@@ -1,4 +1,5 @@
 import * as v from '../../shared/src/valita.ts';
+import {mutationsPatchSchema} from './mutations-patch.ts';
 import {queriesPatchSchema} from './queries-patch.ts';
 import {rowsPatchSchema} from './row-patch.ts';
 import {nullableVersionSchema, versionSchema} from './version.ts';
@@ -58,6 +59,8 @@ export const pokePartBodySchema = v.object({
   gotQueriesPatch: queriesPatchSchema.optional(),
   // Patches to the rows set.
   rowsPatch: rowsPatchSchema.optional(),
+  // Mutation results patch
+  mutationsPatch: mutationsPatchSchema.optional(),
 });
 
 export const pokeEndBodySchema = v.object({

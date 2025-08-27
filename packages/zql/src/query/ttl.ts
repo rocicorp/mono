@@ -1,3 +1,5 @@
+import type {LogContext} from '@rocicorp/logger';
+
 export type TimeUnit = 's' | 'm' | 'h' | 'd' | 'y';
 
 /**
@@ -14,7 +16,14 @@ export type TimeUnit = 's' | 'm' | 'h' | 'd' | 'y';
  */
 export type TTL = `${number}${TimeUnit}` | 'forever' | 'none' | number;
 
-export const DEFAULT_TTL: TTL = 'none';
+export const DEFAULT_TTL: TTL = '5m';
+export const DEFAULT_TTL_MS = 1_000 * 60 * 5;
+
+export const DEFAULT_PRELOAD_TTL: TTL = 'none';
+export const DEFAULT_PRELOAD_TTL_MS = 0;
+
+export const MAX_TTL: TTL = '10m';
+export const MAX_TTL_MS = 1_000 * 60 * 10;
 
 const multiplier = {
   s: 1000,
@@ -75,4 +84,14 @@ export function normalizeTTL(ttl: TTL): TTL {
   }
 
   return (shortest.length < lengthOfNumber ? shortest : ttl) as TTL;
+}
+
+export function clampTTL(ttl: TTL, lc?: Pick<LogContext, 'warn'>): number {
+  const parsedTTL = parseTTL(ttl);
+  if (parsedTTL === -1 || parsedTTL > 10 * 60 * 1000) {
+    // 10 minutes in milliseconds
+    lc?.warn?.(`TTL (${ttl}) is too high, clamping to ${MAX_TTL}`);
+    return parseTTL(MAX_TTL);
+  }
+  return parsedTTL;
 }

@@ -13,15 +13,15 @@ import {
   serverToClient,
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
+import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Input} from '../../../zql/src/ivm/operator.ts';
-import type {Source} from '../../../zql/src/ivm/source.ts';
+import type {Source, SourceInput} from '../../../zql/src/ivm/source.ts';
 import type {SourceFactory} from '../../../zql/src/ivm/test/source-factory.ts';
-import type {QueryDelegate} from '../../../zql/src/query/query-impl.ts';
+import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {Database} from '../db.ts';
 import {compile, sql} from '../internal/sql.ts';
 import {TableSource, toSQLiteTypeName} from '../table-source.ts';
-import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
 
 export const createSource: SourceFactory = (
   lc: LogContext,
@@ -42,15 +42,7 @@ export const createSource: SourceFactory = (
     )}));`,
   );
   db.exec(query);
-  return new TableSource(
-    lc,
-    logConfig,
-    'zqlite-test',
-    db,
-    tableName,
-    columns,
-    primaryKey,
-  );
+  return new TableSource(lc, logConfig, db, tableName, columns, primaryKey);
 };
 
 export function mapResultToClientNames<T, S extends Schema>(
@@ -140,7 +132,6 @@ export function newQueryDelegate(
       source = new TableSource(
         lc,
         logConfig,
-        'query.test.ts',
         db,
         serverTableName,
         Object.fromEntries(
@@ -165,6 +156,10 @@ export function newQueryDelegate(
     createStorage() {
       return new MemoryStorage();
     },
+    decorateSourceInput(input: SourceInput): Input {
+      return input;
+    },
+    addEdge() {},
     decorateInput(input: Input): Input {
       return input;
     },
@@ -174,8 +169,11 @@ export function newQueryDelegate(
     addServerQuery() {
       return () => {};
     },
+    addCustomQuery() {
+      return () => {};
+    },
     updateServerQuery() {},
-    onQueryMaterialized() {},
+    updateCustomQuery() {},
     onTransactionCommit() {
       return () => {};
     },
@@ -183,6 +181,8 @@ export function newQueryDelegate(
       return applyViewUpdates();
     },
     assertValidRunOptions() {},
+    flushQueryChanges() {},
     defaultQueryComplete: true,
+    addMetric() {},
   };
 }

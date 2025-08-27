@@ -1,6 +1,6 @@
 import type postgres from 'postgres';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {testDBs} from '../test/db.ts';
+import {beforeEach, describe, expect, test} from 'vitest';
+import {type PgTest, test as testPg} from '../test/db.ts';
 import {BYTEA, INT4, TEXT, VARCHAR} from './pg-types.ts';
 import {typeNameByOID} from './pg.ts';
 
@@ -20,7 +20,7 @@ describe('types/pg-types', () => {
 describe('types/pg', () => {
   let db: postgres.Sql<{bigint: bigint}>;
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     db = await testDBs.create('pg_types');
     await db.unsafe(`
     CREATE TABLE bigints(
@@ -37,14 +37,16 @@ describe('types/pg', () => {
       d date,
       ds date[]
     );
+    CREATE TABLE times(
+      time time,
+      times time[]
+    );
     `);
+
+    return () => testDBs.drop(db);
   });
 
-  afterEach(async () => {
-    await testDBs.drop(db);
-  });
-
-  test('bigints', async () => {
+  testPg('bigints', async () => {
     await db`INSERT INTO bigints ${db({big: 9007199254740993n})}`;
     expect((await db`SELECT * FROM bigints`)[0]).toEqual({
       big: 9007199254740993n,
@@ -68,7 +70,7 @@ describe('types/pg', () => {
     // });
   });
 
-  test.each([
+  testPg.each([
     ['January 8 04:05:06.123456 1999 PST', 915768306123.456, 915797106123.456],
     ['2004-10-19 10:23:54.654321+02', 1098181434654.321, 1098174234654.321],
     ['1999-01-08 04:05:06.987654 -8:00', 915768306987.654, 915797106987.654],
@@ -89,7 +91,7 @@ describe('types/pg', () => {
     });
   });
 
-  test.for([
+  testPg.for([
     // This one does not work... Maybe because of the timezone? Daylight saving?
     // ['January 8, 1999', Date.UTC(1999, 0, 8)],
 
@@ -103,6 +105,22 @@ describe('types/pg', () => {
     expect((await db`SELECT * FROM dates`)[0]).toEqual({
       d: expected,
       ds: [expected, expected],
+    });
+  });
+
+  testPg.for([
+    ['00:00', 0],
+    ['09:15:32', 33332000],
+    ['14:15:10.1234564', 51310123], // default precision of postgres is 6 fractional digits -> rounded down
+    ['24:00', 86400000],
+  ])('time: %s', async ([input, expected]) => {
+    await db`INSERT INTO times ${db({
+      time: input,
+      times: [input, input],
+    })}`;
+    expect((await db`SELECT * FROM times`)[0]).toEqual({
+      time: expected,
+      times: [expected, expected],
     });
   });
 });

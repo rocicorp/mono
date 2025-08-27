@@ -1,3 +1,5 @@
+import type {ListContext} from '../shared/queries.ts';
+
 // TODO: Use exports instead of a Record
 export const links = {
   home() {
@@ -16,20 +18,6 @@ export const links = {
 
 export type ZbugsHistoryState = {
   readonly zbugsListContext?: ListContext | undefined;
-};
-
-export type ListContext = {
-  readonly href: string;
-  readonly title: string;
-  readonly params: {
-    readonly open?: boolean | undefined;
-    readonly assignee?: string | undefined;
-    readonly creator?: string | undefined;
-    readonly labels?: string[] | undefined;
-    readonly textFilter?: string | undefined;
-    readonly sortField: 'modified' | 'created';
-    readonly sortDirection: 'asc' | 'desc';
-  };
 };
 
 export const routes = {

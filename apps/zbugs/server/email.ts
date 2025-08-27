@@ -7,6 +7,7 @@ export async function sendEmail({
   title,
   message,
   link,
+  unsubscribeLink,
   issue,
   attachments = [],
 }: {
@@ -15,6 +16,7 @@ export async function sendEmail({
   title: string;
   message: string;
   link: string;
+  unsubscribeLink: string;
   issue: Row<typeof schema.tables.issue>;
   attachments?: {
     filename: string;
@@ -54,6 +56,7 @@ export async function sendEmail({
       subject: formattedSubject,
       message: titleMessage,
       link,
+      unsubscribe: unsubscribeLink,
     },
     attachments,
   };

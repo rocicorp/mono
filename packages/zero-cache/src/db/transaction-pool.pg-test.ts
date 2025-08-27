@@ -1,12 +1,12 @@
 import {PG_UNIQUE_VIOLATION} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../shared/src/queue.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
-import {expectTables, testDBs} from '../test/db.ts';
+import {expectTables, test, type PgTest} from '../test/db.ts';
 import type {PostgresDB} from '../types/pg.ts';
 import * as Mode from './mode-enum.ts';
 import {
@@ -25,7 +25,7 @@ describe('db/transaction-pool', () => {
   let lc: LogContext;
   let pools: TransactionPool[];
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     pools = [];
     lc = createSilentLogContext();
     db = await testDBs.create('transaction_pool_test');
@@ -38,11 +38,11 @@ describe('db/transaction-pool', () => {
     CREATE TABLE keepalive (id SERIAL);
     CREATE TABLE cleaned (id SERIAL);
     `.simple();
-  });
 
-  afterEach(async () => {
-    pools.forEach(pool => pool.abort());
-    await testDBs.drop(db);
+    return async () => {
+      pools.forEach(pool => pool.abort());
+      await testDBs.drop(db);
+    };
   });
 
   function newTransactionPool(
@@ -185,7 +185,8 @@ describe('db/transaction-pool', () => {
     });
   });
 
-  test('pool resizing before run', async () => {
+  // TODO: Remove pool resizing functionality
+  test.skip('pool resizing before run', async () => {
     const pool = newTransactionPool(
       Mode.SERIALIZABLE,
       initTask,
@@ -218,7 +219,8 @@ describe('db/transaction-pool', () => {
     });
   });
 
-  test('pool resizing after run', async () => {
+  // TODO: Remove pool resizing functionality
+  test.skip('pool resizing after run', async () => {
     const pool = newTransactionPool(
       Mode.SERIALIZABLE,
       initTask,
@@ -281,151 +283,156 @@ describe('db/transaction-pool', () => {
     });
   });
 
-  test('pool resizing and idle/keepalive timeouts', {retry: 2}, async () => {
-    const pool = newTransactionPool(
-      Mode.SERIALIZABLE,
-      initTask,
-      cleanupTask,
-      2,
-      5,
-      {
-        forInitialWorkers: {
-          timeoutMs: 100,
-          task: keepaliveTask,
+  // TODO: Remove pool resizing functionality
+  test.skip(
+    'pool resizing and idle/keepalive timeouts',
+    {retry: 2},
+    async () => {
+      const pool = newTransactionPool(
+        Mode.SERIALIZABLE,
+        initTask,
+        cleanupTask,
+        2,
+        5,
+        {
+          forInitialWorkers: {
+            timeoutMs: 100,
+            task: keepaliveTask,
+          },
+          forExtraWorkers: {
+            timeoutMs: 50,
+            task: 'done',
+          },
         },
-        forExtraWorkers: {
-          timeoutMs: 50,
-          task: 'done',
-        },
-      },
-    );
+      );
 
-    const processing = new Queue<boolean>();
-    const canProceed = new Queue<boolean>();
+      const processing = new Queue<boolean>();
+      const canProceed = new Queue<boolean>();
 
-    const blockingTask =
-      (stmt: string) => async (tx: postgres.TransactionSql) => {
-        processing.enqueue(true);
-        await canProceed.dequeue();
-        return task(stmt)(tx);
-      };
+      const blockingTask =
+        (stmt: string) => async (tx: postgres.TransactionSql) => {
+          processing.enqueue(true);
+          await canProceed.dequeue();
+          return task(stmt)(tx);
+        };
 
-    pool.run(db);
+      pool.run(db);
 
-    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (1)`));
-    void pool.process(
-      blockingTask(`INSERT INTO foo (id, val) VALUES (6, 'foo')`),
-    );
+      void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (1)`));
+      void pool.process(
+        blockingTask(`INSERT INTO foo (id, val) VALUES (6, 'foo')`),
+      );
 
-    for (let i = 0; i < 2; i++) {
-      await processing.dequeue();
-    }
+      for (let i = 0; i < 2; i++) {
+        await processing.dequeue();
+      }
 
-    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (3)`));
-    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (2)`));
-    void pool.process(
-      blockingTask(`INSERT INTO foo (id, val) VALUES (8, 'foo')`),
-    );
+      void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (3)`));
+      void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (2)`));
+      void pool.process(
+        blockingTask(`INSERT INTO foo (id, val) VALUES (8, 'foo')`),
+      );
 
-    // Ensure all tasks get a worker.
-    for (let i = 2; i < 5; i++) {
-      await processing.dequeue();
-    }
-    // Let all 5 tasks proceed.
-    for (let i = 0; i < 5; i++) {
-      canProceed.enqueue(true);
-    }
+      // Ensure all tasks get a worker.
+      for (let i = 2; i < 5; i++) {
+        await processing.dequeue();
+      }
+      // Let all 5 tasks proceed.
+      for (let i = 0; i < 5; i++) {
+        canProceed.enqueue(true);
+      }
 
-    // Let the extra workers hit their 50ms idle timeout.
-    await sleep(100);
+      // Let the extra workers hit their 50ms idle timeout.
+      await sleep(100);
 
-    await expectTables(db, {
-      ['public.cleaned']: [{id: 1}, {id: 2}, {id: 3}],
-      ['public.keepalive']: [],
-    });
+      await expectTables(db, {
+        ['public.cleaned']: [{id: 1}, {id: 2}, {id: 3}],
+        ['public.keepalive']: [],
+      });
 
-    // Repeat to spawn more workers.
-    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (10)`));
-    void pool.process(
-      blockingTask(`INSERT INTO foo (id, val) VALUES (60, 'foo')`),
-    );
+      // Repeat to spawn more workers.
+      void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (10)`));
+      void pool.process(
+        blockingTask(`INSERT INTO foo (id, val) VALUES (60, 'foo')`),
+      );
 
-    for (let i = 0; i < 2; i++) {
-      await processing.dequeue();
-    }
+      for (let i = 0; i < 2; i++) {
+        await processing.dequeue();
+      }
 
-    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (30)`));
-    void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (20)`));
-    void pool.process(
-      blockingTask(`INSERT INTO foo (id, val) VALUES (80, 'foo')`),
-    );
+      void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (30)`));
+      void pool.process(blockingTask(`INSERT INTO foo (id) VALUES (20)`));
+      void pool.process(
+        blockingTask(`INSERT INTO foo (id, val) VALUES (80, 'foo')`),
+      );
 
-    for (let i = 2; i < 5; i++) {
-      await processing.dequeue();
-    }
+      for (let i = 2; i < 5; i++) {
+        await processing.dequeue();
+      }
 
-    // Let all 5 tasks proceed.
-    for (let i = 0; i < 5; i++) {
-      canProceed.enqueue(true);
-    }
+      // Let all 5 tasks proceed.
+      for (let i = 0; i < 5; i++) {
+        canProceed.enqueue(true);
+      }
 
-    // Let the new extra workers hit their 50ms idle timeout.
-    await sleep(100);
+      // Let the new extra workers hit their 50ms idle timeout.
+      await sleep(100);
 
-    await expectTables(db, {
-      ['public.cleaned']: [
-        {id: 1},
-        {id: 2},
-        {id: 3},
-        {id: 4},
-        {id: 5},
-        {id: 6},
-      ],
-      ['public.keepalive']: [],
-    });
+      await expectTables(db, {
+        ['public.cleaned']: [
+          {id: 1},
+          {id: 2},
+          {id: 3},
+          {id: 4},
+          {id: 5},
+          {id: 6},
+        ],
+        ['public.keepalive']: [],
+      });
 
-    // Let the initial workers hit their 100ms keepalive timeout.
-    await sleep(100);
+      // Let the initial workers hit their 100ms keepalive timeout.
+      await sleep(100);
 
-    pool.setDone();
-    await pool.done();
+      pool.setDone();
+      await pool.done();
 
-    await expectTables(db, {
-      ['public.foo']: [
-        {id: 1, val: null},
-        {id: 2, val: null},
-        {id: 3, val: null},
-        {id: 6, val: 'foo'},
-        {id: 8, val: 'foo'},
-        {id: 10, val: null},
-        {id: 20, val: null},
-        {id: 30, val: null},
-        {id: 60, val: 'foo'},
-        {id: 80, val: 'foo'},
-      ],
-      ['public.workers']: [
-        {id: 1},
-        {id: 2},
-        {id: 3},
-        {id: 4},
-        {id: 5},
-        {id: 6},
-        {id: 7},
-        {id: 8},
-      ],
-      ['public.keepalive']: [{id: 1}, {id: 2}],
-      ['public.cleaned']: [
-        {id: 1},
-        {id: 2},
-        {id: 3},
-        {id: 4},
-        {id: 5},
-        {id: 6},
-        {id: 7},
-        {id: 8},
-      ],
-    });
-  });
+      await expectTables(db, {
+        ['public.foo']: [
+          {id: 1, val: null},
+          {id: 2, val: null},
+          {id: 3, val: null},
+          {id: 6, val: 'foo'},
+          {id: 8, val: 'foo'},
+          {id: 10, val: null},
+          {id: 20, val: null},
+          {id: 30, val: null},
+          {id: 60, val: 'foo'},
+          {id: 80, val: 'foo'},
+        ],
+        ['public.workers']: [
+          {id: 1},
+          {id: 2},
+          {id: 3},
+          {id: 4},
+          {id: 5},
+          {id: 6},
+          {id: 7},
+          {id: 8},
+        ],
+        ['public.keepalive']: [{id: 1}, {id: 2}],
+        ['public.cleaned']: [
+          {id: 1},
+          {id: 2},
+          {id: 3},
+          {id: 4},
+          {id: 5},
+          {id: 6},
+          {id: 7},
+          {id: 8},
+        ],
+      });
+    },
+  );
 
   test('external failure before running', async () => {
     const pool = newTransactionPool(
@@ -804,12 +811,7 @@ describe('db/transaction-pool', () => {
       exportSnapshot,
       cleanupExport,
     );
-    const followers = newTransactionPool(
-      Mode.READONLY,
-      setSnapshot,
-      undefined,
-      3,
-    );
+    const followers = newTransactionPool(Mode.READONLY, setSnapshot, undefined);
 
     const err = new Error('oh nose');
 

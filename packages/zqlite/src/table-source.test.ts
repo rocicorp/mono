@@ -178,7 +178,6 @@ describe('fetching from a table source', () => {
     const source = new TableSource(
       lc,
       testLogConfig,
-      'table-source.test.ts',
       db,
       sourceArgs[0],
       sourceArgs[1],
@@ -277,15 +276,9 @@ describe('fetched value types', () => {
         /* sql */ `INSERT INTO foo (id, a, b, c, d) VALUES (?, ?, ?, ?, ?);`,
       );
       stmt.run(c.input);
-      const source = new TableSource(
-        lc,
-        testLogConfig,
-        'table-source.test.ts',
-        db,
-        'foo',
-        columns,
-        ['id'],
-      );
+      const source = new TableSource(lc, testLogConfig, db, 'foo', columns, [
+        'id',
+      ]);
       const input = source.connect([['id', 'asc']]);
 
       if (c.output) {
@@ -319,15 +312,7 @@ describe('no primary key', () => {
   stmt.run(['far', 234, 567, 333]);
   stmt.run(['boo', 345, 112, 444]);
   stmt.run(['foo', 345, 789, 555]);
-  const source = new TableSource(
-    lc,
-    testLogConfig,
-    'table-source.test.ts',
-    db,
-    'foo',
-    columns,
-    ['id'],
-  );
+  const source = new TableSource(lc, testLogConfig, db, 'foo', columns, ['id']);
 
   test.each([
     [['id'], true],
@@ -342,15 +327,7 @@ describe('no primary key', () => {
     'requires primary key to be uniquely indexed: %o',
     (key, valid) => {
       const createSource = () =>
-        new TableSource(
-          lc,
-          testLogConfig,
-          'table-source.test.ts',
-          db,
-          'foo',
-          columns,
-          key,
-        );
+        new TableSource(lc, testLogConfig, db, 'foo', columns, key);
       if (valid) {
         createSource();
       } else {
@@ -441,7 +418,6 @@ test('pushing values does the correct writes and outputs', () => {
   const source = new TableSource(
     lc,
     testLogConfig,
-    'table-source.test.ts',
     db1,
     'foo',
     {
@@ -707,7 +683,6 @@ test('getByKey', () => {
   const source = new TableSource(
     lc,
     testLogConfig,
-    'table-source.test.ts',
     db,
     'foo',
     {

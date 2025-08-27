@@ -5,7 +5,6 @@ import type {Store} from '../../../replicache/src/dag/store.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
-import {mapAST} from '../../../zero-protocol/src/ast.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
@@ -29,8 +28,6 @@ import type {
 } from '../../../zero-protocol/src/push.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
-import {ast} from '../../../zql/src/query/query-impl.ts';
 import type {PullRow, Query} from '../../../zql/src/query/query.ts';
 import * as ConnectionState from './connection-state-enum.ts';
 import type {CustomMutatorDefs} from './custom.ts';
@@ -64,7 +61,7 @@ export class MockSocket extends EventTarget {
   protocol: string;
   messages: string[] = [];
   closed = false;
-  onUpstream?: (message: string) => void;
+  #listeners = new Set<(message: string) => void>();
 
   constructor(url: string | URL, protocol = '') {
     super();
@@ -74,7 +71,16 @@ export class MockSocket extends EventTarget {
 
   send(message: string) {
     this.messages.push(message);
-    this.onUpstream?.(message);
+    for (const listener of this.#listeners) {
+      listener(message);
+    }
+  }
+
+  onUpstream(callback: (message: string) => void): () => void {
+    this.#listeners.add(callback);
+    return () => {
+      this.#listeners.delete(callback);
+    };
   }
 
   close() {
@@ -85,10 +91,9 @@ export class MockSocket extends EventTarget {
 
 export class TestZero<
   const S extends Schema,
-  MD extends CustomMutatorDefs<S> | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined = undefined,
 > extends Zero<S, MD> {
   pokeIDCounter = 0;
-  readonly #schema: S;
 
   #connectionStateResolvers: Set<{
     state: ConnectionState;
@@ -97,7 +102,6 @@ export class TestZero<
 
   constructor(options: ZeroOptions<S, MD>) {
     super(options);
-    this.#schema = options.schema;
   }
 
   get perdag(): Store {
@@ -238,6 +242,20 @@ export class TestZero<
     socket.dispatchEvent(new CloseEvent('close'));
   }
 
+  async triggerGotQueriesPatch(
+    q: Query<S, keyof S['tables'] & string>,
+  ): Promise<void> {
+    q.hash();
+    await this.triggerPoke(null, '1', {
+      gotQueriesPatch: [
+        {
+          op: 'put',
+          hash: q.hash(),
+        },
+      ],
+    });
+  }
+
   declare [exposedToTestingSymbol]: TestingContext;
 
   get pusher() {
@@ -270,7 +288,6 @@ export class TestZero<
       gotQueriesPatch: [
         {
           op: 'put',
-          ast: mapAST(ast(q), clientToServer(this.#schema.tables)),
           hash: q.hash(),
         },
       ],
@@ -284,7 +301,7 @@ let testZeroCounter = 0;
 
 export function zeroForTest<
   const S extends Schema,
-  MD extends CustomMutatorDefs<S> | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined = undefined,
 >(
   options: Partial<ZeroOptions<S, MD>> = {},
   errorOnUpdateNeeded = true,
@@ -319,16 +336,18 @@ export async function waitForUpstreamMessage(
   vi: VitestUtils,
 ) {
   let gotMessage = false;
-  (await r.socket).onUpstream = message => {
+  const socket = await r.socket;
+  const cleanup = socket.onUpstream(message => {
     const v = JSON.parse(message);
     const [kind] = upstreamSchema.parse(v);
     if (kind === name) {
       gotMessage = true;
     }
-  };
+  });
   for (;;) {
     await vi.advanceTimersByTimeAsync(100);
     if (gotMessage) {
+      cleanup();
       break;
     }
   }

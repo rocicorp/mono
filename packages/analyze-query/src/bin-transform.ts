@@ -1,7 +1,8 @@
 /* eslint-disable no-console */
-import '@dotenvx/dotenvx/config';
-
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
+import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
+import {formatOutput} from '../../ast-to-zql/src/format.ts';
+import '../../shared/src/dotenv.ts';
 import {must} from '../../shared/src/must.ts';
 import {parseOptions} from '../../shared/src/options.ts';
 import * as v from '../../shared/src/valita.ts';
@@ -11,11 +12,9 @@ import {
   shardOptions,
   ZERO_ENV_VAR_PREFIX,
 } from '../../zero-cache/src/config/zero-config.ts';
-import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {loadSchemaAndPermissions} from '../../zero-cache/src/scripts/permissions.ts';
+import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
-import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
-import {formatOutput} from '../../ast-to-zql/src/format.ts';
 
 const options = {
   cvr: {db: v.string()},
@@ -31,14 +30,10 @@ const options = {
   },
 };
 
-const config = parseOptions(
-  options,
-  process.argv.slice(2),
-  ZERO_ENV_VAR_PREFIX,
-);
+const config = parseOptions(options, {envNamePrefix: ZERO_ENV_VAR_PREFIX});
 
 const lc = new LogContext('debug', {}, consoleLogSink);
-const {permissions} = await loadSchemaAndPermissions(lc, config.schema);
+const {permissions} = await loadSchemaAndPermissions(config.schema);
 
 const cvrDB = pgClient(lc, config.cvr.db);
 
@@ -49,11 +44,12 @@ const rows =
 
 const queryAst = transformAndHashQuery(
   lc,
+  '',
   rows[0].clientAST,
   permissions,
   {},
   rows[0].internal,
-).query;
+).transformedAst;
 
 console.log('\n=== AST ===\n');
 console.log(JSON.stringify(queryAst, null, 2));

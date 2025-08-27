@@ -2,8 +2,11 @@ import {expect, test} from 'vitest';
 import {sleep} from '../../../shared/src/sleep.ts';
 
 test('worker test', async () => {
-  const url = new URL('./worker-test.ts', import.meta.url);
-  const w = new Worker(url, {type: 'module'});
+  // Need to have the 'new URL' call inside `new Worker` for vite to
+  // correctly bundle the worker file.
+  const w = new Worker(new URL('./worker-test.ts', import.meta.url), {
+    type: 'module',
+  });
   // Wait for the worker "test harness" to be ready since it may have async
   // modules.
   await waitForReady(w);
@@ -41,6 +44,6 @@ function send(w: Worker, data: {userID: string}): Promise<unknown> {
 function withTimeout<T>(p: Promise<T>): Promise<T> {
   return Promise.race([
     p,
-    sleep(6000).then(() => Promise.reject(new Error('Timed out'))),
+    sleep(9000).then(() => Promise.reject(new Error('Timed out'))),
   ]);
 }

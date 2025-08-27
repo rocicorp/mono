@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /* eslint-disable no-console */
 
-import '@dotenvx/dotenvx/config';
 import {resolver} from '@rocicorp/resolver';
-import chalk from 'chalk';
 import {watch} from 'chokidar';
 import {spawn, type ChildProcess} from 'node:child_process';
+import '../../shared/src/dotenv.ts';
+import {createLogContext} from '../../shared/src/logging.ts';
 import {parseOptionsAdvanced} from '../../shared/src/options.ts';
 import {
   ZERO_ENV_VAR_PREFIX,
@@ -28,43 +28,36 @@ function killProcess(childProcess: ChildProcess | undefined) {
   return promise;
 }
 
-function log(msg: string) {
-  console.log(chalk.green('> ' + msg));
-}
-
-function logWarn(msg: string) {
-  console.log(chalk.yellow('> ' + msg));
-}
-
-function logError(msg: string) {
-  console.error(chalk.red('> ' + msg));
-}
-
 async function main() {
   const {config} = parseOptionsAdvanced(
     {
       ...deployPermissionsOptions,
       ...zeroOptions,
     },
-    process.argv.slice(2),
-    ZERO_ENV_VAR_PREFIX,
-    false,
-    true, // allowPartial, required by server/runner/config.ts
+    {
+      envNamePrefix: ZERO_ENV_VAR_PREFIX,
+      // TODO: This may no longer be necessary since multi-tenant was removed.
+      allowPartial: true, // required by server/runner/config.ts
+    },
   );
+
+  const lc = createLogContext(config);
+
+  process.on('unhandledRejection', reason => {
+    lc.error?.('Unexpected unhandled rejection.', reason);
+    lc.error?.('Exiting');
+    process.exit(-1);
+  });
 
   const {unknown: zeroCacheArgs} = parseOptionsAdvanced(
     deployPermissionsOptions,
-    process.argv.slice(2),
-    ZERO_ENV_VAR_PREFIX,
-    true,
+    {envNamePrefix: ZERO_ENV_VAR_PREFIX, allowUnknown: true},
   );
 
-  const {unknown: deployPermissionsArgs} = parseOptionsAdvanced(
-    zeroOptions,
-    process.argv.slice(2),
-    ZERO_ENV_VAR_PREFIX,
-    true,
-  );
+  const {unknown: deployPermissionsArgs} = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: ZERO_ENV_VAR_PREFIX,
+    allowUnknown: true,
+  });
 
   const {path} = config.schema;
 
@@ -79,7 +72,7 @@ async function main() {
 
   async function deployPermissions(): Promise<boolean> {
     if (config.upstream.type !== 'pg') {
-      logWarn(
+      lc.warn?.(
         `Skipping permissions deployment for ${config.upstream.type} upstream`,
       );
       return true;
@@ -88,7 +81,7 @@ async function main() {
     await killProcess(permissionsProcess);
     permissionsProcess = undefined;
 
-    log(`Running ${deployPermissionsScript}.`);
+    lc.info?.(`Running ${deployPermissionsScript}.`);
     permissionsProcess = spawn(
       deployPermissionsScript,
       deployPermissionsArgs ?? [],
@@ -101,10 +94,10 @@ async function main() {
     const {promise: code, resolve} = resolver<number>();
     permissionsProcess.on('exit', resolve);
     if ((await code) === 0) {
-      log(`${deployPermissionsScript} completed successfully.`);
+      lc.info?.(`${deployPermissionsScript} completed successfully.`);
       return true;
     }
-    logError(`Failed to deploy permissions from ${path}.`);
+    lc.error?.(`Failed to deploy permissions from ${path}.`);
     return false;
   }
 
@@ -114,32 +107,25 @@ async function main() {
     zeroCacheProcess = undefined;
 
     if (await deployPermissions()) {
-      log(
+      lc.info?.(
         `Running ${zeroCacheScript} at\n\n\thttp://localhost:${config.port}\n`,
       );
-      zeroCacheProcess = spawn(
-        'npx',
-        [
-          '--node-options=--require=@opentelemetry/auto-instrumentations-node/register',
-          zeroCacheScript,
-          ...(zeroCacheArgs || []),
-        ],
-        {
-          env: {
-            // Set some low defaults so as to use fewer resources and not trip up,
-            // e.g. developers sharing a database.
-            ['ZERO_NUM_SYNC_WORKERS']: '3',
-            ['ZERO_CVR_MAX_CONNS']: '6',
-            ['ZERO_UPSTREAM_MAX_CONNS']: '6',
-            // But let the developer override any of these dev defaults.
-            ...process.env,
-          },
-          stdio: 'inherit',
-          shell: true,
-        },
-      );
+      const env: NodeJS.ProcessEnv = {
+        // Set some low defaults so as to use fewer resources and not trip up,
+        // e.g. developers sharing a database.
+        ['ZERO_NUM_SYNC_WORKERS']: '3',
+        ['ZERO_CVR_MAX_CONNS']: '6',
+        ['ZERO_UPSTREAM_MAX_CONNS']: '6',
+        // But let the developer override any of these dev defaults.
+        ...process.env,
+      };
+      zeroCacheProcess = spawn(zeroCacheScript, zeroCacheArgs || [], {
+        env,
+        stdio: 'inherit',
+        shell: true,
+      });
       zeroCacheProcess.on('exit', () => {
-        logError(`${zeroCacheScript} exited. Exiting.`);
+        lc.error?.(`${zeroCacheScript} exited. Exiting.`);
         process.exit(-1);
       });
     }
@@ -153,7 +139,7 @@ async function main() {
     awaitWriteFinish: {stabilityThreshold: 500, pollInterval: 100},
   });
   const onFileChange = async () => {
-    log(`Detected ${path} change.`);
+    lc.info?.(`Detected ${path} change.`);
     await deployPermissions();
   };
   watcher.on('add', onFileChange);
@@ -161,16 +147,4 @@ async function main() {
   watcher.on('unlink', onFileChange);
 }
 
-process.on('unhandledRejection', reason => {
-  logError('Unexpected unhandled rejection.');
-  console.error(reason);
-  logError('Exiting');
-  process.exit(-1);
-});
-
-main().catch(e => {
-  logError(`Unexpected unhandled error.`);
-  console.error(e);
-  logError('Exiting.');
-  process.exit(-1);
-});
+void main();

@@ -1,18 +1,22 @@
 import {expect, test, vi} from 'vitest';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Catch} from './catch.ts';
 import {FanIn} from './fan-in.ts';
 import {FanOut} from './fan-out.ts';
-import {Filter} from './filter.ts';
-import {createSource} from './test/source-factory.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {
   buildFilterPipeline,
   FilterEnd,
   FilterStart,
 } from './filter-operators.ts';
+import {Filter} from './filter.ts';
+import {createSource} from './test/source-factory.ts';
+import type {BuilderDelegate} from '../builder/builder.ts';
 
 const lc = createSilentLogContext();
+const mockDelegate = {
+  addEdge() {},
+} as unknown as BuilderDelegate;
 
 test('fan-out pushes along all paths', () => {
   const s = createSource(
@@ -154,7 +158,7 @@ test('fan-out,fan-in pairing does not duplicate pushes', () => {
     ['a'],
   );
   const connector = s.connect([['a', 'asc']]);
-  const pipeline = buildFilterPipeline(connector, filterInput => {
+  const pipeline = buildFilterPipeline(connector, mockDelegate, filterInput => {
     const fanOut = new FanOut(filterInput);
     const filter1 = new Filter(fanOut, () => true);
     const filter2 = new Filter(fanOut, () => true);
@@ -225,7 +229,7 @@ test('fan-in fetch', () => {
     ['b', 'asc'],
   ]);
 
-  const pipeline = buildFilterPipeline(connector, filterInput => {
+  const pipeline = buildFilterPipeline(connector, mockDelegate, filterInput => {
     const fanOut = new FanOut(filterInput);
 
     const filter1 = new Filter(fanOut, row => row.a === true);
@@ -291,7 +295,7 @@ test('cleanup forwards too all branches', () => {
 
   const filterSpy1 = vi.spyOn(filter1, 'filter');
   const filterSpy2 = vi.spyOn(filter2, 'filter');
-  const filterSpy3 = vi.spyOn(filter2, 'filter');
+  const filterSpy3 = vi.spyOn(filter3, 'filter');
 
   const result = out.cleanup();
   expect(result).toMatchInlineSnapshot(`

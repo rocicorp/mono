@@ -1,5 +1,3 @@
-import type {Zero} from '@rocicorp/zero';
-import {escapeLike, type Row} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {useWindowVirtualizer, Virtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
@@ -23,14 +21,14 @@ import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {findLastIndex} from '../../../../../packages/shared/src/find-last-index.ts';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {difference} from '../../../../../packages/shared/src/set-utils.ts';
-import type {
-  CommentRow,
-  IssueRow,
-  Schema,
-  UserRow,
+import {
+  type CommentRow,
+  type IssueRow,
+  type UserRow,
 } from '../../../shared/schema.ts';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
+import circle from '../../assets/icons/circle.svg';
 import {commentQuery} from '../../comment-query.ts';
 import {AvatarImage} from '../../components/avatar-image.tsx';
 import {Button} from '../../components/button.tsx';
@@ -38,6 +36,10 @@ import {CanEdit} from '../../components/can-edit.tsx';
 import {Combobox} from '../../components/combobox.tsx';
 import {Confirm} from '../../components/confirm.tsx';
 import {EmojiPanel} from '../../components/emoji-panel.tsx';
+import {
+  ImageUploadArea,
+  type TextAreaPatch,
+} from '../../components/image-upload-area.tsx';
 import {LabelPicker} from '../../components/label-picker.tsx';
 import {Link} from '../../components/link.tsx';
 import {Markdown} from '../../components/markdown.tsx';
@@ -57,13 +59,17 @@ import {
 } from '../../limits.ts';
 import {LRUCache} from '../../lru-cache.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
-import {CACHE_AWHILE} from '../../query-cache-policy.ts';
-import {links, type ListContext, type ZbugsHistoryState} from '../../routes.ts';
-import {preload} from '../../zero-setup.ts';
+import {CACHE_NAV} from '../../query-cache-policy.ts';
+import {links, type ZbugsHistoryState} from '../../routes.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
-import type {Mutators} from '../../../shared/mutators.ts';
+import {queries} from '../../../shared/queries.ts';
+import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
+import {preload} from '../../zero-preload.ts';
+import type {NotificationType} from '../../../shared/mutators.ts';
+
+const {emojiChange, issueDetail, prevNext} = queries;
 
 function softNavigate(path: string, state?: ZbugsHistoryState) {
   navigate(path, {state});
@@ -74,8 +80,6 @@ function softNavigate(path: string, state?: ZbugsHistoryState) {
 
 const emojiToastShowDuration = 3_000;
 
-export const INITIAL_COMMENT_LIMIT = 100;
-
 export function IssuePage({onReady}: {onReady: () => void}) {
   const z = useZero();
   const params = useParams();
@@ -83,37 +87,20 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const idStr = must(params.id);
   const idField = /[^\d]/.test(idStr) ? 'id' : 'shortID';
   const id = idField === 'shortID' ? parseInt(idStr) : idStr;
+  const login = useLogin();
 
   const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
   const listContext = zbugsHistoryState?.zbugsListContext;
-  const q = z.query.issue
-    .where(idField, id)
-    .related('emoji', emoji => emoji.related('creator'))
-    .related('creator')
-    .related('assignee')
-    .related('labels')
-    .related('viewState', viewState =>
-      viewState.where('userID', z.userID).one(),
-    )
-    .related('comments', comments =>
-      comments
-        .related('creator')
-        .related('emoji', emoji => emoji.related('creator'))
-        // One more than we display so we can detect if there are more to load.
-        .limit(INITIAL_COMMENT_LIMIT + 1)
-        .orderBy('created', 'desc')
-        .orderBy('id', 'desc'),
-    )
-    .one();
 
-  const [issue, issueResult] = useQuery(q, CACHE_AWHILE);
+  const [issue, issueResult] = useQuery(
+    issueDetail(login.loginState?.decoded, idField, id, z.userID),
+    CACHE_NAV,
+  );
   useEffect(() => {
     if (issue || issueResult.type === 'complete') {
       onReady();
     }
   }, [issue, onReady, issueResult.type]);
-
-  const login = useLogin();
 
   const isScrolling = useIsScrolling();
   const [displayed, setDisplayed] = useState(issue);
@@ -159,9 +146,9 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   useEffect(() => {
     if (issueResult.type === 'complete') {
       recordPageLoad('issue-page');
-      preload(z);
+      preload(login.loginState?.decoded, z);
     }
-  }, [issueResult.type, z]);
+  }, [issueResult.type, login.loginState?.decoded, z]);
 
   useEffect(() => {
     // only push viewed forward if the issue has been modified since the last viewing
@@ -184,6 +171,8 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const [editing, setEditing] = useState<typeof displayed | null>(null);
   const [edits, setEdits] = useState<Partial<typeof displayed>>({});
+  const editDescriptionRef = useRef<HTMLTextAreaElement>(null);
+
   useEffect(() => {
     if (displayed?.shortID != null && idField !== 'shortID') {
       navigate(links.issue(displayed), {
@@ -218,12 +207,26 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   ) {
     setIssueSnapshot(displayed);
   }
-  const useQueryOptions = {
+  const prevNextOptions = {
     enabled: listContext !== undefined && issueSnapshot !== undefined,
+    ...CACHE_NAV,
   } as const;
+  // Don't need to send entire issue to server, just the sort columns plus PK.
+  const start = displayed
+    ? {
+        id: displayed.id,
+        created: displayed.created,
+        modified: displayed.modified,
+      }
+    : null;
   const [next] = useQuery(
-    buildListQuery(z, listContext, displayed, 'next'),
-    useQueryOptions,
+    prevNext(
+      login.loginState?.decoded,
+      listContext?.params ?? null,
+      start,
+      'next',
+    ),
+    prevNextOptions,
   );
   useKeypress('j', () => {
     if (next) {
@@ -232,8 +235,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   });
 
   const [prev] = useQuery(
-    buildListQuery(z, listContext, displayed, 'prev'),
-    useQueryOptions,
+    prevNext(
+      login.loginState?.decoded,
+      listContext?.params ?? null,
+      start,
+      'prev',
+    ),
+    prevNextOptions,
   );
   useKeypress('k', () => {
     if (prev) {
@@ -250,7 +258,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const [allComments, allCommentsResult] = useQuery(
     commentQuery(z, displayed),
-    {enabled: displayAllComments && displayed !== undefined, ...CACHE_AWHILE},
+    {enabled: displayAllComments && displayed !== undefined, ...CACHE_NAV},
   );
 
   const [comments, hasOlderComments] = useMemo(() => {
@@ -349,6 +357,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     setRecentEmojis(recentEmojis => recentEmojis.filter(e => e.id !== id));
   }, []);
 
+  const onInsert = (patch: TextAreaPatch) => {
+    setEdits(prev => ({
+      ...prev,
+      description: patch.apply(prev?.description ?? ''),
+    }));
+  };
+
   useEmojiChangeListener(displayed, handleEmojiChange);
   useEmojiDataSourcePreload();
   useShowToastForNewComment(comments, virtualizer, highlightComment);
@@ -381,6 +396,11 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   }
 
   const rendering = editing ? {...editing, ...edits} : displayed;
+
+  const isSubscribed = issue?.notificationState?.subscribed;
+  const currentState: NotificationType = isSubscribed
+    ? 'subscribe'
+    : 'unsubscribe';
 
   return (
     <div className="issue-detail-container">
@@ -479,15 +499,21 @@ export function IssuePage({onReady}: {onReady: () => void}) {
           ) : (
             <div className="edit-description-container">
               <p className="issue-detail-label">Edit description</p>
-              <TextareaAutosize
-                className="edit-description"
-                value={rendering.description}
-                onChange={e =>
-                  setEdits({...edits, description: e.target.value})
-                }
-                onKeyDown={e => isCtrlEnter(e) && save()}
-                maxLength={MAX_ISSUE_DESCRIPTION_LENGTH}
-              />
+              <ImageUploadArea
+                textAreaRef={editDescriptionRef}
+                onInsert={onInsert}
+              >
+                <TextareaAutosize
+                  className="edit-description"
+                  value={rendering.description}
+                  onChange={e =>
+                    setEdits({...edits, description: e.target.value})
+                  }
+                  onKeyDown={e => isCtrlEnter(e) && save()}
+                  maxLength={MAX_ISSUE_DESCRIPTION_LENGTH}
+                  ref={editDescriptionRef}
+                />
+              </ImageUploadArea>
             </div>
           )}
         </div>
@@ -543,7 +569,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
           {login.loginState?.decoded.role === 'crew' ? (
             <div className="sidebar-item">
               <p className="issue-detail-label">Visibility</p>
-              <Combobox
+              <Combobox<'public' | 'internal'>
                 editable={false}
                 disabled={!canEdit}
                 items={[
@@ -569,6 +595,33 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               />
             </div>
           ) : null}
+
+          <div className="sidebar-item">
+            <p className="issue-detail-label">Notifications</p>
+            <Combobox<NotificationType>
+              disabled={!login.loginState?.decoded?.sub}
+              items={[
+                {
+                  text: 'Subscribed',
+                  value: 'subscribe',
+                  icon: statusClosed,
+                },
+                {
+                  text: 'Unsubscribed',
+                  value: 'unsubscribe',
+                  icon: circle,
+                },
+              ]}
+              selectedValue={currentState}
+              onChange={value =>
+                z.mutate.notification.update({
+                  issueID: displayed.id,
+                  subscribed: value,
+                  created: Date.now(),
+                })
+              }
+            />
+          </div>
 
           <div className="sidebar-item">
             <p className="issue-detail-label">Creator</p>
@@ -918,55 +971,6 @@ function noop() {
   // no op
 }
 
-function buildListQuery(
-  z: Zero<Schema, Mutators>,
-  listContext: ListContext | undefined,
-  issue: Row<Schema['tables']['issue']> | undefined,
-  dir: 'next' | 'prev',
-) {
-  if (!listContext || !issue) {
-    return z.query.issue.one();
-  }
-  const {
-    open,
-    creator,
-    assignee,
-    labels,
-    textFilter,
-    sortField,
-    sortDirection,
-  } = listContext.params;
-  const orderByDir =
-    dir === 'next' ? sortDirection : sortDirection === 'asc' ? 'desc' : 'asc';
-  let q = z.query.issue
-    .orderBy(sortField, orderByDir)
-    .orderBy('id', orderByDir)
-    .start(issue)
-    .one();
-  if (open !== undefined) {
-    q = q.where('open', open);
-  }
-
-  if (creator) {
-    q = q.whereExists('creator', q => q.where('login', creator));
-  }
-
-  if (assignee) {
-    q = q.whereExists('assignee', q => q.where('login', assignee));
-  }
-
-  if (textFilter) {
-    q = q.where('title', 'ILIKE', `%${escapeLike(textFilter)}%`);
-  }
-
-  if (labels) {
-    for (const label of labels) {
-      q = q.whereExists('labels', q => q.where('name', label));
-    }
-  }
-  return q;
-}
-
 type Issue = IssueRow & {
   readonly comments: readonly CommentRow[];
 };
@@ -975,15 +979,9 @@ function useEmojiChangeListener(
   issue: Issue | undefined,
   cb: (added: readonly Emoji[], removed: readonly Emoji[]) => void,
 ) {
-  const z = useZero();
   const enabled = issue !== undefined;
   const issueID = issue?.id;
-  const [emojis, result] = useQuery(
-    z.query.emoji
-      .where('subjectID', issueID ?? '')
-      .related('creator', creator => creator.one()),
-    {enabled},
-  );
+  const [emojis, result] = useQuery(emojiChange(issueID ?? ''), {enabled});
 
   const lastEmojis = useRef<Map<string, Emoji> | undefined>();
 

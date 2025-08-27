@@ -1,5 +1,5 @@
-import type {LogContext} from '@rocicorp/logger';
 import {basename, dirname, join, relative, resolve, sep} from 'node:path';
+import {existsSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {tsImport} from 'tsx/esm/api';
 import {logOptions} from '../../../otel/src/log-options.ts';
@@ -11,6 +11,7 @@ import {
 } from '../../../zero-schema/src/compiled-permissions.ts';
 import {isSchemaConfig} from '../../../zero-schema/src/schema-config.ts';
 import {appOptions, shardOptions, zeroOptions} from '../config/zero-config.ts';
+import {colorConsole} from '../../../shared/src/logging.ts';
 
 export const deployPermissionsOptions = {
   schema: {
@@ -72,13 +73,21 @@ export const deployPermissionsOptions = {
 };
 
 export async function loadSchemaAndPermissions(
-  lc: LogContext,
   schemaPath: string,
-): Promise<{schema: Schema; permissions: PermissionsConfig}> {
+  allowMissing: true,
+): Promise<{schema: Schema; permissions: PermissionsConfig} | undefined>;
+export async function loadSchemaAndPermissions(
+  schemaPath: string,
+  allowMissing?: false,
+): Promise<{schema: Schema; permissions: PermissionsConfig}>;
+export async function loadSchemaAndPermissions(
+  schemaPath: string,
+  allowMissing: boolean | undefined,
+): Promise<{schema: Schema; permissions: PermissionsConfig} | undefined> {
   const typeModuleErrorMessage = () =>
     `\n\nYou may need to add \` "type": "module" \` to the package.json file for ${schemaPath}.\n`;
 
-  lc.info?.(`Loading permissions from ${schemaPath}`);
+  colorConsole.info(`Loading permissions from ${schemaPath}`);
   const dir = dirname(fileURLToPath(import.meta.url));
   const absoluteSchemaPath = resolve(schemaPath);
   const relativeDir = relative(dir, dirname(absoluteSchemaPath));
@@ -92,11 +101,19 @@ export async function loadSchemaAndPermissions(
   // on Windows. They need to be converted to *nix format.
   relativePath = relativePath.replace(/\\/g, '/');
 
+  if (!existsSync(absoluteSchemaPath)) {
+    if (allowMissing) {
+      return undefined;
+    }
+    colorConsole.error(`Schema file ${schemaPath} does not exist.`);
+    process.exit(1);
+  }
+
   let module;
   try {
     module = await tsImport(relativePath, import.meta.url);
   } catch (e) {
-    lc.error?.(
+    colorConsole.error(
       `Failed to load zero schema from ${absoluteSchemaPath}` +
         typeModuleErrorMessage(),
     );
@@ -104,7 +121,7 @@ export async function loadSchemaAndPermissions(
   }
 
   if (!isSchemaConfig(module)) {
-    lc.error?.(
+    colorConsole.error(
       `Schema file ${schemaPath} must export [schema] and [permissions].` +
         typeModuleErrorMessage(),
     );
@@ -120,7 +137,7 @@ export async function loadSchemaAndPermissions(
       permissions: v.parse(perms, permissionsConfigSchema),
     };
   } catch (e) {
-    lc.error?.(`Failed to parse Permissions object`);
+    colorConsole.error(`Failed to parse Permissions object`);
     throw e;
   }
 }

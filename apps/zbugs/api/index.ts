@@ -1,17 +1,27 @@
 // https://vercel.com/templates/other/fastify-serverless-function
+import '../../../packages/shared/src/dotenv.ts';
 import cookie from '@fastify/cookie';
 import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
 import {Octokit} from '@octokit/core';
-import '@dotenvx/dotenvx/config';
+import type {ReadonlyJSONValue} from '@rocicorp/zero';
+import assert from 'assert';
 import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
+import type {IncomingHttpHeaders} from 'http';
 import {jwtVerify, SignJWT, type JWK} from 'jose';
 import {nanoid} from 'nanoid';
 import postgres from 'postgres';
-import {handlePush} from '../server/push-handler.ts';
 import {must} from '../../../packages/shared/src/must.ts';
-import assert from 'assert';
-import {authDataSchema, type AuthData} from '../shared/auth.ts';
-import type {ReadonlyJSONValue} from '@rocicorp/zero';
+import {jwtDataSchema, type JWTData} from '../shared/auth.ts';
+import {getQuery} from '../server/get-query.ts';
+import {
+  handleGetQueriesRequest,
+  handleMutationRequest,
+  getMutation,
+} from '@rocicorp/zero/server';
+import {zeroPostgresJS} from '@rocicorp/zero/server/adapters/postgresjs';
+import {schema} from '../shared/schema.ts';
+import {getPresignedUrl} from '../src/server/upload.ts';
+import {createServerMutators} from '../server/server-mutators.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -26,6 +36,8 @@ let privateJwk: JWK | undefined;
 export const fastify = Fastify({
   logger: true,
 });
+
+const dbProvider = zeroPostgresJS(schema, sql);
 
 fastify.register(cookie);
 
@@ -93,7 +105,7 @@ fastify.get<{
 
   const userRows = await sql`SELECT * FROM "user" WHERE "id" = ${userId}`;
 
-  const jwtPayload: AuthData = {
+  const jwtPayload: JWTData = {
     sub: userId,
     iat: Math.floor(Date.now() / 1000),
     role: userRows[0].role,
@@ -116,25 +128,14 @@ fastify.get<{
     );
 });
 
-fastify.post<{
-  Querystring: Record<string, string>;
-  Body: ReadonlyJSONValue;
-}>('/api/push', async function (request, reply) {
-  let {authorization} = request.headers;
-  if (authorization !== undefined) {
-    assert(authorization.toLowerCase().startsWith('bearer '));
-    authorization = authorization.substring('Bearer '.length);
-  }
-
-  const jwk = process.env.VITE_PUBLIC_JWK;
-  let authData: AuthData | undefined;
+async function withAuth<T extends {headers: IncomingHttpHeaders}>(
+  request: T,
+  reply: FastifyReply,
+  handler: (authData: JWTData | undefined) => Promise<void>,
+) {
+  let authData: JWTData | undefined;
   try {
-    authData =
-      jwk && authorization
-        ? authDataSchema.parse(
-            (await jwtVerify(authorization, JSON.parse(jwk))).payload,
-          )
-        : undefined;
+    authData = await maybeVerifyAuth(request.headers);
   } catch (e) {
     if (e instanceof Error) {
       reply.status(401).send(e.message);
@@ -143,9 +144,172 @@ fastify.post<{
     throw e;
   }
 
-  const response = await handlePush(authData, request.query, request.body);
+  await handler(authData);
+}
+
+fastify.post<{
+  Querystring: Record<string, string>;
+  Body: ReadonlyJSONValue;
+}>('/api/push', mutateHandler);
+
+fastify.post<{
+  Querystring: Record<string, string>;
+  Body: ReadonlyJSONValue;
+}>('/api/mutate', mutateHandler);
+
+async function mutateHandler(
+  request: FastifyRequest<{
+    Querystring: Record<string, string>;
+    Body: ReadonlyJSONValue;
+  }>,
+  reply: FastifyReply,
+) {
+  let jwtData: JWTData | undefined;
+  try {
+    jwtData = await maybeVerifyAuth(request.headers);
+  } catch (e) {
+    if (e instanceof Error) {
+      reply.status(401).send(e.message);
+      return;
+    }
+    throw e;
+  }
+
+  const postCommitTasks: (() => Promise<void>)[] = [];
+  const mutators = createServerMutators(jwtData, postCommitTasks);
+
+  const response = await handleMutationRequest(
+    transact =>
+      transact(dbProvider, (tx, name, args) =>
+        getMutation(mutators, name)(tx, args),
+      ),
+    request.query,
+    request.body,
+    'info',
+  );
+
+  await Promise.all(postCommitTasks.map(task => task()));
+
   reply.send(response);
+}
+
+fastify.post<{
+  Querystring: Record<string, string>;
+  Body: ReadonlyJSONValue;
+}>('/api/pull', getQueriesHandler);
+
+fastify.post<{
+  Querystring: Record<string, string>;
+  Body: ReadonlyJSONValue;
+}>('/api/get-queries', getQueriesHandler);
+
+async function getQueriesHandler(
+  request: FastifyRequest<{
+    Querystring: Record<string, string>;
+    Body: ReadonlyJSONValue;
+  }>,
+  reply: FastifyReply,
+) {
+  await withAuth(request, reply, async authData => {
+    reply.send(
+      await handleGetQueriesRequest(
+        (name, args) => ({query: getQuery(authData, name, args)}),
+        schema,
+        request.body,
+      ),
+    );
+  });
+}
+
+fastify.post<{
+  Body: {contentType: string};
+}>('/api/upload/presigned-url', async (request, reply) => {
+  await withAuth(request, reply, async authData => {
+    if (!authData) {
+      reply.status(401).send('Authentication required');
+      return;
+    }
+
+    try {
+      const result = await getPresignedUrl(request.body.contentType);
+      reply.send(result);
+    } catch (error) {
+      if (error instanceof Error) {
+        reply.status(500).send(error.message);
+        return;
+      }
+      reply.status(500).send('Failed to generate presigned URL');
+    }
+  });
 });
+
+fastify.get<{
+  Querystring: {id: string; email: string};
+}>('/api/unsubscribe', async (request, reply) => {
+  if (!request.query.email) {
+    reply.status(400).send('Email is required');
+    return;
+  }
+
+  // Look up the actual issue ID from the shortID
+  const shortID = parseInt(request.query.id);
+
+  if (isNaN(shortID)) {
+    reply.status(400).send('Invalid issue ID');
+    return;
+  }
+
+  const existingUserResult =
+    await sql`SELECT id, email FROM "user" WHERE "email" = ${request.query.email}`;
+
+  const existingUser = existingUserResult[0];
+
+  if (!existingUser) {
+    reply.status(401).send('Unauthorized');
+    return;
+  }
+
+  const issueResult =
+    await sql`SELECT id, title FROM "issue" WHERE "shortID" = ${shortID}`;
+
+  const issue = issueResult[0];
+
+  if (!issue) {
+    reply.status(404).send('Issue not found');
+    return;
+  }
+
+  await sql`INSERT INTO "issueNotifications" ("userID", "issueID", "subscribed") 
+    VALUES (${existingUser.id}, ${issue.id}, false)
+    ON CONFLICT ("userID", "issueID") 
+    DO UPDATE SET "subscribed" = false`;
+  reply
+    .type('text/html')
+    .send(
+      `OK! You are unsubscribed from <a href="https://bugs.rocicorp.dev/issue/${shortID}">${issue.title}</a>.`,
+    );
+});
+
+async function maybeVerifyAuth(
+  headers: IncomingHttpHeaders,
+): Promise<JWTData | undefined> {
+  let {authorization} = headers;
+  if (!authorization) {
+    return undefined;
+  }
+
+  assert(authorization.toLowerCase().startsWith('bearer '));
+  authorization = authorization.substring('Bearer '.length);
+
+  const jwk = process.env.VITE_PUBLIC_JWK;
+  if (!jwk) {
+    throw new Error('VITE_PUBLIC_JWK is not set');
+  }
+
+  return jwtDataSchema.parse(
+    (await jwtVerify(authorization, JSON.parse(jwk))).payload,
+  );
+}
 
 export default async function handler(
   req: FastifyRequest,

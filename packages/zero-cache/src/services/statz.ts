@@ -3,17 +3,18 @@ import type {FastifyReply, FastifyRequest} from 'fastify';
 import fs from 'fs';
 import os from 'os';
 import type {Writable} from 'stream';
-import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {NormalizedZeroConfig as ZeroConfig} from '../config/normalize.ts';
-import {BigIntJSON} from '../types/bigint-json.ts';
+import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
 import {pgClient} from '../types/pg.ts';
 import {getShardID, upstreamSchema} from '../types/shards.ts';
+import type {LogContext} from '@rocicorp/logger';
 
-const lc = createSilentLogContext();
-
-async function upstreamStats(config: ZeroConfig, out: Writable) {
+async function upstreamStats(
+  lc: LogContext,
+  config: ZeroConfig,
+  out: Writable,
+) {
   const schema = upstreamSchema(getShardID(config));
   const sql = pgClient(lc, config.upstream.db);
 
@@ -40,7 +41,7 @@ async function upstreamStats(config: ZeroConfig, out: Writable) {
   await sql.end();
 }
 
-async function cvrStats(config: ZeroConfig, out: Writable) {
+async function cvrStats(lc: LogContext, config: ZeroConfig, out: Writable) {
   out.write(header('CVR'));
 
   const schema = upstreamSchema(getShardID(config)) + '/cvr';
@@ -206,35 +207,14 @@ async function cvrStats(config: ZeroConfig, out: Writable) {
     out,
   );
 
-  out.write('ZQL (without permissions) for each query:');
-  const queryAsts =
-    await sql`SELECT "queryHash", "clientAST" FROM ${sql(schema)}."queries"`;
-
-  const seenQueries = new Set<string>();
-  const parseFailures: string[] = [];
-  for (const row of queryAsts) {
-    const {queryHash, clientAST} = row;
-    if (seenQueries.has(queryHash)) {
-      continue;
-    }
-    seenQueries.add(queryHash);
-
-    try {
-      const zql = clientAST.table + astToZQL(clientAST);
-      out.write('HASH:' + queryHash);
-      out.write('ZQL:' + zql + '\n');
-    } catch (e) {
-      parseFailures.push(queryHash);
-    }
-  }
-  if (parseFailures.length > 0) {
-    out.write('Failed to parse the following hashes: ' + parseFailures);
-  }
-
   await sql.end();
 }
 
-async function changelogStats(config: ZeroConfig, out: Writable) {
+async function changelogStats(
+  lc: LogContext,
+  config: ZeroConfig,
+  out: Writable,
+) {
   out.write(header('Change DB'));
   const schema = upstreamSchema(getShardID(config)) + '/cdc';
   const sql = pgClient(lc, config.change.db);
@@ -251,7 +231,7 @@ async function changelogStats(config: ZeroConfig, out: Writable) {
   await sql.end();
 }
 
-function replicaStats(config: ZeroConfig, out: Writable) {
+function replicaStats(lc: LogContext, config: ZeroConfig, out: Writable) {
   out.write(header('Replica'));
   const db = new Database(lc, config.replica.file);
   printStats(
@@ -320,6 +300,7 @@ function printStats(
 }
 
 export async function handleStatzRequest(
+  lc: LogContext,
   config: ZeroConfig,
   req: FastifyRequest,
   res: FastifyReply,
@@ -334,13 +315,13 @@ export async function handleStatzRequest(
     return;
   }
 
-  await upstreamStats(config, res.raw);
+  await upstreamStats(lc, config, res.raw);
   res.raw.write('\n\n');
-  await cvrStats(config, res.raw);
+  await cvrStats(lc, config, res.raw);
   res.raw.write('\n\n');
-  await changelogStats(config, res.raw);
+  await changelogStats(lc, config, res.raw);
   res.raw.write('\n\n');
-  replicaStats(config, res.raw);
+  replicaStats(lc, config, res.raw);
   res.raw.write('\n\n');
   osStats(res.raw);
   res.raw.end();

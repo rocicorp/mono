@@ -4,10 +4,6 @@ import type {CloseEvent, Data, ErrorEvent} from 'ws';
 import WebSocket, {createWebSocketStream} from 'ws';
 import {assert} from '../../../shared/src/asserts.ts';
 import * as valita from '../../../shared/src/valita.ts';
-import {
-  closeConnectionMessageSchema,
-  type CloseConnectionMessage,
-} from '../../../zero-protocol/src/close-connection.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
@@ -17,7 +13,11 @@ import {
   PROTOCOL_VERSION,
 } from '../../../zero-protocol/src/protocol-version.ts';
 import {upstreamSchema, type Upstream} from '../../../zero-protocol/src/up.ts';
-import {findErrorForClient, getLogLevel} from '../types/error-for-client.ts';
+import {
+  ErrorWithLevel,
+  findErrorForClient,
+  getLogLevel,
+} from '../types/error-for-client.ts';
 import type {Source} from '../types/streams.ts';
 import type {ConnectParams} from './connect-params.ts';
 
@@ -118,7 +118,7 @@ export class Connection {
    * This is early in the connection lifecycle because {@link #handleMessage}
    * will only parse messages with schema(s) of supported protocol versions.
    */
-  init() {
+  init(): boolean {
     if (
       this.#protocolVersion > PROTOCOL_VERSION ||
       this.#protocolVersion < MIN_SERVER_SUPPORTED_SYNC_PROTOCOL
@@ -137,7 +137,9 @@ export class Connection {
         {wsid: this.#wsID, timestamp: Date.now()},
       ];
       this.send(connectedMessage, 'ignore-backpressure');
+      return true;
     }
+    return false;
   }
 
   close(reason: string, ...args: unknown[]) {
@@ -237,32 +239,8 @@ export class Connection {
     }
   }
 
-  #handleClose = async (e: CloseEvent) => {
+  #handleClose = (e: CloseEvent) => {
     const {code, reason, wasClean} = e;
-    // Normal closure
-    if (code === 1000) {
-      let msg: CloseConnectionMessage | undefined;
-      try {
-        const data = JSON.parse(reason);
-        msg = valita.parse(data, closeConnectionMessageSchema);
-      } catch (e) {
-        // failed to to parse reason as JSON.
-        this.#lc.warn?.(
-          `failed to parse close message "${reason}": ${String(e)}`,
-        );
-        return;
-      }
-
-      try {
-        const result = await this.#messageHandler.handleMessage(msg);
-        for (const r of result) {
-          this.#handleMessageResult(r);
-        }
-      } catch (e) {
-        this.#lc.warn?.(`error while handling close connection`, e);
-      }
-    }
-
     this.close('WebSocket close event', {code, reason, wasClean});
   };
 
@@ -341,13 +319,14 @@ export class Connection {
   }
 }
 
-function send(
+// Exported for testing purposes.
+export function send(
   lc: LogContext,
-  ws: WebSocket,
+  ws: Pick<WebSocket, 'readyState' | 'send'>,
   data: Downstream,
   callback: ((err?: Error | null) => void) | 'ignore-backpressure',
 ) {
-  if (ws.readyState === ws.OPEN) {
+  if (ws.readyState === WebSocket.OPEN) {
     ws.send(
       JSON.stringify(data),
       callback === 'ignore-backpressure' ? undefined : callback,
@@ -357,7 +336,7 @@ function send(
       dropped: data,
     });
     if (callback !== 'ignore-backpressure') {
-      callback(new Error('websocket closed'));
+      callback(new ErrorWithLevel('websocket closed', 'info'));
     }
   }
 }

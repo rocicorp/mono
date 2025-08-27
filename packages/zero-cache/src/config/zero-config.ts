@@ -3,14 +3,20 @@
  */
 
 import {logOptions} from '../../../otel/src/log-options.ts';
-import {parseOptions, type Config} from '../../../shared/src/options.ts';
+import {
+  parseOptions,
+  type Config,
+  type ParseOptions,
+} from '../../../shared/src/options.ts';
 import * as v from '../../../shared/src/valita.ts';
-import {runtimeDebugFlags} from '../../../zqlite/src/runtime-debug.ts';
+import packageJson from '../../../zero/package.json' with {type: 'json'};
+import {runtimeDebugFlags} from '../../../zql/src/builder/debug-delegate.ts';
 import {singleProcessMode} from '../types/processes.ts';
 import {
   ALLOWED_APP_ID_CHARACTERS,
   INVALID_APP_ID_MESSAGE,
 } from '../types/shards.ts';
+import {assertNormalized, type NormalizedZeroConfig} from './normalize.ts';
 export type {LogConfig} from '../../../otel/src/log-options.ts';
 
 export const appOptions = {
@@ -68,7 +74,7 @@ export const shardOptions = {
       .string()
       .assert(() => {
         throw new Error(
-          `ZERO_SHARD_ID is deprecated. Please use ZERO_APP_ID instead.`,
+          `ZERO_SHARD_ID is no longer an option. Please use ZERO_APP_ID instead.`,
           // TODO: Link to release / migration notes?
         );
       })
@@ -150,6 +156,42 @@ const authOptions = {
   },
 };
 
+const makeMutatorQueryOptions = (
+  replacement: string | undefined,
+  suffix: string,
+) => ({
+  url: {
+    type: v.array(v.string()).optional(), // optional until we remove CRUD mutations
+    desc: [
+      replacement ? `DEPRECATED. Use ${replacement} instead.` : ``,
+      `The URL of the API server to which zero-cache will ${suffix}.`,
+      ``,
+      `* is allowed if you would like to allow the client to specify a subdomain to use.`,
+      `e.g., *.example.com/api/mutate`,
+      `You can specify multiple URLs as well which the client can choose from.`,
+      `e.g., ["https://api1.example.com/mutate", "https://api2.example.com/mutate"]`,
+    ],
+  },
+  apiKey: {
+    type: v.string().optional(),
+    desc: [
+      `An optional secret used to authorize zero-cache to call the API server handling writes.`,
+    ],
+  },
+  forwardCookies: {
+    type: v.boolean().default(false),
+    desc: [
+      `If true, zero-cache will forward cookies from the request.`,
+      `This is useful for passing authentication cookies to the API server.`,
+      `If false, cookies are not forwarded.`,
+    ],
+  },
+});
+
+const mutateOptions = makeMutatorQueryOptions(undefined, 'push mutations');
+const pushOptions = makeMutatorQueryOptions('mutate-url', 'push mutations');
+const queryOptions = makeMutatorQueryOptions(undefined, 'send synced queries');
+
 export type AuthConfig = Config<typeof authOptions>;
 
 // Note: --help will list flags in the order in which they are defined here,
@@ -195,20 +237,9 @@ export const zeroOptions = {
     },
   },
 
-  push: {
-    url: {
-      type: v.string().optional(), // optional until we remove CRUD mutations
-      desc: [
-        `The URL of the API server to which zero-cache will push mutations.`,
-      ],
-    },
-    apiKey: {
-      type: v.string().optional(),
-      desc: [
-        `An optional secret used to authorize zero-cache to call the API server.`,
-      ],
-    },
-  },
+  push: pushOptions,
+  mutate: mutateOptions,
+  getQueries: queryOptions,
 
   cvr: {
     db: {
@@ -235,12 +266,22 @@ export const zeroOptions = {
       type: v.number().optional(),
       hidden: true, // Passed from main thread to sync workers
     },
+
+    garbageCollectionInactivityThresholdHours: {
+      type: v.number().default(48),
+      desc: [
+        `The duration after which an inactive CVR is eligible for garbage collection.`,
+        `Note that garbage collection is an incremental, periodic process which does not`,
+        `necessarily purge all eligible CVRs immediately.`,
+      ],
+    },
   },
 
   queryHydrationStats: {
     type: v.boolean().optional(),
     desc: [
-      `Track and log the number of rows considered by each query in the system.`,
+      `Track and log the number of rows considered by query hydrations which`,
+      `take longer than {bold log-slow-hydrate-threshold} milliseconds.`,
       `This is useful for debugging and performance tuning.`,
     ],
   },
@@ -281,17 +322,28 @@ export const zeroOptions = {
   },
 
   changeStreamer: {
+    uri: {
+      type: v.string().optional(),
+      desc: [
+        `When set, connects to the {bold change-streamer} at the given URI.`,
+        `In a multi-node setup, this should be specified in {bold view-syncer} options,`,
+        `pointing to the {bold replication-manager} URI, which runs a {bold change-streamer}`,
+        `on port 4849.`,
+      ],
+    },
+
     mode: {
       type: v.literalUnion('dedicated', 'discover').default('dedicated'),
       desc: [
-        `The mode for running or connecting to the change-streamer:`,
-        `* {bold dedicated}: runs the change-streamer and shuts down when another`,
-        `      change-streamer takes over the replication slot. This is appropriate in a `,
-        `      single-node configuration, or for the {bold replication-manager} in a `,
-        `      multi-node configuration.`,
-        `* {bold discover}: connects to the change-streamer as internally advertised in the`,
-        `      change-db. This is appropriate for the {bold view-syncers} in a multi-node `,
-        `      configuration.`,
+        `As an alternative to {bold ZERO_CHANGE_STREAMER_URI}, the {bold ZERO_CHANGE_STREAMER_MODE}`,
+        `can be set to "{bold discover}" to instruct the {bold view-syncer} to connect to the `,
+        `ip address registered by the {bold replication-manager} upon startup.`,
+        ``,
+        `This may not work in all networking configurations, e.g. certain private `,
+        `networking or port forwarding configurations. Using the {bold ZERO_CHANGE_STREAMER_URI}`,
+        `with an explicit routable hostname is recommended instead.`,
+        ``,
+        `Note: This option is ignored if the {bold ZERO_CHANGE_STREAMER_URI} is set.`,
       ],
     },
 
@@ -308,20 +360,18 @@ export const zeroOptions = {
 
     address: {
       type: v.string().optional(),
-      desc: [
-        `The {bold host:port} for other processes to use when connecting to this `,
-        `change-streamer. When unspecified, the machine's IP address and the`,
-        `{bold --change-streamer-port} will be advertised for discovery.`,
-        ``,
-        `In most cases, the default behavior (unspecified) is sufficient, including in a`,
-        `single-node configuration or a multi-node configuration with host/awsvpc networking`,
-        `(e.g. Fargate).`,
-        ``,
-        `For a multi-node configuration in which the process is unable to determine the`,
-        `externally addressable port (e.g. a container running with {bold bridge} mode networking),`,
-        `the {bold --change-streamer-address} must be specified manually (e.g. a load balancer or`,
-        `service discovery address).`,
+      deprecated: [
+        `Set the {bold ZERO_CHANGE_STREAMER_URI} on view-syncers instead.`,
       ],
+      hidden: true,
+    },
+
+    protocol: {
+      type: v.literalUnion('ws', 'wss').default('ws'),
+      deprecated: [
+        `Set the {bold ZERO_CHANGE_STREAMER_URI} on view-syncers instead.`,
+      ],
+      hidden: true,
     },
 
     discoveryInterfacePreferences: {
@@ -338,19 +388,6 @@ export const zeroOptions = {
       // More confusing than it's worth to advertise this. The default list should be
       // adjusted to make things work for all environments; it is controlled as a
       // hidden flag as an emergency to unblock people with outlier network configs.
-      hidden: true,
-    },
-
-    uri: {
-      type: v
-        .string()
-        .assert(() => {
-          throw new Error(
-            `ZERO_CHANGE_STREAMER_URI is deprecated. Please see notes for ` +
-              `ZERO_CHANGE_STREAMER_MODE: https://github.com/rocicorp/mono/pull/4335`,
-          );
-        })
-        .optional(),
       hidden: true,
     },
   },
@@ -521,23 +558,25 @@ export const zeroOptions = {
         `(i.e. IOPS), upstream CPU, and network bandwidth may also be bottlenecks.`,
       ],
     },
-  },
 
-  tenantID: {
-    type: v.string().optional(),
-    desc: ['Passed by runner/main.ts to tag the LogContext of zero-caches'],
-    hidden: true,
+    profileCopy: {
+      type: v.boolean().optional(),
+      hidden: true,
+      desc: [
+        `Takes a cpu profile during the copy phase initial-sync, storing it as a JSON file`,
+        `initial-copy.cpuprofile in the tmp directory.`,
+      ],
+    },
   },
 
   targetClientRowCount: {
     type: v.number().default(20_000),
-    desc: [
-      'The target number of rows to keep per client in the client side cache.',
-      'This limit is a soft limit. When the number of rows in the cache exceeds',
-      'this limit, zero-cache will evict inactive queries in order of ttl-based expiration.',
-      'Active queries, on the other hand, are never evicted and are allowed to use more',
-      'rows than the limit.',
+    deprecated: [
+      'This option is no longer used and will be removed in a future version.',
+      'The client-side cache no longer enforces a row limit. Instead, TTL-based expiration',
+      'automatically manages cache size to prevent unbounded growth.',
     ],
+    hidden: true,
   },
 
   lazyStartup: {
@@ -556,6 +595,43 @@ export const zeroOptions = {
     type: v.string().optional(),
     desc: [`The version string outputted to logs when the server starts up.`],
   },
+
+  enableTelemetry: {
+    type: v.boolean().default(true),
+    desc: [
+      `Set to false to opt out of telemetry collection.`,
+      ``,
+      `This helps us improve Zero by collecting anonymous usage data.`,
+      `Setting the DO_NOT_TRACK environment variable also disables telemetry.`,
+    ],
+  },
+
+  cloudEvent: {
+    sinkEnv: {
+      type: v.string().optional(),
+      desc: [
+        `ENV variable containing a URI to a CloudEvents sink. When set, ZeroEvents`,
+        `will be published to the sink as the {bold data} field of CloudEvents.`,
+        `The {bold source} field of the CloudEvents will be set to the {bold ZERO_TASK_ID},`,
+        `along with any extension attributes specified by the {bold ZERO_CLOUD_EVENT_EXTENSION_OVERRIDES_ENV}.`,
+        ``,
+        `This configuration is modeled to easily integrate with a knative K_SINK binding,`,
+        `(i.e. https://github.com/knative/eventing/blob/main/docs/spec/sources.md#sinkbinding).`,
+        `However, any CloudEvents sink can be used.`,
+      ],
+    },
+
+    extensionOverridesEnv: {
+      type: v.string().optional(),
+      desc: [
+        `ENV variable containing a JSON stringified object with an {bold extensions} field`,
+        `containing attributes that should be added or overridden on outbound CloudEvents.`,
+        ``,
+        `This configuration is modeled to easily integrate with a knative K_CE_OVERRIDES binding,`,
+        `(i.e. https://github.com/knative/eventing/blob/main/docs/spec/sources.md#sinkbinding).`,
+      ],
+    },
+  },
 };
 
 export type ZeroConfig = Config<typeof zeroOptions>;
@@ -565,15 +641,40 @@ export const ZERO_ENV_VAR_PREFIX = 'ZERO_';
 let loadedConfig: Config<typeof zeroOptions> | undefined;
 
 export function getZeroConfig(
-  env: NodeJS.ProcessEnv = process.env,
-  argv = process.argv.slice(2),
-) {
+  opts: Omit<ParseOptions, 'envNamePrefix'> = {},
+): ZeroConfig {
   if (!loadedConfig || singleProcessMode()) {
-    loadedConfig = parseOptions(zeroOptions, argv, ZERO_ENV_VAR_PREFIX, env);
+    loadedConfig = parseOptions(zeroOptions, {
+      envNamePrefix: ZERO_ENV_VAR_PREFIX,
+      emitDeprecationWarnings: false, // overridden at the top level parse
+      ...opts,
+    });
 
     if (loadedConfig.queryHydrationStats) {
-      runtimeDebugFlags.trackRowsVended = true;
+      runtimeDebugFlags.trackRowCountsVended = true;
     }
   }
   return loadedConfig;
+}
+
+/**
+ * Same as {@link getZeroConfig}, with an additional check that the
+ * config has already been normalized (i.e. by the top level server/runner).
+ */
+export function getNormalizedZeroConfig(
+  opts: Omit<ParseOptions, 'envNamePrefix'> = {},
+): NormalizedZeroConfig {
+  const config = getZeroConfig(opts);
+  assertNormalized(config);
+  return config;
+}
+
+/**
+ * Gets the server version from the config if provided. Otherwise it gets it
+ * from the Zero package.json.
+ */
+export function getServerVersion(
+  config: Pick<ZeroConfig, 'serverVersion'> | undefined,
+): string {
+  return config?.serverVersion ?? packageJson.version;
 }

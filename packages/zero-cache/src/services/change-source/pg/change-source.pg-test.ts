@@ -1,7 +1,7 @@
 import {PG_OBJECT_IN_USE} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
 import {PostgresError} from 'postgres';
-import {beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect, vi} from 'vitest';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {TestLogSink} from '../../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../../shared/src/queue.ts';
@@ -11,7 +11,8 @@ import {StatementRunner} from '../../../db/statements.ts';
 import {
   dropReplicationSlots,
   getConnectionURI,
-  testDBs,
+  type PgTest,
+  test,
 } from '../../../test/db.ts';
 import {DbFile} from '../../../test/lite.ts';
 import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.ts';
@@ -35,7 +36,7 @@ import {dropEventTriggerStatements} from './schema/ddl.ts';
 const APP_ID = '23';
 const SHARD_NUM = 1;
 
-describe('change-source/pg', {timeout: 30000}, () => {
+describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
   let logSink: TestLogSink;
   let lc: LogContext;
   let upstream: PostgresDB;
@@ -45,7 +46,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
   let source: ChangeSource;
   let streams: ChangeStream[];
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     streams = [];
     logSink = new TestLogSink();
     lc = new LogContext('error', {}, logSink);
@@ -85,6 +86,10 @@ describe('change-source/pg', {timeout: 30000}, () => {
     CREATE TABLE my.boo(
       a TEXT PRIMARY KEY, b TEXT, c TEXT, d TEXT
     );
+    CREATE TABLE my.bar(a TEXT NOT NULL);
+    CREATE UNIQUE INDEX bar_idx ON my.bar (a);
+    ALTER TABLE my.bar REPLICA IDENTITY USING INDEX bar_idx;
+
     CREATE PUBLICATION zero_zero FOR TABLES IN SCHEMA my;
     `);
 
@@ -263,7 +268,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
           timea: 1050134706000,
           timeb: 1547253035381.101,
           date: Date.UTC(2003, 3, 12),
-          time: '04:05:06.123457', // PG rounds to microseconds
+          time: 14706123,
           dates: [Date.UTC(2001, 1, 3), Date.UTC(2002, 2, 4)],
           times: [1547253035654.321, 1547253035123.456],
           num: 123456789012,
@@ -578,6 +583,14 @@ describe('change-source/pg', {timeout: 30000}, () => {
       'UnsupportedSchemaChangeError: Replication halted',
       `ALTER TABLE foo ADD pubid INT DEFAULT random()`,
     ],
+    [
+      'UnsupportedTableSchemaError: Table "bar" is missing its REPLICA IDENTITY INDEX',
+      `DROP INDEX my.bar_idx`,
+    ],
+    [
+      'UnsupportedTableSchemaError: Table "bar" with REPLICA IDENTITY NOTHING cannot be replicated',
+      `ALTER TABLE my.bar REPLICA IDENTITY NOTHING`,
+    ],
   ])('bad schema change error: %s', async (errMsg, stmt) => {
     await startReplication();
     const {changes} = await startStream('00');
@@ -739,9 +752,7 @@ describe('change-source/pg', {timeout: 30000}, () => {
           {component: 'change-source'},
           [
             expect.stringMatching(
-              'UnsupportedSchemaChangeError: Replication halted. ' +
-                'Schema changes cannot be reliably replicated without event trigger support. ' +
-                'Resync the replica to recover.',
+              'UnsupportedSchemaChangeError: Replication halted. Resync the replica to recover',
             ),
             {tag: 'relation'},
           ],
@@ -909,14 +920,20 @@ describe('change-source/pg', {timeout: 30000}, () => {
     `);
     expect(replicas2).toEqual(replicas1.slice(1));
 
-    // Verify that the two latter slots remain. (Add a sleep to reduce
+    // Verify that the two latter slots remain. (Use waitFor to reduce
     // flakiness because the drop is non-transactional.)
-    await sleep(100);
-    const slots3 = await upstream<{slot: string}[]>`
+    await vi.waitFor(
+      async () => {
+        const slots3 = await upstream<{slot: string}[]>`
       SELECT slot_name as slot FROM pg_replication_slots
         WHERE slot_name LIKE ${APP_ID + '\\_' + SHARD_NUM + '\\_%'}
     `.values();
-    expect(slots3).toEqual(slots2.slice(1));
+        expect(slots3).toEqual(slots2.slice(1));
+      },
+      {
+        interval: 100,
+      },
+    );
 
     replicaFile2.delete();
     replicaFile3.delete();

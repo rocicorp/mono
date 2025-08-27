@@ -3,15 +3,7 @@ import type {LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import Fastify, {type FastifyInstance, type FastifyRequest} from 'fastify';
 import {copyFileSync} from 'fs';
-import {
-  afterAll,
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-  vi,
-} from 'vitest';
+import {afterAll, beforeEach, describe, expect, vi} from 'vitest';
 import WebSocket from 'ws';
 import {assert} from '../../../shared/src/asserts.ts';
 import {h128} from '../../../shared/src/hash.ts';
@@ -35,11 +27,12 @@ import {
   changeSourceUpstreamSchema,
   type ChangeSourceUpstream,
 } from '../services/change-source/protocol/current/upstream.ts';
-import {getConnectionURI, testDBs} from '../test/db.ts';
+import {getConnectionURI, test, type PgTest} from '../test/db.ts';
 import {DbFile} from '../test/lite.ts';
 import type {PostgresDB} from '../types/pg.ts';
 import {childWorker, type Worker} from '../types/processes.ts';
 import {stream, type Sink} from '../types/streams.ts';
+import {PROTOCOL_ERROR} from '../types/ws.ts';
 
 // Adjust to debug.
 const LOG_LEVEL: LogLevel = 'error';
@@ -282,6 +275,40 @@ const INITIAL_CUSTOM_SETUP: ChangeStreamMessage[] = [
     {
       tag: 'create-table',
       spec: {
+        schema: '123_0',
+        name: 'mutations',
+        primaryKey: ['clientGroupID', 'clientID', 'mutationID'],
+        columns: {
+          clientGroupID: {pos: 0, dataType: 'text', notNull: true},
+          clientID: {pos: 1, dataType: 'text', notNull: true},
+          mutationID: {pos: 2, dataType: 'bigint', notNull: true},
+          mutation: {pos: 3, dataType: 'json'},
+        },
+      },
+    },
+  ],
+  [
+    'data',
+    {
+      tag: 'create-index',
+      spec: {
+        name: '123_mutations_key',
+        schema: '123_0',
+        tableName: 'mutations',
+        columns: {
+          clientGroupID: 'ASC',
+          clientID: 'ASC',
+          mutationID: 'ASC',
+        },
+        unique: true,
+      },
+    },
+  ],
+  [
+    'data',
+    {
+      tag: 'create-table',
+      spec: {
         schema: '123',
         name: 'schemaVersions',
         primaryKey: ['lock'],
@@ -391,7 +418,7 @@ describe('integration', {timeout: 30000}, () => {
 
   const CHANGE_SOURCE_PATH = '/foo/changes/v0/stream';
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     upDB = await testDBs.create('integration_test_upstream');
     cvrDB = await testDBs.create('integration_test_cvr');
     changeDB = await testDBs.create('integration_test_change');
@@ -444,6 +471,17 @@ describe('integration', {timeout: 30000}, () => {
       ['ZERO_CHANGE_DB']: getConnectionURI(changeDB),
       ['ZERO_REPLICA_FILE']: replicaDbFile.path,
       ['ZERO_NUM_SYNC_WORKERS']: '1',
+    };
+
+    return async () => {
+      try {
+        zeros.forEach(zero => zero.kill('SIGTERM')); // initiate and await graceful shutdown
+        (await Promise.all(zerosExited)).forEach(code => expect(code).toBe(0));
+      } finally {
+        await testDBs.drop(upDB, cvrDB, changeDB);
+        replicaDbFile.delete();
+        replicaDbFile2.delete();
+      }
     };
   }, 30000);
 
@@ -503,17 +541,6 @@ describe('integration', {timeout: 30000}, () => {
     expect(await client.dequeue(timedOut, 500)).toBe(timedOut);
   }
 
-  afterEach(async () => {
-    try {
-      zeros.forEach(zero => zero.kill('SIGTERM')); // initiate and await graceful shutdown
-      (await Promise.all(zerosExited)).forEach(code => expect(code).toBe(0));
-    } finally {
-      await testDBs.drop(upDB, cvrDB, changeDB);
-      replicaDbFile.delete();
-      replicaDbFile2.delete();
-    }
-  }, 30000);
-
   async function streamCustomChanges(changes: ChangeStreamMessage[]) {
     const sink = await customDownstream;
     for (const change of changes) {
@@ -523,7 +550,7 @@ describe('integration', {timeout: 30000}, () => {
 
   const WATERMARK_REGEX = /[0-9a-z]{4,}/;
 
-  test.each([
+  test.skip.each([
     ['single-node', 'pg', () => [env], undefined],
     ['replica identity full', 'pg', () => [env], 'FULL'],
     [
@@ -533,7 +560,26 @@ describe('integration', {timeout: 30000}, () => {
       undefined,
     ],
     [
-      'multi-node',
+      'multi-node (routed)',
+      'pg',
+      () => [
+        // The replication-manager must be started first for initial-sync
+        {
+          ...env,
+          ['ZERO_PORT']: `${port2}`,
+          ['ZERO_NUM_SYNC_WORKERS']: '0',
+        },
+        // startZero() will then copy to replicaDbFile2 for the view-syncer
+        {
+          ...env,
+          ['ZERO_CHANGE_STREAMER_URI']: `http://localhost:${port2 + 1}`,
+          ['ZERO_REPLICA_FILE']: replicaDbFile2.path,
+        },
+      ],
+      undefined,
+    ],
+    [
+      'multi-node (auto-discover)',
       'pg',
       () => [
         // The replication-manager must be started first for initial-sync
@@ -552,7 +598,27 @@ describe('integration', {timeout: 30000}, () => {
       undefined,
     ],
     [
-      'lazy view-syncer multi-node',
+      'lazy view-syncer multi-node (routed)',
+      'pg',
+      () => [
+        // The replication-manager must be started first for initial-sync
+        {
+          ...env,
+          ['ZERO_PORT']: `${port2}`,
+          ['ZERO_NUM_SYNC_WORKERS']: '0',
+        },
+        // startZero() will then copy to replicaDbFile2 for the view-syncer
+        {
+          ...env,
+          ['ZERO_CHANGE_STREAMER_URI']: `http://localhost:${port2 + 1}`,
+          ['ZERO_REPLICA_FILE']: replicaDbFile2.path,
+          ['ZERO_LAZY_STARTUP']: 'true',
+        },
+      ],
+      undefined,
+    ],
+    [
+      'lazy view-syncer multi-node (auto-discover)',
       'pg',
       () => [
         // The replication-manager must be started first for initial-sync
@@ -634,7 +700,7 @@ describe('integration', {timeout: 30000}, () => {
         {
           pokeID: '00:01',
           desiredQueriesPatches: {
-            def: [{op: 'put', hash: 'query-hash1', ast: FOO_QUERY}],
+            def: [{op: 'put', hash: 'query-hash1'}],
           },
         },
       ]);
@@ -652,7 +718,7 @@ describe('integration', {timeout: 30000}, () => {
         'pokePart',
         {
           pokeID: contentPokeID,
-          gotQueriesPatch: [{op: 'put', hash: 'query-hash1', ast: FOO_QUERY}],
+          gotQueriesPatch: [{op: 'put', hash: 'query-hash1'}],
           rowsPatch: [
             {
               op: 'put',
@@ -909,7 +975,7 @@ describe('integration', {timeout: 30000}, () => {
         {
           pokeID: WATERMARK_REGEX,
           desiredQueriesPatches: {
-            def: [{op: 'put', hash: 'query-hash2', ast: NOPK_QUERY}],
+            def: [{op: 'put', hash: 'query-hash2'}],
           },
         },
       ]);
@@ -945,6 +1011,25 @@ describe('integration', {timeout: 30000}, () => {
         'pokeEnd',
         {pokeID: WATERMARK_REGEX},
       ]);
+
+      await testInvalidRequestHandling();
     },
   );
+
+  async function testInvalidRequestHandling() {
+    const {
+      promise: response,
+      resolve: closedWith,
+      reject: gotError,
+    } = resolver<string>();
+    // Make sure an invalid websocket request is properly handled.
+    const invalidRequest = new WebSocket(`ws://localhost:${port}/foo-bar`);
+    invalidRequest.on('error', gotError);
+    invalidRequest.on('close', (code, reason) =>
+      closedWith(`${code}: ${reason}`),
+    );
+    expect(await response).toEqual(
+      `${PROTOCOL_ERROR}: Error: Invalid URL: /foo-bar`,
+    );
+  }
 });

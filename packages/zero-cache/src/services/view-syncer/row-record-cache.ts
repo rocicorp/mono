@@ -6,10 +6,14 @@ import {must} from '../../../../shared/src/must.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
+import {
+  getOrCreateCounter,
+  getOrCreateHistogram,
+} from '../../observability/metrics.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
 import {rowIDString} from '../../types/row-key.ts';
 import {cvrSchema, type ShardID} from '../../types/shards.ts';
-import {checkVersion} from './cvr-store.ts';
+import {checkVersion, type CVRFlushStats} from './cvr-store.ts';
 import type {CVRSnapshot} from './cvr.ts';
 import {
   rowRecordToRowsRow,
@@ -25,6 +29,8 @@ import {
   versionString,
   versionToNullableCookie,
 } from './schema/types.ts';
+
+const FLUSH_TYPE_ATTRIBUTE = 'flush.type';
 
 /**
  * The RowRecordCache is an in-memory cache of the `cvr.rows` tables that
@@ -95,6 +101,18 @@ export class RowRecordCache {
   #flushedRowsVersion: CVRVersion | null = null;
   #flushing: Resolver<void> | null = null;
 
+  readonly #cvrFlushTime = getOrCreateHistogram('sync', 'cvr.flush-time', {
+    description:
+      'Time to flush a CVR transaction. This includes both synchronous ' +
+      'and asynchronous flushes, distinguished by the flush.type attribute',
+    unit: 's',
+  });
+  readonly #cvrRowsFlushed = getOrCreateCounter(
+    'sync',
+    'cvr.rows-flushed',
+    'Number of (changed) rows flushed to a CVR',
+  );
+
   constructor(
     lc: LogContext,
     db: PostgresDB,
@@ -111,6 +129,22 @@ export class RowRecordCache {
     this.#failService = failService;
     this.#deferredRowFlushThreshold = deferredRowFlushThreshold;
     this.#setTimeout = setTimeoutFn;
+  }
+
+  recordSyncFlushStats(stats: CVRFlushStats, elapsedMs: number) {
+    this.#cvrFlushTime.record(elapsedMs / 1000, {
+      [FLUSH_TYPE_ATTRIBUTE]: 'sync',
+    });
+    if (stats.rowsDeferred === 0) {
+      this.#cvrRowsFlushed.add(stats.rows);
+    }
+  }
+
+  #recordAsyncFlushStats(rows: number, elapsedMs: number) {
+    this.#cvrFlushTime.record(elapsedMs / 1000, {
+      [FLUSH_TYPE_ATTRIBUTE]: 'async',
+    });
+    this.#cvrRowsFlushed.add(rows);
   }
 
   #cvr(table: string) {
@@ -189,7 +223,7 @@ export class RowRecordCache {
     const flushing = must(this.#flushing);
     try {
       while (this.#pendingRowsVersion !== this.#flushedRowsVersion) {
-        const start = Date.now();
+        const start = performance.now();
 
         const {rows, rowsVersion} = await this.#db.begin(tx => {
           // Note: This code block is synchronous, guaranteeing that the
@@ -200,11 +234,11 @@ export class RowRecordCache {
           this.#pending.clear();
           return {rows, rowsVersion};
         });
+        const elapsed = performance.now() - start;
         this.#lc.debug?.(
-          `flushed ${rows} rows@${versionString(rowsVersion)} (${
-            Date.now() - start
-          } ms)`,
+          `flushed ${rows} rows@${versionString(rowsVersion)} (${elapsed} ms)`,
         );
+        this.#recordAsyncFlushStats(rows, elapsed);
         this.#flushedRowsVersion = rowsVersion;
         // Note: apply() may have called while the transaction was committing,
         //       which will result in looping to commit the next #pendingRowsVersion.

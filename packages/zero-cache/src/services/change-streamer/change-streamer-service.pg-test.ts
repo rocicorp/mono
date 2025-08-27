@@ -1,15 +1,15 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {beforeEach, describe, expect, test, vi, type Mock} from 'vitest';
+import {beforeEach, describe, expect, vi, type Mock} from 'vitest';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
+import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
-import {expectTables, testDBs} from '../../test/db.ts';
-import {stringify} from '../../types/bigint-json.ts';
+import {expectTables, test, type PgTest} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
@@ -50,7 +50,7 @@ describe('change-streamer/service', () => {
   const REPLICA_VERSION = '01';
   const shard = {appID: 'zoro', shardNum: 3};
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     lc = createSilentLogContext();
 
     sql = await testDBs.create('change_streamer_test_change_db');
@@ -68,6 +68,7 @@ describe('change-streamer/service', () => {
       shard,
       'task-id',
       'change.streamer:12345',
+      'ws',
       sql,
       {
         startStream: () =>
@@ -728,6 +729,7 @@ describe('change-streamer/service', () => {
       shard,
       'task-id',
       'change.streamer:12345',
+      'ws',
       sql,
       source,
       replicaConfig,
@@ -751,6 +753,7 @@ describe('change-streamer/service', () => {
       shard,
       'task-id',
       'change.streamer:12345',
+      'ws',
       sql,
       source,
       replicaConfig,
@@ -771,6 +774,7 @@ describe('change-streamer/service', () => {
       shard,
       'task-id',
       'change.streamer:12345',
+      'ws',
       sql,
       source,
       replicaConfig,
@@ -803,6 +807,7 @@ describe('change-streamer/service', () => {
       shard,
       'task-id',
       'change.streamer:12345',
+      'ws',
       sql,
       source,
       replicaConfig,
@@ -838,6 +843,7 @@ describe('change-streamer/service', () => {
       shard,
       'task-id',
       'change.streamer:54321',
+      'ws',
       sql,
       source,
       replicaConfig,
@@ -901,6 +907,7 @@ describe('change-streamer/service', () => {
       shard,
       'task-id',
       'change.streamer:54321',
+      'ws',
       sql,
       source,
       replicaConfig,

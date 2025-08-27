@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
-import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {type AST, type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   LastInTuple,
@@ -10,6 +11,8 @@ import type {
 } from '../../../zero-schema/src/table-schema.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
+import type {CustomQueryID} from './named.ts';
+import type {QueryDelegate} from './query-delegate.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
@@ -30,6 +33,10 @@ type ArraySelectors<E extends TableSchema> = {
     ? K
     : never;
 }[keyof E['columns']];
+
+export type QueryReturn<Q> = Q extends Query<any, any, infer R> ? R : never;
+export type QueryTable<Q> = Q extends Query<any, infer T, any> ? T : never;
+export const delegateSymbol = Symbol('delegate');
 
 export type GetFilterType<
   TSchema extends TableSchema,
@@ -148,8 +155,28 @@ export interface Query<
   /**
    * A string that uniquely identifies this query. This can be used to determine
    * if two queries are the same.
+   *
+   * The hash of a custom query, on the client, is the hash of its AST.
+   * The hash of a custom query, on the server, is the hash of its name and args.
+   *
+   * The first allows many client-side queries to be pinned to the same backend query.
+   * The second ensures we do not invoke a named query on the backend more than once for the same `name:arg` pairing.
+   *
+   * If the query.hash was of `name:args` then `useQuery` would de-dupe
+   * queries with divergent ASTs.
+   *
+   * QueryManager will hash based on `name:args` since it is speaking with
+   * the server which tracks queries by `name:args`.
    */
   hash(): string;
+  readonly ast: AST;
+  readonly customQueryID: CustomQueryID | undefined;
+
+  nameAndArgs(
+    name: string,
+    args: ReadonlyArray<ReadonlyJSONValue>,
+  ): Query<TSchema, TTable, TReturn>;
+  [delegateSymbol](delegate: QueryDelegate): Query<TSchema, TTable, TReturn>;
 
   /**
    * Related is used to add a related query to the current query. This is used
@@ -375,7 +402,7 @@ export interface Query<
    *
    * @example
    * ```ts
-   * const view = query.materialize(createSolidView, '1m');
+   * const view = query.materialize(createSolidViewFactory, '1m');
    * ```
    */
   materialize<T>(
@@ -385,7 +412,8 @@ export interface Query<
 
   /**
    * Executes the query and returns the result once. The `options` parameter
-   * specifies whether to wait for complete results or return immediately.
+   * specifies whether to wait for complete results or return immediately,
+   * and the time to live for the query.
    *
    * - `{type: 'unknown'}`: Returns a snapshot of the data immediately.
    * - `{type: 'complete'}`: Waits for the latest, complete results from the server.
@@ -395,12 +423,16 @@ export interface Query<
    * `Query` implements `PromiseLike`, and calling `then` on it will invoke `run`
    * with the default behavior (`unknown`).
    *
-   * @param options Options to control the result type. Defaults to `{type: 'unknown'}`.
+   * @param options Options to control the result type.
+   * @param options.type The type of result to return.
+   * @param options.ttl Time To Live. This is the amount of time to keep the rows
+   *                  associated with this query after the returned promise has
+   *                  resolved.
    * @returns A promise resolving to the query result.
    *
    * @example
    * ```js
-   * const result = await query.run({type: 'complete'});
+   * const result = await query.run({type: 'complete', ttl: '1m'});
    * ```
    */
   run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
@@ -428,6 +460,8 @@ export type PreloadOptions = {
   ttl?: TTL | undefined;
 };
 
+export type MaterializeOptions = PreloadOptions;
+
 /**
  * A helper type that tries to make the type more readable.
  */
@@ -453,9 +487,13 @@ export type HumanReadableRecursive<T> = undefined extends T
  * this query you can preload it before calling run. See {@link preload}.
  *
  * By default, `run` uses `{type: 'unknown'}` to avoid waiting for the server.
+ *
+ * The `ttl` option is used to specify the time to live for the query. This is the amount of
+ * time to keep the rows associated with this query after the promise has resolved.
  */
 export type RunOptions = {
   type: 'unknown' | 'complete';
+  ttl?: TTL;
 };
 
 export const DEFAULT_RUN_OPTIONS_UNKNOWN = {

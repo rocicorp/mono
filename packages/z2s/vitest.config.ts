@@ -7,7 +7,7 @@ import {
 
 const {url} = import.meta;
 
-export const workspace = [
+export const projects = [
   configForNoPg(url),
   configForVersion(15, url),
   configForVersion(16, url),
@@ -21,4 +21,4 @@ export const workspace = [
   }),
 );
 
-export default defineConfig({test: {workspace, testTimeout: 20_000}});
+export default defineConfig({test: {projects, testTimeout: 20_000}});

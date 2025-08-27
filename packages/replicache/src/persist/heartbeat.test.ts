@@ -286,7 +286,7 @@ test('heartbeat with dropped idb throws', async () => {
 
   expect(message).lengthOf(3);
   assert(message[2] instanceof IDBNotFoundError);
-  expect(message[2].message).equal(`Replicache IndexedDB not found: ${name}`);
+  expect(message[2].message).to.match(/^Expected IndexedDB not found: /);
 
   controller.abort();
 });

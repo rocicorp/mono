@@ -1,12 +1,12 @@
 import {LogContext} from '@rocicorp/logger';
 import {WebSocket} from 'ws';
 import {assert, unreachable} from '../../../../../shared/src/asserts.ts';
+import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import type {SchemaValue} from '../../../../../zero-schema/src/table-schema.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {computeZqlSpecs} from '../../../db/lite-tables.ts';
 import {StatementRunner} from '../../../db/statements.ts';
-import {stringify} from '../../../types/bigint-json.ts';
 import type {ShardConfig, ShardID} from '../../../types/shards.ts';
 import {stream} from '../../../types/streams.ts';
 import type {
@@ -18,6 +18,7 @@ import {
   type ReplicationConfig,
 } from '../../change-streamer/schema/tables.ts';
 import {ChangeProcessor} from '../../replicator/change-processor.ts';
+import {ReplicationStatusPublisher} from '../../replicator/replication-status.ts';
 import {initChangeLog} from '../../replicator/schema/change-log.ts';
 import {
   getSubscriptionState,
@@ -151,61 +152,74 @@ export async function initialSync(
 
   const processor = new ChangeProcessor(
     new StatementRunner(tx),
-    'INITIAL-SYNC',
+    'initial-sync',
     (_, err) => {
       throw err;
     },
   );
 
-  let num = 0;
-  for await (const change of changes) {
-    const [tag] = change;
-    switch (tag) {
-      case 'begin': {
-        const {commitWatermark} = change[2];
-        lc.info?.(
-          `initial sync of shard ${id} at replicaVersion ${commitWatermark}`,
-        );
-        initReplicationState(tx, [...publications].sort(), commitWatermark);
-        initChangeLog(tx);
-        processor.processMessage(lc, change);
-        break;
-      }
-      case 'data':
-        processor.processMessage(lc, change);
-        if (++num % 1000 === 0) {
-          lc.debug?.(`processed ${num} changes`);
-        }
-        break;
-      case 'commit':
-        processor.processMessage(lc, change);
-        validateInitiallySyncedData(lc, tx, shard);
-        lc.info?.(`finished initial-sync of ${num} changes`);
-        return;
-
-      case 'status':
-        break; // Ignored
-      // @ts-expect-error: falls through if the tag is not 'reset-required
-      case 'control': {
-        const {tag, message} = change[1];
-        if (tag === 'reset-required') {
-          throw new AutoResetSignal(
-            message ?? 'auto-reset signaled by change source',
+  const statusPublisher = new ReplicationStatusPublisher(tx);
+  try {
+    let num = 0;
+    for await (const change of changes) {
+      const [tag] = change;
+      switch (tag) {
+        case 'begin': {
+          const {commitWatermark} = change[2];
+          lc.info?.(
+            `initial sync of shard ${id} at replicaVersion ${commitWatermark}`,
           );
+          statusPublisher.publish(
+            lc,
+            'Initializing',
+            `Copying upstream tables at version ${commitWatermark}`,
+            5000,
+          );
+          initReplicationState(tx, [...publications].sort(), commitWatermark);
+          initChangeLog(tx);
+          processor.processMessage(lc, change);
+          break;
         }
+        case 'data':
+          processor.processMessage(lc, change);
+          if (++num % 1000 === 0) {
+            lc.debug?.(`processed ${num} changes`);
+          }
+          break;
+        case 'commit':
+          processor.processMessage(lc, change);
+          validateInitiallySyncedData(lc, tx, shard);
+          lc.info?.(`finished initial-sync of ${num} changes`);
+          return;
+
+        case 'status':
+          break; // Ignored
+        // @ts-expect-error: falls through if the tag is not 'reset-required
+        case 'control': {
+          const {tag, message} = change[1];
+          if (tag === 'reset-required') {
+            throw new AutoResetSignal(
+              message ?? 'auto-reset signaled by change source',
+            );
+          }
+        }
+        // falls through
+        case 'rollback':
+          throw new Error(
+            `unexpected message during initial-sync: ${stringify(change)}`,
+          );
+        default:
+          unreachable(change);
       }
-      // falls through
-      case 'rollback':
-        throw new Error(
-          `unexpected message during initial-sync: ${stringify(change)}`,
-        );
-      default:
-        unreachable(change);
     }
+    throw new Error(
+      `change source ${upstreamURI} closed before initial-sync completed`,
+    );
+  } catch (e) {
+    await statusPublisher.publishAndThrowError(lc, 'Initializing', e);
+  } finally {
+    statusPublisher.stop();
   }
-  throw new Error(
-    `change source ${upstreamURI} closed before initial-sync completed`,
-  );
 }
 
 // Verify that the upstream tables expected by the sync logic
@@ -220,6 +234,12 @@ function getRequiredTables({
       clientID: {type: 'string'},
       lastMutationID: {type: 'number'},
       userID: {type: 'string'},
+    },
+    [`${appID}_${shardNum}.mutations`]: {
+      clientGroupID: {type: 'string'},
+      clientID: {type: 'string'},
+      mutationID: {type: 'number'},
+      mutation: {type: 'json'},
     },
     [`${appID}.permissions`]: {
       permissions: {type: 'json'},

@@ -1,17 +1,13 @@
 import {LogContext} from '@rocicorp/logger';
-import type {Socket} from 'node:net';
 import UrlPattern from 'url-pattern';
 import {assert} from '../../../shared/src/asserts.ts';
 import {h32} from '../../../shared/src/hash.ts';
+import {getOrCreateGauge} from '../observability/metrics.ts';
 import {RunningState} from '../services/running-state.ts';
 import type {Service} from '../services/service.ts';
 import type {IncomingMessageSubset} from '../types/http.ts';
 import type {Worker} from '../types/processes.ts';
-import {
-  createWebSocketHandoffHandler,
-  type Handoff,
-  type WebSocketHandoffHandler,
-} from '../types/websocket-handoff.ts';
+import {installWebSocketHandoff} from '../types/websocket-handoff.ts';
 import {getConnectParams} from '../workers/connect-params.ts';
 
 export class WorkerDispatcher implements Service {
@@ -48,18 +44,30 @@ export class WorkerDispatcher implements Service {
       return params;
     }
 
-    const pushHandler = createWebSocketHandoffHandler(lc, req => {
+    const handlePush = (req: IncomingMessageSubset) => {
       assert(
         mutator !== undefined,
         'Received a push for a custom mutation but no `push.url` was configured.',
       );
-      return {payload: connectParams(req), receiver: mutator};
+      return {payload: connectParams(req), sender: mutator};
+    };
+
+    let maxProtocolVersion = 0;
+    getOrCreateGauge(
+      'sync',
+      'max-protocol-version',
+      'Latest sync protocol version from a connecting client',
+    ).addCallback(result => {
+      if (maxProtocolVersion) {
+        result.observe(maxProtocolVersion);
+      }
     });
 
-    const syncHandler = createWebSocketHandoffHandler(lc, req => {
+    const handleSync = (req: IncomingMessageSubset) => {
       assert(syncers.length, 'Received a sync request with no sync workers.');
       const params = connectParams(req);
-      const {clientGroupID} = params;
+      const {clientGroupID, protocolVersion} = params;
+      maxProtocolVersion = Math.max(maxProtocolVersion, protocolVersion);
 
       // Include the TaskID when hash-bucketting the client group to the sync
       // worker. This diversifies the distribution of client groups (across
@@ -69,10 +77,10 @@ export class WorkerDispatcher implements Service {
       const syncer = h32(taskID + '/' + clientGroupID) % syncers.length;
 
       lc.debug?.(`connecting ${clientGroupID} to syncer ${syncer}`);
-      return {payload: params, receiver: syncers[syncer]};
-    });
+      return {payload: params, sender: syncers[syncer]};
+    };
 
-    const changeStreamerHandler = createWebSocketHandoffHandler(lc, req => {
+    const handleChangeStream = (req: IncomingMessageSubset) => {
       // Note: The change-streamer is generally not dispatched via the main
       //       port, and in particular, should *not* be accessible via that
       //       port in single-node mode. However, this plumbing is maintained
@@ -95,35 +103,42 @@ export class WorkerDispatcher implements Service {
 
       return {
         payload: path.action,
-        receiver: changeStreamer,
+        sender: changeStreamer,
       };
-    });
+    };
 
     // handoff messages from this ZeroDispatcher to the appropriate worker (pool).
-    parent.onMessageType<Handoff<unknown>>('handoff', (msg, socket) => {
-      const {message, head} = msg;
-      const {url: u} = message;
-      const url = new URL(u ?? '', 'http://unused/');
-      const path = parsePath(url);
-      if (!path) {
-        throw new Error(`Invalid URL: ${u}`);
-      }
-      const handleWith = (handle: WebSocketHandoffHandler) =>
-        handle(message, socket as Socket, Buffer.from(head));
-      switch (path.worker) {
-        case 'sync':
-          return handleWith(syncHandler);
-        case 'replication':
-          return handleWith(changeStreamerHandler);
-        case 'mutate':
-          return handleWith(pushHandler);
-        default:
+    installWebSocketHandoff<unknown>(
+      lc,
+      request => {
+        const {url: u} = request;
+        const url = new URL(u ?? '', 'http://unused/');
+        const path = parsePath(url);
+        if (!path) {
           throw new Error(`Invalid URL: ${u}`);
-      }
-    });
+        }
+        switch (path.worker) {
+          case 'sync':
+            return handleSync(request);
+          case 'replication':
+            return handleChangeStream(request);
+          case 'mutate':
+            return handlePush(request);
+          default:
+            throw new Error(`Invalid URL: ${u}`);
+        }
+      },
+      parent,
+    );
   }
 
   run() {
+    const readyStart = Date.now();
+    getOrCreateGauge('server', 'uptime', {
+      description: 'Cumulative uptime, starting from when requests are served',
+      unit: 's',
+    }).addCallback(result => result.observe((Date.now() - readyStart) / 1000));
+
     return this.#state.stopped();
   }
 

@@ -1,33 +1,50 @@
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {assert} from '../../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
-import {hashOfAST} from '../../../zero-protocol/src/ast-hash.ts';
+import {TDigest} from '../../../shared/src/tdigest.ts';
 import {
   mapAST,
   normalizeAST,
   type AST,
 } from '../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
-import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
+import type {UpQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
+import {
+  hashOfAST,
+  hashOfNameAndArgs,
+} from '../../../zero-protocol/src/query-hash.ts';
 import {
   clientToServer,
+  serverToClient,
   type NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
-import type {GotCallback} from '../../../zql/src/query/query-impl.ts';
-import {compareTTL, parseTTL, type TTL} from '../../../zql/src/query/ttl.ts';
+import type {ClientMetricMap} from '../../../zql/src/query/metrics-delegate.ts';
+import type {CustomQueryID} from '../../../zql/src/query/named.ts';
+import type {GotCallback} from '../../../zql/src/query/query-delegate.ts';
+import {clampTTL, compareTTL, type TTL} from '../../../zql/src/query/ttl.ts';
+import type {InspectorDelegate} from './inspector/inspector.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 import type {ReadTransaction} from './replicache-types.ts';
+import type {ZeroLogContext} from './zero-log-context.ts';
 
 type QueryHash = string;
 
 type Entry = {
+  // We keep track of the AST so we can use it in the inspector.
   normalized: AST;
+  name: string | undefined;
+  args: readonly ReadonlyJSONValue[] | undefined;
   count: number;
   gotCallbacks: GotCallback[];
   ttl: TTL;
+};
+
+type ClientMetric = {
+  [K in keyof ClientMetricMap]: TDigest;
 };
 
 /**
@@ -35,32 +52,47 @@ type Entry = {
  * Sends `changeDesiredQueries` message to server when this changes.
  * Deduplicates requests so that we only listen to a given unique query once.
  */
-export class QueryManager {
+export class QueryManager implements InspectorDelegate {
   readonly #clientID: ClientID;
   readonly #clientToServer: NameMapper;
+  readonly #serverToClient: NameMapper;
   readonly #send: (change: ChangeDesiredQueriesMessage) => void;
   readonly #queries: Map<QueryHash, Entry> = new Map();
   readonly #recentQueriesMaxSize: number;
   readonly #recentQueries: Set<string> = new Set();
   readonly #gotQueries: Set<string> = new Set();
   readonly #mutationTracker: MutationTracker;
+  readonly #pendingQueryChanges: UpQueriesPatchOp[] = [];
+  readonly #queryChangeThrottleMs: number;
   #pendingRemovals: Array<() => void> = [];
+  #batchTimer: ReturnType<typeof setTimeout> | undefined;
+  readonly #lc: ZeroLogContext;
+  readonly #metrics: ClientMetric = newMetrics();
+  readonly #queryMetrics: Map<string, ClientMetric> = new Map();
+  readonly #slowMaterializeThreshold: number;
 
   constructor(
+    lc: ZeroLogContext,
     mutationTracker: MutationTracker,
     clientID: ClientID,
     tables: Record<string, TableSchema>,
     send: (change: ChangeDesiredQueriesMessage) => void,
     experimentalWatch: ReplicacheImpl['experimentalWatch'],
     recentQueriesMaxSize: number,
+    queryChangeThrottleMs: number,
+    slowMaterializeThreshold: number,
   ) {
+    this.#lc = lc.withContext('QueryManager');
     this.#clientID = clientID;
     this.#clientToServer = clientToServer(tables);
+    this.#serverToClient = serverToClient(tables);
     this.#recentQueriesMaxSize = recentQueriesMaxSize;
     this.#send = send;
     this.#mutationTracker = mutationTracker;
+    this.#queryChangeThrottleMs = queryChangeThrottleMs;
+    this.#slowMaterializeThreshold = slowMaterializeThreshold;
 
-    this.#mutationTracker.onAllMutationsConfirmed(() => {
+    this.#mutationTracker.onAllMutationsApplied(() => {
       if (this.#pendingRemovals.length === 0) {
         return;
       }
@@ -94,6 +126,11 @@ export class QueryManager {
     );
   }
 
+  getAST(queryID: string): AST | undefined {
+    const ast = this.#queries.get(queryID)?.normalized;
+    return ast && mapAST(ast, this.#serverToClient);
+  }
+
   #fireGotCallbacks(queryHash: string, got: boolean) {
     const gotCallbacks = this.#queries.get(queryHash)?.gotCallbacks ?? [];
     for (const gotCallback of gotCallbacks) {
@@ -118,22 +155,32 @@ export class QueryManager {
    */
   async getQueriesPatch(
     tx: ReadTransaction,
-    lastPatch?: Map<string, QueriesPatchOp> | undefined,
-  ): Promise<Map<string, QueriesPatchOp>> {
+    lastPatch?: Map<string, UpQueriesPatchOp> | undefined,
+  ): Promise<Map<string, UpQueriesPatchOp>> {
     const existingQueryHashes = new Set<string>();
     const prefix = desiredQueriesPrefixForClient(this.#clientID);
     for await (const key of tx.scan({prefix}).keys()) {
       existingQueryHashes.add(key.substring(prefix.length, key.length));
     }
-    const patch: Map<string, QueriesPatchOp> = new Map();
+    const patch: Map<string, UpQueriesPatchOp> = new Map();
     for (const hash of existingQueryHashes) {
       if (!this.#queries.has(hash)) {
         patch.set(hash, {op: 'del', hash});
       }
     }
-    for (const [hash, {normalized, ttl}] of this.#queries) {
+
+    for (const [hash, {normalized, ttl, name, args}] of this.#queries) {
       if (!existingQueryHashes.has(hash)) {
-        patch.set(hash, {op: 'put', hash, ast: normalized, ttl: parseTTL(ttl)});
+        patch.set(hash, {
+          op: 'put',
+          hash,
+          ast: name === undefined ? normalized : undefined,
+          name,
+          args,
+          // We get TTL out of the DagStore so it is possible that the TTL was written
+          // with a too high TTL.
+          ttl: clampTTL(ttl), // no lc here since no need to log here
+        });
       }
     }
 
@@ -157,31 +204,72 @@ export class QueryManager {
     return patch;
   }
 
-  add(ast: AST, ttl: TTL, gotCallback?: GotCallback | undefined): () => void {
+  addCustom(
+    ast: AST,
+    {name, args}: CustomQueryID,
+    ttl: TTL,
+    gotCallback?: GotCallback | undefined,
+  ): () => void {
+    const normalized = normalizeAST(ast);
+    const queryId = hashOfNameAndArgs(name, args);
+    return this.#add(queryId, normalized, name, args, ttl, gotCallback);
+  }
+
+  addLegacy(
+    ast: AST,
+    ttl: TTL,
+    gotCallback?: GotCallback | undefined,
+  ): () => void {
     const normalized = normalizeAST(ast);
     const astHash = hashOfAST(normalized);
-    let entry = this.#queries.get(astHash);
-    this.#recentQueries.delete(astHash);
+    return this.#add(
+      astHash,
+      normalized,
+      undefined, // name is undefined for legacy queries
+      undefined, // args are undefined for legacy queries
+      ttl,
+      gotCallback,
+    );
+  }
+
+  #add(
+    queryId: string,
+    normalized: AST,
+    name: string | undefined,
+    args: readonly ReadonlyJSONValue[] | undefined,
+    ttl: TTL,
+    gotCallback?: GotCallback | undefined,
+  ) {
+    assert(
+      (name === undefined) === (args === undefined),
+      'If name is defined, args must be defined',
+    );
+    ttl = clampTTL(ttl, this.#lc);
+    let entry = this.#queries.get(queryId);
+    this.#recentQueries.delete(queryId);
     if (!entry) {
-      const serverAST = mapAST(normalized, this.#clientToServer);
+      normalized = mapAST(normalized, this.#clientToServer);
+
       entry = {
-        normalized: serverAST,
+        normalized,
+        name,
+        args,
         count: 1,
         gotCallbacks: gotCallback ? [gotCallback] : [],
         ttl,
       };
-      this.#queries.set(astHash, entry);
-      this.#send([
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [
-            {op: 'put', hash: astHash, ast: serverAST, ttl: parseTTL(ttl)},
-          ],
-        },
-      ]);
+      this.#queries.set(queryId, entry);
+      this.#queueQueryChange({
+        op: 'put',
+        hash: queryId,
+        ast: name === undefined ? normalized : undefined,
+        name,
+        args,
+        ttl,
+      });
     } else {
       ++entry.count;
-      this.#updateEntry(entry, astHash, ttl);
+      this.#updateEntry(entry, queryId, ttl);
 
       if (gotCallback) {
         entry.gotCallbacks.push(gotCallback);
@@ -189,7 +277,7 @@ export class QueryManager {
     }
 
     if (gotCallback) {
-      gotCallback(this.#gotQueries.has(astHash));
+      gotCallback(this.#gotQueries.has(queryId));
     }
 
     let removed = false;
@@ -203,40 +291,72 @@ export class QueryManager {
       // as that could take data out of scope that is needed in a rebase
       if (this.#mutationTracker.size > 0) {
         this.#pendingRemovals.push(() =>
-          this.#remove(entry, astHash, gotCallback),
+          this.#remove(entry, queryId, gotCallback),
         );
         return;
       }
 
-      this.#remove(entry, astHash, gotCallback);
+      this.#remove(entry, queryId, gotCallback);
     };
   }
 
-  update(ast: AST, ttl: TTL) {
-    const normalized = normalizeAST(ast);
-    const astHash = hashOfAST(normalized);
-    const entry = must(this.#queries.get(astHash));
-    this.#updateEntry(entry, astHash, ttl);
+  updateCustom({name, args}: CustomQueryID, ttl: TTL) {
+    const queryID = hashOfNameAndArgs(name, args);
+    const entry = must(this.#queries.get(queryID));
+    this.#updateEntry(entry, queryID, ttl);
   }
 
-  #updateEntry(entry: Entry, hash: string, ttl: TTL): void {
+  updateLegacy(ast: AST, ttl: TTL) {
+    const normalized = normalizeAST(ast);
+    const queryID = hashOfAST(normalized);
+    const entry = must(this.#queries.get(queryID));
+    this.#updateEntry(entry, queryID, ttl);
+  }
+
+  #updateEntry(entry: Entry, queryID: string, ttl: TTL): void {
     // If the query already exists and the new ttl is larger than the old one
     // we send a changeDesiredQueries message to the server to update the ttl.
+    ttl = clampTTL(ttl, this.#lc);
     if (compareTTL(ttl, entry.ttl) > 0) {
       entry.ttl = ttl;
+      this.#queueQueryChange({
+        op: 'put',
+        hash: queryID,
+        ast: entry.name === undefined ? entry.normalized : undefined,
+        name: entry.name,
+        args: entry.args,
+        ttl,
+      });
+    }
+  }
+
+  #queueQueryChange(op: UpQueriesPatchOp) {
+    this.#pendingQueryChanges.push(op);
+    this.#scheduleBatch();
+  }
+
+  #scheduleBatch() {
+    if (this.#batchTimer === undefined) {
+      this.#batchTimer = setTimeout(
+        () => this.flushBatch(),
+        this.#queryChangeThrottleMs,
+      );
+    }
+  }
+
+  flushBatch() {
+    if (this.#batchTimer !== undefined) {
+      clearTimeout(this.#batchTimer);
+      this.#batchTimer = undefined;
+    }
+    if (this.#pendingQueryChanges.length > 0) {
       this.#send([
         'changeDesiredQueries',
         {
-          desiredQueriesPatch: [
-            {
-              op: 'put',
-              hash,
-              ast: entry.normalized,
-              ttl: parseTTL(ttl),
-            },
-          ],
+          desiredQueriesPatch: [...this.#pendingQueryChanges],
         },
       ]);
+      this.#pendingQueryChanges.length = 0;
     }
   }
 
@@ -249,17 +369,80 @@ export class QueryManager {
     if (entry.count === 0) {
       this.#recentQueries.add(astHash);
       if (this.#recentQueries.size > this.#recentQueriesMaxSize) {
-        const lruAstHash = this.#recentQueries.values().next().value;
-        assert(lruAstHash);
-        this.#queries.delete(lruAstHash);
-        this.#recentQueries.delete(lruAstHash);
-        this.#send([
-          'changeDesiredQueries',
-          {
-            desiredQueriesPatch: [{op: 'del', hash: lruAstHash}],
-          },
-        ]);
+        const lruQueryID = this.#recentQueries.values().next().value;
+        assert(lruQueryID);
+        this.#queries.delete(lruQueryID);
+        this.#recentQueries.delete(lruQueryID);
+        this.#queryMetrics.delete(lruQueryID);
+        this.#queueQueryChange({op: 'del', hash: lruQueryID});
       }
     }
   }
+
+  /**
+   * Gets the aggregated metrics for all queries managed by this QueryManager.
+   */
+  get metrics(): ClientMetric {
+    return this.#metrics;
+  }
+
+  addMetric<K extends keyof ClientMetricMap>(
+    metric: K,
+    value: number,
+    ...args: ClientMetricMap[K]
+  ): void {
+    // Only query metrics are tracked at this point.
+    // If this check fails then we need to add a runtime check.
+    metric satisfies `query-${string}`;
+
+    // We track all materializations of queries as well as per
+    // query materializations.
+    this.#metrics[metric].add(value);
+
+    const queryID = args[0];
+
+    // Handle slow query logging for end-to-end materialization
+    if (metric === 'query-materialization-end-to-end') {
+      const ast = args[1];
+
+      if (
+        this.#slowMaterializeThreshold !== undefined &&
+        value > this.#slowMaterializeThreshold
+      ) {
+        this.#lc.warn?.(
+          'Slow query materialization (including server/network)',
+          queryID,
+          ast,
+          value,
+        );
+      } else {
+        this.#lc.debug?.(
+          'Materialized query (including server/network)',
+          queryID,
+          ast,
+          value,
+        );
+      }
+    }
+
+    // The query manager manages metrics that are per query.
+    let existing = this.#queryMetrics.get(queryID);
+    if (!existing) {
+      existing = newMetrics();
+      this.#queryMetrics.set(queryID, existing);
+    }
+    existing[metric].add(value);
+  }
+
+  getQueryMetrics(queryID: string): ClientMetric | undefined {
+    return this.#queryMetrics.get(queryID);
+  }
+}
+
+function newMetrics(): ClientMetric {
+  return {
+    'query-materialization-client': new TDigest(),
+    'query-materialization-end-to-end': new TDigest(),
+    'query-update-client': new TDigest(),
+  };
 }

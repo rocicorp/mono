@@ -1,8 +1,8 @@
-import '@dotenvx/dotenvx/config'; // Imports ENV variables from .env
 import {resolver, type Resolver} from '@rocicorp/resolver';
+import '../../../../shared/src/dotenv.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import {normalizeZeroConfig} from '../../config/normalize.ts';
-import {getZeroConfig} from '../../config/zero-config.ts';
+import {getServerVersion, getZeroConfig} from '../../config/zero-config.ts';
 import {ProcessManager, runUntilKilled} from '../../services/life-cycle.ts';
 import {childWorker, type Worker} from '../../types/processes.ts';
 import {createLogContext} from '../logging.ts';
@@ -20,14 +20,17 @@ export async function runWorker(
   parent: Worker | null,
   env: NodeJS.ProcessEnv,
 ): Promise<void> {
-  const cfg = getZeroConfig(env);
+  // Note: Deprecation warnings are only emitted at this top-level parse;
+  //       they are suppressed when parsed in subprocesses.
+  const cfg = getZeroConfig({env, emitDeprecationWarnings: true});
   const lc = createLogContext(cfg, {worker: 'runner'});
 
   const defaultTaskID = await getTaskID(lc);
   const config = normalizeZeroConfig(lc, cfg, env, defaultTaskID);
   const processes = new ProcessManager(lc, parent ?? process);
 
-  const {serverVersion, port, lazyStartup} = config;
+  const {port, lazyStartup} = config;
+  const serverVersion = getServerVersion(config);
   lc.info?.(
     `starting server${!serverVersion ? '' : `@${serverVersion}`} ` +
       `protocolVersion=${PROTOCOL_VERSION}`,

@@ -2,7 +2,7 @@ import type {OptionalLogger} from '@rocicorp/logger';
 import {template} from 'chalk-template';
 import type {OptionDefinition} from 'command-line-args';
 import commandLineArgs from 'command-line-args';
-import commandLineUsage from 'command-line-usage';
+import commandLineUsage, {type Section} from 'command-line-usage';
 import {createDefu} from 'defu';
 import {toKebabCase, toSnakeCase} from 'kasi';
 import {stripVTControlCharacters as stripAnsi} from 'node:util';
@@ -37,10 +37,16 @@ export type WrappedOptionType = {
   /** Description lines to be displayed in --help. */
   desc?: string[];
 
+  /** Logged as a warning when parsed. */
+  deprecated?: string[];
+
   /** One-character alias for getopt-style short flags, e.g. -m */
   alias?: string;
 
-  /** Exclude this flag from --help text. Used for internal flags. */
+  /**
+   * Exclude this flag from --help text. Used for internal flags.
+   * Deprecated options are hidden by default.
+   */
   hidden?: boolean;
 };
 
@@ -276,39 +282,58 @@ function getRequiredOrDefault(type: OptionType) {
   };
 }
 
+export type ParseOptions = {
+  /** Defaults to process.argv.slice(2) */
+  argv?: string[];
+
+  envNamePrefix?: string;
+
+  description?: {header: string; content: string}[];
+
+  /** Defaults to `false` */
+  allowUnknown?: boolean;
+
+  /** Defaults to `false` */
+  allowPartial?: boolean;
+
+  /** Defaults to `process.env`. */
+  env?: NodeJS.ProcessEnv;
+
+  /** Defaults to `true`. */
+  emitDeprecationWarnings?: boolean;
+
+  /** Defaults to `console` */
+  logger?: OptionalLogger;
+
+  /** Defaults to `process.exit` */
+  exit?: (code?: number | string | null | undefined) => never;
+};
+
 export function parseOptions<T extends Options>(
-  options: T,
-  argv: string[] = process.argv.slice(2),
-  envNamePrefix = '',
-  processEnv = process.env,
-  logger: OptionalLogger = console,
-  exit = process.exit,
+  appOptions: T,
+  opts: ParseOptions = {},
 ): Config<T> {
-  return parseOptionsAdvanced(
-    options,
-    argv,
-    envNamePrefix,
-    false,
-    false,
-    processEnv,
-    logger,
-    exit,
-  ).config;
+  return parseOptionsAdvanced(appOptions, opts).config;
 }
 
 export function parseOptionsAdvanced<T extends Options>(
-  options: T,
-  argv: string[],
-  envNamePrefix = '',
-  allowUnknown = false,
-  allowPartial = false,
-  processEnv = process.env,
-  logger: OptionalLogger = console,
-  exit = process.exit,
+  appOptions: T,
+  opts: ParseOptions = {},
 ): {config: Config<T>; env: Record<string, string>; unknown?: string[]} {
+  const {
+    argv = process.argv.slice(2),
+    envNamePrefix = '',
+    description = [],
+    allowUnknown = false,
+    allowPartial = false,
+    env: processEnv = process.env,
+    emitDeprecationWarnings = true,
+    logger = console,
+    exit = process.exit,
+  } = opts;
   // The main logic for converting a valita Type spec to an Option (i.e. flag) spec.
   function addOption(field: string, option: WrappedOptionType, group?: string) {
-    const {type, desc = [], alias, hidden} = option;
+    const {type, desc = [], deprecated, alias, hidden} = option;
 
     // The group name is prepended to the flag name.
     const flag = group ? toKebabCase(`${group}-${field}`) : toKebabCase(field);
@@ -381,12 +406,17 @@ export function parseOptionsAdvanced<T extends Options>(
     const opt = {
       name: flag,
       alias,
-      type: valueParser(env, terminalType),
+      type: valueParser(
+        env,
+        terminalType,
+        logger,
+        emitDeprecationWarnings ? deprecated : undefined,
+      ),
       multiple,
       group,
       description: spec.join('\n') + '\n',
       typeLabel: typeLabel.join('\n') + '\n',
-      hidden,
+      hidden: hidden === undefined ? deprecated !== undefined : hidden,
     };
     optsWithoutDefaults.push(opt);
     optsWithDefaults.push({...opt, defaultValue});
@@ -398,7 +428,7 @@ export function parseOptionsAdvanced<T extends Options>(
   const envArgv: string[] = [];
 
   try {
-    for (const [name, val] of Object.entries(options)) {
+    for (const [name, val] of Object.entries(appOptions)) {
       const {type} = val as {type: unknown};
       if (v.instanceOfAbstractType(val)) {
         addOption(name, {type: val});
@@ -424,13 +454,13 @@ export function parseOptionsAdvanced<T extends Options>(
         break;
       case '--help':
       case '-h':
-        showUsage(optsWithDefaults, logger);
+        showUsage(optsWithDefaults, description, logger);
         exit(0);
         break;
       default:
         if (!allowUnknown) {
           logger.error?.('Invalid arguments:', unknown);
-          showUsage(optsWithDefaults, logger);
+          showUsage(optsWithDefaults, description, logger);
           exit(0);
         }
         break;
@@ -439,7 +469,7 @@ export function parseOptionsAdvanced<T extends Options>(
     const parsedArgs = defu(withoutDefaults, fromEnv, defaults);
     const env = {...env1, ...env2, ...env3};
 
-    let schema = configSchema(options, envNamePrefix);
+    let schema = configSchema(appOptions, envNamePrefix);
     if (allowPartial) {
       // TODO: Type configSchema() to return a v.ObjectType<...>
       schema = v.deepPartial(schema as v.ObjectType) as v.Type<Config<T>>;
@@ -451,13 +481,25 @@ export function parseOptionsAdvanced<T extends Options>(
     };
   } catch (e) {
     logger.error?.(String(e));
-    showUsage(optsWithDefaults, logger);
+    showUsage(optsWithDefaults, description, logger);
     throw e;
   }
 }
 
-function valueParser(optionName: string, typeName: string) {
+function valueParser(
+  optionName: string,
+  typeName: string,
+  logger: OptionalLogger,
+  deprecated: string[] | undefined,
+) {
   return (input: string) => {
+    if (deprecated) {
+      logger.warn?.(
+        template(
+          `\n${optionName} is deprecated:\n` + deprecated.join('\n') + '\n',
+        ),
+      );
+    }
     switch (typeName) {
       case 'string':
         return input;
@@ -547,6 +589,7 @@ export function parseBoolean(optionName: string, input: string) {
 
 function showUsage(
   optionList: DescribedOptionDefinition[],
+  description: {header: string; content: string}[] = [],
   logger: OptionalLogger = console,
 ) {
   const hide: string[] = [];
@@ -567,8 +610,8 @@ function showUsage(
     }
   });
 
-  logger.info?.(
-    commandLineUsage({
+  const sections: Section[] = [
+    {
       optionList,
       reverseNameOrder: true, // Display --flag-name before -alias
       hide,
@@ -579,8 +622,14 @@ function showUsage(
         ],
         noTrim: true,
       },
-    }),
-  );
+    },
+  ];
+
+  if (description) {
+    sections.unshift(...description);
+  }
+
+  logger.info?.(commandLineUsage(sections));
 }
 
 type DescribedOptionDefinition = OptionDefinition & {

@@ -11,22 +11,22 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {must} from '../../../shared/src/must.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import {compile, extractZqlResult} from '../../../z2s/src/compiler.ts';
-import type {ServerSchema} from '../../../z2s/src/schema.ts';
 import {formatPgInternalConvert} from '../../../z2s/src/sql.ts';
 import {initialSync} from '../../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
-import {makeSchemaCRUD} from '../../../zero-pg/src/custom.ts';
-import {ZPGQuery} from '../../../zero-pg/src/query.ts';
-import {getServerSchema} from '../../../zero-pg/src/schema.ts';
-import {Transaction} from '../../../zero-pg/src/test/util.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   clientToServer,
   type NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
+import type {ServerSchema} from '../../../zero-schema/src/server-schema.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
+import {makeSchemaCRUD} from '../../../zero-server/src/custom.ts';
+import {ZPGQuery} from '../../../zero-server/src/query.ts';
+import {getServerSchema} from '../../../zero-server/src/schema.ts';
+import {Transaction} from '../../../zero-server/src/test/util.ts';
 import type {Change} from '../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../zql/src/ivm/data.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
@@ -35,11 +35,11 @@ import type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
 import type {SourceChange} from '../../../zql/src/ivm/source.ts';
 import type {Format} from '../../../zql/src/ivm/view.ts';
 import type {DBTransaction} from '../../../zql/src/mutate/custom.ts';
+import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {
   ast,
   defaultFormat,
   QueryImpl,
-  type QueryDelegate,
 } from '../../../zql/src/query/query-impl.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../zql/src/query/test/query-delegate.ts';
@@ -1012,7 +1012,7 @@ function assignRandomValues(schema: TableSchema, row: Row): Row {
         newRow[col] = null;
         break;
       default:
-        unreachable(colSchema);
+        unreachable(colSchema.type);
     }
   }
   return newRow;

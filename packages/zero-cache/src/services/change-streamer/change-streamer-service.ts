@@ -1,6 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {unreachable} from '../../../../shared/src/asserts.ts';
+import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {
   min,
   type AtLeastOne,
@@ -46,6 +47,7 @@ export async function initializeStreamer(
   shard: ShardID,
   taskID: string,
   discoveryAddress: string,
+  discoveryProtocol: string,
   changeDB: PostgresDB,
   changeSource: ChangeSource,
   subscriptionState: SubscriptionState,
@@ -68,6 +70,7 @@ export async function initializeStreamer(
     shard,
     taskID,
     discoveryAddress,
+    discoveryProtocol,
     changeDB,
     replicaVersion,
     changeSource,
@@ -270,6 +273,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   // load-balancing / routing logic has begun routing requests to this task.
   readonly #serving = resolver();
 
+  readonly #txCounter = getOrCreateCounter(
+    'replication',
+    'transactions',
+    'Count of replicated transactions',
+  );
+
   #stream: ChangeStream | undefined;
 
   constructor(
@@ -277,6 +286,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     shard: ShardID,
     taskID: string,
     discoveryAddress: string,
+    discoveryProtocol: string,
     changeDB: PostgresDB,
     replicaVersion: string,
     source: ChangeSource,
@@ -294,6 +304,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       shard,
       taskID,
       discoveryAddress,
+      discoveryProtocol,
       changeDB,
       replicaVersion,
       consumed => this.#stream?.acks.push(['status', consumed[1], consumed[2]]),
@@ -342,6 +353,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
                   `commit watermark ${change[2].watermark} does not match 'begin' watermark ${watermark}`,
                 );
               }
+              this.#txCounter.add(1);
               break;
             default:
               if (watermark === null) {

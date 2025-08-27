@@ -1,6 +1,7 @@
 import {describe, expect, test} from 'vitest';
 import {must} from '../../../shared/src/must.ts';
-import {newQuery, type QueryDelegate} from './query-impl.ts';
+import type {QueryDelegate} from './query-delegate.ts';
+import {newQuery} from './query-impl.ts';
 import {QueryDelegateImpl} from './test/query-delegate.ts';
 import {schema} from './test/test-schemas.ts';
 
@@ -334,6 +335,7 @@ describe('kitchen sink query', () => {
     expect(queryDelegate.addedServerQueries).toMatchInlineSnapshot(`
       [
         {
+          "args": undefined,
           "ast": {
             "limit": 6,
             "orderBy": [
@@ -511,7 +513,8 @@ describe('kitchen sink query', () => {
               "type": "and",
             },
           },
-          "ttl": "none",
+          "name": undefined,
+          "ttl": 300000,
         },
       ]
     `);

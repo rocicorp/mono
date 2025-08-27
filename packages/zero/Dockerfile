@@ -17,6 +17,7 @@ ARG ZERO_VERSION
 RUN test -n "$ZERO_VERSION"
 
 RUN apk add --update curl
+RUN apk add --no-cache readline readline-dev
 
 RUN mkdir -p /opt/app
 WORKDIR /opt/app
@@ -35,6 +36,9 @@ RUN if echo "$ZERO_VERSION" | grep -q "\.tgz$"; then \
     npm install -g @rocicorp/zero@${ZERO_VERSION}; \
   fi
 
+# Add zero-sqlite3 to path
+RUN ln -s /usr/local/lib/node_modules/@rocicorp/zero/node_modules/@rocicorp/zero-sqlite3/build/Release/zero_sqlite3  /usr/local/bin/zero-sqlite3
+
 # Copy litestream executable and config.yml
 COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream
 RUN cp /usr/local/lib/node_modules/@rocicorp/zero/out/zero-cache/src/services/litestream/config.yml /etc/litestream.yml
@@ -43,11 +47,8 @@ ENV ZERO_LITESTREAM_EXECUTABLE=/usr/local/bin/litestream
 ENV ZERO_LITESTREAM_CONFIG_PATH=/etc/litestream.yml
 ENV ZERO_LOG_FORMAT=json
 ENV ZERO_SERVER_VERSION=${ZERO_VERSION}
-
-# Install OpenTelemetry instrumentation
-ENV NODE_PATH=/usr/local/lib/node_modules
-RUN npm install -g @opentelemetry/auto-instrumentations-node
+ENV ZERO_IN_CONTAINER=1
 
 EXPOSE 4848 4849
 ENTRYPOINT ["/bin/sh", "-c"]
-CMD ["NODE_OPTIONS='--require=@opentelemetry/auto-instrumentations-node/register' npx zero-cache"]
+CMD ["npx zero-cache"]

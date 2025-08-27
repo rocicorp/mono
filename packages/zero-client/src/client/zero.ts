@@ -30,14 +30,14 @@ import type {Enum} from '../../../shared/src/enum.ts';
 import {must} from '../../../shared/src/must.ts';
 import {navigator} from '../../../shared/src/navigator.ts';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
+import {Subscribable} from '../../../shared/src/subscribable.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
-import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
-import type {CloseConnectionMessage} from '../../../zero-protocol/src/close-connection.ts';
 import type {
   ConnectedMessage,
-  UserPushParams,
+  UserMutateParams,
+  UserQueryParams,
 } from '../../../zero-protocol/src/connect.ts';
 import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
 import type {DeleteClientsBody} from '../../../zero-protocol/src/delete-clients.ts';
@@ -62,10 +62,11 @@ import type {
   CRUDMutation,
   CRUDMutationArg,
   CustomMutation,
+  MutationID,
   PushMessage,
 } from '../../../zero-protocol/src/push.ts';
 import {CRUD_MUTATION_NAME, mapCRUD} from '../../../zero-protocol/src/push.ts';
-import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
+import type {UpQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
 import {nullableVersionSchema} from '../../../zero-protocol/src/version.ts';
@@ -78,10 +79,26 @@ import {
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
-import {newQuery} from '../../../zql/src/query/query-impl.ts';
-import {type Query, type RunOptions} from '../../../zql/src/query/query.ts';
+import {
+  type ClientMetricMap,
+  type MetricMap,
+  isClientMetric,
+} from '../../../zql/src/query/metrics-delegate.ts';
+import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
+import {newQuery, type AnyQuery} from '../../../zql/src/query/query-impl.ts';
+import {
+  delegateSymbol,
+  type HumanReadable,
+  type MaterializeOptions,
+  type PreloadOptions,
+  type Query,
+  type QueryReturn,
+  type QueryTable,
+  type RunOptions,
+} from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
+import {ActiveClientsManager} from './active-clients-manager.ts';
 import * as ConnectionState from './connection-state-enum.ts';
 import {ZeroContext} from './context.ts';
 import {
@@ -139,6 +156,9 @@ import {version} from './version.ts';
 import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
+import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
+import type {TypedView} from '../../../zql/src/query/typed-view.ts';
+import {emptyFunction} from '../../../shared/src/sentinels.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -174,10 +194,9 @@ interface TestZero {
   }) => LogOptions;
 }
 
-function asTestZero<
-  S extends Schema,
-  MD extends CustomMutatorDefs<S> | undefined,
->(z: Zero<S, MD>): TestZero {
+function asTestZero<S extends Schema, MD extends CustomMutatorDefs | undefined>(
+  z: Zero<S, MD>,
+): TestZero {
   return z as TestZero;
 }
 
@@ -210,6 +229,8 @@ export const CONNECT_TIMEOUT_MS = 10_000;
 const CHECK_CONNECTIVITY_ON_ERROR_FREQUENCY = 6;
 
 const NULL_LAST_MUTATION_ID_SENT = {clientID: '', id: -1} as const;
+
+const DEFAULT_QUERY_CHANGE_THROTTLE_MS = 10;
 
 function convertOnUpdateNeededReason(
   reason: ReplicacheUpdateNeededReason,
@@ -272,7 +293,7 @@ type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
 
 export class Zero<
   const S extends Schema,
-  MD extends CustomMutatorDefs<S> | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined = undefined,
 > {
   readonly version = version;
 
@@ -303,7 +324,7 @@ export class Zero<
    * If this is set to `undefined` that means no queries were sent inside the `sec-protocol` header
    * and an `initConnection` message must be sent to the server after receiving the `connected` message.
    */
-  #initConnectionQueries: Map<string, QueriesPatchOp> | undefined;
+  #initConnectionQueries: Map<string, UpQueriesPatchOp> | undefined;
 
   /**
    * We try to send the deleted clients and (client groups) as part of the
@@ -318,9 +339,8 @@ export class Zero<
 
   #onPong: () => void = () => undefined;
 
-  #online = false;
+  readonly #onlineManager: OnlineManager;
 
-  readonly #onOnlineChange: ((online: boolean) => void) | undefined;
   readonly #onUpdateNeeded: (
     reason: UpdateNeededReason,
     serverErrorMsg?: string,
@@ -342,6 +362,7 @@ export class Zero<
   };
 
   readonly #zeroContext: ZeroContext;
+  readonly queryDelegate: QueryDelegate;
 
   #connectResolver = resolver<void>();
   #pendingPullsByRequestID: Map<string, Resolver<PullResponseBody>> = new Map();
@@ -365,6 +386,7 @@ export class Zero<
 
   // We use an accessor pair to allow the subclass to override the setter.
   #connectionState: ConnectionState = ConnectionState.Disconnected;
+  readonly #activeClientsManager: Promise<ActiveClientsManager>;
 
   #setConnectionState(state: ConnectionState) {
     if (state === this.#connectionState) {
@@ -416,7 +438,7 @@ export class Zero<
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
       maxRecentQueries = 0,
       slowMaterializeThreshold = 5_000,
-    } = options as ZeroOptions<S>;
+    } = options as ZeroOptions<S, MD>;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
     }
@@ -426,7 +448,7 @@ export class Zero<
       false /*options.enableAnalytics,*/, // Reenable analytics
     );
 
-    let {kvStore = 'idb'} = options as ZeroOptions<S>;
+    let {kvStore = 'idb'} = options as ZeroOptions<S, MD>;
     if (kvStore === 'idb') {
       if (!getBrowserGlobal('indexedDB')) {
         // eslint-disable-next-line no-console
@@ -443,20 +465,30 @@ export class Zero<
       );
     }
 
-    this.#onOnlineChange = onOnlineChange;
+    this.#onlineManager = new OnlineManager();
+
+    if (onOnlineChange) {
+      this.#onlineManager.subscribe(onOnlineChange);
+    }
+
     this.#options = options;
 
     this.#logOptions = this.#createLogOptions({
-      consoleLogLevel: options.logLevel ?? 'error',
+      consoleLogLevel: options.logLevel ?? 'warn',
       server: null, //server, // Reenable remote logging
       enableAnalytics: this.#enableAnalytics,
     });
     const logOptions = this.#logOptions;
 
+    const {enableLegacyMutators = true, enableLegacyQueries = true} = options;
+
     const replicacheMutators: MutatorDefs & {
       [CRUD_MUTATION_NAME]: CRUDMutator;
     } = {
-      [CRUD_MUTATION_NAME]: makeCRUDMutator(schema),
+      [CRUD_MUTATION_NAME]: enableLegacyMutators
+        ? makeCRUDMutator(schema)
+        : () =>
+            Promise.reject(new Error('Zero CRUD mutators are not enabled.')),
     };
     this.#ivmMain = new IVMSourceBranch(schema.tables);
 
@@ -486,7 +518,9 @@ export class Zero<
 
     const lc = new ZeroLogContext(logOptions.logLevel, {}, logSink);
 
-    this.#mutationTracker = new MutationTracker(lc);
+    this.#mutationTracker = new MutationTracker(lc, (upTo: MutationID) =>
+      this.#send(['ackMutationResponses', upTo]),
+    );
     if (options.mutators) {
       for (const [namespaceOrKey, mutatorOrMutators] of Object.entries(
         options.mutators,
@@ -498,7 +532,6 @@ export class Zero<
             lc,
             mutatorOrMutators,
             schema,
-            slowMaterializeThreshold,
             // Replicache expects mutators to only be able to return JSON
             // but Zero wraps the return with: `{server?: Promise<MutationResult>, client?: T}`
           ) as () => MutatorReturn;
@@ -515,7 +548,6 @@ export class Zero<
               lc,
               mutator as CustomMutatorImpl<S>,
               schema,
-              slowMaterializeThreshold,
             ) as () => MutatorReturn;
           }
           continue;
@@ -552,12 +584,30 @@ export class Zero<
     this.#zeroContext = new ZeroContext(
       lc,
       this.#ivmMain,
-      (ast, ttl, gotCallback) => this.#queryManager.add(ast, ttl, gotCallback),
-      (ast, ttl) => this.#queryManager.update(ast, ttl),
+      (ast, ttl, gotCallback) => {
+        if (enableLegacyQueries) {
+          return this.#queryManager.addLegacy(ast, ttl, gotCallback);
+        }
+        // legacy queries are client side only. Do not track with the server
+        return emptyFunction;
+      },
+      (ast, customQueryID, ttl, gotCallback) =>
+        this.#queryManager.addCustom(ast, customQueryID, ttl, gotCallback),
+      (ast, ttl) => {
+        if (enableLegacyQueries) {
+          this.#queryManager.updateLegacy(ast, ttl);
+          return;
+        }
+        this.#queryManager.updateLegacy(ast, ttl);
+      },
+      (customQueryID, ttl) =>
+        this.#queryManager.updateCustom(customQueryID, ttl),
+      () => this.#queryManager.flushBatch(),
       batchViewUpdates,
-      slowMaterializeThreshold,
+      this.#addMetric,
       assertValidRunOptions,
     );
+    this.queryDelegate = this.#zeroContext;
 
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
@@ -582,7 +632,18 @@ export class Zero<
     this.#server = server;
     this.userID = userID;
     this.#lc = lc.withContext('clientID', rep.clientID);
-    this.#mutationTracker.clientID = rep.clientID;
+    this.#mutationTracker.setClientIDAndWatch(
+      rep.clientID,
+      rep.experimentalWatch.bind(rep),
+    );
+
+    this.#activeClientsManager = makeActiveClientsManager(
+      rep.clientGroupID,
+      this.clientID,
+      this.#closeAbortController.signal,
+      (clientID: string) =>
+        this.#deleteClientsManager.onClientsDeleted([clientID], []),
+    );
 
     const onUpdateNeededCallback = (
       reason: UpdateNeededReason,
@@ -647,12 +708,15 @@ export class Zero<
     this.mutateBatch = mutateBatch;
 
     this.#queryManager = new QueryManager(
+      this.#lc,
       this.#mutationTracker,
       rep.clientID,
       schema.tables,
-      msg => this.#sendChangeDesiredQueries(msg),
+      msg => this.#send(msg),
       rep.experimentalWatch.bind(rep),
       maxRecentQueries,
+      options.queryChangeThrottleMs ?? DEFAULT_QUERY_CHANGE_THROTTLE_MS,
+      slowMaterializeThreshold,
     );
     this.#clientToServer = clientToServer(schema.tables);
 
@@ -683,6 +747,7 @@ export class Zero<
       rep.clientID,
       schema,
       this.#lc,
+      this.#mutationTracker,
     );
 
     this.#visibilityWatcher = getDocumentVisibilityWatcher(
@@ -692,6 +757,8 @@ export class Zero<
     );
 
     void this.#runLoop();
+
+    this.#expose();
 
     if (TESTING) {
       asTestZero(this)[exposedToTestingSymbol] = {
@@ -708,8 +775,36 @@ export class Zero<
     }
   }
 
-  #sendChangeDesiredQueries(msg: ChangeDesiredQueriesMessage): void {
-    this.#send(msg);
+  #expose() {
+    // Expose the Zero instance to the global scope.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const g = globalThis as any;
+    if (g.__zero === undefined) {
+      g.__zero = this;
+    } else if (g.__zero instanceof Zero) {
+      const prev = g.__zero;
+      g.__zero = {
+        [prev.clientID]: prev,
+        [this.clientID]: this,
+      };
+    } else {
+      g.__zero[this.clientID] = this;
+    }
+  }
+
+  #unexpose() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const g = globalThis as any;
+    assert(g.__zero !== undefined);
+    if (g.__zero instanceof Zero) {
+      assert(g.__zero === this);
+      delete g.__zero;
+    } else {
+      delete g.__zero[this.clientID];
+      if (Object.entries(g.__zero).length === 1) {
+        g.__zero = Object.values(g.__zero)[0];
+      }
+    }
   }
 
   #send(msg: Upstream): void {
@@ -730,6 +825,59 @@ export class Zero<
       }
     }
     return createLogOptions(options);
+  }
+
+  preload(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    query: Query<S, keyof S['tables'] & string, any>,
+    options?: PreloadOptions | undefined,
+  ) {
+    return query[delegateSymbol](this.#zeroContext).preload(options);
+  }
+
+  run<Q>(
+    query: Q,
+    runOptions?: RunOptions | undefined,
+  ): Promise<HumanReadable<QueryReturn<Q>>> {
+    return (
+      (query as AnyQuery)
+        // eslint-disable-next-line no-unexpected-multiline
+        [delegateSymbol](this.#zeroContext)
+        .run(runOptions) as Promise<HumanReadable<QueryReturn<Q>>>
+    );
+  }
+
+  materialize<Q>(
+    query: Q,
+    options?: MaterializeOptions | undefined,
+  ): TypedView<HumanReadable<QueryReturn<Q>>>;
+  materialize<T, Q>(
+    query: Q,
+    factory: ViewFactory<S, QueryTable<Q>, QueryReturn<Q>, T>,
+    options?: MaterializeOptions | undefined,
+  ): T;
+  materialize<T, Q>(
+    query: Q,
+    factoryOrOptions?:
+      | ViewFactory<S, QueryTable<Q>, QueryReturn<Q>, T>
+      | MaterializeOptions
+      | undefined,
+    maybeOptions?: MaterializeOptions | undefined,
+  ) {
+    if (typeof factoryOrOptions === 'function') {
+      return (
+        (query as AnyQuery)
+          // eslint-disable-next-line no-unexpected-multiline
+          [delegateSymbol](this.#zeroContext)
+          .materialize(factoryOrOptions, maybeOptions?.ttl)
+      );
+    }
+    return (
+      (query as AnyQuery)
+        // eslint-disable-next-line no-unexpected-multiline
+        [delegateSymbol](this.#zeroContext)
+        .materialize(factoryOrOptions?.ttl)
+    );
   }
 
   /**
@@ -785,7 +933,7 @@ export class Zero<
    * await zero.mutate.issue.update({id: '1', title: 'Updated title'});
    * ```
    */
-  readonly mutate: MD extends CustomMutatorDefs<S>
+  readonly mutate: MD extends CustomMutatorDefs
     ? DeepMerge<DBMutator<S>, MakeCustomMutatorInterfaces<S, MD>>
     : DBMutator<S>;
 
@@ -824,47 +972,29 @@ export class Zero<
    * Once a Zero instance has been closed it no longer syncs, you can no
    * longer query or mutate data with it, and its query views stop updating.
    */
-  close(): Promise<void> {
+  async close(): Promise<void> {
     const lc = this.#lc.withContext('close');
 
     lc.debug?.('Closing Zero instance. Stack:', new Error().stack);
 
+    this.#onlineManager.cleanup();
+
     if (this.#connectionState !== ConnectionState.Disconnected) {
-      let closeReason = JSON.stringify([
-        'closeConnection',
-        [],
-      ] satisfies CloseConnectionMessage);
-      if (closeReason.length > 123) {
-        lc.warn?.('Close reason is too long. Removing it.');
-        closeReason = '';
-      }
       this.#disconnect(
         lc,
         {
           client: 'ClientClosed',
         },
         CLOSE_CODE_NORMAL,
-        closeReason,
       );
     }
     lc.debug?.('Aborting closeAbortController due to close()');
     this.#closeAbortController.abort();
     this.#metrics.stop();
-    return this.#rep.close();
+    const ret = await this.#rep.close();
+    this.#unexpose();
+    return ret;
   }
-
-  #onPageHide = (e: PageTransitionEvent) => {
-    // When pagehide fires and persisted is true it means the page is going into
-    // the BFCache. If that happens the page might get restored and this client
-    // will be operational again. If that happens we do not want to remove the
-    // client from the server.
-    if (e.persisted) {
-      this.#lc.debug?.('Ignoring pagehide event because it was persisted');
-    } else {
-      this.#lc.debug?.('Closing client because we got a clean close');
-      this.close().catch(() => {});
-    }
-  };
 
   #onMessage = (e: MessageEvent<string>) => {
     const lc = this.#lc;
@@ -886,7 +1016,11 @@ export class Zero<
     let downMessage: Downstream;
     const {data} = e;
     try {
-      downMessage = valita.parse(JSON.parse(data), downstreamSchema);
+      downMessage = valita.parse(
+        JSON.parse(data),
+        downstreamSchema,
+        'passthrough',
+      );
     } catch (e) {
       rejectInvalidMessage(e);
       return;
@@ -931,6 +1065,10 @@ export class Zero<
 
       case 'pushResponse':
         return this.#mutationTracker.processPushResponse(downMessage[1]);
+
+      case 'transformError':
+        // this.#queryManager.handleTransformError();
+        break;
 
       case 'inspect':
         // ignore at this layer.
@@ -1106,7 +1244,8 @@ export class Zero<
           // The clientSchema only needs to be sent for the very first request.
           // Henceforth it is stored with the CVR and verified automatically.
           ...(this.#connectCookie === null ? {clientSchema} : {}),
-          userPushParams: this.#options.push,
+          userPushParams: this.#options.mutate ?? this.#options.push,
+          userQueryParams: this.#options.query,
         },
       ]);
       this.#deletedClients = undefined;
@@ -1166,6 +1305,7 @@ export class Zero<
     this.#connectCookie = valita.parse(
       await this.#rep.cookie,
       nullableVersionSchema,
+      'passthrough',
     );
     if (this.closed) {
       return;
@@ -1200,9 +1340,11 @@ export class Zero<
       wsid,
       this.#options.logLevel === 'debug',
       lc,
-      this.#options.push,
+      this.#options.mutate ?? this.#options.push,
+      this.#options.query,
       this.#options.maxHeaderLength,
       additionalConnectParams,
+      await this.#activeClientsManager,
     );
 
     if (this.closed) {
@@ -1216,11 +1358,6 @@ export class Zero<
     ws.addEventListener('close', this.#onClose);
     this.#socket = ws;
     this.#socketResolver.resolve(ws);
-
-    getBrowserGlobal('window')?.addEventListener?.(
-      'pagehide',
-      this.#onPageHide,
-    );
 
     try {
       lc.debug?.('Waiting for connection to be acknowledged');
@@ -1241,7 +1378,6 @@ export class Zero<
     lc: ZeroLogContext,
     reason: DisconnectReason,
     closeCode?: CloseCode,
-    closeReason?: string,
   ): void {
     if (this.#connectionState === ConnectionState.Connecting) {
       this.#connectErrorCount++;
@@ -1307,15 +1443,10 @@ export class Zero<
     this.#socket?.removeEventListener('message', this.#onMessage);
     this.#socket?.removeEventListener('open', this.#onOpen);
     this.#socket?.removeEventListener('close', this.#onClose);
-    this.#socket?.close(closeCode, closeReason);
+    this.#socket?.close(closeCode);
     this.#socket = undefined;
     this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
     this.#pokeHandler.handleDisconnect();
-
-    getBrowserGlobal('window')?.removeEventListener?.(
-      'pagehide',
-      this.#onPageHide,
-    );
   }
 
   #handlePokeStart(_lc: ZeroLogContext, pokeMessage: PokeStartMessage): void {
@@ -1697,7 +1828,11 @@ export class Zero<
     assert(socket);
     // Mutation recovery pull.
     lc.debug?.('Pull is for mutation recovery');
-    const cookie = valita.parse(req.cookie, nullableVersionSchema);
+    const cookie = valita.parse(
+      req.cookie,
+      nullableVersionSchema,
+      'passthrough',
+    );
     const pullRequestMessage: PullRequestMessage = [
       'pull',
       {
@@ -1746,12 +1881,7 @@ export class Zero<
   }
 
   #setOnline(online: boolean): void {
-    if (this.#online === online) {
-      return;
-    }
-
-    this.#online = online;
-    this.#onOnlineChange?.(online);
+    this.#onlineManager.setOnline(online);
   }
 
   /**
@@ -1759,8 +1889,19 @@ export class Zero<
    * authenticated.
    */
   get online(): boolean {
-    return this.#online;
+    return this.#onlineManager.online;
   }
+
+  /**
+   * Subscribe to online status changes.
+   *
+   * This is useful when you want to update state based on the online status.
+   *
+   * @param listener - The listener to subscribe to.
+   * @returns A function to unsubscribe the listener.
+   */
+  onOnline = (listener: (online: boolean) => void): (() => void) =>
+    this.#onlineManager.subscribe(listener);
 
   /**
    * Starts a ping and waits for a pong.
@@ -1875,11 +2016,45 @@ export class Zero<
     BUNDLE_SIZE: {
       const m = await import('./inspector/inspector.ts');
       // Wait for the web socket to be available
-      return m.newInspector(this.#rep, this.#schema, async () => {
-        await this.#connectResolver.promise;
-        return this.#socket!;
-      });
+      return m.newInspector(
+        this.#rep,
+        this.#queryManager,
+        this.#schema,
+        async () => {
+          await this.#connectResolver.promise;
+          return this.#socket!;
+        },
+      );
     }
+  }
+
+  #addMetric: <K extends keyof MetricMap>(
+    metric: K,
+    value: number,
+    ...args: MetricMap[K]
+  ) => void = (metric, value, ...args) => {
+    assert(isClientMetric(metric), `Invalid metric: ${metric}`);
+    this.#queryManager.addMetric(
+      metric as keyof ClientMetricMap,
+      value,
+      ...(args as ClientMetricMap[keyof ClientMetricMap]),
+    );
+  };
+}
+
+export class OnlineManager extends Subscribable<boolean> {
+  #online = false;
+
+  setOnline(online: boolean): void {
+    if (this.#online === online) {
+      return;
+    }
+    this.#online = online;
+    this.notify(online);
+  }
+
+  get online(): boolean {
+    return this.#online;
   }
 }
 
@@ -1898,13 +2073,15 @@ export async function createSocket(
   wsid: string,
   debugPerf: boolean,
   lc: ZeroLogContext,
-  userPushParams: UserPushParams | undefined,
+  userPushParams: UserMutateParams | undefined,
+  userQueryParams: UserQueryParams | undefined,
   maxHeaderLength = 1024 * 8,
-  additionalConnectParams?: Record<string, string> | undefined,
+  additionalConnectParams: Record<string, string> | undefined,
+  activeClientsManager: Pick<ActiveClientsManager, 'activeClients'>,
 ): Promise<
   [
     WebSocket,
-    Map<string, QueriesPatchOp> | undefined,
+    Map<string, UpQueriesPatchOp> | undefined,
     DeleteClientsBody | undefined,
   ]
 > {
@@ -1943,8 +2120,9 @@ export async function createSocket(
   const queriesPatchP = rep.query(tx => queryManager.getQueriesPatch(tx));
   let deletedClients: DeleteClientsBody | undefined =
     await deleteClientsManager.getDeletedClients();
-  let queriesPatch: Map<string, QueriesPatchOp> | undefined =
+  let queriesPatch: Map<string, UpQueriesPatchOp> | undefined =
     await queriesPatchP;
+  const {activeClients} = activeClientsManager;
 
   let secProtocol = encodeSecProtocols(
     [
@@ -1956,12 +2134,21 @@ export async function createSocket(
         // Henceforth it is stored with the CVR and verified automatically.
         ...(baseCookie === null ? {clientSchema} : {}),
         userPushParams,
+        userQueryParams,
+        activeClients: [...activeClients],
       },
     ],
     auth,
   );
   if (secProtocol.length > maxHeaderLength) {
     secProtocol = encodeSecProtocols(undefined, auth);
+    if (secProtocol.length > maxHeaderLength) {
+      lc.warn?.(
+        `Encoded auth token length (${secProtocol.length}) exceeds ` +
+          `ZeroOptions.maxHeaderLength (${maxHeaderLength}). This may ` +
+          `cause connection failures.`,
+      );
+    }
     queriesPatch = undefined;
   } else {
     deletedClients = undefined;
@@ -2037,3 +2224,18 @@ class TimedOutError extends Error {
 class CloseError extends Error {}
 
 function assertValidRunOptions(_options?: RunOptions | undefined): void {}
+
+async function makeActiveClientsManager(
+  clientGroupID: Promise<string>,
+  clientID: string,
+  signal: AbortSignal,
+  onDelete: ActiveClientsManager['onDelete'],
+): Promise<ActiveClientsManager> {
+  const manager = await ActiveClientsManager.create(
+    await clientGroupID,
+    clientID,
+    signal,
+  );
+  manager.onDelete = onDelete;
+  return manager;
+}

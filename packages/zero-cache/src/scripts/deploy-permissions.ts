@@ -1,7 +1,7 @@
-import {consoleLogSink, LogContext} from '@rocicorp/logger';
-import '@dotenvx/dotenvx/config';
 import {writeFile} from 'node:fs/promises';
 import {ident as id, literal} from 'pg-format';
+import '../../../shared/src/dotenv.ts';
+import {colorConsole, createLogContext} from '../../../shared/src/logging.ts';
 import {parseOptions} from '../../../shared/src/options.ts';
 import {difference} from '../../../shared/src/set-utils.ts';
 import {mapCondition} from '../../../zero-protocol/src/ast.ts';
@@ -25,16 +25,15 @@ import {
   loadSchemaAndPermissions,
 } from './permissions.ts';
 
-const config = parseOptions(
-  deployPermissionsOptions,
-  process.argv.slice(2),
-  ZERO_ENV_VAR_PREFIX,
-);
+const config = parseOptions(deployPermissionsOptions, {
+  argv: process.argv.slice(2),
+  envNamePrefix: ZERO_ENV_VAR_PREFIX,
+});
 
 const shard = getShardID(config);
 const app = appSchema(shard);
 
-const lc = new LogContext(config.log.level, {}, consoleLogSink);
+const lc = createLogContext(config);
 
 async function validatePermissions(
   db: PostgresDB,
@@ -48,7 +47,7 @@ async function validatePermissions(
       JOIN pg_namespace ON relnamespace = pg_namespace.oid
       WHERE nspname = ${schema} AND relname = ${SHARD_CONFIG_TABLE}`;
   if (result.length === 0) {
-    lc.warn?.(
+    colorConsole.warn(
       `zero-cache has not yet initialized the upstream database.\n` +
         `Deploying ${app} permissions without validating against published tables/columns.`,
     );
@@ -60,13 +59,13 @@ async function validatePermissions(
     SELECT publications FROM ${db(schema + '.' + SHARD_CONFIG_TABLE)}
   `;
   if (config.length === 0) {
-    lc.warn?.(
+    colorConsole.warn(
       `zero-cache has not yet initialized the upstream database.\n` +
         `Deploying ${app} permissions without validating against published tables/columns.`,
     );
     return;
   }
-  lc.info?.(
+  colorConsole.info(
     `Validating permissions against tables and columns published for "${app}".`,
   );
 
@@ -78,7 +77,7 @@ async function validatePermissions(
   const pubnames = publications.map(p => p.pubname);
   const missing = difference(new Set(shardPublications), new Set(pubnames));
   if (missing.size) {
-    lc.warn?.(
+    colorConsole.warn(
       `Upstream is missing expected publications "${[...missing]}".\n` +
         `You may need to re-initialize your replica.\n` +
         `Deploying ${app} permissions without validating against published tables/columns.`,
@@ -112,8 +111,8 @@ async function validatePermissions(
 }
 
 function failWithMessage(msg: string) {
-  lc.error?.(msg);
-  lc.info?.('\nUse --force to deploy at your own risk.\n');
+  colorConsole.error(msg);
+  colorConsole.info('\nUse --force to deploy at your own risk.\n');
   process.exit(-1);
 }
 
@@ -124,19 +123,19 @@ async function deployPermissions(
 ) {
   const db = pgClient(lc, upstreamURI);
   const {host, port} = db.options;
-  lc.debug?.(`Connecting to upstream@${host}:${port}`);
+  colorConsole.debug(`Connecting to upstream@${host}:${port}`);
   try {
     await ensureGlobalTables(db, shard);
 
     const {hash, changed} = await db.begin(async tx => {
       if (force) {
-        lc.warn?.(`--force specified. Skipping validation.`);
+        colorConsole.warn(`--force specified. Skipping validation.`);
       } else {
         await validatePermissions(tx, permissions);
       }
 
       const {appID} = shard;
-      lc.info?.(
+      colorConsole.info(
         `Deploying permissions for --app-id "${appID}" to upstream@${db.options.host}`,
       );
       const [{hash: beforeHash}] = await tx<{hash: string}[]>`
@@ -147,9 +146,9 @@ async function deployPermissions(
       return {hash: hash.substring(0, 7), changed: beforeHash !== hash};
     });
     if (changed) {
-      lc.info?.(`Deployed new permissions (hash=${hash})`);
+      colorConsole.info(`Deployed new permissions (hash=${hash})`);
     } else {
-      lc.info?.(`Permissions unchanged (hash=${hash})`);
+      colorConsole.info(`Permissions unchanged (hash=${hash})`);
     }
   } finally {
     await db.end();
@@ -168,25 +167,37 @@ async function writePermissionsFile(
         )};`
       : JSON.stringify(perms, null, format === 'pretty' ? 2 : 0);
   await writeFile(file, contents);
-  lc.info?.(`Wrote ${format} permissions to ${config.output.file}`);
+  colorConsole.info(`Wrote ${format} permissions to ${config.output.file}`);
 }
 
-const {permissions} = await loadSchemaAndPermissions(lc, config.schema.path);
-if (config.output.file) {
-  await writePermissionsFile(
-    permissions,
-    config.output.file,
-    config.output.format,
+const ret = await loadSchemaAndPermissions(config.schema.path, true);
+if (!ret) {
+  colorConsole.warn(
+    `No schema found at ${config.schema.path}, so could not deploy ` +
+      `permissions. Replicating data, but no tables will be syncable. ` +
+      `Create a schema file with permissions to be able to sync data.`,
   );
-} else if (config.upstream.type !== 'pg') {
-  lc.warn?.(
-    `Permissions deployment is not supported for ${config.upstream.type} upstreams`,
-  );
-  process.exit(-1);
-} else if (config.upstream.db) {
-  await deployPermissions(config.upstream.db, permissions, config.force);
 } else {
-  lc.error?.(`No --output-file or --upstream-db specified`);
-  // Shows the usage text.
-  parseOptions(deployPermissionsOptions, ['--help'], ZERO_ENV_VAR_PREFIX);
+  const {permissions} = ret;
+  if (config.output.file) {
+    await writePermissionsFile(
+      permissions,
+      config.output.file,
+      config.output.format,
+    );
+  } else if (config.upstream.type !== 'pg') {
+    colorConsole.warn(
+      `Permissions deployment is not supported for ${config.upstream.type} upstreams`,
+    );
+    process.exit(-1);
+  } else if (config.upstream.db) {
+    await deployPermissions(config.upstream.db, permissions, config.force);
+  } else {
+    colorConsole.error(`No --output-file or --upstream-db specified`);
+    // Shows the usage text.
+    parseOptions(deployPermissionsOptions, {
+      argv: ['--help'],
+      envNamePrefix: ZERO_ENV_VAR_PREFIX,
+    });
+  }
 }

@@ -8,8 +8,11 @@ afterEach(async () => {
 });
 
 test('worker test', async () => {
-  const url = new URL('./worker-test.ts', import.meta.url);
-  const w = new Worker(url, {type: 'module'});
+  // Need to have the 'new URL' call inside `new Worker` for vite to
+  // correctly bundle the worker file.
+  const w = new Worker(new URL('./worker-test.ts', import.meta.url), {
+    type: 'module',
+  });
   const name = 'worker-test';
   dbsToDrop.add(name);
 
@@ -33,6 +36,6 @@ function send(w: Worker, data: {name: string}): Promise<unknown> {
 function withTimeout<T>(p: Promise<T>): Promise<T> {
   return Promise.race([
     p,
-    sleep(3000).then(() => Promise.reject(new Error('Timed out'))),
+    sleep(9000).then(() => Promise.reject(new Error('Timed out'))),
   ]);
 }

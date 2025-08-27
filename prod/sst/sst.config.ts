@@ -54,7 +54,9 @@ export default $config({
     const commonEnv = {
       ZERO_APP_PUBLICATIONS: process.env.ZERO_APP_PUBLICATIONS!,
       ZERO_UPSTREAM_DB: process.env.ZERO_UPSTREAM_DB!,
+      ZERO_ADMIN_PASSWORD: process.env.ZERO_ADMIN_PASSWORD!,
       ZERO_PUSH_URL: process.env.ZERO_PUSH_URL!,
+      ZERO_GET_QUERIES_URL: process.env.ZERO_GET_QUERIES_URL!,
       ZERO_CVR_DB: process.env.ZERO_CVR_DB!,
       ZERO_CHANGE_DB: process.env.ZERO_CHANGE_DB!,
       ZERO_AUTH_JWK: process.env.ZERO_AUTH_JWK!,
@@ -66,6 +68,7 @@ export default $config({
       ZERO_APP_ID: process.env.ZERO_APP_ID || 'zero',
       PGCONNECT_TIMEOUT: '60', // scale-from-zero dbs need more than 30 seconds
       OTEL_TRACES_EXPORTER: 'otlp',
+      OTEL_LOGS_EXPORTER: 'none',
       OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
       OTEL_EXPORTER_OTLP_HEADERS: process.env.OTEL_EXPORTER_OTLP_HEADERS,
       OTEL_RESOURCE_ATTRIBUTES: process.env.OTEL_RESOURCE_ATTRIBUTES,
@@ -175,9 +178,19 @@ export default $config({
       environment: {
         ...commonEnv,
         ZERO_LOG_LEVEL: 'debug',
-        ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250520-06`,
+        ZERO_LITESTREAM_BACKUP_URL: $interpolate`s3://${replicationBucket.name}/backup/20250630-00`,
+        ZERO_INITIAL_SYNC_PROFILE_COPY: 'true',
         ZERO_CHANGE_MAX_CONNS: '3',
         ZERO_NUM_SYNC_WORKERS: '0',
+      },
+      loadBalancer: {
+        public: false,
+        ports: [
+          {
+            listen: '80/http',
+            forward: '4849/http',
+          },
+        ],
       },
       logging: {
         retention: '1 month',
@@ -200,7 +213,7 @@ export default $config({
       },
       environment: {
         ...commonEnv,
-        ZERO_CHANGE_STREAMER_MODE: 'discover',
+        ZERO_CHANGE_STREAMER_URI: replicationManager.url,
         ZERO_UPSTREAM_MAX_CONNS: '15',
         ZERO_CVR_MAX_CONNS: '160',
       },
@@ -257,7 +270,7 @@ export default $config({
       wait: false,
     });
 
-    if ($app.stage === 'sandbox') {
+    if ($app.stage === 'sandbox-disabled') {
       // In sandbox, deploy permissions in a Lambda.
       const permissionsDeployer = new sst.aws.Function(
         'zero-permissions-deployer',

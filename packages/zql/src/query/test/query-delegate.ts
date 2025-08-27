@@ -1,18 +1,22 @@
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
-import {deepEqual} from '../../../../shared/src/json.ts';
+import {
+  deepEqual,
+  type ReadonlyJSONValue,
+} from '../../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {FilterInput} from '../../ivm/filter-operators.ts';
 import {MemoryStorage} from '../../ivm/memory-storage.ts';
 import type {Input} from '../../ivm/operator.ts';
-import type {Source} from '../../ivm/source.ts';
+import type {Source, SourceInput} from '../../ivm/source.ts';
 import {createSource} from '../../ivm/test/source-factory.ts';
-import {
-  type CommitListener,
-  type GotCallback,
-  type QueryDelegate,
-} from '../query-impl.ts';
+import type {CustomQueryID} from '../named.ts';
+import type {
+  CommitListener,
+  GotCallback,
+  QueryDelegate,
+} from '../query-delegate.ts';
 import type {TTL} from '../ttl.ts';
 import {
   commentSchema,
@@ -25,11 +29,17 @@ import {
 
 const lc = createSilentLogContext();
 
+type Entry = {
+  ast: AST | undefined;
+  name: string | undefined;
+  args: readonly ReadonlyJSONValue[] | undefined;
+  ttl: TTL;
+};
 export class QueryDelegateImpl implements QueryDelegate {
   readonly #sources: Record<string, Source> = makeSources();
   readonly #commitListeners: Set<CommitListener> = new Set();
 
-  readonly addedServerQueries: {ast: AST; ttl: TTL}[] = [];
+  readonly addedServerQueries: Entry[] = [];
   readonly gotCallbacks: (GotCallback | undefined)[] = [];
   synchronouslyCallNextGotCallback = false;
   callGot = false;
@@ -45,6 +55,8 @@ export class QueryDelegateImpl implements QueryDelegate {
     this.#sources = sources;
     this.callGot = callGot;
   }
+
+  flushQueryChanges() {}
 
   assertValidRunOptions(): void {}
 
@@ -63,12 +75,19 @@ export class QueryDelegateImpl implements QueryDelegate {
     return ast;
   }
 
-  onQueryMaterialized() {}
-
   commit() {
     for (const listener of this.#commitListeners) {
       listener();
     }
+  }
+
+  addCustomQuery(
+    ast: AST,
+    customQueryID: CustomQueryID,
+    ttl: TTL,
+    gotCallback?: GotCallback | undefined,
+  ): () => void {
+    return this.#addQuery({ast, ttl, ...customQueryID}, gotCallback);
   }
 
   addServerQuery(
@@ -76,7 +95,14 @@ export class QueryDelegateImpl implements QueryDelegate {
     ttl: TTL,
     gotCallback?: GotCallback | undefined,
   ): () => void {
-    this.addedServerQueries.push({ast, ttl});
+    return this.#addQuery(
+      {ast, name: undefined, args: undefined, ttl},
+      gotCallback,
+    );
+  }
+
+  #addQuery(entry: Entry, gotCallback?: GotCallback | undefined) {
+    this.addedServerQueries.push(entry);
     this.gotCallbacks.push(gotCallback);
     if (this.callGot) {
       void Promise.resolve().then(() => {
@@ -99,12 +125,26 @@ export class QueryDelegateImpl implements QueryDelegate {
     query.ttl = ttl;
   }
 
+  updateCustomQuery(customQueryID: CustomQueryID, ttl: TTL): void {
+    const query = this.addedServerQueries.find(
+      ({name, args}) =>
+        name === customQueryID.name &&
+        (args === undefined || deepEqual(args, customQueryID.args)),
+    );
+    assert(query);
+    query.ttl = ttl;
+  }
+
   getSource(name: string): Source {
     return this.#sources[name];
   }
 
   createStorage() {
     return new MemoryStorage();
+  }
+
+  decorateSourceInput(input: SourceInput): Input {
+    return input;
   }
 
   decorateInput(input: Input, _description: string): Input {
@@ -115,12 +155,16 @@ export class QueryDelegateImpl implements QueryDelegate {
     return input;
   }
 
+  addEdge() {}
+
   callAllGotCallbacks() {
     for (const gotCallback of this.gotCallbacks) {
       gotCallback?.(true);
     }
     this.gotCallbacks.length = 0;
   }
+
+  addMetric() {}
 }
 
 function makeSources() {

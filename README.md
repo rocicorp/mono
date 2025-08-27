@@ -8,7 +8,7 @@ Web site and docs: https://zero.rocicorp.dev/.
 
 ### Code
 
-- [packages/zero-client](./packages/zero-client): The main client library. It use replicache under the hood.
+- [packages/zero-client](./packages/zero-client): The main client library. It uses replicache under the hood.
 - [packages/zero-cache](./packages/zero-cache): The server side code.
 - [packages/zql](./packages/zql): The IVM (incremental view maintenance) engine as well as the query language/API.
 - [@rocicorp/zero-docs](https://github.com/rocicorp/zero-docs): The docs for zero is currently in a separate repo.

@@ -14,6 +14,8 @@ export function runPostgresContainer(image: string, timezone: string) {
 
     // Referenced by ./src/test/db.ts
     provide('pgConnectionString', container.getConnectionUri());
+    provide('pgImage', image);
+    provide('pgTimezone', timezone);
 
     return async () => {
       await container.stop();

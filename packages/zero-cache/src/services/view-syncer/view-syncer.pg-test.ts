@@ -4,16 +4,17 @@ import {
   describe,
   expect,
   type Mock,
-  test,
+  type MockedFunction,
   vi,
 } from 'vitest';
-import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
-import {h128} from '../../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
-import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
+import type {
+  TransformResponseBody,
+  TransformResponseMessage,
+} from '../../../../zero-protocol/src/custom-queries.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import type {ErrorBody} from '../../../../zero-protocol/src/error.ts';
@@ -23,661 +24,57 @@ import type {
   PokeStartBody,
 } from '../../../../zero-protocol/src/poke.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
-import type {QueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
-import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
-import {
-  clientSchemaFrom,
-  createSchema,
-} from '../../../../zero-schema/src/builder/schema-builder.ts';
-import {
-  json,
-  number,
-  string,
-  table,
-} from '../../../../zero-schema/src/builder/table-builder.ts';
-import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.ts';
-import {
-  ANYONE_CAN_DO_ANYTHING,
-  definePermissions,
-} from '../../../../zero-schema/src/permissions.ts';
-import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
+import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
-import {testDBs} from '../../test/db.ts';
+import {type PgTest, test} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {cvrSchema} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
-import type {DataChange} from '../change-source/protocol/current/data.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
-import {initChangeLog} from '../replicator/schema/change-log.ts';
-import {
-  initReplicationState,
-  updateReplicationWatermark,
-} from '../replicator/schema/replication-state.ts';
-import {
-  fakeReplicator,
-  type FakeReplicator,
-  ReplicationMessages,
-} from '../replicator/test-utils.ts';
+import {updateReplicationWatermark} from '../replicator/schema/replication-state.ts';
+import {type FakeReplicator} from '../replicator/test-utils.ts';
 import {CVRStore} from './cvr-store.ts';
 import {CVRQueryDrivenUpdater} from './cvr.ts';
-import {
-  type ClientGroupStorage,
-  CREATE_STORAGE_TABLE,
-  DatabaseStorage,
-} from './database-storage.ts';
+import {type ClientGroupStorage} from './database-storage.ts';
 import {DrainCoordinator} from './drain-coordinator.ts';
-import {PipelineDriver} from './pipeline-driver.ts';
-import {initViewSyncerSchema} from './schema/init.ts';
-import {Snapshotter} from './snapshotter.ts';
-import {pickToken, type SyncContext, ViewSyncerService} from './view-syncer.ts';
-
-const APP_ID = 'this_app';
-const SHARD_NUM = 2;
-const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
-
-const EXPECTED_LMIDS_AST: AST = {
-  schema: '',
-  table: 'this_app_2.clients',
-  where: {
-    type: 'simple',
-    op: '=',
-    left: {
-      type: 'column',
-      name: 'clientGroupID',
-    },
-    right: {
-      type: 'literal',
-      value: '9876',
-    },
-  },
-  orderBy: [
-    ['clientGroupID', 'asc'],
-    ['clientID', 'asc'],
-  ],
-};
-
-const ON_FAILURE = (e: unknown) => {
-  throw e;
-};
-
-const REPLICA_VERSION = '01';
-const TASK_ID = 'foo-task';
-const serviceID = '9876';
-const ISSUES_QUERY: AST = {
-  table: 'issues',
-  where: {
-    type: 'simple',
-    left: {
-      type: 'column',
-      name: 'id',
-    },
-    op: 'IN',
-    right: {
-      type: 'literal',
-      value: ['1', '2', '3', '4'],
-    },
-  },
-  orderBy: [['id', 'asc']],
-};
-
-const COMMENTS_QUERY: AST = {
-  table: 'comments',
-  orderBy: [['id', 'asc']],
-};
-
-const ISSUES_QUERY_WITH_EXISTS: AST = {
-  table: 'issues',
-  orderBy: [['id', 'asc']],
-  where: {
-    type: 'correlatedSubquery',
-    op: 'EXISTS',
-    related: {
-      system: 'client',
-      correlation: {
-        parentField: ['id'],
-        childField: ['issueID'],
-      },
-      subquery: {
-        table: 'issueLabels',
-        alias: 'labels',
-        orderBy: [
-          ['issueID', 'asc'],
-          ['labelID', 'asc'],
-        ],
-        where: {
-          type: 'correlatedSubquery',
-          op: 'EXISTS',
-          related: {
-            system: 'client',
-            correlation: {
-              parentField: ['labelID'],
-              childField: ['id'],
-            },
-            subquery: {
-              table: 'labels',
-              alias: 'labels',
-              orderBy: [['id', 'asc']],
-              where: {
-                type: 'simple',
-                left: {
-                  type: 'column',
-                  name: 'name',
-                },
-                op: '=',
-                right: {
-                  type: 'literal',
-                  value: 'bug',
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  },
-};
-
-const ISSUES_QUERY_WITH_RELATED: AST = {
-  table: 'issues',
-  orderBy: [['id', 'asc']],
-  where: {
-    type: 'simple',
-    left: {
-      type: 'column',
-      name: 'id',
-    },
-    op: 'IN',
-    right: {
-      type: 'literal',
-      value: ['1', '2'],
-    },
-  },
-  related: [
-    {
-      system: 'client',
-      correlation: {
-        parentField: ['id'],
-        childField: ['issueID'],
-      },
-      hidden: true,
-      subquery: {
-        table: 'issueLabels',
-        alias: 'labels',
-        orderBy: [
-          ['issueID', 'asc'],
-          ['labelID', 'asc'],
-        ],
-        related: [
-          {
-            system: 'client',
-            correlation: {
-              parentField: ['labelID'],
-              childField: ['id'],
-            },
-            subquery: {
-              table: 'labels',
-              alias: 'labels',
-              orderBy: [['id', 'asc']],
-            },
-          },
-        ],
-      },
-    },
-  ],
-};
-
-const ISSUES_QUERY_WITH_EXISTS_AND_RELATED: AST = {
-  table: 'issues',
-  orderBy: [['id', 'asc']],
-  where: {
-    type: 'correlatedSubquery',
-    op: 'EXISTS',
-    related: {
-      system: 'client',
-      correlation: {
-        parentField: ['id'],
-        childField: ['issueID'],
-      },
-      subquery: {
-        table: 'comments',
-        alias: 'exists_comments',
-        orderBy: [
-          ['issueID', 'asc'],
-          ['id', 'asc'],
-        ],
-        where: {
-          type: 'simple',
-          left: {
-            type: 'column',
-            name: 'text',
-          },
-          op: '=',
-          right: {
-            type: 'literal',
-            value: 'foo',
-          },
-        },
-      },
-    },
-  },
-  related: [
-    {
-      system: 'client',
-      correlation: {
-        parentField: ['id'],
-        childField: ['issueID'],
-      },
-      subquery: {
-        table: 'comments',
-        alias: 'comments',
-        orderBy: [
-          ['issueID', 'asc'],
-          ['id', 'asc'],
-        ],
-      },
-    },
-  ],
-};
-
-const ISSUES_QUERY_WITH_NOT_EXISTS_AND_RELATED: AST = {
-  table: 'issues',
-  orderBy: [['id', 'asc']],
-  where: {
-    type: 'correlatedSubquery',
-    op: 'NOT EXISTS',
-    related: {
-      system: 'client',
-      correlation: {
-        parentField: ['id'],
-        childField: ['issueID'],
-      },
-      subquery: {
-        table: 'comments',
-        alias: 'exists_comments',
-        orderBy: [
-          ['issueID', 'asc'],
-          ['id', 'asc'],
-        ],
-        where: {
-          type: 'simple',
-          left: {
-            type: 'column',
-            name: 'text',
-          },
-          op: '=',
-          right: {
-            type: 'literal',
-            value: 'bar',
-          },
-        },
-      },
-    },
-  },
-  related: [
-    {
-      system: 'client',
-      correlation: {
-        parentField: ['id'],
-        childField: ['issueID'],
-      },
-      subquery: {
-        table: 'comments',
-        alias: 'comments',
-        orderBy: [
-          ['issueID', 'asc'],
-          ['id', 'asc'],
-        ],
-      },
-    },
-  ],
-};
-
-const ISSUES_QUERY2: AST = {
-  table: 'issues',
-  orderBy: [['id', 'asc']],
-};
-
-const USERS_QUERY: AST = {
-  table: 'users',
-  orderBy: [['id', 'asc']],
-};
-
-const issues = table('issues')
-  .columns({
-    id: string(),
-    title: string(),
-    owner: string(),
-    parent: string(),
-    big: number(),
-    json: json(),
-  })
-  .primaryKey('id');
-const comments = table('comments')
-  .columns({
-    id: string(),
-    issueID: string(),
-    text: string(),
-  })
-  .primaryKey('id');
-const issueLabels = table('issueLabels')
-  .columns({
-    issueID: string(),
-    labelID: string(),
-  })
-  .primaryKey('issueID', 'labelID');
-const labels = table('labels')
-  .columns({
-    id: string(),
-    name: string(),
-  })
-  .primaryKey('id');
-const users = table('users')
-  .columns({
-    id: string(),
-    name: string(),
-  })
-  .primaryKey('id');
-
-const schema = createSchema({
-  tables: [issues, comments, issueLabels, labels, users],
-  relationships: [
-    relationships(comments, connect => ({
-      issue: connect.many({
-        sourceField: ['issueID'],
-        destField: ['id'],
-        destSchema: issues,
-      }),
-    })),
-  ],
-});
-
-const {clientSchema: defaultClientSchema} = clientSchemaFrom(schema);
-
-type Schema = typeof schema;
-
-type AuthData = {
-  sub: string;
-  role: 'user' | 'admin';
-  iat: number;
-};
-const canSeeIssue = (
-  authData: AuthData,
-  eb: ExpressionBuilder<Schema, 'issues'>,
-) => eb.cmpLit(authData.role, '=', 'admin');
-
-const permissions = await definePermissions<AuthData, typeof schema>(
-  schema,
-  () => ({
-    issues: {
-      row: {
-        select: [canSeeIssue],
-      },
-    },
-    comments: {
-      row: {
-        select: [
-          (authData, eb: ExpressionBuilder<Schema, 'comments'>) =>
-            eb.exists('issue', iq =>
-              iq.where(({eb}) => canSeeIssue(authData, eb)),
-            ),
-        ],
-      },
-    },
-  }),
-);
-
-const permissionsAll = await definePermissions<AuthData, typeof schema>(
-  schema,
-  () => ({
-    issues: ANYONE_CAN_DO_ANYTHING,
-    comments: ANYONE_CAN_DO_ANYTHING,
-    issueLabels: ANYONE_CAN_DO_ANYTHING,
-    labels: ANYONE_CAN_DO_ANYTHING,
-    users: ANYONE_CAN_DO_ANYTHING,
-  }),
-);
-
-async function setup(permissions: PermissionsConfig | undefined) {
-  const lc = createSilentLogContext();
-  const storageDB = new Database(lc, ':memory:');
-  storageDB.prepare(CREATE_STORAGE_TABLE).run();
-
-  const replicaDbFile = new DbFile('view_syncer_service_test');
-  const replica = replicaDbFile.connect(lc);
-  initChangeLog(replica);
-  initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
-
-  replica.pragma('journal_mode = WAL2');
-  replica.pragma('busy_timeout = 1');
-  replica.exec(`
-  CREATE TABLE "this_app_2.clients" (
-    "clientGroupID"  TEXT,
-    "clientID"       TEXT,
-    "lastMutationID" INTEGER,
-    "userID"         TEXT,
-    _0_version       TEXT NOT NULL,
-    PRIMARY KEY ("clientGroupID", "clientID")
-  );
-  CREATE TABLE "this_app.schemaVersions" (
-    "lock"                INT PRIMARY KEY,
-    "minSupportedVersion" INT,
-    "maxSupportedVersion" INT,
-    _0_version            TEXT NOT NULL
-  );
-  CREATE TABLE "this_app.permissions" (
-    "lock"        INT PRIMARY KEY,
-    "permissions" JSON,
-    "hash"        TEXT,
-    _0_version    TEXT NOT NULL
-  );
-  CREATE TABLE issues (
-    id text PRIMARY KEY,
-    owner text,
-    parent text,
-    big INTEGER,
-    title text,
-    json JSON,
-    _0_version TEXT NOT NULL
-  );
-  CREATE TABLE "issueLabels" (
-    issueID TEXT,
-    labelID TEXT,
-    _0_version TEXT NOT NULL,
-    PRIMARY KEY (issueID, labelID)
-  );
-  CREATE TABLE "labels" (
-    id TEXT PRIMARY KEY,
-    name TEXT,
-    _0_version TEXT NOT NULL
-  );
-  CREATE TABLE users (
-    id text PRIMARY KEY,
-    name text,
-    _0_version TEXT NOT NULL
-  );
-  CREATE TABLE comments (
-    id TEXT PRIMARY KEY,
-    issueID TEXT,
-    text TEXT,
-    _0_version TEXT NOT NULL
-  );
-
-  INSERT INTO "this_app_2.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
-    VALUES ('9876', 'foo', 42, '01');
-  INSERT INTO "this_app.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
-    VALUES (1, 2, 3, '01'); 
-  INSERT INTO "this_app.permissions" ("lock", "permissions", "hash", _0_version)
-    VALUES (1, NULL, NULL, '01');
-
-  INSERT INTO users (id, name, _0_version) VALUES ('100', 'Alice', '01');
-  INSERT INTO users (id, name, _0_version) VALUES ('101', 'Bob', '01');
-  INSERT INTO users (id, name, _0_version) VALUES ('102', 'Candice', '01');
-
-  INSERT INTO issues (id, title, owner, big, _0_version) VALUES ('1', 'parent issue foo', 100, 9007199254740991, '01');
-  INSERT INTO issues (id, title, owner, big, _0_version) VALUES ('2', 'parent issue bar', 101, -9007199254740991, '01');
-  INSERT INTO issues (id, title, owner, parent, big, _0_version) VALUES ('3', 'foo', 102, 1, 123, '01');
-  INSERT INTO issues (id, title, owner, parent, big, _0_version) VALUES ('4', 'bar', 101, 2, 100, '01');
-  -- The last row should not match the ISSUES_TITLE_QUERY: "WHERE id IN (1, 2, 3, 4)"
-  INSERT INTO issues (id, title, owner, parent, big, json, _0_version) VALUES 
-    ('5', 'not matched', 101, 2, 100, '[123,{"foo":456,"bar":789},"baz"]', '01');
-
-  INSERT INTO "issueLabels" (issueID, labelID, _0_version) VALUES ('1', '1', '01');
-  INSERT INTO "labels" (id, name, _0_version) VALUES ('1', 'bug', '01');
-
-  INSERT INTO "comments" (id, issueID, text, _0_version) VALUES ('1', '1', 'comment 1', '01');
-  INSERT INTO "comments" (id, issueID, text, _0_version) VALUES ('2', '1', 'bar', '01');
-  `);
-
-  const cvrDB = await testDBs.create('view_syncer_service_test');
-  await initViewSyncerSchema(lc, cvrDB, SHARD);
-
-  const setTimeoutFn = vi.fn();
-
-  const replicator = fakeReplicator(lc, replica);
-  const stateChanges: Subscription<ReplicaState> = Subscription.create();
-  const drainCoordinator = new DrainCoordinator();
-  const operatorStorage = new DatabaseStorage(
-    storageDB,
-  ).createClientGroupStorage(serviceID);
-  const vs = new ViewSyncerService(
-    lc,
-    SHARD,
-    TASK_ID,
-    serviceID,
-    cvrDB,
-    new PipelineDriver(
-      lc.withContext('component', 'pipeline-driver'),
-      testLogConfig,
-      new Snapshotter(lc, replicaDbFile.path, SHARD),
-      SHARD,
-      operatorStorage,
-      'view-syncer.pg-test.ts',
-    ),
-    stateChanges,
-    drainCoordinator,
-    100,
-    undefined,
-    undefined,
-    setTimeoutFn,
-  );
-  if (permissions) {
-    const json = JSON.stringify(permissions);
-    replica
-      .prepare(`UPDATE "this_app.permissions" SET permissions = ?, hash = ?`)
-      .run(json, h128(json).toString(16));
-  }
-  const viewSyncerDone = vs.run();
-
-  function connectWithQueueAndSource(
-    ctx: SyncContext,
-    desiredQueriesPatch: QueriesPatch,
-    clientSchema: ClientSchema = defaultClientSchema,
-  ): {queue: Queue<Downstream>; source: Source<Downstream>} {
-    const source = vs.initConnection(ctx, [
-      'initConnection',
-      {desiredQueriesPatch, clientSchema},
-    ]);
-    const queue = new Queue<Downstream>();
-
-    void (async function () {
-      try {
-        for await (const msg of source) {
-          await queue.enqueue(msg);
-        }
-      } catch (e) {
-        await queue.enqueueRejection(e);
-      }
-    })();
-
-    return {queue, source};
-  }
-
-  function connect(
-    ctx: SyncContext,
-    desiredQueriesPatch: QueriesPatch,
-    clientSchema?: ClientSchema,
-  ) {
-    return connectWithQueueAndSource(ctx, desiredQueriesPatch, clientSchema)
-      .queue;
-  }
-
-  async function nextPoke(client: Queue<Downstream>): Promise<Downstream[]> {
-    const received: Downstream[] = [];
-    for (;;) {
-      const msg = await client.dequeue();
-      received.push(msg);
-      if (msg[0] === 'pokeEnd') {
-        break;
-      }
-    }
-    return received;
-  }
-
-  async function nextPokeParts(
-    client: Queue<Downstream>,
-  ): Promise<PokePartBody[]> {
-    const pokes = await nextPoke(client);
-    return pokes
-      .filter((msg: Downstream) => msg[0] === 'pokePart')
-      .map(([, body]) => body);
-  }
-
-  async function expectNoPokes(client: Queue<Downstream>) {
-    // Use the dequeue() API that cancels the dequeue() request after a timeout.
-    const timedOut = 'nothing' as unknown as Downstream;
-    expect(await client.dequeue(timedOut, 10)).toBe(timedOut);
-  }
-
-  return {
-    storageDB,
-    replicaDbFile,
-    replica,
-    cvrDB,
-    stateChanges,
-    drainCoordinator,
-    operatorStorage,
-    vs,
-    viewSyncerDone,
-    replicator,
-    connect,
-    connectWithQueueAndSource,
-    nextPoke,
-    nextPokeParts,
-    expectNoPokes,
-    setTimeoutFn,
-  };
-}
-
-const messages = new ReplicationMessages({
-  issues: 'id',
-  users: 'id',
-  issueLabels: ['issueID', 'labelID'],
-  comments: 'id',
-});
-const appMessages = new ReplicationMessages(
-  {
-    schemaVersions: 'lock',
-    permissions: 'lock',
-  },
-  'this_app',
-);
-
-const app2Messages = new ReplicationMessages(
-  {
-    clients: ['clientGroupID', 'clientID'],
-  },
-  'this_app_2',
-);
+import {ttlClockFromNumber} from './ttl-clock.ts';
+import {
+  app2Messages,
+  appMessages,
+  COMMENTS_QUERY,
+  EXPECTED_LMIDS_AST,
+  expectNoPokes,
+  ISSUES_QUERY,
+  ISSUES_QUERY2,
+  ISSUES_QUERY_WITH_EXISTS,
+  ISSUES_QUERY_WITH_EXISTS_AND_RELATED,
+  ISSUES_QUERY_WITH_NOT_EXISTS_AND_RELATED,
+  ISSUES_QUERY_WITH_RELATED,
+  messages,
+  nextPoke,
+  nextPokeParts,
+  ON_FAILURE,
+  permissionsAll,
+  REPLICA_VERSION,
+  serviceID,
+  setup,
+  SHARD,
+  TASK_ID,
+  USERS_QUERY,
+} from './view-syncer-test-util.ts';
+import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
 
 describe('view-syncer/service', () => {
   let storageDB: Database;
   let replicaDbFile: DbFile;
   let replica: Database;
   let cvrDB: PostgresDB;
+  let upstreamDb: PostgresDB;
   const lc = createSilentLogContext();
   let stateChanges: Subscription<ReplicaState>;
   let drainCoordinator: DrainCoordinator;
@@ -688,20 +85,18 @@ describe('view-syncer/service', () => {
   let replicator: FakeReplicator;
   let connect: (
     ctx: SyncContext,
-    desiredQueriesPatch: QueriesPatch,
+    desiredQueriesPatch: UpQueriesPatch,
     clientSchema?: ClientSchema,
   ) => Queue<Downstream>;
   let connectWithQueueAndSource: (
     ctx: SyncContext,
-    desiredQueriesPatch: QueriesPatch,
+    desiredQueriesPatch: UpQueriesPatch,
     clientSchema?: ClientSchema,
+    activeClients?: string[],
   ) => {
     queue: Queue<Downstream>;
     source: Source<Downstream>;
   };
-  let nextPoke: (client: Queue<Downstream>) => Promise<Downstream[]>;
-  let nextPokeParts: (client: Queue<Downstream>) => Promise<PokePartBody[]>;
-  let expectNoPokes: (client: Queue<Downstream>) => Promise<void>;
   let setTimeoutFn: Mock<typeof setTimeout>;
 
   function callNextSetTimeout(delta: number) {
@@ -719,14 +114,16 @@ describe('view-syncer/service', () => {
     protocolVersion: PROTOCOL_VERSION,
     schemaVersion: 2,
     tokenData: undefined,
+    httpCookie: undefined,
   };
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     ({
       storageDB,
       replicaDbFile,
       replica,
       cvrDB,
+      upstreamDb,
       stateChanges,
       drainCoordinator,
       operatorStorage,
@@ -735,19 +132,16 @@ describe('view-syncer/service', () => {
       replicator,
       connect,
       connectWithQueueAndSource,
-      nextPoke,
-      nextPokeParts,
-      expectNoPokes,
       setTimeoutFn,
-    } = await setup(permissionsAll));
-  });
+    } = await setup(testDBs, 'view_syncer_service_test', permissionsAll));
 
-  afterEach(async () => {
-    vi.useRealTimers();
-    await vs.stop();
-    await viewSyncerDone;
-    await testDBs.drop(cvrDB);
-    replicaDbFile.delete();
+    return async () => {
+      vi.useRealTimers();
+      await vs.stop();
+      await viewSyncerDone;
+      await testDBs.drop(cvrDB, upstreamDb);
+      replicaDbFile.delete();
+    };
   });
 
   async function getCVROwner() {
@@ -767,6 +161,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
+      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -795,6 +190,7 @@ describe('view-syncer/service', () => {
 
   test('responds to changeDesiredQueries patch', async () => {
     const now = Date.UTC(2025, 1, 20);
+    const ttlClock = 0;
     vi.setSystemTime(now);
     connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
@@ -810,7 +206,7 @@ describe('view-syncer/service', () => {
       },
     ]);
 
-    const inactivatedAt = Date.now();
+    const inactivatedAt = ttlClock;
     // Change the set of queries.
     await vs.changeDesiredQueries(SYNC_CONTEXT, [
       'changeDesiredQueries',
@@ -825,6 +221,7 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
+      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
@@ -851,7 +248,7 @@ describe('view-syncer/service', () => {
           clientState: {
             foo: {
               inactivatedAt,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
               version: {minorVersion: 2, stateVersion: '00'},
             },
           },
@@ -863,7 +260,7 @@ describe('view-syncer/service', () => {
           clientState: {
             foo: {
               inactivatedAt: undefined,
-              ttl: -1,
+              ttl: DEFAULT_TTL_MS,
               version: {stateVersion: '00', minorVersion: 2},
             },
           },
@@ -893,32 +290,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -956,32 +327,6 @@ describe('view-syncer/service', () => {
           {
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "query-hash1",
                 "op": "put",
               },
@@ -1125,6 +470,965 @@ describe('view-syncer/service', () => {
     `);
   });
 
+  describe('custom queries', () => {
+    const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
+    beforeEach(() => {
+      vi.stubGlobal('fetch', mockFetch);
+    });
+
+    afterEach(() => {
+      mockFetch.mockClear();
+      vi.unstubAllGlobals();
+    });
+
+    function mockFetchImpl(
+      queryResponses: TransformResponseBody | (() => Promise<Response>),
+    ) {
+      mockFetch.mockImplementation(url => {
+        if (
+          url ===
+          'http://my-pull-endpoint.dev/api/zero/pull?schema=this_app_2&appID=this_app'
+        ) {
+          if (typeof queryResponses === 'function') {
+            return queryResponses();
+          }
+          return Promise.resolve(
+            new Response(
+              JSON.stringify([
+                'transformed',
+                queryResponses,
+              ] satisfies TransformResponseMessage),
+            ),
+          );
+        }
+        return Promise.reject(new Error('Unexpected fetch call ' + url));
+      });
+    }
+
+    test('initial hydration of a custom query', async () => {
+      mockFetchImpl([
+        {
+          ast: ISSUES_QUERY,
+          id: 'custom-1',
+          name: 'named-query',
+        },
+      ]);
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query', args: ['thing']},
+      ]);
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": null,
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "desiredQueriesPatches": {
+              "foo": [
+                {
+                  "hash": "custom-1",
+                  "op": "put",
+                },
+              ],
+            },
+            "pokeID": "00:01",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "00:01",
+            "pokeID": "00:01",
+          },
+        ],
+      ]
+    `);
+
+      stateChanges.push({state: 'version-ready'});
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "00:01",
+              "pokeID": "01",
+              "schemaVersions": {
+                "maxSupportedVersion": 3,
+                "minSupportedVersion": 2,
+              },
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "put",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01",
+              "rowsPatch": [
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 9007199254740991,
+                    "id": "1",
+                    "json": null,
+                    "owner": "100",
+                    "parent": null,
+                    "title": "parent issue foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": -9007199254740991,
+                    "id": "2",
+                    "json": null,
+                    "owner": "101",
+                    "parent": null,
+                    "title": "parent issue bar",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 123,
+                    "id": "3",
+                    "json": null,
+                    "owner": "102",
+                    "parent": "1",
+                    "title": "foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 100,
+                    "id": "4",
+                    "json": null,
+                    "owner": "101",
+                    "parent": "2",
+                    "title": "bar",
+                  },
+                },
+              ],
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01",
+              "pokeID": "01",
+            },
+          ],
+        ]
+      `);
+
+      expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
+        .toMatchInlineSnapshot(`
+          Result [
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "lmids": 1,
+              },
+              "rowKey": {
+                "clientGroupID": "9876",
+                "clientID": "foo",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "this_app_2.clients",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "1",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "2",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "3",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+            {
+              "clientGroupID": "9876",
+              "patchVersion": "01",
+              "refCounts": {
+                "custom-1": 1,
+              },
+              "rowKey": {
+                "id": "4",
+              },
+              "rowVersion": "01",
+              "schema": "",
+              "table": "issues",
+            },
+          ]
+        `);
+    });
+
+    test('different custom queries end up with the same query after transformation', async () => {
+      mockFetchImpl([
+        {
+          ast: ISSUES_QUERY,
+          id: 'custom-1',
+          name: 'named-query-1',
+        },
+        {
+          ast: ISSUES_QUERY,
+          id: 'custom-2',
+          name: 'named-query-2',
+        },
+      ]);
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+        {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+      ]);
+
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": null,
+              "pokeID": "00:01",
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "desiredQueriesPatches": {
+                "foo": [
+                  {
+                    "hash": "custom-1",
+                    "op": "put",
+                  },
+                  {
+                    "hash": "custom-2",
+                    "op": "put",
+                  },
+                ],
+              },
+              "pokeID": "00:01",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "00:01",
+              "pokeID": "00:01",
+            },
+          ],
+        ]
+      `);
+      stateChanges.push({state: 'version-ready'});
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "00:01",
+              "pokeID": "01",
+              "schemaVersions": {
+                "maxSupportedVersion": 3,
+                "minSupportedVersion": 2,
+              },
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "put",
+                },
+                {
+                  "hash": "custom-2",
+                  "op": "put",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01",
+              "rowsPatch": [
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 9007199254740991,
+                    "id": "1",
+                    "json": null,
+                    "owner": "100",
+                    "parent": null,
+                    "title": "parent issue foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": -9007199254740991,
+                    "id": "2",
+                    "json": null,
+                    "owner": "101",
+                    "parent": null,
+                    "title": "parent issue bar",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 123,
+                    "id": "3",
+                    "json": null,
+                    "owner": "102",
+                    "parent": "1",
+                    "title": "foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 100,
+                    "id": "4",
+                    "json": null,
+                    "owner": "101",
+                    "parent": "2",
+                    "title": "bar",
+                  },
+                },
+              ],
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01",
+              "pokeID": "01",
+            },
+          ],
+        ]
+      `);
+      expect(await cvrDB`SELECT * from "this_app_2/cvr".rows`)
+        .toMatchInlineSnapshot(`
+        Result [
+          {
+            "clientGroupID": "9876",
+            "patchVersion": "01",
+            "refCounts": {
+              "lmids": 1,
+            },
+            "rowKey": {
+              "clientGroupID": "9876",
+              "clientID": "foo",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "this_app_2.clients",
+          },
+          {
+            "clientGroupID": "9876",
+            "patchVersion": "01",
+            "refCounts": {
+              "custom-1": 1,
+              "custom-2": 1,
+            },
+            "rowKey": {
+              "id": "1",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
+          },
+          {
+            "clientGroupID": "9876",
+            "patchVersion": "01",
+            "refCounts": {
+              "custom-1": 1,
+              "custom-2": 1,
+            },
+            "rowKey": {
+              "id": "2",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
+          },
+          {
+            "clientGroupID": "9876",
+            "patchVersion": "01",
+            "refCounts": {
+              "custom-1": 1,
+              "custom-2": 1,
+            },
+            "rowKey": {
+              "id": "3",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
+          },
+          {
+            "clientGroupID": "9876",
+            "patchVersion": "01",
+            "refCounts": {
+              "custom-1": 1,
+              "custom-2": 1,
+            },
+            "rowKey": {
+              "id": "4",
+            },
+            "rowVersion": "01",
+            "schema": "",
+            "table": "issues",
+          },
+        ]
+      `);
+    });
+
+    test('does not re-transform the same custom query if it was already registered and transformed', async () => {
+      let callCount = 0;
+      mockFetchImpl(() => {
+        callCount++;
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              'transformed',
+              [
+                {
+                  ast: ISSUES_QUERY,
+                  id: 'custom-1',
+                  name: 'named-query-1',
+                },
+                {
+                  ast: ISSUES_QUERY,
+                  id: 'custom-2',
+                  name: 'named-query-2',
+                },
+              ],
+            ] satisfies TransformResponseMessage),
+          ),
+        );
+      });
+
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+        {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+      expect(callCount).toBe(1);
+
+      const client2 = connect(
+        {
+          ...SYNC_CONTEXT,
+          clientID: 'cq-c2-client',
+          wsID: 'cq-c2-wsid',
+        },
+        [
+          {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+          {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+        ],
+      );
+
+      // query should still transition to `got`
+      expect(await nextPoke(client2)).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": null,
+              "pokeID": "01:01",
+              "schemaVersions": {
+                "maxSupportedVersion": 3,
+                "minSupportedVersion": 2,
+              },
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "desiredQueriesPatches": {
+                "cq-c2-client": [
+                  {
+                    "hash": "custom-1",
+                    "op": "put",
+                  },
+                  {
+                    "hash": "custom-2",
+                    "op": "put",
+                  },
+                ],
+                "foo": [
+                  {
+                    "hash": "custom-1",
+                    "op": "put",
+                  },
+                  {
+                    "hash": "custom-2",
+                    "op": "put",
+                  },
+                ],
+              },
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "put",
+                },
+                {
+                  "hash": "custom-2",
+                  "op": "put",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01:01",
+              "rowsPatch": [
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 9007199254740991,
+                    "id": "1",
+                    "json": null,
+                    "owner": "100",
+                    "parent": null,
+                    "title": "parent issue foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": -9007199254740991,
+                    "id": "2",
+                    "json": null,
+                    "owner": "101",
+                    "parent": null,
+                    "title": "parent issue bar",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 123,
+                    "id": "3",
+                    "json": null,
+                    "owner": "102",
+                    "parent": "1",
+                    "title": "foo",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "issues",
+                  "value": {
+                    "big": 100,
+                    "id": "4",
+                    "json": null,
+                    "owner": "101",
+                    "parent": "2",
+                    "title": "bar",
+                  },
+                },
+              ],
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01:01",
+              "pokeID": "01:01",
+            },
+          ],
+        ]
+      `);
+      expect(callCount).toBe(1);
+    });
+
+    // test cases where custom query transforms fail
+    test('http transform call fails', async () => {
+      mockFetchImpl(() => Promise.reject(JSON.stringify({})));
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+        {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "transformError",
+            [
+              {
+                "details": "{}",
+                "error": "zero",
+                "id": "custom-1",
+                "name": "named-query-1",
+              },
+              {
+                "details": "{}",
+                "error": "zero",
+                "id": "custom-2",
+                "name": "named-query-2",
+              },
+            ],
+          ],
+          [
+            "pokeStart",
+            {
+              "baseCookie": "00:01",
+              "pokeID": "01",
+              "schemaVersions": {
+                "maxSupportedVersion": 3,
+                "minSupportedVersion": 2,
+              },
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "del",
+                },
+                {
+                  "hash": "custom-2",
+                  "op": "del",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01",
+              "pokeID": "01",
+            },
+          ],
+        ]
+      `);
+    });
+
+    test('bad http response', async () => {
+      const r = new Response(JSON.stringify({}), {
+        status: 500,
+        statusText: 'Internal Server Error',
+      });
+      mockFetchImpl(() => Promise.resolve(r));
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+        {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "transformError",
+            [
+              {
+                "details": "{}",
+                "error": "http",
+                "id": "custom-1",
+                "name": "named-query-1",
+                "status": 500,
+              },
+              {
+                "details": "{}",
+                "error": "http",
+                "id": "custom-2",
+                "name": "named-query-2",
+                "status": 500,
+              },
+            ],
+          ],
+          [
+            "pokeStart",
+            {
+              "baseCookie": "00:01",
+              "pokeID": "01",
+              "schemaVersions": {
+                "maxSupportedVersion": 3,
+                "minSupportedVersion": 2,
+              },
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "del",
+                },
+                {
+                  "hash": "custom-2",
+                  "op": "del",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01",
+              "pokeID": "01",
+            },
+          ],
+        ]
+      `);
+    });
+
+    test('all individual queries fail', async () => {
+      mockFetchImpl([
+        {
+          error: 'app',
+          id: 'custom-1',
+          name: 'named-query-1',
+          details: 'errrrrr',
+        },
+        {
+          error: 'app',
+          id: 'custom-2',
+          name: 'named-query-2',
+          details: 'brrrr',
+        },
+      ] satisfies TransformResponseBody);
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+        {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "transformError",
+            [
+              {
+                "details": "errrrrr",
+                "error": "app",
+                "id": "custom-1",
+                "name": "named-query-1",
+              },
+              {
+                "details": "brrrr",
+                "error": "app",
+                "id": "custom-2",
+                "name": "named-query-2",
+              },
+            ],
+          ],
+          [
+            "pokeStart",
+            {
+              "baseCookie": "00:01",
+              "pokeID": "01",
+              "schemaVersions": {
+                "maxSupportedVersion": 3,
+                "minSupportedVersion": 2,
+              },
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-1",
+                  "op": "del",
+                },
+                {
+                  "hash": "custom-2",
+                  "op": "del",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01",
+              "pokeID": "01",
+            },
+          ],
+        ]
+      `);
+    });
+
+    test('some individual queries fail', async () => {
+      mockFetchImpl([
+        {
+          error: 'app',
+          id: 'custom-1',
+          name: 'named-query-1',
+          details: 'errrrrr',
+        },
+        {
+          id: 'custom-2',
+          name: 'named-query-2',
+          ast: USERS_QUERY,
+        },
+      ] satisfies TransformResponseBody);
+      const client = connect(SYNC_CONTEXT, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+        {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+      ]);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      expect(await nextPoke(client)).toMatchInlineSnapshot(`
+        [
+          [
+            "transformError",
+            [
+              {
+                "details": "errrrrr",
+                "error": "app",
+                "id": "custom-1",
+                "name": "named-query-1",
+              },
+            ],
+          ],
+          [
+            "pokeStart",
+            {
+              "baseCookie": "00:01",
+              "pokeID": "01",
+              "schemaVersions": {
+                "maxSupportedVersion": 3,
+                "minSupportedVersion": 2,
+              },
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "gotQueriesPatch": [
+                {
+                  "hash": "custom-2",
+                  "op": "put",
+                },
+                {
+                  "hash": "custom-1",
+                  "op": "del",
+                },
+              ],
+              "lastMutationIDChanges": {
+                "foo": 42,
+              },
+              "pokeID": "01",
+              "rowsPatch": [
+                {
+                  "op": "put",
+                  "tableName": "users",
+                  "value": {
+                    "id": "100",
+                    "name": "Alice",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "users",
+                  "value": {
+                    "id": "101",
+                    "name": "Bob",
+                  },
+                },
+                {
+                  "op": "put",
+                  "tableName": "users",
+                  "value": {
+                    "id": "102",
+                    "name": "Candice",
+                  },
+                },
+              ],
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "01",
+              "pokeID": "01",
+            },
+          ],
+        ]
+      `);
+    });
+
+    // not yet supported: test('a single custom query that returns many queries' () => {});
+  });
+
   test('delete client', async () => {
     const ttl = 5000; // 5s
     vi.setSystemTime(Date.UTC(2025, 2, 4));
@@ -1150,17 +1454,15 @@ describe('view-syncer/service', () => {
     await nextPoke(client2);
 
     expect(
-      await cvrDB`SELECT "clientID", "deleted" from "this_app_2/cvr".clients`,
+      await cvrDB`SELECT "clientID" from "this_app_2/cvr".clients`,
     ).toMatchInlineSnapshot(
       `
       Result [
         {
           "clientID": "foo",
-          "deleted": false,
         },
         {
           "clientID": "bar",
-          "deleted": false,
         },
       ]
     `,
@@ -1225,13 +1527,12 @@ describe('view-syncer/service', () => {
     await expectNoPokes(client1);
 
     expect(
-      await cvrDB`SELECT "clientID", "deleted" from "this_app_2/cvr".clients`,
+      await cvrDB`SELECT "clientID" from "this_app_2/cvr".clients`,
     ).toMatchInlineSnapshot(
       `
       Result [
         {
           "clientID": "foo",
-          "deleted": false,
         },
       ]
     `,
@@ -1251,7 +1552,7 @@ describe('view-syncer/service', () => {
         {
           "clientID": "bar",
           "deleted": true,
-          "inactivatedAt": 1741046400000,
+          "inactivatedAt": 0,
           "queryHash": "query-hash2",
           "ttl": "00:00:05",
         },
@@ -1313,7 +1614,7 @@ describe('view-syncer/service', () => {
         {
           "clientID": "bar",
           "deleted": true,
-          "inactivatedAt": 1741046400000,
+          "inactivatedAt": 0,
           "queryHash": "query-hash2",
           "ttl": "00:00:05",
         },
@@ -1321,199 +1622,260 @@ describe('view-syncer/service', () => {
     `);
   });
 
-  test('close connection', async () => {
-    const ttl = 100;
-    vi.setSystemTime(Date.UTC(2025, 2, 4));
-    const client1 = connect(SYNC_CONTEXT, [
-      {op: 'put', hash: 'issues-hash', ast: ISSUES_QUERY2, ttl},
-    ]);
+  test('activeClients inactivates queries from inactive clients', async () => {
+    const ttl = 5000; // 5s
+    vi.setSystemTime(Date.UTC(2025, 5, 30));
 
-    const ctx2 = {...SYNC_CONTEXT, clientID: 'bar', wsID: 'ws2'};
-    const client2 = connect(ctx2, [
-      {op: 'put', hash: 'users-hash', ast: USERS_QUERY, ttl},
+    // First, connect client A with queries
+    const ctxA = {...SYNC_CONTEXT, clientID: 'clientA', wsID: 'wsA'};
+    const {source: streamA, queue: clientA} = connectWithQueueAndSource(ctxA, [
+      {op: 'put', hash: 'query-hashA', ast: ISSUES_QUERY, ttl},
     ]);
-
-    await nextPoke(client1);
-    await nextPoke(client2);
 
     stateChanges.push({state: 'version-ready'});
 
-    await nextPoke(client1);
-    await nextPoke(client1);
+    await nextPoke(clientA); // desire query-hashA
+    await nextPoke(clientA); // Got query-hashA and rows
 
-    await nextPoke(client2);
-    await nextPoke(client2);
+    // Now connect client B and C using initConnection
+    const ctxB = {...SYNC_CONTEXT, clientID: 'clientB', wsID: 'wsB'};
+    const ctxC = {...SYNC_CONTEXT, clientID: 'clientC', wsID: 'wsC'};
 
+    // Connect client B
+    const {source: streamB, queue: clientB} = connectWithQueueAndSource(ctxB, [
+      {op: 'put', hash: 'query-hashB', ast: USERS_QUERY, ttl},
+    ]);
+
+    // Connect client C
+    const {source: streamC, queue: clientC} = connectWithQueueAndSource(ctxC, [
+      {op: 'put', hash: 'query-hashC', ast: COMMENTS_QUERY, ttl},
+    ]);
+
+    await nextPoke(clientA); // desire query-hashB
+    await nextPoke(clientA); // Got query-hashB and rows
+
+    await nextPoke(clientA); // desire query-hashC
+    await nextPoke(clientA); // Got query-hashC
+    await expectNoPokes(clientA);
+
+    await nextPoke(clientB); // Desire and got A & B and rows
+    await nextPoke(clientB); // desire query-hashC
+    await nextPoke(clientB); // Got query-hashC
+    await expectNoPokes(clientB);
+
+    await nextPoke(clientC); // Desire and got A & B and rows
+    await nextPoke(clientC); // desire query-hashC
+    await nextPoke(clientC); // Got query-hashC
+    await expectNoPokes(clientC);
+
+    // Verify all three clients are active and have their queries
     expect(
-      await cvrDB`SELECT "clientID", "deleted" from "this_app_2/cvr".clients`,
-    ).toMatchInlineSnapshot(
-      `
+      await cvrDB`SELECT "clientID" from "this_app_2/cvr".clients ORDER BY "clientID"`,
+    ).toMatchInlineSnapshot(`
       Result [
         {
-          "clientID": "foo",
-          "deleted": false,
+          "clientID": "clientA",
         },
         {
-          "clientID": "bar",
-          "deleted": false,
+          "clientID": "clientB",
+        },
+        {
+          "clientID": "clientC",
         },
       ]
-    `,
+    `);
+
+    expect(
+      await cvrDB`SELECT "clientID", "deleted", "queryHash", "inactivatedAt" from "this_app_2/cvr".desires ORDER BY "clientID"`,
+    ).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientID": "clientA",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "query-hashA",
+        },
+        {
+          "clientID": "clientB",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "query-hashB",
+        },
+        {
+          "clientID": "clientC",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "query-hashC",
+        },
+      ]
+    `);
+
+    // Close client A & C
+    streamA.cancel();
+    streamC.cancel();
+
+    await expectNoPokes(clientA);
+    await expectNoPokes(clientB);
+    await expectNoPokes(clientC);
+
+    // Verify that the clients' queries are NOT inactivated
+    expect(
+      await cvrDB`SELECT "clientID", "deleted", "queryHash", "inactivatedAt"
+        FROM "this_app_2/cvr".desires
+        ORDER BY "clientID"`,
+    ).toMatchInlineSnapshot(`
+      Result [
+        {
+          "clientID": "clientA",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "query-hashA",
+        },
+        {
+          "clientID": "clientB",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "query-hashB",
+        },
+        {
+          "clientID": "clientC",
+          "deleted": false,
+          "inactivatedAt": null,
+          "queryHash": "query-hashC",
+        },
+      ]
+    `);
+
+    // Simulate the passage of time.
+    const ONE_HOUR = 60 * 60 * 1000;
+    vi.setSystemTime(Date.now() + ONE_HOUR);
+
+    // Now reconnect client A with activeClients [clientA, clientB]
+    // This should inactivate clientC's queries
+    const newCtxA = {...ctxA, baseCookie: '01:04', wsID: 'wsA2'};
+    const {source: newStreamA, queue: newClientA} = connectWithQueueAndSource(
+      newCtxA,
+      [{op: 'put', hash: 'query-hashA', ast: ISSUES_QUERY, ttl}],
+      undefined,
+      ['clientA', 'clientB'],
     );
 
-    expect(
-      await cvrDB`SELECT "clientID", "queryHash", "inactivatedAt", "deleted" from "this_app_2/cvr".desires`,
-    ).toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientID": "foo",
-          "deleted": false,
-          "inactivatedAt": null,
-          "queryHash": "issues-hash",
-        },
-        {
-          "clientID": "bar",
-          "deleted": false,
-          "inactivatedAt": null,
-          "queryHash": "users-hash",
-        },
-      ]
-    `);
-
-    await vs.closeConnection(ctx2, ['closeConnection', []]);
-
-    expect(
-      await cvrDB`SELECT "clientID", "queryHash", "inactivatedAt", "deleted" from "this_app_2/cvr".desires`,
-    ).toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientID": "foo",
-          "deleted": false,
-          "inactivatedAt": null,
-          "queryHash": "issues-hash",
-        },
-        {
-          "clientID": "bar",
-          "deleted": true,
-          "inactivatedAt": 1741046400000,
-          "queryHash": "users-hash",
-        },
-      ]
-    `);
-
-    expect(await nextPokeParts(client1)).toMatchInlineSnapshot(`
+    expect(await nextPokeParts(newClientA)).toMatchInlineSnapshot(`
       [
         {
           "desiredQueriesPatches": {
-            "bar": [
+            "clientC": [
               {
-                "hash": "users-hash",
+                "hash": "query-hashC",
                 "op": "del",
               },
             ],
           },
-          "pokeID": "01:01",
+          "pokeID": "01:05",
         },
       ]
     `);
 
-    expect(await client1.dequeue()).toMatchInlineSnapshot(`
-      [
-        "deleteClients",
-        {
-          "clientIDs": [
-            "bar",
-          ],
-        },
-      ]
-    `);
+    await expectNoPokes(newClientA);
 
-    await expectNoPokes(client1);
+    await nextPoke(clientB); // desire delete query-hashC
+    await expectNoPokes(clientB);
 
+    // Verify that clientC's query remains present but is inactivated.
     expect(
-      await cvrDB`SELECT "clientID", "queryHash", "inactivatedAt", "deleted" from "this_app_2/cvr".desires`,
-    ).toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientID": "foo",
-          "deleted": false,
-          "inactivatedAt": null,
-          "queryHash": "issues-hash",
-        },
-        {
-          "clientID": "bar",
-          "deleted": true,
-          "inactivatedAt": 1741046400000,
-          "queryHash": "users-hash",
-        },
-      ]
-    `);
-    expect(
-      await cvrDB`SELECT "clientID", "deleted" from "this_app_2/cvr".clients`,
-    ).toMatchInlineSnapshot(`
-      Result [
-        {
-          "clientID": "foo",
-          "deleted": false,
-        },
-      ]
-    `);
+      await cvrDB`SELECT "clientID", "deleted", "queryHash", "inactivatedAt" FROM "this_app_2/cvr".desires`,
+    ).toEqual([
+      {
+        clientID: 'clientA',
+        deleted: false,
+        inactivatedAt: null,
+        queryHash: 'query-hashA',
+      },
+      {
+        clientID: 'clientB',
+        deleted: false,
+        inactivatedAt: null,
+        queryHash: 'query-hashB',
+      },
+      {
+        clientID: 'clientC',
+        deleted: true,
+        inactivatedAt: 60 * 60 * 1000,
+        queryHash: 'query-hashC',
+      },
+    ]);
 
+    // If we move time forward 5s the inactivated query should be deleted
     callNextSetTimeout(ttl);
 
-    expect(await nextPokeParts(client1)).toMatchInlineSnapshot(`
+    expect(await nextPokeParts(newClientA)).toMatchInlineSnapshot(`
       [
         {
           "gotQueriesPatch": [
             {
-              "hash": "users-hash",
+              "hash": "query-hashC",
               "op": "del",
             },
           ],
-          "pokeID": "01:02",
+          "pokeID": "01:06",
           "rowsPatch": [
             {
               "id": {
-                "id": "100",
+                "id": "1",
               },
               "op": "del",
-              "tableName": "users",
+              "tableName": "comments",
             },
             {
               "id": {
-                "id": "101",
+                "id": "2",
               },
               "op": "del",
-              "tableName": "users",
+              "tableName": "comments",
+            },
+          ],
+        },
+      ]
+    `);
+    expect(await nextPokeParts(clientB)).toMatchInlineSnapshot(`
+      [
+        {
+          "gotQueriesPatch": [
+            {
+              "hash": "query-hashC",
+              "op": "del",
+            },
+          ],
+          "pokeID": "01:06",
+          "rowsPatch": [
+            {
+              "id": {
+                "id": "1",
+              },
+              "op": "del",
+              "tableName": "comments",
             },
             {
               "id": {
-                "id": "102",
+                "id": "2",
               },
               "op": "del",
-              "tableName": "users",
+              "tableName": "comments",
             },
           ],
         },
       ]
     `);
 
-    await expectNoPokes(client1);
+    await expectNoPokes(newClientA);
+    await expectNoPokes(clientB);
 
-    expect(
-      await cvrDB`SELECT "queryHash", "deleted" from "this_app_2/cvr".queries WHERE "internal" IS DISTINCT FROM TRUE`,
-    ).toMatchInlineSnapshot(`
-      Result [
-        {
-          "deleted": false,
-          "queryHash": "issues-hash",
-        },
-        {
-          "deleted": true,
-          "queryHash": "users-hash",
-        },
-      ]
-    `);
+    // Clean up the streams
+    newStreamA.cancel();
+    streamB.cancel();
+
+    await expectNoPokes(newClientA);
+    await expectNoPokes(clientB);
   });
 
   test('initial hydration, rows in multiple queries', async () => {
@@ -1538,75 +1900,14 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1.1",
                   "op": "put",
                 },
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                  },
                   "hash": "query-hash2",
                   "op": "put",
                 },
@@ -1644,75 +1945,14 @@ describe('view-syncer/service', () => {
           {
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "query-hash1",
                 "op": "put",
               },
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "query-hash1.1",
                 "op": "put",
               },
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                },
                 "hash": "query-hash2",
                 "op": "put",
               },
@@ -1915,32 +2155,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -1992,32 +2206,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -2047,6 +2235,7 @@ describe('view-syncer/service', () => {
   });
 
   test('initial hydration, schemaVersion unsupported with bad query', async () => {
+    vi.setSystemTime(Date.UTC(2025, 6, 14));
     // Simulate a connection when the replica is already ready.
     stateChanges.push({state: 'version-ready'});
     await sleep(5);
@@ -2102,45 +2291,10 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                  },
                   "hash": "query-hash2",
                   "op": "put",
                 },
@@ -2495,32 +2649,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -2561,32 +2689,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "bar": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -2733,32 +2835,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -2898,32 +2974,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -3082,32 +3132,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -3180,6 +3204,7 @@ describe('view-syncer/service', () => {
         protocolVersion: PROTOCOL_VERSION,
         schemaVersion: 2,
         tokenData: undefined,
+        httpCookie: undefined,
       },
       [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
     );
@@ -3210,32 +3235,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "bar": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -3292,32 +3291,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "bar": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -3391,64 +3364,12 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "bar": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
               ],
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -3456,32 +3377,6 @@ describe('view-syncer/service', () => {
             },
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "query-hash1",
                 "op": "put",
               },
@@ -3554,17 +3449,20 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
+      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
       ON_FAILURE,
     );
+    const now = Date.now();
+    const ttlClock = ttlClockFromNumber(now);
     await new CVRQueryDrivenUpdater(
       cvrStore,
-      await cvrStore.load(lc, Date.now()),
+      await cvrStore.load(lc, now),
       '07',
       REPLICA_VERSION,
-    ).flush(lc, Date.now(), Date.now());
+    ).flush(lc, now, now, ttlClock);
 
     // Connect the client.
     const client = connect(SYNC_CONTEXT, [
@@ -3618,32 +3516,6 @@ describe('view-syncer/service', () => {
             "desiredQueriesPatches": {
               "foo": [
                 {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
                   "hash": "query-hash1",
                   "op": "put",
                 },
@@ -3651,32 +3523,6 @@ describe('view-syncer/service', () => {
             },
             "gotQueriesPatch": [
               {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
                 "hash": "query-hash1",
                 "op": "put",
               },
@@ -3716,17 +3562,20 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
+      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
       ON_FAILURE,
     );
+    const now = Date.now();
+    const ttlClock = ttlClockFromNumber(now);
     await new CVRQueryDrivenUpdater(
       cvrStore,
-      await cvrStore.load(lc, Date.now()),
+      await cvrStore.load(lc, now),
       '07',
       '1' + REPLICA_VERSION, // CVR is at a newer replica version.
-    ).flush(lc, Date.now(), Date.now());
+    ).flush(lc, now, now, ttlClock);
 
     // Connect the client.
     const client = connect(SYNC_CONTEXT, [
@@ -3772,18 +3621,21 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
+      upstreamDb,
       SHARD,
       'some-other-task-id',
       serviceID,
       ON_FAILURE,
     );
-    const otherTaskOwnershipTime = Date.now() - 600_000;
+    const now = Date.now();
+    const ttlClock = ttlClockFromNumber(now);
+    const otherTaskOwnershipTime = now - 600_000;
     await new CVRQueryDrivenUpdater(
       cvrStore,
       await cvrStore.load(lc, otherTaskOwnershipTime),
       '07',
       REPLICA_VERSION, // CVR is at a newer replica version.
-    ).flush(lc, otherTaskOwnershipTime, Date.now());
+    ).flush(lc, otherTaskOwnershipTime, now, ttlClock);
 
     expect(await getCVROwner()).toBe('some-other-task-id');
 
@@ -3802,18 +3654,21 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
+      upstreamDb,
       SHARD,
       'some-other-task-id',
       serviceID,
       ON_FAILURE,
     );
-    const otherTaskOwnershipTime = Date.now();
+    const now = Date.now();
+    const ttlClock = ttlClockFromNumber(now);
+    const otherTaskOwnershipTime = now;
     await new CVRQueryDrivenUpdater(
       cvrStore,
       await cvrStore.load(lc, otherTaskOwnershipTime),
       '07',
       REPLICA_VERSION, // CVR is at a newer replica version.
-    ).flush(lc, otherTaskOwnershipTime, Date.now());
+    ).flush(lc, otherTaskOwnershipTime, now, ttlClock);
 
     expect(await getCVROwner()).toBe('some-other-task-id');
 
@@ -3833,17 +3688,20 @@ describe('view-syncer/service', () => {
     const cvrStore = new CVRStore(
       lc,
       cvrDB,
+      upstreamDb,
       SHARD,
       TASK_ID,
       serviceID,
       ON_FAILURE,
     );
+    const now = Date.now();
+    const ttlClock = ttlClockFromNumber(now);
     await new CVRQueryDrivenUpdater(
       cvrStore,
-      await cvrStore.load(lc, Date.now()),
+      await cvrStore.load(lc, now),
       '07',
       REPLICA_VERSION,
-    ).flush(lc, Date.now(), Date.now());
+    ).flush(lc, now, now, ttlClock);
 
     // Connect the client with a base cookie from the future.
     const client = connect({...SYNC_CONTEXT, baseCookie: '08'}, [
@@ -4140,4232 +3998,50 @@ describe('view-syncer/service', () => {
     `);
   });
 
-  describe('expired queries', () => {
-    test('expired query is removed', async () => {
-      const ttl = 100;
-      vi.setSystemTime(Date.now());
-      const client = connect(SYNC_CONTEXT, [
-        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
-      ]);
-
-      stateChanges.push({state: 'version-ready'});
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
-            },
-            "pokeID": "00:01",
-          },
-        ]
-      `);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
-                "hash": "query-hash1",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "json": null,
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "json": null,
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-            ],
-          },
-        ]
-      `);
-
-      // Mark query-hash1 as inactive
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [{op: 'del', hash: 'query-hash1'}],
-        },
-      ]);
-
-      // Make sure we do not get a delete of the gotQueriesPatch
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:01",
-          },
-        ]
-      `);
-
-      await expectNoPokes(client);
-
-      callNextSetTimeout(ttl);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "query-hash1",
-                "op": "del",
-              },
-            ],
-            "pokeID": "01:02",
-            "rowsPatch": [
-              {
-                "id": {
-                  "id": "1",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "2",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "3",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "4",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-            ],
-          },
-        ]
-      `);
-
-      await expectNoPokes(client);
-    });
-
-    test('expired query is readded', async () => {
-      const ttl = 100;
-      vi.setSystemTime(Date.now());
-      const client = connect(SYNC_CONTEXT, [
-        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
-      ]);
-
-      stateChanges.push({state: 'version-ready'});
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
-            },
-            "pokeID": "00:01",
-          },
-        ]
-      `);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
-                "hash": "query-hash1",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "json": null,
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "json": null,
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-            ],
-          },
-        ]
-      `);
-
-      // Mark query-hash1 as inactive
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [{op: 'del', hash: 'query-hash1'}],
-        },
-      ]);
-
-      // Make sure we do not get a delete of the gotQueriesPatch
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:01",
-          },
-        ]
-      `);
-
-      await expectNoPokes(client);
-
-      callNextSetTimeout(ttl / 2);
-
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [
-            {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl: ttl * 2},
-          ],
-        },
-      ]);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
-            },
-            "pokeID": "01:02",
-          },
-        ]
-      `);
-
-      // No got queries patch since we newer removed.
-      await expectNoPokes(client);
-
-      callNextSetTimeout(ttl);
-
-      await expectNoPokes(client);
-
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [{op: 'del', hash: 'query-hash1'}],
-        },
-      ]);
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:03",
-          },
-        ]
-      `);
-
-      await expectNoPokes(client);
-
-      callNextSetTimeout(ttl * 2);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "query-hash1",
-                "op": "del",
-              },
-            ],
-            "pokeID": "01:04",
-            "rowsPatch": [
-              {
-                "id": {
-                  "id": "1",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "2",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "3",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "4",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-            ],
-          },
-        ]
-      `);
-    });
-
-    test('query is added twice with longer ttl', async () => {
-      const ttl = 100;
-      vi.setSystemTime(Date.now());
-      const client = connect(SYNC_CONTEXT, [
-        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
-      ]);
-
-      stateChanges.push({state: 'version-ready'});
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
-            },
-            "pokeID": "00:01",
-          },
-        ]
-      `);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
-                "hash": "query-hash1",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "json": null,
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "json": null,
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-            ],
-          },
-        ]
-      `);
-
-      // Set the same query again but with 2*ttl
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [
-            {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl: ttl * 2},
-          ],
-        },
-      ]);
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
-            },
-            "pokeID": "01:01",
-          },
-        ]
-      `);
-
-      await expectNoPokes(client);
-
-      vi.setSystemTime(Date.now() + ttl * 2);
-
-      // Now delete it and make sure it takes 2 * ttl to get the got delete.
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [{op: 'del', hash: 'query-hash1'}],
-        },
-      ]);
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:02",
-          },
-        ]
-      `);
-
-      await expectNoPokes(client);
-
-      callNextSetTimeout(2 * ttl);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "query-hash1",
-                "op": "del",
-              },
-            ],
-            "pokeID": "01:03",
-            "rowsPatch": [
-              {
-                "id": {
-                  "id": "1",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "2",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "3",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "4",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-            ],
-          },
-        ]
-      `);
-
-      await expectNoPokes(client);
-    });
-
-    test('query is added twice with shorter ttl', async () => {
-      const ttl = 100;
-      vi.setSystemTime(Date.now());
-      const client = connect(SYNC_CONTEXT, [
-        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl: ttl * 2},
-      ]);
-
-      stateChanges.push({state: 'version-ready'});
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
-            },
-            "pokeID": "00:01",
-          },
-        ]
-      `);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
-                "hash": "query-hash1",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "json": null,
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "json": null,
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-            ],
-          },
-        ]
-      `);
-
-      // Set the same query again but with lower ttl which has no effect
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [
-            {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
-          ],
-        },
-      ]);
-      await expectNoPokes(client);
-
-      vi.setSystemTime(Date.now() + 2 * ttl);
-
-      // Now delete it and make sure it takes 2 * ttl to get the got delete.
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [{op: 'del', hash: 'query-hash1'}],
-        },
-      ]);
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:01",
-          },
-        ]
-      `);
-
-      await expectNoPokes(client);
-      callNextSetTimeout(2 * ttl);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "query-hash1",
-                "op": "del",
-              },
-            ],
-            "pokeID": "01:02",
-            "rowsPatch": [
-              {
-                "id": {
-                  "id": "1",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "2",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "3",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "4",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-            ],
-          },
-        ]
-      `);
-
-      await expectNoPokes(client);
-    });
-
-    test('expire time is too far in the future', async () => {
-      // The timer is limited to 1h... This test sets the expire to 2.5h in the future... so the timer should
-      // be fired at 1h, 2h and once again at 2.5h
-
-      const ttl = 2.5 * 60 * 60 * 1000;
-      vi.setSystemTime(Date.now());
-      const client = connect(SYNC_CONTEXT, [
-        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl},
-      ]);
-
-      stateChanges.push({state: 'version-ready'});
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
-            },
-            "pokeID": "00:01",
-          },
-        ]
-      `);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
-                "hash": "query-hash1",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "json": null,
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "json": null,
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-            ],
-          },
-        ]
-      `);
-
-      // Mark query-hash1 as inactive
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [{op: 'del', hash: 'query-hash1'}],
-        },
-      ]);
-
-      // Make sure we do not get a delete of the gotQueriesPatch
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:01",
-          },
-        ]
-      `);
-
-      await expectNoPokes(client);
-
-      callNextSetTimeout(60 * 60 * 1000);
-
-      await expectNoPokes(client);
-
-      callNextSetTimeout(60 * 60 * 1000);
-
-      await expectNoPokes(client);
-
-      callNextSetTimeout(30 * 60 * 1000);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "query-hash1",
-                "op": "del",
-              },
-            ],
-            "pokeID": "01:02",
-            "rowsPatch": [
-              {
-                "id": {
-                  "id": "1",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "2",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "3",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "4",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-            ],
-          },
-        ]
-      `);
-    });
-  });
-
-  describe('LRU', () => {
-    // LMID query has 1 row
-    // USERS_QUERY has 3 rows
-    // COMMENTS_QUERY has 2 rows
-    // ISSUES_QUERY has 4 rows
-
-    test('2 queries', async () => {
-      vs.maxRowCount = 4;
-
-      // This test has two queries and together the size is too large. When one becomes inactive
-      // we should evict that one.
-
-      const client = connect(SYNC_CONTEXT, [
-        {op: 'put', hash: 'user-query-hash', ast: USERS_QUERY}, // 3 rows
-        {op: 'put', hash: 'comment-query-hash', ast: COMMENTS_QUERY}, // 2 rows
-      ]);
-
-      stateChanges.push({state: 'version-ready'});
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "users",
-                  },
-                  "hash": "user-query-hash",
-                  "op": "put",
-                },
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "comments",
-                  },
-                  "hash": "comment-query-hash",
-                  "op": "put",
-                },
-              ],
-            },
-            "pokeID": "00:01",
-          },
-        ]
-      `);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "users",
-                },
-                "hash": "user-query-hash",
-                "op": "put",
-              },
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "comments",
-                },
-                "hash": "comment-query-hash",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "100",
-                  "name": "Alice",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "101",
-                  "name": "Bob",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "102",
-                  "name": "Candice",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "comments",
-                "value": {
-                  "id": "1",
-                  "issueID": "1",
-                  "text": "comment 1",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "comments",
-                "value": {
-                  "id": "2",
-                  "issueID": "1",
-                  "text": "bar",
-                },
-              },
-            ],
-          },
-        ]
-      `);
-
-      expect(
-        (
-          await cvrDB`SELECT count(*) from "this_app_2/cvr".rows where "this_app_2/cvr".rows.table != 'this_app_2.clients'`.values()
-        )[0][0],
-      ).toBe(5n);
-
-      await expectNoPokes(client);
-
-      // We now mark the USERS_QUERY as inactive. Since we are above the desired
-      // row count we will evict the USERS_QUERY and get rowsPatch deletes.
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [{op: 'del', hash: 'user-query-hash'}],
-        },
-      ]);
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "user-query-hash",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:01",
-          },
-        ]
-      `);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "user-query-hash",
-                "op": "del",
-              },
-            ],
-            "pokeID": "01:02",
-            "rowsPatch": [
-              {
-                "id": {
-                  "id": "100",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-              {
-                "id": {
-                  "id": "101",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-              {
-                "id": {
-                  "id": "102",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-            ],
-          },
-        ]
-      `);
-
-      await expectNoPokes(client);
-
-      // now we mark the COMMENTS_QUERY as inactive. Since we are below the desired
-      // row count we should not evict anything.
-
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [{op: 'del', hash: 'comment-query-hash'}],
-        },
-      ]);
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "comment-query-hash",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:03",
-          },
-        ]
-      `);
-      await expectNoPokes(client);
-    });
-
-    test('3 queries', async () => {
-      vs.maxRowCount = 5;
-
-      // This test is similar to the previous one but we have 3 queries with no ttl.
-      // We will inactivate users first, then comments and finally issues.
-      // after each, we will check that the oldest query is evicted.
-      const client = connect(SYNC_CONTEXT, [
-        {op: 'put', hash: 'user-query-hash', ast: USERS_QUERY}, // 3 rows
-        {op: 'put', hash: 'comment-query-hash', ast: COMMENTS_QUERY}, // 2 rows
-        {op: 'put', hash: 'issue-query-hash', ast: ISSUES_QUERY}, // 4 rows
-      ]);
-      stateChanges.push({state: 'version-ready'});
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "users",
-                  },
-                  "hash": "user-query-hash",
-                  "op": "put",
-                },
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "comments",
-                  },
-                  "hash": "comment-query-hash",
-                  "op": "put",
-                },
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
-                  "hash": "issue-query-hash",
-                  "op": "put",
-                },
-              ],
-            },
-            "pokeID": "00:01",
-          },
-        ]
-      `);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "users",
-                },
-                "hash": "user-query-hash",
-                "op": "put",
-              },
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "comments",
-                },
-                "hash": "comment-query-hash",
-                "op": "put",
-              },
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
-                "hash": "issue-query-hash",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "100",
-                  "name": "Alice",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "101",
-                  "name": "Bob",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "102",
-                  "name": "Candice",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "comments",
-                "value": {
-                  "id": "1",
-                  "issueID": "1",
-                  "text": "comment 1",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "comments",
-                "value": {
-                  "id": "2",
-                  "issueID": "1",
-                  "text": "bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "json": null,
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "json": null,
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-            ],
-          },
-        ]
-      `);
-
-      expect(
-        (
-          await cvrDB`SELECT count(*) from "this_app_2/cvr".rows where "this_app_2/cvr".rows.table != 'this_app_2.clients'`.values()
-        )[0][0],
-      ).toBe(9n);
-
-      await expectNoPokes(client);
-
-      // This is needed because we are using Date.now but real time and we want to ensure
-      // that the invalidatedAt is increasing.
-      function loopOneMs() {
-        const start = Date.now();
-        while (Date.now() - start < 1);
-      }
-
-      // We now mark the queries as inactive in the order users, comments and
-      // then issues moving the time forward after each inactivation. This means
-      // that the oldest query will be evicted each time.
-      loopOneMs();
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [{op: 'del', hash: 'user-query-hash'}],
-        },
-      ]);
-      loopOneMs();
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [{op: 'del', hash: 'comment-query-hash'}],
-        },
-      ]);
-      loopOneMs();
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [{op: 'del', hash: 'issue-query-hash'}],
-        },
-      ]);
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "user-query-hash",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:01",
-          },
-        ]
-      `);
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "user-query-hash",
-                "op": "del",
-              },
-            ],
-            "pokeID": "01:02",
-            "rowsPatch": [
-              {
-                "id": {
-                  "id": "100",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-              {
-                "id": {
-                  "id": "101",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-              {
-                "id": {
-                  "id": "102",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-            ],
-          },
-        ]
-      `);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "comment-query-hash",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:03",
-          },
-        ]
-      `);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "comment-query-hash",
-                "op": "del",
-              },
-            ],
-            "pokeID": "01:04",
-            "rowsPatch": [
-              {
-                "id": {
-                  "id": "1",
-                },
-                "op": "del",
-                "tableName": "comments",
-              },
-              {
-                "id": {
-                  "id": "2",
-                },
-                "op": "del",
-                "tableName": "comments",
-              },
-            ],
-          },
-        ]
-      `);
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "issue-query-hash",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:05",
-          },
-        ]
-      `);
-      // Not deleting issue rows because we are now under the limit.
-      await expectNoPokes(client);
-    });
-
-    test('3 queries, inactivate 2 at the same time', async () => {
-      vs.maxRowCount = 5;
-
-      // This test is similar to the previous one but we inactivate two at the same time. Both should be evicted.
-      const client = connect(SYNC_CONTEXT, [
-        {op: 'put', hash: 'user-query-hash', ast: USERS_QUERY}, // 3 rows
-        {op: 'put', hash: 'comment-query-hash', ast: COMMENTS_QUERY}, // 2 rows
-        {op: 'put', hash: 'issue-query-hash', ast: ISSUES_QUERY}, // 4 rows
-      ]);
-      stateChanges.push({state: 'version-ready'});
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "users",
-                  },
-                  "hash": "user-query-hash",
-                  "op": "put",
-                },
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "comments",
-                  },
-                  "hash": "comment-query-hash",
-                  "op": "put",
-                },
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
-                  "hash": "issue-query-hash",
-                  "op": "put",
-                },
-              ],
-            },
-            "pokeID": "00:01",
-          },
-        ]
-      `);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "users",
-                },
-                "hash": "user-query-hash",
-                "op": "put",
-              },
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "comments",
-                },
-                "hash": "comment-query-hash",
-                "op": "put",
-              },
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
-                "hash": "issue-query-hash",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "100",
-                  "name": "Alice",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "101",
-                  "name": "Bob",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "102",
-                  "name": "Candice",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "comments",
-                "value": {
-                  "id": "1",
-                  "issueID": "1",
-                  "text": "comment 1",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "comments",
-                "value": {
-                  "id": "2",
-                  "issueID": "1",
-                  "text": "bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "json": null,
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "json": null,
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-            ],
-          },
-        ]
-      `);
-
-      expect(
-        (
-          await cvrDB`SELECT count(*) from "this_app_2/cvr".rows where "this_app_2/cvr".rows.table != 'this_app_2.clients'`.values()
-        )[0][0],
-      ).toBe(9n);
-
-      await expectNoPokes(client);
-
-      // We now mark the queries as inactive in the order users and comments.
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [
-            {op: 'del', hash: 'user-query-hash'},
-            {op: 'del', hash: 'comment-query-hash'},
-          ],
-        },
-      ]);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "user-query-hash",
-                  "op": "del",
-                },
-                {
-                  "hash": "comment-query-hash",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:01",
-          },
-        ]
-      `);
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "user-query-hash",
-                "op": "del",
-              },
-            ],
-            "pokeID": "01:02",
-            "rowsPatch": [
-              {
-                "id": {
-                  "id": "100",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-              {
-                "id": {
-                  "id": "101",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-              {
-                "id": {
-                  "id": "102",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-            ],
-          },
-        ]
-      `);
-
-      // We continue since we are still above the limit.
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "comment-query-hash",
-                "op": "del",
-              },
-            ],
-            "pokeID": "01:03",
-            "rowsPatch": [
-              {
-                "id": {
-                  "id": "1",
-                },
-                "op": "del",
-                "tableName": "comments",
-              },
-              {
-                "id": {
-                  "id": "2",
-                },
-                "op": "del",
-                "tableName": "comments",
-              },
-            ],
-          },
-        ]
-      `);
-      await expectNoPokes(client);
-    });
-
-    test('2 queries, evict due to adding new rows', async () => {
-      vs.maxRowCount = 6;
-
-      // This test has two queries and together the size is too large. When one becomes inactive
-      // we should evict that one.
-
-      const client = connect(SYNC_CONTEXT, [
-        {op: 'put', hash: 'user-query-hash', ast: USERS_QUERY}, // 3 rows
-        {op: 'put', hash: 'comment-query-hash', ast: COMMENTS_QUERY}, // 2 rows
-      ]);
-
-      stateChanges.push({state: 'version-ready'});
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "users",
-                  },
-                  "hash": "user-query-hash",
-                  "op": "put",
-                },
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "comments",
-                  },
-                  "hash": "comment-query-hash",
-                  "op": "put",
-                },
-              ],
-            },
-            "pokeID": "00:01",
-          },
-        ]
-      `);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "users",
-                },
-                "hash": "user-query-hash",
-                "op": "put",
-              },
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "comments",
-                },
-                "hash": "comment-query-hash",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "100",
-                  "name": "Alice",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "101",
-                  "name": "Bob",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "102",
-                  "name": "Candice",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "comments",
-                "value": {
-                  "id": "1",
-                  "issueID": "1",
-                  "text": "comment 1",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "comments",
-                "value": {
-                  "id": "2",
-                  "issueID": "1",
-                  "text": "bar",
-                },
-              },
-            ],
-          },
-        ]
-      `);
-
-      expect(
-        (
-          await cvrDB`SELECT count(*) from "this_app_2/cvr".rows where "this_app_2/cvr".rows.table != 'this_app_2.clients'`.values()
-        )[0][0],
-      ).toBe(5n);
-
-      await expectNoPokes(client);
-
-      // We now mark the USERS_QUERY as inactive. Since we are above the desired
-      // row count we will evict the USERS_QUERY and get rowsPatch deletes.
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [
-            {op: 'del', hash: 'user-query-hash'},
-            {op: 'del', hash: 'comment-query-hash'},
-          ],
-        },
-      ]);
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "user-query-hash",
-                  "op": "del",
-                },
-                {
-                  "hash": "comment-query-hash",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:01",
-          },
-        ]
-      `);
-
-      await expectNoPokes(client);
-
-      // Now we add new rows to the users and we should evict the queries.
-      replicator.processTransaction(
-        '101',
-        messages.insert('users', {
-          id: '103',
-          name: 'Dude',
-        }),
-      );
-      stateChanges.push({state: 'version-ready'});
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "pokeID": "101",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "103",
-                  "name": "Dude",
-                },
-              },
-            ],
-          },
-        ]
-      `);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "user-query-hash",
-                "op": "del",
-              },
-            ],
-            "pokeID": "101:01",
-            "rowsPatch": [
-              {
-                "id": {
-                  "id": "100",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-              {
-                "id": {
-                  "id": "101",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-              {
-                "id": {
-                  "id": "102",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-              {
-                "id": {
-                  "id": "103",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-            ],
-          },
-        ]
-      `);
-
-      await expectNoPokes(client);
-    });
-
-    test('3 queries, evict 2 due to adding new rows', async () => {
-      vs.maxRowCount = 11;
-
-      // This test has two queries and together the size is too large. When one becomes inactive
-      // we should evict that one.
-
-      const client = connect(SYNC_CONTEXT, [
-        {op: 'put', hash: 'user-query-hash', ast: USERS_QUERY}, // 3 rows
-        {op: 'put', hash: 'comment-query-hash', ast: COMMENTS_QUERY}, // 2 rows
-        {op: 'put', hash: 'issue-query-hash', ast: ISSUES_QUERY2}, // 5 rows
-      ]);
-
-      stateChanges.push({state: 'version-ready'});
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "users",
-                  },
-                  "hash": "user-query-hash",
-                  "op": "put",
-                },
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "comments",
-                  },
-                  "hash": "comment-query-hash",
-                  "op": "put",
-                },
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                  },
-                  "hash": "issue-query-hash",
-                  "op": "put",
-                },
-              ],
-            },
-            "pokeID": "00:01",
-          },
-        ]
-      `);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "users",
-                },
-                "hash": "user-query-hash",
-                "op": "put",
-              },
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "comments",
-                },
-                "hash": "comment-query-hash",
-                "op": "put",
-              },
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                },
-                "hash": "issue-query-hash",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "100",
-                  "name": "Alice",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "101",
-                  "name": "Bob",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "102",
-                  "name": "Candice",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "comments",
-                "value": {
-                  "id": "1",
-                  "issueID": "1",
-                  "text": "comment 1",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "comments",
-                "value": {
-                  "id": "2",
-                  "issueID": "1",
-                  "text": "bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "json": null,
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "json": null,
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "5",
-                  "json": [
-                    123,
-                    {
-                      "bar": 789,
-                      "foo": 456,
-                    },
-                    "baz",
-                  ],
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "not matched",
-                },
-              },
-            ],
-          },
-        ]
-      `);
-
-      expect(
-        (
-          await cvrDB`SELECT count(*) from "this_app_2/cvr".rows where "this_app_2/cvr".rows.table != 'this_app_2.clients'`.values()
-        )[0][0],
-      ).toBe(10n);
-
-      await expectNoPokes(client);
-
-      // We now mark the all the queries as inactive. Since we are above the desired
-      // row count we will evict the USERS_QUERY and get rowsPatch deletes.
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [
-            {op: 'del', hash: 'issue-query-hash'},
-            {op: 'del', hash: 'user-query-hash'},
-            {op: 'del', hash: 'comment-query-hash'},
-          ],
-        },
-      ]);
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "issue-query-hash",
-                  "op": "del",
-                },
-                {
-                  "hash": "user-query-hash",
-                  "op": "del",
-                },
-                {
-                  "hash": "comment-query-hash",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "01:01",
-          },
-        ]
-      `);
-
-      await expectNoPokes(client);
-
-      // Now we add new rows to the users and we should evict the queries.
-      // add 4 users and 3 issues.
-      const changes: DataChange[] = [];
-      for (let i = 0; i < 5; i++) {
-        changes.push(
-          messages.insert('users', {
-            id: `10x${i}`,
-            name: `User ${i}`,
-          }),
-        );
-      }
-      for (let i = 0; i < 4; i++) {
-        changes.push(
-          messages.insert('issues', {
-            id: `5${i}`,
-            title: `issue ${i}`,
-            big: 100,
-            json: null,
-            owner: '101',
-            parent: '2',
-          }),
-        );
-      }
-      replicator.processTransaction('101', ...changes);
-      stateChanges.push({state: 'version-ready'});
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "pokeID": "101",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "50",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "issue 0",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "51",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "issue 1",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "52",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "issue 2",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "53",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "issue 3",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "10x0",
-                  "name": "User 0",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "10x1",
-                  "name": "User 1",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "10x2",
-                  "name": "User 2",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "10x3",
-                  "name": "User 3",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "users",
-                "value": {
-                  "id": "10x4",
-                  "name": "User 4",
-                },
-              },
-            ],
-          },
-        ]
-      `);
-
-      // expect(await nextPokeParts(client)).toMatchObject(
-      // rowDeletes('users', 10)
-      // )
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "user-query-hash",
-                "op": "del",
-              },
-            ],
-            "pokeID": "101:01",
-            "rowsPatch": [
-              {
-                "id": {
-                  "id": "100",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-              {
-                "id": {
-                  "id": "101",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-              {
-                "id": {
-                  "id": "102",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-              {
-                "id": {
-                  "id": "10x0",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-              {
-                "id": {
-                  "id": "10x1",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-              {
-                "id": {
-                  "id": "10x2",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-              {
-                "id": {
-                  "id": "10x3",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-              {
-                "id": {
-                  "id": "10x4",
-                },
-                "op": "del",
-                "tableName": "users",
-              },
-            ],
-          },
-        ]
-      `);
-
-      expect(await nextPokeParts(client)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "comment-query-hash",
-                "op": "del",
-              },
-            ],
-            "pokeID": "101:02",
-            "rowsPatch": [
-              {
-                "id": {
-                  "id": "1",
-                },
-                "op": "del",
-                "tableName": "comments",
-              },
-              {
-                "id": {
-                  "id": "2",
-                },
-                "op": "del",
-                "tableName": "comments",
-              },
-            ],
-          },
-        ]
-      `);
-
-      await expectNoPokes(client);
-    });
-
-    test('catchup client', async () => {
-      vs.maxRowCount = 5;
-
-      const client1 = connect(SYNC_CONTEXT, [
-        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY2}, // 5 rows
-      ]);
-      expect(await nextPoke(client1)).toMatchInlineSnapshot(`
-        [
-          [
-            "pokeStart",
-            {
-              "baseCookie": null,
-              "pokeID": "00:01",
-            },
-          ],
-          [
-            "pokePart",
-            {
-              "desiredQueriesPatches": {
-                "foo": [
-                  {
-                    "ast": {
-                      "orderBy": [
-                        [
-                          "id",
-                          "asc",
-                        ],
-                      ],
-                      "table": "issues",
-                    },
-                    "hash": "query-hash1",
-                    "op": "put",
-                  },
-                ],
-              },
-              "pokeID": "00:01",
-            },
-          ],
-          [
-            "pokeEnd",
-            {
-              "cookie": "00:01",
-              "pokeID": "00:01",
-            },
-          ],
-        ]
-      `);
-
-      stateChanges.push({state: 'version-ready'});
-      const poke = await nextPoke(client1);
-
-      expect(poke[1]).toMatchInlineSnapshot(`
-        [
-          "pokePart",
-          {
-            "gotQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                },
-                "hash": "query-hash1",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "json": null,
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "json": null,
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "5",
-                  "json": [
-                    123,
-                    {
-                      "bar": 789,
-                      "foo": 456,
-                    },
-                    "baz",
-                  ],
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "not matched",
-                },
-              },
-            ],
-          },
-        ]
-      `);
-      const preAdvancement = poke[2][1] as PokeEndBody;
-      expect(preAdvancement).toEqual({
-        cookie: '01',
-        pokeID: '01',
-      });
-
-      replicator.processTransaction(
-        '123',
-        messages.insert('issues', {
-          id: '6',
-          title: 'new title 6',
-          owner: 100,
-          parent: null,
-          big: 9007199254740991n,
-        }),
-        messages.insert('issues', {
-          id: '7',
-          title: 'new title 7',
-          owner: 100,
-          parent: null,
-          big: 9007199254740991n,
-        }),
-      );
-
-      stateChanges.push({state: 'version-ready'});
-      const advancement = (await nextPoke(client1))[1][1] as PokePartBody;
-      expect(advancement).toMatchInlineSnapshot(`
-        {
-          "pokeID": "123",
-          "rowsPatch": [
-            {
-              "op": "put",
-              "tableName": "issues",
-              "value": {
-                "big": 9007199254740991,
-                "id": "6",
-                "json": null,
-                "owner": "100.0",
-                "parent": null,
-                "title": "new title 6",
-              },
-            },
-            {
-              "op": "put",
-              "tableName": "issues",
-              "value": {
-                "big": 9007199254740991,
-                "id": "7",
-                "json": null,
-                "owner": "100.0",
-                "parent": null,
-                "title": "new title 7",
-              },
-            },
-          ],
-        }
-      `);
-
-      await vs.changeDesiredQueries(SYNC_CONTEXT, [
-        'changeDesiredQueries',
-        {
-          desiredQueriesPatch: [{op: 'del', hash: 'query-hash1'}],
-        },
-      ]);
-      expect(await nextPokeParts(client1)).toMatchInlineSnapshot(`
-        [
-          {
-            "desiredQueriesPatches": {
-              "foo": [
-                {
-                  "hash": "query-hash1",
-                  "op": "del",
-                },
-              ],
-            },
-            "pokeID": "123:01",
-          },
-        ]
-      `);
-      expect(await nextPokeParts(client1)).toMatchInlineSnapshot(`
-        [
-          {
-            "gotQueriesPatch": [
-              {
-                "hash": "query-hash1",
-                "op": "del",
-              },
-            ],
-            "pokeID": "123:02",
-            "rowsPatch": [
-              {
-                "id": {
-                  "id": "1",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "2",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "3",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "4",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "5",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "6",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-              {
-                "id": {
-                  "id": "7",
-                },
-                "op": "del",
-                "tableName": "issues",
-              },
-            ],
-          },
-        ]
-      `);
-
-      // Connect with another client (i.e. tab) at older version '00:02'
-      // (i.e. pre-advancement).
-      const client2 = connect(
-        {
-          clientID: 'bar',
-          wsID: '9382',
-          baseCookie: preAdvancement.cookie,
-          protocolVersion: PROTOCOL_VERSION,
-          schemaVersion: 2,
-          tokenData: undefined,
-        },
-        [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY2}],
-      );
-
-      // Response should catch client2 up with the all 7 rows since the query was evicted for client1
-      expect(await nextPoke(client2)).toMatchInlineSnapshot(`
-        [
-          [
-            "pokeStart",
-            {
-              "baseCookie": "01",
-              "pokeID": "123:04",
-              "schemaVersions": {
-                "maxSupportedVersion": 3,
-                "minSupportedVersion": 2,
-              },
-            },
-          ],
-          [
-            "pokePart",
-            {
-              "desiredQueriesPatches": {
-                "bar": [
-                  {
-                    "ast": {
-                      "orderBy": [
-                        [
-                          "id",
-                          "asc",
-                        ],
-                      ],
-                      "table": "issues",
-                    },
-                    "hash": "query-hash1",
-                    "op": "put",
-                  },
-                ],
-                "foo": [
-                  {
-                    "hash": "query-hash1",
-                    "op": "del",
-                  },
-                ],
-              },
-              "gotQueriesPatch": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                  },
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
-              "pokeID": "123:04",
-              "rowsPatch": [
-                {
-                  "op": "put",
-                  "tableName": "issues",
-                  "value": {
-                    "big": 9007199254740991,
-                    "id": "1",
-                    "json": null,
-                    "owner": "100",
-                    "parent": null,
-                    "title": "parent issue foo",
-                  },
-                },
-                {
-                  "op": "put",
-                  "tableName": "issues",
-                  "value": {
-                    "big": -9007199254740991,
-                    "id": "2",
-                    "json": null,
-                    "owner": "101",
-                    "parent": null,
-                    "title": "parent issue bar",
-                  },
-                },
-                {
-                  "op": "put",
-                  "tableName": "issues",
-                  "value": {
-                    "big": 123,
-                    "id": "3",
-                    "json": null,
-                    "owner": "102",
-                    "parent": "1",
-                    "title": "foo",
-                  },
-                },
-                {
-                  "op": "put",
-                  "tableName": "issues",
-                  "value": {
-                    "big": 100,
-                    "id": "4",
-                    "json": null,
-                    "owner": "101",
-                    "parent": "2",
-                    "title": "bar",
-                  },
-                },
-                {
-                  "op": "put",
-                  "tableName": "issues",
-                  "value": {
-                    "big": 100,
-                    "id": "5",
-                    "json": [
-                      123,
-                      {
-                        "bar": 789,
-                        "foo": 456,
-                      },
-                      "baz",
-                    ],
-                    "owner": "101",
-                    "parent": "2",
-                    "title": "not matched",
-                  },
-                },
-                {
-                  "op": "put",
-                  "tableName": "issues",
-                  "value": {
-                    "big": 9007199254740991,
-                    "id": "6",
-                    "json": null,
-                    "owner": "100.0",
-                    "parent": null,
-                    "title": "new title 6",
-                  },
-                },
-                {
-                  "op": "put",
-                  "tableName": "issues",
-                  "value": {
-                    "big": 9007199254740991,
-                    "id": "7",
-                    "json": null,
-                    "owner": "100.0",
-                    "parent": null,
-                    "title": "new title 7",
-                  },
-                },
-              ],
-            },
-          ],
-          [
-            "pokeEnd",
-            {
-              "cookie": "123:04",
-              "pokeID": "123:04",
-            },
-          ],
-        ]
-      `);
-
-      // client1 should be poked to get the new client2 config,
-      // but no new entities.
-      expect(await nextPoke(client1)).toMatchInlineSnapshot(`
-        [
-          [
-            "pokeStart",
-            {
-              "baseCookie": "123:02",
-              "pokeID": "123:03",
-            },
-          ],
-          [
-            "pokePart",
-            {
-              "desiredQueriesPatches": {
-                "bar": [
-                  {
-                    "ast": {
-                      "orderBy": [
-                        [
-                          "id",
-                          "asc",
-                        ],
-                      ],
-                      "table": "issues",
-                    },
-                    "hash": "query-hash1",
-                    "op": "put",
-                  },
-                ],
-              },
-              "pokeID": "123:03",
-            },
-          ],
-          [
-            "pokeEnd",
-            {
-              "cookie": "123:03",
-              "pokeID": "123:03",
-            },
-          ],
-        ]
-      `);
-    });
-  });
-});
-
-describe('permissions', () => {
-  let stateChanges: Subscription<ReplicaState>;
-  let connect: (
-    ctx: SyncContext,
-    desiredQueriesPatch: QueriesPatch,
-  ) => Queue<Downstream>;
-  let nextPoke: (client: Queue<Downstream>) => Promise<Downstream[]>;
-  let replicaDbFile: DbFile;
-  let cvrDB: PostgresDB;
-  let vs: ViewSyncerService;
-  let viewSyncerDone: Promise<void>;
-  let replicator: FakeReplicator;
-
-  const SYNC_CONTEXT: SyncContext = {
-    clientID: 'foo',
-    wsID: 'ws1',
-    baseCookie: null,
-    protocolVersion: PROTOCOL_VERSION,
-    schemaVersion: 2,
-    tokenData: {
-      raw: '',
-      decoded: {sub: 'foo', role: 'user', iat: 0},
-    },
-  };
-
-  beforeEach(async () => {
-    ({
-      stateChanges,
-      connect,
-      nextPoke,
-      vs,
-      viewSyncerDone,
-      cvrDB,
-      replicaDbFile,
-      replicator,
-    } = await setup(permissions));
-  });
-
-  afterEach(async () => {
-    // Restores fake date if used.
-    vi.useRealTimers();
-    await vs.stop();
-    await viewSyncerDone;
-    await testDBs.drop(cvrDB);
-    replicaDbFile.delete();
-  });
-
-  test('client with user role followed by client with admin role', async () => {
-    const client = connect(SYNC_CONTEXT, [
+  test('inspect metrics op returns server metrics', async () => {
+    const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
+
+    // Wait for initial hydration to complete
+    await nextPoke(client);
     stateChanges.push({state: 'version-ready'});
     await nextPoke(client);
-    // the user is not logged in as admin and so cannot see any issues.
-    expect(await nextPoke(client)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": "00:01",
-            "pokeID": "01",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "gotQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
-                "hash": "query-hash1",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01",
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "cookie": "01",
-            "pokeID": "01",
-          },
-        ],
-      ]
-    `);
 
-    // New client connects with same everything (client group, user id) but brings a new role.
-    // This should transform their existing queries to return the data they can now see.
-    const client2 = connect(
-      {
-        ...SYNC_CONTEXT,
-        clientID: 'bar',
-        tokenData: {
-          raw: '',
-          decoded: {sub: 'foo', role: 'admin', iat: 1},
-        },
-      },
-      [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
-    );
-
-    expect(await nextPoke(client2)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": null,
-            "pokeID": "01:02",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "desiredQueriesPatches": {
-              "bar": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
-              "foo": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "issues",
-                    "where": {
-                      "left": {
-                        "name": "id",
-                        "type": "column",
-                      },
-                      "op": "IN",
-                      "right": {
-                        "type": "literal",
-                        "value": [
-                          "1",
-                          "2",
-                          "3",
-                          "4",
-                        ],
-                      },
-                      "type": "simple",
-                    },
-                  },
-                  "hash": "query-hash1",
-                  "op": "put",
-                },
-              ],
-            },
-            "gotQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
-                "hash": "query-hash1",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01:02",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "json": null,
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "json": null,
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-            ],
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "cookie": "01:02",
-            "pokeID": "01:02",
-          },
-        ],
-      ]
-    `);
-  });
-
-  test('upstream permissions change', async () => {
-    const client = connect(SYNC_CONTEXT, [
-      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
-    ]);
-    stateChanges.push({state: 'version-ready'});
-    await nextPoke(client);
-    // the user is not logged in as admin and so cannot see any issues.
-    expect(await nextPoke(client)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": "00:01",
-            "pokeID": "01",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "gotQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "issues",
-                  "where": {
-                    "left": {
-                      "name": "id",
-                      "type": "column",
-                    },
-                    "op": "IN",
-                    "right": {
-                      "type": "literal",
-                      "value": [
-                        "1",
-                        "2",
-                        "3",
-                        "4",
-                      ],
-                    },
-                    "type": "simple",
-                  },
-                },
-                "hash": "query-hash1",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01",
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "cookie": "01",
-            "pokeID": "01",
-          },
-        ],
-      ]
-    `);
-
-    // Open permissions
-    const relaxed: PermissionsConfig = {
-      tables: {
-        issues: {
-          row: {
-            select: [
-              [
-                'allow',
-                {
-                  type: 'simple',
-                  left: {type: 'literal', value: true},
-                  op: '=',
-                  right: {type: 'literal', value: true},
-                },
-              ],
-            ],
-          },
-        },
-        comments: {},
-      },
-    };
+    // Trigger query materializations to generate metrics
     replicator.processTransaction(
-      '05',
-      appMessages.update('permissions', {
-        lock: 1,
-        permissions: relaxed,
-        hash: h128(JSON.stringify(relaxed)).toString(16),
+      'txn-1',
+      messages.insert('issues', {
+        id: 'test-issue',
+        title: 'Test Issue',
+        owner: '100',
+        big: 1000,
+        json: null,
+        parent: null,
       }),
     );
     stateChanges.push({state: 'version-ready'});
+    await expectNoPokes(client);
 
-    // Newly visible rows are poked.
-    expect(await nextPoke(client)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": "01",
-            "pokeID": "05",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "pokeID": "05",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 9007199254740991,
-                  "id": "1",
-                  "json": null,
-                  "owner": "100",
-                  "parent": null,
-                  "title": "parent issue foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": -9007199254740991,
-                  "id": "2",
-                  "json": null,
-                  "owner": "101",
-                  "parent": null,
-                  "title": "parent issue bar",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 123,
-                  "id": "3",
-                  "json": null,
-                  "owner": "102",
-                  "parent": "1",
-                  "title": "foo",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "issues",
-                "value": {
-                  "big": 100,
-                  "id": "4",
-                  "json": null,
-                  "owner": "101",
-                  "parent": "2",
-                  "title": "bar",
-                },
-              },
-            ],
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "cookie": "05",
-            "pokeID": "05",
-          },
-        ],
-      ]
-    `);
-  });
+    // Now call the inspect method and expect it to send a response
+    const inspectId = 'test-metrics-inspect';
 
-  test('permissions via subquery', async () => {
-    const client = await connect(SYNC_CONTEXT, [
-      {op: 'put', hash: 'query-hash1', ast: COMMENTS_QUERY},
-    ]);
-    stateChanges.push({state: 'version-ready'});
-    await nextPoke(client);
-    // Should not receive any comments b/c they cannot see any issues
-    expect(await nextPoke(client)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": "00:01",
-            "pokeID": "01",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "gotQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "comments",
-                },
-                "hash": "query-hash1",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01",
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "cookie": "01",
-            "pokeID": "01",
-          },
-        ],
-      ]
-    `);
-  });
+    // Call inspect and wait for the response to come through the client queue
+    await vs.inspect(SYNC_CONTEXT, ['inspect', {op: 'metrics', id: inspectId}]);
 
-  test('query for comments does not return issue rows as those are gotten by the permission system', async () => {
-    const client = connect(
+    const msg = await client.dequeue();
+    expect(msg).toMatchObject([
+      'inspect',
       {
-        ...SYNC_CONTEXT,
-        tokenData: {
-          raw: '',
-          decoded: {sub: 'foo', role: 'admin', iat: 1},
+        id: 'test-metrics-inspect',
+        op: 'metrics',
+        value: {
+          'query-materialization-server': expect.arrayContaining([
+            expect.any(Number),
+          ]),
+          'query-update-server': expect.arrayContaining([expect.any(Number)]),
         },
       },
-      [{op: 'put', hash: 'query-hash2', ast: COMMENTS_QUERY}],
-    );
-    stateChanges.push({state: 'version-ready'});
-    await nextPoke(client);
-    // Should receive comments since they can see issues as the admin
-    // but should not receive those issues since the query for them was added by
-    // the auth system.
-    expect(await nextPoke(client)).toMatchInlineSnapshot(`
-      [
-        [
-          "pokeStart",
-          {
-            "baseCookie": "00:01",
-            "pokeID": "01",
-            "schemaVersions": {
-              "maxSupportedVersion": 3,
-              "minSupportedVersion": 2,
-            },
-          },
-        ],
-        [
-          "pokePart",
-          {
-            "gotQueriesPatch": [
-              {
-                "ast": {
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
-                  "table": "comments",
-                },
-                "hash": "query-hash2",
-                "op": "put",
-              },
-            ],
-            "lastMutationIDChanges": {
-              "foo": 42,
-            },
-            "pokeID": "01",
-            "rowsPatch": [
-              {
-                "op": "put",
-                "tableName": "comments",
-                "value": {
-                  "id": "1",
-                  "issueID": "1",
-                  "text": "comment 1",
-                },
-              },
-              {
-                "op": "put",
-                "tableName": "comments",
-                "value": {
-                  "id": "2",
-                  "issueID": "1",
-                  "text": "bar",
-                },
-              },
-            ],
-          },
-        ],
-        [
-          "pokeEnd",
-          {
-            "cookie": "01",
-            "pokeID": "01",
-          },
-        ],
-      ]
-    `);
-  });
-});
-
-describe('pickToken', () => {
-  const lc = createSilentLogContext();
-
-  test('previous token is undefined', () => {
-    expect(pickToken(lc, undefined, {sub: 'foo', iat: 1})).toEqual({
-      sub: 'foo',
-      iat: 1,
-    });
-  });
-
-  test('previous token exists, new token is undefined', () => {
-    expect(() => pickToken(lc, {sub: 'foo', iat: 1}, undefined)).toThrowError(
-      ErrorForClient,
-    );
-  });
-
-  test('previous token has a subject, new token does not', () => {
-    expect(() => pickToken(lc, {sub: 'foo'}, {})).toThrowError(ErrorForClient);
-  });
-
-  test('previous token has a subject, new token has a different subject', () => {
-    expect(() =>
-      pickToken(lc, {sub: 'foo', iat: 1}, {sub: 'bar', iat: 1}),
-    ).toThrowError(ErrorForClient);
-  });
-
-  test('previous token has a subject, new token has the same subject', () => {
-    expect(pickToken(lc, {sub: 'foo', iat: 1}, {sub: 'foo', iat: 2})).toEqual({
-      sub: 'foo',
-      iat: 2,
-    });
-
-    expect(pickToken(lc, {sub: 'foo', iat: 2}, {sub: 'foo', iat: 1})).toEqual({
-      sub: 'foo',
-      iat: 2,
-    });
-  });
-
-  test('previous token has no subject, new token has a subject', () => {
-    expect(() =>
-      pickToken(lc, {sub: 'foo', iat: 123}, {iat: 123}),
-    ).toThrowError(ErrorForClient);
-  });
-
-  test('previous token has no subject, new token has no subject', () => {
-    expect(pickToken(lc, {iat: 1}, {iat: 2})).toEqual({
-      iat: 2,
-    });
-    expect(pickToken(lc, {iat: 2}, {iat: 1})).toEqual({
-      iat: 2,
-    });
-  });
-
-  test('previous token has an issued at time, new token does not', () => {
-    expect(() =>
-      pickToken(lc, {sub: 'foo', iat: 1}, {sub: 'foo'}),
-    ).toThrowError(ErrorForClient);
-  });
-
-  test('previous token has an issued at time, new token has a greater issued at time', () => {
-    expect(pickToken(lc, {sub: 'foo', iat: 1}, {sub: 'foo', iat: 2})).toEqual({
-      sub: 'foo',
-      iat: 2,
-    });
-  });
-
-  test('previous token has an issued at time, new token has a lesser issued at time', () => {
-    expect(pickToken(lc, {sub: 'foo', iat: 2}, {sub: 'foo', iat: 1})).toEqual({
-      sub: 'foo',
-      iat: 2,
-    });
-  });
-
-  test('previous token has an issued at time, new token has the same issued at time', () => {
-    expect(pickToken(lc, {sub: 'foo', iat: 2}, {sub: 'foo', iat: 2})).toEqual({
-      sub: 'foo',
-      iat: 2,
-    });
-  });
-
-  test('previous token has no issued at time, new token has an issued at time', () => {
-    expect(pickToken(lc, {sub: 'foo'}, {sub: 'foo', iat: 2})).toEqual({
-      sub: 'foo',
-      iat: 2,
-    });
-  });
-
-  test('previous token has no issued at time, new token has no issued at time', () => {
-    expect(pickToken(lc, {sub: 'foo'}, {sub: 'foo'})).toEqual({
-      sub: 'foo',
-    });
+    ]);
   });
 });

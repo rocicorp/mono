@@ -2624,6 +2624,194 @@ suite('take with no partition', () => {
         `);
       });
 
+      test('edit row at boundary, making it fall outside the window', () => {
+        const {data, messages, storage, pushesWithFetch} = takeNoPartitionTest({
+          ...base,
+          limit: 3,
+          fetchOnPush: true,
+          pushes: [
+            {
+              type: 'edit',
+              oldRow: {id: 'i3', created: 300, text: 'c'},
+              row: {id: 'i3', created: 550, text: 'c'},
+            },
+          ],
+        });
+        expect(data).toMatchInlineSnapshot(`
+          [
+            {
+              "created": 100,
+              "id": "i1",
+              "text": "a",
+              Symbol(rc): 1,
+            },
+            {
+              "created": 200,
+              "id": "i2",
+              "text": "b",
+              Symbol(rc): 1,
+            },
+            {
+              "created": 400,
+              "id": "i4",
+              "text": "d",
+              Symbol(rc): 1,
+            },
+          ]
+        `);
+        expect(messages).toMatchInlineSnapshot(`
+          [
+            [
+              ":source(testTable)",
+              "push",
+              {
+                "oldRow": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": "c",
+                },
+                "row": {
+                  "created": 550,
+                  "id": "i3",
+                  "text": "c",
+                },
+                "type": "edit",
+              },
+            ],
+            [
+              ":source(testTable)",
+              "fetch",
+              {
+                "constraint": undefined,
+                "start": {
+                  "basis": "at",
+                  "row": {
+                    "created": 300,
+                    "id": "i3",
+                    "text": "c",
+                  },
+                },
+              },
+            ],
+            [
+              ":take",
+              "push",
+              {
+                "row": {
+                  "created": 300,
+                  "id": "i3",
+                  "text": "c",
+                },
+                "type": "remove",
+              },
+            ],
+            [
+              ":take",
+              "push",
+              {
+                "row": {
+                  "created": 400,
+                  "id": "i4",
+                  "text": "d",
+                },
+                "type": "add",
+              },
+            ],
+          ]
+        `);
+        expect(storage).toMatchInlineSnapshot(`
+          {
+            "["take"]": {
+              "bound": {
+                "created": 400,
+                "id": "i4",
+                "text": "d",
+              },
+              "size": 3,
+            },
+            "maxBound": {
+              "created": 400,
+              "id": "i4",
+              "text": "d",
+            },
+          }
+        `);
+        expect(pushesWithFetch).toMatchInlineSnapshot(`
+          [
+            {
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "created": 300,
+                    "id": "i3",
+                    "text": "c",
+                  },
+                },
+                "type": "remove",
+              },
+              "fetch": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 100,
+                    "id": "i1",
+                    "text": "a",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 200,
+                    "id": "i2",
+                    "text": "b",
+                  },
+                },
+              ],
+            },
+            {
+              "change": {
+                "node": {
+                  "relationships": {},
+                  "row": {
+                    "created": 400,
+                    "id": "i4",
+                    "text": "d",
+                  },
+                },
+                "type": "add",
+              },
+              "fetch": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 100,
+                    "id": "i1",
+                    "text": "a",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 200,
+                    "id": "i2",
+                    "text": "b",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 400,
+                    "id": "i4",
+                    "text": "d",
+                  },
+                },
+              ],
+            },
+          ]
+        `);
+      });
+
       test('edit row before boundary, changing its order', () => {
         const {data, messages, storage, pushes} = takeNoPartitionTest({
           ...base,
@@ -5616,17 +5804,19 @@ suite('take with partition', () => {
       });
 
       test('edit row at boundary, making it fall outside the window', () => {
-        const {data, messages, storage, pushes} = takeTestWithPartition({
-          ...base,
-          limit: 2,
-          pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
-              row: {id: 'c2', issueID: 'i1', created: 350, text: 'b2'},
-            },
-          ],
-        });
+        const {data, messages, storage, pushesWithFetch} =
+          takeTestWithPartition({
+            ...base,
+            limit: 2,
+            fetchOnPush: true,
+            pushes: [
+              {
+                type: 'edit',
+                oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+                row: {id: 'c2', issueID: 'i1', created: 350, text: 'b2'},
+              },
+            ],
+          });
         expect(data).toMatchInlineSnapshot(`
           [
             {
@@ -5636,13 +5826,6 @@ suite('take with partition', () => {
                   "id": "c1",
                   "issueID": "i1",
                   "text": "a",
-                  Symbol(rc): 1,
-                },
-                {
-                  "created": 200,
-                  "id": "c2",
-                  "issueID": "i1",
-                  "text": "b",
                   Symbol(rc): 1,
                 },
                 {
@@ -5722,6 +5905,47 @@ suite('take with partition', () => {
               "push",
               {
                 "row": {
+                  "created": 200,
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "b",
+                },
+                "type": "remove",
+              },
+            ],
+            [
+              ":source(issue)",
+              "fetch",
+              {
+                "constraint": {
+                  "id": "i1",
+                },
+              },
+            ],
+            [
+              ":join(comments)",
+              "push",
+              {
+                "child": {
+                  "row": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                    "text": "b",
+                  },
+                  "type": "remove",
+                },
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
+              },
+            ],
+            [
+              ".comments:take",
+              "push",
+              {
+                "row": {
                   "created": 300,
                   "id": "c3",
                   "issueID": "i1",
@@ -5788,28 +6012,156 @@ suite('take with partition', () => {
             },
           }
         `);
-        expect(pushes).toMatchInlineSnapshot(`
+        expect(pushesWithFetch).toMatchInlineSnapshot(`
           [
             {
-              "child": {
-                "change": {
-                  "node": {
-                    "relationships": {},
-                    "row": {
-                      "created": 300,
-                      "id": "c3",
-                      "issueID": "i1",
-                      "text": "c",
+              "change": {
+                "child": {
+                  "change": {
+                    "node": {
+                      "relationships": {},
+                      "row": {
+                        "created": 200,
+                        "id": "c2",
+                        "issueID": "i1",
+                        "text": "b",
+                      },
                     },
+                    "type": "remove",
                   },
-                  "type": "add",
+                  "relationshipName": "comments",
                 },
-                "relationshipName": "comments",
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
               },
-              "row": {
-                "id": "i1",
+              "fetch": [
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 100,
+                          "id": "c1",
+                          "issueID": "i1",
+                          "text": "a",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i1",
+                  },
+                },
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 400,
+                          "id": "c4",
+                          "issueID": "i2",
+                          "text": "d",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 500,
+                          "id": "c5",
+                          "issueID": "i2",
+                          "text": "e",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i2",
+                  },
+                },
+              ],
+            },
+            {
+              "change": {
+                "child": {
+                  "change": {
+                    "node": {
+                      "relationships": {},
+                      "row": {
+                        "created": 300,
+                        "id": "c3",
+                        "issueID": "i1",
+                        "text": "c",
+                      },
+                    },
+                    "type": "add",
+                  },
+                  "relationshipName": "comments",
+                },
+                "row": {
+                  "id": "i1",
+                },
+                "type": "child",
               },
-              "type": "child",
+              "fetch": [
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 100,
+                          "id": "c1",
+                          "issueID": "i1",
+                          "text": "a",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 300,
+                          "id": "c3",
+                          "issueID": "i1",
+                          "text": "c",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i1",
+                  },
+                },
+                {
+                  "relationships": {
+                    "comments": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 400,
+                          "id": "c4",
+                          "issueID": "i2",
+                          "text": "d",
+                        },
+                      },
+                      {
+                        "relationships": {},
+                        "row": {
+                          "created": 500,
+                          "id": "c5",
+                          "issueID": "i2",
+                          "text": "e",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "i2",
+                  },
+                },
+              ],
             },
           ]
         `);

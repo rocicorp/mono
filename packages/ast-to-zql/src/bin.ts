@@ -1,5 +1,4 @@
 /* eslint-disable no-console */
-import * as m from '@rocicorp/logger';
 import {readFile} from 'node:fs/promises';
 import process from 'node:process';
 import {createInterface} from 'node:readline';
@@ -21,12 +20,11 @@ const options = {
   },
 };
 
-const config = parseOptions(options, process.argv.slice(2));
-const lc = new m.LogContext('debug'); //new m.ConsoleLogger('error');
+const config = parseOptions(options);
 
 let schema: Schema | undefined;
 if (config.schema) {
-  schema = (await loadSchemaAndPermissions(lc, config.schema)).schema;
+  schema = (await loadSchemaAndPermissions(config.schema)).schema;
 }
 
 function isStdinPiped(): boolean {

@@ -46,6 +46,14 @@ export type {
   SimpleOperator,
   ValuePosition,
 } from '../../zero-protocol/src/ast.ts';
+export {
+  transformRequestMessageSchema,
+  transformResponseMessageSchema,
+  type TransformRequestBody,
+  type TransformRequestMessage,
+  type TransformResponseBody,
+  type TransformResponseMessage,
+} from '../../zero-protocol/src/custom-queries.ts';
 export {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 export {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
 export {
@@ -81,7 +89,6 @@ export type {
 } from '../../zero-schema/src/permissions.ts';
 export {type TableSchema} from '../../zero-schema/src/table-schema.ts';
 export type {
-  EnumSchemaValue,
   SchemaValue,
   SchemaValueWithCustomType,
   ValueType,
@@ -98,6 +105,7 @@ export type {Entry, Format, View, ViewFactory} from '../../zql/src/ivm/view.ts';
 export type {
   DeleteID,
   InsertValue,
+  SchemaQuery,
   ServerTransaction,
   Transaction,
   UpdateValue,
@@ -108,13 +116,16 @@ export type {
   ExpressionBuilder,
   ExpressionFactory,
 } from '../../zql/src/query/expression.ts';
+export * from '../../zql/src/query/named.ts';
 export type {
   HumanReadable,
+  PullRow,
   Query,
   Row,
   RunOptions,
 } from '../../zql/src/query/query.ts';
-export {DEFAULT_TTL, type TTL} from '../../zql/src/query/ttl.ts';
+export type {AnyQuery} from '../../zql/src/query/query-impl.ts';
+export {type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 export type {BatchMutator, DBMutator, TableMutator} from './client/crud.ts';
 export type {

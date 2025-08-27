@@ -14,7 +14,7 @@ export function configForVersion(version: number, url: string) {
     test: {
       name: `${name}/pg-${version}`,
       browser: {enabled: false},
-      silent: false,
+      silent: 'passed-only',
       include: ['src/**/*.pg-test.?(c|m)[jt]s?(x)'],
       exclude: ['src/**/*.test.?(c|m)[jt]s?(x)'],
       globalSetup: [`../zero-cache/test/pg-${version}.ts`],
@@ -23,6 +23,8 @@ export function configForVersion(version: number, url: string) {
         reporter: [['html'], ['clover', {file: 'coverage.xml'}]],
         include: ['src/**'],
       },
+      testTimeout: 20000,
+      hookTimeout: 20000,
     },
   });
 }
@@ -35,7 +37,7 @@ export function configForNoPg(url: string) {
       include: ['src/**/*.test.?(c|m)[jt]s?(x)'],
 
       browser: {enabled: false},
-      silent: true,
+      silent: 'passed-only',
       coverage: {
         enabled: !ci, // Don't run coverage in continuous integration.
         reporter: [['html'], ['clover', {file: 'coverage.xml'}]],
@@ -58,7 +60,7 @@ export function configForCustomPg(url: string) {
         test: {
           name: `${name}/custom-pg`,
           browser: {enabled: false},
-          silent: false,
+          silent: 'passed-only',
           include: ['src/**/*.pg-test.?(c|m)[jt]s?(x)'],
           exclude: ['src/**/*.test.?(c|m)[jt]s?(x)'],
           provide: {
@@ -74,6 +76,6 @@ export function configForCustomPg(url: string) {
 
 export default defineConfig({
   test: {
-    workspace: ['vitest.config.*.ts', ...configForCustomPg(import.meta.url)],
+    projects: ['vitest.config.*.ts', ...configForCustomPg(import.meta.url)],
   },
 });

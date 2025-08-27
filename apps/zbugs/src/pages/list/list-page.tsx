@@ -1,4 +1,3 @@
-import {escapeLike} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {useVirtualizer} from '@tanstack/react-virtual';
 import classNames from 'classnames';
@@ -26,22 +25,22 @@ import {useLogin} from '../../hooks/use-login.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
-import type {ListContext} from '../../routes.ts';
-import {preload} from '../../zero-setup.ts';
-import {CACHE_AWHILE, CACHE_NONE} from '../../query-cache-policy.ts';
+import {preload} from '../../zero-preload.ts';
+import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
+import {queries, type ListContext} from '../../../shared/queries.ts';
 
 let firstRowRendered = false;
 const itemSize = 56;
 
 export function ListPage({onReady}: {onReady: () => void}) {
-  const z = useZero();
   const login = useLogin();
   const search = useSearch();
   const qs = useMemo(() => new URLSearchParams(search), [search]);
+  const z = useZero();
 
   const status = qs.get('status')?.toLowerCase() ?? 'open';
-  const creator = qs.get('creator') ?? undefined;
-  const assignee = qs.get('assignee') ?? undefined;
+  const creator = qs.get('creator') ?? null;
+  const assignee = qs.get('assignee') ?? null;
   const labels = qs.getAll('label');
 
   // Cannot drive entirely by URL params because we need to debounce the changes
@@ -57,58 +56,36 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const sortDirection =
     qs.get('sortDir')?.toLowerCase() === 'asc' ? 'asc' : 'desc';
 
-  let q = z.query.issue
-    .orderBy(sortField, sortDirection)
-    .orderBy('id', sortDirection)
-    .related('labels')
-    .related('viewState', q => q.where('userID', z.userID).one());
+  const open = status === 'open' ? true : status === 'closed' ? false : null;
 
-  const open =
-    status === 'open' ? true : status === 'closed' ? false : undefined;
-
-  if (open !== undefined) {
-    q = q.where('open', open);
-  }
-
-  if (creator) {
-    q = q.whereExists('creator', q => q.where('login', creator));
-  }
-
-  if (assignee) {
-    q = q.whereExists('assignee', q => q.where('login', assignee));
-  }
-
-  if (textFilter) {
-    q = q.where(({or, cmp, exists}) =>
-      or(
-        cmp('title', 'ILIKE', `%${escapeLike(textFilter)}%`),
-        cmp('description', 'ILIKE', `%${escapeLike(textFilter)}%`),
-        exists('comments', q =>
-          q.where('body', 'ILIKE', `%${escapeLike(textFilter)}%`),
-        ),
-      ),
-    );
-  }
-
-  for (const label of labels) {
-    q = q.whereExists('labels', q => q.where('name', label));
-  }
-
-  const pageSize = 10;
+  const pageSize = 20;
   const [limit, setLimit] = useState(pageSize);
+  const q = queries.issueList(
+    login.loginState?.decoded,
+    {
+      sortDirection,
+      sortField,
+      assignee,
+      creator,
+      labels,
+      open,
+      textFilter,
+    },
+    z.userID,
+    limit,
+  );
+
   useEffect(() => {
     setLimit(pageSize);
     virtualizer.scrollToIndex(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q.hash()]);
-
-  q = q.limit(limit);
+  }, [q.limit(0).hash()]); // limit set to 0 since we only scroll on query change, not limit change.
 
   // We don't want to cache every single keystroke. We already debounce
   // keystrokes for the URL, so we just reuse that.
   const [issues, issuesResult] = useQuery(
     q,
-    textFilterQuery === textFilter ? CACHE_AWHILE : CACHE_NONE,
+    textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
   );
   const isSearchComplete = issues.length < limit;
 
@@ -121,9 +98,9 @@ export function ListPage({onReady}: {onReady: () => void}) {
   useEffect(() => {
     if (issuesResult.type === 'complete') {
       recordPageLoad('list-page');
-      preload(z);
+      preload(login.loginState?.decoded, z);
     }
-  }, [issuesResult.type, z]);
+  }, [login.loginState?.decoded, issuesResult.type, z]);
 
   let title;
   if (creator || assignee || labels.length > 0 || textFilter) {
@@ -140,7 +117,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       assignee,
       creator,
       labels,
-      textFilter: textFilter ?? undefined,
+      textFilter: textFilter ?? null,
       sortField,
       sortDirection,
     },
@@ -216,7 +193,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
     }
 
     const timestamp = sortField === 'modified' ? issue.modified : issue.created;
-
     return (
       <div
         key={issue.id}

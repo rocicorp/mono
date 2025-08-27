@@ -2,7 +2,10 @@ import type {LogLevel} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import * as v from '../../../shared/src/valita.ts';
-import type {UserPushParams} from '../../../zero-protocol/src/connect.ts';
+import type {
+  UserMutateParams,
+  UserQueryParams,
+} from '../../../zero-protocol/src/connect.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {OnError} from './on-error.ts';
@@ -13,7 +16,7 @@ import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
  */
 export interface ZeroOptions<
   S extends Schema,
-  MD extends CustomMutatorDefs<S> | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined = undefined,
 > {
   /**
    * URL to the zero-cache. This can be a simple hostname, e.g.
@@ -22,8 +25,9 @@ export interface ZeroOptions<
    * - "https://myapp-myteam.zero.ms/zero"
    * - "https://myapp-myteam.zero.ms/db"
    *
-   * The latter is useful for configuring routing rules (e.g. "zero/**") when
-   * the zero-cache is hosted on the same domain as the application.
+   * The latter is useful for configuring routing rules (e.g. "/zero/\*") when
+   * the zero-cache is hosted on the same domain as the application. **Note that
+   * only a single path segment is allowed (e.g. it cannot be "/proxy/zero/\*")**.
    */
   server?: string | null | undefined;
 
@@ -49,6 +53,22 @@ export interface ZeroOptions<
     | string
     | ((error?: 'invalid-token') => MaybePromise<string | undefined>)
     | undefined;
+
+  /**
+   * Enables legacy query support.
+   * When this is true, old-style queries that do not require server side implementations will be enabled.
+   * This will flip to false in the future and what we currently call "custom queries" will become "queries" and
+   * the only option for reading data.
+   */
+  enableLegacyQueries?: boolean | undefined;
+
+  /**
+   * Enables legacy mutator support.
+   * When this is true, old-style mutations that do not require server side implementations will be enabled.
+   * This will flip to false in the future and what we currently call "custom mutations" will become "mutations" and
+   * the only option for writing data.
+   */
+  enableLegacyMutators?: boolean | undefined;
 
   /**
    * A unique identifier for the user. Must be non-empty.
@@ -104,11 +124,21 @@ export interface ZeroOptions<
    * push.queryParams can be used to augment the URL
    * used to connect to your API server so it includes
    * variables in the query string.
+   *
+   * DEPRECATED: Use `userMutateParams` instead.
    */
-  push?: UserPushParams;
+  push?: UserMutateParams;
+  mutate?: UserMutateParams;
+  query?: UserQueryParams;
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes.
+   *
+   * @deprecated Use `onOnline` on the Zero instance instead. e.g.
+   * ```ts
+   * const zero = new Zero({...});
+   * zero.onOnline((online) => { ... });
+   * ```
    */
   onOnlineChange?: ((online: boolean) => void) | undefined;
 
@@ -228,6 +258,14 @@ export interface ZeroOptions<
    * @deprecated Use ttl instead
    */
   maxRecentQueries?: number | undefined;
+
+  /**
+   * Changes to queries are sent to server in batches. This option controls
+   * the number of milliseconds to wait before sending the next batch.
+   *
+   * Defaults is 10.
+   */
+  queryChangeThrottleMs?: number | undefined;
 }
 
 /**
@@ -235,7 +273,7 @@ export interface ZeroOptions<
  */
 export interface ZeroAdvancedOptions<
   S extends Schema,
-  MD extends CustomMutatorDefs<S> | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined = undefined,
 > extends ZeroOptions<S, MD> {}
 
 export type UpdateNeededReason =

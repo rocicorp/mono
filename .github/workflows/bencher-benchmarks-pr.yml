@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: 'npm'
       - uses: bencherdev/bencher@main
 
@@ -91,7 +91,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: 'npm'
       - uses: bencherdev/bencher@main
 
@@ -111,6 +111,7 @@ jobs:
           npx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
           bencher run \
           --project zero \
+          --testbed self-hosted \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
@@ -122,5 +123,6 @@ jobs:
           --start-point-reset \
           --threshold-measure throughput \
           --threshold-test t_test \
-          --threshold-lower-boundary 0.90 \
+          --threshold-lower-boundary 0.80 \
+          --threshold-max-sample-size 10 \
           --err

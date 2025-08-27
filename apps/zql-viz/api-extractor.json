@@ -1,0 +1,16 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
+  "mainEntryPointFilePath": "../../packages/zero/out/zero-client/src/mod.d.ts",
+  "bundledPackages": ["zero-client"],
+  "dtsRollup": {
+    "enabled": true,
+    "untrimmedFilePath": "./bundled-types/zero-client.d.ts"
+  },
+  "apiReport": {
+    "enabled": true,
+    "reportFolder": "./reports/api"
+  },
+  "docModel": {
+    "enabled": true
+  }
+}

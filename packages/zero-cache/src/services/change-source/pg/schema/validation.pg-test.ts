@@ -1,6 +1,6 @@
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../../../shared/src/logging-test-utils.ts';
-import {initDB, testDBs} from '../../../../test/db.ts';
+import {initDB, type PgTest, test} from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
 import {getPublicationInfo} from './published.ts';
 import {UnsupportedTableSchemaError, validate} from './validation.ts';
@@ -9,12 +9,10 @@ describe('change-source/pg', () => {
   const lc = createSilentLogContext();
   let db: PostgresDB;
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     db = await testDBs.create('zero_schema_validation_test');
-  });
 
-  afterEach(async () => {
-    await testDBs.drop(db);
+    return () => testDBs.drop(db);
   });
 
   type InvalidTableCase = {
@@ -51,6 +49,24 @@ describe('change-source/pg', () => {
         CREATE TABLE issues ("issueID" INTEGER PRIMARY KEY, "column/with/slashes" INTEGER);
       `,
     },
+    {
+      error:
+        'UnsupportedTableSchemaError: Table "issues" is missing its REPLICA IDENTITY INDEX',
+      setupUpstreamQuery: `
+        CREATE TABLE issues ("issueID" INTEGER NOT NULL, "foo" INTEGER);
+        CREATE UNIQUE INDEX issues_idx ON issues ("issueID");
+        ALTER TABLE issues REPLICA IDENTITY USING INDEX issues_idx;
+        DROP INDEX issues_idx;
+      `,
+    },
+    {
+      error:
+        'UnsupportedTableSchemaError: Table "issues" with REPLICA IDENTITY NOTHING cannot be replicated',
+      setupUpstreamQuery: `
+        CREATE TABLE issues ("issueID" INTEGER NOT NULL, "foo" INTEGER);
+        ALTER TABLE issues REPLICA IDENTITY NOTHING;
+      `,
+    },
   ];
 
   for (const c of invalidUpstreamCases) {
@@ -64,7 +80,7 @@ describe('change-source/pg', () => {
       expect(pubs.tables.length).toBe(1);
       let result;
       try {
-        validate(lc, pubs.tables[0]);
+        validate(lc, pubs.tables[0], pubs.indexes);
       } catch (e) {
         result = e;
       }

@@ -6,8 +6,8 @@ import {MessagePort} from 'node:worker_threads';
 import {WebSocketServer, type WebSocket} from 'ws';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import {verifyToken} from '../auth/jwt.ts';
-import {type AuthConfig, type ZeroConfig} from '../config/zero-config.ts';
+import {tokenConfigOptions, verifyToken} from '../auth/jwt.ts';
+import {type ZeroConfig} from '../config/zero-config.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
 import type {Pusher} from '../services/mutagen/pusher.ts';
 import type {ReplicaState} from '../services/replicator/replicator.ts';
@@ -26,6 +26,11 @@ import type {ConnectParams} from './connect-params.ts';
 import {Connection, sendError} from './connection.ts';
 import {createNotifierFrom, subscribeTo} from './replicator.ts';
 import {SyncerWsMessageHandler} from './syncer-ws-message-handler.ts';
+import {
+  recordConnectionSuccess,
+  recordConnectionAttempted,
+  setActiveClientGroupsGetter,
+} from '../server/anonymous-otel-start.ts';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
@@ -49,7 +54,7 @@ export class Syncer implements SingletonService {
   readonly #parent: Worker;
   readonly #wss: WebSocketServer;
   readonly #stopped = resolver();
-  readonly #authConfig: AuthConfig;
+  readonly #config: ZeroConfig;
 
   constructor(
     lc: LogContext,
@@ -63,7 +68,7 @@ export class Syncer implements SingletonService {
     pusherFactory: ((id: string) => Pusher & Service) | undefined,
     parent: Worker,
   ) {
-    this.#authConfig = config.auth;
+    this.#config = config;
     // Relays notifications from the parent thread subscription
     // to ViewSyncers within this thread.
     const notifier = createNotifierFrom(lc, parent);
@@ -75,9 +80,9 @@ export class Syncer implements SingletonService {
       id => viewSyncerFactory(id, notifier.subscribe(), this.#drainCoordinator),
       v => v.keepalive(),
     );
-    this.#mutagens = new ServiceRunner(lc, mutagenFactory);
+    this.#mutagens = new ServiceRunner(lc, mutagenFactory, m => m.hasRefs());
     if (pusherFactory) {
-      this.#pushers = new ServiceRunner(lc, pusherFactory);
+      this.#pushers = new ServiceRunner(lc, pusherFactory, p => p.hasRefs());
     }
     this.#parent = parent;
     this.#wss = new WebSocketServer({noServer: true});
@@ -88,6 +93,8 @@ export class Syncer implements SingletonService {
       this.#createConnection,
       this.#parent,
     );
+
+    setActiveClientGroupsGetter(() => this.#viewSyncers.size);
   }
 
   readonly #createConnection = async (ws: WebSocket, params: ConnectParams) => {
@@ -96,6 +103,7 @@ export class Syncer implements SingletonService {
       params.clientGroupID,
       params.clientID,
     );
+    recordConnectionAttempted();
     const {clientID, clientGroupID, auth, userID} = params;
     const existing = this.#connections.get(clientID);
     if (existing) {
@@ -107,56 +115,100 @@ export class Syncer implements SingletonService {
 
     let decodedToken: JWTPayload | undefined;
     if (auth) {
-      try {
-        decodedToken = await verifyToken(this.#authConfig, auth, {
-          subject: userID,
-        });
-        this.#lc.debug?.(
-          `Received auth token ${auth} for clientID ${clientID}, decoded: ${JSON.stringify(decodedToken)}`,
+      const tokenOptions = tokenConfigOptions(this.#config.auth);
+
+      const hasPushOrMutate =
+        this.#config?.push?.url !== undefined ||
+        this.#config?.mutate?.url !== undefined;
+      const hasGetQueries = this.#config?.getQueries?.url !== undefined;
+
+      // must either have one of the token options set or have custom mutations & queries enabled
+      const hasExactlyOneTokenOption = tokenOptions.length === 1;
+      const hasCustomEndpoints = hasPushOrMutate && hasGetQueries;
+      if (!hasExactlyOneTokenOption && !hasCustomEndpoints) {
+        throw new Error(
+          'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
+            JSON.stringify(tokenOptions) +
+            '. You may also set both ZERO_MUTATE_URL and ZERO_GET_QUERIES_URL to enable custom mutations and queries without passing token verification options.',
         );
-      } catch (e) {
-        sendError(
-          this.#lc,
-          ws,
-          {
-            kind: ErrorKind.AuthInvalidated,
-            message: `Failed to decode auth token: ${String(e)}`,
-          },
-          e,
+      }
+
+      if (tokenOptions.length > 0) {
+        try {
+          decodedToken = await verifyToken(this.#config.auth, auth, {
+            subject: userID,
+          });
+          this.#lc.debug?.(
+            `Received auth token ${auth} for clientID ${clientID}, decoded: ${JSON.stringify(decodedToken)}`,
+          );
+        } catch (e) {
+          sendError(
+            this.#lc,
+            ws,
+            {
+              kind: ErrorKind.AuthInvalidated,
+              message: `Failed to decode auth token: ${String(e)}`,
+            },
+            e,
+          );
+          ws.close(3000, 'Failed to decode JWT');
+          return;
+        }
+      } else {
+        this.#lc.warn?.(
+          `One of jwk, secret, or jwksUrl is not configured - the \`authorization\` header must be manually verified by the user`,
         );
-        ws.close(3000, 'Failed to decode JWT');
-        return;
       }
     } else {
       this.#lc.debug?.(`No auth token received for clientID ${clientID}`);
     }
 
-    const connection = new Connection(
-      this.#lc,
-      params,
-      ws,
-      new SyncerWsMessageHandler(
+    const mutagen = this.#mutagens.getService(clientGroupID);
+    const pusher = this.#pushers?.getService(clientGroupID);
+    // a new connection is using the mutagen and pusher. Bump their ref counts.
+    mutagen.ref();
+    pusher?.ref();
+
+    let connection: Connection;
+    try {
+      connection = new Connection(
         this.#lc,
         params,
-        auth !== undefined && decodedToken !== undefined
-          ? {
-              raw: auth,
-              decoded: decodedToken,
-            }
-          : undefined,
-        this.#viewSyncers.getService(clientGroupID),
-        this.#mutagens.getService(clientGroupID),
-        this.#pushers?.getService(clientGroupID),
-      ),
-      () => {
-        if (this.#connections.get(clientID) === connection) {
-          this.#connections.delete(clientID);
-        }
-      },
-    );
+        ws,
+        new SyncerWsMessageHandler(
+          this.#lc,
+          params,
+          // auth is an empty string if the user is not authenticated
+          auth
+            ? {
+                raw: auth,
+                decoded: decodedToken ?? {},
+              }
+            : undefined,
+          this.#viewSyncers.getService(clientGroupID),
+          mutagen,
+          pusher,
+        ),
+        () => {
+          if (this.#connections.get(clientID) === connection) {
+            this.#connections.delete(clientID);
+          }
+          // Connection is closed. We can unref the mutagen and pusher.
+          // If their ref counts are zero, they will stop themselves and set themselves invalid.
+          mutagen.unref();
+          pusher?.unref();
+        },
+      );
+    } catch (e) {
+      mutagen.unref();
+      pusher?.unref();
+      throw e;
+    }
+
     this.#connections.set(clientID, connection);
 
-    connection.init();
+    connection.init() && recordConnectionSuccess();
+
     if (params.initConnectionMsg) {
       this.#lc.debug?.(
         'handling init connection message from sec header',

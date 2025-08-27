@@ -14,6 +14,7 @@ import {createSource} from './test/source-factory.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {buildFilterPipeline} from './filter-operators.ts';
+import type {BuilderDelegate} from '../builder/builder.ts';
 
 const base = {
   columns: [
@@ -27,6 +28,10 @@ const base = {
     relationshipName: 'comments',
   },
 } as const;
+
+const mockDelegate = {
+  addEdge() {},
+} as unknown as BuilderDelegate;
 
 const lc = createSilentLogContext();
 
@@ -1466,6 +1471,7 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
       hidden: false,
       system: 'client',
     }),
+    mockDelegate,
     filterInput =>
       new Exists(
         filterInput,

@@ -1,4 +1,4 @@
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {deepClone} from '../../../shared/src/deep-clone.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
@@ -7,9 +7,10 @@ import {relationships} from '../../../zero-schema/src/builder/relationship-build
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {number, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {createSource} from '../ivm/test/source-factory.ts';
-import {newQuery, type QueryDelegate} from './query-impl.ts';
+import {newQuery} from './query-impl.ts';
 import {QueryDelegateImpl} from './test/query-delegate.ts';
 import {schema} from './test/test-schemas.ts';
+import type {QueryDelegate} from './query-delegate.ts';
 
 /**
  * Some basic manual tests to get us started.
@@ -987,28 +988,28 @@ describe('pk lookup optimization', () => {
         .where('id', '=', '0001')
         .related('comments', q => q.where('id', '=', '0001')),
     ).toMatchInlineSnapshot(`
-    [
-      {
-        "closed": false,
-        "comments": [
-          {
-            "authorId": "0001",
-            "createdAt": 1,
-            "id": "0001",
-            "issueId": "0001",
-            "text": "comment 1",
-            Symbol(rc): 1,
-          },
-        ],
-        "createdAt": 1,
-        "description": "description 1",
-        "id": "0001",
-        "ownerId": "0001",
-        "title": "issue 1",
-        Symbol(rc): 1,
-      },
-    ]
-  `);
+      [
+        {
+          "closed": false,
+          "comments": [
+            {
+              "authorId": "0001",
+              "createdAt": 1,
+              "id": "0001",
+              "issueId": "0001",
+              "text": "comment 1",
+              Symbol(rc): 1,
+            },
+          ],
+          "createdAt": 1,
+          "description": "description 1",
+          "id": "0001",
+          "ownerId": "0001",
+          "title": "issue 1",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
   });
 
   test('exists with pk constraint', async () => {
@@ -1017,18 +1018,18 @@ describe('pk lookup optimization', () => {
         .where('id', '=', '0001')
         .whereExists('comments', q => q.where('id', '=', '0001')),
     ).toMatchInlineSnapshot(`
-    [
-      {
-        "closed": false,
-        "createdAt": 1,
-        "description": "description 1",
-        "id": "0001",
-        "ownerId": "0001",
-        "title": "issue 1",
-        Symbol(rc): 1,
-      },
-    ]
-  `);
+      [
+        {
+          "closed": false,
+          "createdAt": 1,
+          "description": "description 1",
+          "id": "0001",
+          "ownerId": "0001",
+          "title": "issue 1",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
   });
 
   test('junction with pk constraint', async () => {
@@ -1037,25 +1038,25 @@ describe('pk lookup optimization', () => {
         .where('id', '=', '0001')
         .related('labels', q => q.where('id', '=', '0001')),
     ).toMatchInlineSnapshot(`
-    [
-      {
-        "closed": false,
-        "createdAt": 1,
-        "description": "description 1",
-        "id": "0001",
-        "labels": [
-          {
-            "id": "0001",
-            "name": "label 1",
-            Symbol(rc): 1,
-          },
-        ],
-        "ownerId": "0001",
-        "title": "issue 1",
-        Symbol(rc): 1,
-      },
-    ]
-  `);
+      [
+        {
+          "closed": false,
+          "createdAt": 1,
+          "description": "description 1",
+          "id": "0001",
+          "labels": [
+            {
+              "id": "0001",
+              "name": "label 1",
+              Symbol(rc): 1,
+            },
+          ],
+          "ownerId": "0001",
+          "title": "issue 1",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
   });
 
   test('junction with exists with pk constraint', async () => {
@@ -1122,32 +1123,33 @@ describe('pk lookup optimization', () => {
   });
 });
 
-test('run with options', async () => {
-  const queryDelegate = new QueryDelegateImpl();
-  const {issueSource} = addData(queryDelegate);
-  const issueQuery = newQuery(queryDelegate, schema, 'issue').where(
-    'title',
-    '=',
-    'issue 1',
-  );
-  const singleFilterRowsUnknownP = issueQuery.run({type: 'unknown'});
-  const singleFilterRowsCompleteP = issueQuery.run({type: 'complete'});
-  issueSource.push({
-    type: 'remove',
-    row: {
-      id: '0001',
-      title: 'issue 1',
-      description: 'description 1',
-      closed: false,
-      ownerId: '0001',
-      createdAt: 10,
-    },
-  });
-  queryDelegate.callAllGotCallbacks();
-  const singleFilterRowsUnknown = await singleFilterRowsUnknownP;
-  const singleFilterRowsComplete = await singleFilterRowsCompleteP;
+describe('run with options', () => {
+  test('run with type', async () => {
+    const queryDelegate = new QueryDelegateImpl();
+    const {issueSource} = addData(queryDelegate);
+    const issueQuery = newQuery(queryDelegate, schema, 'issue').where(
+      'title',
+      '=',
+      'issue 1',
+    );
+    const singleFilterRowsUnknownP = issueQuery.run({type: 'unknown'});
+    const singleFilterRowsCompleteP = issueQuery.run({type: 'complete'});
+    issueSource.push({
+      type: 'remove',
+      row: {
+        id: '0001',
+        title: 'issue 1',
+        description: 'description 1',
+        closed: false,
+        ownerId: '0001',
+        createdAt: 10,
+      },
+    });
+    queryDelegate.callAllGotCallbacks();
+    const singleFilterRowsUnknown = await singleFilterRowsUnknownP;
+    const singleFilterRowsComplete = await singleFilterRowsCompleteP;
 
-  expect(singleFilterRowsUnknown).toMatchInlineSnapshot(`
+    expect(singleFilterRowsUnknown).toMatchInlineSnapshot(`
     [
       {
         "closed": false,
@@ -1160,7 +1162,31 @@ test('run with options', async () => {
       },
     ]
   `);
-  expect(singleFilterRowsComplete).toMatchInlineSnapshot(`[]`);
+    expect(singleFilterRowsComplete).toMatchInlineSnapshot(`[]`);
+  });
+
+  test('run with ttl', async () => {
+    const queryDelegate = new QueryDelegateImpl();
+    const issueQuery = newQuery(queryDelegate, schema, 'issue').where(
+      'title',
+      '=',
+      'issue 1',
+    );
+    const unknownP = issueQuery.run({ttl: '1s', type: 'unknown'});
+    const completeP = issueQuery.run({ttl: '1m', type: 'complete'});
+    const hourP = issueQuery.run({ttl: '1h', type: 'unknown'});
+    queryDelegate.callAllGotCallbacks();
+    await Promise.all([unknownP, completeP, hourP]);
+
+    expect(queryDelegate.addedServerQueries.map(q => q.ttl))
+      .toMatchInlineSnapshot(`
+      [
+        "1s",
+        "1m",
+        "1h",
+      ]
+    `);
+  });
 });
 
 test('view creation is wrapped in context.batchViewUpdates call', () => {
@@ -1834,5 +1860,30 @@ describe('junction relationship limitations', () => {
         q.whereExists('comments', q => q.orderBy('id', 'asc')),
       ),
     ).not.toThrow();
+  });
+});
+
+describe('addCustom / addServer are called', () => {
+  async function check(
+    type: 'addCustomQuery' | 'addServerQuery',
+    op: 'preload' | 'materialize' | 'run',
+  ) {
+    const queryDelegate = new QueryDelegateImpl();
+    let query = newQuery(queryDelegate, schema, 'issue');
+    if (type === 'addCustomQuery') {
+      query = query.nameAndArgs('issue', []);
+    }
+    const spy = vi.spyOn(queryDelegate, type);
+    await query[op]();
+
+    expect(spy).toHaveBeenCalledOnce();
+  }
+
+  test('preload, materialize, run', async () => {
+    for (const type of ['addCustomQuery', 'addServerQuery'] as const) {
+      for (const op of ['preload', 'materialize', 'run'] as const) {
+        await check(type, op);
+      }
+    }
   });
 });

@@ -1,7 +1,7 @@
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
-import {expectTables, testDBs} from '../../../test/db.ts';
+import {expectTables, type PgTest, test} from '../../../test/db.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
 import {
@@ -19,13 +19,11 @@ describe('change-streamer/schema/tables', () => {
   const SHARD_NUM = 8;
   const shard = {appID: APP_ID, shardNum: SHARD_NUM};
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     db = await testDBs.create('change_streamer_schema_tables');
     await db.begin(tx => setupCDCTables(lc, tx, shard));
-  });
 
-  afterEach(async () => {
-    await testDBs.drop(db);
+    return () => testDBs.drop(db);
   });
 
   test('ensureReplicationConfig', async () => {

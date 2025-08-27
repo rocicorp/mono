@@ -61,7 +61,9 @@ describe('lite/tables', () => {
         bool_array BOOL[],
         real_array REAL[],
         int_array INTEGER[] DEFAULT '{1, 2, 3}',
-        json_val JSONB
+        json_val JSONB,
+        time_value TIME,
+        time_array TIME[]
       );
       `,
       expectedResult: [
@@ -88,7 +90,7 @@ describe('lite/tables', () => {
               pos: 3,
               characterMaximumLength: null,
               dataType: 'text[]',
-              elemPgTypeClass: null,
+              elemPgTypeClass: 'b',
               notNull: false,
               dflt: null,
             },
@@ -104,7 +106,7 @@ describe('lite/tables', () => {
               pos: 5,
               characterMaximumLength: null,
               dataType: 'BOOL[]',
-              elemPgTypeClass: null,
+              elemPgTypeClass: 'b',
               notNull: false,
               dflt: null,
             },
@@ -112,7 +114,7 @@ describe('lite/tables', () => {
               pos: 6,
               characterMaximumLength: null,
               dataType: 'REAL[]',
-              elemPgTypeClass: null,
+              elemPgTypeClass: 'b',
               notNull: false,
               dflt: null,
             },
@@ -120,7 +122,7 @@ describe('lite/tables', () => {
               pos: 7,
               dataType: 'INTEGER[]',
               characterMaximumLength: null,
-              elemPgTypeClass: null,
+              elemPgTypeClass: 'b',
               notNull: false,
               dflt: "'{1, 2, 3}'",
             },
@@ -129,6 +131,22 @@ describe('lite/tables', () => {
               dataType: 'JSONB',
               characterMaximumLength: null,
               elemPgTypeClass: null,
+              notNull: false,
+              dflt: null,
+            },
+            ['time_value']: {
+              pos: 9,
+              dataType: 'TIME',
+              characterMaximumLength: null,
+              elemPgTypeClass: null,
+              notNull: false,
+              dflt: null,
+            },
+            ['time_array']: {
+              pos: 10,
+              dataType: 'TIME[]',
+              characterMaximumLength: null,
+              elemPgTypeClass: 'b',
               notNull: false,
               dflt: null,
             },
@@ -377,10 +395,10 @@ describe('computeZqlSpec', () => {
     `);
   });
 
-  test('unsupported columns are excluded', () => {
+  test('unsupported columns (MACADDR8) are excluded', () => {
     expect(
       t(`
-    CREATE TABLE foo(a INT, b "TEXT|NOT_NULL", c TIME, d BYTEA);
+    CREATE TABLE foo(a INT, b "TEXT|NOT_NULL", c MACADDR8, d BYTEA);
     CREATE UNIQUE INDEX foo_pkey ON foo(b ASC);
     `),
     ).toMatchInlineSnapshot(`
@@ -426,10 +444,10 @@ describe('computeZqlSpec', () => {
     `);
   });
 
-  test('indexes with unsupported columns are excluded', () => {
+  test('indexes with unsupported columns (MACADDR8) are excluded', () => {
     expect(
       t(`
-    CREATE TABLE foo(a "INT|NOT_NULL", b "TEXT|NOT_NULL", c "TIME|NOT_NULL", d "TEXT|NOT_NULL");
+    CREATE TABLE foo(a "INT|NOT_NULL", b "TEXT|NOT_NULL", c "MACADDR8|NOT_NULL", d "TEXT|NOT_NULL");
     CREATE UNIQUE INDEX foo_pkey ON foo(a ASC, c DESC);
     CREATE UNIQUE INDEX foo_other_key ON foo(b ASC, d ASC, a DESC);
     `),

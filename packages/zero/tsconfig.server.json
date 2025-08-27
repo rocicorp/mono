@@ -5,6 +5,8 @@
   },
   "include": [
     "src/server/*.ts",
+    "src/server.ts",
+    "src/adapters/*.ts",
     "src/cli.ts",
     "src/build-schema.ts",
     "src/zero-cache-dev.ts",

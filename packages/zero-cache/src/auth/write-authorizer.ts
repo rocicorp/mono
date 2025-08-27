@@ -1,4 +1,5 @@
 import type {SQLQuery} from '@databases/sql';
+import type {MaybePromise} from '@opentelemetry/resources';
 import {LogContext} from '@rocicorp/logger';
 import type {JWTPayload} from 'jose';
 import {tmpdir} from 'node:os';
@@ -28,6 +29,7 @@ import {
   bindStaticParameters,
   buildPipeline,
 } from '../../../zql/src/builder/builder.ts';
+import {simplifyCondition} from '../../../zql/src/query/expression.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {StaticQuery, staticQuery} from '../../../zql/src/query/static-query.ts';
 import {Database} from '../../../zqlite/src/db.ts';
@@ -40,15 +42,16 @@ import type {LogConfig, ZeroConfig} from '../config/zero-config.ts';
 import {computeZqlSpecs} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../db/specs.ts';
 import {StatementRunner} from '../db/statements.ts';
-import {DatabaseStorage} from '../services/view-syncer/database-storage.ts';
+import {
+  DatabaseStorage,
+  type ClientGroupStorage,
+} from '../services/view-syncer/database-storage.ts';
 import {mapLiteDataTypeToZqlSchemaValue} from '../types/lite.ts';
 import {
   getSchema,
   reloadPermissionsIfChanged,
   type LoadedPermissions,
 } from './load-permissions.ts';
-import {simplifyCondition} from '../../../zql/src/query/expression.ts';
-import type {MaybePromise} from '@opentelemetry/resources';
 
 type Phase = 'preMutation' | 'postMutation';
 
@@ -74,8 +77,8 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   readonly #statementRunner: StatementRunner;
   readonly #lc: LogContext;
   readonly #appID: string;
-  readonly #clientGroupID: string;
   readonly #logConfig: LogConfig;
+  readonly #cgStorage: ClientGroupStorage;
 
   #loadedPermissions: LoadedPermissions | null = null;
 
@@ -87,7 +90,6 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     cgID: string,
   ) {
     this.#appID = appID;
-    this.#clientGroupID = cgID;
     this.#lc = lc.withContext('class', 'WriteAuthorizerImpl');
     this.#logConfig = config.log;
     this.#schema = getSchema(this.#lc, replica);
@@ -97,11 +99,13 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       lc,
       path.join(tmpDir, `mutagen-${pid}-${randInt(1000000, 9999999)}`),
     );
-    const cgStorage = writeAuthzStorage.createClientGroupStorage(cgID);
+    this.#cgStorage = writeAuthzStorage.createClientGroupStorage(cgID);
     this.#builderDelegate = {
       getSource: name => this.#getSource(name),
-      createStorage: () => cgStorage.createStorage(),
+      createStorage: () => this.#cgStorage.createStorage(),
+      decorateSourceInput: input => input,
       decorateInput: input => input,
+      addEdge() {},
       decorateFilterInput: input => input,
     };
     this.#tableSpecs = computeZqlSpecs(this.#lc, replica);
@@ -116,6 +120,10 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       this.#appID,
       this.#loadedPermissions,
     ).permissions;
+  }
+
+  destroy() {
+    this.#cgStorage.destroy();
   }
 
   async canPreMutation(
@@ -254,7 +262,6 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     source = new TableSource(
       this.#lc,
       this.#logConfig,
-      this.#clientGroupID,
       this.#replica,
       tableName,
       Object.fromEntries(
@@ -488,7 +495,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     // run the sql against upstream.
     // remove the collecting into json? just need to know if a row comes back.
 
-    const input = buildPipeline(rowQueryAst, this.#builderDelegate);
+    const input = buildPipeline(rowQueryAst, this.#builderDelegate, 'query-id');
     try {
       const res = input.fetch({});
       for (const _ of res) {

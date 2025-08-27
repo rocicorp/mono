@@ -5,9 +5,9 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
-import {assertNormalized} from '../config/normalize.ts';
-import {getZeroConfig} from '../config/zero-config.ts';
+import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {warmupConnections} from '../db/warmup.ts';
+import {initEventSink} from '../observability/events.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {MutagenService} from '../services/mutagen/mutagen.ts';
 import {PusherService} from '../services/mutagen/pusher.ts';
@@ -27,6 +27,8 @@ import {getShardID} from '../types/shards.ts';
 import {Subscription} from '../types/subscription.ts';
 import {replicaFileModeSchema, replicaFileName} from '../workers/replicator.ts';
 import {Syncer} from '../workers/syncer.ts';
+import {startAnonymousTelemetry} from './anonymous-otel-start.ts';
+import {InspectorDelegate} from './inspector-delegate.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
 
@@ -39,17 +41,18 @@ export default function runWorker(
   env: NodeJS.ProcessEnv,
   ...args: string[]
 ): Promise<void> {
-  const config = getZeroConfig(env, args.slice(1));
-  assertNormalized(config);
-  startOtelAuto();
+  const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
 
-  const lc = createLogContext(config, {worker: 'syncer'});
+  startOtelAuto(createLogContext(config, {worker: 'syncer'}, false));
+  const lc = createLogContext(config, {worker: 'syncer'}, true);
+  initEventSink(lc, config);
+
   assert(args.length > 0, `replicator mode not specified`);
   const fileMode = v.parse(args[0], replicaFileModeSchema);
 
   const {cvr, upstream} = config;
-  assert(cvr.maxConnsPerWorker);
-  assert(upstream.maxConnsPerWorker);
+  assert(cvr.maxConnsPerWorker, 'cvr.maxConnsPerWorker must be set');
+  assert(upstream.maxConnsPerWorker, 'upstream.maxConnsPerWorker must be set');
 
   const replicaFile = replicaFileName(config.replica.file, fileMode);
   lc.debug?.(`running view-syncer on ${replicaFile}`);
@@ -87,12 +90,15 @@ export default function runWorker(
       .withContext('clientGroupID', id)
       .withContext('instance', randomID());
     lc.debug?.(`creating view syncer`);
+    const inspectMetricsDelegate = new InspectorDelegate();
     return new ViewSyncerService(
+      config,
       logger,
       shard,
       config.taskID,
       id,
       cvrDB,
+      config.upstream.type === 'pg' ? upstreamDB : undefined,
       new PipelineDriver(
         logger,
         config.log,
@@ -100,12 +106,12 @@ export default function runWorker(
         shard,
         operatorStorage.createClientGroupStorage(id),
         id,
+        inspectMetricsDelegate,
       ),
       sub,
       drainCoordinator,
       config.log.slowHydrateThreshold,
-      undefined,
-      config.targetClientRowCount,
+      inspectMetricsDelegate,
     );
   };
 
@@ -119,15 +125,22 @@ export default function runWorker(
     );
 
   const pusherFactory =
-    config.push.url === undefined
+    config.push.url === undefined && config.mutate.url === undefined
       ? undefined
       : (id: string) =>
           new PusherService(
+            upstreamDB,
             config,
+            {
+              ...config.push,
+              ...config.mutate,
+              url: must(
+                config.push.url ?? config.mutate.url,
+                'No push or mutate URL configured',
+              ),
+            },
             lc.withContext('clientGroupID', id),
             id,
-            must(config.push.url),
-            config.push.apiKey,
           );
 
   const syncer = new Syncer(
@@ -138,6 +151,8 @@ export default function runWorker(
     pusherFactory,
     parent,
   );
+
+  startAnonymousTelemetry(lc, config);
 
   void dbWarmup.then(() => parent.send(['ready', {ready: true}]));
 

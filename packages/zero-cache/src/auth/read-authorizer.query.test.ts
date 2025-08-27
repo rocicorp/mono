@@ -35,21 +35,16 @@ import {
 } from '../../../zql/src/builder/builder.ts';
 import {Catch, type CaughtNode} from '../../../zql/src/ivm/catch.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
-import type {Input} from '../../../zql/src/ivm/operator.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
-import {
-  completedAST,
-  newQuery,
-  type QueryDelegate,
-} from '../../../zql/src/query/query-impl.ts';
+import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
+import {completedAST, newQuery} from '../../../zql/src/query/query-impl.ts';
 import {type Query, type Row} from '../../../zql/src/query/query.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
 import {transformQuery} from './read-authorizer.ts';
 import {WriteAuthorizerImpl} from './write-authorizer.ts';
-import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
 
 const zeroConfig = {
   log: testLogConfig,
@@ -506,7 +501,6 @@ beforeEach(() => {
       source = new TableSource(
         lc,
         testLogConfig,
-        'read-auth-test',
         replica,
         name,
         tableSchema.columns,
@@ -520,17 +514,18 @@ beforeEach(() => {
     createStorage() {
       return new MemoryStorage();
     },
-    decorateInput(input: Input): Input {
-      return input;
-    },
-    decorateFilterInput(input: FilterInput): FilterInput {
-      return input;
-    },
+    decorateInput: input => input,
+    addEdge() {},
+    decorateFilterInput: input => input,
+    decorateSourceInput: input => input,
     addServerQuery() {
       return () => {};
     },
+    addCustomQuery() {
+      return () => {};
+    },
     updateServerQuery() {},
-    onQueryMaterialized() {},
+    updateCustomQuery() {},
     onTransactionCommit() {
       return () => {};
     },
@@ -538,7 +533,9 @@ beforeEach(() => {
       return applyViewUpdates();
     },
     assertValidRunOptions() {},
+    flushQueryChanges() {},
     defaultQueryComplete: true,
+    addMetric() {},
   };
 
   for (const table of Object.values(schema.tables)) {
@@ -932,7 +929,7 @@ function runReadQueryWithPermissions(
       preMutationRow: undefined,
     },
   );
-  const pipeline = buildPipeline(updatedAst, queryDelegate);
+  const pipeline = buildPipeline(updatedAst, queryDelegate, 'query-id');
   const out = new Catch(pipeline);
   return out.fetch({});
 }

@@ -6,8 +6,8 @@ import {
   type LogRecord,
 } from '@opentelemetry/api-logs';
 import type {Context, LogLevel, LogSink} from '@rocicorp/logger';
-import {errorOrObject} from './logging.ts';
-import {stringify} from '../types/bigint-json.ts';
+import {errorOrObject} from '../../../shared/src/logging.ts';
+import {stringify} from '../../../shared/src/bigint-json.ts';
 import {startOtelAuto} from './otel-start.ts';
 
 export class OtelLogSink implements LogSink {

@@ -1,17 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import Fastify from 'fastify';
-import {
-  beforeEach,
-  describe,
-  expect,
-  type MockedFunction,
-  test,
-  vi,
-} from 'vitest';
+import {beforeEach, describe, expect, type MockedFunction, vi} from 'vitest';
 import WebSocket from 'ws';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {getConnectionURI, testDBs} from '../../test/db.ts';
+import {getConnectionURI, type PgTest, test} from '../../test/db.ts';
 import {type PostgresDB} from '../../types/pg.ts';
 import {inProcChannel} from '../../types/processes.ts';
 import {cdcSchema, type ShardID} from '../../types/shards.ts';
@@ -50,7 +43,7 @@ describe('change-streamer/http', () => {
   let connectionClosed: Promise<Downstream[]>;
   let changeStreamerClient: ChangeStreamerHttpClient;
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     lc = createSilentLogContext();
 
     changeDB = await testDBs.create('change_streamer_http_client');
@@ -63,6 +56,7 @@ describe('change-streamer/http', () => {
       lc,
       SHARD_ID,
       getConnectionURI(changeDB),
+      undefined,
     );
 
     const {promise, resolve: cleanup} = resolver<Downstream[]>();
@@ -73,7 +67,7 @@ describe('change-streamer/http', () => {
     snapshotFn = vi.fn();
     endReservationFn = vi.fn();
 
-    const [parent, receiver] = inProcChannel();
+    const [parent, sender] = inProcChannel();
 
     const dispatcher = Fastify();
     installWebSocketHandoff(
@@ -81,7 +75,7 @@ describe('change-streamer/http', () => {
       req => {
         const {pathname} = new URL(req.url ?? '', 'http://unused/');
         const action = pathname.substring(pathname.lastIndexOf('/') + 1);
-        return {payload: action, receiver};
+        return {payload: action, sender};
       },
       dispatcher.server,
     );
@@ -174,6 +168,12 @@ describe('change-streamer/http', () => {
         `/replication/v${PROTOCOL_VERSION + 1}/changes` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
+      [
+        // Change the error message as necessary
+        `Cannot service client at protocol v4. Supported protocols: [v1 ... v3]`,
+        `/replication/v${PROTOCOL_VERSION + 1}/snapshot` +
+          `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
+      ],
     ])('%s: %s', async (error, path) => {
       for (const address of [serverAddress, dispatcherAddress]) {
         const {promise: result, resolve} = resolver<unknown>();
@@ -187,57 +187,83 @@ describe('change-streamer/http', () => {
   });
 
   test.each([
-    ['hostname', () => serverAddress],
-    ['websocket handoff', () => dispatcherAddress],
-  ])('snapshot status streamed over websocket: %s', async (_name, addr) => {
-    await setChangeStreamerAddress(addr());
-    const sub = await changeStreamerClient.reserveSnapshot('foo-bar-id');
+    ['hostname', false, () => serverAddress],
+    ['websocket handoff', false, () => dispatcherAddress],
+    ['hostname auto-discover', true, () => serverAddress],
+    ['websocket handoff auto-discover', true, () => dispatcherAddress],
+  ])(
+    'snapshot status streamed over websocket: %s',
+    async (_name, autoDiscover, addr) => {
+      await setChangeStreamerAddress(addr());
+      const client = autoDiscover
+        ? changeStreamerClient
+        : new ChangeStreamerHttpClient(
+            lc,
+            SHARD_ID,
+            getConnectionURI(changeDB),
+            `http://${addr()}`,
+          );
+      const sub = await client.reserveSnapshot('foo-bar-id');
 
-    expect(snapshotFn).toHaveBeenCalledWith('foo-bar-id');
+      expect(snapshotFn).toHaveBeenCalledWith('foo-bar-id');
 
-    const status = [
-      'status',
-      {tag: 'status', backupURL: 's3://foo/bar'},
-    ] satisfies SnapshotMessage;
+      const status = [
+        'status',
+        {tag: 'status', backupURL: 's3://foo/bar'},
+      ] satisfies SnapshotMessage;
 
-    snapshotStream.push(status);
+      snapshotStream.push(status);
 
-    expect(await drain(1, sub)).toEqual([status]);
-  });
+      expect(await drain(1, sub)).toEqual([status]);
+    },
+  );
 
   test.each([
-    ['hostname', () => serverAddress],
-    ['websocket handoff', () => dispatcherAddress],
-  ])('basic changes streamed over websocket: %s', async (_name, addr) => {
-    const ctx = {
-      protocolVersion: PROTOCOL_VERSION,
-      taskID: 'foo-task',
-      id: 'foo',
-      mode: 'serving',
-      replicaVersion: 'abc',
-      watermark: '123',
-      initial: true,
-    } as const;
-    await setChangeStreamerAddress(addr());
-    const sub = await changeStreamerClient.subscribe(ctx);
+    ['hostname', false, () => serverAddress],
+    ['websocket handoff', false, () => dispatcherAddress],
+    ['hostname auto-discover', true, () => serverAddress],
+    ['websocket handoff auto-discover', true, () => dispatcherAddress],
+  ])(
+    'basic changes streamed over websocket: %s',
+    async (_name, autoDiscover, addr) => {
+      const ctx = {
+        protocolVersion: PROTOCOL_VERSION,
+        taskID: 'foo-task',
+        id: 'foo',
+        mode: 'serving',
+        replicaVersion: 'abc',
+        watermark: '123',
+        initial: true,
+      } as const;
+      await setChangeStreamerAddress(addr());
+      const client = autoDiscover
+        ? changeStreamerClient
+        : new ChangeStreamerHttpClient(
+            lc,
+            SHARD_ID,
+            getConnectionURI(changeDB),
+            `http://${addr()}`,
+          );
+      const sub = await client.subscribe(ctx);
 
-    expect(endReservationFn).toHaveBeenCalledWith('foo-task');
+      expect(endReservationFn).toHaveBeenCalledWith('foo-task');
 
-    downstream.push(['begin', {tag: 'begin'}, {commitWatermark: '456'}]);
-    downstream.push(['commit', {tag: 'commit'}, {watermark: '456'}]);
+      downstream.push(['begin', {tag: 'begin'}, {commitWatermark: '456'}]);
+      downstream.push(['commit', {tag: 'commit'}, {watermark: '456'}]);
 
-    expect(await drain(2, sub)).toEqual([
-      ['begin', {tag: 'begin'}, {commitWatermark: '456'}],
-      ['commit', {tag: 'commit'}, {watermark: '456'}],
-    ]);
+      expect(await drain(2, sub)).toEqual([
+        ['begin', {tag: 'begin'}, {commitWatermark: '456'}],
+        ['commit', {tag: 'commit'}, {watermark: '456'}],
+      ]);
 
-    // Draining the client-side subscription should cancel it, closing the
-    // websocket, which should cancel the server-side subscription.
-    expect(await connectionClosed).toEqual([]);
+      // Draining the client-side subscription should cancel it, closing the
+      // websocket, which should cancel the server-side subscription.
+      expect(await connectionClosed).toEqual([]);
 
-    expect(subscribeFn).toHaveBeenCalledOnce();
-    expect(subscribeFn.mock.calls[0][0]).toEqual(ctx);
-  });
+      expect(subscribeFn).toHaveBeenCalledOnce();
+      expect(subscribeFn.mock.calls[0][0]).toEqual(ctx);
+    },
+  );
 
   test('bigint fields', async () => {
     await setChangeStreamerAddress(serverAddress);

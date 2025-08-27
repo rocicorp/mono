@@ -8,7 +8,7 @@ on:
 
 concurrency:
   group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   format:
@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: 'npm'
       - run: npm ci
       - run: npm run check-format
@@ -36,7 +36,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: 'npm'
       - run: npm ci
       - run: npm run lint
@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: 'npm'
 
       - run: npm ci
@@ -60,6 +60,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    needs: [format, lint, check-types]
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
@@ -69,16 +70,34 @@ jobs:
           fetch-depth: 100
       - uses: actions/setup-node@v4
         with:
-          node-version: 20.x
+          node-version: 22.x
           cache: 'npm'
 
       - run: npm ci
       - name: Install Playwright
-        run: npx playwright install --with-deps
+        run: npx playwright install chromium firefox webkit --with-deps
+      - name: Run tests
+        run: TEST_PG_MODE=nopg npm run test
+
+  test-pg:
+    name: Test PG
+    runs-on: ubuntu-latest
+    needs: [format, lint, check-types]
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: rocicorp
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 100
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+
+      - run: npm ci
       - name: Run tests
         run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            npm run test -- --changed ${{ github.event.pull_request.base.sha }}
-          else
-            npm run test
-          fi
+          TEST_PG_MODE=pg-17 npm run test
+          TEST_PG_MODE=pg-16 npm run test
+          TEST_PG_MODE=pg-15 npm run test

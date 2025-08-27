@@ -8,6 +8,9 @@
     "build": "tsc && vite build",
     "check-types": "tsc && tsc -p tsconfig.node.json",
     "check-types:watch": "tsc --watch",
+    "db-up": "cd docker && docker compose up",
+    "db-down": "cd docker && docker compose down",
+    "clean": "cd docker && docker volume rm docker_zbugs_pgdata_sync && docker volume rm docker_zbugs_pgdata_upstream && rm -rf /tmp/zbugs-sync-replica.db*",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
@@ -19,20 +22,22 @@
     "run-query": "tsx ../../packages/zero-cache/src/scripts/run-query.ts",
     "run-query-brk": "tsx --inspect-brk ../../packages/zero-cache/src/scripts/run-query.ts",
     "create-keys": "tsx ../../packages/zero-cache/src/scripts/create-jwk.ts",
-    "test": "vitest run --config vitest.config.ts --project zbugs/no-pg",
+    "test": "cd ../../packages/zero && npm run build && cd ../../apps/zbugs && vitest run --config vitest.config.ts --project zbugs/no-pg",
     "test:watch": "vitest --config vitest.config.ts --project zbugs/no-pg",
     "analyze": "analyze -c vite.config.ts",
     "test:pg": "vitest run --config vitest.config.ts --project zbugs/pg-16",
     "test:pg:watch": "vitest --config vitest.config.ts --project zbugs/pg-16"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.844.0",
+    "@aws-sdk/s3-request-presigner": "^3.844.0",
     "@dotenvx/dotenvx": "^1.39.0",
     "@fastify/cookie": "^10.0.0",
     "@fastify/oauth2": "^8.0.0",
     "@floating-ui/react": "^0.26.28",
     "@headlessui/react": "^2.1.8",
     "@octokit/core": "^6.1.2",
-    "@rocicorp/zero": "0.21.2025052900",
+    "@rocicorp/zero": "0.23.2025082600",
     "@schickling/fps-meter": "^0.1.2",
     "@tanstack/react-virtual": "^3.10.9",
     "classnames": "^2.5.1",
@@ -45,6 +50,7 @@
     "postgres": "^3.4.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-dropzone": "^14.3.8",
     "react-markdown": "^9.0.1",
     "react-textarea-autosize": "^8.5.3",
     "react-toastify": "^10.0.6",
@@ -53,7 +59,8 @@
     "remark-gfm": "^4.0.0",
     "use-debounce": "^10.0.4",
     "usehooks-ts": "^3.1.0",
-    "wouter": "^3.3.5"
+    "wouter": "^3.7.1",
+    "zod": "^3.21.4"
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.7.0",
@@ -66,7 +73,7 @@
     "@types/react-dom": "18.3.5",
     "@typescript-eslint/eslint-plugin": "^5.16.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "@vitest/runner": "3.0.8",
+    "@vitest/runner": "3.2.4",
     "eslint": "^8.15.0",
     "eslint-config-prettier": "^8.5.0",
     "eslint-plugin-react-hooks": "^4.6.0",
@@ -82,7 +89,7 @@
     "vite-bundle-analyzer": "^0.17.3",
     "vite-plugin-svgr": "^4.3.0",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "3.0.8"
+    "vitest": "3.2.4"
   },
   "eslintConfig": {
     "extends": "../../eslint-config.json"

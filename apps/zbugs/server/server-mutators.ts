@@ -1,16 +1,18 @@
-import {
-  createMutators,
-  type CreateIssueArgs,
-  type AddEmojiArgs,
-  type AddCommentArgs,
-} from '../shared/mutators.ts';
-import {type CustomMutatorDefs, type UpdateValue} from '@rocicorp/zero';
-import {schema} from '../shared/schema.ts';
-import {notify} from './notify.ts';
+import {type ServerTransaction, type UpdateValue} from '@rocicorp/zero';
+import type {TransactionSql} from 'postgres';
 import {assert} from '../../../packages/shared/src/asserts.ts';
 import {type AuthData} from '../shared/auth.ts';
+import {
+  createMutators,
+  type AddCommentArgs,
+  type AddEmojiArgs,
+  type CreateIssueArgs,
+} from '../shared/mutators.ts';
+import {schema, type Schema} from '../shared/schema.ts';
+import {notify} from './notify.ts';
 
 export type PostCommitTask = () => Promise<void>;
+type MutatorTx = ServerTransaction<Schema, TransactionSql>;
 
 export function createServerMutators(
   authData: AuthData | undefined,
@@ -24,7 +26,7 @@ export function createServerMutators(
     issue: {
       ...mutators.issue,
 
-      async create(tx, {id, title, description}: CreateIssueArgs) {
+      async create(tx: MutatorTx, {id, title, description}: CreateIssueArgs) {
         await mutators.issue.create(tx, {
           id,
           title,
@@ -32,6 +34,8 @@ export function createServerMutators(
           created: Date.now(),
           modified: Date.now(),
         });
+
+        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -41,24 +45,15 @@ export function createServerMutators(
       },
 
       async update(
-        tx,
+        tx: MutatorTx,
         args: {id: string} & UpdateValue<typeof schema.tables.issue>,
       ) {
-        const oldIssue = await tx.query.issue.where('id', args.id).one();
-        assert(oldIssue);
-
-        const isAssigneeChange =
-          args.assigneeID !== undefined &&
-          args.assigneeID !== oldIssue.assigneeID;
-        const previousAssigneeID = isAssigneeChange
-          ? oldIssue.assigneeID
-          : undefined;
-
         await mutators.issue.update(tx, {
           ...args,
           modified: Date.now(),
         });
 
+        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -68,16 +63,16 @@ export function createServerMutators(
             update: args,
           },
           postCommitTasks,
-          isAssigneeChange,
-          previousAssigneeID,
         );
       },
 
       async addLabel(
-        tx,
+        tx: MutatorTx,
         {issueID, labelID}: {issueID: string; labelID: string},
       ) {
         await mutators.issue.addLabel(tx, {issueID, labelID});
+
+        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -91,10 +86,12 @@ export function createServerMutators(
       },
 
       async removeLabel(
-        tx,
+        tx: MutatorTx,
         {issueID, labelID}: {issueID: string; labelID: string},
       ) {
         await mutators.issue.removeLabel(tx, {issueID, labelID});
+
+        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -111,11 +108,13 @@ export function createServerMutators(
     emoji: {
       ...mutators.emoji,
 
-      async addToIssue(tx, args: AddEmojiArgs) {
+      async addToIssue(tx: MutatorTx, args: AddEmojiArgs) {
         await mutators.emoji.addToIssue(tx, {
           ...args,
           created: Date.now(),
         });
+
+        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -128,7 +127,7 @@ export function createServerMutators(
         );
       },
 
-      async addToComment(tx, args: AddEmojiArgs) {
+      async addToComment(tx: MutatorTx, args: AddEmojiArgs) {
         await mutators.emoji.addToComment(tx, {
           ...args,
           created: Date.now(),
@@ -138,6 +137,7 @@ export function createServerMutators(
           .where('id', args.subjectID)
           .one();
         assert(comment);
+        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -155,13 +155,14 @@ export function createServerMutators(
     comment: {
       ...mutators.comment,
 
-      async add(tx, {id, issueID, body}: AddCommentArgs) {
+      async add(tx: MutatorTx, {id, issueID, body}: AddCommentArgs) {
         await mutators.comment.add(tx, {
           id,
           issueID,
           body,
           created: Date.now(),
         });
+        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -175,12 +176,13 @@ export function createServerMutators(
         );
       },
 
-      async edit(tx, {id, body}: {id: string; body: string}) {
+      async edit(tx: MutatorTx, {id, body}: {id: string; body: string}) {
         await mutators.comment.edit(tx, {id, body});
 
         const comment = await tx.query.comment.where('id', id).one();
         assert(comment);
 
+        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -194,5 +196,5 @@ export function createServerMutators(
         );
       },
     },
-  } as const satisfies CustomMutatorDefs<typeof schema>;
+  } as const;
 }

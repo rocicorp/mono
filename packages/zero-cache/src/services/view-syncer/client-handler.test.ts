@@ -1,5 +1,5 @@
 import {resolver} from '@rocicorp/resolver';
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, beforeEach} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
@@ -8,7 +8,7 @@ import type {
   PokePartMessage,
   PokeStartMessage,
 } from '../../../../zero-protocol/src/poke.ts';
-import type {JSONObject} from '../../types/bigint-json.ts';
+import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {
@@ -16,6 +16,7 @@ import {
   ensureSafeJSON,
   startPoke,
   type Patch,
+  type PokeHandler,
 } from './client-handler.ts';
 
 const APP_ID = 'zapp';
@@ -191,7 +192,6 @@ describe('view-syncer/client-handler', () => {
         op: 'put',
         id: 'foohash',
         clientID: 'foo',
-        ast: {table: 'issues'},
       },
     });
     await pokers.addPatch({
@@ -222,7 +222,6 @@ describe('view-syncer/client-handler', () => {
         type: 'query',
         op: 'put',
         id: 'bazhash',
-        ast: {table: 'labels'},
       },
     });
 
@@ -318,9 +317,7 @@ describe('view-syncer/client-handler', () => {
           desiredQueriesPatches: {
             foo: [{op: 'del', hash: 'barhash'}],
           },
-          gotQueriesPatch: [
-            {op: 'put', hash: 'bazhash', ast: {table: 'labels'}},
-          ],
+          gotQueriesPatch: [{op: 'put', hash: 'bazhash'}],
           rowsPatch: [
             {
               op: 'put',
@@ -361,13 +358,11 @@ describe('view-syncer/client-handler', () => {
           },
           desiredQueriesPatches: {
             foo: [
-              {op: 'put', hash: 'foohash', ast: {table: 'issues'}},
+              {op: 'put', hash: 'foohash'},
               {op: 'del', hash: 'barhash'},
             ],
           },
-          gotQueriesPatch: [
-            {op: 'put', hash: 'bazhash', ast: {table: 'labels'}},
-          ],
+          gotQueriesPatch: [{op: 'put', hash: 'bazhash'}],
           rowsPatch: [
             {
               op: 'put',
@@ -392,6 +387,228 @@ describe('view-syncer/client-handler', () => {
       ] satisfies PokeStartMessage,
       ['pokeEnd', {pokeID: '123', cookie: '123'}] satisfies PokeEndMessage,
     ]);
+  });
+
+  describe('mutation results', () => {
+    let poker: PokeHandler;
+    let closer: ReturnType<typeof createSubscription>['close'];
+
+    beforeEach(() => {
+      const {subscription, close} = createSubscription();
+
+      const schemaVersion = 1;
+      const schemaVersions = {minSupportedVersion: 1, maxSupportedVersion: 1};
+      const handler = new ClientHandler(
+        lc,
+        'g1',
+        'id1',
+        'ws1',
+        SHARD,
+        '121',
+        schemaVersion,
+        subscription,
+      );
+      poker = handler.startPoke({stateVersion: '123'}, schemaVersions);
+      closer = close;
+    });
+
+    test('successful mutation result', async () => {
+      await poker.addPatch({
+        toVersion: {stateVersion: '123'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {
+            schema: '',
+            table: 'zapp_6.mutations',
+            rowKey: {clientGroupID: 'g1', clientID: 'boo', mutationID: 123n},
+          },
+          contents: {
+            clientGroupID: 'g1',
+            clientID: 'boo',
+            mutationID: 123n,
+            result: {},
+          },
+        },
+      });
+
+      await poker.end({stateVersion: '123'});
+
+      const {received, err} = await closer();
+      expect(received).toMatchInlineSnapshot(`
+      [
+        [
+          "pokeStart",
+          {
+            "baseCookie": "121",
+            "pokeID": "123",
+            "schemaVersions": {
+              "maxSupportedVersion": 1,
+              "minSupportedVersion": 1,
+            },
+          },
+        ],
+        [
+          "pokePart",
+          {
+            "mutationsPatch": [
+              {
+                "mutation": {
+                  "id": {
+                    "clientID": "boo",
+                    "id": 123,
+                  },
+                  "result": {},
+                },
+                "op": "put",
+              },
+            ],
+            "pokeID": "123",
+          },
+        ],
+        [
+          "pokeEnd",
+          {
+            "cookie": "123",
+            "pokeID": "123",
+          },
+        ],
+      ]
+    `);
+      expect(err).toBeUndefined();
+    });
+
+    test('failed mutation result', async () => {
+      await poker.addPatch({
+        toVersion: {stateVersion: '123'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {
+            schema: '',
+            table: 'zapp_6.mutations',
+            rowKey: {clientGroupID: 'g1', clientID: 'boo', mutationID: 123n},
+          },
+          contents: {
+            clientGroupID: 'g1',
+            clientID: 'boo',
+            mutationID: 123n,
+            result: {
+              error: 'app',
+              message: 'Something went wrong',
+            },
+          },
+        },
+      });
+
+      await poker.end({stateVersion: '123'});
+
+      const {received, err} = await closer();
+      expect(received).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "121",
+              "pokeID": "123",
+              "schemaVersions": {
+                "maxSupportedVersion": 1,
+                "minSupportedVersion": 1,
+              },
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "mutationsPatch": [
+                {
+                  "mutation": {
+                    "id": {
+                      "clientID": "boo",
+                      "id": 123,
+                    },
+                    "result": {
+                      "error": "app",
+                      "message": "Something went wrong",
+                    },
+                  },
+                  "op": "put",
+                },
+              ],
+              "pokeID": "123",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "123",
+              "pokeID": "123",
+            },
+          ],
+        ]
+      `);
+      expect(err).toBeUndefined();
+    });
+
+    // nothing to do here.
+    // the client stores mutation results ephemerally and discards them on `put`
+    // so no need to send a `del` for the mutation result.
+    test('removed mutation result', async () => {
+      await poker.addPatch({
+        toVersion: {stateVersion: '123'},
+        patch: {
+          type: 'row',
+          op: 'del',
+          id: {
+            schema: '',
+            table: 'zapp_6.mutations',
+            rowKey: {clientGroupID: 'g1', clientID: 'boo', mutationID: 123n},
+          },
+        },
+      });
+
+      await poker.end({stateVersion: '123'});
+
+      const {received, err} = await closer();
+      expect(received).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "121",
+              "pokeID": "123",
+              "schemaVersions": {
+                "maxSupportedVersion": 1,
+                "minSupportedVersion": 1,
+              },
+            },
+          ],
+          [
+            "pokePart",
+            {
+              "mutationsPatch": [
+                {
+                  "id": {
+                    "clientID": "boo",
+                    "id": 123,
+                  },
+                  "op": "del",
+                },
+              ],
+              "pokeID": "123",
+            },
+          ],
+          [
+            "pokeEnd",
+            {
+              "cookie": "123",
+              "pokeID": "123",
+            },
+          ],
+        ]
+      `);
+      expect(err).toBeUndefined();
+    });
   });
 
   test('schemaVersion unsupported', async () => {

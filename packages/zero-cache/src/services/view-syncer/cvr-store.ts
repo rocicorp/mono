@@ -10,19 +10,20 @@ import {
   deepEqual,
   type ReadonlyJSONValue,
 } from '../../../../shared/src/json.ts';
-import {must} from '../../../../shared/src/must.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import {astSchema} from '../../../../zero-protocol/src/ast.ts';
 import {clientSchemaSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import type {InspectQueryRow} from '../../../../zero-protocol/src/inspect-down.ts';
+import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
+import {recordRowsSynced} from '../../server/anonymous-otel-start.ts';
 import {ErrorForClient, ErrorWithLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
 import {rowIDString} from '../../types/row-key.ts';
-import {cvrSchema, type ShardID} from '../../types/shards.ts';
+import {cvrSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
 import type {Patch, PatchToVersion} from './client-handler.ts';
 import type {CVR, CVRSnapshot} from './cvr.ts';
 import {RowRecordCache} from './row-record-cache.ts';
@@ -37,17 +38,24 @@ import {
   type ClientQueryRecord,
   type ClientRecord,
   cmpVersions,
+  type CustomQueryRecord,
   type CVRVersion,
   EMPTY_CVR_VERSION,
   type InternalQueryRecord,
   type NullableCVRVersion,
   type QueryPatch,
   type QueryRecord,
+  queryRecordToQueryRow,
   type RowID,
   type RowRecord,
   versionFromString,
   versionString,
 } from './schema/types.ts';
+import {
+  type TTLClock,
+  ttlClockAsNumber,
+  ttlClockFromNumber,
+} from './ttl-clock.ts';
 
 export type CVRFlushStats = {
   instances: number;
@@ -62,9 +70,28 @@ export type CVRFlushStats = {
 const tracer = trace.getTracer('cvr-store', version);
 
 function asQuery(row: QueriesRow): QueryRecord {
-  const ast = astSchema.parse(row.clientAST);
   const maybeVersion = (s: string | null) =>
     s === null ? undefined : versionFromString(s);
+
+  if (row.clientAST === null) {
+    // custom query
+    assert(
+      row.queryName !== null && row.queryArgs !== null,
+      'queryName and queryArgs must be set for custom queries',
+    );
+    return {
+      type: 'custom',
+      id: row.queryHash,
+      name: row.queryName,
+      args: row.queryArgs,
+      patchVersion: maybeVersion(row.patchVersion),
+      clientState: {},
+      transformationHash: row.transformationHash ?? undefined,
+      transformationVersion: maybeVersion(row.transformationVersion),
+    } satisfies CustomQueryRecord;
+  }
+
+  const ast = astSchema.parse(row.clientAST);
   return row.internal
     ? ({
         type: 'internal',
@@ -99,6 +126,7 @@ export class CVRStore {
   readonly #taskID: string;
   readonly #id: string;
   readonly #db: PostgresDB;
+  readonly #upstreamDb: PostgresDB | undefined;
   readonly #writes: Set<{
     stats: Partial<CVRFlushStats>;
     write: (
@@ -106,6 +134,9 @@ export class CVRStore {
       lastConnectTime: number,
     ) => PendingQuery<MaybeRow[]>;
   }> = new Set();
+  readonly #upstreamWrites: ((
+    tx: PostgresTransaction,
+  ) => PendingQuery<MaybeRow[]>)[] = [];
   readonly #pendingRowRecordUpdates = new CustomKeyMap<RowID, RowRecord | null>(
     rowIDString,
   );
@@ -113,11 +144,17 @@ export class CVRStore {
   readonly #rowCache: RowRecordCache;
   readonly #loadAttemptIntervalMs: number;
   readonly #maxLoadAttempts: number;
+  readonly #upstreamSchemaName: string;
   #rowCount: number = 0;
 
   constructor(
     lc: LogContext,
-    db: PostgresDB,
+    cvrDb: PostgresDB,
+    // Optionally undefined to deal with custom upstreams.
+    // This is temporary until we have a more principled protocol to deal with
+    // custom upstreams and clearing their custom mutator responses.
+    // An implementor could simply clear them after N minutes for the time being.
+    upstreamDb: PostgresDB | undefined,
     shard: ShardID,
     taskID: string,
     cvrID: string,
@@ -127,13 +164,14 @@ export class CVRStore {
     deferredRowFlushThreshold = 100, // somewhat arbitrary
     setTimeoutFn = setTimeout,
   ) {
-    this.#db = db;
+    this.#db = cvrDb;
+    this.#upstreamDb = upstreamDb;
     this.#schema = cvrSchema(shard);
     this.#taskID = taskID;
     this.#id = cvrID;
     this.#rowCache = new RowRecordCache(
       lc,
-      db,
+      cvrDb,
       shard,
       cvrID,
       failService,
@@ -142,6 +180,7 @@ export class CVRStore {
     );
     this.#loadAttemptIntervalMs = loadAttemptIntervalMs;
     this.#maxLoadAttempts = maxLoadAttempts;
+    this.#upstreamSchemaName = upstreamSchema(shard);
   }
 
   #cvr(table: string) {
@@ -182,6 +221,7 @@ export class CVRStore {
       id,
       version: EMPTY_CVR_VERSION,
       lastActive: 0,
+      ttlClock: ttlClockFromNumber(0), // TTL clock starts at 0, not Date.now()
       replicaVersion: null,
       clients: {},
       queries: {},
@@ -193,7 +233,8 @@ export class CVRStore {
         tx<
           (Omit<InstancesRow, 'clientGroupID'> & {rowsVersion: string | null})[]
         >`SELECT cvr."version", 
-                 "lastActive", 
+                 "lastActive",
+                 "ttlClock",
                  "replicaVersion", 
                  "owner", 
                  "grantedAt",
@@ -226,6 +267,7 @@ export class CVRStore {
       this.putInstance({
         version: cvr.version,
         lastActive: 0,
+        ttlClock: ttlClockFromNumber(0), // TTL clock starts at 0 for new instances
         replicaVersion: null,
         clientSchema: null,
       });
@@ -234,6 +276,7 @@ export class CVRStore {
       const {
         version,
         lastActive,
+        ttlClock,
         replicaVersion,
         owner,
         grantedAt,
@@ -268,6 +311,7 @@ export class CVRStore {
 
       cvr.version = versionFromString(version);
       cvr.lastActive = lastActive;
+      cvr.ttlClock = ttlClock;
       cvr.replicaVersion = replicaVersion;
 
       try {
@@ -300,7 +344,7 @@ export class CVRStore {
         }
       } else {
         // This can happen if the client was deleted but the queries are still alive.
-        lc.debug?.(`Client ${row.clientID} not found`, cvr);
+        lc.debug?.(`Client ${row.clientID} not found`);
       }
 
       const query = cvr.queries[row.queryHash];
@@ -311,7 +355,7 @@ export class CVRStore {
       ) {
         query.clientState[row.clientID] = {
           inactivatedAt: row.inactivatedAt ?? undefined,
-          ttl: row.ttl ?? -1,
+          ttl: row.ttl ?? DEFAULT_TTL_MS,
           version: versionFromString(row.patchVersion),
         };
       }
@@ -319,6 +363,8 @@ export class CVRStore {
     lc.debug?.(
       `loaded cvr@${versionString(cvr.version)} (${Date.now() - start} ms)`,
     );
+
+    // why do we not sort `desiredQueryIDs` here?
 
     return cvr;
   }
@@ -356,14 +402,45 @@ export class CVRStore {
     }
   }
 
+  /**
+   * Updates the `ttlClock` of the CVR instance. The ttlClock starts at 0 when
+   * the CVR instance is first created and increments based on elapsed time
+   * since the base time established by the ViewSyncerService.
+   */
+  async updateTTLClock(ttlClock: TTLClock, lastActive: number): Promise<void> {
+    await this.#db`UPDATE ${this.#cvr('instances')}
+          SET "lastActive" = ${lastActive},
+              "ttlClock" = ${ttlClock}
+          WHERE "clientGroupID" = ${this.#id}`.execute();
+  }
+
+  /**
+   * @returns This returns the current `ttlClock` of the CVR instance. The ttlClock
+   *          represents elapsed time since the instance was created (starting from 0).
+   *          If the CVR has never been initialized for this client group, it returns
+   *          `undefined`.
+   */
+  async getTTLClock(): Promise<TTLClock | undefined> {
+    const result = await this.#db<Pick<InstancesRow, 'ttlClock'>[]>`
+      SELECT "ttlClock" FROM ${this.#cvr('instances')}
+      WHERE "clientGroupID" = ${this.#id}`.values();
+    if (result.length === 0) {
+      // This can happen if the CVR has not been initialized yet.
+      return undefined;
+    }
+    assert(result.length === 1);
+    return result[0][0];
+  }
+
   putInstance({
     version,
     replicaVersion,
     lastActive,
     clientSchema,
+    ttlClock,
   }: Pick<
     CVRSnapshot,
-    'version' | 'replicaVersion' | 'lastActive' | 'clientSchema'
+    'version' | 'replicaVersion' | 'lastActive' | 'clientSchema' | 'ttlClock'
   >): void {
     this.#writes.add({
       stats: {instances: 1},
@@ -372,6 +449,7 @@ export class CVRStore {
           clientGroupID: this.#id,
           version: versionString(version),
           lastActive,
+          ttlClock,
           replicaVersion,
           owner: this.#taskID,
           grantedAt: lastConnectTime,
@@ -398,44 +476,46 @@ export class CVRStore {
   }
 
   putQuery(query: QueryRecord): void {
-    const maybeVersionString = (v: CVRVersion | undefined) =>
-      v ? versionString(v) : null;
-
-    const change: QueriesRow =
-      query.type === 'internal'
-        ? {
-            clientGroupID: this.#id,
-            queryHash: query.id,
-            clientAST: query.ast,
-            queryName: null,
-            queryArgs: null,
-            patchVersion: null,
-            transformationHash: query.transformationHash ?? null,
-            transformationVersion: maybeVersionString(
-              query.transformationVersion,
-            ),
-            internal: true,
-            deleted: false, // put vs del "got" query
-          }
-        : {
-            clientGroupID: this.#id,
-            queryHash: query.id,
-            clientAST: query.ast,
-            queryName: null,
-            queryArgs: null,
-            patchVersion: maybeVersionString(query.patchVersion),
-            transformationHash: query.transformationHash ?? null,
-            transformationVersion: maybeVersionString(
-              query.transformationVersion,
-            ),
-            internal: null,
-            deleted: false, // put vs del "got" query
-          };
+    const change: QueriesRow = queryRecordToQueryRow(this.#id, query);
+    // ${JSON.stringify(change.queryArgs)}::text::json is used because postgres.js
+    // gets confused if the input is `[boolean]` and throws an error saying a bool
+    // cannot be converted to json.
+    // https://github.com/porsager/postgres/issues/386
     this.#writes.add({
       stats: {queries: 1},
-      write: tx => tx`INSERT INTO ${this.#cvr('queries')} ${tx(change)}
+      write: tx => tx`INSERT INTO ${this.#cvr('queries')} (
+        "clientGroupID",
+        "queryHash",
+        "clientAST",
+        "queryName",
+        "queryArgs",
+        "patchVersion",
+        "transformationHash",
+        "transformationVersion",
+        "internal",
+        "deleted"
+      ) VALUES (
+        ${change.clientGroupID},
+        ${change.queryHash},
+        ${change.clientAST},
+        ${change.queryName},
+        ${change.queryArgs === undefined ? null : JSON.stringify(change.queryArgs)}::text::json,
+        ${change.patchVersion},
+        ${change.transformationHash ?? null},
+        ${change.transformationVersion ?? null},
+        ${change.internal},
+        ${change.deleted ?? false}
+      )
       ON CONFLICT ("clientGroupID", "queryHash")
-      DO UPDATE SET ${tx(change)}`,
+      DO UPDATE SET 
+        "clientAST" = ${change.clientAST},
+        "queryName" = ${change.queryName},
+        "queryArgs" = ${change.queryArgs === undefined ? null : JSON.stringify(change.queryArgs)}::text::json,
+        "patchVersion" = ${change.patchVersion},
+        "transformationHash" = ${change.transformationHash ?? null},
+        "transformationVersion" = ${change.transformationVersion ?? null},
+        "internal" = ${change.internal},
+        "deleted" = ${change.deleted ?? false}`,
     });
   }
 
@@ -466,17 +546,10 @@ export class CVRStore {
     });
   }
 
-  /**
-   * @param patchVersion This is only needed to allow old view syncers to function.
-   */
-  insertClient(client: ClientRecord, patchVersion: CVRVersion): void {
+  insertClient(client: ClientRecord): void {
     const change: ClientsRow = {
       clientGroupID: this.#id,
       clientID: client.id,
-
-      // Written so that exist clients that read do not fail.
-      patchVersion: versionString(patchVersion),
-      deleted: false,
     };
 
     this.#writes.add({
@@ -491,6 +564,10 @@ export class CVRStore {
       write: tx =>
         tx`DELETE FROM ${this.#cvr('clients')} WHERE "clientID" = ${clientID}`,
     });
+    this.#upstreamWrites.push(
+      sql =>
+        sql`DELETE FROM ${sql(this.#upstreamSchemaName)}."mutations" WHERE "clientGroupID" = ${this.#id} AND "clientID" = ${clientID}`,
+    );
   }
 
   deleteClientGroup(clientGroupID: string) {
@@ -509,6 +586,11 @@ export class CVRStore {
             name,
           )} WHERE "clientGroupID" = ${clientGroupID}`,
       });
+      // delete mutation responses
+      this.#upstreamWrites.push(
+        sql =>
+          sql`DELETE FROM ${sql(this.#upstreamSchemaName)}."mutations" WHERE "clientGroupID" = ${clientGroupID}`,
+      );
     }
   }
 
@@ -517,7 +599,7 @@ export class CVRStore {
     query: {id: string},
     client: {id: string},
     deleted: boolean,
-    inactivatedAt: number | undefined,
+    inactivatedAt: TTLClock | undefined,
     ttl: number,
   ): void {
     const change: DesiresRow = {
@@ -594,14 +676,12 @@ export class CVRStore {
         ]),
       );
 
-      const ast = (id: string) => must(upToCVR.queries[id]).ast;
-
       const patches: PatchToVersion[] = [];
       for (const row of queryRows) {
         const {queryHash: id} = row;
         const patch: Patch = row.deleted
           ? {type: 'query', op: 'del', id}
-          : {type: 'query', op: 'put', id, ast: ast(id)};
+          : {type: 'query', op: 'put', id};
         const v = row.patchVersion;
         assert(v);
         patches.push({patch, toVersion: versionFromString(v)});
@@ -610,7 +690,7 @@ export class CVRStore {
         const {clientID, queryHash: id} = row;
         const patch: Patch = row.deleted
           ? {type: 'query', op: 'del', id, clientID}
-          : {type: 'query', op: 'put', id, clientID, ast: ast(id)};
+          : {type: 'query', op: 'put', id, clientID};
         patches.push({patch, toVersion: versionFromString(row.patchVersion)});
       }
 
@@ -739,11 +819,20 @@ export class CVRStore {
       stats.rows += this.#pendingRowRecordUpdates.size;
       return true;
     });
+
     this.#rowCount = await this.#rowCache.apply(
       this.#pendingRowRecordUpdates,
       cvr.version,
       rowsFlushed,
     );
+    recordRowsSynced(this.#rowCount);
+
+    if (this.#upstreamDb) {
+      await this.#upstreamDb.begin(async tx => {
+        await Promise.all(this.#upstreamWrites.map(write => write(tx)));
+      });
+    }
+
     return stats;
   }
 
@@ -752,18 +841,34 @@ export class CVRStore {
   }
 
   async flush(
+    lc: LogContext,
     expectedCurrentVersion: CVRVersion,
     cvr: CVRSnapshot,
     lastConnectTime: number,
   ): Promise<CVRFlushStats | null> {
+    const start = performance.now();
     try {
-      return await this.#flush(expectedCurrentVersion, cvr, lastConnectTime);
+      const stats = await this.#flush(
+        expectedCurrentVersion,
+        cvr,
+        lastConnectTime,
+      );
+      if (stats) {
+        const elapsed = performance.now() - start;
+        lc.debug?.(
+          `flushed cvr@${versionString(cvr.version)} ` +
+            `${JSON.stringify(stats)} in (${elapsed} ms)`,
+        );
+        this.#rowCache.recordSyncFlushStats(stats, elapsed);
+      }
+      return stats;
     } catch (e) {
       // Clear cached state if an error (e.g. ConcurrentModificationException) is encountered.
       this.#rowCache.clear();
       throw e;
     } finally {
       this.#writes.clear();
+      this.#upstreamWrites.length = 0;
       this.#pendingRowRecordUpdates.clear();
       this.#forceUpdates.clear();
     }
@@ -780,6 +885,7 @@ export class CVRStore {
 
   async inspectQueries(
     lc: LogContext,
+    ttlClock: TTLClock,
     clientID?: string,
   ): Promise<InspectQueryRow[]> {
     const db = this.#db;
@@ -789,29 +895,26 @@ export class CVRStore {
     try {
       return await reader.processReadTask(
         tx => tx<InspectQueryRow[]>`
-  SELECT
+  SELECT DISTINCT ON (d."clientID", d."queryHash")
     d."clientID",
     d."queryHash" AS "queryID",
-    COALESCE((EXTRACT(EPOCH FROM d."ttl") * 1000)::double precision, -1) AS "ttl",
+    COALESCE((EXTRACT(EPOCH FROM d."ttl") * 1000)::double precision, ${DEFAULT_TTL_MS}) AS "ttl",
     (EXTRACT(EPOCH FROM d."inactivatedAt") * 1000)::double precision AS "inactivatedAt",
-    COUNT(r.*)::INT AS "rowCount",
+    (SELECT COUNT(*)::INT FROM ${this.#cvr('rows')} r 
+     WHERE r."clientGroupID" = d."clientGroupID" 
+     AND r."refCounts" ? d."queryHash") AS "rowCount",
     q."clientAST" AS "ast",
     (q."patchVersion" IS NOT NULL) AS "got",
-    COALESCE(d."deleted", FALSE) AS "deleted"
+    COALESCE(d."deleted", FALSE) AS "deleted",
+    q."queryName" AS "name",
+    q."queryArgs" AS "args"
   FROM ${this.#cvr('desires')} d
-  LEFT JOIN ${this.#cvr('rows')} r
-    ON r."clientGroupID" = d."clientGroupID"
-   AND r."refCounts" ? d."queryHash"
   LEFT JOIN ${this.#cvr('queries')} q
     ON q."clientGroupID" = d."clientGroupID"
    AND q."queryHash" = d."queryHash"
   WHERE d."clientGroupID" = ${clientGroupID}
     ${clientID ? tx`AND d."clientID" = ${clientID}` : tx``}
-    AND NOT (
-      d."deleted" IS NOT DISTINCT FROM true AND
-      (d."inactivatedAt" IS NOT NULL AND d."ttl" IS NOT NULL AND d."inactivatedAt" + d."ttl" <= now())
-    )
-  GROUP BY d."clientID", d."queryHash", d."ttl", d."inactivatedAt", q."patchVersion", q."clientAST", d."deleted"
+    AND NOT (d."inactivatedAt" IS NOT NULL AND d."ttl" IS NOT NULL AND d."inactivatedAt" + d."ttl" <= to_timestamp(${ttlClockAsNumber(ttlClock) / 1000}))
   ORDER BY d."clientID", d."queryHash"`,
       );
     } finally {

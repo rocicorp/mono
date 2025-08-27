@@ -1,8 +1,8 @@
 import {LogContext} from '@rocicorp/logger';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
 import {TestLogSink} from '../../../../../../shared/src/logging-test-utils.ts';
 import {Index} from '../../../../db/postgres-replica-identity-enum.ts';
-import {expectTables, initDB, testDBs} from '../../../../test/db.ts';
+import {expectTables, initDB, type PgTest, test} from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
 import {getPublicationInfo} from './published.ts';
 import {
@@ -18,15 +18,15 @@ describe('change-source/pg', () => {
   let lc: LogContext;
   let db: PostgresDB;
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     logSink = new TestLogSink();
     lc = new LogContext('warn', {}, logSink);
     db = await testDBs.create('zero_schema_test');
-  });
 
-  afterEach(async () => {
-    await testDBs.drop(db);
-    await testDBs.sql`RESET ROLE; DROP ROLE IF EXISTS supaneon`.simple();
+    return async () => {
+      await testDBs.drop(db);
+      await testDBs.sql`RESET ROLE; DROP ROLE IF EXISTS supaneon`.simple();
+    };
   });
 
   function publications() {
@@ -56,6 +56,7 @@ describe('change-source/pg', () => {
       [`_zro_metadata_0`, 'zro', 'schemaVersions', null],
       [`_zro_metadata_0`, 'zro', 'permissions', null],
       [`_zro_metadata_0`, `zro_0`, 'clients', null],
+      [`_zro_metadata_0`, `zro_0`, 'mutations', null],
       ['_zro_public_0', null, null, null],
     ]);
 
@@ -114,6 +115,7 @@ describe('change-source/pg', () => {
       [`_zro_metadata_0`, 'zro', 'schemaVersions', null],
       [`_zro_metadata_0`, 'zro', 'permissions', null],
       [`_zro_metadata_0`, `zro_0`, 'clients', null],
+      [`_zro_metadata_0`, `zro_0`, 'mutations', null],
       ['_zro_public_0', 'public', 'join_table', null],
     ]);
 
@@ -155,6 +157,7 @@ describe('change-source/pg', () => {
       [`_1_metadata_0`, '1', 'schemaVersions', null],
       [`_1_metadata_0`, '1', 'permissions', null],
       [`_1_metadata_0`, `1_0`, 'clients', null],
+      [`_1_metadata_0`, `1_0`, 'mutations', null],
       [`_1_public_0`, null, null, null],
     ]);
 
@@ -195,9 +198,11 @@ describe('change-source/pg', () => {
       [`_zro_metadata_0`, 'zro', 'schemaVersions', null],
       [`_zro_metadata_0`, 'zro', 'permissions', null],
       [`_zro_metadata_0`, `zro_0`, 'clients', null],
+      [`_zro_metadata_0`, `zro_0`, 'mutations', null],
       [`_zro_metadata_1`, 'zro', 'schemaVersions', null],
       [`_zro_metadata_1`, 'zro', 'permissions', null],
       [`_zro_metadata_1`, `zro_1`, 'clients', null],
+      [`_zro_metadata_1`, `zro_1`, 'mutations', null],
       ['_zro_public_0', null, null, null],
       ['_zro_public_1', null, null, null],
     ]);
@@ -288,6 +293,7 @@ describe('change-source/pg', () => {
       [`_zro_metadata_2`, 'zro', 'schemaVersions', null],
       [`_zro_metadata_2`, 'zro', 'permissions', null],
       [`_zro_metadata_2`, `zro_2`, 'clients', null],
+      [`_zro_metadata_2`, `zro_2`, 'mutations', null],
       ['zero_bar', 'far', 'bar', null],
       ['zero_foo', 'public', 'foo', '(id > 1000)'],
     ]);
@@ -330,6 +336,7 @@ describe('change-source/pg', () => {
       [`_supaneon_metadata_0`, 'supaneon', 'schemaVersions', null],
       [`_supaneon_metadata_0`, 'supaneon', 'permissions', null],
       [`_supaneon_metadata_0`, `supaneon_0`, 'clients', null],
+      ['_supaneon_metadata_0', 'supaneon_0', 'mutations', null],
       ['zero_foo', 'public', 'foo', null],
     ]);
 

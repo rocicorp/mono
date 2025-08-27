@@ -1,6 +1,6 @@
 import {
-  ANYONE_CAN,
   boolean,
+  createBuilder,
   createSchema,
   definePermissions,
   enumeration,
@@ -8,10 +8,9 @@ import {
   relationships,
   string,
   table,
-  type ExpressionBuilder,
   type Row,
 } from '@rocicorp/zero';
-import type {AuthData} from './auth.ts';
+import type {Role} from './auth.ts';
 
 // Table definitions
 const user = table('user')
@@ -20,7 +19,7 @@ const user = table('user')
     login: string(),
     name: string().optional(),
     avatar: string(),
-    role: enumeration<'user' | 'crew'>(),
+    role: enumeration<Role>(),
   })
   .primaryKey('id');
 
@@ -35,7 +34,7 @@ const issue = table('issue')
     creatorID: string(),
     assigneeID: string().optional(),
     description: string(),
-    visibility: string(),
+    visibility: enumeration<'internal' | 'public'>(),
   })
   .primaryKey('id');
 
@@ -90,6 +89,15 @@ const userPref = table('userPref')
   })
   .primaryKey('userID', 'key');
 
+const issueNotifications = table('issueNotifications')
+  .columns({
+    userID: string(),
+    issueID: string(),
+    subscribed: boolean(),
+    created: number(),
+  })
+  .primaryKey('userID', 'issueID');
+
 // Relationships
 const userRelationships = relationships(user, ({many}) => ({
   createdIssues: many({
@@ -136,6 +144,11 @@ const issueRelationships = relationships(issue, ({many, one}) => ({
     sourceField: ['id'],
     destField: ['subjectID'],
     destSchema: emoji,
+  }),
+  notificationState: one({
+    sourceField: ['id'],
+    destField: ['issueID'],
+    destSchema: issueNotifications,
   }),
 }));
 
@@ -184,7 +197,17 @@ const emojiRelationships = relationships(emoji, ({one}) => ({
 }));
 
 export const schema = createSchema({
-  tables: [user, issue, comment, label, issueLabel, viewState, emoji, userPref],
+  tables: [
+    user,
+    issue,
+    comment,
+    label,
+    issueLabel,
+    viewState,
+    emoji,
+    userPref,
+    issueNotifications,
+  ],
   relationships: [
     userRelationships,
     issueRelationships,
@@ -195,79 +218,12 @@ export const schema = createSchema({
 });
 
 export type Schema = typeof schema;
-type TableName = keyof Schema['tables'];
 
 export type IssueRow = Row<typeof schema.tables.issue>;
 export type CommentRow = Row<typeof schema.tables.comment>;
 export type UserRow = Row<typeof schema.tables.user>;
 
+export const builder = createBuilder(schema);
+
 export const permissions: ReturnType<typeof definePermissions> =
-  definePermissions<AuthData, Schema>(schema, () => {
-    const userIsLoggedIn = (
-      authData: AuthData,
-      {cmpLit}: ExpressionBuilder<Schema, TableName>,
-    ) => cmpLit(authData.sub, 'IS NOT', null);
-
-    const loggedInUserIsAdmin = (
-      authData: AuthData,
-      eb: ExpressionBuilder<Schema, TableName>,
-    ) =>
-      eb.and(
-        userIsLoggedIn(authData, eb),
-        eb.cmpLit(authData.role, '=', 'crew'),
-      );
-
-    const allowIfUserIDMatchesLoggedInUser = (
-      authData: AuthData,
-      {cmp}: ExpressionBuilder<Schema, 'viewState' | 'userPref'>,
-    ) => cmp('userID', '=', authData.sub);
-
-    const canSeeIssue = (
-      authData: AuthData,
-      eb: ExpressionBuilder<Schema, 'issue'>,
-    ) =>
-      eb.or(loggedInUserIsAdmin(authData, eb), eb.cmp('visibility', 'public'));
-
-    return {
-      user: {
-        row: {
-          select: ANYONE_CAN,
-        },
-      },
-      issue: {
-        row: {
-          select: [canSeeIssue],
-        },
-      },
-      comment: {
-        row: {
-          select: ANYONE_CAN,
-        },
-      },
-      label: {
-        row: {
-          select: ANYONE_CAN,
-        },
-      },
-      viewState: {
-        row: {
-          select: ANYONE_CAN,
-        },
-      },
-      issueLabel: {
-        row: {
-          select: ANYONE_CAN,
-        },
-      },
-      emoji: {
-        row: {
-          select: ANYONE_CAN,
-        },
-      },
-      userPref: {
-        row: {
-          select: [allowIfUserIDMatchesLoggedInUser],
-        },
-      },
-    };
-  });
+  definePermissions<unknown, Schema>(schema, () => ({}));

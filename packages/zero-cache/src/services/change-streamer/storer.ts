@@ -8,7 +8,7 @@ import {Queue} from '../../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
-import {type JSONValue} from '../../types/bigint-json.ts';
+import {type JSONValue} from '../../../../shared/src/bigint-json.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../types/shards.ts';
 import {type Commit} from '../change-source/protocol/current/downstream.ts';
@@ -95,6 +95,7 @@ export class Storer implements Service {
   readonly #shard: ShardID;
   readonly #taskID: string;
   readonly #discoveryAddress: string;
+  readonly #discoveryProtocol: string;
   readonly #db: PostgresDB;
   readonly #replicaVersion: string;
   readonly #onConsumed: (c: Commit | StatusMessage) => void;
@@ -108,6 +109,7 @@ export class Storer implements Service {
     shard: ShardID,
     taskID: string,
     discoveryAddress: string,
+    discoveryProtocol: string,
     db: PostgresDB,
     replicaVersion: string,
     onConsumed: (c: Commit | StatusMessage) => void,
@@ -117,6 +119,7 @@ export class Storer implements Service {
     this.#shard = shard;
     this.#taskID = taskID;
     this.#discoveryAddress = discoveryAddress;
+    this.#discoveryProtocol = discoveryProtocol;
     this.#db = db;
     this.#replicaVersion = replicaVersion;
     this.#onConsumed = onConsumed;
@@ -132,8 +135,14 @@ export class Storer implements Service {
     const db = this.#db;
     const owner = this.#taskID;
     const ownerAddress = this.#discoveryAddress;
-    await db`UPDATE ${this.#cdc('replicationState')} SET ${db({owner, ownerAddress})}`;
-    this.#lc.info?.(`assumed ownership at ${ownerAddress}`);
+    const ownerProtocol = this.#discoveryProtocol;
+    // we omit `ws://` so that old view syncer versions that are not expecting the protocol continue to not get it
+    const addressWithProtocol =
+      ownerProtocol === 'ws'
+        ? ownerAddress
+        : `${ownerProtocol}://${ownerAddress}`;
+    await db`UPDATE ${this.#cdc('replicationState')} SET ${db({owner, ownerAddress: addressWithProtocol})}`;
+    this.#lc.info?.(`assumed ownership at ${addressWithProtocol}`);
   }
 
   async getLastWatermarkToStartStream(): Promise<string> {

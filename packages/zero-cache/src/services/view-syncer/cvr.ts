@@ -1,7 +1,14 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
+import {
+  stringify,
+  type JSONObject,
+} from '../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
-import {deepEqual} from '../../../../shared/src/json.ts';
+import {
+  deepEqual,
+  type ReadonlyJSONValue,
+} from '../../../../shared/src/json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {
   difference,
@@ -11,9 +18,11 @@ import {
 import {stringCompare} from '../../../../shared/src/string-compare.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
-import {compareTTL} from '../../../../zql/src/query/ttl.ts';
-import instruments from '../../observability/view-syncer-instruments.ts';
-import {stringify, type JSONObject} from '../../types/bigint-json.ts';
+import {
+  clampTTL,
+  compareTTL,
+  DEFAULT_TTL_MS,
+} from '../../../../zql/src/query/ttl.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {rowIDString} from '../../types/row-key.ts';
@@ -25,15 +34,16 @@ import {
   cmpVersions,
   maxVersion,
   oneAfter,
-  versionString,
-  type CVRVersion,
   type ClientQueryRecord,
   type ClientRecord,
+  type CustomQueryRecord,
+  type CVRVersion,
   type InternalQueryRecord,
   type QueryRecord,
   type RowID,
   type RowRecord,
 } from './schema/types.ts';
+import {ttlClockAsNumber, type TTLClock} from './ttl-clock.ts';
 
 export type RowUpdate = {
   version?: string; // Undefined for an unref.
@@ -46,6 +56,7 @@ export type CVR = {
   id: string;
   version: CVRVersion;
   lastActive: number;
+  ttlClock: TTLClock;
   replicaVersion: string | null;
   clients: Record<string, ClientRecord>;
   queries: Record<string, QueryRecord>;
@@ -58,6 +69,7 @@ export type CVRSnapshot = {
   readonly id: string;
   readonly version: CVRVersion;
   readonly lastActive: number;
+  readonly ttlClock: TTLClock;
   readonly replicaVersion: string | null;
   readonly clients: Readonly<Record<string, ClientRecord>>;
   readonly queries: Readonly<Record<string, QueryRecord>>;
@@ -65,6 +77,7 @@ export type CVRSnapshot = {
 };
 
 const CLIENT_LMID_QUERY_ID = 'lmids';
+const CLIENT_MUTATION_RESULTS_QUERY_ID = 'mutationResults';
 
 function assertNotInternal(
   query: QueryRecord,
@@ -73,6 +86,42 @@ function assertNotInternal(
     // This should never happen for behaving clients, as query ids should be hashes.
     throw new Error(`Query ID ${query.id} is reserved for internal use`);
   }
+}
+
+export function getMutationResultsQuery(
+  upstreamSchema: string,
+  clientGroupID: string,
+): InternalQueryRecord {
+  return {
+    id: CLIENT_MUTATION_RESULTS_QUERY_ID,
+    type: 'internal',
+    ast: {
+      schema: '',
+      table: `${upstreamSchema}.mutations`,
+      where: {
+        type: 'and',
+        conditions: [
+          {
+            type: 'simple',
+            left: {
+              type: 'column',
+              name: 'clientGroupID',
+            },
+            op: '=',
+            right: {
+              type: 'literal',
+              value: clientGroupID,
+            },
+          },
+        ],
+      },
+      orderBy: [
+        ['clientGroupID', 'asc'],
+        ['clientID', 'asc'],
+        ['mutationID', 'asc'],
+      ],
+    },
+  };
 }
 
 /**
@@ -126,30 +175,23 @@ export class CVRUpdater {
   async flush(
     lc: LogContext,
     lastConnectTime: number,
-    lastActive = Date.now(),
+    lastActive: number,
+    ttlClock: TTLClock,
   ): Promise<{
     cvr: CVRSnapshot;
     flushed: CVRFlushStats | false;
   }> {
-    const start = performance.now();
-
+    this._cvr.ttlClock = ttlClock;
     this._cvr.lastActive = lastActive;
     const flushed = await this._cvrStore.flush(
+      lc,
       this._orig.version,
       this._cvr,
       lastConnectTime,
     );
-
     if (!flushed) {
       return {cvr: this._orig, flushed: false};
     }
-    const elapsed = performance.now() - start;
-    lc.debug?.(
-      `flushed cvr@${versionString(this._cvr.version)} ` +
-        `${JSON.stringify(flushed)} in (${elapsed} ms)`,
-    );
-    instruments.counters.cvrRowsFlushed.add(flushed.rows);
-    instruments.histograms.cvrFlushTime.record(elapsed);
     return {cvr: this._cvr, flushed};
   }
 }
@@ -176,8 +218,8 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     client = {id, desiredQueryIDs: []};
     this._cvr.clients[id] = client;
 
-    const newVersion = this._ensureNewVersion();
-    this._cvrStore.insertClient(client, newVersion);
+    this._ensureNewVersion();
+    this._cvrStore.insertClient(client);
 
     if (!this._cvr.queries[CLIENT_LMID_QUERY_ID]) {
       const lmidsQuery: InternalQueryRecord = {
@@ -207,6 +249,16 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       this._cvr.queries[CLIENT_LMID_QUERY_ID] = lmidsQuery;
       this._cvrStore.putQuery(lmidsQuery);
     }
+    if (!this._cvr.queries[CLIENT_MUTATION_RESULTS_QUERY_ID]) {
+      const mutationResultsQuery: InternalQueryRecord = getMutationResultsQuery(
+        upstreamSchema(this.#shard),
+        this._cvr.id,
+      );
+      this._cvr.queries[CLIENT_MUTATION_RESULTS_QUERY_ID] =
+        mutationResultsQuery;
+      this._cvrStore.putQuery(mutationResultsQuery);
+    }
+
     return client;
   }
 
@@ -235,7 +287,13 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
   putDesiredQueries(
     clientID: string,
-    queries: Readonly<{hash: string; ast: AST; ttl?: number | undefined}>[],
+    queries: Readonly<{
+      hash: string;
+      ast?: AST | undefined;
+      name?: string | undefined;
+      args?: readonly ReadonlyJSONValue[] | undefined;
+      ttl?: number | undefined;
+    }>[],
   ): PatchToVersion[] {
     const patches: PatchToVersion[] = [];
     const client = this.ensureClient(clientID);
@@ -243,7 +301,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
     // Find the new/changed desired queries.
     const needed: Set<string> = new Set();
-    for (const {hash, ttl = -1} of queries) {
+    for (const {hash, ttl = DEFAULT_TTL_MS} of queries) {
       const query = this._cvr.queries[hash];
       if (!query) {
         needed.add(hash);
@@ -272,28 +330,24 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     client.desiredQueryIDs = [...union(current, needed)].sort(stringCompare);
 
     for (const id of needed) {
-      const {ast, ttl = -1} = must(queries.find(({hash}) => hash === id));
+      const q = must(queries.find(({hash}) => hash === id));
+      const {ast, name, args} = q;
+      const ttl = clampTTL(q.ttl ?? DEFAULT_TTL_MS);
       const query =
-        this._cvr.queries[id] ??
-        ({
-          id,
-          type: 'client',
-          ast,
-          clientState: {},
-        } satisfies ClientQueryRecord);
+        this._cvr.queries[id] ?? newQueryRecord(id, ast, name, args);
       assertNotInternal(query);
 
       const inactivatedAt = undefined;
 
       query.clientState[clientID] = {
         inactivatedAt,
-        ttl: normalizeTTL(ttl),
+        ttl,
         version: newVersion,
       };
       this._cvr.queries[id] = query;
       patches.push({
         toVersion: newVersion,
-        patch: {type: 'query', op: 'put', id, ast, clientID},
+        patch: {type: 'query', op: 'put', id, clientID},
       });
 
       this._cvrStore.putQuery(query);
@@ -303,7 +357,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
         client,
         false,
         inactivatedAt,
-        normalizeTTL(ttl),
+        ttl,
       );
     }
     return patches;
@@ -312,20 +366,9 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
   markDesiredQueriesAsInactive(
     clientID: string,
     queryHashes: string[],
-    now: number,
+    ttlClock: TTLClock,
   ): PatchToVersion[] {
-    return this.#deleteQueries(clientID, queryHashes, now);
-  }
-
-  /**
-   * Returns non active queries in the order that we want to remove them.
-   */
-  getInactiveQueries(): {
-    hash: string;
-    inactivatedAt: number;
-    ttl: number | undefined;
-  }[] {
-    return getInactiveQueries(this._cvr);
+    return this.#deleteQueries(clientID, queryHashes, ttlClock);
   }
 
   deleteDesiredQueries(
@@ -338,7 +381,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
   #deleteQueries(
     clientID: string,
     queryHashes: string[],
-    inactivatedAt: number | undefined,
+    inactivatedAt: TTLClock | undefined,
   ): PatchToVersion[] {
     const patches: PatchToVersion[] = [];
     const client = this.ensureClient(clientID);
@@ -361,21 +404,25 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       }
       assertNotInternal(query);
 
-      let ttl = -1;
+      let ttl = DEFAULT_TTL_MS;
       if (inactivatedAt === undefined) {
         delete query.clientState[clientID];
       } else {
-        const clientState = must(query.clientState[clientID]);
-        assert(
-          clientState.inactivatedAt === undefined,
-          `Query ${id} is already inactivated`,
-        );
-        ({ttl} = clientState);
-        query.clientState[clientID] = {
-          inactivatedAt,
-          ttl,
-          version: newVersion,
-        };
+        // client state can be missing if the query never transformed so we never
+        // recorded it.
+        const clientState = query.clientState[clientID];
+        if (clientState !== undefined) {
+          assert(
+            clientState.inactivatedAt === undefined,
+            `Query ${id} is already inactivated`,
+          );
+          ({ttl} = clientState);
+          query.clientState[clientID] = {
+            inactivatedAt,
+            ttl,
+            version: newVersion,
+          };
+        }
       }
 
       this._cvrStore.putQuery(query);
@@ -400,7 +447,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     return this.#deleteQueries(clientID, client.desiredQueryIDs, undefined);
   }
 
-  deleteClient(clientID: string): PatchToVersion[] {
+  deleteClient(clientID: string, ttlClock: TTLClock): PatchToVersion[] {
     // clientID might not be part of this client group but if it is, this delete
     // may generate changes to the desired queries.
 
@@ -418,7 +465,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     const patches = this.markDesiredQueriesAsInactive(
       clientID,
       client.desiredQueryIDs,
-      Date.now(),
+      ttlClock,
     );
     delete this._cvr.clients[clientID];
     this._cvrStore.deleteClient(clientID);
@@ -430,10 +477,8 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     this._cvrStore.deleteClientGroup(clientGroupID);
   }
 
-  flush(lc: LogContext, lastConnectTime: number, lastActive = Date.now()) {
-    // TODO: Add cleanup of no-longer-desired got queries and constituent rows.
-    return super.flush(lc, lastConnectTime, lastActive);
-  }
+  // TODO: Add cleanup of no-longer-desired got queries and constituent rows in
+  // flush.
 }
 
 type Hash = string;
@@ -509,7 +554,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   trackQueries(
     lc: LogContext,
     executed: {id: string; transformationHash: string}[],
-    removed: {id: string; transformationHash: string}[],
+    removed: {id: string; transformationHash: string | undefined}[],
   ): {newVersion: CVRVersion; queryPatches: PatchToVersion[]} {
     assert(this.#existingRows === undefined, `trackQueries already called`);
 
@@ -585,7 +630,6 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           type: 'query',
           op: 'put',
           id: query.id,
-          ast: query.ast,
         };
       }
 
@@ -864,16 +908,25 @@ function mergeRefCounts(
   return Object.values(merged).some(v => v > 0) ? merged : null;
 }
 
+/**
+ * The query must be inactive for all clients to be considered inactive.
+ * This is because expiration is defined that way: a query is expired for a client group
+ * only if it is expired for all clients in the group.
+ *
+ * If all clients have inactivated the query, we return
+ * the one with the expiration furthest in the future.
+ */
 export function getInactiveQueries(cvr: CVR): {
   hash: string;
-  inactivatedAt: number;
+  inactivatedAt: TTLClock;
   ttl: number;
 }[] {
+  // We no longer support a TTL larger than 10 minutes.
   const inactive: Map<
     string,
     {
       hash: string;
-      inactivatedAt: number;
+      inactivatedAt: TTLClock;
       ttl: number;
     }
   > = new Map();
@@ -882,31 +935,36 @@ export function getInactiveQueries(cvr: CVR): {
       continue;
     }
     for (const clientState of Object.values(query.clientState)) {
+      // 1. Take the longest TTL
+      // 2. If the query is not inactivated (for any client), do not return it
       const {inactivatedAt, ttl} = clientState;
-      if (inactivatedAt !== undefined) {
-        const existing = inactive.get(queryID);
+      const existing = inactive.get(queryID);
+      if (inactivatedAt === undefined) {
         if (existing) {
-          // if one of them have no ttl, then we have no ttl
-          if (existing.ttl < 0 || ttl < 0) {
-            existing.ttl = -1;
-            existing.inactivatedAt = Math.max(
-              existing.inactivatedAt,
-              inactivatedAt,
-            );
-          } else {
-            // pick the one with the last expire
-            if (existing.inactivatedAt + existing.ttl < inactivatedAt + ttl) {
-              existing.inactivatedAt = inactivatedAt;
-              existing.ttl = ttl;
-            }
-          }
-        } else {
-          inactive.set(queryID, {
-            hash: queryID,
-            inactivatedAt,
-            ttl,
-          });
+          inactive.delete(queryID);
         }
+        break;
+      }
+
+      const clampedTTL = clampTTL(ttl);
+      if (existing) {
+        // The stored one might be too large because from a previous version of
+        // zero
+        const existingTTL = clampTTL(existing.ttl);
+        // Use the last eviction time.
+        if (
+          existingTTL + ttlClockAsNumber(existing.inactivatedAt) <
+          ttlClockAsNumber(inactivatedAt) + clampedTTL
+        ) {
+          existing.ttl = clampedTTL;
+          existing.inactivatedAt = inactivatedAt;
+        }
+      } else {
+        inactive.set(queryID, {
+          hash: queryID,
+          inactivatedAt,
+          ttl: clampedTTL,
+        });
       }
     }
   }
@@ -914,32 +972,58 @@ export function getInactiveQueries(cvr: CVR): {
   // First sort all the queries that have TTL. Oldest first.
   return [...inactive.values()].sort((a, b) => {
     if (a.ttl === b.ttl) {
-      return a.inactivatedAt - b.inactivatedAt;
+      return (
+        ttlClockAsNumber(a.inactivatedAt) - ttlClockAsNumber(b.inactivatedAt)
+      );
     }
-    if (a.ttl < 0) {
-      return 1;
-    }
-    if (b.ttl < 0) {
-      return -1;
-    }
-    return a.inactivatedAt + a.ttl - b.inactivatedAt - b.ttl;
+    return (
+      ttlClockAsNumber(a.inactivatedAt) +
+      a.ttl -
+      ttlClockAsNumber(b.inactivatedAt) -
+      b.ttl
+    );
   });
 }
 
-export function nextEvictionTime(cvr: CVR): number | undefined {
+export function nextEvictionTime(cvr: CVR): TTLClock | undefined {
   let next: number | undefined;
   for (const {inactivatedAt, ttl} of getInactiveQueries(cvr)) {
-    if (ttl < 0) {
-      continue;
-    }
-    const expire = inactivatedAt + ttl;
+    const expire = ttlClockAsNumber(inactivatedAt) + ttl;
     if (next === undefined || expire < next) {
       next = expire;
     }
   }
-  return next;
+  return next as TTLClock | undefined;
 }
 
-function normalizeTTL(ttl: number): number {
-  return ttl < 0 ? -1 : ttl;
+function newQueryRecord(
+  id: string,
+  ast: AST | undefined,
+  name: string | undefined,
+  args: readonly ReadonlyJSONValue[] | undefined,
+): ClientQueryRecord | CustomQueryRecord {
+  if (ast !== undefined) {
+    assert(
+      name === undefined && args === undefined,
+      'Cannot provide name or args with ast',
+    );
+    return {
+      id,
+      type: 'client',
+      ast,
+      clientState: {},
+    } satisfies ClientQueryRecord;
+  }
+
+  assert(
+    name !== undefined && args !== undefined,
+    'Must provide name and args',
+  );
+  return {
+    id,
+    type: 'custom',
+    name,
+    args,
+    clientState: {},
+  } satisfies CustomQueryRecord;
 }

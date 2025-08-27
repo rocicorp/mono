@@ -1,15 +1,9 @@
-import {
-  createStore,
-  produce,
-  type SetStoreFunction,
-  type Store,
-} from 'solid-js/store';
+import {produce, reconcile, type SetStoreFunction} from 'solid-js/store';
 import {
   applyChange,
   type Change,
   type Entry,
   type Format,
-  type HumanReadable,
   type Input,
   type Node,
   type Output,
@@ -21,22 +15,22 @@ import {
   type ViewChange,
   type ViewFactory,
 } from '../../zero-client/src/mod.js';
+import {idSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 
 export type QueryResultDetails = {
   readonly type: ResultType;
 };
 
-type State = [Entry, QueryResultDetails];
+export type State = [Entry, QueryResultDetails];
 
-const complete = {type: 'complete'} as const;
-const unknown = {type: 'unknown'} as const;
+export const COMPLETE: QueryResultDetails = Object.freeze({type: 'complete'});
+export const UNKNOWN: QueryResultDetails = Object.freeze({type: 'unknown'});
 
-export class SolidView<V> implements Output {
+export class SolidView implements Output {
   readonly #input: Input;
   readonly #format: Format;
   readonly #onDestroy: () => void;
 
-  #state: Store<State>;
   #setState: SetStoreFunction<State>;
 
   // Optimization: if the store is currently empty we build up
@@ -58,6 +52,7 @@ export class SolidView<V> implements Output {
     onDestroy: () => void,
     queryComplete: true | Promise<true>,
     updateTTL: (ttl: TTL) => void,
+    setState: SetStoreFunction<State>,
   ) {
     this.#input = input;
     onTransactionCommit(this.#onTransactionCommit);
@@ -73,27 +68,24 @@ export class SolidView<V> implements Output {
       node => ({type: 'add', node}),
       initialRoot,
     );
-    [this.#state, this.#setState] = createStore<State>([
-      initialRoot,
-      queryComplete === true ? complete : unknown,
-    ]);
+
+    this.#setState = setState;
+    this.#setState(
+      reconcile([initialRoot, queryComplete === true ? COMPLETE : UNKNOWN], {
+        // solidjs's types want a string, but a symbol works
+        key: idSymbol as unknown as string,
+      }),
+    );
+
     if (isEmptyRoot(initialRoot)) {
       this.#builderRoot = this.#createEmptyRoot();
     }
 
     if (queryComplete !== true) {
       void queryComplete.then(() => {
-        this.#setState(oldState => [oldState[0], complete]);
+        this.#setState(prev => [prev[0], COMPLETE]);
       });
     }
-  }
-
-  get data(): V {
-    return this.#state[0][''] as V;
-  }
-
-  get resultDetails(): QueryResultDetails {
-    return this.#state[1];
   }
 
   destroy(): void {
@@ -104,7 +96,14 @@ export class SolidView<V> implements Output {
     const builderRoot = this.#builderRoot;
     if (builderRoot) {
       if (!isEmptyRoot(builderRoot)) {
-        this.#setState(oldState => [builderRoot, oldState[1]]);
+        this.#setState(
+          0,
+          reconcile(builderRoot, {
+            // solidjs's types want a string, but a symbol works
+            key: idSymbol as unknown as string,
+          }),
+        );
+        this.#setState(prev => [builderRoot, prev[1]]);
         this.#builderRoot = undefined;
       }
     } else {
@@ -152,7 +151,14 @@ export class SolidView<V> implements Output {
   }
 
   #applyChangeToRoot(change: ViewChange, root: Entry) {
-    applyChange(root, change, this.#input.getSchema(), '', this.#format);
+    applyChange(
+      root,
+      change,
+      this.#input.getSchema(),
+      '',
+      this.#format,
+      true /* withIDs */,
+    );
   }
 
   #createEmptyRoot(): Entry {
@@ -210,27 +216,32 @@ function isEmptyRoot(entry: Entry) {
   return data === undefined || (Array.isArray(data) && data.length === 0);
 }
 
-export function solidViewFactory<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
->(
-  _query: Query<TSchema, TTable, TReturn>,
-  input: Input,
-  format: Format,
-  onDestroy: () => void,
-  onTransactionCommit: (cb: () => void) => void,
-  queryComplete: true | Promise<true>,
-  updateTTL: (ttl: TTL) => void,
-) {
-  return new SolidView<HumanReadable<TReturn>>(
-    input,
-    onTransactionCommit,
-    format,
-    onDestroy,
-    queryComplete,
-    updateTTL,
-  );
-}
+export function createSolidViewFactory(setState: SetStoreFunction<State>) {
+  function solidViewFactory<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+  >(
+    _query: Query<TSchema, TTable, TReturn>,
+    input: Input,
+    format: Format,
+    onDestroy: () => void,
+    onTransactionCommit: (cb: () => void) => void,
+    queryComplete: true | Promise<true>,
+    updateTTL: (ttl: TTL) => void,
+  ) {
+    return new SolidView(
+      input,
+      onTransactionCommit,
+      format,
+      onDestroy,
+      queryComplete,
+      updateTTL,
+      setState,
+    );
+  }
 
-solidViewFactory satisfies ViewFactory<Schema, string, unknown, unknown>;
+  solidViewFactory satisfies ViewFactory<Schema, string, unknown, unknown>;
+
+  return solidViewFactory;
+}

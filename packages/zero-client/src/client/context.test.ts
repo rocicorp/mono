@@ -9,7 +9,14 @@ import {Catch} from '../../../zql/src/ivm/catch.ts';
 import {Join} from '../../../zql/src/ivm/join.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
-import {ZeroContext, type AddQuery, type UpdateQuery} from './context.ts';
+import {
+  ZeroContext,
+  type AddCustomQuery,
+  type AddQuery,
+  type FlushQueryChanges,
+  type UpdateCustomQuery,
+  type UpdateQuery,
+} from './context.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
 
@@ -40,9 +47,12 @@ test('getSource', () => {
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
+    null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
+    null as unknown as UpdateCustomQuery,
+    null as unknown as FlushQueryChanges,
     testBatchViewUpdates,
-    5_000,
+    () => {},
     assertValidRunOptions,
   );
 
@@ -114,9 +124,12 @@ test('processChanges', () => {
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
+    null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
+    null as unknown as UpdateCustomQuery,
+    null as unknown as FlushQueryChanges,
     testBatchViewUpdates,
-    5_000,
+    () => {},
     assertValidRunOptions,
   );
   const out = new Catch(
@@ -181,9 +194,12 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
+    null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
+    null as unknown as UpdateCustomQuery,
+    null as unknown as FlushQueryChanges,
     batchViewUpdates,
-    5_000,
+    () => {},
     assertValidRunOptions,
   );
   const out = new Catch(
@@ -237,9 +253,12 @@ test('transactions', () => {
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
+    null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
+    null as unknown as UpdateCustomQuery,
+    null as unknown as FlushQueryChanges,
     testBatchViewUpdates,
-    5_000,
+    () => {},
     assertValidRunOptions,
   );
   const servers = context.getSource('server')!;
@@ -314,9 +333,12 @@ test('batchViewUpdates errors if applyViewUpdates is not called', () => {
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
+    null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
+    null as unknown as UpdateCustomQuery,
+    null as unknown as FlushQueryChanges,
     batchViewUpdates,
-    5_000,
+    () => {},
     assertValidRunOptions,
   );
 
@@ -335,9 +357,12 @@ test('batchViewUpdates returns value', () => {
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
     null as unknown as AddQuery,
+    null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
+    null as unknown as UpdateCustomQuery,
+    null as unknown as FlushQueryChanges,
     batchViewUpdates,
-    5_000,
+    () => {},
     assertValidRunOptions,
   );
 

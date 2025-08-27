@@ -33,8 +33,8 @@ export default {
       }
       return undefined;
     },
-    include: ['src/**/*.{test,spec}.?(c|m)[jt]s?(x)'],
-    silent: true,
+    include: ['src/**/*.{test,spec}{,.node}.?(c|m)[jt]s?(x)'],
+    silent: 'passed-only',
     browser: {
       enabled: true,
       provider: 'playwright',
@@ -42,7 +42,7 @@ export default {
       screenshotFailures: false,
       instances: [
         {browser: 'chromium'},
-        // {browser: 'firefox'},
+        {browser: 'firefox'},
         {browser: 'webkit'},
       ],
     },

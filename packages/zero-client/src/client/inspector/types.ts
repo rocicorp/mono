@@ -1,5 +1,5 @@
 import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
-import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {TTL} from '../../../../zql/src/query/ttl.ts';
 
@@ -7,11 +7,21 @@ export interface GetInspector {
   inspect(): Promise<Inspector>;
 }
 
+export type Metrics = {
+  'query-materialization-client': ReadonlyTDigest;
+  'query-materialization-end-to-end': ReadonlyTDigest;
+  'query-update-client': ReadonlyTDigest;
+  'query-materialization-server': ReadonlyTDigest;
+  'query-update-server': ReadonlyTDigest;
+};
+
 export interface Inspector {
   readonly client: Client;
   readonly clientGroup: ClientGroup;
   clients(): Promise<Client[]>;
   clientsWithQueries(): Promise<Client[]>;
+  metrics(): Promise<Metrics>;
+  serverVersion(): Promise<string>;
 }
 
 export interface Client {
@@ -30,7 +40,8 @@ export interface ClientGroup {
 }
 
 export interface Query {
-  readonly ast: AST;
+  readonly name: string | null;
+  readonly args: ReadonlyArray<ReadonlyJSONValue> | null;
   readonly clientID: string;
   readonly deleted: boolean;
   readonly got: boolean;
@@ -38,5 +49,7 @@ export interface Query {
   readonly inactivatedAt: Date | null;
   readonly rowCount: number;
   readonly ttl: TTL;
-  readonly zql: string;
+  readonly clientZQL: string | null;
+  readonly serverZQL: string | null;
+  readonly metrics: Metrics | null;
 }

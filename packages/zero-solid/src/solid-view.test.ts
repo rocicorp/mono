@@ -13,9 +13,12 @@ import type {Input} from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
 import {Take} from '../../zql/src/ivm/take.ts';
 import {createSource} from '../../zql/src/ivm/test/source-factory.ts';
-import {refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
-import type {HumanReadable, Query} from '../../zql/src/query/query.ts';
-import {SolidView, solidViewFactory} from './solid-view.ts';
+import {idSymbol, refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
+import type {Query} from '../../zql/src/query/query.ts';
+import {SolidView, createSolidViewFactory, type State} from './solid-view.ts';
+import {createStore} from 'solid-js/store';
+import type {EntryList} from '../../zql/src/ivm/view.ts';
+import {createEffect} from 'solid-js';
 
 const lc = createSilentLogContext();
 
@@ -35,8 +38,15 @@ test('basics', () => {
   const format = {singular: false, relationships: {}};
   const onDestroy = () => {};
   const queryComplete = true;
+  const [state, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    {type: 'unknown'},
+  ]);
+  const data = () => state[0][''];
 
-  const view = new SolidView(
+  new SolidView(
     ms.connect([
       ['b', 'asc'],
       ['a', 'asc'],
@@ -46,42 +56,43 @@ test('basics', () => {
     onDestroy,
     queryComplete,
     () => {},
+    setState,
   );
 
-  const state0 = [
-    {a: 1, b: 'a', [refCountSymbol]: 1},
-    {a: 2, b: 'b', [refCountSymbol]: 1},
+  const data0 = [
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {a: 2, b: 'b', [refCountSymbol]: 1, [idSymbol]: '2'},
   ];
-  expect(view.data).toEqual(state0);
+  expect(data()).toEqual(data0);
 
-  expect(view.resultDetails).toEqual({type: 'complete'});
+  expect(state[1]).toEqual({type: 'complete'});
 
   ms.push({row: {a: 3, b: 'c'}, type: 'add'});
-  expect(view.data).toEqual(state0);
+  expect(data()).toEqual(data0);
   commit();
 
-  const state1 = [
-    {a: 1, b: 'a', [refCountSymbol]: 1},
-    {a: 2, b: 'b', [refCountSymbol]: 1},
-    {a: 3, b: 'c', [refCountSymbol]: 1},
+  const data1 = [
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {a: 2, b: 'b', [refCountSymbol]: 1, [idSymbol]: '2'},
+    {a: 3, b: 'c', [refCountSymbol]: 1, [idSymbol]: '3'},
   ];
-  expect(view.data).toEqual(state1);
+  expect(data()).toEqual(data1);
 
   ms.push({row: {a: 2, b: 'b'}, type: 'remove'});
   ms.push({row: {a: 1, b: 'a'}, type: 'remove'});
 
-  expect(view.data).toEqual(state1);
+  expect(data()).toEqual(data1);
   commit();
 
-  const state2 = [{a: 3, b: 'c', [refCountSymbol]: 1}];
-  expect(view.data).toEqual(state2);
+  const data2 = [{a: 3, b: 'c', [refCountSymbol]: 1, [idSymbol]: '3'}];
+  expect(data()).toEqual(data2);
 
   ms.push({row: {a: 3, b: 'c'}, type: 'remove'});
 
-  expect(view.data).toEqual(state2);
+  expect(data()).toEqual(data2);
   commit();
 
-  expect(view.data).toEqual([]);
+  expect(data()).toEqual([]);
 });
 
 test('single-format', () => {
@@ -97,7 +108,15 @@ test('single-format', () => {
     commit = cb;
   };
 
-  const view = new SolidView(
+  const [state, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    {type: 'unknown'},
+  ]);
+  const data = () => state[0][''];
+
+  new SolidView(
     ms.connect([
       ['b', 'asc'],
       ['a', 'asc'],
@@ -107,10 +126,11 @@ test('single-format', () => {
     () => {},
     true,
     () => {},
+    setState,
   );
 
-  const state0 = {a: 1, b: 'a', [refCountSymbol]: 1};
-  expect(view.data).toEqual(state0);
+  const data0 = {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'};
+  expect(data()).toEqual(data0);
 
   // trying to add another element should be an error
   // pipeline should have been configured with a limit of one
@@ -125,10 +145,10 @@ test('single-format', () => {
   // in the Source. This case is tested in view-apply-change.ts.
 
   ms.push({row: {a: 1, b: 'a'}, type: 'remove'});
-  expect(view.data).toEqual(state0);
+  expect(data()).toEqual(data0);
   commit();
 
-  expect(view.data).toEqual(undefined);
+  expect(data()).toEqual(undefined);
 });
 
 test('hydrate-empty', () => {
@@ -144,7 +164,15 @@ test('hydrate-empty', () => {
   const onDestroy = () => {};
   const queryComplete = true;
 
-  const view = new SolidView(
+  const [state, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    {type: 'unknown'},
+  ]);
+  const data = () => state[0][''];
+
+  new SolidView(
     ms.connect([
       ['b', 'asc'],
       ['a', 'asc'],
@@ -154,9 +182,10 @@ test('hydrate-empty', () => {
     onDestroy,
     queryComplete,
     () => {},
+    setState,
   );
 
-  expect(view.data).toEqual([]);
+  expect(data()).toEqual([]);
 });
 
 test('tree', () => {
@@ -206,7 +235,15 @@ test('tree', () => {
     commit = cb;
   };
 
-  const view = new SolidView(
+  const [state, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    {type: 'unknown'},
+  ]);
+  const data = () => state[0][''];
+
+  new SolidView(
     join,
     onTransactionCommit,
     {
@@ -216,9 +253,10 @@ test('tree', () => {
     () => {},
     true,
     () => {},
+    setState,
   );
 
-  const state0 = [
+  const data0 = [
     {
       id: 1,
       name: 'foo',
@@ -229,9 +267,11 @@ test('tree', () => {
           name: 'foobar',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 2,
@@ -239,6 +279,7 @@ test('tree', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
     {
       id: 3,
@@ -250,9 +291,11 @@ test('tree', () => {
           name: 'monkey',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '4',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '3',
     },
     {
       id: 4,
@@ -260,15 +303,16 @@ test('tree', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '4',
     },
   ];
-  expect(view.data).toEqual(state0);
+  expect(data()).toEqual(data0);
 
   // add parent with child
   ms.push({type: 'add', row: {id: 5, name: 'chocolate', childID: 2}});
-  expect(view.data).toEqual(state0);
+  expect(data()).toEqual(data0);
   commit();
-  const state1 = [
+  const data1 = [
     {
       id: 5,
       name: 'chocolate',
@@ -279,9 +323,11 @@ test('tree', () => {
           name: 'foobar',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '5',
     },
     {
       id: 1,
@@ -293,9 +339,11 @@ test('tree', () => {
           name: 'foobar',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 2,
@@ -303,6 +351,7 @@ test('tree', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
     {
       id: 3,
@@ -314,9 +363,11 @@ test('tree', () => {
           name: 'monkey',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '4',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '3',
     },
     {
       id: 4,
@@ -324,15 +375,16 @@ test('tree', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '4',
     },
   ];
-  expect(view.data).toEqual(state1);
+  expect(data()).toEqual(data1);
 
   // remove parent with child
   ms.push({type: 'remove', row: {id: 5, name: 'chocolate', childID: 2}});
-  expect(view.data).toEqual(state1);
+  expect(data()).toEqual(data1);
   commit();
-  const state2 = [
+  const data2 = [
     {
       id: 1,
       name: 'foo',
@@ -343,9 +395,11 @@ test('tree', () => {
           name: 'foobar',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 2,
@@ -353,6 +407,7 @@ test('tree', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
     {
       id: 3,
@@ -364,9 +419,11 @@ test('tree', () => {
           name: 'monkey',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '4',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '3',
     },
     {
       id: 4,
@@ -374,9 +431,10 @@ test('tree', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '4',
     },
   ];
-  expect(view.data).toEqual(state2);
+  expect(data()).toEqual(data2);
 
   // remove just child
   ms.push({
@@ -387,15 +445,16 @@ test('tree', () => {
       childID: null,
     },
   });
-  expect(view.data).toEqual(state2);
+  expect(data()).toEqual(data2);
   commit();
-  const state3 = [
+  const data3 = [
     {
       id: 1,
       name: 'foo',
       childID: 2,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 3,
@@ -407,9 +466,11 @@ test('tree', () => {
           name: 'monkey',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '4',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '3',
     },
     {
       id: 4,
@@ -417,9 +478,10 @@ test('tree', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '4',
     },
   ];
-  expect(view.data).toEqual(state3);
+  expect(data()).toEqual(data3);
 
   // add child
   ms.push({
@@ -430,9 +492,9 @@ test('tree', () => {
       childID: null,
     },
   });
-  expect(view.data).toEqual(state3);
+  expect(data()).toEqual(data3);
   commit();
-  expect(view.data).toEqual([
+  expect(data()).toEqual([
     {
       id: 1,
       name: 'foo',
@@ -443,9 +505,11 @@ test('tree', () => {
           name: 'foobaz',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 2,
@@ -453,6 +517,7 @@ test('tree', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
     {
       id: 3,
@@ -464,9 +529,11 @@ test('tree', () => {
           name: 'monkey',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '4',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '3',
     },
     {
       id: 4,
@@ -474,6 +541,7 @@ test('tree', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '4',
     },
   ]);
 });
@@ -523,7 +591,15 @@ test('tree-single', () => {
     commit = cb;
   };
 
-  const view = new SolidView(
+  const [state, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    {type: 'unknown'},
+  ]);
+  const data = () => state[0][''];
+
+  new SolidView(
     join,
     onTransactionCommit,
     {
@@ -533,9 +609,10 @@ test('tree-single', () => {
     () => {},
     true,
     () => {},
+    setState,
   );
 
-  const state0 = {
+  const data0 = {
     id: 1,
     name: 'foo',
     childID: 2,
@@ -544,10 +621,12 @@ test('tree-single', () => {
       name: 'foobar',
       childID: null,
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
     [refCountSymbol]: 1,
+    [idSymbol]: '1',
   };
-  expect(view.data).toEqual(state0);
+  expect(data()).toEqual(data0);
 
   // remove the child
   ms.push({
@@ -555,17 +634,18 @@ test('tree-single', () => {
     row: {id: 2, name: 'foobar', childID: null},
   });
 
-  expect(view.data).toEqual(state0);
+  expect(data()).toEqual(data0);
   commit();
 
-  const state1 = {
+  const data1 = {
     id: 1,
     name: 'foo',
     childID: 2,
     child: undefined,
     [refCountSymbol]: 1,
+    [idSymbol]: '1',
   };
-  expect(view.data).toEqual(state1);
+  expect(data()).toEqual(data1);
 
   // remove the parent
   ms.push({
@@ -573,9 +653,9 @@ test('tree-single', () => {
     row: {id: 1, name: 'foo', childID: 2},
   });
 
-  expect(view.data).toEqual(state1);
+  expect(data()).toEqual(data1);
   commit();
-  expect(view.data).toEqual(undefined);
+  expect(data()).toEqual(undefined);
 });
 
 test('collapse', () => {
@@ -642,6 +722,14 @@ test('collapse', () => {
     commit = cb;
   };
 
+  const [state, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    {type: 'unknown'},
+  ]);
+  const data = () => state[0][''];
+
   const view = new SolidView(
     input,
     onTransactionCommit,
@@ -652,10 +740,11 @@ test('collapse', () => {
     () => {},
     true,
     () => {},
+    setState,
   );
 
-  const state0: unknown[] = [];
-  expect(view.data).toEqual(state0);
+  const data0: unknown[] = [];
+  expect(data()).toEqual(data0);
 
   const changeSansType = {
     node: {
@@ -693,10 +782,10 @@ test('collapse', () => {
     type: 'add',
     ...changeSansType,
   });
-  expect(view.data).toEqual(state0);
+  expect(data()).toEqual(data0);
   commit();
 
-  const state1 = [
+  const data1 = [
     {
       id: 1,
       labels: [
@@ -704,23 +793,25 @@ test('collapse', () => {
           id: 1,
           name: 'label',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
       ],
       name: 'issue',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
   ];
-  expect(view.data).toEqual(state1);
+  expect(data()).toEqual(data1);
 
   view.push({
     type: 'remove',
     ...changeSansType,
   });
-  expect(view.data).toEqual(state1);
+  expect(data()).toEqual(data1);
   commit();
 
-  const state2: unknown[] = [];
-  expect(view.data).toEqual(state2);
+  const data2: unknown[] = [];
+  expect(data()).toEqual(data2);
 
   view.push({
     type: 'add',
@@ -728,7 +819,7 @@ test('collapse', () => {
   });
   // no commit
 
-  expect(view.data).toEqual(state2);
+  expect(data()).toEqual(data2);
 
   view.push({
     type: 'child',
@@ -807,10 +898,10 @@ test('collapse', () => {
     },
   });
 
-  expect(view.data).toEqual(state2);
+  expect(data()).toEqual(data2);
   commit();
 
-  const state3 = [
+  const data3 = [
     {
       id: 1,
       labels: [
@@ -818,18 +909,21 @@ test('collapse', () => {
           id: 1,
           name: 'label',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
         {
           id: 2,
           name: 'label2',
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       name: 'issue',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
   ];
-  expect(view.data).toEqual(state3);
+  expect(data()).toEqual(data3);
 
   // edit the hidden row
   view.push({
@@ -927,7 +1021,7 @@ test('collapse', () => {
       },
     },
   });
-  expect(view.data).toEqual(state3);
+  expect(data()).toEqual(data3);
   commit();
 
   const state4 = [
@@ -938,18 +1032,21 @@ test('collapse', () => {
           id: 1,
           name: 'label',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
         {
           id: 2,
           name: 'label2',
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       name: 'issue',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
   ];
-  expect(view.data).toEqual(state4);
+  expect(data()).toEqual(state4);
 
   // edit the leaf
   view.push({
@@ -1048,10 +1145,10 @@ test('collapse', () => {
       },
     },
   });
-  expect(view.data).toEqual(state4);
+  expect(data()).toEqual(state4);
   commit();
 
-  expect(view.data).toEqual([
+  expect(data()).toEqual([
     {
       id: 1,
       labels: [
@@ -1059,15 +1156,18 @@ test('collapse', () => {
           id: 1,
           name: 'label',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
         {
           id: 2,
           name: 'label2x',
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       name: 'issue',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
   ]);
 });
@@ -1138,6 +1238,14 @@ test('collapse-single', () => {
     commit = cb;
   };
 
+  const [state, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    {type: 'unknown'},
+  ]);
+  const data = () => state[0][''];
+
   const view = new SolidView(
     input,
     onTransactionCommit,
@@ -1148,10 +1256,11 @@ test('collapse-single', () => {
     () => {},
     true,
     () => {},
+    setState,
   );
 
-  const state0: unknown[] = [];
-  expect(view.data).toEqual(state0);
+  const data0: unknown[] = [];
+  expect(data()).toEqual(data0);
 
   const changeSansType = {
     node: {
@@ -1188,19 +1297,21 @@ test('collapse-single', () => {
     ...changeSansType,
   });
 
-  expect(view.data).toEqual(state0);
+  expect(data()).toEqual(data0);
   commit();
 
-  expect(view.data).toEqual([
+  expect(data()).toEqual([
     {
       id: 1,
       labels: {
         id: 1,
         name: 'label',
         [refCountSymbol]: 1,
+        [idSymbol]: '1',
       },
       name: 'issue',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
   ]);
 });
@@ -1221,40 +1332,194 @@ test('basic with edit pushes', () => {
     commit = cb;
   };
 
-  const view = new SolidView(
+  const [state, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    {type: 'unknown'},
+  ]);
+  const data = () => state[0][''];
+
+  new SolidView(
     ms.connect([['id', 'asc']]),
     onTransactionCommit,
     {singular: false, relationships: {}},
     () => {},
     true,
     () => {},
+    setState,
   );
 
-  const state0 = [
-    {id: 1, b: 'a', [refCountSymbol]: 1},
-    {id: 2, b: 'b', [refCountSymbol]: 1},
+  const data0 = [
+    {id: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {id: 2, b: 'b', [refCountSymbol]: 1, [idSymbol]: '2'},
   ];
-  expect(view.data).toEqual(state0);
+  expect(data()).toEqual(data0);
 
   ms.push({type: 'edit', row: {id: 2, b: 'b2'}, oldRow: {id: 2, b: 'b'}});
 
-  expect(view.data).toEqual(state0);
+  expect(data()).toEqual(data0);
   commit();
 
-  const state1 = [
-    {id: 1, b: 'a', [refCountSymbol]: 1},
-    {id: 2, b: 'b2', [refCountSymbol]: 1},
+  const data1 = [
+    {id: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {id: 2, b: 'b2', [refCountSymbol]: 1, [idSymbol]: '2'},
   ];
-  expect(view.data).toEqual(state1);
+  expect(data()).toEqual(data1);
 
   ms.push({type: 'edit', row: {id: 3, b: 'b3'}, oldRow: {id: 2, b: 'b2'}});
 
-  expect(view.data).toEqual(state1);
+  expect(data()).toEqual(data1);
   commit();
-  expect(view.data).toEqual([
-    {id: 1, b: 'a', [refCountSymbol]: 1},
-    {id: 3, b: 'b3', [refCountSymbol]: 1},
+  expect(data()).toEqual([
+    {id: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {id: 3, b: 'b3', [refCountSymbol]: 1, [idSymbol]: '3'},
   ]);
+});
+
+test('edit trigger reactivity at the column level', () => {
+  const ms = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
+  ms.push({row: {a: 2, b: 'b'}, type: 'add'});
+
+  let commit: () => void = () => {};
+  const onTransactionCommit = (cb: () => void): void => {
+    commit = cb;
+  };
+
+  const [state, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    {type: 'unknown'},
+  ]);
+  const data = () => state[0][''] as EntryList;
+
+  const row0Log: unknown[] = [];
+  const row1Log: unknown[] = [];
+  const row0ALog: unknown[] = [];
+  const row0BLog: unknown[] = [];
+  const row1ALog: unknown[] = [];
+  const row1BLog: unknown[] = [];
+
+  function clearLog() {
+    row0Log.length = 0;
+    row1Log.length = 0;
+    row0ALog.length = 0;
+    row0BLog.length = 0;
+    row1ALog.length = 0;
+    row1BLog.length = 0;
+  }
+
+  new SolidView(
+    ms.connect([['a', 'asc']]),
+    onTransactionCommit,
+    {singular: false, relationships: {}},
+    () => {},
+    true,
+    () => {},
+    setState,
+  );
+
+  createEffect(() => {
+    row0Log.push(data()[0]);
+  });
+  createEffect(() => {
+    row1Log.push(data()[1]);
+  });
+  createEffect(() => {
+    row0ALog.push(data()[0]?.a);
+  });
+  createEffect(() => {
+    row0BLog.push(data()[0]?.b);
+  });
+  createEffect(() => {
+    row1ALog.push(data()[1]?.a);
+  });
+  createEffect(() => {
+    row1BLog.push(data()[1]?.b);
+  });
+
+  const data0 = [
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {a: 2, b: 'b', [refCountSymbol]: 1, [idSymbol]: '2'},
+  ];
+  expect(data()).toEqual(data0);
+  expect(row0Log).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+  ]);
+  expect(row1Log).toEqual([
+    {a: 2, b: 'b', [refCountSymbol]: 1, [idSymbol]: '2'},
+  ]);
+  expect(row0ALog).toEqual([1]);
+  expect(row0BLog).toEqual(['a']);
+  expect(row1ALog).toEqual([2]);
+  expect(row1BLog).toEqual(['b']);
+
+  clearLog();
+
+  ms.push({type: 'edit', row: {a: 2, b: 'b2'}, oldRow: {a: 2, b: 'b'}});
+
+  expect(data()).toEqual(data0);
+  commit();
+
+  const data1 = [
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {a: 2, b: 'b2', [refCountSymbol]: 1, [idSymbol]: '2'},
+  ];
+  expect(data()).toEqual(data1);
+  expect(row0Log).toEqual([]);
+  expect(row1Log).toEqual([]);
+  expect(row0ALog).toEqual([]);
+  expect(row0BLog).toEqual([]);
+  expect(row1ALog).toEqual([]);
+  expect(row1BLog).toEqual(['b2']);
+
+  clearLog();
+
+  ms.push({type: 'edit', row: {a: 3, b: 'b3'}, oldRow: {a: 2, b: 'b2'}});
+
+  expect(data()).toEqual(data1);
+  commit();
+  const data2 = [
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {a: 3, b: 'b3', [refCountSymbol]: 1, [idSymbol]: '3'},
+  ];
+  expect(data()).toEqual(data2);
+  expect(row0Log).toEqual([]);
+  expect(row1Log).toEqual([]);
+  expect(row0ALog).toEqual([]);
+  expect(row0BLog).toEqual([]);
+  expect(row1ALog).toEqual([3]);
+  expect(row1BLog).toEqual(['b3']);
+
+  clearLog();
+
+  ms.push({type: 'edit', row: {a: 0, b: 'b3'}, oldRow: {a: 3, b: 'b3'}});
+
+  expect(data()).toEqual(data2);
+  commit();
+  const data3 = [
+    {a: 0, b: 'b3', [refCountSymbol]: 1, [idSymbol]: '0'},
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+  ];
+  expect(data()).toEqual(data3);
+  expect(row0Log).toEqual([
+    {a: 0, b: 'b3', [refCountSymbol]: 1, [idSymbol]: '0'},
+  ]);
+  expect(row1Log).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+  ]);
+  expect(row0ALog).toEqual([0]);
+  expect(row0BLog).toEqual(['b3']);
+  expect(row1ALog).toEqual([1]);
+  expect(row1BLog).toEqual(['a']);
 });
 
 test('tree edit', () => {
@@ -1301,7 +1566,15 @@ test('tree edit', () => {
     commit = cb;
   };
 
-  const view = new SolidView(
+  const [state, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    {type: 'unknown'},
+  ]);
+  const data = () => state[0][''];
+
+  new SolidView(
     join,
     onTransactionCommit,
     {
@@ -1311,9 +1584,10 @@ test('tree edit', () => {
     () => {},
     true,
     () => {},
+    setState,
   );
 
-  const state0 = [
+  const data0 = [
     {
       id: 1,
       name: 'foo',
@@ -1326,9 +1600,11 @@ test('tree edit', () => {
           data: 'b',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 2,
@@ -1337,6 +1613,7 @@ test('tree edit', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
     {
       id: 3,
@@ -1350,9 +1627,11 @@ test('tree edit', () => {
           data: 'd',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '4',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '3',
     },
     {
       id: 4,
@@ -1361,9 +1640,10 @@ test('tree edit', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '4',
     },
   ];
-  expect(view.data).toEqual(state0);
+  expect(data()).toEqual(data0);
 
   // Edit root
   ms.push({
@@ -1372,10 +1652,10 @@ test('tree edit', () => {
     row: {id: 1, name: 'foo', data: 'a2', childID: 2},
   });
 
-  expect(view.data).toEqual(state0);
+  expect(data()).toEqual(data0);
   commit();
 
-  const state1 = [
+  const data1 = [
     {
       id: 1,
       name: 'foo',
@@ -1388,9 +1668,11 @@ test('tree edit', () => {
           data: 'b',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 2,
@@ -1399,6 +1681,7 @@ test('tree edit', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
     {
       id: 3,
@@ -1412,9 +1695,11 @@ test('tree edit', () => {
           data: 'd',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '4',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '3',
     },
     {
       id: 4,
@@ -1423,9 +1708,10 @@ test('tree edit', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '4',
     },
   ];
-  expect(view.data).toEqual(state1);
+  expect(data()).toEqual(data1);
 
   // Edit leaf
   ms.push({
@@ -1444,11 +1730,11 @@ test('tree edit', () => {
     },
   });
 
-  expect(view.data).toEqual(state1);
+  expect(data()).toEqual(data1);
 
   commit();
 
-  const state2 = [
+  const data2 = [
     {
       id: 1,
       name: 'foo',
@@ -1461,9 +1747,11 @@ test('tree edit', () => {
           data: 'b',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 2,
@@ -1472,6 +1760,7 @@ test('tree edit', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
     {
       id: 3,
@@ -1485,9 +1774,11 @@ test('tree edit', () => {
           data: 'd2',
           childID: null,
           [refCountSymbol]: 1,
+          [idSymbol]: '4',
         },
       ],
       [refCountSymbol]: 1,
+      [idSymbol]: '3',
     },
     {
       id: 4,
@@ -1496,10 +1787,11 @@ test('tree edit', () => {
       childID: null,
       children: [],
       [refCountSymbol]: 1,
+      [idSymbol]: '4',
     },
   ];
 
-  expect(view.data).toEqual(state2);
+  expect(data()).toEqual(data2);
 });
 
 test('edit to change the order', () => {
@@ -1523,21 +1815,30 @@ test('edit to change the order', () => {
     commit = cb;
   };
 
-  const view = new SolidView(
+  const [state, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    {type: 'unknown'},
+  ]);
+  const data = () => state[0][''];
+
+  new SolidView(
     ms.connect([['a', 'asc']]),
     onTransactionCommit,
     {singular: false, relationships: {}},
     () => {},
     true,
     () => {},
+    setState,
   );
 
-  const state0 = [
-    {a: 10, b: 'a', [refCountSymbol]: 1},
-    {a: 20, b: 'b', [refCountSymbol]: 1},
-    {a: 30, b: 'c', [refCountSymbol]: 1},
+  const data0 = [
+    {a: 10, b: 'a', [refCountSymbol]: 1, [idSymbol]: '10'},
+    {a: 20, b: 'b', [refCountSymbol]: 1, [idSymbol]: '20'},
+    {a: 30, b: 'c', [refCountSymbol]: 1, [idSymbol]: '30'},
   ];
-  expect(view.data).toEqual(state0);
+  expect(data()).toEqual(data0);
 
   ms.push({
     type: 'edit',
@@ -1545,15 +1846,15 @@ test('edit to change the order', () => {
     row: {a: 5, b: 'b2'},
   });
 
-  expect(view.data).toEqual(state0);
+  expect(data()).toEqual(data0);
   commit();
 
-  const state1 = [
-    {a: 5, b: 'b2', [refCountSymbol]: 1},
-    {a: 10, b: 'a', [refCountSymbol]: 1},
-    {a: 30, b: 'c', [refCountSymbol]: 1},
+  const data1 = [
+    {a: 5, b: 'b2', [refCountSymbol]: 1, [idSymbol]: '5'},
+    {a: 10, b: 'a', [refCountSymbol]: 1, [idSymbol]: '10'},
+    {a: 30, b: 'c', [refCountSymbol]: 1, [idSymbol]: '30'},
   ];
-  expect(view.data).toEqual(state1);
+  expect(data()).toEqual(data1);
 
   ms.push({
     type: 'edit',
@@ -1561,15 +1862,15 @@ test('edit to change the order', () => {
     row: {a: 4, b: 'b3'},
   });
 
-  expect(view.data).toEqual(state1);
+  expect(data()).toEqual(data1);
   commit();
 
-  const state2 = [
-    {a: 4, b: 'b3', [refCountSymbol]: 1},
-    {a: 10, b: 'a', [refCountSymbol]: 1},
-    {a: 30, b: 'c', [refCountSymbol]: 1},
+  const data2 = [
+    {a: 4, b: 'b3', [refCountSymbol]: 1, [idSymbol]: '4'},
+    {a: 10, b: 'a', [refCountSymbol]: 1, [idSymbol]: '10'},
+    {a: 30, b: 'c', [refCountSymbol]: 1, [idSymbol]: '30'},
   ];
-  expect(view.data).toEqual(state2);
+  expect(data()).toEqual(data2);
 
   ms.push({
     type: 'edit',
@@ -1577,13 +1878,13 @@ test('edit to change the order', () => {
     row: {a: 20, b: 'b4'},
   });
 
-  expect(view.data).toEqual(state2);
+  expect(data()).toEqual(data2);
   commit();
 
-  expect(view.data).toEqual([
-    {a: 10, b: 'a', [refCountSymbol]: 1},
-    {a: 20, b: 'b4', [refCountSymbol]: 1},
-    {a: 30, b: 'c', [refCountSymbol]: 1},
+  expect(data()).toEqual([
+    {a: 10, b: 'a', [refCountSymbol]: 1, [idSymbol]: '10'},
+    {a: 20, b: 'b4', [refCountSymbol]: 1, [idSymbol]: '20'},
+    {a: 30, b: 'c', [refCountSymbol]: 1, [idSymbol]: '30'},
   ]);
 });
 
@@ -1632,6 +1933,14 @@ test('edit to preserve relationships', () => {
     commit = cb;
   };
 
+  const [state, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    {type: 'unknown'},
+  ]);
+  const data = () => state[0][''];
+
   const view = new SolidView(
     input,
     onTransactionCommit,
@@ -1642,10 +1951,11 @@ test('edit to preserve relationships', () => {
     () => {},
     true,
     () => {},
+    setState,
   );
 
-  const state0: unknown[] = [];
-  expect(view.data).toEqual(state0);
+  const data0: unknown[] = [];
+  expect(data()).toEqual(data0);
 
   view.push({
     type: 'add',
@@ -1662,7 +1972,7 @@ test('edit to preserve relationships', () => {
     },
   });
 
-  expect(view.data).toEqual(state0);
+  expect(data()).toEqual(data0);
 
   view.push({
     type: 'add',
@@ -1679,9 +1989,9 @@ test('edit to preserve relationships', () => {
     },
   });
 
-  expect(view.data).toEqual(state0);
+  expect(data()).toEqual(data0);
   commit();
-  const state1 = [
+  const data1 = [
     {
       id: 1,
       labels: [
@@ -1689,10 +1999,12 @@ test('edit to preserve relationships', () => {
           id: 1,
           name: 'label1',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
       ],
       title: 'issue1',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 2,
@@ -1701,13 +2013,15 @@ test('edit to preserve relationships', () => {
           id: 2,
           name: 'label2',
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       title: 'issue2',
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
   ];
-  expect(view.data).toEqual(state1);
+  expect(data()).toEqual(data1);
 
   view.push({
     type: 'edit',
@@ -1718,10 +2032,10 @@ test('edit to preserve relationships', () => {
     node: {row: {id: 1, title: 'issue1 changed'}, relationships: {}},
   });
 
-  expect(view.data).toEqual(state1);
+  expect(data()).toEqual(data1);
   commit();
 
-  const state2 = [
+  const data2 = [
     {
       id: 1,
       labels: [
@@ -1729,10 +2043,12 @@ test('edit to preserve relationships', () => {
           id: 1,
           name: 'label1',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
       ],
       title: 'issue1 changed',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
     {
       id: 2,
@@ -1741,13 +2057,15 @@ test('edit to preserve relationships', () => {
           id: 2,
           name: 'label2',
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       title: 'issue2',
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
   ];
-  expect(view.data).toEqual(state2);
+  expect(data()).toEqual(data2);
 
   // And now edit to change order
   view.push({
@@ -1756,10 +2074,10 @@ test('edit to preserve relationships', () => {
     node: {row: {id: 3, title: 'issue1 is now issue3'}, relationships: {}},
   });
 
-  expect(view.data).toEqual(state2);
+  expect(data()).toEqual(data2);
   commit();
 
-  expect(view.data).toEqual([
+  expect(data()).toEqual([
     {
       id: 2,
       labels: [
@@ -1767,10 +2085,12 @@ test('edit to preserve relationships', () => {
           id: 2,
           name: 'label2',
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       title: 'issue2',
       [refCountSymbol]: 1,
+      [idSymbol]: '2',
     },
     {
       id: 3,
@@ -1779,10 +2099,12 @@ test('edit to preserve relationships', () => {
           id: 1,
           name: 'label1',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
       ],
       title: 'issue1 is now issue3',
       [refCountSymbol]: 1,
+      [idSymbol]: '3',
     },
   ]);
 });
@@ -1837,6 +2159,14 @@ test('edit leaf', () => {
     commit = cb;
   };
 
+  const [state, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    {type: 'unknown'},
+  ]);
+  const data = () => state[0][''];
+
   const view = new SolidView(
     input,
     onTransactionCommit,
@@ -1847,10 +2177,11 @@ test('edit leaf', () => {
     () => {},
     true,
     () => {},
+    setState,
   );
 
-  const state0: unknown[] = [];
-  expect(view.data).toEqual(state0);
+  const data0: unknown[] = [];
+  expect(data()).toEqual(data0);
 
   const changeSansType = {
     node: {
@@ -1878,10 +2209,10 @@ test('edit leaf', () => {
     type: 'add',
     ...changeSansType,
   });
-  expect(view.data).toEqual(state0);
+  expect(data()).toEqual(data0);
   commit();
 
-  const state1 = [
+  const data1 = [
     {
       id: 1,
       labels: [
@@ -1891,23 +2222,25 @@ test('edit leaf', () => {
           labelId: 1,
           extra: 'a',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
       ],
       name: 'issue',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
   ];
-  expect(view.data).toEqual(state1);
+  expect(data()).toEqual(data1);
 
   view.push({
     type: 'remove',
     ...changeSansType,
   });
-  expect(view.data).toEqual(state1);
+  expect(data()).toEqual(data1);
   commit();
 
-  const state2: unknown[] = [];
-  expect(view.data).toEqual(state2);
+  const data2: unknown[] = [];
+  expect(data()).toEqual(data2);
 
   view.push({
     type: 'add',
@@ -1915,7 +2248,7 @@ test('edit leaf', () => {
   });
   // no commit
 
-  expect(view.data).toEqual(state2);
+  expect(data()).toEqual(data2);
 
   view.push({
     type: 'child',
@@ -1964,10 +2297,10 @@ test('edit leaf', () => {
     },
   });
 
-  expect(view.data).toEqual(state2);
+  expect(data()).toEqual(data2);
   commit();
 
-  const state3 = [
+  const data3 = [
     {
       id: 1,
       labels: [
@@ -1977,6 +2310,7 @@ test('edit leaf', () => {
           labelId: 1,
           extra: 'a',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
         {
           id: 2,
@@ -1984,13 +2318,15 @@ test('edit leaf', () => {
           labelId: 2,
           extra: 'b',
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       name: 'issue',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
   ];
-  expect(view.data).toEqual(state3);
+  expect(data()).toEqual(data3);
 
   // edit leaf
   view.push({
@@ -2048,10 +2384,10 @@ test('edit leaf', () => {
       },
     },
   });
-  expect(view.data).toEqual(state3);
+  expect(data()).toEqual(data3);
   commit();
 
-  expect(view.data).toEqual([
+  expect(data()).toEqual([
     {
       id: 1,
       labels: [
@@ -2061,6 +2397,7 @@ test('edit leaf', () => {
           labelId: 1,
           extra: 'a',
           [refCountSymbol]: 1,
+          [idSymbol]: '1',
         },
         {
           id: 2,
@@ -2068,10 +2405,12 @@ test('edit leaf', () => {
           labelId: 2,
           extra: 'b2',
           [refCountSymbol]: 1,
+          [idSymbol]: '2',
         },
       ],
       name: 'issue',
       [refCountSymbol]: 1,
+      [idSymbol]: '1',
     },
   ]);
 });
@@ -2089,7 +2428,16 @@ test('queryComplete promise', async () => {
 
   const onTransactionCommit = () => {};
 
-  const view = new SolidView(
+  const [state, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    {type: 'unknown'},
+  ]);
+  const data = () => state[0][''];
+  const resultDetails = () => state[1];
+
+  new SolidView(
     ms.connect([
       ['b', 'asc'],
       ['a', 'asc'],
@@ -2099,28 +2447,31 @@ test('queryComplete promise', async () => {
     () => {},
     queryCompleteResolver.promise,
     () => {},
+    setState,
   );
 
-  expect(view.data).toMatchInlineSnapshot(`
+  expect(data()).toMatchInlineSnapshot(`
     [
       {
         "a": 1,
         "b": "a",
         Symbol(rc): 1,
+        Symbol(id): "1",
       },
       {
         "a": 2,
         "b": "b",
         Symbol(rc): 1,
+        Symbol(id): "2",
       },
     ]
   `);
 
-  expect(view.resultDetails).toEqual({type: 'unknown'});
+  expect(resultDetails()).toEqual({type: 'unknown'});
 
   queryCompleteResolver.resolve(true);
   await 1;
-  expect(view.resultDetails).toEqual({type: 'complete'});
+  expect(resultDetails()).toEqual({type: 'complete'});
 });
 
 const schema = createSchema({
@@ -2151,7 +2502,14 @@ test('factory', () => {
   const onDestroy = vi.fn();
   const onTransactionCommit = vi.fn();
 
-  const view: SolidView<HumanReadable<TestReturn>> = solidViewFactory(
+  const [_, setState] = createStore<State>([
+    {
+      '': undefined,
+    },
+    {type: 'unknown'},
+  ]);
+
+  const view: SolidView = createSolidViewFactory(setState)(
     undefined as unknown as Query<typeof schema, 'test', TestReturn>,
     ms.connect([
       ['b', 'asc'],

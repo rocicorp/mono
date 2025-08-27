@@ -10,12 +10,13 @@ import {
 import {zeroData} from '../../../replicache/src/transactions.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
+import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
+import type {Row} from '../../../zql/src/query/query.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import * as ConnectionState from './connection-state-enum.ts';
 import {
   TransactionImpl,
-  type CustomMutatorDefs,
   type MakeCustomMutatorInterfaces,
   type MutatorResult,
 } from './custom.ts';
@@ -24,16 +25,20 @@ import type {WriteTransaction} from './replicache-types.ts';
 import {MockSocket, zeroForTest} from './test-utils.ts';
 import {createDb} from './test/create-db.ts';
 import {getInternalReplicacheImplForTesting} from './zero.ts';
+import {QueryManager} from './query-manager.ts';
 
 type Schema = typeof schema;
+type MutatorTx = Transaction<Schema>;
+
+afterEach(() => vi.restoreAllMocks());
 
 test('argument types are preserved on the generated mutator interface', () => {
   const mutators = {
     issue: {
-      setTitle: (tx, {id, title}: {id: string; title: string}) =>
+      setTitle: (tx: MutatorTx, {id, title}: {id: string; title: string}) =>
         tx.mutate.issue.update({id, title}),
       setProps: (
-        tx,
+        tx: MutatorTx,
         {
           id,
           title,
@@ -54,11 +59,11 @@ test('argument types are preserved on the generated mutator interface', () => {
         }),
     },
     nonTableNamespace: {
-      doThing: (_tx, _a: {arg1: string; arg2: number}) => {
+      doThing: (_tx: MutatorTx, _a: {arg1: string; arg2: number}) => {
         throw new Error('not implemented');
       },
     },
-  } satisfies CustomMutatorDefs<Schema>;
+  } as const;
 
   type MutatorsInterface = MakeCustomMutatorInterfaces<Schema, typeof mutators>;
 
@@ -138,25 +143,34 @@ test('custom mutators write to the local store', async () => {
     schema,
     mutators: {
       issue: {
-        setTitle: async (tx, {id, title}: {id: string; title: string}) => {
+        setTitle: async (
+          tx: MutatorTx,
+          {id, title}: {id: string; title: string},
+        ) => {
           await tx.mutate.issue.update({id, title});
         },
-        deleteTwoIssues: async (tx, {id1, id2}: {id1: string; id2: string}) => {
+        deleteTwoIssues: async (
+          tx: MutatorTx,
+          {id1, id2}: {id1: string; id2: string},
+        ) => {
           await Promise.all([
             tx.mutate.issue.delete({id: id1}),
             tx.mutate.issue.delete({id: id2}),
           ]);
         },
-        create: async (tx, args: InsertValue<typeof schema.tables.issue>) => {
+        create: async (
+          tx: MutatorTx,
+          args: InsertValue<typeof schema.tables.issue>,
+        ) => {
           await tx.mutate.issue.insert(args);
         },
       },
       customNamespace: {
-        clown: async (tx, id: string) => {
+        clown: async (tx: MutatorTx, id: string) => {
           await tx.mutate.issue.update({id, title: '🤡'});
         },
       },
-    } satisfies CustomMutatorDefs<Schema>,
+    } as const,
   });
 
   await z.mutate.issue.create({
@@ -202,10 +216,13 @@ test('custom mutators can query the local store during an optimistic mutation', 
     schema,
     mutators: {
       issue: {
-        create: async (tx, args: InsertValue<typeof schema.tables.issue>) => {
+        create: async (
+          tx: MutatorTx,
+          args: InsertValue<typeof schema.tables.issue>,
+        ) => {
           await tx.mutate.issue.insert(args);
         },
-        closeAll: async tx => {
+        closeAll: async (tx: MutatorTx) => {
           const issues = await tx.query.issue;
           await Promise.all(
             issues.map(issue =>
@@ -214,7 +231,7 @@ test('custom mutators can query the local store during an optimistic mutation', 
           );
         },
       },
-    } as const satisfies CustomMutatorDefs<Schema>,
+    } as const,
   });
 
   await Promise.all(
@@ -261,7 +278,6 @@ describe('rebasing custom mutators', () => {
         },
       } as unknown as WriteTransaction,
       schema,
-      10,
     ) as unknown as Transaction<Schema>;
 
     await tx1.mutate.issue.insert({
@@ -300,7 +316,7 @@ describe('rebasing custom mutators', () => {
       mutators: {
         issue: {
           createAndReadCreated: async (
-            tx,
+            tx: MutatorTx,
             args: InsertValue<typeof schema.tables.issue>,
           ) => {
             await tx.mutate.issue.insert(args);
@@ -314,7 +330,7 @@ describe('rebasing custom mutators', () => {
             });
           },
         },
-      } as const satisfies CustomMutatorDefs<Schema>,
+      } as const,
     });
 
     await z.mutate.issue.createAndReadCreated({
@@ -356,13 +372,46 @@ describe('rebasing custom mutators', () => {
     }
   });
 
+  test('the writes of a mutation are immediately available after awaiting the client promise', async () => {
+    const z = zeroForTest({
+      schema,
+      mutators: {
+        issue: {
+          create: async (
+            tx: MutatorTx,
+            args: InsertValue<typeof schema.tables.issue>,
+          ) => {
+            await tx.mutate.issue.insert(args);
+          },
+        },
+      } as const,
+    });
+
+    for (let i = 0; i < 10; i++) {
+      await z.mutate.issue.create({
+        id: String(i),
+        title: 'foo ' + i,
+        description: '',
+        closed: false,
+        createdAt: 1743018138477,
+      }).client;
+
+      const result = await z.query.issue.where('id', String(i)).one();
+      expect(result?.title).toEqual('foo ' + i);
+      expect(result?.id).toEqual(String(i));
+    }
+  });
+
   test('mutations on main do not change main until they are committed', async () => {
     let mutationRun = false;
     const z = zeroForTest({
       schema,
       mutators: {
         issue: {
-          create: async (tx, args: InsertValue<typeof schema.tables.issue>) => {
+          create: async (
+            tx: MutatorTx,
+            args: InsertValue<typeof schema.tables.issue>,
+          ) => {
             await tx.mutate.issue.insert(args);
             // query main. The issue should not be there yet.
             expect(await z.query.issue).length(0);
@@ -372,7 +421,7 @@ describe('rebasing custom mutators', () => {
             mutationRun = true;
           },
         },
-      } as const satisfies CustomMutatorDefs<Schema>,
+      } as const,
     });
 
     await z.mutate.issue.create({
@@ -404,13 +453,13 @@ describe('server results and keeping read queries', () => {
       mutators: {
         issue: {
           create: async (
-            _tx,
+            _tx: MutatorTx,
             _args: InsertValue<typeof schema.tables.issue>,
           ) => {},
 
-          close: async (_tx, _args: object) => {},
+          close: async (_tx: MutatorTx, _args: object) => {},
         },
-      } as const satisfies CustomMutatorDefs<Schema>,
+      } as const,
     });
 
     await z.triggerConnected();
@@ -470,47 +519,47 @@ describe('server results and keeping read queries', () => {
       mutators: {
         issue: {
           create: async (
-            tx,
+            tx: MutatorTx,
             _args: InsertValue<typeof schema.tables.issue>,
           ) => {
             await tx.query.issue;
           },
 
-          close: async (tx, _args: object) => {
+          close: async (tx: MutatorTx, _args: object) => {
             await tx.query.issue.limit(1);
           },
         },
-      } as const satisfies CustomMutatorDefs<Schema>,
+      } as const,
     });
 
     const mockSocket = await z.socket;
     const messages: string[] = [];
-    mockSocket.onUpstream = msg => {
+    mockSocket.onUpstream(msg => {
       messages.push(msg);
-    };
+    });
 
     await z.triggerConnected();
     await z.waitForConnectionState(ConnectionState.Connected);
 
-    await z.mutate.issue.create({
+    const q = z.query.issue.limit(1).materialize();
+    const create = z.mutate.issue.create({
       id: '1',
       title: 'foo',
       closed: false,
       description: '',
       ownerId: '',
       createdAt: 1743018138477,
-    }).client;
+    });
+    await create.client;
 
-    const q = z.query.issue.limit(1).materialize();
     q.destroy();
 
-    // tick a time to be sure everything is collected
-    await new Promise(resolve => setTimeout(resolve, 0));
+    z.queryDelegate.flushQueryChanges();
 
     // query is not removed, only put.
     expect(filter(messages)).toMatchInlineSnapshot(`
       [
-        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"1vsd9vcx6ynd4","ast":{"table":"issues","limit":1,"orderBy":[["id","asc"]]},"ttl":0}]}]",
+        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"1vsd9vcx6ynd4","ast":{"table":"issues","limit":1,"orderBy":[["id","asc"]]},"ttl":300000}]}]",
       ]
     `);
     messages.length = 0;
@@ -524,12 +573,30 @@ describe('server results and keeping read queries', () => {
       ],
     });
 
+    // confirm the mutation
+    await z.triggerPokeStart({
+      pokeID: '1',
+      baseCookie: null,
+      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
+    });
+    await z.triggerPokePart({
+      pokeID: '1',
+      lastMutationIDChanges: {[z.clientID]: 1},
+    });
+    await z.triggerPokeEnd({pokeID: '1', cookie: '1'});
+
+    z.queryDelegate.flushQueryChanges();
+
+    // lmid advancement is not in a RAF callback
+    // so tick a few times
+
     // mutation is no longer outstanding, query is removed.
-    expect(filter(messages)).toMatchInlineSnapshot(`
-      [
-        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"1vsd9vcx6ynd4"}]}]",
-      ]
-    `);
+    await vi.waitFor(() => {
+      expect(filter(messages)).toEqual([
+        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"1vsd9vcx6ynd4"}]}]`,
+      ]);
+    });
+
     messages.length = 0;
 
     // check the error case
@@ -537,12 +604,12 @@ describe('server results and keeping read queries', () => {
     const close = z.mutate.issue.close({});
     await close;
     q2.destroy();
-    // tick a time to be sure everything is collected
-    await new Promise(resolve => setTimeout(resolve, 0));
+
+    z.queryDelegate.flushQueryChanges();
 
     expect(filter(messages)).toMatchInlineSnapshot(`
       [
-        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"12hwg3ihkijhm","ast":{"table":"issues","orderBy":[["id","asc"]]},"ttl":0}]}]",
+        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"12hwg3ihkijhm","ast":{"table":"issues","orderBy":[["id","asc"]]},"ttl":300000}]}]",
       ]
     `);
     messages.length = 0;
@@ -553,20 +620,127 @@ describe('server results and keeping read queries', () => {
           id: {clientID: z.clientID, id: 2},
           result: {
             error: 'app',
+            details: 'womp womp',
           },
         },
       ],
     });
 
-    expect(messages).toMatchInlineSnapshot(`
-      [
-        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"12hwg3ihkijhm"}]}]",
-      ]
-    `);
+    await z.triggerPokeStart({
+      pokeID: '2',
+      baseCookie: '1',
+      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
+    });
+    await z.triggerPokePart({
+      pokeID: '2',
+      lastMutationIDChanges: {[z.clientID]: 2},
+    });
+    await z.triggerPokeEnd({pokeID: '2', cookie: '2'});
+
+    z.queryDelegate.flushQueryChanges();
+
+    await expect(close.server).rejects.toEqual({
+      error: 'app',
+      details: 'womp womp',
+    });
+
+    await vi.waitFor(() => {
+      expect(filter(messages)).toEqual([
+        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"12hwg3ihkijhm"}]}]`,
+      ]);
+    });
+
     messages.length = 0;
 
     await z.close();
-    await expect(close.server).rejects.toEqual({error: 'app'});
+  });
+
+  test('after the server promise resolves (via poke), reads from the store return the data from the server', async () => {
+    const z = zeroForTest({
+      schema,
+      mutators: {
+        issue: {
+          create: async (
+            _tx: MutatorTx,
+            _args: InsertValue<typeof schema.tables.issue>,
+          ) => {},
+        },
+      } as const,
+    });
+
+    const mockSocket = await z.socket;
+    const messages: string[] = [];
+    mockSocket.onUpstream(msg => {
+      messages.push(msg);
+    });
+
+    await z.triggerConnected();
+    await z.waitForConnectionState(ConnectionState.Connected);
+
+    const create = z.mutate.issue.create({
+      id: '1',
+      title: 'foo',
+      closed: false,
+      description: '',
+      ownerId: '',
+      createdAt: 1743018138477,
+    });
+    await create.client;
+
+    let foundIssue: Row<typeof schema.tables.issue> | undefined;
+    void create.server.then(async () => {
+      foundIssue = await z.query.issue.where('id', '1').one();
+    });
+
+    // confirm the mutation
+    await z.triggerPokeStart({
+      pokeID: '1',
+      baseCookie: null,
+      schemaVersions: {minSupportedVersion: 1, maxSupportedVersion: 1},
+    });
+    await z.triggerPokePart({
+      pokeID: '1',
+      lastMutationIDChanges: {[z.clientID]: 1},
+      rowsPatch: [
+        {
+          op: 'put',
+          tableName: 'issues',
+          value: {
+            id: '1',
+            title: 'server-foo',
+            closed: false,
+            description: 'server-desc',
+            ownerId: '',
+            createdAt: 1743018138477,
+          },
+        },
+      ],
+      mutationsPatch: [
+        {
+          op: 'put',
+          mutation: {
+            id: {clientID: z.clientID, id: 1},
+            result: {},
+          },
+        },
+      ],
+    });
+    await z.triggerPokeEnd({pokeID: '1', cookie: '1'});
+    z.queryDelegate.flushQueryChanges();
+
+    await vi.waitFor(() => {
+      expect(foundIssue).toEqual({
+        id: '1',
+        title: 'server-foo',
+        closed: false,
+        description: 'server-desc',
+        ownerId: '',
+        createdAt: 1743018138477,
+        [refCountSymbol]: 1,
+      });
+    });
+
+    await z.close();
   });
 });
 
@@ -576,7 +750,7 @@ test('run waiting for complete results throws in custom mutations', async () => 
     schema,
     mutators: {
       issue: {
-        create: async tx => {
+        create: async (tx: MutatorTx) => {
           try {
             await tx.query.issue.run({type: 'complete'});
           } catch (e) {
@@ -584,7 +758,7 @@ test('run waiting for complete results throws in custom mutations', async () => 
           }
         },
       },
-    } as const satisfies CustomMutatorDefs<Schema>,
+    } as const,
   });
 
   await z.triggerConnected();
@@ -605,11 +779,11 @@ test('warns when awaiting the promise directly', async () => {
     logLevel: 'warn',
     mutators: {
       issue: {
-        create: async tx => {
+        create: async (tx: MutatorTx) => {
           await tx.query.issue;
         },
       },
-    } as const satisfies CustomMutatorDefs<Schema>,
+    } as const,
   });
 
   await z.triggerConnected();
@@ -621,5 +795,89 @@ test('warns when awaiting the promise directly', async () => {
     'Awaiting the mutator result directly is being deprecated. Please use `await z.mutate[mutatorName].client` or `await result.mutate[mutatorName].server`',
   ]);
 
+  await z.close();
+});
+
+test('trying to use crud mutators throws if `enableLegacyMutators` is set to false', async () => {
+  const z = zeroForTest({
+    schema,
+    enableLegacyMutators: false,
+  });
+
+  await expect(
+    z.mutate.issue.insert({
+      id: '1',
+      title: 'foo',
+      closed: false,
+      description: '',
+      ownerId: '',
+      createdAt: 1743018138477,
+    }),
+  ).rejects.toThrowErrorMatchingInlineSnapshot(
+    `[Error: Zero CRUD mutators are not enabled.]`,
+  );
+
+  await z.close();
+});
+
+test('crud mutators work if `enableLegacyMutators` is set to true (or not set)', async () => {
+  const z = zeroForTest({
+    schema,
+  });
+
+  await z.mutate.issue.insert({
+    id: '1',
+    title: 'foo',
+    closed: false,
+    description: '',
+    ownerId: '',
+    createdAt: 1743018138477,
+  });
+  // read a row
+  await expect(z.query.issue.where('id', '1').one()).resolves.toEqual({
+    id: '1',
+    title: 'foo',
+    closed: false,
+    description: '',
+    ownerId: '',
+    createdAt: 1743018138477,
+    [refCountSymbol]: 1,
+  });
+
+  await z.close();
+});
+
+test('unnamed queries do not get registered with the query manager if `enableLegacyQueries` is set to false', async () => {
+  const addLegacySpy = vi.spyOn(QueryManager.prototype, 'addLegacy');
+  const z = zeroForTest({
+    schema,
+    enableLegacyQueries: false,
+  });
+
+  // mock the QueryManager class
+  // and spy on addLegacy
+
+  await z.triggerConnected();
+  await z.waitForConnectionState(ConnectionState.Connected);
+
+  await z.query.issue.where('id', '1').one();
+
+  expect(addLegacySpy).not.toHaveBeenCalled();
+  await z.close();
+});
+
+test('unnamed queries do get registered with the query manager if `enableLegacyQueries` is set to true', async () => {
+  const addLegacySpy = vi.spyOn(QueryManager.prototype, 'addLegacy');
+
+  const z = zeroForTest({
+    schema,
+  });
+
+  await z.triggerConnected();
+  await z.waitForConnectionState(ConnectionState.Connected);
+
+  await z.query.issue.where('id', '1').one();
+
+  expect(addLegacySpy).toHaveBeenCalled();
   await z.close();
 });

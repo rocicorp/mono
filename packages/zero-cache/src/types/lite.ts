@@ -4,7 +4,7 @@ import type {
   ValueType,
 } from '../../../zero-schema/src/table-schema.ts';
 import type {LiteTableSpec} from '../db/specs.ts';
-import {stringify, type JSONValue} from './bigint-json.ts';
+import {stringify, type JSONValue} from '../../../shared/src/bigint-json.ts';
 import {
   dataTypeToZqlValueType as upstreamDataTypeToZqlValueType,
   type PostgresValueType,
@@ -202,7 +202,7 @@ export function dataTypeToZqlValueType(
   return upstreamDataTypeToZqlValueType(
     upstreamDataType(liteTypeString).toLowerCase(),
     liteTypeString.includes(TEXT_ENUM_ATTRIBUTE),
-    liteTypeString.includes(TEXT_ARRAY_ATTRIBUTE),
+    isArray(liteTypeString),
   );
 }
 
@@ -211,5 +211,8 @@ export function isEnum(liteTypeString: LiteTypeString) {
 }
 
 export function isArray(liteTypeString: LiteTypeString) {
-  return liteTypeString.includes(TEXT_ARRAY_ATTRIBUTE);
+  return (
+    liteTypeString.includes(TEXT_ARRAY_ATTRIBUTE) ||
+    liteTypeString.includes('[]')
+  );
 }

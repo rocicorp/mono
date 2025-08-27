@@ -1,8 +1,9 @@
 import {describe, expect, test} from 'vitest';
 import type {ExpressionFactory} from './expression.ts';
-import {ast, newQuery, type QueryDelegate} from './query-impl.ts';
+import {ast, newQuery} from './query-impl.ts';
 import {staticQuery} from './static-query.ts';
 import {schema} from './test/test-schemas.ts';
+import type {QueryDelegate} from './query-delegate.ts';
 
 const mockDelegate = {} as QueryDelegate;
 

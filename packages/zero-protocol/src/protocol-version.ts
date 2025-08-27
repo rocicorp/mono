@@ -20,9 +20,22 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- Version 11 adds inspect queries. (0.18)
 // -- Version 12 adds 'timestamp' and 'date' types to the ClientSchema ValueType. (not shipped, reversed by version 14)
 // -- Version 14 removes 'timestamp' and 'date' types from the ClientSchema ValueType. (0.18)
-// -- Version 15 adds a `userPushParams` field to `initConnection`
-// -- Version 16 adds a new error type (alreadyProcessed) to mutation responses
-export const PROTOCOL_VERSION = 16;
+// -- Version 15 adds a `userPushParams` field to `initConnection` (0.19)
+// -- Version 16 adds a new error type (alreadyProcessed) to mutation responses (0.19)
+// -- Version 17 deprecates `AST` in downstream query puts. It was never used anyway. (0.21)
+// -- Version 18 adds `name` and `args` to the `queries-patch` protocol (0.21)
+// -- Version 19 adds `activeClients` to the `initConnection` protocol (0.22)
+// -- Version 20 changes inspector down message (0.22)
+// -- Version 21 removes `AST` in downstream query puts which was deprecated in Version 17, removes support for versions < 18 (0.22)
+// -- Version 22 adds an optional 'userQueryParams' field to `initConnection` (0.22)
+// -- Version 23 add `mutationResults` to poke (0.22)
+// -- Version 24 adds `ackMutationResults` to upstream (0.22).
+// -- version 25 modifies `mutationsResults` to include `del` patches (0.22)
+// -- version 26 adds inspect/metrics and adds metrics to inspect/query (0.23)
+// -- version 27 adds inspect/version (0.23)
+// -- version 28 adds more inspect/metrics (0.23)
+// -- version 29 adds error responses for custom queries (0.23)
+export const PROTOCOL_VERSION = 29;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version
@@ -34,6 +47,6 @@ export const PROTOCOL_VERSION = 16;
  * from protocol versions before `MIN_SERVER_SUPPORTED_PROTOCOL_VERSION` are
  * closed with a `VersionNotSupported` error.
  */
-export const MIN_SERVER_SUPPORTED_SYNC_PROTOCOL = 6;
+export const MIN_SERVER_SUPPORTED_SYNC_PROTOCOL = 18;
 
 assert(MIN_SERVER_SUPPORTED_SYNC_PROTOCOL < PROTOCOL_VERSION);

@@ -7,7 +7,7 @@ import {must} from '../../shared/src/must.ts';
 import {
   parse as parseBigIntJson,
   type JSONValue as BigIntJSONValue,
-} from '../../zero-cache/src/types/bigint-json.ts';
+} from '../../shared/src/bigint-json.ts';
 import {pgToZqlStringTypeMap} from '../../zero-cache/src/types/pg.ts';
 import type {
   AST,
@@ -26,7 +26,10 @@ import {
   type NameMapper,
 } from '../../zero-schema/src/name-mapper.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
-import type {ServerColumnSchema, ServerSchema} from './schema.ts';
+import type {
+  ServerColumnSchema,
+  ServerSchema,
+} from '../../zero-schema/src/server-schema.ts';
 import {
   sql,
   sqlConvertColumnArg,

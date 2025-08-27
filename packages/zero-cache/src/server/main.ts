@@ -1,9 +1,8 @@
 import {resolver} from '@rocicorp/resolver';
-import {availableParallelism} from 'node:os';
 import path from 'node:path';
 import {must} from '../../../shared/src/must.ts';
-import {assertNormalized} from '../config/normalize.ts';
-import {getZeroConfig} from '../config/zero-config.ts';
+import {getNormalizedZeroConfig} from '../config/zero-config.ts';
+import {initEventSink} from '../observability/events.ts';
 import {
   exitAfter,
   ProcessManager,
@@ -14,15 +13,12 @@ import {
   restoreReplica,
   startReplicaBackupProcess,
 } from '../services/litestream/commands.ts';
-import {initViewSyncerSchema} from '../services/view-syncer/schema/init.ts';
-import {pgClient} from '../types/pg.ts';
 import {
   childWorker,
   parentWorker,
   singleProcessMode,
   type Worker,
 } from '../types/processes.ts';
-import {getShardID} from '../types/shards.ts';
 import {
   createNotifierFrom,
   handleSubscriptionsFrom,
@@ -30,7 +26,9 @@ import {
   subscribeTo,
 } from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
+import {startOtelAuto} from './otel-start.ts';
 import {WorkerDispatcher} from './worker-dispatcher.ts';
+
 const clientConnectionBifurcated = false;
 
 export default async function runWorker(
@@ -38,18 +36,15 @@ export default async function runWorker(
   env: NodeJS.ProcessEnv,
 ): Promise<void> {
   const startMs = Date.now();
-  const config = getZeroConfig(env);
-  assertNormalized(config);
-  const lc = createLogContext(config, {worker: 'dispatcher'});
+  const config = getNormalizedZeroConfig({env});
+
+  startOtelAuto(createLogContext(config, {worker: 'dispatcher'}, false));
+  const lc = createLogContext(config, {worker: 'dispatcher'}, true);
+  initEventSink(lc, config);
 
   const processes = new ProcessManager(lc, parent);
 
-  const numSyncers =
-    config.numSyncWorkers !== undefined
-      ? config.numSyncWorkers
-      : // Reserve 1 core for the replicator. The change-streamer is not CPU heavy.
-        Math.max(1, availableParallelism() - 1);
-
+  const {numSyncWorkers: numSyncers} = config;
   if (config.upstream.maxConns < numSyncers) {
     throw new Error(
       `Insufficient upstream connections (${config.upstream.maxConns}) for ${numSyncers} syncers.` +
@@ -84,13 +79,13 @@ export default async function runWorker(
     return processes.addWorker(worker, type, name);
   }
 
-  const shard = getShardID(config);
   const {
     taskID,
-    changeStreamer: {mode: changeStreamerMode},
+    changeStreamer: {mode: changeStreamerMode, uri: changeStreamerURI},
     litestream,
   } = config;
-  const runChangeStreamer = changeStreamerMode !== 'discover';
+  const runChangeStreamer =
+    changeStreamerMode === 'dedicated' && changeStreamerURI === undefined;
 
   let restoreStart = new Date();
   if (litestream.backupURL || (litestream.executable && !runChangeStreamer)) {
@@ -111,24 +106,25 @@ export default async function runWorker(
     }
   }
 
-  const {promise: changeStreamerReady, resolve} = resolver();
+  const {promise: changeStreamerReady, resolve: changeStreamerStarted} =
+    resolver();
   const changeStreamer = runChangeStreamer
     ? loadWorker(
         './server/change-streamer.ts',
         'supporting',
         undefined,
         String(restoreStart.getTime()),
-      ).once('message', resolve)
-    : (resolve() ?? undefined);
+      ).once('message', changeStreamerStarted)
+    : (changeStreamerStarted() ?? undefined);
 
-  if (numSyncers) {
-    // Technically, setting up the CVR DB schema is the responsibility of the Syncer,
-    // but it is done here in the main thread because it is wasteful to have all of
-    // the Syncers attempt the migration in parallel.
-    const {cvr} = config;
-    const cvrDB = pgClient(lc, cvr.db);
-    await initViewSyncerSchema(lc, cvrDB, shard);
-    void cvrDB.end();
+  const {promise: reaperReady, resolve: reaperStarted} = resolver();
+  if (numSyncers > 0) {
+    loadWorker('./server/reaper.ts', 'supporting').once(
+      'message',
+      reaperStarted,
+    );
+  } else {
+    reaperStarted();
   }
 
   // Wait for the change-streamer to be ready to guarantee that a replica
@@ -155,6 +151,10 @@ export default async function runWorker(
     );
     await backupReady;
   }
+
+  // Before starting the view-syncers, ensure that the reaper has started
+  // up, indicating that any CVR db migrations have been performed.
+  await reaperReady;
 
   const syncers: Worker[] = [];
   if (numSyncers) {

@@ -43,6 +43,8 @@ import {
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
+import type {Transaction} from '../../../zql/src/mutate/custom.ts';
+import {nanoid} from '../util/nanoid.ts';
 import * as ConnectionState from './connection-state-enum.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {DeleteClientsManager} from './delete-clients-manager.ts';
@@ -72,6 +74,7 @@ import {
 
 const startTime = 1678829450000;
 
+let rejectionHandler: (event: PromiseRejectionEvent) => void;
 beforeEach(() => {
   vi.useFakeTimers({now: startTime});
   vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
@@ -79,11 +82,52 @@ beforeEach(() => {
     'fetch',
     vi.fn().mockReturnValue(Promise.resolve(new Response())),
   );
+
+  rejectionHandler = event => {
+    // eslint-disable-next-line no-console
+    console.error('Test rejection:', event.reason);
+  };
+
+  window.addEventListener('unhandledrejection', rejectionHandler);
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
+});
+
+test('expose and unexpose', async () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const g = globalThis as any;
+  expect(g.__zero).toBeUndefined();
+  const z1 = zeroForTest();
+  expect(g.__zero).toBe(z1);
+  const z1p = z1.close();
+  expect(g.__zero).toBe(z1);
+  await z1p;
+  expect(g.__zero).toBeUndefined();
+  const z2 = zeroForTest();
+  expect(g.__zero).toBe(z2);
+  const z3 = zeroForTest();
+  expect(g.__zero).deep.equal({
+    [z2.clientID]: z2,
+    [z3.clientID]: z3,
+  });
+  const z4 = zeroForTest();
+  expect(g.__zero).deep.equal({
+    [z2.clientID]: z2,
+    [z3.clientID]: z3,
+    [z4.clientID]: z4,
+  });
+  await z2.close();
+  expect(g.__zero).deep.equal({
+    [z3.clientID]: z3,
+    [z4.clientID]: z4,
+  });
+  await z3.close();
+  expect(g.__zero).toBe(z4);
+  await z4.close();
+  expect(g.__zero).toBeUndefined();
 });
 
 test('onOnlineChange callback', async () => {
@@ -287,6 +331,71 @@ test('onOnlineChange callback', async () => {
   }
 });
 
+test('onOnline listener', async () => {
+  let online1 = 0;
+  let offline1 = 0;
+  let online2 = 0;
+  let offline2 = 0;
+
+  const z = zeroForTest({
+    logLevel: 'debug',
+  });
+
+  const unsubscribe1 = z.onOnline(online => {
+    if (online) {
+      online1++;
+    } else {
+      offline1++;
+    }
+  });
+
+  const unsubscribe2 = z.onOnline(online => {
+    if (online) {
+      online2++;
+    } else {
+      offline2++;
+    }
+  });
+
+  // Offline by default.
+  await vi.advanceTimersByTimeAsync(1);
+  expect(z.online).false;
+
+  // Connect: both listeners should be notified.
+  await z.waitForConnectionState(ConnectionState.Connecting);
+  await z.triggerConnected();
+  await z.waitForConnectionState(ConnectionState.Connected);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(z.online).true;
+  expect(online1).toBe(1);
+  expect(offline1).toBe(0);
+  expect(online2).toBe(1);
+  expect(offline2).toBe(0);
+
+  // Unsubscribe the first listener and trigger an error to go offline.
+  unsubscribe1();
+  await z.triggerError(ErrorKind.InvalidMessage, 'oops');
+  await z.waitForConnectionState(ConnectionState.Disconnected);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(z.online).false;
+  expect(online1).toBe(1);
+  expect(offline1).toBe(0);
+  expect(online2).toBe(1);
+  expect(offline2).toBe(1);
+
+  // Reconnect: only the second listener should be notified.
+  await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
+  await z.triggerConnected();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(z.online).true;
+  expect(online1).toBe(1);
+  expect(offline1).toBe(0);
+  expect(online2).toBe(2);
+  expect(offline2).toBe(1);
+
+  unsubscribe2();
+});
+
 test('disconnects if ping fails', async () => {
   const watchdogInterval = RUN_LOOP_INTERVAL_MS;
   const pingTimeout = 5000;
@@ -351,6 +460,7 @@ describe('createSocket', () => {
     now: number,
     expectedURL: string,
     additionalConnectParams?: Record<string, string>,
+    activeClients = new Set([clientID]),
   ) => {
     const clientSchema: ClientSchema = {
       tables: {
@@ -380,8 +490,10 @@ describe('createSocket', () => {
         debugPerf,
         new ZeroLogContext('error', undefined, new TestLogSink()),
         undefined,
+        undefined,
         1048 * 8,
         additionalConnectParams,
+        {activeClients},
       );
       expect(`${mockSocket.url}`).equal(expectedURL);
       expect(mockSocket.protocol).equal(
@@ -392,6 +504,7 @@ describe('createSocket', () => {
               desiredQueriesPatch: [],
               deleted: {clientIDs: ['old-deleted-client']},
               ...(baseCookie === null ? {clientSchema} : {}),
+              activeClients: [...activeClients],
             },
           ],
           auth,
@@ -416,8 +529,10 @@ describe('createSocket', () => {
         debugPerf,
         new ZeroLogContext('error', undefined, new TestLogSink()),
         undefined,
+        undefined,
         0, // do not put any extra information into headers
         additionalConnectParams,
+        {activeClients},
       );
       expect(`${mockSocket.url}`).equal(expectedURL);
       expect(mockSocket2.protocol).equal(encodeSecProtocols(undefined, auth));
@@ -603,7 +718,7 @@ describe('initConnection', () => {
       }),
     });
     const mockSocket = await r.socket;
-    mockSocket.onUpstream = msg => {
+    mockSocket.onUpstream(msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
           [
@@ -628,7 +743,7 @@ describe('initConnection', () => {
           ]
         `);
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
-    };
+    });
 
     expect(mockSocket.messages.length).toEqual(0);
     await r.triggerConnected();
@@ -652,7 +767,7 @@ describe('initConnection', () => {
     });
 
     const mockSocket = await r.socket;
-    mockSocket.onUpstream = msg => {
+    mockSocket.onUpstream(msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
           [
@@ -682,7 +797,7 @@ describe('initConnection', () => {
           ]
         `);
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
-    };
+    });
 
     expect(mockSocket.messages.length).toEqual(0);
     await r.triggerConnected();
@@ -706,7 +821,7 @@ describe('initConnection', () => {
     });
 
     const mockSocket = await r.socket;
-    mockSocket.onUpstream = msg => {
+    mockSocket.onUpstream(msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
           [
@@ -736,7 +851,7 @@ describe('initConnection', () => {
           ]
         `);
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
-    };
+    });
 
     expect(mockSocket.messages.length).toEqual(0);
     await r.triggerConnected();
@@ -767,43 +882,37 @@ describe('initConnection', () => {
         decodeSecProtocols(mockSocket.protocol).initConnectionMessage,
         initConnectionMessageSchema,
       ),
-    ).toMatchInlineSnapshot(`
-      [
-        "initConnection",
-        {
-          "clientSchema": {
-            "tables": {
-              "e": {
-                "columns": {
-                  "id": {
-                    "type": "string",
-                  },
-                  "value": {
-                    "type": "string",
-                  },
+    ).toEqual([
+      'initConnection',
+      {
+        activeClients: [r.clientID],
+        clientSchema: {
+          tables: {
+            e: {
+              columns: {
+                id: {
+                  type: 'string',
+                },
+                value: {
+                  type: 'string',
                 },
               },
             },
           },
-          "desiredQueriesPatch": [
-            {
-              "ast": {
-                "orderBy": [
-                  [
-                    "id",
-                    "asc",
-                  ],
-                ],
-                "table": "e",
-              },
-              "hash": "29j3x0l4bxthp",
-              "op": "put",
-              "ttl": 0,
-            },
-          ],
         },
-      ]
-    `);
+        desiredQueriesPatch: [
+          {
+            ast: {
+              orderBy: [['id', 'asc']],
+              table: 'e',
+            },
+            hash: '29j3x0l4bxthp',
+            op: 'put',
+            ttl: 300000,
+          },
+        ],
+      },
+    ]);
 
     expect(mockSocket.messages.length).toEqual(0);
     await r.triggerConnected();
@@ -812,7 +921,7 @@ describe('initConnection', () => {
 
   async function zeroForTestWithDeletedClients<
     const S extends Schema,
-    MD extends CustomMutatorDefs<S> = CustomMutatorDefs<S>,
+    MD extends CustomMutatorDefs = CustomMutatorDefs,
   >(
     options: Partial<ZeroOptions<S, MD>> & {
       deletedClients?: ClientID[] | undefined;
@@ -864,52 +973,45 @@ describe('initConnection', () => {
         decodeSecProtocols(mockSocket.protocol).initConnectionMessage,
         initConnectionMessageSchema,
       ),
-    ).toMatchInlineSnapshot(`
-      [
-        "initConnection",
-        {
-          "clientSchema": {
-            "tables": {
-              "e": {
-                "columns": {
-                  "id": {
-                    "type": "string",
-                  },
-                  "value": {
-                    "type": "string",
-                  },
+    ).toEqual([
+      'initConnection',
+      {
+        activeClients: [r.clientID],
+        clientSchema: {
+          tables: {
+            e: {
+              columns: {
+                id: {
+                  type: 'string',
+                },
+                value: {
+                  type: 'string',
                 },
               },
             },
           },
-          "deleted": {
-            "clientIDs": [
-              "a",
-            ],
-          },
-          "desiredQueriesPatch": [
-            {
-              "ast": {
-                "orderBy": [
-                  [
-                    "id",
-                    "asc",
-                  ],
-                ],
-                "table": "e",
-              },
-              "hash": "29j3x0l4bxthp",
-              "op": "put",
-              "ttl": 0,
-            },
-          ],
         },
-      ]
-    `);
+        deleted: {
+          clientIDs: ['a'],
+        },
+        desiredQueriesPatch: [
+          {
+            ast: {
+              orderBy: [['id', 'asc']],
+              table: 'e',
+            },
+            hash: '29j3x0l4bxthp',
+            op: 'put',
+            ttl: 300000,
+          },
+        ],
+      },
+    ]);
 
     expect(mockSocket.messages.length).toEqual(0);
     await r.triggerConnected();
     expect(mockSocket.messages.length).toEqual(0);
+    await r.close();
   });
 
   test('sends desired queries patch in `initConnectionMessage` when the patch is over maxHeaderLength', async () => {
@@ -928,7 +1030,7 @@ describe('initConnection', () => {
     });
     const mockSocket = await r.socket;
 
-    mockSocket.onUpstream = msg => {
+    mockSocket.onUpstream(msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
           [
@@ -961,7 +1063,7 @@ describe('initConnection', () => {
                   },
                   "hash": "29j3x0l4bxthp",
                   "op": "put",
-                  "ttl": 0,
+                  "ttl": 300000,
                 },
               ],
             },
@@ -969,13 +1071,15 @@ describe('initConnection', () => {
         `);
 
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
-    };
+    });
 
     expect(mockSocket.messages.length).toEqual(0);
     const view = r.query.e.materialize();
     view.addListener(() => {});
     await r.triggerConnected();
     expect(mockSocket.messages.length).toEqual(1);
+
+    await r.close();
   });
 
   test('sends desired queries patch in `initConnectionMessage` when the patch is over maxHeaderLength with deleted clients', async () => {
@@ -995,7 +1099,7 @@ describe('initConnection', () => {
     });
     const mockSocket = await r.socket;
 
-    mockSocket.onUpstream = msg => {
+    mockSocket.onUpstream(msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
           [
@@ -1033,7 +1137,7 @@ describe('initConnection', () => {
                   },
                   "hash": "29j3x0l4bxthp",
                   "op": "put",
-                  "ttl": 0,
+                  "ttl": 300000,
                 },
               ],
             },
@@ -1041,7 +1145,7 @@ describe('initConnection', () => {
         `);
 
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
-    };
+    });
 
     expect(mockSocket.messages.length).toEqual(0);
     const view = r.query.e.materialize();
@@ -1065,7 +1169,7 @@ describe('initConnection', () => {
     });
 
     const mockSocket = await r.socket;
-    mockSocket.onUpstream = msg => {
+    mockSocket.onUpstream(msg => {
       expect(
         valita.parse(JSON.parse(msg), changeDesiredQueriesMessageSchema),
       ).toEqual([
@@ -1079,13 +1183,13 @@ describe('initConnection', () => {
               } satisfies AST,
               hash: '29j3x0l4bxthp',
               op: 'put',
-              ttl: 0,
+              ttl: 300000,
             },
           ],
         },
       ]);
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
-    };
+    });
 
     expect(
       valita.parse(
@@ -1095,6 +1199,7 @@ describe('initConnection', () => {
     ).toEqual([
       'initConnection',
       {
+        activeClients: [r.clientID],
         desiredQueriesPatch: [],
         clientSchema: {
           tables: {
@@ -1163,7 +1268,7 @@ describe('initConnection', () => {
     const removeListener = view1.addListener(() => {});
 
     const mockSocket = await r.socket;
-    mockSocket.onUpstream = msg => {
+    mockSocket.onUpstream(msg => {
       expect(
         valita.parse(JSON.parse(msg), changeDesiredQueriesMessageSchema),
       ).toEqual([
@@ -1177,7 +1282,7 @@ describe('initConnection', () => {
           ],
         },
       ]);
-    };
+    });
     expect(mockSocket.messages.length).toEqual(0);
 
     removeListener();
@@ -2321,15 +2426,13 @@ test('server ahead', async () => {
     ErrorKind.InvalidConnectionRequestBaseCookie,
     'unexpected BaseCookie',
   );
-  // There are a lot of timers that get scheduled before the reload timer
-  // for dropping the database. TODO: Make this more robust.
-  for (let i = 0; i < 8; i++) {
-    await vi.advanceTimersToNextTimerAsync();
-  }
+
+  await vi.waitUntil(() => storage[RELOAD_REASON_STORAGE_KEY]);
+
   await promise;
 
-  expect(storage[RELOAD_REASON_STORAGE_KEY]).toMatchInlineSnapshot(
-    `"["InvalidConnectionRequestBaseCookie","Server reported that client is ahead of server. This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Zero."]"`,
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).toEqual(
+    `["InvalidConnectionRequestBaseCookie","Server reported that client is ahead of server. This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Zero."]`,
   );
 });
 
@@ -2624,13 +2727,126 @@ describe('Invalid Downstream message', () => {
     expect(r.online).eq(true);
     expect(r.connectionState).eq(ConnectionState.Connected);
 
-    const found = r.testLogSink.messages.some(m =>
-      m[2].some(
-        v =>
-          v instanceof Error && v.message.includes('Missing property pokeID'),
+    expect(
+      r.testLogSink.messages.some(m =>
+        m[2].some(
+          v =>
+            v instanceof Error && v.message.includes('Missing property pokeID'),
+        ),
       ),
-    );
-    expect(found).true;
+    ).true;
+    expect(
+      r.testLogSink.messages.some(m =>
+        m[2].some(
+          v =>
+            v instanceof Error &&
+            v.message.includes('Invalid message received from server'),
+        ),
+      ),
+    ).true;
+  });
+});
+
+describe('Downstream message with unknown fields', () => {
+  afterEach(() => vi.resetAllMocks());
+
+  test('unknown fields do not result in a parse error', async () => {
+    const r = zeroForTest({
+      logLevel: 'debug',
+    });
+    await r.triggerConnected();
+    expect(r.connectionState).toBe(ConnectionState.Connected);
+
+    await r.triggerPokeStart({
+      pokeID: '1',
+      // @ts-expect-error - invalid field
+      pokeIDXX: '1',
+      baseCookie: null,
+      cookie: '1',
+      timestamp: 123456,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(r.online).eq(true);
+    expect(r.connectionState).eq(ConnectionState.Connected);
+
+    expect(
+      r.testLogSink.messages.some(m =>
+        m[2].some(
+          v =>
+            v instanceof Error &&
+            v.message.includes('Invalid message received from server'),
+        ),
+      ),
+    ).false;
+  });
+});
+
+describe('Mutation responses poked down', () => {
+  afterEach(() => vi.resetAllMocks());
+
+  test('poke down partial responses, rest resolved by lmid advance', async () => {
+    const schema = createSchema({
+      tables: [
+        table('issues')
+          .columns({id: string(), value: number()})
+          .primaryKey('id'),
+      ],
+    });
+    const r = zeroForTest({
+      logLevel: 'debug',
+      schema,
+      mutators: {
+        issues: {
+          foo: (tx: Transaction<typeof schema>, {foo}: {foo: number}) =>
+            tx.mutate.issues.insert({id: foo.toString(), value: foo}),
+        },
+      } as const,
+    });
+    await r.triggerConnected();
+    expect(r.connectionState).toBe(ConnectionState.Connected);
+
+    const mutation = r.mutate.issues.foo({foo: 1});
+    const mutation2 = r.mutate.issues.foo({foo: 2});
+    await mutation.client;
+    await mutation2.client;
+
+    await r.triggerPoke(null, '1', {
+      lastMutationIDChanges: {
+        [r.clientID]: 5,
+      },
+      mutationsPatch: [
+        {
+          mutation: {
+            id: {
+              clientID: r.clientID,
+              id: 1,
+            },
+            result: {
+              error: 'app',
+              details: '...test ',
+            },
+          },
+          op: 'put',
+        },
+      ],
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+    let caught: unknown = undefined;
+    try {
+      await mutation.server;
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toMatchInlineSnapshot(`
+      {
+        "details": "...test ",
+        "error": "app",
+      }
+    `);
+    await r.close();
   });
 });
 
@@ -2886,21 +3102,46 @@ describe('CRUD', () => {
     const view = z.query.comment.materialize();
     await z.mutate.comment.insert({id: 'a', issueID: '1', text: 'A text'});
     expect(view.data).toEqual([
-      {id: 'a', issueID: '1', text: 'A text', [refCountSymbol]: 1},
+      {
+        id: 'a',
+        issueID: '1',
+        text: 'A text',
+        [refCountSymbol]: 1,
+      },
     ]);
 
     const setComment = z.mutate.comment.upsert;
     await setComment({id: 'b', issueID: '2', text: 'B text'});
     expect(view.data).toEqual([
-      {id: 'a', issueID: '1', text: 'A text', [refCountSymbol]: 1},
-      {id: 'b', issueID: '2', text: 'B text', [refCountSymbol]: 1},
+      {
+        id: 'a',
+        issueID: '1',
+        text: 'A text',
+        [refCountSymbol]: 1,
+      },
+      {
+        id: 'b',
+        issueID: '2',
+        text: 'B text',
+        [refCountSymbol]: 1,
+      },
     ]);
 
     // set allows updating
     await setComment({id: 'a', issueID: '11', text: 'AA text'});
     expect(view.data).toEqual([
-      {id: 'a', issueID: '11', text: 'AA text', [refCountSymbol]: 1},
-      {id: 'b', issueID: '2', text: 'B text', [refCountSymbol]: 1},
+      {
+        id: 'a',
+        issueID: '11',
+        text: 'AA text',
+        [refCountSymbol]: 1,
+      },
+      {
+        id: 'b',
+        issueID: '2',
+        text: 'B text',
+        [refCountSymbol]: 1,
+      },
     ]);
 
     // Optional fields can be set to null/undefined or left off completely.
@@ -2967,35 +3208,65 @@ describe('CRUD', () => {
     const view = z.query.comment.materialize();
     await z.mutate.comment.insert({id: 'a', issueID: '1', text: 'A text'});
     expect(view.data).toEqual([
-      {id: 'a', issueID: '1', text: 'A text', [refCountSymbol]: 1},
+      {
+        id: 'a',
+        issueID: '1',
+        text: 'A text',
+        [refCountSymbol]: 1,
+      },
     ]);
 
     const updateComment = z.mutate.comment.update;
     await updateComment({id: 'a', issueID: '11', text: 'AA text'});
     expect(view.data).toEqual([
-      {id: 'a', issueID: '11', text: 'AA text', [refCountSymbol]: 1},
+      {
+        id: 'a',
+        issueID: '11',
+        text: 'AA text',
+        [refCountSymbol]: 1,
+      },
     ]);
 
     await updateComment({id: 'a', text: 'AAA text'});
     expect(view.data).toEqual([
-      {id: 'a', issueID: '11', text: 'AAA text', [refCountSymbol]: 1},
+      {
+        id: 'a',
+        issueID: '11',
+        text: 'AAA text',
+        [refCountSymbol]: 1,
+      },
     ]);
 
     // update is a noop if not existing
     await updateComment({id: 'b', issueID: '2', text: 'B text'});
     expect(view.data).toEqual([
-      {id: 'a', issueID: '11', text: 'AAA text', [refCountSymbol]: 1},
+      {
+        id: 'a',
+        issueID: '11',
+        text: 'AAA text',
+        [refCountSymbol]: 1,
+      },
     ]);
 
     // All fields take previous value if left off or set to undefined.
     await updateComment({id: 'a', issueID: '11'});
     expect(view.data).toEqual([
-      {id: 'a', issueID: '11', text: 'AAA text', [refCountSymbol]: 1},
+      {
+        id: 'a',
+        issueID: '11',
+        text: 'AAA text',
+        [refCountSymbol]: 1,
+      },
     ]);
 
     await updateComment({id: 'a', issueID: '11', text: undefined});
     expect(view.data).toEqual([
-      {id: 'a', issueID: '11', text: 'AAA text', [refCountSymbol]: 1},
+      {
+        id: 'a',
+        issueID: '11',
+        text: 'AAA text',
+        [refCountSymbol]: 1,
+      },
     ]);
 
     // 'optional' fields can be explicitly set to null to overwrite previous
@@ -3320,10 +3591,10 @@ test('custom mutations get pushed', async () => {
     schema,
     mutators: {
       issues: {
-        foo: (tx, {foo}: {foo: number}) =>
+        foo: (tx: Transaction<typeof schema>, {foo}: {foo: number}) =>
           tx.mutate.issues.insert({id: foo.toString(), value: foo}),
       },
-    } as const satisfies CustomMutatorDefs<typeof schema>,
+    } as const,
   });
   await z.triggerConnected();
   const mockSocket = await z.socket;
@@ -3492,64 +3763,14 @@ test('Logging stack on close', async () => {
   );
 });
 
-test('Close should send a special close reason', async () => {
+test('Close should call socket close', async () => {
   const z = zeroForTest();
   const socket = await z.socket;
   const close = (socket.close = vi.fn(socket.close));
   await z.close();
   expect(socket.closed).toBe(true);
   expect(close).toHaveBeenCalledOnce();
-  expect(close).toHaveBeenCalledWith(
-    1000,
-    JSON.stringify(['closeConnection', []]),
-  );
-});
-
-describe('Should call close on pagehide', () => {
-  async function setup(persisted: boolean) {
-    const z = zeroForTest();
-    const zeroClose = vi.spyOn(z, 'close');
-    const socket = await z.socket;
-    const socketClose = vi.spyOn(socket, 'close');
-    await z.triggerConnected();
-    await z.waitForConnectionState(ConnectionState.Connected);
-
-    window.dispatchEvent(new PageTransitionEvent('pagehide', {persisted}));
-    return {z, socket, zeroClose, socketClose};
-  }
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-    window.dispatchEvent(new PageTransitionEvent('pageshow'));
-    expect(document.visibilityState).toBe('visible');
-  });
-
-  test('persisted: false', async () => {
-    const {z, socket, zeroClose, socketClose} = await setup(false);
-
-    expect(z.closed).toBe(true);
-    expect(socket.closed).toBe(true);
-    expect(zeroClose).toHaveBeenCalledOnce();
-    expect(zeroClose).toHaveBeenCalledWith();
-    expect(socketClose).toHaveBeenCalledOnce();
-    expect(socketClose).toHaveBeenCalledWith(
-      1000,
-      JSON.stringify(['closeConnection', []]),
-    );
-
-    await z.close();
-  });
-
-  test('persisted: true', async () => {
-    const {z, socket, zeroClose, socketClose} = await setup(true);
-
-    expect(z.closed).toBe(false);
-    expect(socket.closed).toBe(false);
-    expect(zeroClose).not.toHaveBeenCalled();
-    expect(socketClose).not.toHaveBeenCalled();
-
-    await z.close();
-  });
+  expect(close).toHaveBeenCalledWith(1000);
 });
 
 test('push is called on initial connect and reconnect', async () => {
@@ -3622,4 +3843,39 @@ test('onError is called on error', async () => {
       ],
     ]
   `);
+});
+
+test('We should send a deleteClient when a Zero instance is closed', async () => {
+  // We need the same clientGroupID for both instances to test the
+  // deleteClients message.
+  const userID = nanoid();
+  const z1 = zeroForTest({userID});
+  const z2 = zeroForTest({userID});
+
+  expect(await z1.clientGroupID).toBe(await z2.clientGroupID);
+
+  await z1.triggerConnected();
+  await z2.triggerConnected();
+
+  expect(z1.connectionState).toBe(ConnectionState.Connected);
+  expect(z2.connectionState).toBe(ConnectionState.Connected);
+
+  const mockSocket1 = await z1.socket;
+  const mockSocket2 = await z2.socket;
+
+  expect(mockSocket1.messages).toMatchInlineSnapshot(`[]`);
+  expect(mockSocket2.messages).toMatchInlineSnapshot(`[]`);
+
+  await z1.close();
+
+  vi.useRealTimers();
+
+  await vi.waitFor(() => {
+    expect(mockSocket1.messages).toMatchInlineSnapshot(`[]`);
+    expect(mockSocket2.messages.map(s => JSON.parse(s))).toEqual([
+      ['deleteClients', {clientIDs: [z1.clientID], clientGroupIDs: []}],
+    ]);
+  });
+
+  await z2.close();
 });

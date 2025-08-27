@@ -4,23 +4,27 @@ import {assert} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import * as v from '../../../../shared/src/valita.ts';
-import type {UserPushParams} from '../../../../zero-protocol/src/connect.ts';
+import type {UserMutateParams} from '../../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {
   pushResponseSchema,
+  type MutationID,
   type PushBody,
   type PushError,
   type PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
+import {fetchFromAPIServer} from '../../custom/fetch.ts';
+import {getOrCreateCounter} from '../../observability/metrics.ts';
+import {recordMutation} from '../../server/anonymous-otel-start.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
+import type {PostgresDB} from '../../types/pg.ts';
 import {upstreamSchema} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
 import type {HandlerResult, StreamResult} from '../../workers/connection.ts';
-import type {Service} from '../service.ts';
-import instruments from '../../observability/view-syncer-instruments.ts';
+import type {RefCountedService, Service} from '../service.ts';
 
 type Fatal = {
   error: 'forClient';
@@ -28,23 +32,24 @@ type Fatal = {
   mutationIDs: PushError['mutationIDs'];
 };
 
-export interface Pusher {
+export interface Pusher extends RefCountedService {
   readonly pushURL: string | undefined;
 
+  initConnection(
+    clientID: string,
+    wsID: string,
+    userPushParams: UserMutateParams | undefined,
+  ): Source<Downstream>;
   enqueuePush(
     clientID: string,
     push: PushBody,
     jwt: string | undefined,
+    httpCookie: string | undefined,
   ): HandlerResult;
-  initConnection(
-    clientID: string,
-    wsID: string,
-    userPushParams: UserPushParams | undefined,
-  ): Source<Downstream>;
+  ackMutationResponses(upToID: MutationID): Promise<void>;
 }
 
 type Config = Pick<ZeroConfig, 'app' | 'shard'>;
-const reservedParams = ['schema', 'appID'];
 
 /**
  * Receives push messages from zero-client and forwards
@@ -63,28 +68,42 @@ export class PusherService implements Service, Pusher {
   readonly id: string;
   readonly #pusher: PushWorker;
   readonly #queue: Queue<PusherEntryOrStop>;
+  readonly #pushConfig: ZeroConfig['push'] & {url: string[]};
+  readonly #upstream: PostgresDB;
+  readonly #config: Config;
   #stopped: Promise<void> | undefined;
+  #refCount = 0;
+  #isStopped = false;
 
   constructor(
-    config: Config,
+    upstream: PostgresDB,
+    appConfig: Config,
+    pushConfig: ZeroConfig['push'] & {url: string[]},
     lc: LogContext,
     clientGroupID: string,
-    pushURL: string,
-    apiKey: string | undefined,
   ) {
+    this.#config = appConfig;
+    this.#upstream = upstream;
     this.#queue = new Queue();
-    this.#pusher = new PushWorker(config, lc, pushURL, apiKey, this.#queue);
+    this.#pusher = new PushWorker(
+      appConfig,
+      lc,
+      pushConfig.url,
+      pushConfig.apiKey,
+      this.#queue,
+    );
     this.id = clientGroupID;
+    this.#pushConfig = pushConfig;
   }
 
   get pushURL(): string | undefined {
-    return this.#pusher.pushURL;
+    return this.#pusher.pushURL[0];
   }
 
   initConnection(
     clientID: string,
     wsID: string,
-    userPushParams: UserPushParams | undefined,
+    userPushParams: UserMutateParams | undefined,
   ) {
     return this.#pusher.initConnection(clientID, wsID, userPushParams);
   }
@@ -93,12 +112,44 @@ export class PusherService implements Service, Pusher {
     clientID: string,
     push: PushBody,
     jwt: string | undefined,
+    httpCookie: string | undefined,
   ): Exclude<HandlerResult, StreamResult> {
-    this.#queue.enqueue({push, jwt, clientID});
+    if (!this.#pushConfig.forwardCookies) {
+      httpCookie = undefined; // remove cookies if not forwarded
+    }
+    this.#queue.enqueue({push, jwt, clientID, httpCookie});
 
     return {
       type: 'ok',
     };
+  }
+
+  async ackMutationResponses(upToID: MutationID) {
+    // delete the relevant rows from the `mutations` table
+    const sql = this.#upstream;
+    await sql`DELETE FROM ${sql(
+      upstreamSchema({
+        appID: this.#config.app.id,
+        shardNum: this.#config.shard.num,
+      }),
+    )}.mutations WHERE "clientGroupID" = ${this.id} AND "clientID" = ${upToID.clientID} AND "mutationID" <= ${upToID.id}`;
+  }
+
+  ref() {
+    assert(!this.#isStopped, 'PusherService is already stopped');
+    ++this.#refCount;
+  }
+
+  unref() {
+    assert(!this.#isStopped, 'PusherService is already stopped');
+    --this.#refCount;
+    if (this.#refCount <= 0) {
+      void this.stop();
+    }
+  }
+
+  hasRefs(): boolean {
+    return this.#refCount > 0;
   }
 
   run(): Promise<void> {
@@ -107,6 +158,10 @@ export class PusherService implements Service, Pusher {
   }
 
   stop(): Promise<void> {
+    if (this.#isStopped) {
+      return must(this.#stopped, 'Stop was called before `run`');
+    }
+    this.#isStopped = true;
     this.#queue.enqueue('stop');
     return must(this.#stopped, 'Stop was called before `run`');
   }
@@ -115,6 +170,7 @@ export class PusherService implements Service, Pusher {
 type PusherEntry = {
   push: PushBody;
   jwt: string | undefined;
+  httpCookie: string | undefined;
   clientID: string;
 };
 type PusherEntryOrStop = PusherEntry | 'stop';
@@ -124,7 +180,7 @@ type PusherEntryOrStop = PusherEntry | 'stop';
  * to the user's API server.
  */
 class PushWorker {
-  readonly #pushURL: string;
+  readonly #pushURLs: string[];
   readonly #apiKey: string | undefined;
   readonly #queue: Queue<PusherEntryOrStop>;
   readonly #lc: LogContext;
@@ -133,19 +189,30 @@ class PushWorker {
     string,
     {
       wsID: string;
-      userParams?: UserPushParams | undefined;
+      userParams?: UserMutateParams | undefined;
       downstream: Subscription<Downstream>;
     }
   >;
 
+  readonly #customMutations = getOrCreateCounter(
+    'mutation',
+    'custom',
+    'Number of custom mutations processed',
+  );
+  readonly #pushes = getOrCreateCounter(
+    'mutation',
+    'pushes',
+    'Number of pushes processed by the pusher',
+  );
+
   constructor(
     config: Config,
     lc: LogContext,
-    pushURL: string,
+    pushURL: string[],
     apiKey: string | undefined,
     queue: Queue<PusherEntryOrStop>,
   ) {
-    this.#pushURL = pushURL;
+    this.#pushURLs = pushURL;
     this.#apiKey = apiKey;
     this.#queue = queue;
     this.#lc = lc.withContext('component', 'pusher');
@@ -154,7 +221,7 @@ class PushWorker {
   }
 
   get pushURL() {
-    return this.#pushURL;
+    return this.#pushURLs;
   }
 
   /**
@@ -164,7 +231,7 @@ class PushWorker {
   initConnection(
     clientID: string,
     wsID: string,
-    userParams: UserPushParams | undefined,
+    userParams: UserMutateParams | undefined,
   ) {
     const existing = this.#clients.get(clientID);
     if (existing && existing.wsID === wsID) {
@@ -203,18 +270,15 @@ class PushWorker {
   }
 
   /**
-   * The pusher can end up combining many push requests, from the client group, into a single request
-   * to the API server.
-   *
-   * In that case, many different clients will have their mutations present in the
-   * PushResponse.
-   *
-   * Each client is on a different websocket connection though, so we need to fan out the response
-   * to all the clients that were part of the push.
+   * 1. If the entire `push` fails, we send the error to relevant clients.
+   * 2. If the push succeeds, we look for any mutation failure that should cause the connection to terminate
+   *  and terminate the connection for those clients.
    */
-  async #fanOutResponses(response: PushResponse | Fatal) {
+  #fanOutResponses(response: PushResponse | Fatal) {
     const responses: Promise<Result>[] = [];
     const connectionTerminations: (() => void)[] = [];
+
+    // if the entire push failed, send that to the client.
     if ('error' in response) {
       this.#lc.warn?.(
         'The server behind ZERO_PUSH_URL returned a push error.',
@@ -257,6 +321,7 @@ class PushWorker {
         }
       }
     } else {
+      // Look for mutations results that should cause us to terminate the connection
       const groupedMutations = groupBy(response.mutations, m => m.id.clientID);
       for (const [clientID, mutations] of groupedMutations) {
         const client = this.#clients.get(clientID);
@@ -289,110 +354,48 @@ class PushWorker {
           );
         }
 
-        // We do not resolve the mutation on the client if it
-        // fails for a reason that will cause it to be retried.
-        const successes = failure ? mutations.slice(0, i) : mutations;
-
-        if (successes.length > 0) {
-          responses.push(
-            client.downstream.push(['pushResponse', {mutations: successes}])
-              .result,
-          );
-        }
-
         if (failure) {
           connectionTerminations.push(() => client.downstream.fail(failure));
         }
       }
     }
 
-    try {
-      await Promise.allSettled(responses);
-    } finally {
-      connectionTerminations.forEach(cb => cb());
-    }
+    connectionTerminations.forEach(cb => cb());
   }
 
   async #processPush(entry: PusherEntry): Promise<PushResponse | Fatal> {
-    instruments.counters.customMutations.add(entry.push.mutations.length, {
+    this.#customMutations.add(entry.push.mutations.length, {
       clientGroupID: entry.push.clientGroupID,
     });
-    instruments.counters.pushes.add(1, {
+    this.#pushes.add(1, {
       clientGroupID: entry.push.clientGroupID,
     });
 
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    if (this.#apiKey) {
-      headers['X-Api-Key'] = this.#apiKey;
-    }
-    if (entry.jwt) {
-      headers['Authorization'] = `Bearer ${entry.jwt}`;
-    }
+    // Record custom mutations for telemetry
+    recordMutation('custom', entry.push.mutations.length);
 
     try {
-      const params = new URLSearchParams(this.#pushURL.split('?')[1]);
-      for (const [key, value] of Object.entries(
-        this.#clients.get(entry.clientID)?.userParams?.queryParams ?? {},
-      )) {
-        params.append(key, value);
-      }
-
-      for (const reserved of reservedParams) {
-        assert(
-          !params.has(reserved),
-          `The push URL cannot contain the reserved query param "${reserved}"`,
-        );
-      }
-
-      params.append(
-        'schema',
-        upstreamSchema({
+      const response = await fetchFromAPIServer(
+        must(this.#pushURLs[0], 'ZERO_MUTATE_URL is not set'),
+        this.#pushURLs,
+        {
           appID: this.#config.app.id,
           shardNum: this.#config.shard.num,
-        }),
+        },
+        {
+          apiKey: this.#apiKey,
+          token: entry.jwt,
+          cookie: entry.httpCookie,
+        },
+        this.#clients.get(entry.clientID)?.userParams?.queryParams,
+        entry.push,
       );
-      params.append('appID', this.#config.app.id);
 
-      this.#lc.debug?.(
-        'pushing custom mutators to',
-        this.#pushURL,
-        'with params',
-        params.toString(),
-        'and body',
-        JSON.stringify(entry.push),
-      );
-      const response = await fetch(`${this.#pushURL}?${params.toString()}`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(entry.push),
-      });
       if (!response.ok) {
-        const details = await response.text();
-
-        // Zero currently handles all auth errors this way (throws ErrorForClient).
-        // Continue doing that until we have an `onError` callback exposed on the top level Zero instance.
-        // This:
-        // 1. Keeps the API the same for those migrating to custom mutators from CRUD
-        // 2. Ensures we only churn the API once, when we have `onError` available.
-        //
-        // When switching to `onError`, we should stop disconnecting the websocket
-        // on auth errors and instead let the token be updated
-        // on the existing WS connection. This will give us the chance to skip
-        // re-hydrating queries that do not use the modified fields of the token.
-        if (response.status === 401) {
-          throw new ErrorForClient({
-            kind: ErrorKind.AuthInvalidated,
-            message: details,
-          });
-        }
-
         return {
           error: 'http',
           status: response.status,
-          details,
+          details: await response.text(),
           mutationIDs: entry.push.mutations.map(m => ({
             id: m.id,
             clientID: m.clientID,

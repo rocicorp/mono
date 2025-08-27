@@ -5,6 +5,7 @@ import {
 import {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
+import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import {must} from '../../../../../shared/src/must.ts';
 import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
@@ -23,7 +24,6 @@ import type {
   TableSpec,
 } from '../../../db/specs.ts';
 import {StatementRunner} from '../../../db/statements.ts';
-import {stringify} from '../../../types/bigint-json.ts';
 import {
   oneAfter,
   versionFromLexi,
@@ -183,14 +183,16 @@ async function checkAndUpdateUpstream(
   }
 
   const {slot} = upstreamReplica;
-  const result = await sql<{restartLSN: LSN | null}[]>`
-    SELECT restart_lsn as "restartLSN" FROM pg_replication_slots
+  const result = await sql<
+    {restartLSN: LSN | null; walStatus: string | null}[]
+  >/*sql*/ `
+    SELECT restart_lsn as "restartLSN", wal_status as "walStatus" FROM pg_replication_slots
       WHERE slot_name = ${slot}`;
   if (result.length === 0) {
     throw new AutoResetSignal(`replication slot ${slot} is missing`);
   }
-  const [{restartLSN}] = result;
-  if (restartLSN === null) {
+  const [{restartLSN, walStatus}] = result;
+  if (restartLSN === null || walStatus === 'lost') {
     throw new AutoResetSignal(
       `replication slot ${slot} has been invalidated for exceeding the max_slot_wal_keep_size`,
     );
@@ -643,7 +645,7 @@ class ChangeMaker {
 
     // Validate the new table schemas
     for (const table of nextTbl.values()) {
-      validate(this.#lc, table);
+      validate(this.#lc, table, update.schema.indexes);
     }
 
     const [droppedIdx, createdIdx] = symmetricDifferences(prevIdx, nextIdx);
@@ -734,7 +736,7 @@ class ChangeMaker {
         // Validate that the ChangeProcessor will accept the column change.
         mapPostgresToLiteColumn(table.name, column);
       } catch (cause) {
-        throw new UnsupportedSchemaChangeError({cause});
+        throw new UnsupportedSchemaChangeError(String(cause), {cause});
       }
       changes.push({tag: 'add-column', table, column});
     }
@@ -777,8 +779,9 @@ class ChangeMaker {
       this.#upstreamDB,
       publications,
     );
-    if (schemasDifferent(this.#initialSchema, currentSchema, this.#lc)) {
-      throw new UnsupportedSchemaChangeError();
+    const difference = getSchemaDifference(this.#initialSchema, currentSchema);
+    if (difference !== null) {
+      throw new MissingEventTriggerSupport(difference);
     }
     // Even if the currentSchema is equal to the initialSchema, the
     // MessageRelation itself must be checked to detect transient
@@ -789,55 +792,55 @@ class ChangeMaker {
     );
     if (!orel) {
       // Can happen if a table is created and then dropped in the same transaction.
-      this.#lc.info?.(`relation not in initialSchema: ${stringify(rel)}`);
-      throw new UnsupportedSchemaChangeError();
+      throw new MissingEventTriggerSupport(
+        `relation not in initialSchema: ${stringify(rel)}`,
+      );
     }
     if (relationDifferent(orel, rel)) {
-      this.#lc.info?.(
-        `relation has changed within the transaction: ${stringify(orel)}`,
-        rel,
+      throw new MissingEventTriggerSupport(
+        `relation has changed within the transaction: ${stringify(orel)} vs ${stringify(rel)}`,
       );
-      throw new UnsupportedSchemaChangeError();
     }
     return [];
   }
 }
 
-export function schemasDifferent(
+function getSchemaDifference(
   a: PublishedSchema,
   b: PublishedSchema,
-  lc?: LogContext,
-) {
+): string | null {
   // Note: ignore indexes since changes need not to halt replication
-  return (
-    a.tables.length !== b.tables.length ||
-    a.tables.some((at, i) => {
-      const bt = b.tables[i];
-      if (tablesDifferent(at, bt)) {
-        lc?.info?.(`table ${stringify(at)} has changed`, bt);
-        return true;
-      }
-      return false;
-    })
-  );
+  if (a.tables.length !== b.tables.length) {
+    return `tables created or dropped`;
+  }
+  for (let i = 0; i < a.tables.length; i++) {
+    const at = a.tables[i];
+    const bt = b.tables[i];
+    const difference = getTableDifference(at, bt);
+    if (difference) {
+      return difference;
+    }
+  }
+  return null;
 }
 
 // ColumnSpec comparator
 const byColumnPos = (a: [string, ColumnSpec], b: [string, ColumnSpec]) =>
   a[1].pos < b[1].pos ? -1 : a[1].pos > b[1].pos ? 1 : 0;
 
-export function tablesDifferent(a: PublishedTableSpec, b: PublishedTableSpec) {
-  if (
-    a.oid !== b.oid ||
-    a.schema !== b.schema ||
-    a.name !== b.name ||
-    !deepEqual(a.primaryKey, b.primaryKey)
-  ) {
-    return true;
+function getTableDifference(
+  a: PublishedTableSpec,
+  b: PublishedTableSpec,
+): string | null {
+  if (a.oid !== b.oid || a.schema !== b.schema || a.name !== b.name) {
+    return `Table "${a.name}" differs from table "${b.name}"`;
+  }
+  if (!deepEqual(a.primaryKey, b.primaryKey)) {
+    return `Primary key of table "${a.name}" has changed`;
   }
   const acols = Object.entries(a.columns).sort(byColumnPos);
   const bcols = Object.entries(b.columns).sort(byColumnPos);
-  return (
+  if (
     acols.length !== bcols.length ||
     acols.some(([aname, acol], i) => {
       const [bname, bcol] = bcols[i];
@@ -848,7 +851,10 @@ export function tablesDifferent(a: PublishedTableSpec, b: PublishedTableSpec) {
         acol.notNull !== bcol.notNull
       );
     })
-  );
+  ) {
+    return `Columns of table "${a.name}" have changed`;
+  }
+  return null;
 }
 
 export function relationDifferent(a: PublishedTableSpec, b: PostgresRelation) {
@@ -916,13 +922,19 @@ function withoutColumns(relation: PostgresRelation): MessageRelation {
   return rest;
 }
 
-export class UnsupportedSchemaChangeError extends Error {
+class UnsupportedSchemaChangeError extends Error {
   readonly name = 'UnsupportedSchemaChangeError';
 
-  constructor(options?: ErrorOptions) {
+  // Schema changes cannot be reliably replicated without event trigger support.
+  constructor(msg: string, options?: ErrorOptions) {
+    super(`Replication halted. Resync the replica to recover: ${msg}`, options);
+  }
+}
+
+class MissingEventTriggerSupport extends UnsupportedSchemaChangeError {
+  constructor(msg: string) {
     super(
-      'Replication halted. Schema changes cannot be reliably replicated without event trigger support. Resync the replica to recover.',
-      options,
+      `${msg}. Schema changes cannot be reliably replicated without event trigger support.`,
     );
   }
 }

@@ -1,5 +1,9 @@
-import {PG_INSUFFICIENT_PRIVILEGE} from '@drdgvhbh/postgres-error-codes';
+import {
+  PG_CONFIGURATION_LIMIT_EXCEEDED,
+  PG_INSUFFICIENT_PRIVILEGE,
+} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
+import {platform} from 'node:os';
 import {Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
@@ -9,14 +13,14 @@ import {
   createTableStatement,
 } from '../../../db/create.ts';
 import * as Mode from '../../../db/mode-enum.ts';
-import {NULL_BYTE, TextTransform} from '../../../db/pg-copy.ts';
+import {TsvParser} from '../../../db/pg-copy.ts';
 import {
   mapPostgresToLite,
   mapPostgresToLiteIndex,
 } from '../../../db/pg-to-lite.ts';
 import {getTypeParsers} from '../../../db/pg-type-parser.ts';
 import type {IndexSpec, PublishedTableSpec} from '../../../db/specs.ts';
-import type {LexiVersion} from '../../../types/lexi-version.ts';
+import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
 import {
   JSON_STRINGIFIED,
   liteValue,
@@ -29,15 +33,13 @@ import {
   type PostgresTransaction,
   type PostgresValueType,
 } from '../../../types/pg.ts';
+import {CpuProfiler} from '../../../types/profiler.ts';
 import type {ShardConfig} from '../../../types/shards.ts';
 import {ALLOWED_APP_ID_CHARACTERS} from '../../../types/shards.ts';
 import {id} from '../../../types/sql.ts';
+import {ReplicationStatusPublisher} from '../../replicator/replication-status.ts';
 import {initChangeLog} from '../../replicator/schema/change-log.ts';
-import {
-  initReplicationState,
-  ZERO_VERSION_COLUMN_NAME,
-} from '../../replicator/schema/replication-state.ts';
-import {CopyRunner} from './copy-runner.ts';
+import {initReplicationState} from '../../replicator/schema/replication-state.ts';
 import {toLexiVersion} from './lsn.ts';
 import {ensureShardSchema} from './schema/init.ts';
 import {getPublicationInfo} from './schema/published.ts';
@@ -46,11 +48,13 @@ import {
   dropShard,
   getInternalShardConfig,
   newReplicationSlot,
+  replicationSlotExpression,
   validatePublications,
 } from './schema/shard.ts';
 
 export type InitialSyncOptions = {
   tableCopyWorkers: number;
+  profileCopy?: boolean | undefined;
 };
 
 export async function initialSync(
@@ -65,19 +69,18 @@ export async function initialSync(
       'The App ID may only consist of lower-case letters, numbers, and the underscore character',
     );
   }
-  const {tableCopyWorkers: numWorkers} = syncOptions;
+  const {tableCopyWorkers, profileCopy} = syncOptions;
+  const copyProfiler = profileCopy ? await CpuProfiler.connect() : null;
   const sql = pgClient(lc, upstreamURI);
-  // The typeClient's reason for existence is to configure the type
-  // parsing for the copy workers, which skip JSON parsing for efficiency.
-  const typeClient = pgClient(lc, upstreamURI, {}, 'json-as-string');
-  // Fire off an innocuous request to initialize a connection and thus fetch
-  // the array types that will be used to parse the COPY stream.
-  void typeClient`SELECT 1`.execute();
   const replicationSession = pgClient(lc, upstreamURI, {
     ['fetch_types']: false, // Necessary for the streaming protocol
     connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
   });
   const slotName = newReplicationSlot(shard);
+  const statusPublisher = new ReplicationStatusPublisher(tx).publish(
+    lc,
+    'Initializing',
+  );
   try {
     await checkUpstreamConfig(sql);
 
@@ -93,18 +96,32 @@ export async function initialSync(
         slot = await createReplicationSlot(lc, replicationSession, slotName);
         break;
       } catch (e) {
-        if (
-          first &&
-          e instanceof postgres.PostgresError &&
-          e.code === PG_INSUFFICIENT_PRIVILEGE
-        ) {
-          // Some Postgres variants (e.g. Google Cloud SQL) require that
-          // the user have the REPLICATION role in order to create a slot.
-          // Note that this must be done by the upstreamDB connection, and
-          // does not work in the replicationSession itself.
-          await sql`ALTER ROLE current_user WITH REPLICATION`;
-          lc.info?.(`Added the REPLICATION role to database user`);
-          continue;
+        if (first && e instanceof postgres.PostgresError) {
+          if (e.code === PG_INSUFFICIENT_PRIVILEGE) {
+            // Some Postgres variants (e.g. Google Cloud SQL) require that
+            // the user have the REPLICATION role in order to create a slot.
+            // Note that this must be done by the upstreamDB connection, and
+            // does not work in the replicationSession itself.
+            await sql`ALTER ROLE current_user WITH REPLICATION`;
+            lc.info?.(`Added the REPLICATION role to database user`);
+            continue;
+          }
+          if (e.code === PG_CONFIGURATION_LIMIT_EXCEEDED) {
+            const slotExpression = replicationSlotExpression(shard);
+
+            const dropped = await sql<{slot: string}[]>`
+              SELECT slot_name as slot, pg_drop_replication_slot(slot_name) 
+                FROM pg_replication_slots
+                WHERE slot_name LIKE ${slotExpression} AND NOT active`;
+            if (dropped.length) {
+              lc.warn?.(
+                `Dropped inactive replication slots: ${dropped.map(({slot}) => slot)}`,
+                e,
+              );
+              continue;
+            }
+            lc.error?.(`Unable to drop replication slots`, e);
+          }
         }
         throw e;
       }
@@ -117,41 +134,63 @@ export async function initialSync(
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
     const start = performance.now();
-    const copyRunner = new CopyRunner(
+    // Retrieve the published schema at the consistent_point.
+    const published = await sql.begin(Mode.READONLY, async tx => {
+      await tx.unsafe(/* sql*/ `SET TRANSACTION SNAPSHOT '${snapshot}'`);
+      return getPublicationInfo(tx, publications);
+    });
+    // Note: If this throws, initial-sync is aborted.
+    validatePublications(lc, published);
+
+    // Now that tables have been validated, kick off the copiers.
+    const {tables, indexes} = published;
+    const numTables = tables.length;
+    if (platform() === 'win32' && tableCopyWorkers < numTables) {
+      lc.warn?.(
+        `Increasing the number of copy workers from ${tableCopyWorkers} to ` +
+          `${numTables} to work around a Node/Postgres connection bug`,
+      );
+    }
+    const numWorkers =
+      platform() === 'win32'
+        ? numTables
+        : Math.min(tableCopyWorkers, numTables);
+
+    const copyPool = pgClient(
       lc,
-      () =>
-        pgClient(lc, upstreamURI, {
-          // No need to fetch array types for these connections, as pgClient
-          // streams the COPY data as plain text; type parsing is done in the
-          // copy worker, which gets its types from the typeClient. This
-          // eliminates one round trip when each db connection is established.
-          ['fetch_types']: false,
-          connection: {['application_name']: 'initial-sync-copy-worker'},
-        }),
-      numWorkers,
+      upstreamURI,
+      {
+        max: numWorkers,
+        connection: {['application_name']: 'initial-sync-copy-worker'},
+      },
+      'json-as-string',
+    );
+    const copiers = startTableCopyWorkers(
+      lc,
+      copyPool,
       snapshot,
+      numWorkers,
+      numTables,
     );
     try {
-      // Retrieve the published schema at the consistent_point.
-      const published = await sql.begin(Mode.READONLY, async tx => {
-        await tx.unsafe(/* sql*/ `SET TRANSACTION SNAPSHOT '${snapshot}'`);
-        return getPublicationInfo(tx, publications);
-      });
-      // Note: If this throws, initial-sync is aborted.
-      validatePublications(lc, published);
+      createLiteTables(tx, tables, initialVersion);
+      statusPublisher.publish(
+        lc,
+        'Initializing',
+        `Copying ${numTables} upstream tables at version ${initialVersion}`,
+        5000,
+      );
 
-      // Now that tables have been validated, kick off the copiers.
-      const {tables, indexes} = published;
-      const numTables = tables.length;
-      createLiteTables(tx, tables);
-
+      void copyProfiler?.start();
       const rowCounts = await Promise.all(
         tables.map(table =>
-          copyRunner.run((db, lc) =>
-            copy(lc, table, typeClient, db, tx, initialVersion),
+          copiers.processReadTask((db, lc) =>
+            copy(lc, table, copyPool, db, tx),
           ),
         ),
       );
+      void copyProfiler?.stopAndDispose(lc, 'initial-copy');
+
       const total = rowCounts.reduce(
         (acc, curr) => ({
           rows: acc.rows + curr.rows,
@@ -160,6 +199,12 @@ export async function initialSync(
         {rows: 0, flushTime: 0},
       );
 
+      statusPublisher.publish(
+        lc,
+        'Indexing',
+        `Creating ${indexes.length} indexes`,
+        5000,
+      );
       const indexStart = performance.now();
       createLiteIndices(tx, indexes);
       const index = performance.now() - indexStart;
@@ -173,7 +218,14 @@ export async function initialSync(
           `(flush: ${total.flushTime.toFixed(3)}, index: ${index.toFixed(3)}, total: ${elapsed.toFixed(3)} ms)`,
       );
     } finally {
-      copyRunner.close();
+      copiers.setDone();
+      if (platform() === 'win32') {
+        // Workaround a Node bug in Windows in which certain COPY streams result
+        // in hanging the connection, which causes this await to never resolve.
+        void copyPool.end().catch(e => lc.warn?.(`Error closing copyPool`, e));
+      } else {
+        await copyPool.end();
+      }
     }
   } catch (e) {
     // If initial-sync did not succeed, make a best effort to drop the
@@ -183,12 +235,12 @@ export async function initialSync(
     await sql`
       SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots
         WHERE slot_name = ${slotName};
-    `;
-    throw e;
+    `.catch(e => lc.warn?.(`Unable to drop replication slot ${slotName}`, e));
+    await statusPublisher.publishAndThrowError(lc, 'Initializing', e);
   } finally {
+    statusPublisher.stop();
     await replicationSession.end();
     await sql.end();
-    await typeClient.end();
   }
 }
 
@@ -240,6 +292,38 @@ async function ensurePublishedTables(
   return {publications};
 }
 
+function startTableCopyWorkers(
+  lc: LogContext,
+  db: PostgresDB,
+  snapshot: string,
+  numWorkers: number,
+  numTables: number,
+): TransactionPool {
+  const {init} = importSnapshot(snapshot);
+  const tableCopiers = new TransactionPool(
+    lc,
+    Mode.READONLY,
+    init,
+    undefined,
+    numWorkers,
+  );
+  tableCopiers.run(db);
+
+  lc.info?.(`Started ${numWorkers} workers to copy ${numTables} tables`);
+
+  if (parseInt(process.versions.node) < 22) {
+    lc.warn?.(
+      `\n\n\n` +
+        `Older versions of Node have a bug that results in an unresponsive\n` +
+        `Postgres connection after running certain combinations of COPY commands.\n` +
+        `If initial sync hangs, run zero-cache with Node v22+. This has the additional\n` +
+        `benefit of being consistent with the Node version run in the production container image.` +
+        `\n\n\n`,
+    );
+  }
+  return tableCopiers;
+}
+
 /* eslint-disable @typescript-eslint/naming-convention */
 // Row returned by `CREATE_REPLICATION_SLOT`
 type ReplicationSlot = {
@@ -267,9 +351,13 @@ async function createReplicationSlot(
   return slot;
 }
 
-function createLiteTables(tx: Database, tables: PublishedTableSpec[]) {
+function createLiteTables(
+  tx: Database,
+  tables: PublishedTableSpec[],
+  initialVersion: string,
+) {
   for (const t of tables) {
-    tx.exec(createTableStatement(mapPostgresToLite(t)));
+    tx.exec(createTableStatement(mapPostgresToLite(t, initialVersion)));
   }
 }
 
@@ -295,7 +383,6 @@ async function copy(
   dbClient: PostgresDB,
   from: PostgresTransaction,
   to: Database,
-  initialVersion: LexiVersion,
 ) {
   const start = performance.now();
   let rows = 0;
@@ -306,10 +393,7 @@ async function copy(
 
   const columnSpecs = orderedColumns.map(([_name, spec]) => spec);
   const selectColumns = orderedColumns.map(([c]) => id(c)).join(',');
-  const insertColumns = [
-    ...orderedColumns.map(([c]) => c),
-    ZERO_VERSION_COLUMN_NAME,
-  ];
+  const insertColumns = orderedColumns.map(([c]) => c);
   const insertColumnList = insertColumns.map(c => id(c)).join(',');
 
   // (?,?,?,?,?)
@@ -332,7 +416,7 @@ async function copy(
       ? ''
       : /*sql*/ ` WHERE ${filterConditions.join(' OR ')}`);
 
-  const valuesPerRow = columnSpecs.length + 1; // includes _0_version column
+  const valuesPerRow = columnSpecs.length;
   const valuesPerBatch = valuesPerRow * INSERT_BATCH_SIZE;
 
   // Preallocate the buffer of values to reduce memory allocation churn.
@@ -375,42 +459,40 @@ async function copy(
   const parsers = columnSpecs.map(c => {
     const pgParse = pgParsers.getTypeParser(c.typeOID);
     return (val: string) =>
-      val === NULL_BYTE
-        ? null
-        : liteValue(
-            pgParse(val) as PostgresValueType,
-            c.dataType,
-            JSON_STRINGIFIED,
-          );
+      liteValue(
+        pgParse(val) as PostgresValueType,
+        c.dataType,
+        JSON_STRINGIFIED,
+      );
   });
 
+  const tsvParser = new TsvParser();
   let col = 0;
 
   await pipeline(
     await from.unsafe(`COPY (${selectStmt}) TO STDOUT`).readable(),
-    new TextTransform(),
     new Writable({
-      objectMode: true,
+      highWaterMark: BUFFERED_SIZE_THRESHOLD,
 
-      write: (
-        text: string,
+      write(
+        chunk: Buffer,
         _encoding: string,
         callback: (error?: Error) => void,
-      ) => {
+      ) {
         try {
-          // Give every value at least 4 bytes.
-          pendingSize += 4 + (text === NULL_BYTE ? 0 : text.length);
-          pendingValues[pendingRows * valuesPerRow + col] = parsers[col](text);
+          for (const text of tsvParser.parse(chunk)) {
+            pendingSize += text === null ? 4 : text.length;
+            pendingValues[pendingRows * valuesPerRow + col] =
+              text === null ? null : parsers[col](text);
 
-          if (++col === parsers.length) {
-            // The last column is the _0_version.
-            pendingValues[pendingRows * valuesPerRow + col] = initialVersion;
-            col = 0;
-            if (
-              ++pendingRows >= MAX_BUFFERED_ROWS - valuesPerRow ||
-              pendingSize >= BUFFERED_SIZE_THRESHOLD
-            ) {
-              flush();
+            if (++col === parsers.length) {
+              col = 0;
+              if (
+                ++pendingRows >= MAX_BUFFERED_ROWS - valuesPerRow ||
+                pendingSize >= BUFFERED_SIZE_THRESHOLD
+              ) {
+                flush();
+              }
             }
           }
           callback();

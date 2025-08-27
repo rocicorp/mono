@@ -29,6 +29,9 @@ export class SyncerWsMessageHandler implements MessageHandler {
   readonly #clientGroupID: string;
   readonly #syncContext: SyncContext;
   readonly #pusher: Pusher | undefined;
+  // DEPRECATED: remove #token
+  // and forward auth and cookie headers that were
+  // sent with the push.
   readonly #token: string | undefined;
 
   constructor(
@@ -46,6 +49,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
       baseCookie,
       protocolVersion,
       schemaVersion,
+      httpCookie,
     } = connectParams;
     this.#viewSyncer = viewSyncer;
     this.#mutagen = mutagen;
@@ -66,6 +70,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
       protocolVersion,
       schemaVersion,
       tokenData,
+      httpCookie,
     };
   }
 
@@ -114,13 +119,14 @@ export class SyncerWsMessageHandler implements MessageHandler {
             if (mutations[0].type === 'custom') {
               assert(
                 this.#pusher,
-                'A ZERO_PUSH_URL must be set in order to process custom mutations.',
+                'A ZERO_MUTATE_URL must be set in order to process custom mutations.',
               );
               return [
                 this.#pusher.enqueuePush(
                   this.#syncContext.clientID,
                   msg[1],
                   this.#token,
+                  this.#syncContext.httpCookie,
                 ),
               ];
             }
@@ -165,7 +171,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
           {
             type: 'stream',
             source: 'viewSyncer',
-            stream: await startSpan(tracer, 'connection.initConnection', () =>
+            stream: startSpan(tracer, 'connection.initConnection', () =>
               viewSyncer.initConnection(this.#syncContext, msg),
             ),
           },
@@ -190,15 +196,19 @@ export class SyncerWsMessageHandler implements MessageHandler {
         return ret;
       }
       case 'closeConnection':
-        await startAsyncSpan(tracer, 'connection.closeConnection', () =>
-          viewSyncer.closeConnection(this.#syncContext, msg),
-        );
+        // This message is deprecated and no longer used.
         break;
 
       case 'inspect':
         await startAsyncSpan(tracer, 'connection.inspect', () =>
           viewSyncer.inspect(this.#syncContext, msg),
         );
+        break;
+
+      case 'ackMutationResponses':
+        if (this.#pusher) {
+          await this.#pusher.ackMutationResponses(msg[1]);
+        }
         break;
 
       default:

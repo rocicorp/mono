@@ -1,17 +1,17 @@
 /* eslint-disable no-irregular-whitespace */
 import {Readable, Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
-import {beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect} from 'vitest';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import {randInt} from '../../../shared/src/rand.ts';
-import {testDBs} from '../test/db.ts';
+import {type PgTest, test} from '../test/db.ts';
 import {type PostgresDB} from '../types/pg.ts';
 import {NULL_BYTE, TextTransform} from './pg-copy.ts';
 
 describe('pg-copy', () => {
   let sql: PostgresDB;
 
-  beforeEach(async () => {
+  beforeEach<PgTest>(async ({testDBs}) => {
     sql = await testDBs.create('pg_copy_test');
 
     await sql`
@@ -28,9 +28,7 @@ describe('pg-copy', () => {
         j text
       )`;
 
-    return async () => {
-      await testDBs.drop(sql);
-    };
+    return () => testDBs.drop(sql);
   });
 
   type Row = {

@@ -2,13 +2,18 @@ import {useSyncExternalStore} from 'react';
 import {deepClone} from '../../shared/src/deep-clone.ts';
 import type {Immutable} from '../../shared/src/immutable.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {Zero} from '../../zero-client/src/client/zero.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {AbstractQuery} from '../../zql/src/query/query-impl.ts';
-import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
-import {DEFAULT_TTL, type TTL} from '../../zql/src/query/ttl.ts';
+import {
+  delegateSymbol,
+  type HumanReadable,
+  type Query,
+} from '../../zql/src/query/query.ts';
+import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
-import {useZero} from './use-zero.tsx';
+import {useZero} from './zero-provider.tsx';
 
 export type QueryResultDetails = Readonly<{
   type: ResultType;
@@ -38,16 +43,15 @@ export function useQuery<
   options?: UseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
-  let ttl: TTL = DEFAULT_TTL;
+  let ttl: TTL = DEFAULT_TTL_MS;
   if (typeof options === 'boolean') {
     enabled = options;
   } else if (options) {
-    ({enabled = true, ttl = DEFAULT_TTL} = options);
+    ({enabled = true, ttl = DEFAULT_TTL_MS} = options);
   }
 
-  const z = useZero();
   const view = viewStore.getView(
-    z.clientID,
+    useZero(),
     query as AbstractQuery<TSchema, TTable, TReturn>,
     enabled,
     ttl,
@@ -182,8 +186,8 @@ export class ViewStore {
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
   >(
-    clientID: string,
-    query: AbstractQuery<TSchema, TTable, TReturn>,
+    zero: Zero<TSchema>,
+    query: Query<TSchema, TTable, TReturn>,
     enabled: boolean,
     ttl: TTL,
   ): {
@@ -200,9 +204,10 @@ export class ViewStore {
       };
     }
 
-    const hash = query.hash() + clientID;
+    const hash = query.hash() + zero.clientID;
     let existing = this.#views.get(hash);
     if (!existing) {
+      query = query[delegateSymbol](zero.queryDelegate);
       existing = new ViewWrapper(
         query,
         format,
@@ -271,7 +276,7 @@ class ViewWrapper<
   #ttl: TTL;
 
   constructor(
-    query: AbstractQuery<TSchema, TTable, TReturn>,
+    query: Query<TSchema, TTable, TReturn>,
     format: Format,
     ttl: TTL,
     onMaterialized: (view: ViewWrapper<TSchema, TTable, TReturn>) => void,

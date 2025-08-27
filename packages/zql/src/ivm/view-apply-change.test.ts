@@ -20,12 +20,14 @@ describe('applyChange', () => {
         tableName: 'matchup',
         columns: {
           eventID: {type: 'string'},
+          athleteCountry: {type: 'string'},
           athleteID: {type: 'string'},
           disciplineID: {type: 'string'},
         },
-        primaryKey: ['eventID', 'athleteID', 'disciplineID'],
+        primaryKey: ['eventID', 'athleteCountry', 'athleteID', 'disciplineID'],
         sort: [
           ['eventID', 'asc'],
+          ['athleteCountry', 'asc'],
           ['athleteID', 'asc'],
           ['disciplineID', 'asc'],
         ],
@@ -35,19 +37,27 @@ describe('applyChange', () => {
             tableName: 'athlete',
             columns: {
               id: {type: 'string'},
+              country: {type: 'string'},
               name: {type: 'string'},
             },
-            primaryKey: ['id'],
-            sort: [['id', 'asc']],
+            primaryKey: ['country', 'id'],
+            sort: [
+              ['country', 'asc'],
+              ['id', 'asc'],
+            ],
             system: 'client',
             relationships: {},
             isHidden: false,
-            compareRows: makeComparator([['id', 'asc']]),
+            compareRows: makeComparator([
+              ['country', 'asc'],
+              ['id', 'asc'],
+            ]),
           },
         },
         isHidden: true,
         compareRows: makeComparator([
           ['eventID', 'asc'],
+          ['athleteCountry', 'asc'],
           ['athleteID', 'asc'],
           ['disciplineID', 'asc'],
         ]),
@@ -101,6 +111,7 @@ describe('applyChange', () => {
                 node: {
                   row: {
                     eventID: 'e1',
+                    athleteCountry: 'USA',
                     athleteID: 'a1',
                     disciplineID: 'd1',
                   },
@@ -108,6 +119,7 @@ describe('applyChange', () => {
                     athletes: () => [
                       {
                         row: {
+                          country: 'USA',
                           id: 'a1',
                           name: 'Mason Ho',
                         },
@@ -134,6 +146,7 @@ describe('applyChange', () => {
                 node: {
                   row: {
                     eventID: 'e1',
+                    athleteCountry: 'USA',
                     athleteID: 'a1',
                     disciplineID: 'd2',
                   },
@@ -141,6 +154,7 @@ describe('applyChange', () => {
                     athletes: () => [
                       {
                         row: {
+                          country: 'USA',
                           id: 'a1',
                           name: 'Mason Ho',
                         },
@@ -155,7 +169,7 @@ describe('applyChange', () => {
         ];
 
         for (const change of changes) {
-          applyChange(parentEntry, change, schema, relationship, format);
+          applyChange(parentEntry, change, schema, relationship, format, true);
         }
 
         expect(parentEntry).toMatchInlineSnapshot(`
@@ -164,14 +178,17 @@ describe('applyChange', () => {
               {
                 "athletes": [
                   {
+                    "country": "USA",
                     "id": "a1",
                     "name": "Mason Ho",
                     Symbol(rc): 2,
+                    Symbol(id): "["USA","a1"]",
                   },
                 ],
                 "id": "e1",
                 "name": "Buffalo Big Board Classic",
                 Symbol(rc): 1,
+                Symbol(id): ""e1"",
               },
             ],
           }
@@ -195,6 +212,7 @@ describe('applyChange', () => {
                 node: {
                   row: {
                     eventID: 'e1',
+                    athleteCountry: 'USA',
                     athleteID: 'a1',
                     disciplineID: 'd1',
                   },
@@ -202,6 +220,7 @@ describe('applyChange', () => {
                     athletes: () => [
                       {
                         row: {
+                          country: 'USA',
                           id: 'a1',
                           name: 'Mason Ho',
                         },
@@ -216,7 +235,7 @@ describe('applyChange', () => {
         ];
 
         for (const change of changes) {
-          applyChange(parentEntry, change, schema, relationship, format);
+          applyChange(parentEntry, change, schema, relationship, format, true);
         }
 
         expect(parentEntry).toMatchInlineSnapshot(`
@@ -225,14 +244,17 @@ describe('applyChange', () => {
               {
                 "athletes": [
                   {
+                    "country": "USA",
                     "id": "a1",
                     "name": "Mason Ho",
                     Symbol(rc): 1,
+                    Symbol(id): "["USA","a1"]",
                   },
                 ],
                 "id": "e1",
                 "name": "Buffalo Big Board Classic",
                 Symbol(rc): 1,
+                Symbol(id): ""e1"",
               },
             ],
           }
@@ -256,6 +278,7 @@ describe('applyChange', () => {
                 node: {
                   row: {
                     eventID: 'e1',
+                    athleteCountry: 'USA',
                     athleteID: 'a1',
                     disciplineID: 'd2',
                   },
@@ -263,6 +286,7 @@ describe('applyChange', () => {
                     athletes: () => [
                       {
                         row: {
+                          country: 'USA',
                           id: 'a1',
                           name: 'Mason Ho',
                         },
@@ -277,7 +301,7 @@ describe('applyChange', () => {
         ];
 
         for (const change of changes) {
-          applyChange(parentEntry, change, schema, relationship, format);
+          applyChange(parentEntry, change, schema, relationship, format, true);
         }
 
         expect(parentEntry).toMatchInlineSnapshot(`
@@ -288,6 +312,7 @@ describe('applyChange', () => {
                 "id": "e1",
                 "name": "Buffalo Big Board Classic",
                 Symbol(rc): 1,
+                Symbol(id): ""e1"",
               },
             ],
           }
@@ -338,6 +363,7 @@ describe('applyChange', () => {
                 node: {
                   row: {
                     eventID: 'e1',
+                    athleteCountry: 'USA',
                     athleteID: 'a1',
                     disciplineID: 'd1',
                   },
@@ -345,6 +371,7 @@ describe('applyChange', () => {
                     athletes: () => [
                       {
                         row: {
+                          country: 'USA',
                           id: 'a1',
                           name: 'Mason Ho',
                         },
@@ -371,6 +398,7 @@ describe('applyChange', () => {
                 node: {
                   row: {
                     eventID: 'e1',
+                    athleteCountry: 'USA',
                     athleteID: 'a1',
                     disciplineID: 'd2',
                   },
@@ -378,6 +406,7 @@ describe('applyChange', () => {
                     athletes: () => [
                       {
                         row: {
+                          country: 'USA',
                           id: 'a1',
                           name: 'Mason Ho',
                         },
@@ -392,7 +421,7 @@ describe('applyChange', () => {
         ];
 
         for (const change of changes) {
-          applyChange(parentEntry, change, schema, relationship, format);
+          applyChange(parentEntry, change, schema, relationship, format, true);
         }
 
         expect(parentEntry).toMatchInlineSnapshot(`
@@ -400,13 +429,16 @@ describe('applyChange', () => {
             "": [
               {
                 "athletes": {
+                  "country": "USA",
                   "id": "a1",
                   "name": "Mason Ho",
                   Symbol(rc): 2,
+                  Symbol(id): "["USA","a1"]",
                 },
                 "id": "e1",
                 "name": "Buffalo Big Board Classic",
                 Symbol(rc): 1,
+                Symbol(id): ""e1"",
               },
             ],
           }
@@ -430,6 +462,7 @@ describe('applyChange', () => {
                 node: {
                   row: {
                     eventID: 'e1',
+                    athleteCountry: 'USA',
                     athleteID: 'a1',
                     disciplineID: 'd1',
                   },
@@ -437,6 +470,7 @@ describe('applyChange', () => {
                     athletes: () => [
                       {
                         row: {
+                          country: 'USA',
                           id: 'a1',
                           name: 'Mason Ho',
                         },
@@ -451,7 +485,7 @@ describe('applyChange', () => {
         ];
 
         for (const change of changes) {
-          applyChange(parentEntry, change, schema, relationship, format);
+          applyChange(parentEntry, change, schema, relationship, format, true);
         }
 
         expect(parentEntry).toMatchInlineSnapshot(`
@@ -459,13 +493,16 @@ describe('applyChange', () => {
             "": [
               {
                 "athletes": {
+                  "country": "USA",
                   "id": "a1",
                   "name": "Mason Ho",
                   Symbol(rc): 1,
+                  Symbol(id): "["USA","a1"]",
                 },
                 "id": "e1",
                 "name": "Buffalo Big Board Classic",
                 Symbol(rc): 1,
+                Symbol(id): ""e1"",
               },
             ],
           }
@@ -489,6 +526,7 @@ describe('applyChange', () => {
                 node: {
                   row: {
                     eventID: 'e1',
+                    athleteCountry: 'USA',
                     athleteID: 'a1',
                     disciplineID: 'd2',
                   },
@@ -496,6 +534,7 @@ describe('applyChange', () => {
                     athletes: () => [
                       {
                         row: {
+                          country: 'USA',
                           id: 'a1',
                           name: 'Mason Ho',
                         },
@@ -510,7 +549,7 @@ describe('applyChange', () => {
         ];
 
         for (const change of changes) {
-          applyChange(parentEntry, change, schema, relationship, format);
+          applyChange(parentEntry, change, schema, relationship, format, true);
         }
 
         expect(parentEntry).toMatchInlineSnapshot(`
@@ -521,6 +560,7 @@ describe('applyChange', () => {
                 "id": "e1",
                 "name": "Buffalo Big Board Classic",
                 Symbol(rc): 1,
+                Symbol(id): ""e1"",
               },
             ],
           }
@@ -551,7 +591,7 @@ describe('applyChange', () => {
       };
 
       const apply = (change: ViewChange) =>
-        applyChange(root, change, schema, '', format);
+        applyChange(root, change, schema, '', format, true);
 
       apply({
         type: 'add',
@@ -570,6 +610,7 @@ describe('applyChange', () => {
               "id": "1",
               "name": "Aaron",
               Symbol(rc): 1,
+              Symbol(id): ""1"",
             },
           ],
         }
@@ -594,11 +635,13 @@ describe('applyChange', () => {
               "id": "1",
               "name": "Aaron",
               Symbol(rc): 1,
+              Symbol(id): ""1"",
             },
             {
               "id": "2",
               "name": "Greg",
               Symbol(rc): 5,
+              Symbol(id): ""2"",
             },
           ],
         }
@@ -610,7 +653,7 @@ describe('applyChange', () => {
           node: {
             row: {
               id: '2',
-              name: 'N/A',
+              name: 'Greg',
             },
             relationships: {},
           },
@@ -623,11 +666,13 @@ describe('applyChange', () => {
               "id": "1",
               "name": "Aaron",
               Symbol(rc): 1,
+              Symbol(id): ""1"",
             },
             {
               "id": "2",
               "name": "Greg",
               Symbol(rc): 1,
+              Symbol(id): ""2"",
             },
           ],
         }
@@ -638,7 +683,7 @@ describe('applyChange', () => {
         node: {
           row: {
             id: '2',
-            name: 'N/A',
+            name: 'Greg',
           },
           relationships: {},
         },
@@ -651,6 +696,7 @@ describe('applyChange', () => {
               "id": "1",
               "name": "Aaron",
               Symbol(rc): 1,
+              Symbol(id): ""1"",
             },
           ],
         }
@@ -662,35 +708,12 @@ describe('applyChange', () => {
           node: {
             row: {
               id: '2',
-              name: 'N/A', // when removing the non primary keys are ignored
+              name: 'Greg',
             },
             relationships: {},
           },
         }),
       ).toThrowError(new Error('node does not exist'));
-
-      // Add id:1 again but with a different name
-      apply({
-        type: 'add',
-        node: {
-          row: {
-            id: '1',
-            name: 'Darick',
-          },
-          relationships: {},
-        },
-      });
-      expect(root).toMatchInlineSnapshot(`
-        {
-          "": [
-            {
-              "id": "1",
-              "name": "Darick",
-              Symbol(rc): 2,
-            },
-          ],
-        }
-      `);
     });
 
     test('singular: true', () => {
@@ -714,7 +737,7 @@ describe('applyChange', () => {
       };
 
       const apply = (change: ViewChange) =>
-        applyChange(root, change, schema, relationship, format);
+        applyChange(root, change, schema, relationship, format, true);
 
       apply({
         type: 'add',
@@ -732,6 +755,7 @@ describe('applyChange', () => {
             "id": "1",
             "name": "Aaron",
             Symbol(rc): 1,
+            Symbol(id): ""1"",
           },
         }
       `);
@@ -758,7 +782,7 @@ describe('applyChange', () => {
         node: {
           row: {
             id: '1',
-            name: 'Greg',
+            name: 'Aaron',
           },
           relationships: {},
         },
@@ -767,8 +791,9 @@ describe('applyChange', () => {
         {
           "": {
             "id": "1",
-            "name": "Greg",
+            "name": "Aaron",
             Symbol(rc): 2,
+            Symbol(id): ""1"",
           },
         }
       `);
@@ -779,7 +804,7 @@ describe('applyChange', () => {
           node: {
             row: {
               id: '1',
-              name: 'Greg',
+              name: 'Aaron',
             },
             relationships: {},
           },
@@ -789,8 +814,9 @@ describe('applyChange', () => {
         {
           "": {
             "id": "1",
-            "name": "Greg",
+            "name": "Aaron",
             Symbol(rc): 5,
+            Symbol(id): ""1"",
           },
         }
       `);
@@ -801,7 +827,7 @@ describe('applyChange', () => {
           node: {
             row: {
               id: '1',
-              name: 'N/A',
+              name: 'Aaron',
             },
             relationships: {},
           },
@@ -811,8 +837,9 @@ describe('applyChange', () => {
         {
           "": {
             "id": "1",
-            "name": "Greg",
+            "name": "Aaron",
             Symbol(rc): 1,
+            Symbol(id): ""1"",
           },
         }
       `);
@@ -822,7 +849,7 @@ describe('applyChange', () => {
         node: {
           row: {
             id: '1',
-            name: 'N/A',
+            name: 'Aaron',
           },
           relationships: {},
         },
@@ -839,7 +866,7 @@ describe('applyChange', () => {
           node: {
             row: {
               id: '1',
-              name: 'N/A',
+              name: 'Aaron',
             },
             relationships: {},
           },
@@ -868,7 +895,7 @@ describe('applyChange', () => {
       };
 
       const apply = (change: ViewChange) =>
-        applyChange(root, change, schema, '', format);
+        applyChange(root, change, schema, '', format, true);
 
       apply({
         type: 'add',
@@ -887,57 +914,7 @@ describe('applyChange', () => {
               "id": "1",
               "name": "Aaron",
               Symbol(rc): 1,
-            },
-          ],
-        }
-      `);
-
-      apply({
-        type: 'edit',
-        oldNode: {
-          row: {
-            id: '1',
-            name: 'N/A',
-          },
-        },
-        node: {
-          row: {
-            id: '1',
-            name: 'Greg',
-          },
-        },
-      });
-      expect(root).toMatchInlineSnapshot(`
-        {
-          "": [
-            {
-              "id": "1",
-              "name": "Greg",
-              Symbol(rc): 1,
-            },
-          ],
-        }
-      `);
-
-      for (let i = 0; i < 2; i++) {
-        apply({
-          type: 'add',
-          node: {
-            row: {
-              id: '1',
-              name: 'Aaron',
-            },
-            relationships: {},
-          },
-        });
-      }
-      expect(root).toMatchInlineSnapshot(`
-        {
-          "": [
-            {
-              "id": "1",
-              "name": "Aaron",
-              Symbol(rc): 3,
+              Symbol(id): ""1"",
             },
           ],
         }
@@ -964,7 +941,61 @@ describe('applyChange', () => {
             {
               "id": "1",
               "name": "Greg",
+              Symbol(rc): 1,
+              Symbol(id): ""1"",
+            },
+          ],
+        }
+      `);
+
+      for (let i = 0; i < 2; i++) {
+        apply({
+          type: 'add',
+          node: {
+            row: {
+              id: '1',
+              name: 'Greg',
+            },
+            relationships: {},
+          },
+        });
+      }
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": [
+            {
+              "id": "1",
+              "name": "Greg",
               Symbol(rc): 3,
+              Symbol(id): ""1"",
+            },
+          ],
+        }
+      `);
+
+      apply({
+        type: 'edit',
+        oldNode: {
+          row: {
+            id: '1',
+            name: 'Greg',
+          },
+        },
+        node: {
+          row: {
+            id: '1',
+            name: 'Aaron',
+          },
+        },
+      });
+      expect(root).toMatchInlineSnapshot(`
+        {
+          "": [
+            {
+              "id": "1",
+              "name": "Aaron",
+              Symbol(rc): 3,
+              Symbol(id): ""1"",
             },
           ],
         }
@@ -992,7 +1023,7 @@ describe('applyChange', () => {
       };
 
       const apply = (change: ViewChange) =>
-        applyChange(root, change, schema, '', format);
+        applyChange(root, change, schema, '', format, true);
 
       apply({
         type: 'add',
@@ -1011,6 +1042,7 @@ describe('applyChange', () => {
               "id": "1",
               "name": "Aaron",
               Symbol(rc): 1,
+              Symbol(id): ""1"",
             },
           ],
         }
@@ -1021,7 +1053,7 @@ describe('applyChange', () => {
         oldNode: {
           row: {
             id: '1',
-            name: 'N/A',
+            name: 'Aaron',
           },
         },
         node: {
@@ -1038,6 +1070,7 @@ describe('applyChange', () => {
               "id": "2",
               "name": "Greg",
               Symbol(rc): 1,
+              Symbol(id): ""2"",
             },
           ],
         }
@@ -1073,6 +1106,7 @@ describe('applyChange', () => {
               "id": "1",
               "name": "Aaron",
               Symbol(rc): 2,
+              Symbol(id): ""1"",
             },
           ],
         }
@@ -1098,11 +1132,13 @@ describe('applyChange', () => {
               "id": "1",
               "name": "Aaron",
               Symbol(rc): 2,
+              Symbol(id): ""1"",
             },
             {
               "id": "2",
               "name": "Greg",
               Symbol(rc): 2,
+              Symbol(id): ""2"",
             },
           ],
         }
@@ -1130,11 +1166,13 @@ describe('applyChange', () => {
               "id": "1",
               "name": "Aaron",
               Symbol(rc): 1,
+              Symbol(id): ""1"",
             },
             {
               "id": "2",
               "name": "Greg",
               Symbol(rc): 3,
+              Symbol(id): ""2"",
             },
           ],
         }
@@ -1162,7 +1200,7 @@ describe('applyChange', () => {
       };
 
       const apply = (change: ViewChange) =>
-        applyChange(root, change, schema, '', format);
+        applyChange(root, change, schema, '', format, true);
 
       apply({
         type: 'add',
@@ -1180,6 +1218,7 @@ describe('applyChange', () => {
             "id": "1",
             "name": "Aaron",
             Symbol(rc): 1,
+            Symbol(id): ""1"",
           },
         }
       `);
@@ -1189,7 +1228,7 @@ describe('applyChange', () => {
         oldNode: {
           row: {
             id: '1',
-            name: 'N/A',
+            name: 'Aaron',
           },
         },
         node: {
@@ -1205,6 +1244,7 @@ describe('applyChange', () => {
             "id": "1",
             "name": "Greg",
             Symbol(rc): 1,
+            Symbol(id): ""1"",
           },
         }
       `);
@@ -1225,6 +1265,7 @@ describe('applyChange', () => {
             "id": "1",
             "name": "Greg",
             Symbol(rc): 2,
+            Symbol(id): ""1"",
           },
         }
       `);
@@ -1250,6 +1291,7 @@ describe('applyChange', () => {
             "id": "1",
             "name": "Aaron",
             Symbol(rc): 2,
+            Symbol(id): ""1"",
           },
         }
       `);
@@ -1276,7 +1318,7 @@ describe('applyChange', () => {
       };
 
       const apply = (change: ViewChange) =>
-        applyChange(root, change, schema, '', format);
+        applyChange(root, change, schema, '', format, true);
 
       apply({
         type: 'add',
@@ -1294,6 +1336,7 @@ describe('applyChange', () => {
             "id": "1",
             "name": "Aaron",
             Symbol(rc): 1,
+            Symbol(id): ""1"",
           },
         }
       `);
@@ -1303,7 +1346,7 @@ describe('applyChange', () => {
         oldNode: {
           row: {
             id: '1',
-            name: 'N/A',
+            name: 'Aaron',
           },
         },
         node: {
@@ -1319,6 +1362,7 @@ describe('applyChange', () => {
             "id": "2",
             "name": "Greg",
             Symbol(rc): 1,
+            Symbol(id): ""2"",
           },
         }
       `);
@@ -1339,6 +1383,7 @@ describe('applyChange', () => {
             "id": "2",
             "name": "Greg",
             Symbol(rc): 2,
+            Symbol(id): ""2"",
           },
         }
       `);
@@ -1364,6 +1409,7 @@ describe('applyChange', () => {
             "id": "1",
             "name": "Aaron",
             Symbol(rc): 2,
+            Symbol(id): ""1"",
           },
         }
       `);

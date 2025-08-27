@@ -5,8 +5,8 @@ import {toSorted} from '../../../../packages/shared/src/to-sorted.ts';
 import {type Schema} from '../../shared/schema.ts';
 import avatarIcon from '../assets/icons/avatar-default.svg';
 import {avatarURLWithSize} from '../avatar-url-with-size.ts';
-import {useZero} from '../hooks/use-zero.ts';
 import {Combobox} from './combobox.tsx';
+import {queries} from '../../shared/queries.ts';
 
 type Props = {
   onSelect?: ((user: User | undefined) => void) | undefined;
@@ -29,24 +29,9 @@ export function UserPicker({
   allowNone = true,
   filter = undefined,
 }: Props) {
-  const z = useZero();
-
-  let q = z.query.user;
-  if (disabled && selected?.login) {
-    q = q.where('login', selected.login);
-  } else if (filter) {
-    if (filter === 'crew') {
-      q = q.where(({cmp, not, and}) =>
-        and(cmp('role', 'crew'), not(cmp('login', 'LIKE', 'rocibot%'))),
-      );
-    } else if (filter === 'creators') {
-      q = q.whereExists('createdIssues');
-    } else {
-      throw new Error(`Unknown filter: ${filter}`);
-    }
-  }
-
-  const [unsortedUsers] = useQuery(q);
+  const [unsortedUsers] = useQuery(
+    queries.userPicker(!!disabled, selected?.login ?? null, filter ?? null),
+  );
   // TODO: Support case-insensitive sorting in ZQL.
   const users = useMemo(
     () => toSorted(unsortedUsers, (a, b) => a.login.localeCompare(b.login)),
