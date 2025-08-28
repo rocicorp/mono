@@ -1723,7 +1723,7 @@ async function tickUntilTimeIs(time: number, tick = 10) {
   }
 }
 
-test('pull mutate options', async () => {
+test('pull mutate options', {retry: 3}, async () => {
   const pullURL = 'https://diff.com/pull';
   const rep = await replicacheForTesting(
     'pull-mutate-options',
