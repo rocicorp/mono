@@ -827,9 +827,7 @@ describe('authenticate', () => {
       },
     ] satisfies InspectDownMessage);
 
-    await expect(p).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[Error: Authentication failed]`,
-    );
+    await expect(p).rejects.toThrowError(`Authentication failed`);
     await z.close();
   });
 
