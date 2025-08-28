@@ -10,11 +10,11 @@ import {
   normalize,
 } from '../deleted-clients.ts';
 import * as FormatVersion from '../format-version-enum.ts';
+import {getKVStoreProvider} from '../get-kv-store-provider.ts';
 import {assertHash, newRandomHash} from '../hash.ts';
 import {IDBStore} from '../kv/idb-store.ts';
 import type {DropStore, StoreProvider} from '../kv/store.ts';
 import {createLogContext} from '../log-options.ts';
-import {getKVStoreProvider} from '../replicache.ts';
 import type {ClientGroupID, ClientID} from '../sync/ids.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
 import {

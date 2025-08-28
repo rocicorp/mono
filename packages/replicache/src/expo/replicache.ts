@@ -1,32 +1,33 @@
-import type {MaybePromise} from '../../shared/src/types.ts';
-import {makeIDBName} from './make-idb-name.ts';
-import type {PendingMutation} from './pending-mutations.ts';
-import type {Puller} from './puller.ts';
-import type {Pusher} from './pusher.ts';
-import {ReplicacheImpl} from './replicache-impl.ts';
-import type {ReplicacheOptions} from './replicache-options.ts';
+import type {MaybePromise} from '../../../shared/src/types.ts';
+import {makeIDBName} from '../make-idb-name.ts';
+import type {PendingMutation} from '../pending-mutations.ts';
+import type {Puller} from '../puller.ts';
+import type {Pusher} from '../pusher.ts';
+import {ReplicacheImpl} from '../replicache-impl.ts';
 import type {
   SubscribeOptions,
   WatchCallbackForOptions,
   WatchNoIndexCallback,
   WatchOptions,
-} from './subscriptions.ts';
-import type {ReadTransaction} from './transactions.ts';
+} from '../subscriptions.ts';
+import type {ReadTransaction} from '../transactions.ts';
 import type {
   MakeMutators,
   MutatorDefs,
   Poke,
   RequestOptions,
   UpdateNeededReason,
-} from './types.ts';
+} from '../types.ts';
+import {getKVStoreProvider} from './get-kv-store-provider.ts';
+import type {ReplicacheExpoOptions} from './replicache-expo-options.ts';
 
 type MakeImpl = <MD extends MutatorDefs>(
-  options: ReplicacheOptions<MD>,
+  options: ReplicacheExpoOptions<MD>,
 ) => ReplicacheImpl<MD>;
 
 const defaultMakeImpl: MakeImpl = <MD extends MutatorDefs>(
-  options: ReplicacheOptions<MD>,
-) => new ReplicacheImpl<MD>(options);
+  options: ReplicacheExpoOptions<MD>,
+) => new ReplicacheImpl<MD>(options, {getKVStoreProvider});
 let makeImpl: MakeImpl = defaultMakeImpl;
 
 export function setMakeImplForTest(testMakeImpl: MakeImpl) {
@@ -41,7 +42,7 @@ export function restoreMakeImplForTest() {
 export class Replicache<MD extends MutatorDefs = {}> {
   readonly #impl: ReplicacheImpl<MD>;
 
-  constructor(options: ReplicacheOptions<MD>) {
+  constructor(options: ReplicacheExpoOptions<MD>) {
     this.#impl = makeImpl(options);
   }
 
@@ -69,7 +70,7 @@ export class Replicache<MD extends MutatorDefs = {}> {
     this.#impl.auth = value;
   }
 
-  /** The name of the Replicache database. Populated by {@link ReplicacheOptions#name}. */
+  /** The name of the Replicache database. Populated by {@link ReplicacheExpoOptions#name}. */
   get name(): string {
     return this.#impl.name;
   }
