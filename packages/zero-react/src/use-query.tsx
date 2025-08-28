@@ -1,5 +1,5 @@
 import React, {useSyncExternalStore} from 'react';
-import {resolver, type Resolver} from '@rocicorp/resolver';
+import {resolver} from '@rocicorp/resolver';
 import {deepClone} from '../../shared/src/deep-clone.ts';
 import type {Immutable} from '../../shared/src/immutable.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
@@ -37,11 +37,28 @@ export type UseQueryOptions = {
 
 export type UseSuspenseQueryOptions = UseQueryOptions & {
   /**
-   * Whether to suspend until the query is complete or until the query has non-empty data.
-   * Default is 'complete'.
+   * Whether to suspend until:
+   * - 'non-empty': the query has non-empty results (non-empty array or defined
+   *   value for singular results) which may be of result type 'unknown'
+   *   or the query result type is 'complete' (in which case results may be
+   *   empty).  This is useful for suspending until there are non-empty
+   *   optimistic local results, or the query has completed loading from the
+   * server.
+   * - 'complete': the query result type is 'complete'.
+   *
+   * Default is 'non-empty'.
    */
   suspendUntil?: 'complete' | 'non-empty';
 };
+
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+const reactUse = (React as unknown as {use?: (p: Promise<unknown>) => void})
+  .use;
+const suspend: (p: Promise<unknown>) => void = reactUse
+  ? reactUse
+  : p => {
+      throw p;
+    };
 
 export function useQuery<
   TSchema extends Schema,
@@ -83,7 +100,7 @@ export function useSuspenseQuery<
 ): QueryResult<TReturn> {
   let enabled = true;
   let ttl: TTL = DEFAULT_TTL_MS;
-  let suspendUntil: 'complete' | 'non-empty' = 'complete';
+  let suspendUntil: 'complete' | 'non-empty' = 'non-empty';
   if (typeof options === 'boolean') {
     enabled = options;
   } else if (options) {
@@ -107,30 +124,13 @@ export function useSuspenseQuery<
     view.getSnapshot,
   );
 
-  // React 19 exposes use(), otherwise we throw the promise to suspend
-  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-  const useHook = (React as unknown as {use?: (p: Promise<void>) => void}).use;
-
-  if (suspendUntil === 'complete' && snapshot[1].type !== 'complete') {
-    const promise = view.waitForComplete();
-    if (useHook) {
-      useHook(promise);
-    } else {
-      throw promise;
+  if (enabled) {
+    if (suspendUntil === 'complete' && !view.complete) {
+      suspend(view.waitForComplete());
     }
-  }
 
-  if (
-    suspendUntil === 'non-empty' &&
-    (query.format.singular
-      ? snapshot[0] === undefined
-      : (snapshot[0] as unknown[]).length === 0)
-  ) {
-    const promise = view.waitForNonEmpty();
-    if (useHook) {
-      useHook(promise);
-    } else {
-      throw promise;
+    if (suspendUntil === 'non-empty' && !view.nonEmpty) {
+      suspend(view.waitForNonEmpty());
     }
   }
 
@@ -269,6 +269,8 @@ export class ViewStore {
     updateTTL: (ttl: TTL) => void;
     waitForComplete: () => Promise<void>;
     waitForNonEmpty: () => Promise<void>;
+    complete: boolean;
+    nonEmpty: boolean;
   } {
     const {format} = query;
     if (!enabled) {
@@ -278,6 +280,8 @@ export class ViewStore {
         updateTTL: () => {},
         waitForComplete: () => Promise.resolve(),
         waitForNonEmpty: () => Promise.resolve(),
+        complete: false,
+        nonEmpty: false,
       };
     }
 
@@ -302,7 +306,7 @@ export class ViewStore {
         () => {
           this.#views.delete(hash);
         },
-      ) as ViewWrapper<TSchema, TTable, TReturn>;
+      );
       this.#views.set(hash, existing);
     } else {
       existing.updateTTL(ttl);
@@ -351,10 +355,10 @@ class ViewWrapper<
   #snapshot: QueryResult<TReturn>;
   #reactInternals: Set<() => void>;
   #ttl: TTL;
-  #completeResolver: Resolver<void> | undefined;
-  #complete: Promise<void> | undefined;
-  #nonEmptyResolver: Resolver<void> | undefined;
-  #nonEmpty: Promise<void> | undefined;
+  #complete = false;
+  #completeResolver = resolver<void>();
+  #nonEmpty = false;
+  #nonEmptyResolver = resolver<void>();
 
   constructor(
     query: Query<TSchema, TTable, TReturn>,
@@ -382,10 +386,11 @@ class ViewWrapper<
         ? snap
         : (deepClone(snap as ReadonlyJSONValue) as HumanReadable<TReturn>);
     this.#snapshot = getSnapshot(this.#format.singular, data, resultType);
-
     if (resultType === 'complete') {
-      this.#completeResolver?.resolve();
-      this.#nonEmptyResolver?.resolve();
+      this.#complete = true;
+      this.#completeResolver.resolve();
+      this.#nonEmpty = true;
+      this.#nonEmptyResolver.resolve();
     }
 
     if (
@@ -393,7 +398,8 @@ class ViewWrapper<
         ? this.#snapshot[0] !== undefined
         : (this.#snapshot[0] as unknown[]).length !== 0
     ) {
-      this.#nonEmptyResolver?.resolve();
+      this.#nonEmpty = true;
+      this.#nonEmptyResolver.resolve();
     }
 
     for (const internals of this.#reactInternals) {
@@ -406,8 +412,6 @@ class ViewWrapper<
       return;
     }
 
-    this.#resetComplete();
-    this.#resetNonEmpty();
     this.#view = this.#query.materialize(this.#ttl);
     this.#view.addListener(this.#onData);
 
@@ -435,8 +439,12 @@ class ViewWrapper<
           if (this.#view === undefined) {
             return;
           }
-          this.#view?.destroy();
+          this.#view.destroy();
           this.#view = undefined;
+          this.#complete = false;
+          this.#completeResolver = resolver();
+          this.#nonEmpty = false;
+          this.#nonEmptyResolver = resolver();
           this.#onDematerialized();
         }, 10);
       }
@@ -448,27 +456,19 @@ class ViewWrapper<
     this.#view?.updateTTL(ttl);
   }
 
+  get complete() {
+    return this.#complete;
+  }
+
   waitForComplete(): Promise<void> {
-    if (!this.#complete) {
-      this.#resetComplete();
-    }
-    return this.#complete!;
+    return this.#completeResolver.promise;
+  }
+
+  get nonEmpty() {
+    return this.#nonEmpty;
   }
 
   waitForNonEmpty(): Promise<void> {
-    if (!this.#nonEmpty) {
-      this.#resetNonEmpty();
-    }
-    return this.#nonEmpty!;
-  }
-
-  #resetComplete() {
-    this.#completeResolver = resolver<void>();
-    this.#complete = this.#completeResolver.promise;
-  }
-
-  #resetNonEmpty() {
-    this.#nonEmptyResolver = resolver<void>();
-    this.#nonEmpty = this.#nonEmptyResolver.promise;
+    return this.#nonEmptyResolver.promise;
   }
 }
