@@ -45,10 +45,11 @@ export type UseSuspenseQueryOptions = UseQueryOptions & {
    *   optimistic local results, or the query has completed loading from the
    *   server.
    * - 'complete': the query result type is 'complete'.
+   * - 'none': do not suspend.
    *
    * Default is 'non-empty'.
    */
-  suspendUntil?: 'complete' | 'non-empty';
+  suspendUntil?: 'complete' | 'non-empty' | 'none';
 };
 
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion

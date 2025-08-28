@@ -1,10 +1,11 @@
-import {useQuery} from '@rocicorp/zero/react';
+import {useSuspenseQuery} from '@rocicorp/zero/react';
 import {useVirtualizer} from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import React, {
   type CSSProperties,
   type KeyboardEvent,
   useCallback,
+  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -28,11 +29,12 @@ import {mark} from '../../perf-log.ts';
 import {preload} from '../../zero-preload.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {queries, type ListContext} from '../../../shared/queries.ts';
+import {LoadContext} from '../../root.tsx';
 
 let firstRowRendered = false;
 const itemSize = 56;
 
-export function ListPage({onReady}: {onReady: () => void}) {
+export function ListPage() {
   const login = useLogin();
   const search = useSearch();
   const qs = useMemo(() => new URLSearchParams(search), [search]);
@@ -81,19 +83,30 @@ export function ListPage({onReady}: {onReady: () => void}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [q.limit(0).hash()]); // limit set to 0 since we only scroll on query change, not limit change.
 
+  const loadState = useContext(LoadContext);
+
+  // TODO: SUSPENSE HAS ME IN SUSPENSE ARGH
+  //
+  // argh my plan had been to set suspendUntil conditionally here based on whether
+  // initial load had completed, but:
+  //
+  // (a) we don't have a 'none' value, and
+  // (b) that doesnt make sense because it would destroy the feature that
+  // useSuspenseQuery doesn't return null.
+  //
+  // So it seems like <Suspense> ha to go around this query. But in that case, how
+  // to handle the result count UI.
+  //
+  // So maybe there needs to be fallback UI that displays the search controls. But
+  // that UI would then receive the query result as a param that is nullable!
+
   // We don't want to cache every single keystroke. We already debounce
   // keystrokes for the URL, so we just reuse that.
-  const [issues, issuesResult] = useQuery(
-    q,
-    textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
-  );
+  const [issues, issuesResult] = useSuspenseQuery(q, {
+    ttl: textFilter === textFilterQuery ? CACHE_NAV : CACHE_NONE,
+    suspendUntil: loadState === 'loading' ? 'non-empty' : 'complete',
+  });
   const isSearchComplete = issues.length < limit;
-
-  useEffect(() => {
-    if (issues.length > 0 || issuesResult.type === 'complete') {
-      onReady();
-    }
-  }, [issues.length, issuesResult.type, onReady]);
 
   useEffect(() => {
     if (issuesResult.type === 'complete') {

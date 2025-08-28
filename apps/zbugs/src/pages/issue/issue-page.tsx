@@ -1,4 +1,4 @@
-import {useQuery} from '@rocicorp/zero/react';
+import {useQuery, useSuspenseQuery} from '@rocicorp/zero/react';
 import {useWindowVirtualizer, Virtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
 import {
@@ -80,7 +80,7 @@ function softNavigate(path: string, state?: ZbugsHistoryState) {
 
 const emojiToastShowDuration = 3_000;
 
-export function IssuePage({onReady}: {onReady: () => void}) {
+export function IssuePage() {
   const z = useZero();
   const params = useParams();
 
@@ -92,15 +92,10 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
   const listContext = zbugsHistoryState?.zbugsListContext;
 
-  const [issue, issueResult] = useQuery(
+  const [issue, issueResult] = useSuspenseQuery(
     issueDetail(login.loginState?.decoded, idField, id, z.userID),
-    CACHE_NAV,
+    {ttl: CACHE_NAV},
   );
-  useEffect(() => {
-    if (issue || issueResult.type === 'complete') {
-      onReady();
-    }
-  }, [issue, onReady, issueResult.type]);
 
   const isScrolling = useIsScrolling();
   const [displayed, setDisplayed] = useState(issue);
@@ -209,7 +204,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   }
   const prevNextOptions = {
     enabled: listContext !== undefined && issueSnapshot !== undefined,
-    ...CACHE_NAV,
+    ttl: CACHE_NAV,
   } as const;
   // Don't need to send entire issue to server, just the sort columns plus PK.
   const start = displayed
@@ -258,7 +253,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const [allComments, allCommentsResult] = useQuery(
     commentQuery(z, displayed),
-    {enabled: displayAllComments && displayed !== undefined, ...CACHE_NAV},
+    {enabled: displayAllComments && displayed !== undefined, ttl: CACHE_NAV},
   );
 
   const [comments, hasOlderComments] = useMemo(() => {

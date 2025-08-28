@@ -1,6 +1,5 @@
-import {ZeroInspector} from '@rocicorp/zero/react';
 import Cookies from 'js-cookie';
-import {useState} from 'react';
+import {createContext, useState} from 'react';
 import {Route, Switch} from 'wouter';
 import {Nav} from './components/nav.tsx';
 import {OnboardingModal} from './components/onboarding-modal.tsx';
@@ -9,44 +8,45 @@ import {ErrorPage} from './pages/error/error-page.tsx';
 import {IssuePage} from './pages/issue/issue-page.tsx';
 import {ListPage} from './pages/list/list-page.tsx';
 import {routes} from './routes.ts';
-import {useZero} from './hooks/use-zero.ts';
+import {MaybeSuspend} from './components/maybe-suspend.tsx';
+
+type InitialLoadState = 'loading' | 'complete';
+export const LoadContext = createContext<InitialLoadState>('loading');
 
 export function Root() {
-  const z = useZero();
-
-  const [contentReady, setContentReady] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(
     () => !Cookies.get('onboardingDismissed'),
   );
+
+  const [loadState, setLoadState] = useState<InitialLoadState>('loading');
 
   useSoftNav();
 
   return (
     <>
-      <div
-        className="app-container flex p-8"
-        style={{visibility: contentReady ? 'visible' : 'hidden'}}
+      <MaybeSuspend
+        enabled={loadState === 'loading'}
+        onReveal={() => setLoadState('complete')}
       >
-        <div className="primary-nav w-48 shrink-0 grow-0">
-          <Nav />
-        </div>
-        <div className="primary-content">
-          <Switch>
-            <Route path={routes.home}>
-              <ListPage onReady={() => setContentReady(true)} />
-            </Route>
-            <Route path={routes.issue}>
-              {params => (
-                <IssuePage
-                  key={params.id}
-                  onReady={() => setContentReady(true)}
-                />
-              )}
-            </Route>
-            <Route component={ErrorPage} />
-          </Switch>
-        </div>
-      </div>
+        <LoadContext.Provider value={loadState}>
+          <div className="app-container flex p-8">
+            <div className="primary-nav w-48 shrink-0 grow-0">
+              <Nav />
+            </div>
+            <div className="primary-content">
+              <Switch>
+                <Route path={routes.home}>
+                  <ListPage />
+                </Route>
+                <Route path={routes.issue}>
+                  {params => <IssuePage key={params.id} />}
+                </Route>
+                <Route component={ErrorPage} />
+              </Switch>
+            </div>
+          </div>
+        </LoadContext.Provider>
+      </MaybeSuspend>
       <OnboardingModal
         isOpen={showOnboarding}
         onDismiss={() => {
@@ -54,7 +54,6 @@ export function Root() {
           setShowOnboarding(false);
         }}
       />
-      {import.meta.env.DEV && <ZeroInspector zero={z} />}
     </>
   );
 }
