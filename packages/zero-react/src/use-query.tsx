@@ -43,7 +43,7 @@ export type UseSuspenseQueryOptions = UseQueryOptions & {
    *   or the query result type is 'complete' (in which case results may be
    *   empty).  This is useful for suspending until there are non-empty
    *   optimistic local results, or the query has completed loading from the
-   * server.
+   *   server.
    * - 'complete': the query result type is 'complete'.
    *
    * Default is 'non-empty'.
