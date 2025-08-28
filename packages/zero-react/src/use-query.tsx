@@ -38,17 +38,17 @@ export type UseQueryOptions = {
 export type UseSuspenseQueryOptions = UseQueryOptions & {
   /**
    * Whether to suspend until:
-   * - 'non-empty': the query has non-empty results (non-empty array or defined
-   *   value for singular results) which may be of result type 'unknown'
+   * - 'partial': the query has partial results (partial array or defined
+   *   value for singular results) which may be of result type 'unknown',
    *   or the query result type is 'complete' (in which case results may be
-   *   empty).  This is useful for suspending until there are non-empty
+   *   empty).  This is useful for suspending until there are partial
    *   optimistic local results, or the query has completed loading from the
    *   server.
    * - 'complete': the query result type is 'complete'.
    *
-   * Default is 'non-empty'.
+   * Default is 'partial'.
    */
-  suspendUntil?: 'complete' | 'non-empty';
+  suspendUntil?: 'complete' | 'partial';
 };
 
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
@@ -100,7 +100,7 @@ export function useSuspenseQuery<
 ): QueryResult<TReturn> {
   let enabled = true;
   let ttl: TTL = DEFAULT_TTL_MS;
-  let suspendUntil: 'complete' | 'non-empty' = 'non-empty';
+  let suspendUntil: 'complete' | 'partial' = 'partial';
   if (typeof options === 'boolean') {
     enabled = options;
   } else if (options) {
@@ -129,7 +129,7 @@ export function useSuspenseQuery<
       suspend(view.waitForComplete());
     }
 
-    if (suspendUntil === 'non-empty' && !view.nonEmpty) {
+    if (suspendUntil === 'partial' && !view.nonEmpty) {
       suspend(view.waitForNonEmpty());
     }
   }

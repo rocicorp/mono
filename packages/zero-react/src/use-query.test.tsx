@@ -450,13 +450,13 @@ describe('useSuspenseQuery', () => {
     await expect.poll(() => element.textContent).toBe('2:[{"a":1}]');
   });
 
-  test('suspendsUntil non-empty, non-empty array before complete', async () => {
+  test('suspendsUntil partial, partial array before complete', async () => {
     const q = newMockQuery('query' + unique);
     const materializeSpy = vi.spyOn(q, 'materialize');
     const zero = newMockZero('client' + unique);
 
     function Comp() {
-      const [data] = useSuspenseQuery(q, {suspendUntil: 'non-empty'});
+      const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
       return <div>{JSON.stringify(data)}</div>;
     }
 
@@ -478,13 +478,13 @@ describe('useSuspenseQuery', () => {
     await expect.poll(() => element.textContent).toBe('[{"a":1}]');
   });
 
-  test('suspendsUntil non-empty, already non-empty array before complete', async () => {
+  test('suspendsUntil partial, already partial array before complete', async () => {
     const q = newMockQuery('query' + unique);
     const materializeSpy = vi.spyOn(q, 'materialize');
     const zero = newMockZero('client' + unique);
 
     function Comp({label}: {label: string}) {
-      const [data] = useSuspenseQuery(q, {suspendUntil: 'non-empty'});
+      const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
       return <div>{`${label}:${JSON.stringify(data)}`}</div>;
     }
 
@@ -516,13 +516,13 @@ describe('useSuspenseQuery', () => {
     await expect.poll(() => element.textContent).toBe('2:[{"a":1}]');
   });
 
-  test('suspendsUntil non-empty singular, defined value before complete', async () => {
+  test('suspendsUntil partial singular, defined value before complete', async () => {
     const q = newMockQuery('query' + unique, true);
     const materializeSpy = vi.spyOn(q, 'materialize');
     const zero = newMockZero('client' + unique);
 
     function Comp() {
-      const [data] = useSuspenseQuery(q, {suspendUntil: 'non-empty'});
+      const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
       return <div>{JSON.stringify(data)}</div>;
     }
 
@@ -544,13 +544,13 @@ describe('useSuspenseQuery', () => {
     await expect.poll(() => element.textContent).toBe('{"a":1}');
   });
 
-  test('suspendUntil non-empty, complete with empty array', async () => {
+  test('suspendUntil partial, complete with empty array', async () => {
     const q = newMockQuery('query' + unique);
     const materializeSpy = vi.spyOn(q, 'materialize');
     const zero = newMockZero('client' + unique);
 
     function Comp() {
-      const [data] = useSuspenseQuery(q, {suspendUntil: 'non-empty'});
+      const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
       return <div>{JSON.stringify(data)}</div>;
     }
 
@@ -572,13 +572,13 @@ describe('useSuspenseQuery', () => {
     await expect.poll(() => element.textContent).toBe('[]');
   });
 
-  test('suspendUntil non-empty, complete with undefined', async () => {
+  test('suspendUntil partial, complete with undefined', async () => {
     const q = newMockQuery('query' + unique, true);
     const materializeSpy = vi.spyOn(q, 'materialize');
     const zero = newMockZero('client' + unique);
 
     function Comp() {
-      const [data] = useSuspenseQuery(q, {suspendUntil: 'non-empty'});
+      const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
       return (
         <div>
           {data === undefined ? 'singularUndefined' : JSON.stringify(data)}
