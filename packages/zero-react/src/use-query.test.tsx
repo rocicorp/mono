@@ -1,8 +1,15 @@
-import {beforeEach, describe, expect, test, vi} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {Suspense} from 'react';
+import {createRoot, type Root} from 'react-dom/client';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {type AbstractQuery} from '../../zql/src/query/query-impl.ts';
 import type {ResultType} from '../../zql/src/query/typed-view.ts';
-import {getAllViewsSizeForTesting, ViewStore} from './use-query.tsx';
+import {
+  getAllViewsSizeForTesting,
+  ViewStore,
+  useSuspenseQuery,
+} from './use-query.tsx';
+import {ZeroProvider} from './zero-provider.tsx';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
 import {delegateSymbol} from '../../zql/src/query/query.ts';
 
@@ -356,5 +363,244 @@ describe('ViewStore', () => {
 
       cleanup();
     });
+  });
+});
+
+describe('useSuspenseQuery', () => {
+  let root: Root;
+  let element: HTMLDivElement;
+  let unique: number = 0;
+
+  beforeEach(() => {
+    vi.useRealTimers();
+    element = document.createElement('div');
+    document.body.appendChild(element);
+    root = createRoot(element);
+    unique++;
+  });
+
+  afterEach(() => {
+    document.body.removeChild(element);
+    root.unmount();
+  });
+
+  test('suspendsUntil complete', async () => {
+    const q = newMockQuery('query' + unique);
+    const materializeSpy = vi.spyOn(q, 'materialize');
+    const zero = newMockZero('client' + unique);
+
+    function Comp() {
+      const [data] = useSuspenseQuery(q, {suspendUntil: 'complete'});
+      return <div>{JSON.stringify(data)}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Suspense fallback={<>loading</>}>
+          <Comp />
+        </Suspense>
+      </ZeroProvider>,
+    );
+
+    await expect.poll(() => element.textContent).toBe('loading');
+
+    const view = materializeSpy.mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    view.listeners.forEach(cb => cb([{a: 1}], 'complete'));
+    await expect.poll(() => element.textContent).toBe('[{"a":1}]');
+  });
+
+  test('suspendsUntil complete, already complete', async () => {
+    const q = newMockQuery('query' + unique);
+    const materializeSpy = vi.spyOn(q, 'materialize');
+    const zero = newMockZero('client' + unique);
+
+    function Comp({label}: {label: string}) {
+      const [data] = useSuspenseQuery(q, {suspendUntil: 'complete'});
+      return <div>{`${label}:${JSON.stringify(data)}`}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero} key="1">
+        <Suspense fallback={<>loading</>}>
+          <Comp label="1" />
+        </Suspense>
+      </ZeroProvider>,
+    );
+
+    await expect.poll(() => element.textContent).toBe('loading');
+
+    const view = materializeSpy.mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    view.listeners.forEach(cb => cb([{a: 1}], 'complete'));
+    await expect.poll(() => element.textContent).toBe('1:[{"a":1}]');
+
+    root.render(
+      <ZeroProvider zero={zero} key="2">
+        <Suspense fallback={<>loading</>}>
+          <Comp label="2" />
+        </Suspense>
+      </ZeroProvider>,
+    );
+
+    await expect.poll(() => element.textContent).toBe('2:[{"a":1}]');
+  });
+
+  test('suspendsUntil non-empty, non-empty array before complete', async () => {
+    const q = newMockQuery('query' + unique);
+    const materializeSpy = vi.spyOn(q, 'materialize');
+    const zero = newMockZero('client' + unique);
+
+    function Comp() {
+      const [data] = useSuspenseQuery(q, {suspendUntil: 'non-empty'});
+      return <div>{JSON.stringify(data)}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Suspense fallback={<>loading</>}>
+          <Comp />
+        </Suspense>
+      </ZeroProvider>,
+    );
+
+    await expect.poll(() => element.textContent).toBe('loading');
+
+    const view = materializeSpy.mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    view.listeners.forEach(cb => cb([{a: 1}], 'unknown'));
+    await expect.poll(() => element.textContent).toBe('[{"a":1}]');
+  });
+
+  test('suspendsUntil non-empty, already non-empty array before complete', async () => {
+    const q = newMockQuery('query' + unique);
+    const materializeSpy = vi.spyOn(q, 'materialize');
+    const zero = newMockZero('client' + unique);
+
+    function Comp({label}: {label: string}) {
+      const [data] = useSuspenseQuery(q, {suspendUntil: 'non-empty'});
+      return <div>{`${label}:${JSON.stringify(data)}`}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero} key="1">
+        <Suspense fallback={<>loading</>}>
+          <Comp label="1" />
+        </Suspense>
+      </ZeroProvider>,
+    );
+
+    await expect.poll(() => element.textContent).toBe('loading');
+
+    const view = materializeSpy.mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    view.listeners.forEach(cb => cb([{a: 1}], 'unknown'));
+    await expect.poll(() => element.textContent).toBe('1:[{"a":1}]');
+
+    root.render(
+      <ZeroProvider zero={zero} key="2">
+        <Suspense fallback={<>loading</>}>
+          <Comp label="2" />
+        </Suspense>
+      </ZeroProvider>,
+    );
+
+    await expect.poll(() => element.textContent).toBe('2:[{"a":1}]');
+  });
+
+  test('suspendsUntil non-empty singular, defined value before complete', async () => {
+    const q = newMockQuery('query' + unique, true);
+    const materializeSpy = vi.spyOn(q, 'materialize');
+    const zero = newMockZero('client' + unique);
+
+    function Comp() {
+      const [data] = useSuspenseQuery(q, {suspendUntil: 'non-empty'});
+      return <div>{JSON.stringify(data)}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Suspense fallback={<>loading</>}>
+          <Comp />
+        </Suspense>
+      </ZeroProvider>,
+    );
+
+    await expect.poll(() => element.textContent).toBe('loading');
+
+    const view = materializeSpy.mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    view.listeners.forEach(cb => cb({a: 1}, 'unknown'));
+    await expect.poll(() => element.textContent).toBe('{"a":1}');
+  });
+
+  test('suspendUntil non-empty, complete with empty array', async () => {
+    const q = newMockQuery('query' + unique);
+    const materializeSpy = vi.spyOn(q, 'materialize');
+    const zero = newMockZero('client' + unique);
+
+    function Comp() {
+      const [data] = useSuspenseQuery(q, {suspendUntil: 'non-empty'});
+      return <div>{JSON.stringify(data)}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Suspense fallback={<>loading</>}>
+          <Comp />
+        </Suspense>
+      </ZeroProvider>,
+    );
+
+    await expect.poll(() => element.textContent).toBe('loading');
+
+    const view = materializeSpy.mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    view.listeners.forEach(cb => cb([], 'complete'));
+    await expect.poll(() => element.textContent).toBe('[]');
+  });
+
+  test('suspendUntil non-empty, complete with undefined', async () => {
+    const q = newMockQuery('query' + unique, true);
+    const materializeSpy = vi.spyOn(q, 'materialize');
+    const zero = newMockZero('client' + unique);
+
+    function Comp() {
+      const [data] = useSuspenseQuery(q, {suspendUntil: 'non-empty'});
+      return (
+        <div>
+          {data === undefined ? 'singularUndefined' : JSON.stringify(data)}
+        </div>
+      );
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Suspense fallback={<>loading</>}>
+          <Comp />
+        </Suspense>
+      </ZeroProvider>,
+    );
+
+    await expect.poll(() => element.textContent).toBe('loading');
+
+    const view = materializeSpy.mock.results[0].value as {
+      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+    };
+
+    view.listeners.forEach(cb => cb(undefined, 'complete'));
+    await expect.poll(() => element.textContent).toBe('singularUndefined');
   });
 });

@@ -11,6 +11,7 @@ export type {ResultType} from '../../zql/src/query/typed-view.ts';
 export {ZeroInspector} from './components/zero-inspector.tsx';
 export {
   useQuery,
+  useSuspenseQuery,
   type QueryResult,
   type QueryResultDetails,
   type UseQueryOptions,

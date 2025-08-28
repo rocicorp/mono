@@ -1,4 +1,5 @@
-import {useSyncExternalStore} from 'react';
+import React, {useSyncExternalStore} from 'react';
+import {resolver} from '@rocicorp/resolver';
 import {deepClone} from '../../shared/src/deep-clone.ts';
 import type {Immutable} from '../../shared/src/immutable.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
@@ -34,6 +35,31 @@ export type UseQueryOptions = {
   ttl?: TTL | undefined;
 };
 
+export type UseSuspenseQueryOptions = UseQueryOptions & {
+  /**
+   * Whether to suspend until:
+   * - 'non-empty': the query has non-empty results (non-empty array or defined
+   *   value for singular results) which may be of result type 'unknown'
+   *   or the query result type is 'complete' (in which case results may be
+   *   empty).  This is useful for suspending until there are non-empty
+   *   optimistic local results, or the query has completed loading from the
+   *   server.
+   * - 'complete': the query result type is 'complete'.
+   *
+   * Default is 'non-empty'.
+   */
+  suspendUntil?: 'complete' | 'non-empty';
+};
+
+// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+const reactUse = (React as unknown as {use?: (p: Promise<unknown>) => void})
+  .use;
+const suspend: (p: Promise<unknown>) => void = reactUse
+  ? reactUse
+  : p => {
+      throw p;
+    };
+
 export function useQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
@@ -62,6 +88,53 @@ export function useQuery<
     view.getSnapshot,
     view.getSnapshot,
   );
+}
+
+export function useSuspenseQuery<
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+>(
+  query: Query<TSchema, TTable, TReturn>,
+  options?: UseSuspenseQueryOptions | boolean,
+): QueryResult<TReturn> {
+  let enabled = true;
+  let ttl: TTL = DEFAULT_TTL_MS;
+  let suspendUntil: 'complete' | 'non-empty' = 'non-empty';
+  if (typeof options === 'boolean') {
+    enabled = options;
+  } else if (options) {
+    ({
+      enabled = true,
+      ttl = DEFAULT_TTL_MS,
+      suspendUntil = 'complete',
+    } = options);
+  }
+
+  const view = viewStore.getView(
+    useZero(),
+    query as AbstractQuery<TSchema, TTable, TReturn>,
+    enabled,
+    ttl,
+  );
+  // https://react.dev/reference/react/useSyncExternalStore
+  const snapshot = useSyncExternalStore(
+    view.subscribeReactInternals,
+    view.getSnapshot,
+    view.getSnapshot,
+  );
+
+  if (enabled) {
+    if (suspendUntil === 'complete' && !view.complete) {
+      suspend(view.waitForComplete());
+    }
+
+    if (suspendUntil === 'non-empty' && !view.nonEmpty) {
+      suspend(view.waitForNonEmpty());
+    }
+  }
+
+  return snapshot;
 }
 
 const emptyArray: unknown[] = [];
@@ -194,6 +267,10 @@ export class ViewStore {
     getSnapshot: () => QueryResult<TReturn>;
     subscribeReactInternals: (internals: () => void) => () => void;
     updateTTL: (ttl: TTL) => void;
+    waitForComplete: () => Promise<void>;
+    waitForNonEmpty: () => Promise<void>;
+    complete: boolean;
+    nonEmpty: boolean;
   } {
     const {format} = query;
     if (!enabled) {
@@ -201,6 +278,10 @@ export class ViewStore {
         getSnapshot: () => getDefaultSnapshot(format.singular),
         subscribeReactInternals: disabledSubscriber,
         updateTTL: () => {},
+        waitForComplete: () => Promise.resolve(),
+        waitForNonEmpty: () => Promise.resolve(),
+        complete: false,
+        nonEmpty: false,
       };
     }
 
@@ -225,7 +306,7 @@ export class ViewStore {
         () => {
           this.#views.delete(hash);
         },
-      ) as ViewWrapper<TSchema, TTable, TReturn>;
+      );
       this.#views.set(hash, existing);
     } else {
       existing.updateTTL(ttl);
@@ -274,6 +355,10 @@ class ViewWrapper<
   #snapshot: QueryResult<TReturn>;
   #reactInternals: Set<() => void>;
   #ttl: TTL;
+  #complete = false;
+  #completeResolver = resolver<void>();
+  #nonEmpty = false;
+  #nonEmptyResolver = resolver<void>();
 
   constructor(
     query: Query<TSchema, TTable, TReturn>,
@@ -301,6 +386,22 @@ class ViewWrapper<
         ? snap
         : (deepClone(snap as ReadonlyJSONValue) as HumanReadable<TReturn>);
     this.#snapshot = getSnapshot(this.#format.singular, data, resultType);
+    if (resultType === 'complete') {
+      this.#complete = true;
+      this.#completeResolver.resolve();
+      this.#nonEmpty = true;
+      this.#nonEmptyResolver.resolve();
+    }
+
+    if (
+      this.#format.singular
+        ? this.#snapshot[0] !== undefined
+        : (this.#snapshot[0] as unknown[]).length !== 0
+    ) {
+      this.#nonEmpty = true;
+      this.#nonEmptyResolver.resolve();
+    }
+
     for (const internals of this.#reactInternals) {
       internals();
     }
@@ -338,8 +439,12 @@ class ViewWrapper<
           if (this.#view === undefined) {
             return;
           }
-          this.#view?.destroy();
+          this.#view.destroy();
           this.#view = undefined;
+          this.#complete = false;
+          this.#completeResolver = resolver();
+          this.#nonEmpty = false;
+          this.#nonEmptyResolver = resolver();
           this.#onDematerialized();
         }, 10);
       }
@@ -349,5 +454,21 @@ class ViewWrapper<
   updateTTL(ttl: TTL): void {
     this.#ttl = ttl;
     this.#view?.updateTTL(ttl);
+  }
+
+  get complete() {
+    return this.#complete;
+  }
+
+  waitForComplete(): Promise<void> {
+    return this.#completeResolver.promise;
+  }
+
+  get nonEmpty() {
+    return this.#nonEmpty;
+  }
+
+  waitForNonEmpty(): Promise<void> {
+    return this.#nonEmptyResolver.promise;
   }
 }
