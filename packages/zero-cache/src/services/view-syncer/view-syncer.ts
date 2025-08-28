@@ -151,7 +151,10 @@ export const TTL_CLOCK_INTERVAL = 60_000;
  */
 export const TTL_TIMER_HYSTERESIS = 50; // ms
 
-type PartialZeroConfig = Pick<ZeroConfig, 'getQueries' | 'serverVersion'>;
+type PartialZeroConfig = Pick<
+  ZeroConfig,
+  'getQueries' | 'serverVersion' | 'adminPassword'
+>;
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
@@ -244,7 +247,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   readonly #inspectorDelegate: InspectorDelegate;
 
-  readonly #config: Pick<ZeroConfig, 'serverVersion'>;
+  readonly #config: Pick<ZeroConfig, 'serverVersion' | 'adminPassword'>;
 
   constructor(
     config: PartialZeroConfig,
@@ -1802,6 +1805,23 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ): Promise<void> => {
     const client = must(this.#clients.get(clientID));
 
+    // Check if the client is already authenticated. We only authenticate the clientGroup
+    // once per "worker".
+    if (
+      body.op !== 'authenticate' &&
+      !this.#inspectorDelegate.isAuthenticated(this.id)
+    ) {
+      lc.info?.(
+        'Client not authenticated to access the inspector protocol. Sending authentication challenge',
+      );
+      client.sendInspectResponse(lc, {
+        op: 'authenticated',
+        id: body.id,
+        value: false,
+      });
+      return;
+    }
+
     switch (body.op) {
       case 'queries': {
         const queryRows = await this.#cvrStore.inspectQueries(
@@ -1844,6 +1864,24 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           value: getServerVersion(this.#config),
         });
         break;
+
+      case 'authenticate': {
+        const password = body.value;
+        const ok = password === this.#config.adminPassword;
+        if (ok) {
+          this.#inspectorDelegate.setAuthenticated(this.id);
+        } else {
+          this.#inspectorDelegate.clearAuthenticated(this.id);
+        }
+
+        client.sendInspectResponse(lc, {
+          op: 'authenticated',
+          id: body.id,
+          value: ok,
+        });
+
+        break;
+      }
 
       default:
         unreachable(body);
