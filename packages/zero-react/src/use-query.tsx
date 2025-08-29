@@ -7,11 +7,7 @@ import {Zero} from '../../zero-client/src/client/zero.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {AbstractQuery} from '../../zql/src/query/query-impl.ts';
-import {
-  delegateSymbol,
-  type HumanReadable,
-  type Query,
-} from '../../zql/src/query/query.ts';
+import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 import {useZero} from './zero-provider.tsx';
@@ -288,8 +284,8 @@ export class ViewStore {
     const hash = query.hash() + zero.clientID;
     let existing = this.#views.get(hash);
     if (!existing) {
-      query = query[delegateSymbol](zero.queryDelegate);
       existing = new ViewWrapper(
+        zero,
         query,
         format,
         ttl,
@@ -347,6 +343,7 @@ class ViewWrapper<
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 > {
+  #zero: Zero<TSchema>;
   #view: TypedView<HumanReadable<TReturn>> | undefined;
   readonly #onDematerialized;
   readonly #onMaterialized;
@@ -361,12 +358,14 @@ class ViewWrapper<
   #nonEmptyResolver = resolver<void>();
 
   constructor(
+    zero: Zero<TSchema>,
     query: Query<TSchema, TTable, TReturn>,
     format: Format,
     ttl: TTL,
     onMaterialized: (view: ViewWrapper<TSchema, TTable, TReturn>) => void,
     onDematerialized: () => void,
   ) {
+    this.#zero = zero;
     this.#query = query;
     this.#format = format;
     this.#ttl = ttl;
@@ -412,7 +411,7 @@ class ViewWrapper<
       return;
     }
 
-    this.#view = this.#query.materialize(this.#ttl);
+    this.#view = this.#zero.materialize(this.#query, {ttl: this.#ttl});
     this.#view.addListener(this.#onData);
 
     this.#onMaterialized(this);

@@ -11,29 +11,26 @@ import {
 } from './use-query.tsx';
 import {ZeroProvider} from './zero-provider.tsx';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
-import {delegateSymbol} from '../../zql/src/query/query.ts';
 
 function newMockQuery(
   query: string,
   singular = false,
 ): AbstractQuery<Schema, string> {
-  const view = newView();
   const ret = {
     hash() {
       return query;
     },
-    [delegateSymbol]() {
-      return ret;
-    },
-    materialize: vi.fn().mockImplementation(() => view),
     format: {singular},
   } as unknown as AbstractQuery<Schema, string>;
   return ret;
 }
 
 function newMockZero(clientID: string): Zero<Schema> {
+  const view = newView();
+
   return {
     clientID,
+    materialize: vi.fn().mockImplementation(() => view),
   } as unknown as Zero<Schema>;
 }
 
@@ -107,17 +104,24 @@ describe('ViewStore', () => {
       const viewStore = new ViewStore();
 
       const q1 = newMockQuery('query1');
-      const view1 = viewStore.getView(newMockZero('client1'), q1, true, '1s');
+      const zero = newMockZero('client1');
+      const materializeSpy = vi.spyOn(zero, 'materialize');
+      const view1 = viewStore.getView(zero, q1, true, '1s');
 
       const updateTTLSpy = vi.spyOn(view1, 'updateTTL');
-      expect(q1.materialize).toHaveBeenCalledExactlyOnceWith('1s');
+      expect(materializeSpy).toHaveBeenCalledTimes(1);
+      expect(materializeSpy.mock.calls[0][0]).toBe(q1);
+      expect(materializeSpy.mock.calls[0][1]).toEqual({ttl: '1s'});
 
       const q2 = newMockQuery('query1');
-      const view2 = viewStore.getView(newMockZero('client1'), q2, true, '1m');
+      const zeroClient2 = newMockZero('client1');
+      const materializeSpy2 = vi.spyOn(zero, 'materialize');
+      const view2 = viewStore.getView(zeroClient2, q2, true, '1m');
       expect(view1).toBe(view2);
 
-      // Same query hash so only one view. Should have called updateTTL on the existing one.
-      expect(q2.materialize).not.toHaveBeenCalled();
+      // Same query hash and client id so only one view. Should have called
+      // updateTTL on the existing one.
+      expect(materializeSpy2).not.toHaveBeenCalled();
       expect(updateTTLSpy).toHaveBeenCalledExactlyOnceWith('1m');
 
       expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
@@ -127,9 +131,11 @@ describe('ViewStore', () => {
       const viewStore = new ViewStore();
 
       const q1 = newMockQuery('query1');
-      const view1 = viewStore.getView(newMockZero('client1'), q1, true, '60s');
+      const zero = newMockZero('client1');
+      const materializeSpy = vi.spyOn(zero, 'materialize');
+      const view1 = viewStore.getView(zero, q1, true, '60s');
       const updateTTLSpy = vi.spyOn(view1, 'updateTTL');
-      expect(q1.materialize).toHaveBeenCalledTimes(1);
+      expect(materializeSpy).toHaveBeenCalledTimes(1);
 
       const q2 = newMockQuery('query1');
       const view2 = viewStore.getView(newMockZero('client1'), q2, true, '1m');
@@ -288,15 +294,14 @@ describe('ViewStore', () => {
     test('plural', () => {
       const viewStore = new ViewStore();
       const q = newMockQuery('query1');
-      const {listeners} = q.materialize() as unknown as {
-        listeners: Set<(data: unknown, resultType: ResultType) => void>;
+      const zero = newMockZero('client1');
+      const materializeSpy = vi.spyOn(zero, 'materialize');
+      const view = viewStore.getView(zero, q, true, 'forever');
+
+      expect(materializeSpy).toHaveBeenCalledTimes(1);
+      const {listeners} = materializeSpy.mock.results[0].value as unknown as {
+        listeners: Set<(...args: unknown[]) => void>;
       };
-      const view = viewStore.getView(
-        newMockZero('client1'),
-        q,
-        true,
-        'forever',
-      );
 
       const cleanup = view.subscribeReactInternals(() => {});
 
@@ -329,15 +334,14 @@ describe('ViewStore', () => {
     test('singular', () => {
       const viewStore = new ViewStore();
       const q = newMockQuery('query1', true);
-      const {listeners} = q.materialize() as unknown as {
+      const zero = newMockZero('client1');
+      const materializeSpy = vi.spyOn(zero, 'materialize');
+      const view = viewStore.getView(zero, q, true, 'forever');
+
+      expect(materializeSpy).toHaveBeenCalledTimes(1);
+      const {listeners} = materializeSpy.mock.results[0].value as unknown as {
         listeners: Set<(...args: unknown[]) => void>;
       };
-      const view = viewStore.getView(
-        newMockZero('client1'),
-        q,
-        true,
-        'forever',
-      );
 
       const cleanup = view.subscribeReactInternals(() => {});
 
@@ -386,8 +390,8 @@ describe('useSuspenseQuery', () => {
 
   test('suspendsUntil complete', async () => {
     const q = newMockQuery('query' + unique);
-    const materializeSpy = vi.spyOn(q, 'materialize');
     const zero = newMockZero('client' + unique);
+    const materializeSpy = vi.spyOn(zero, 'materialize');
 
     function Comp() {
       const [data] = useSuspenseQuery(q, {suspendUntil: 'complete'});
@@ -414,8 +418,8 @@ describe('useSuspenseQuery', () => {
 
   test('suspendsUntil complete, already complete', async () => {
     const q = newMockQuery('query' + unique);
-    const materializeSpy = vi.spyOn(q, 'materialize');
     const zero = newMockZero('client' + unique);
+    const materializeSpy = vi.spyOn(zero, 'materialize');
 
     function Comp({label}: {label: string}) {
       const [data] = useSuspenseQuery(q, {suspendUntil: 'complete'});
@@ -452,8 +456,8 @@ describe('useSuspenseQuery', () => {
 
   test('suspendsUntil partial, partial array before complete', async () => {
     const q = newMockQuery('query' + unique);
-    const materializeSpy = vi.spyOn(q, 'materialize');
     const zero = newMockZero('client' + unique);
+    const materializeSpy = vi.spyOn(zero, 'materialize');
 
     function Comp() {
       const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
@@ -480,8 +484,8 @@ describe('useSuspenseQuery', () => {
 
   test('suspendsUntil partial, already partial array before complete', async () => {
     const q = newMockQuery('query' + unique);
-    const materializeSpy = vi.spyOn(q, 'materialize');
     const zero = newMockZero('client' + unique);
+    const materializeSpy = vi.spyOn(zero, 'materialize');
 
     function Comp({label}: {label: string}) {
       const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
@@ -518,8 +522,8 @@ describe('useSuspenseQuery', () => {
 
   test('suspendsUntil partial singular, defined value before complete', async () => {
     const q = newMockQuery('query' + unique, true);
-    const materializeSpy = vi.spyOn(q, 'materialize');
     const zero = newMockZero('client' + unique);
+    const materializeSpy = vi.spyOn(zero, 'materialize');
 
     function Comp() {
       const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
@@ -546,8 +550,8 @@ describe('useSuspenseQuery', () => {
 
   test('suspendUntil partial, complete with empty array', async () => {
     const q = newMockQuery('query' + unique);
-    const materializeSpy = vi.spyOn(q, 'materialize');
     const zero = newMockZero('client' + unique);
+    const materializeSpy = vi.spyOn(zero, 'materialize');
 
     function Comp() {
       const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
@@ -574,8 +578,8 @@ describe('useSuspenseQuery', () => {
 
   test('suspendUntil partial, complete with undefined', async () => {
     const q = newMockQuery('query' + unique, true);
-    const materializeSpy = vi.spyOn(q, 'materialize');
     const zero = newMockZero('client' + unique);
+    const materializeSpy = vi.spyOn(zero, 'materialize');
 
     function Comp() {
       const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
