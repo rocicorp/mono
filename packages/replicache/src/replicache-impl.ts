@@ -27,15 +27,11 @@ import {
   isVersionNotSupportedResponse,
   type VersionNotSupportedResponse,
 } from './error-responses.ts';
-import type {ReplicacheExpoOptions} from './expo/replicache-expo-options.ts';
 import * as FormatVersion from './format-version-enum.ts';
 import {deepFreeze} from './frozen-json.ts';
 import {getDefaultPuller, isDefaultPuller} from './get-default-puller.ts';
 import {getDefaultPusher, isDefaultPusher} from './get-default-pusher.ts';
-import {
-  getKVStoreProvider,
-  type KVStoreProvider,
-} from './get-kv-store-provider.ts';
+import {getKVStoreProvider} from './get-kv-store-provider.ts';
 import {assertHash, emptyHash, type Hash, newRandomHash} from './hash.ts';
 import type {HTTPRequestInfo} from './http-request-info.ts';
 import {httpStatusUnauthorized} from './http-status-unauthorized.ts';
@@ -211,12 +207,6 @@ export interface ReplicacheImplOptions {
    * invoke various hooks to allow Zero the keep IVM in sync with Replicache's b-trees.
    */
   zero?: ZeroOption | undefined;
-
-  /**
-   * Allows different implementations to have different behavior for the kvStore
-   * option.
-   */
-  getKVStoreProvider?: KVStoreProvider | undefined;
 }
 
 // eslint-disable-next-line @typescript-eslint/ban-types
@@ -419,7 +409,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   onRecoverMutations = (r: Promise<boolean>) => r;
 
   constructor(
-    options: ReplicacheOptions<MD> | ReplicacheExpoOptions<MD>,
+    options: ReplicacheOptions<MD>,
     implOptions: ReplicacheImplOptions = {},
   ) {
     validateOptions(options);
@@ -475,9 +465,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       this.#closeAbortController.signal,
     );
 
-    const kvStoreProvider = (
-      implOptions.getKVStoreProvider ?? getKVStoreProvider
-    )(this.#lc, options.kvStore);
+    const kvStoreProvider = getKVStoreProvider(this.#lc, options.kvStore);
     this.#kvStoreProvider = kvStoreProvider;
 
     const perKVStore = kvStoreProvider.create(this.idbName);
@@ -1674,7 +1662,7 @@ function reload(): void {
 }
 
 function validateOptions<MD extends MutatorDefs>(
-  options: ReplicacheOptions<MD> | ReplicacheExpoOptions<MD>,
+  options: ReplicacheOptions<MD>,
 ): void {
   const {name, clientMaxAgeMs} = options;
   if (typeof name !== 'string' || !name) {

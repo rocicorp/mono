@@ -68,16 +68,16 @@
   },
   "exports": {
     ".": {
-      "react-native": {
-        "types": "./out/replicache/src/expo.d.ts",
-        "default": "./out/expo.js"
-      },
       "types": "./out/replicache/src/mod.d.ts",
       "default": "./out/replicache.js"
     },
     "./impl": {
       "types": "./out/replicache/src/impl.d.ts",
       "default": "./out/impl.js"
+    },
+    "./expo": {
+      "types": "./out/replicache/src/expo.d.ts",
+      "default": "./out/expo.js"
     }
   },
   "files": [
