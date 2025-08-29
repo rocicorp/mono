@@ -17,7 +17,7 @@ import {
   type PusherResult,
   assertPusherResult,
 } from '../pusher.ts';
-import {ReportError} from '../replicache.ts';
+import {ReportError} from '../report-error.ts';
 import {toError} from '../to-error.ts';
 import {withRead} from '../with-transactions.ts';
 import {
