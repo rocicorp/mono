@@ -5,9 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "npx api-extractor run --local && vite",
-    "build": "npx api-extractor run --local && vite build",
-    "preview": "vite preview",
-    "check-types": "tsc --noEmit"
+    "preview": "vite preview"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
