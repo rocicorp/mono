@@ -1,12 +1,12 @@
 import type {LogLevel, LogSink} from '@rocicorp/logger';
+import type {InternalDiff} from './btree/node.ts';
+import type {Read, Store} from './dag/store.ts';
+import type {Hash} from './hash.ts';
 import type {IndexDefinitions} from './index-defs.ts';
 import type {StoreProvider} from './kv/store.ts';
 import type {Puller} from './puller.ts';
 import type {Pusher} from './pusher.ts';
 import type {MutatorDefs, RequestOptions} from './types.ts';
-import type {Hash} from './hash.ts';
-import type {InternalDiff} from './btree/node.ts';
-import type {Read, Store} from './dag/store.ts';
 
 /**
  * The options passed to {@link Replicache}.

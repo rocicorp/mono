@@ -14,6 +14,7 @@ const logSilenceMessages = [
   'Not indexing value',
   'Zero starting up with no server URL',
 ];
+
 export default {
   // https://github.com/vitest-dev/vitest/issues/5332#issuecomment-1977785593
   optimizeDeps: {

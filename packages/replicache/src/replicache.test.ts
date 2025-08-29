@@ -7,12 +7,13 @@ import {promiseVoid} from '../../shared/src/resolved-promises.ts';
 import {sleep} from '../../shared/src/sleep.ts';
 import {asyncIterableToArray} from './async-iterable-to-array.ts';
 import {Write} from './db/write.ts';
+import {httpStatusUnauthorized} from './http-status-unauthorized.ts';
 import {TestMemStore} from './kv/test-mem-store.ts';
 import type {PatchOperation} from './patch-operation.ts';
 import {getClientGroup} from './persist/client-groups.ts';
 import {deleteClientForTesting} from './persist/clients-test-helpers.ts';
 import type {ReplicacheOptions} from './replicache-options.ts';
-import {Replicache, httpStatusUnauthorized} from './replicache.ts';
+import {Replicache} from './replicache.ts';
 import type {ScanOptions} from './scan-options.ts';
 import type {ClientID} from './sync/ids.ts';
 import {
