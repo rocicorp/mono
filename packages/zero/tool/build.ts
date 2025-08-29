@@ -75,7 +75,7 @@ async function getExternal(includePeerDeps: boolean): Promise<string[]> {
   return [...externalSet].sort();
 }
 
-const extraExternals = ['node:*', ...builtinModules];
+const extraExternals = ['node:*', 'expo*', ...builtinModules];
 
 await verifyDependencies(await getExternal(false));
 
