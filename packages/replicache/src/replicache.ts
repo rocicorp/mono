@@ -1,5 +1,4 @@
 import type {MaybePromise} from '../../shared/src/types.ts';
-import {MemStore} from './kv/mem-store.ts';
 import {makeIDBName} from './make-idb-name.ts';
 import type {PendingMutation} from './pending-mutations.ts';
 import type {Puller} from './puller.ts';
@@ -433,8 +432,4 @@ export class Replicache<MD extends MutatorDefs = {}> {
   experimentalPendingMutations(): Promise<readonly PendingMutation[]> {
     return this.#impl.experimentalPendingMutations();
   }
-}
-
-export function createMemStore(name: string): MemStore {
-  return new MemStore(name);
 }

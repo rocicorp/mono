@@ -3,9 +3,8 @@ import {
   dropIDBStoreWithMemFallback,
   newIDBStoreWithMemFallback,
 } from './kv/idb-store-with-mem-fallback.ts';
-import {dropMemStore} from './kv/mem-store.ts';
+import {dropMemStore, MemStore} from './kv/mem-store.ts';
 import type {StoreProvider} from './kv/store.ts';
-import {createMemStore} from './replicache.ts';
 
 export function getKVStoreProvider(
   lc: LogContext,
@@ -15,13 +14,13 @@ export function getKVStoreProvider(
     case 'idb':
     case undefined:
       return {
-        create: (name: string) => newIDBStoreWithMemFallback(lc, name),
+        create: name => newIDBStoreWithMemFallback(lc, name),
         drop: dropIDBStoreWithMemFallback,
       };
     case 'mem':
       return {
-        create: createMemStore,
-        drop: (name: string) => dropMemStore(name),
+        create: name => new MemStore(name),
+        drop: name => dropMemStore(name),
       };
     default:
       return kvStore;
