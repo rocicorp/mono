@@ -285,6 +285,7 @@ export class ViewStore {
     let existing = this.#views.get(hash);
     if (!existing) {
       existing = new ViewWrapper(
+        zero,
         query,
         format,
         ttl,
@@ -342,6 +343,7 @@ class ViewWrapper<
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 > {
+  #zero: Zero<TSchema>;
   #view: TypedView<HumanReadable<TReturn>> | undefined;
   readonly #onDematerialized;
   readonly #onMaterialized;
@@ -356,12 +358,14 @@ class ViewWrapper<
   #nonEmptyResolver = resolver<void>();
 
   constructor(
+    zero: Zero<TSchema>,
     query: Query<TSchema, TTable, TReturn>,
     format: Format,
     ttl: TTL,
     onMaterialized: (view: ViewWrapper<TSchema, TTable, TReturn>) => void,
     onDematerialized: () => void,
   ) {
+    this.#zero = zero;
     this.#query = query;
     this.#format = format;
     this.#ttl = ttl;
@@ -407,7 +411,7 @@ class ViewWrapper<
       return;
     }
 
-    this.#view = this.#query.materialize(this.#ttl);
+    this.#view = this.#zero.materialize(this.#query, {ttl: this.#ttl});
     this.#view.addListener(this.#onData);
 
     this.#onMaterialized(this);
