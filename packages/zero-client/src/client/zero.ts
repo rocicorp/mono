@@ -85,7 +85,11 @@ import {
   isClientMetric,
 } from '../../../zql/src/query/metrics-delegate.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {newQuery, type AnyQuery} from '../../../zql/src/query/query-impl.ts';
+import {
+  materialize,
+  newQuery,
+  type AnyQuery,
+} from '../../../zql/src/query/query-impl.ts';
 import {
   delegateSymbol,
   type HumanReadable,
@@ -864,19 +868,11 @@ export class Zero<
       | undefined,
     maybeOptions?: MaterializeOptions | undefined,
   ) {
-    if (typeof factoryOrOptions === 'function') {
-      return (
-        (query as AnyQuery)
-          // eslint-disable-next-line no-unexpected-multiline
-          [delegateSymbol](this.#zeroContext)
-          .materialize(factoryOrOptions, maybeOptions?.ttl)
-      );
-    }
-    return (
-      (query as AnyQuery)
-        // eslint-disable-next-line no-unexpected-multiline
-        [delegateSymbol](this.#zeroContext)
-        .materialize(factoryOrOptions?.ttl)
+    return materialize(
+      query,
+      this.#zeroContext,
+      factoryOrOptions,
+      maybeOptions,
     );
   }
 

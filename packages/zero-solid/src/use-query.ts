@@ -76,7 +76,8 @@ export function useQuery<
     ]
   >(
     ([prevView, prevClientID, prevQuery, prevQueryHash, prevTtl]) => {
-      const {clientID} = useZero()();
+      const zero = useZero()();
+      const {clientID} = zero;
       const query = querySignal();
       const queryHash = query.hash();
       const ttl = normalize(options)?.ttl ?? DEFAULT_TTL_MS;
@@ -89,7 +90,7 @@ export function useQuery<
         if (prevView) {
           prevView.destroy();
         }
-        view = query.materialize(createSolidViewFactory(setState), ttl);
+        view = zero.materialize(query, createSolidViewFactory(setState), {ttl});
       } else {
         view = prevView;
         if (ttl !== prevTtl) {

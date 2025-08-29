@@ -44,15 +44,43 @@ import {
   delegateSymbol,
   type GetFilterType,
   type HumanReadable,
+  type MaterializeOptions,
   type PreloadOptions,
   type PullRow,
   type Query,
+  type QueryReturn,
+  type QueryTable,
   type RunOptions,
 } from './query.ts';
 import {DEFAULT_PRELOAD_TTL_MS, DEFAULT_TTL_MS, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
 export type AnyQuery = Query<Schema, string, any>;
+
+export function materialize<S extends Schema, T, Q>(
+  query: Q,
+  delegate: QueryDelegate,
+  factoryOrOptions?:
+    | ViewFactory<S, QueryTable<Q>, QueryReturn<Q>, T>
+    | MaterializeOptions
+    | undefined,
+  maybeOptions?: MaterializeOptions | undefined,
+) {
+  if (typeof factoryOrOptions === 'function') {
+    return (
+      (query as AnyQuery)
+        // eslint-disable-next-line no-unexpected-multiline
+        [delegateSymbol](delegate)
+        .materialize(factoryOrOptions, maybeOptions?.ttl)
+    );
+  }
+  return (
+    (query as AnyQuery)
+      // eslint-disable-next-line no-unexpected-multiline
+      [delegateSymbol](delegate)
+      .materialize(factoryOrOptions?.ttl)
+  );
+}
 
 const astSymbol = Symbol();
 
