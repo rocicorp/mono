@@ -5,7 +5,6 @@ import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts'
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
-import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
@@ -60,7 +59,6 @@ let connectWithQueueAndSource: (
   source: Source<Downstream>;
 };
 let setTimeoutFn: Mock<typeof setTimeout>;
-let inspectorDelegate: InspectorDelegate;
 
 function callNextSetTimeout(delta: number, expectedDelay?: number) {
   // Sanity check that the system time is the mocked time.
@@ -98,13 +96,9 @@ beforeEach<PgTest>(async ({testDBs}) => {
     connect,
     connectWithQueueAndSource,
     setTimeoutFn,
-    inspectorDelegate,
   } = await setup(testDBs, 'view_syncer_ttl_test', permissionsAll));
-  inspectorDelegate.setAuthenticated(serviceID);
 
   return async () => {
-    inspectorDelegate.clearAuthenticated(serviceID);
-
     vi.useRealTimers();
     await vs.stop();
     await viewSyncerDone;

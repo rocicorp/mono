@@ -19,7 +19,6 @@ import * as valita from '../../../../shared/src/valita.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import {
-  inspectAuthenticatedDownSchema,
   inspectMetricsDownSchema,
   inspectQueriesDownSchema,
   inspectVersionDownSchema,
@@ -27,7 +26,11 @@ import {
   type InspectQueryRow,
   type ServerMetrics as ServerMetricsJSON,
 } from '../../../../zero-protocol/src/inspect-down.ts';
-import type {InspectUpBody} from '../../../../zero-protocol/src/inspect-up.ts';
+import type {
+  InspectQueriesUpBody,
+  InspectUpBody,
+  InspectUpMessage,
+} from '../../../../zero-protocol/src/inspect-up.ts';
 import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   ClientMetricMap,
@@ -82,11 +85,6 @@ export async function newInspector(
     socket,
   );
 }
-
-// T extends forces T to be resolved
-type DistributiveOmit<T, K extends string> = T extends object
-  ? Omit<T, K>
-  : never;
 
 class Inspector implements InspectorInterface {
   readonly #rep: Rep;
@@ -152,11 +150,9 @@ class Inspector implements InspectorInterface {
   }
 }
 
-class UnauthenticatedError extends Error {}
-
-function rpcNoAuthTry<T extends InspectDownBody>(
+function rpc<T extends InspectDownBody>(
   socket: WebSocket,
-  arg: DistributiveOmit<InspectUpBody, 'id'>,
+  arg: Omit<InspectUpBody, 'id'>,
   downSchema: valita.Type<T>,
 ): Promise<T['value']> {
   return new Promise((resolve, reject) => {
@@ -172,53 +168,16 @@ function rpcNoAuthTry<T extends InspectDownBody>(
         if (res.ok) {
           resolve(res.value.value);
         } else {
-          // Check if we got un authenticated/false response
-          const authRes = valita.test(body, inspectAuthenticatedDownSchema);
-          if (authRes.ok) {
-            // Handle authenticated response
-            assert(
-              authRes.value.value === false,
-              'Expected unauthenticated response',
-            );
-            reject(new UnauthenticatedError());
-          }
-
           reject(res.error);
         }
         socket.removeEventListener('message', f);
       }
     };
     socket.addEventListener('message', f);
-    socket.send(JSON.stringify(['inspect', {...arg, id}]));
+    socket.send(
+      JSON.stringify(['inspect', {...arg, id}] satisfies InspectUpMessage),
+    );
   });
-}
-
-async function rpc<T extends InspectDownBody>(
-  socket: WebSocket,
-  arg: DistributiveOmit<InspectUpBody, 'id'>,
-  downSchema: valita.Type<T>,
-): Promise<T['value']> {
-  try {
-    return await rpcNoAuthTry(socket, arg, downSchema);
-  } catch (e) {
-    if (e instanceof UnauthenticatedError) {
-      const password = prompt('Enter password:');
-      if (password) {
-        // Do authenticate rpc
-        const authRes = await rpcNoAuthTry(
-          socket,
-          {op: 'authenticate', value: password},
-          inspectAuthenticatedDownSchema,
-        );
-        if (authRes) {
-          // If authentication is successful, retry the original RPC
-          return rpcNoAuthTry(socket, arg, downSchema);
-        }
-      }
-      throw new Error('Authentication failed');
-    }
-    throw e;
-  }
 }
 
 class Client implements ClientInterface {
@@ -252,7 +211,7 @@ class Client implements ClientInterface {
   async queries(): Promise<QueryInterface[]> {
     const rows: InspectQueryRow[] = await rpc(
       await this.#socket(),
-      {op: 'queries', clientID: this.id},
+      {op: 'queries', clientID: this.id} as InspectQueriesUpBody,
       inspectQueriesDownSchema,
     );
     return rows.map(row => new Query(row, this.#delegate));

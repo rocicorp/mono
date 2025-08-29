@@ -18,14 +18,6 @@ export type ServerMetrics = {
   'query-update-server': TDigest;
 };
 
-type ClientGroupID = string;
-
-/**
- * Set of authenticated client IDs. We keep this outside of the class to share this state
- * across all instances of the InspectorDelegate.
- */
-const authenticatedClientIDs = new Set<ClientGroupID>();
-
 export class InspectorDelegate implements MetricsDelegate {
   readonly #globalMetrics: ServerMetrics = newMetrics();
   readonly #perQueryServerMetrics = new Map<string, ServerMetrics>();
@@ -90,22 +82,6 @@ export class InspectorDelegate implements MetricsDelegate {
     }
     this.#queryIDToTransformationHash.set(queryID, transformationHash);
     this.#transformationASTs.set(transformationHash, ast);
-  }
-
-  /**
-   * Check if the client is authenticated. We only require authentication once
-   * per "worker".
-   */
-  isAuthenticated(clientGroupID: ClientGroupID): boolean {
-    return authenticatedClientIDs.has(clientGroupID);
-  }
-
-  setAuthenticated(clientGroupID: ClientGroupID): void {
-    authenticatedClientIDs.add(clientGroupID);
-  }
-
-  clearAuthenticated(clientGroupID: ClientGroupID) {
-    authenticatedClientIDs.delete(clientGroupID);
   }
 }
 

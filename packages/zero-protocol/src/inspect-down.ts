@@ -53,20 +53,10 @@ export const inspectVersionDownSchema = inspectBaseDownSchema.extend({
   value: v.string(),
 });
 
-export const inspectAuthenticatedDownSchema = inspectBaseDownSchema.extend({
-  op: v.literal('authenticated'),
-  value: v.boolean(),
-});
-
-export type InspectAuthenticatedDown = v.Infer<
-  typeof inspectAuthenticatedDownSchema
->;
-
 export const inspectDownBodySchema = v.union(
   inspectQueriesDownSchema,
   inspectMetricsDownSchema,
   inspectVersionDownSchema,
-  inspectAuthenticatedDownSchema,
 );
 
 export const inspectDownMessageSchema = v.tuple([

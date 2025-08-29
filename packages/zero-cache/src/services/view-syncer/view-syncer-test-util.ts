@@ -544,8 +544,6 @@ async function expectDesired(
   return pokeParts;
 }
 
-export const TEST_ADMIN_PASSWORD = 'test-pwd';
-
 export async function setup(
   testDBs: TestDBs,
   testName: string,
@@ -670,9 +668,9 @@ export async function setup(
   const operatorStorage = new DatabaseStorage(
     storageDB,
   ).createClientGroupStorage(serviceID);
-  const inspectorDelegate = new InspectorDelegate();
+  const inspectMetricsDelegate = new InspectorDelegate();
   const vs = new ViewSyncerService(
-    {getQueries: queryConfig, adminPassword: TEST_ADMIN_PASSWORD},
+    {getQueries: queryConfig},
     lc,
     SHARD,
     TASK_ID,
@@ -686,12 +684,12 @@ export async function setup(
       SHARD,
       operatorStorage,
       'view-syncer.pg-test.ts',
-      inspectorDelegate,
+      inspectMetricsDelegate,
     ),
     stateChanges,
     drainCoordinator,
     100,
-    inspectorDelegate,
+    inspectMetricsDelegate,
     undefined,
     setTimeoutFn,
   );
@@ -752,7 +750,6 @@ export async function setup(
     connect,
     connectWithQueueAndSource,
     setTimeoutFn,
-    inspectorDelegate,
   };
 }
 
