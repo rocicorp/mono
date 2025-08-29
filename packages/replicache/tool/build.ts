@@ -67,11 +67,12 @@ async function buildCLI() {
   });
 }
 
+const external = ['node:*', 'expo*'];
+
 if (perf) {
-  await buildReplicache({minify: true, ext: 'js', mode: 'release'});
+  await buildReplicache({minify: true, ext: 'js', mode: 'release', external});
 } else if (forBundleSizeDashboard) {
   // Bundle external modules for the bundle size dashboard
-  const external = ['node:*', 'expo'];
   // We keep mjs as mjs so the dashboard does not get reset
   await Promise.all([
     buildReplicache({minify: false, ext: 'mjs', mode: 'unknown', external}),
@@ -79,7 +80,6 @@ if (perf) {
     buildCLI(),
   ]);
 } else {
-  const external = ['node:*', 'expo*'];
   await buildCLI();
   await buildReplicache({minify: false, ext: 'js', mode: 'unknown', external});
 }

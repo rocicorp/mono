@@ -13,7 +13,7 @@ async function buildIndex(): Promise<void> {
   const outfile = path.join(dirname, '..', 'out', 'index.js');
   await esbuild.build({
     ...sharedOptions(minify),
-    external: [],
+    external: ['node:*', 'expo*'],
     format: 'esm',
     platform: 'browser',
     define,
