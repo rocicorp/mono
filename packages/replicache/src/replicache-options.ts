@@ -8,12 +8,7 @@ import type {Puller} from './puller.ts';
 import type {Pusher} from './pusher.ts';
 import type {MutatorDefs, RequestOptions} from './types.ts';
 
-export type KVStoreOption =
-  | 'mem'
-  | 'idb'
-  | 'expo-sqlite'
-  | StoreProvider
-  | undefined;
+export type KVStoreOption = 'mem' | 'idb' | 'expo-sqlite' | StoreProvider;
 
 /**
  * The options passed to {@link Replicache}.
@@ -214,7 +209,7 @@ export interface ReplicacheOptions<MD extends MutatorDefs> {
   /**
    * Allows providing a custom implementation of the underlying storage layer.
    */
-  kvStore?: KVStoreOption;
+  kvStore?: KVStoreOption | undefined;
 
   /**
    * Defines the indexes, if any, to use on the data.

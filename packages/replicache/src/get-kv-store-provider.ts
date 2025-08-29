@@ -16,11 +16,10 @@ export type KVStoreProvider = (
 
 export function getKVStoreProvider(
   lc: LogContext,
-  kvStore: KVStoreOption,
+  kvStore: KVStoreOption = defaultKVStore(),
 ): StoreProvider {
   switch (kvStore) {
     case 'idb':
-    case undefined:
       return {
         create: (name: string) => newIDBStoreWithMemFallback(lc, name),
         drop: dropIDBStoreWithMemFallback,
@@ -35,7 +34,12 @@ export function getKVStoreProvider(
         create: (name: string) => new ExpoStore(name),
         drop: (name: string) => dropExpoStore(name),
       };
+
     default:
       return kvStore;
   }
+}
+
+function defaultKVStore(): KVStoreOption {
+  return navigator?.product === 'ReactNative' ? 'expo-sqlite' : 'idb';
 }
