@@ -30,7 +30,7 @@ import type {
   PullResponseOKV1Internal,
   PullResponseV1,
 } from '../puller.ts';
-import {ReportError} from '../report-error.ts';
+import {ReportError} from '../replicache.ts';
 import {toError} from '../to-error.ts';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.ts';
 import {

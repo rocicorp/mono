@@ -10,14 +10,14 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
 async function buildIndex(): Promise<void> {
   const minify = true;
   const define = makeDefine('release');
+  const outfile = path.join(dirname, '..', 'out', 'index.js');
   await esbuild.build({
     ...sharedOptions(minify),
-    external: ['node:*', 'expo*'],
+    external: [],
     format: 'esm',
     platform: 'browser',
-    splitting: true,
     define,
-    outdir: path.join(dirname, '..', 'out'),
+    outfile,
     entryPoints: [path.join(dirname, '..', 'src', 'index.ts')],
   });
 }

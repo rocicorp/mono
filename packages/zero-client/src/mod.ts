@@ -8,11 +8,11 @@ export type {
   Store as KVStore,
   Write as KVWrite,
 } from '../../replicache/src/kv/store.ts';
-export {makeIDBName} from '../../replicache/src/make-idb-name.ts';
 export {
   dropAllDatabases,
   dropDatabase,
 } from '../../replicache/src/persist/collect-idb-databases.ts';
+export {makeIDBName} from '../../replicache/src/replicache.ts';
 export type {ClientGroupID, ClientID} from '../../replicache/src/sync/ids.ts';
 export {TransactionClosedError} from '../../replicache/src/transaction-closed-error.ts';
 export type {
@@ -117,7 +117,6 @@ export type {
   ExpressionFactory,
 } from '../../zql/src/query/expression.ts';
 export * from '../../zql/src/query/named.ts';
-export type {AnyQuery} from '../../zql/src/query/query-impl.ts';
 export type {
   HumanReadable,
   PullRow,
@@ -125,6 +124,7 @@ export type {
   Row,
   RunOptions,
 } from '../../zql/src/query/query.ts';
+export type {AnyQuery} from '../../zql/src/query/query-impl.ts';
 export {type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 export type {BatchMutator, DBMutator, TableMutator} from './client/crud.ts';

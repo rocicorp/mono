@@ -28,15 +28,5 @@ export default defineConfig({
   define: makeDefine(),
   build: {
     target: 'esnext',
-    rollupOptions: {
-      external: ['expo-sqlite'],
-    },
-  },
-  resolve: {
-    alias: {
-      // Mock expo-sqlite to prevent eager transformation by Vitest
-      // Even though it's loaded via dynamic import, Vitest eagerly transforms it during dependency analysis
-      'expo-sqlite': 'data:text/javascript,export default {}',
-    },
   },
 });

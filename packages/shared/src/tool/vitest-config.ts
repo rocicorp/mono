@@ -14,7 +14,6 @@ const logSilenceMessages = [
   'Not indexing value',
   'Zero starting up with no server URL',
 ];
-
 export default {
   // https://github.com/vitest-dev/vitest/issues/5332#issuecomment-1977785593
   optimizeDeps: {
@@ -23,13 +22,6 @@ export default {
   define,
   esbuild: {
     define,
-  },
-  resolve: {
-    alias: {
-      // Mock expo-sqlite to prevent eager transformation by Vitest
-      // Even though it's loaded via dynamic import, Vitest eagerly transforms it during dependency analysis
-      'expo-sqlite': 'data:text/javascript,export default {}',
-    },
   },
 
   test: {

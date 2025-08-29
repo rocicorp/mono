@@ -1,14 +1,12 @@
 import type {LogLevel, LogSink} from '@rocicorp/logger';
-import type {InternalDiff} from './btree/node.ts';
-import type {Read, Store} from './dag/store.ts';
-import type {Hash} from './hash.ts';
 import type {IndexDefinitions} from './index-defs.ts';
 import type {StoreProvider} from './kv/store.ts';
 import type {Puller} from './puller.ts';
 import type {Pusher} from './pusher.ts';
 import type {MutatorDefs, RequestOptions} from './types.ts';
-
-export type KVStoreOption = 'mem' | 'idb' | 'expo-sqlite' | StoreProvider;
+import type {Hash} from './hash.ts';
+import type {InternalDiff} from './btree/node.ts';
+import type {Read, Store} from './dag/store.ts';
 
 /**
  * The options passed to {@link Replicache}.
@@ -209,7 +207,7 @@ export interface ReplicacheOptions<MD extends MutatorDefs> {
   /**
    * Allows providing a custom implementation of the underlying storage layer.
    */
-  kvStore?: KVStoreOption | undefined;
+  kvStore?: 'mem' | 'idb' | StoreProvider | undefined;
 
   /**
    * Defines the indexes, if any, to use on the data.
