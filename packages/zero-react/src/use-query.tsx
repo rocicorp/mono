@@ -7,11 +7,7 @@ import {Zero} from '../../zero-client/src/client/zero.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {AbstractQuery} from '../../zql/src/query/query-impl.ts';
-import {
-  delegateSymbol,
-  type HumanReadable,
-  type Query,
-} from '../../zql/src/query/query.ts';
+import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 import {useZero} from './zero-provider.tsx';
@@ -38,17 +34,17 @@ export type UseQueryOptions = {
 export type UseSuspenseQueryOptions = UseQueryOptions & {
   /**
    * Whether to suspend until:
-   * - 'non-empty': the query has non-empty results (non-empty array or defined
-   *   value for singular results) which may be of result type 'unknown'
+   * - 'partial': the query has partial results (partial array or defined
+   *   value for singular results) which may be of result type 'unknown',
    *   or the query result type is 'complete' (in which case results may be
-   *   empty).  This is useful for suspending until there are non-empty
+   *   empty).  This is useful for suspending until there are partial
    *   optimistic local results, or the query has completed loading from the
    *   server.
    * - 'complete': the query result type is 'complete'.
    *
-   * Default is 'non-empty'.
+   * Default is 'partial'.
    */
-  suspendUntil?: 'complete' | 'non-empty';
+  suspendUntil?: 'complete' | 'partial';
 };
 
 // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
@@ -100,7 +96,7 @@ export function useSuspenseQuery<
 ): QueryResult<TReturn> {
   let enabled = true;
   let ttl: TTL = DEFAULT_TTL_MS;
-  let suspendUntil: 'complete' | 'non-empty' = 'non-empty';
+  let suspendUntil: 'complete' | 'partial' = 'partial';
   if (typeof options === 'boolean') {
     enabled = options;
   } else if (options) {
@@ -129,7 +125,7 @@ export function useSuspenseQuery<
       suspend(view.waitForComplete());
     }
 
-    if (suspendUntil === 'non-empty' && !view.nonEmpty) {
+    if (suspendUntil === 'partial' && !view.nonEmpty) {
       suspend(view.waitForNonEmpty());
     }
   }
@@ -288,8 +284,8 @@ export class ViewStore {
     const hash = query.hash() + zero.clientID;
     let existing = this.#views.get(hash);
     if (!existing) {
-      query = query[delegateSymbol](zero.queryDelegate);
       existing = new ViewWrapper(
+        zero,
         query,
         format,
         ttl,
@@ -347,6 +343,7 @@ class ViewWrapper<
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 > {
+  #zero: Zero<TSchema>;
   #view: TypedView<HumanReadable<TReturn>> | undefined;
   readonly #onDematerialized;
   readonly #onMaterialized;
@@ -361,12 +358,14 @@ class ViewWrapper<
   #nonEmptyResolver = resolver<void>();
 
   constructor(
+    zero: Zero<TSchema>,
     query: Query<TSchema, TTable, TReturn>,
     format: Format,
     ttl: TTL,
     onMaterialized: (view: ViewWrapper<TSchema, TTable, TReturn>) => void,
     onDematerialized: () => void,
   ) {
+    this.#zero = zero;
     this.#query = query;
     this.#format = format;
     this.#ttl = ttl;
@@ -412,7 +411,7 @@ class ViewWrapper<
       return;
     }
 
-    this.#view = this.#query.materialize(this.#ttl);
+    this.#view = this.#zero.materialize(this.#query, {ttl: this.#ttl});
     this.#view.addListener(this.#onData);
 
     this.#onMaterialized(this);
