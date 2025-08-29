@@ -9,6 +9,7 @@ import {
 import {afterEach, expect, test, vi} from 'vitest';
 import {must} from '../../shared/src/must.ts';
 import {
+  createBuilder,
   createSchema,
   number,
   relationships,
@@ -119,9 +120,24 @@ test('useQuery', async () => {
 
   must(queryDelegate.gotCallbacks[0])(true);
   await 1;
+});
+
+test('useQuery with builder', () => {
+  const {ms, schema} = setupTestEnvironment();
+  const builder = createBuilder(schema);
+  const querySignal = vi.fn(() => builder.table);
+
+  const {
+    result: [rows, resultType],
+  } = useQueryWithZeroProvider('useQuery-id', querySignal);
+
+  expect(rows()).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {a: 2, b: 'b', [refCountSymbol]: 1, [idSymbol]: '2'},
+  ]);
+  expect(resultType()).toEqual({type: 'unknown'});
 
   ms.push({row: {a: 3, b: 'c'}, type: 'add'});
-  queryDelegate.commit();
 
   expect(rows()).toEqual([
     {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
