@@ -44,20 +44,11 @@
     "command-line-usage": "^7.0.3",
     "compare-utf8": "^0.1.1",
     "esbuild": "^0.25.0",
-    "expo-sqlite": "^15.2.14",
     "fetch-mock": "^9.11.0",
     "playwright": "^1.53.2",
     "shared": "0.0.0",
     "typescript": "~5.8.2",
     "vitest": "3.2.4"
-  },
-  "peerDependencies": {
-    "expo-sqlite": "^15.2.14"
-  },
-  "peerDependenciesMeta": {
-    "expo-sqlite": {
-      "optional": true
-    }
   },
   "type": "module",
   "main": "out/replicache.js",
@@ -74,10 +65,6 @@
     "./impl": {
       "types": "./out/replicache/src/impl.d.ts",
       "default": "./out/impl.js"
-    },
-    "./expo": {
-      "types": "./out/replicache/src/expo.d.ts",
-      "default": "./out/expo.js"
     }
   },
   "files": [

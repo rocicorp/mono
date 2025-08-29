@@ -3,5 +3,9 @@
   "compilerOptions": {
     "lib": ["dom", "es2022"]
   },
-  "include": ["src/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "../shared/src/binary-search.ts",
+    "../shared/src/binary-search.test.ts"
+  ]
 }

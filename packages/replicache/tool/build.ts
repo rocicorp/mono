@@ -31,12 +31,7 @@ async function buildReplicache(options: BuildOptions) {
   const outfile = basePath('out', 'replicache.' + ext);
   const entryPoints = {
     replicache: basePath('src', 'mod.ts'),
-    ...(forBundleSizeDashboard
-      ? {}
-      : {
-          impl: basePath('src', 'impl.ts'),
-          expo: basePath('src', 'expo.ts'),
-        }),
+    ...(forBundleSizeDashboard ? {} : {impl: basePath('src', 'impl.ts')}),
   };
   const result = await esbuild.build({
     ...sharedOptions(options.minify, metafile),
@@ -67,12 +62,11 @@ async function buildCLI() {
   });
 }
 
-const external = ['node:*', 'expo*'];
-
 if (perf) {
-  await buildReplicache({minify: true, ext: 'js', mode: 'release', external});
+  await buildReplicache({minify: true, ext: 'js', mode: 'release'});
 } else if (forBundleSizeDashboard) {
   // Bundle external modules for the bundle size dashboard
+  const external = ['node:*'];
   // We keep mjs as mjs so the dashboard does not get reset
   await Promise.all([
     buildReplicache({minify: false, ext: 'mjs', mode: 'unknown', external}),
@@ -81,5 +75,5 @@ if (perf) {
   ]);
 } else {
   await buildCLI();
-  await buildReplicache({minify: false, ext: 'js', mode: 'unknown', external});
+  await buildReplicache({minify: false, ext: 'js', mode: 'unknown'});
 }

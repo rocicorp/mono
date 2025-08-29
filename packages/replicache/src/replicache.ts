@@ -1,5 +1,12 @@
+import type {LogContext} from '@rocicorp/logger';
 import type {MaybePromise} from '../../shared/src/types.ts';
-import {makeIDBName} from './make-idb-name.ts';
+import * as FormatVersion from './format-version-enum.ts';
+import {
+  dropIDBStoreWithMemFallback,
+  newIDBStoreWithMemFallback,
+} from './kv/idb-store-with-mem-fallback.ts';
+import {MemStore, dropMemStore} from './kv/mem-store.ts';
+import type {StoreProvider} from './kv/store.ts';
 import type {PendingMutation} from './pending-mutations.ts';
 import type {Puller} from './puller.ts';
 import type {Pusher} from './pusher.ts';
@@ -36,6 +43,29 @@ export function setMakeImplForTest(testMakeImpl: MakeImpl) {
 export function restoreMakeImplForTest() {
   makeImpl = defaultMakeImpl;
 }
+
+export const httpStatusUnauthorized = 401;
+
+/**
+ * Returns the name of the IDB database that will be used for a particular Replicache instance.
+ * @param name The name of the Replicache instance (i.e., the `name` field of `ReplicacheOptions`).
+ * @param schemaVersion The schema version of the database (i.e., the `schemaVersion` field of `ReplicacheOptions`).
+ * @returns
+ */
+export function makeIDBName(name: string, schemaVersion?: string): string {
+  return makeIDBNameInternal(name, schemaVersion, FormatVersion.Latest);
+}
+
+function makeIDBNameInternal(
+  name: string,
+  schemaVersion: string | undefined,
+  formatVersion: number,
+): string {
+  const n = `rep:${name}:${formatVersion}`;
+  return schemaVersion ? `${n}:${schemaVersion}` : n;
+}
+
+export {makeIDBNameInternal as makeIDBNameForTesting};
 
 // eslint-disable-next-line @typescript-eslint/ban-types
 export class Replicache<MD extends MutatorDefs = {}> {
@@ -431,5 +461,35 @@ export class Replicache<MD extends MutatorDefs = {}> {
    */
   experimentalPendingMutations(): Promise<readonly PendingMutation[]> {
     return this.#impl.experimentalPendingMutations();
+  }
+}
+
+/**
+ * Wrapper error class that should be reported as error (logger.error)
+ */
+export class ReportError extends Error {}
+
+function createMemStore(name: string): MemStore {
+  return new MemStore(name);
+}
+
+export function getKVStoreProvider(
+  lc: LogContext,
+  kvStore: 'mem' | 'idb' | StoreProvider | undefined,
+): StoreProvider {
+  switch (kvStore) {
+    case 'idb':
+    case undefined:
+      return {
+        create: (name: string) => newIDBStoreWithMemFallback(lc, name),
+        drop: dropIDBStoreWithMemFallback,
+      };
+    case 'mem':
+      return {
+        create: createMemStore,
+        drop: (name: string) => dropMemStore(name),
+      };
+    default:
+      return kvStore;
   }
 }

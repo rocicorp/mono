@@ -37,7 +37,6 @@ export type {
   StoreProvider as KVStoreProvider,
   Write as KVWrite,
 } from './kv/store.ts';
-export {makeIDBName} from './make-idb-name.ts';
 export {mergeAsyncIterables} from './merge-async-iterables.ts';
 export type {PatchOperation} from './patch-operation.ts';
 export type {PendingMutation} from './pending-mutations.ts';
@@ -49,8 +48,8 @@ export {
 } from './persist/collect-idb-databases.ts';
 export type {Puller, PullerResult, PullResponse} from './puller.ts';
 export type {Pusher, PusherResult, PushError, PushResponse} from './pusher.ts';
-export type {KVStoreOption, ReplicacheOptions} from './replicache-options.ts';
-export {Replicache} from './replicache.ts';
+export type {ReplicacheOptions} from './replicache-options.ts';
+export {makeIDBName, Replicache} from './replicache.ts';
 export {makeScanResult} from './scan-iterator.ts';
 export type {
   AsyncIterableIteratorToArray,

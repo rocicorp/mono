@@ -3,8 +3,8 @@ import {expect, test, vi} from 'vitest';
 import type {VersionNotSupportedResponse} from './error-responses.ts';
 import {getDefaultPuller} from './get-default-puller.ts';
 import {type Hash, emptyHash} from './hash.ts';
-import {httpStatusUnauthorized} from './http-status-unauthorized.ts';
 import type {Puller} from './puller.ts';
+import {httpStatusUnauthorized} from './replicache.ts';
 import {
   disableAllBackgroundProcesses,
   expectConsoleLogContextStub,

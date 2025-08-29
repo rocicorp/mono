@@ -31,14 +31,11 @@ import * as FormatVersion from './format-version-enum.ts';
 import {deepFreeze} from './frozen-json.ts';
 import {getDefaultPuller, isDefaultPuller} from './get-default-puller.ts';
 import {getDefaultPusher, isDefaultPusher} from './get-default-pusher.ts';
-import {getKVStoreProvider} from './get-kv-store-provider.ts';
 import {assertHash, emptyHash, type Hash, newRandomHash} from './hash.ts';
 import type {HTTPRequestInfo} from './http-request-info.ts';
-import {httpStatusUnauthorized} from './http-status-unauthorized.ts';
 import type {IndexDefinitions} from './index-defs.ts';
 import type {StoreProvider} from './kv/store.ts';
 import {createLogContext} from './log-options.ts';
-import {makeIDBName} from './make-idb-name.ts';
 import {MutationRecovery} from './mutation-recovery.ts';
 import {initNewClientChannel} from './new-client-channel.ts';
 import {
@@ -84,7 +81,12 @@ import type {
   ReplicacheOptions,
   ZeroOption,
 } from './replicache-options.ts';
-import {ReportError} from './report-error.ts';
+import {
+  getKVStoreProvider,
+  httpStatusUnauthorized,
+  makeIDBName,
+  ReportError,
+} from './replicache.ts';
 import {setIntervalWithSignal} from './set-interval-with-signal.ts';
 import {
   type SubscribeOptions,
@@ -97,7 +99,6 @@ import {
   type WatchOptions,
   WatchSubscription,
 } from './subscriptions.ts';
-import type {DiffsMap} from './sync/diff.ts';
 import * as HandlePullResponseResultEnum from './sync/handle-pull-response-result-type-enum.ts';
 import type {ClientGroupID, ClientID} from './sync/ids.ts';
 import {PullError} from './sync/pull-error.ts';
@@ -125,6 +126,7 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.ts';
+import type {DiffsMap} from './sync/diff.ts';
 
 declare const TESTING: boolean;
 
