@@ -110,39 +110,6 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     }
   }, [issue, isScrolling, displayed]);
 
-  if (import.meta.env.DEV) {
-    // exposes a function to dev console to create comments.
-    // useful for testing displayed above, and other things.
-    // eslint-disable-next-line react-hooks/rules-of-hooks
-    useEffect(() => {
-      (window as unknown as Record<string, unknown>).autocomment = (
-        count = 1,
-        repeat = true,
-      ) => {
-        const mut = () => {
-          z.mutateBatch(m => {
-            for (let i = 0; i < count; i++) {
-              const id = nanoid();
-              m.comment.insert({
-                id,
-                issueID: displayed?.id ?? '',
-                body: `autocomment ${id}`,
-                created: Date.now(),
-                creatorID: z.userID,
-              });
-            }
-          });
-        };
-
-        if (repeat) {
-          setInterval(mut, 5_000);
-        } else {
-          mut();
-        }
-      };
-    });
-  }
-
   useEffect(() => {
     if (issueResult.type === 'complete') {
       recordPageLoad('issue-page');

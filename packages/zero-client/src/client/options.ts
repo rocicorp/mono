@@ -55,22 +55,6 @@ export interface ZeroOptions<
     | undefined;
 
   /**
-   * Enables legacy query support.
-   * When this is true, old-style queries that do not require server side implementations will be enabled.
-   * This will flip to false in the future and what we currently call "custom queries" will become "queries" and
-   * the only option for reading data.
-   */
-  enableLegacyQueries?: boolean | undefined;
-
-  /**
-   * Enables legacy mutator support.
-   * When this is true, old-style mutations that do not require server side implementations will be enabled.
-   * This will flip to false in the future and what we currently call "custom mutations" will become "mutations" and
-   * the only option for writing data.
-   */
-  enableLegacyMutators?: boolean | undefined;
-
-  /**
    * A unique identifier for the user. Must be non-empty.
    *
    * Each userID gets its own client-side storage so that the app can switch

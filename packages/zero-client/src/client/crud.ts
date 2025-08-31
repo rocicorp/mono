@@ -58,9 +58,12 @@ export type TableMutator<S extends TableSchema> = {
   delete: (id: DeleteID<S>) => Promise<void>;
 };
 
-export type DBMutator<S extends Schema> = {
-  [K in keyof S['tables']]: TableMutator<S['tables'][K]>;
-};
+export type DBMutator<S extends Schema> =
+  S['enableLegacyMutators'] extends false
+    ? {} // eslint-disable-line @typescript-eslint/ban-types -- {} is needed here for intersection type identity
+    : {
+        [K in keyof S['tables']]: TableMutator<S['tables'][K]>;
+      };
 
 export type BatchMutator<S extends Schema> = <R>(
   body: (m: DBMutator<S>) => MaybePromise<R>,

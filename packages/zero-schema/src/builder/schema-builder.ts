@@ -16,6 +16,22 @@ import {type TableBuilderWithColumns} from './table-builder.ts';
 export type Schema = {
   readonly tables: {readonly [table: string]: TableSchema};
   readonly relationships: {readonly [table: string]: RelationshipsSchema};
+  /**
+   * Enables legacy query support.
+   * When this is true, old-style queries that do not require server side implementations will be enabled.
+   * This will flip to false in the future and what we currently call "custom queries" will become "queries" and
+   * the only option for reading data.
+   * The default is true, but will flip to false in the future.
+   */
+  readonly enableLegacyQueries?: boolean | undefined;
+  /**
+   * Enables legacy mutator support.
+   * When this is true, old-style mutations that do not require server side implementations will be enabled.
+   * This will flip to false in the future and what we currently call "custom mutations" will become "mutations" and
+   * the only option for writing data.
+   * The default is true, but will flip to false in the future.
+   */
+  readonly enableLegacyMutators?: boolean | undefined;
 };
 
 /**
@@ -29,9 +45,15 @@ export type Schema = {
 export function createSchema<
   const TTables extends readonly TableBuilderWithColumns<TableSchema>[],
   const TRelationships extends readonly Relationships[],
+  const TEnableLegacyQueries extends boolean | undefined,
+  const TEnableLegacyMutators extends boolean | undefined,
 >(options: {
   readonly tables: TTables;
   readonly relationships?: TRelationships | undefined;
+  /** @see Schema.enableLegacyQueries */
+  readonly enableLegacyQueries?: TEnableLegacyQueries | undefined;
+  /** @see Schema.enableLegacyMutators */
+  readonly enableLegacyMutators?: TEnableLegacyMutators | undefined;
 }): {
   tables: {
     readonly [K in TTables[number]['schema']['name']]: Extract<
@@ -45,6 +67,8 @@ export function createSchema<
       {name: K}
     >['relationships'];
   };
+  enableLegacyQueries: TEnableLegacyQueries;
+  enableLegacyMutators: TEnableLegacyMutators;
 } {
   const retTables: Record<string, TableSchema> = {};
   const retRelationships: Record<string, Record<string, Relationship>> = {};
@@ -80,6 +104,8 @@ export function createSchema<
   return {
     tables: retTables,
     relationships: retRelationships,
+    enableLegacyQueries: options.enableLegacyQueries,
+    enableLegacyMutators: options.enableLegacyMutators,
   } as any;
 }
 
