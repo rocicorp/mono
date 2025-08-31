@@ -484,7 +484,7 @@ export class Zero<
     });
     const logOptions = this.#logOptions;
 
-    const {enableLegacyMutators = true, enableLegacyQueries = true} = options;
+    const {enableLegacyMutators = true, enableLegacyQueries = true} = schema;
 
     const replicacheMutators: MutatorDefs & {
       [CRUD_MUTATION_NAME]: CRUDMutator;
@@ -930,7 +930,9 @@ export class Zero<
    * ```
    */
   readonly mutate: MD extends CustomMutatorDefs
-    ? DeepMerge<DBMutator<S>, MakeCustomMutatorInterfaces<S, MD>>
+    ? S['enableLegacyMutators'] extends false
+      ? MakeCustomMutatorInterfaces<S, MD>
+      : DeepMerge<DBMutator<S>, MakeCustomMutatorInterfaces<S, MD>>
     : DBMutator<S>;
 
   /**

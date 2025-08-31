@@ -215,6 +215,8 @@ export const schema = createSchema({
     issueLabelRelationships,
     emojiRelationships,
   ],
+  enableLegacyMutators: false,
+  enableLegacyQueries: false,
 });
 
 export type Schema = typeof schema;

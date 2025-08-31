@@ -800,11 +800,14 @@ test('warns when awaiting the promise directly', async () => {
 
 test('trying to use crud mutators throws if `enableLegacyMutators` is set to false', async () => {
   const z = zeroForTest({
-    schema,
-    enableLegacyMutators: false,
+    schema: {
+      ...schema,
+      enableLegacyMutators: false,
+    },
   });
 
   await expect(
+    // @ts-expect-error - Testing runtime behavior when legacy mutators are disabled
     z.mutate.issue.insert({
       id: '1',
       title: 'foo',
@@ -850,8 +853,10 @@ test('crud mutators work if `enableLegacyMutators` is set to true (or not set)',
 test('unnamed queries do not get registered with the query manager if `enableLegacyQueries` is set to false', async () => {
   const addLegacySpy = vi.spyOn(QueryManager.prototype, 'addLegacy');
   const z = zeroForTest({
-    schema,
-    enableLegacyQueries: false,
+    schema: {
+      ...schema,
+      enableLegacyQueries: false,
+    },
   });
 
   // mock the QueryManager class

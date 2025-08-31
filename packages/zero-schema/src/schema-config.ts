@@ -42,6 +42,8 @@ export const tableSchemaSchema: v.Type<TableSchema> = v.readonlyObject({
 export const schemaSchema = v.readonlyObject({
   tables: v.record(tableSchemaSchema),
   relationships: v.record(v.record(relationshipSchema)),
+  enableLegacyQueries: v.boolean().optional(),
+  enableLegacyMutators: v.boolean().optional(),
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
