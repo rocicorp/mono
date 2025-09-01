@@ -639,6 +639,116 @@ describe('initConnection', () => {
 
     await pusher.stop();
   });
+
+  test('uses client custom URL when userParams.url is provided', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({mutations: []}),
+    });
+
+    const pusher = new PusherService(
+      mockDB,
+      config,
+      {
+        url: ['http://default.com', 'http://custom.com/push'],
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
+      lc,
+      'cgid',
+    );
+    void pusher.run();
+
+    const userPushParams = {
+      url: 'http://custom.com/push',
+      queryParams: {workspace: '1'},
+    };
+
+    pusher.initConnection(clientID, wsID, userPushParams);
+    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    // Verify custom URL was used instead of default
+    expect(fetch.mock.calls[0][0]).toEqual(
+      'http://custom.com/push?workspace=1&schema=zero_0&appID=zero'
+    );
+
+    await pusher.stop();
+  });
+
+  test('falls back to default URL when userParams.url is not provided', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({mutations: []}),
+    });
+
+    const pusher = new PusherService(
+      mockDB,
+      config,
+      {
+        url: ['http://default.com'],
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
+      lc,
+      'cgid',
+    );
+    void pusher.run();
+
+    pusher.initConnection(clientID, wsID, undefined);
+    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    // Verify default URL was used
+    expect(fetch.mock.calls[0][0]).toEqual(
+      'http://default.com/?schema=zero_0&appID=zero'
+    );
+
+    await pusher.stop();
+  });
+
+  test('rejects disallowed custom URL', async () => {
+    const pusher = new PusherService(
+      mockDB,
+      config,
+      {
+        url: ['http://allowed.com'],
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
+      lc,
+      'cgid',
+    );
+    void pusher.run();
+    const stream = pusher.initConnection(clientID, wsID, {
+      url: 'http://malicious.com/endpoint',
+    });
+
+    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
+
+    const messages: unknown[] = [];
+    for await (const msg of stream) {
+      messages.push(msg);
+      break;
+    }
+
+    expect(messages).toEqual([
+      [
+        'pushResponse',
+        {
+          error: 'zeroPusher',
+          details: expect.stringContaining('URL "http://malicious.com/endpoint" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration'),
+          mutationIDs: [{clientID, id: 1}],
+        },
+      ],
+    ]);
+
+    await pusher.stop();
+  });
 });
 
 describe('pusher streaming', () => {
