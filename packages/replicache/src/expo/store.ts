@@ -6,7 +6,6 @@ import {
 import {
   createSQLiteStore,
   SQLiteDatabaseManager,
-  type SQLiteDatabase,
   type SQLiteDatabaseManagerOptions,
 } from '../kv/sqlite-store.ts';
 import type {StoreProvider} from '../kv/store.ts';
@@ -14,14 +13,22 @@ import type {StoreProvider} from '../kv/store.ts';
 export const expoDbManagerInstance = new SQLiteDatabaseManager({
   open: fileName => {
     const db = openDatabaseSync(fileName);
+    let closed = false;
 
-    const genericDb: SQLiteDatabase = {
-      close: () => db.closeSync(),
-      destroy: () => {
+    const close = () => {
+      if (!closed) {
         db.closeSync();
+        closed = true;
+      }
+    };
+
+    return {
+      close,
+      destroy() {
+        close();
         deleteDatabaseSync(fileName);
       },
-      prepare: (sql: string) => {
+      prepare(sql: string) {
         const stmt = db.prepareSync(sql);
         return {
           run: (...params: unknown[]): void => {
@@ -35,8 +42,6 @@ export const expoDbManagerInstance = new SQLiteDatabaseManager({
         };
       },
     };
-
-    return genericDb;
   },
 });
 

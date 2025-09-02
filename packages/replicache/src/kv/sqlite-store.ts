@@ -76,11 +76,9 @@ interface SQLiteConnectionManager {
     preparedStatements: SQLitePreparedStatements;
     release: () => void;
   }>;
-  close(): void;
 }
 
 type SQLitePreparedStatementPoolEntry = {
-  db: SQLiteDatabase;
   lock: Lock;
   preparedStatements: SQLitePreparedStatements;
 };
@@ -116,9 +114,8 @@ class SQLiteReadConnectionManager implements SQLiteConnectionManager {
 
     for (let i = 0; i < opts.readPoolSize; i++) {
       // create a new readonly SQLiteDatabase for each instance in the pool
-      const {db, preparedStatements} = manager.open(name, opts);
+      const {preparedStatements} = manager.open(name, opts);
       this.#pool.push({
-        db,
         lock: new Lock(),
         preparedStatements,
       });
@@ -155,20 +152,6 @@ class SQLiteReadConnectionManager implements SQLiteConnectionManager {
       },
     };
   }
-
-  /**
-   * Finalizes all prepared statements and closes the underlying connections.
-   * After calling this method the manager can no longer be used.
-   */
-  close(): void {
-    for (const entry of this.#pool) {
-      for (const stmt of Object.values(entry.preparedStatements)) {
-        stmt.finalize();
-      }
-      entry.db.close();
-    }
-    this.#pool = [];
-  }
 }
 
 /**
@@ -177,7 +160,6 @@ class SQLiteReadConnectionManager implements SQLiteConnectionManager {
 class SQLiteWriteConnectionManager implements SQLiteConnectionManager {
   readonly #rwLock: RWLock;
   readonly #preparedStatements: SQLitePreparedStatements;
-  readonly #db: SQLiteDatabase;
 
   constructor(
     name: string,
@@ -185,9 +167,8 @@ class SQLiteWriteConnectionManager implements SQLiteConnectionManager {
     rwLock: RWLock,
     opts: SQLiteDatabaseManagerOptions,
   ) {
-    const {db, preparedStatements} = manager.open(name, opts);
+    const {preparedStatements} = manager.open(name, opts);
     this.#preparedStatements = preparedStatements;
-    this.#db = db;
     this.#rwLock = rwLock;
   }
 
@@ -197,13 +178,6 @@ class SQLiteWriteConnectionManager implements SQLiteConnectionManager {
   }> {
     const release = await this.#rwLock.write();
     return {preparedStatements: this.#preparedStatements, release};
-  }
-
-  close(): void {
-    for (const stmt of Object.values(this.#preparedStatements)) {
-      stmt.finalize();
-    }
-    this.#db.close();
   }
 }
 
@@ -262,8 +236,6 @@ export class SQLiteStore implements Store {
   }
 
   close(): Promise<void> {
-    this.#writeConnectionManager.close();
-    this.#readConnectionManager.close();
     this.#dbm.close(this.#name);
     this.#closed = true;
 
@@ -410,17 +382,20 @@ export type SQLiteDatabaseManagerOptions = {
   readUncommitted?: boolean | undefined;
 };
 
+const OPEN = 1;
+const CLOSED = 0;
+
+type DBInstance = {
+  instances: {
+    db: SQLiteDatabase;
+    preparedStatements: SQLitePreparedStatements;
+    state: typeof OPEN | typeof CLOSED;
+  }[];
+};
+
 export class SQLiteDatabaseManager {
   readonly #dbm: GenericSQLiteDatabaseManager;
-  readonly #dbInstances = new Map<
-    string,
-    {
-      instances: {
-        db: SQLiteDatabase;
-        preparedStatements: SQLitePreparedStatements;
-      }[];
-    }
-  >();
+  readonly #dbInstances = new Map<string, DBInstance>();
 
   constructor(dbm: GenericSQLiteDatabaseManager) {
     this.#dbm = dbm;
@@ -484,7 +459,7 @@ export class SQLiteDatabaseManager {
     this.#dbInstances.set(name, {
       instances: [
         ...(dbInstance?.instances ?? []),
-        {db: newDb, preparedStatements},
+        {db: newDb, preparedStatements, state: OPEN},
       ],
     });
 
@@ -494,32 +469,34 @@ export class SQLiteDatabaseManager {
     };
   }
 
-  close(name: string) {
+  #closeDBInstance(name: string): DBInstance | undefined {
     const dbInstance = this.#dbInstances.get(name);
-    if (!dbInstance) return;
+    if (dbInstance) {
+      for (const instance of dbInstance.instances) {
+        if (instance.state === CLOSED) {
+          continue;
+        }
 
-    for (const instance of dbInstance.instances) {
-      for (const stmt of Object.values(instance.preparedStatements)) {
-        stmt.finalize();
+        for (const stmt of Object.values(instance.preparedStatements)) {
+          stmt.finalize();
+        }
+        instance.db.close();
+        instance.state = CLOSED;
       }
-      instance.db.close();
     }
+    return dbInstance;
+  }
+
+  close(name: string) {
+    this.#closeDBInstance(name);
   }
 
   destroy(name: string): void {
-    const dbInstance = this.#dbInstances.get(name);
-    if (!dbInstance) return;
+    const dbInstance = this.#closeDBInstance(name);
 
-    // we close all databases first before destroying
-    for (const instance of dbInstance.instances) {
-      for (const stmt of Object.values(instance.preparedStatements)) {
-        stmt.finalize();
-      }
-      instance.db.close();
-    }
-    for (const instance of dbInstance.instances) {
-      instance.db.destroy();
-    }
+    // All the instances in dbInstance share one underlying file.
+    dbInstance?.instances[0].db.destroy();
+
     this.#dbInstances.delete(name);
   }
 
