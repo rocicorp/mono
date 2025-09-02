@@ -385,18 +385,17 @@ export type SQLiteDatabaseManagerOptions = {
 const OPEN = 1;
 const CLOSED = 0;
 
+type DBInstance = {
+  instances: {
+    db: SQLiteDatabase;
+    preparedStatements: SQLitePreparedStatements;
+    state: typeof OPEN | typeof CLOSED;
+  }[];
+};
+
 export class SQLiteDatabaseManager {
   readonly #dbm: GenericSQLiteDatabaseManager;
-  readonly #dbInstances = new Map<
-    string,
-    {
-      instances: {
-        db: SQLiteDatabase;
-        preparedStatements: SQLitePreparedStatements;
-        state: typeof OPEN | typeof CLOSED;
-      }[];
-    }
-  >();
+  readonly #dbInstances = new Map<string, DBInstance>();
 
   constructor(dbm: GenericSQLiteDatabaseManager) {
     this.#dbm = dbm;
@@ -470,40 +469,33 @@ export class SQLiteDatabaseManager {
     };
   }
 
-  close(name: string) {
+  #closeDBInstance(name: string): DBInstance | undefined {
     const dbInstance = this.#dbInstances.get(name);
-    if (!dbInstance) return;
+    if (dbInstance) {
+      for (const instance of dbInstance.instances) {
+        if (instance.state === CLOSED) {
+          continue;
+        }
 
-    for (const instance of dbInstance.instances) {
-      if (instance.state === CLOSED) {
-        continue;
+        for (const stmt of Object.values(instance.preparedStatements)) {
+          stmt.finalize();
+        }
+        instance.db.close();
+        instance.state = CLOSED;
       }
-
-      for (const stmt of Object.values(instance.preparedStatements)) {
-        stmt.finalize();
-      }
-      instance.db.close();
-      instance.state = CLOSED;
     }
+    return dbInstance;
+  }
+
+  close(name: string) {
+    this.#closeDBInstance(name);
   }
 
   destroy(name: string): void {
-    const dbInstance = this.#dbInstances.get(name);
-    if (!dbInstance) return;
-
-    // we close all databases first before destroying
-    for (const instance of dbInstance.instances) {
-      if (instance.state === CLOSED) {
-        continue;
-      }
-      for (const stmt of Object.values(instance.preparedStatements)) {
-        stmt.finalize();
-      }
-      instance.db.close();
-    }
+    const dbInstance = this.#closeDBInstance(name);
 
     // All the instances in dbInstance share one underlying file.
-    dbInstance.instances[0].db.destroy();
+    dbInstance?.instances[0].db.destroy();
 
     this.#dbInstances.delete(name);
   }
