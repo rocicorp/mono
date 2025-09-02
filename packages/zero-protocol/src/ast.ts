@@ -317,7 +317,7 @@ export type CorrelatedSubqueryCondition = {
   type: 'correlatedSubquery';
   related: CorrelatedSubquery;
   op: CorrelatedSubqueryConditionOperator;
-  flip?: boolean;
+  flip?: boolean | undefined;
 };
 
 export type CorrelatedSubqueryConditionOperator = 'EXISTS' | 'NOT EXISTS';

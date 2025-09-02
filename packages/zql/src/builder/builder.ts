@@ -423,6 +423,7 @@ function applyCorrelatedSubQuery(
   }
 
   assert(sq.subquery.alias, 'Subquery must have an alias');
+
   const child = buildPipelineInternal(
     sq.subquery,
     delegate,
@@ -482,6 +483,7 @@ function gatherCorrelatedSubqueryQueriesFromCondition(
   const gather = (condition: Condition) => {
     if (condition.type === 'correlatedSubquery') {
       assert(condition.op === 'EXISTS' || condition.op === 'NOT EXISTS');
+
       csqs.push({
         ...condition.related,
         subquery: {

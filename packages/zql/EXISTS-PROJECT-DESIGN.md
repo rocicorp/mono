@@ -223,10 +223,109 @@ Instead of traversing the entire tree eagerly, we could mark nodes with metadata
 3. **The pipeline assumes flat joins are at the top**, before any regular joins
 4. **Full row data is preserved** through extraction, eliminating need for rejoin
 
+## AST Transformation Approach (Alternative)
+
+Instead of handling `flip: true` in the pipeline builder, we can transform the AST to eliminate flip flags by restructuring the query.
+
+### Basic Transformation
+
+When we encounter `flip: true` on an EXISTS condition:
+
+```typescript
+// Original AST with flip
+{
+  table: 'users',
+  orderBy: [['id', 'asc']],
+  where: {
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    flip: true,
+    related: {
+      subquery: { table: 'orders', ... },
+      correlation: { parentField: ['id'], childField: ['userId'] }
+    }
+  }
+}
+
+// Transformed AST (no flip)
+{
+  table: 'orders',  // Subquery becomes root
+  orderBy: [['userId', 'asc']],  // Adjust ordering
+  where: {
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    related: {
+      subquery: { table: 'users', ... },  // Parent becomes subquery
+      correlation: { 
+        parentField: ['userId'],  // Swap correlation
+        childField: ['id'] 
+      }
+    }
+  }
+}
+// Returns: { ast: transformedAST, pathToOriginalRoot: ['users'] }
+```
+
+### Handling AND/OR with Multiple Flipped EXISTS
+
+For complex boolean conditions with multiple flipped EXISTS:
+
+#### AND Case
+```typescript
+// Multiple flipped EXISTS with AND
+// WHERE EXISTS(orders) AND EXISTS(reviews)
+// Both with flip: true
+
+// Transform into:
+// 1. Create two pipelines, each starting from subquery
+// 2. Extract users from each
+// 3. INTERSECT the extracted users
+// 4. Apply SortToRootOrder
+```
+
+#### OR Case
+```typescript
+// Multiple flipped EXISTS with OR
+// WHERE EXISTS(orders) OR EXISTS(reviews)
+// Both with flip: true
+
+// Transform into:
+// 1. Create two pipelines, each starting from subquery
+// 2. Extract users from each
+// 3. UNION the extracted users
+// 4. Apply SortToRootOrder
+```
+
+### Implementation Plan
+
+1. **Phase 1**: Implement AST transformation for single flipped EXISTS
+   - `transformFlippedExists(ast: AST): { ast: AST, pathToRoot: string[] }`
+   - Handle WHERE conditions moving with parent
+   - Return path for later extraction
+
+2. **Phase 2**: Handle complex cases
+   - Detect AND/OR with multiple flipped EXISTS
+   - Create union/intersect operators for combining results
+   - Ensure correct deduplication
+
+3. **Phase 3**: Integration
+   - Update pipeline builder to use transformed AST
+   - Apply ExtractMatchingKeys using pathToRoot
+   - Apply SortToRootOrder at the end
+
+### Benefits of AST Transformation
+
+1. **Cleaner separation**: AST transformation is pure, pipeline building stays simple
+2. **Easier testing**: Can test AST transformation independently
+3. **Better optimization**: Can analyze and optimize the transformed AST
+4. **Type safety**: No type mismatches between Input and FilterInput
+
 ## Next Steps
 
-1. Implement ExtractMatchingKeys operator
-2. Implement SortToRootOrder operator
-3. Create tests for the complete pipeline
-4. Add query planner logic to detect when to apply this optimization
-5. Add cardinality estimation to decide when reordering is beneficial
+1. ✅ Implement ExtractMatchingKeys operator
+2. ✅ Implement SortToRootOrder operator
+3. Implement AST transformation for flipped EXISTS
+4. Add union/intersect operators for AND/OR cases
+5. Create tests for the complete pipeline
+6. Add query planner logic to detect when to apply this optimization
+7. Add cardinality estimation to decide when reordering is beneficial
