@@ -268,50 +268,129 @@ When we encounter `flip: true` on an EXISTS condition:
 
 ### Handling AND/OR with Multiple Flipped EXISTS
 
-For complex boolean conditions with multiple flipped EXISTS:
+#### AND Case - Transform First Approach ✅ IMPLEMENTED
 
-#### AND Case
+**Strategy:** Transform only the **first** flipped EXISTS, convert others to regular EXISTS.
+
 ```typescript
-// Multiple flipped EXISTS with AND
-// WHERE EXISTS(orders) AND EXISTS(reviews)
-// Both with flip: true
+// Original
+users WHERE EXISTS(orders WITH flip) AND EXISTS(reviews WITH flip)
 
-// Transform into:
-// 1. Create two pipelines, each starting from subquery
-// 2. Extract users from each
-// 3. INTERSECT the extracted users
-// 4. Apply SortToRootOrder
+// Transformation
+orders WHERE EXISTS(users) AND EXISTS(reviews) // reviews converted to regular EXISTS
 ```
 
-#### OR Case
-```typescript
-// Multiple flipped EXISTS with OR
-// WHERE EXISTS(orders) OR EXISTS(reviews)
-// Both with flip: true
+**Benefits:**
+- **Query author control:** Put the most selective table first to control optimization
+- **Simple implementation:** Reuses existing single-flip transformation logic  
+- **Predictable behavior:** First flip always wins
+- **Semantic preservation:** Non-flipped conditions stay with their logical parent
 
-// Transform into:
-// 1. Create two pipelines, each starting from subquery
-// 2. Extract users from each
-// 3. UNION the extracted users
-// 4. Apply SortToRootOrder
+**Implementation Logic:**
+1. Detect multiple flipped EXISTS in AND condition
+2. Transform only the first flipped EXISTS found
+3. Split conditions:
+   - **Flipped EXISTS:** Others become regular EXISTS at root level
+   - **Non-flipped conditions:** Stay with parent (preserve original semantics)
+4. Combine all conditions at appropriate levels
+
+```typescript
+// Example with mixed conditions:
+// Original: users WHERE age > 30 AND EXISTS(orders WITH flip) AND EXISTS(reviews WITH flip)
+// Result: orders WHERE EXISTS(users WHERE age > 30) AND EXISTS(reviews)
+//         ^         ^                   ^               ^
+//         new root  parent EXISTS      age stays       reviews at root
+//                   preserves context  with parent     level
+```
+
+#### OR Case - Union Approach 📋 PLANNED
+
+**Strategy:** Create separate pipelines for each flipped EXISTS and union results.
+
+```typescript
+// Original
+users WHERE EXISTS(orders WITH flip) OR EXISTS(reviews WITH flip)
+
+// Transformation Strategy:
+// 1. Create Pipeline 1: orders -> ExtractMatchingKeys(users)
+// 2. Create Pipeline 2: reviews -> ExtractMatchingKeys(users)  
+// 3. Union(Pipeline1, Pipeline2) -> Distinct -> SortToRootOrder
+```
+
+**Why Union Approach:**
+- **Preserves semantics:** Still returns users (not orders)
+- **Maintains performance:** Each branch starts from optimal table
+- **Database-like:** How SQL engines handle complex OR conditions
+- **Conceptually sound:** OR naturally maps to set union
+
+**Required Components:**
+```typescript
+// New operators needed:
+class Union implements Operator {
+  // Combines results from multiple input streams
+  constructor(inputs: Input[]) { ... }
+}
+
+class Distinct implements Operator {
+  // Removes duplicates based on primary key
+  constructor(input: Input, primaryKey: string[]) { ... }
+}
+
+// Enhanced pipeline builder:
+function buildUnionPipeline(
+  flippedConditions: CorrelatedSubqueryCondition[],
+  originalRoot: AST
+): Input {
+  const pipelines = flippedConditions.map(condition => 
+    buildFlipPipeline(condition, originalRoot)
+  );
+  
+  return Union(pipelines) -> Distinct -> SortToRootOrder;
+}
+```
+
+**Implementation Phases:**
+1. **Phase 2A:** Implement Union and Distinct operators
+2. **Phase 2B:** Detect OR with multiple flips in AST transformation
+3. **Phase 2C:** Generate union-based pipeline for OR cases
+4. **Phase 2D:** Handle mixed OR conditions (flipped + non-flipped)
+
+**Conservative Fallback:**
+For now, OR with multiple flips can fall back to no transformation:
+```typescript
+// In findFlippedExists():
+if (condition.type === 'or') {
+  const flippedCount = countFlippedExists(condition);
+  if (flippedCount <= 1) {
+    // Safe to transform single flip in OR
+    return findFirstFlip(condition);
+  }
+  // Skip transformation for multiple flips - use regular pipeline
+  return null;
+}
 ```
 
 ### Implementation Plan
 
-1. **Phase 1**: Implement AST transformation for single flipped EXISTS
-   - `transformFlippedExists(ast: AST): { ast: AST, pathToRoot: string[] }`
-   - Handle WHERE conditions moving with parent
-   - Return path for later extraction
+1. **Phase 1**: ✅ COMPLETE - AST transformation for single flipped EXISTS
+   - ✅ `transformFlippedExists(ast: AST): { ast: AST, pathToRoot: string[] }`
+   - ✅ Handle WHERE conditions moving with parent
+   - ✅ Return path for later extraction
+   - ✅ AND with multiple flips: Transform first, convert others to regular EXISTS
 
-2. **Phase 2**: Handle complex cases
-   - Detect AND/OR with multiple flipped EXISTS
-   - Create union/intersect operators for combining results
-   - Ensure correct deduplication
+2. **Phase 2**: 📋 IN PROGRESS - OR handling with Union approach
+   - **Phase 2A**: 🔄 NEXT - Implement Union operator
+   - **Phase 2B**: Implement Distinct operator  
+   - **Phase 2C**: Detect OR with multiple flips in AST transformation
+   - **Phase 2D**: Generate union-based pipeline for OR cases
+   - **Phase 2E**: Handle mixed OR conditions (flipped + non-flipped)
 
-3. **Phase 3**: Integration
+3. **Phase 3**: Integration and optimization
    - Update pipeline builder to use transformed AST
    - Apply ExtractMatchingKeys using pathToRoot
    - Apply SortToRootOrder at the end
+   - Add query planner logic to detect when to apply optimization
+   - Add cardinality estimation for join reordering decisions
 
 ### Benefits of AST Transformation
 
@@ -320,12 +399,22 @@ For complex boolean conditions with multiple flipped EXISTS:
 3. **Better optimization**: Can analyze and optimize the transformed AST
 4. **Type safety**: No type mismatches between Input and FilterInput
 
-## Next Steps
+## Current Status & Next Steps
 
-1. ✅ Implement ExtractMatchingKeys operator
-2. ✅ Implement SortToRootOrder operator
-3. Implement AST transformation for flipped EXISTS
-4. Add union/intersect operators for AND/OR cases
-5. Create tests for the complete pipeline
-6. Add query planner logic to detect when to apply this optimization
-7. Add cardinality estimation to decide when reordering is beneficial
+### Completed ✅
+1. ✅ ExtractMatchingKeys operator - Extracts target table rows from nested structures
+2. ✅ SortToRootOrder operator - Restores original sort order after extraction
+3. ✅ AST transformation for single flipped EXISTS - Core transformation logic
+4. ✅ AND with multiple flips - "Transform first, convert others" approach
+5. ✅ Comprehensive test coverage - All transformation scenarios tested
+6. ✅ Nested flipped EXISTS - Handles complex nested cases with hierarchy preservation
+
+### In Progress 🔄
+- **Phase 2A**: Implement Union operator for OR case handling
+
+### Upcoming 📋
+1. **Phase 2B**: Implement Distinct operator for deduplication
+2. **Phase 2C**: Extend AST transformation to detect and handle OR cases
+3. **Phase 2D**: Integration - Update pipeline builder to use transformed ASTs
+4. **Phase 2E**: End-to-end testing of complete flip optimization pipeline
+5. **Phase 3**: Query planner integration and cardinality-based optimization decisions
