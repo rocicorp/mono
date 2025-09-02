@@ -119,6 +119,7 @@ export const correlatedSubqueryConditionSchema: v.Type<CorrelatedSubqueryConditi
     type: v.literal('correlatedSubquery'),
     related: v.lazy(() => correlatedSubquerySchema),
     op: correlatedSubqueryConditionOperatorSchema,
+    flip: v.boolean().optional(),
   });
 
 export const conditionSchema: v.Type<Condition> = v.union(
@@ -316,6 +317,7 @@ export type CorrelatedSubqueryCondition = {
   type: 'correlatedSubquery';
   related: CorrelatedSubquery;
   op: CorrelatedSubqueryConditionOperator;
+  flip?: boolean;
 };
 
 export type CorrelatedSubqueryConditionOperator = 'EXISTS' | 'NOT EXISTS';
