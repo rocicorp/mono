@@ -14,12 +14,14 @@ The key issue is determining the optimal join order - specifically, which table 
 ### Current Challenge
 
 The existing join structure creates a tree output, which is problematic when re-ordering joins because:
+
 - Changing join order changes the output structure
 - Tree structure makes it difficult to optimize join ordering dynamically
 
 ### Proposed Solution: Flat Joins
 
 The idea is to create a new type of join called `flatJoin` that:
+
 - Creates a cartesian product rather than a tree structure
 - Is used specifically for exists operations (since they don't need to appear in final output)
 - Can be reordered without affecting the output structure
@@ -27,11 +29,12 @@ The idea is to create a new type of join called `flatJoin` that:
 #### Row Format
 
 The flat join will produce rows in the following format:
+
 ```typescript
 {
   // All fields from the root table
   ...rootTableFields,
-  
+
   // Joined data nested under aliases (not in the tree structure)
   [flatJoinAlias]: { ...joinedRow },
   [anotherAlias]: { ...anotherJoinedRow }
@@ -39,6 +42,7 @@ The flat join will produce rows in the following format:
 ```
 
 For example:
+
 ```typescript
 {
   id: '1',
@@ -50,6 +54,7 @@ For example:
 ```
 
 The processing pipeline would be:
+
 1. Process all flat joins first (can be reordered for optimization)
 2. Apply a new `distinct` operator to collapse duplicates
    - Distinct only on the primary keys of the root table
@@ -62,6 +67,7 @@ The processing pipeline would be:
 ### 1. Distinct Operator (`src/ivm/distinct.ts`)
 
 Created a new operator that:
+
 - **Deduplicates rows** based on specified keys (typically primary keys)
 - **Maintains state** using the storage mechanism to track seen rows
 - **Handles all change types**:
@@ -75,6 +81,7 @@ Created a new operator that:
 ### 2. Comprehensive Test Suite (`src/ivm/distinct.test.ts`)
 
 Implemented tests covering:
+
 - Filtering duplicate rows during fetch operations
 - Handling incremental changes (add/remove/edit)
 - Composite key deduplication
@@ -84,6 +91,7 @@ Implemented tests covering:
 ### 3. Integration Points
 
 The distinct operator follows the established patterns in the codebase:
+
 - Implements the `Operator` interface
 - Uses the standard `Input`/`Output` pattern for pipeline composition
 - Leverages the `Storage` interface for state persistence
@@ -104,17 +112,20 @@ The repository implements an incremental view maintenance (IVM) engine with a no
 ### Key Components
 
 #### Core Operators (`src/ivm/`)
+
 - **Source operators**: `MemorySource`, base data providers
 - **Transform operators**: `Filter`, `Take`, `Skip`, `Join`
 - **State management**: `Storage` interface with `MemoryStorage` implementation
 - **Change propagation**: Structured change types (add/remove/edit/child)
 
 #### Query System (`src/query/`)
+
 - AST-based query definition
 - Query compilation to operator pipelines
 - Expression evaluation and filtering
 
 #### Testing Infrastructure
+
 - Comprehensive test utilities (`Snitch` for debugging, `MockInput` for testing)
 - Property-based testing with fast-check
 - Extensive test coverage for edge cases
@@ -137,6 +148,7 @@ The repository implements an incremental view maintenance (IVM) engine with a no
 ### Next Steps for the Project
 
 With the distinct operator complete, the next phases would be:
+
 1. Implement the `flatJoin` operator for cartesian products
 2. Modify the exists query compilation to use flatJoin + distinct
 3. Implement join reordering logic based on cardinality estimates

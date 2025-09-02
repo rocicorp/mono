@@ -28,9 +28,9 @@ Extracts the full row data of a target table from a potentially deeply nested tr
 
 ```typescript
 /**
- * ExtractMatchingKeys extracts full row data of a target table from a 
+ * ExtractMatchingKeys extracts full row data of a target table from a
  * potentially deeply nested tree structure created by reordered joins.
- * 
+ *
  * Example:
  * Input tree (after baz → bar → foo reordering):
  * {
@@ -47,7 +47,7 @@ Extracts the full row data of a target table from a potentially deeply nested tr
  *     }]
  *   }
  * }
- * 
+ *
  * Output (with targetTable='foo', targetPath=['bar', 'foo']):
  * { row: { foo_id: 100, foo_name: 'test', foo_value: 42 }, relationships: {} }
  */
@@ -65,9 +65,9 @@ Extracts the full row data of a target table from a potentially deeply nested tr
 ```typescript
 export interface ExtractMatchingKeysArgs {
   input: Input;
-  targetTable: string;           // The table whose rows we want
-  targetPath: string[];           // Path to traverse to find target table
-  targetSchema: SourceSchema;     // Schema of the target table
+  targetTable: string; // The table whose rows we want
+  targetPath: string[]; // Path to traverse to find target table
+  targetSchema: SourceSchema; // Schema of the target table
 }
 ```
 
@@ -86,13 +86,13 @@ Re-sorts extracted rows to match the original root table's sort order. This is n
 /**
  * SortToRootOrder re-sorts extracted rows to match the root table's
  * sort order. After join reordering, results are ordered by the wrong table.
- * 
+ *
  * Example:
  * Input (after extraction, in baz order):
  * { foo_id: 5, foo_name: 'E' }
- * { foo_id: 2, foo_name: 'B' }  
+ * { foo_id: 2, foo_name: 'B' }
  * { foo_id: 8, foo_name: 'H' }
- * 
+ *
  * Output (sorted by foo_id asc):
  * { foo_id: 2, foo_name: 'B' }
  * { foo_id: 5, foo_name: 'E' }
@@ -113,7 +113,7 @@ Re-sorts extracted rows to match the original root table's sort order. This is n
 export interface SortToRootOrderArgs {
   input: Input;
   storage: Storage;
-  targetSort: Ordering;  // The columns to sort by (from query's ORDER BY)
+  targetSort: Ordering; // The columns to sort by (from query's ORDER BY)
 }
 ```
 
@@ -129,14 +129,14 @@ export interface SortToRootOrderArgs {
 // Original query: SELECT * FROM foo ORDER BY foo.name WHERE EXISTS(bar WHERE EXISTS(baz))
 
 // Step 1: Reordered joins for optimization (start with smallest table)
-const reorderedJoins = 
-  baz → 
-  Join(bar, { relationshipName: 'bar' }) → 
+const reorderedJoins =
+  baz →
+  Join(bar, { relationshipName: 'bar' }) →
   Join(foo, { relationshipName: 'foo' });
 
 // Step 2: Apply EXISTS filters (on the reordered tree)
-const filtered = 
-  reorderedJoins → 
+const filtered =
+  reorderedJoins →
   Exists('bar') →  // Has bar relationship
   Exists('foo');   // Has foo relationship
 
