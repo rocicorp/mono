@@ -338,3 +338,73 @@ test('flipped EXISTS in OR condition', () => {
   
   expect(result.pathToOriginalRoot).toEqual(['users']);
 });
+
+test('multiple flipped EXISTS in AND - transforms only first', () => {
+  const ast: AST = {
+    table: 'users',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'and',
+      conditions: [
+        {
+          type: 'correlatedSubquery',
+          related: {
+            system: 'client',
+            correlation: {parentField: ['id'], childField: ['userId']},
+            subquery: {
+              table: 'orders',
+              alias: 'orders_exists',
+              orderBy: [['id', 'asc']],
+            },
+          },
+          op: 'EXISTS',
+          flip: true, // First flip - should be transformed
+        } as CorrelatedSubqueryCondition,
+        {
+          type: 'correlatedSubquery',
+          related: {
+            system: 'client',
+            correlation: {parentField: ['id'], childField: ['userId']},
+            subquery: {
+              table: 'reviews',
+              alias: 'reviews_exists',
+              orderBy: [['id', 'asc']],
+            },
+          },
+          op: 'EXISTS',
+          flip: true, // Second flip - should remain as regular EXISTS
+        } as CorrelatedSubqueryCondition,
+      ],
+    },
+  };
+
+  const result = transformFlippedExists(ast);
+  
+  // orders should be the new root (first flip wins)
+  expect(result.ast.table).toBe('orders');
+  expect(result.pathToOriginalRoot).toEqual(['users']);
+  
+  // The WHERE should be an AND with two conditions:
+  // 1. EXISTS(users) - the original parent
+  // 2. EXISTS(reviews) - the second flipped condition becomes regular EXISTS
+  expect(result.ast.where?.type).toBe('and');
+  if (result.ast.where?.type === 'and') {
+    expect(result.ast.where.conditions).toHaveLength(2);
+    
+    // First condition should be EXISTS(users)
+    const usersCondition = result.ast.where.conditions.find(
+      c => c.type === 'correlatedSubquery' && 
+          c.related.subquery.table === 'users'
+    ) as CorrelatedSubqueryCondition | undefined;
+    expect(usersCondition).toBeDefined();
+    expect(usersCondition?.flip).toBeFalsy(); // No flip
+    
+    // Second condition should be EXISTS(reviews) - the second flip becomes regular EXISTS
+    const reviewsCondition = result.ast.where.conditions.find(
+      c => c.type === 'correlatedSubquery' && 
+          c.related.subquery.table === 'reviews'
+    ) as CorrelatedSubqueryCondition | undefined;
+    expect(reviewsCondition).toBeDefined();
+    expect(reviewsCondition?.flip).toBeFalsy(); // No flip - converted to regular EXISTS
+  }
+});

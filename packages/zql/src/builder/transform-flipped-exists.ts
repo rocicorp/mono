@@ -19,6 +19,9 @@ export interface TransformResult {
  * 3. WHERE conditions move with their table
  * 4. Returns the path to the original root for later extraction
  * 
+ * For AND with multiple flips: Only transforms the FIRST flipped EXISTS.
+ * This gives query authors control over optimization by ordering conditions.
+ * 
  * Handles nested flips recursively.
  */
 export function transformFlippedExists(ast: AST, depth = 0): TransformResult {
@@ -68,8 +71,9 @@ function findFlippedExists(
   }
   
   if (condition.type === 'and' || condition.type === 'or') {
-    // For now, we only handle single flipped EXISTS
-    // Phase 2 will handle multiple with union/intersect
+    // For AND: Transform only the FIRST flipped EXISTS found
+    // This gives query authors control over optimization by putting the best table first
+    // For OR: Transform only the FIRST flipped EXISTS found (OR will need union/intersect in future)
     for (const subCondition of condition.conditions) {
       const found = findFlippedExists(subCondition, visited);
       if (found) return found;
@@ -93,40 +97,59 @@ function transformAtCondition(
   const parentInfo = findParentOfCondition(ast, flippedCondition);
   const parentAST = parentInfo || ast;
   
-  // Remove the flipped condition from the parent's WHERE
-  const parentWhereWithoutFlip = removeCondition(parentAST.where, flippedCondition);
+  // Check if there are multiple flipped EXISTS at the parent level
+  const hasMultipleFlippedExists = parentAST.where?.type === 'and' && 
+    hasMultipleFlippedExistsConditions(parentAST.where);
   
-  // Create the parent EXISTS condition (without the flip)
-  // We need to pass the original root context to preserve the hierarchy
-  const parentExists = createParentExistsCondition(
-    { ...parentAST, where: parentWhereWithoutFlip },
-    flippedCondition,
-    ast, // Pass the original root for context
-  );
-  
-  // The subquery becomes the new root
-  const newRootAST: AST = {
-    ...subquery,
-    // The WHERE clause of the new root should include:
-    // 1. The subquery's original WHERE (if any)
-    // 2. An EXISTS checking for the parent
-    where: combineConditions(
-      subquery.where,
-      parentExists,
-    ),
-  };
-  
-  // Build the path to the original root
-  // The path should point to the parent table that was flipped with the subquery
-  const pathToOriginalRoot = [parentAST.table];
-  
-  // For now, only handle one flip at a time
-  // Multiple flips will be handled in Phase 2 with union/intersect
-  // So we don't recursively transform the new AST
-  return {
-    ast: newRootAST,
-    pathToOriginalRoot: pathToOriginalRoot,
-  };
+  if (hasMultipleFlippedExists) {
+    // New approach: Split flipped vs non-flipped conditions
+    const { flippedConditions, nonFlippedConditions } = splitFlippedConditions(parentAST.where, flippedCondition);
+    
+    // Convert remaining flipped conditions to regular EXISTS (for root level)
+    const convertedFlippedConditions = flippedConditions.map(c => convertFlipToRegularExists(c));
+    
+    // Create the parent EXISTS condition (keeps non-flipped conditions)
+    const parentExists = createParentExistsCondition(
+      { ...parentAST, where: nonFlippedConditions },
+      flippedCondition,
+      ast,
+    );
+    
+    // Combine at root level: subquery WHERE + parent EXISTS + other flipped EXISTS
+    let rootWhere: Condition | undefined = combineConditions(subquery.where, parentExists);
+    for (const convertedCondition of convertedFlippedConditions) {
+      rootWhere = combineConditions(rootWhere, convertedCondition);
+    }
+    
+    const newRootAST: AST = {
+      ...subquery,
+      where: rootWhere,
+    };
+    
+    return {
+      ast: newRootAST,
+      pathToOriginalRoot: [parentAST.table],
+    };
+  } else {
+    // Original approach: Keep conditions with the parent
+    const parentWhereWithoutFlip = removeCondition(parentAST.where, flippedCondition);
+    
+    const parentExists = createParentExistsCondition(
+      { ...parentAST, where: parentWhereWithoutFlip },
+      flippedCondition,
+      ast,
+    );
+    
+    const newRootAST: AST = {
+      ...subquery,
+      where: combineConditions(subquery.where, parentExists),
+    };
+    
+    return {
+      ast: newRootAST,
+      pathToOriginalRoot: [parentAST.table],
+    };
+  }
 }
 
 /**
@@ -291,6 +314,80 @@ function findCorrelatedSubqueryCondition(
   }
   
   return null;
+}
+
+/**
+ * Check if an AND condition has multiple flipped EXISTS conditions.
+ */
+function hasMultipleFlippedExistsConditions(condition: Condition): boolean {
+  if (condition.type !== 'and') return false;
+  
+  const flippedCount = condition.conditions.filter(c => 
+    c.type === 'correlatedSubquery' && c.flip === true
+  ).length;
+  
+  return flippedCount >= 2;
+}
+
+/**
+ * Split conditions into flipped EXISTS vs non-flipped conditions.
+ */
+function splitFlippedConditions(
+  where: Condition | undefined,
+  excludeFlippedCondition: CorrelatedSubqueryCondition,
+): { flippedConditions: CorrelatedSubqueryCondition[], nonFlippedConditions: Condition | undefined } {
+  if (!where || where.type !== 'and') {
+    return { flippedConditions: [], nonFlippedConditions: where };
+  }
+  
+  const flippedConditions: CorrelatedSubqueryCondition[] = [];
+  const nonFlippedConditions: Condition[] = [];
+  
+  for (const condition of where.conditions) {
+    if (condition === excludeFlippedCondition) {
+      // Skip the flipped condition we're transforming
+      continue;
+    }
+    
+    if (condition.type === 'correlatedSubquery' && condition.flip === true) {
+      flippedConditions.push(condition);
+    } else {
+      nonFlippedConditions.push(condition);
+    }
+  }
+  
+  let combinedNonFlipped: Condition | undefined;
+  if (nonFlippedConditions.length === 0) {
+    combinedNonFlipped = undefined;
+  } else if (nonFlippedConditions.length === 1) {
+    combinedNonFlipped = nonFlippedConditions[0];
+  } else {
+    combinedNonFlipped = { type: 'and', conditions: nonFlippedConditions };
+  }
+  
+  return { flippedConditions, nonFlippedConditions: combinedNonFlipped };
+}
+
+
+/**
+ * Convert a flipped EXISTS condition to a regular EXISTS condition.
+ */
+function convertFlipToRegularExists(condition: Condition): Condition {
+  if (condition.type === 'correlatedSubquery' && condition.flip === true) {
+    return {
+      ...condition,
+      flip: false, // Remove the flip
+    };
+  }
+  
+  if (condition.type === 'and' || condition.type === 'or') {
+    return {
+      ...condition,
+      conditions: condition.conditions.map(convertFlipToRegularExists),
+    };
+  }
+  
+  return condition;
 }
 
 /**
