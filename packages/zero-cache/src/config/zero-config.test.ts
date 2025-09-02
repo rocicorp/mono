@@ -297,6 +297,9 @@ test('zero-cache --help', () => {
                                                                    A password used to administer zero-cache server, for example to access the                        
                                                                    /statz endpoint.                                                                                  
                                                                                                                                                                      
+                                                                   If this is not set a new random string will be used as the admin password.                        
+                                                                   This random password will be printed to the logs on startup.                                      
+                                                                                                                                                                     
      --litestream-executable string                                optional                                                                                          
        ZERO_LITESTREAM_EXECUTABLE env                                                                                                                                
                                                                    Path to the litestream executable.                                                                
