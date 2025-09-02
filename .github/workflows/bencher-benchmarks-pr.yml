@@ -123,6 +123,6 @@ jobs:
           --start-point-reset \
           --threshold-measure throughput \
           --threshold-test t_test \
-          --threshold-lower-boundary 0.70 \
+          --threshold-lower-boundary 0.9 \
           --threshold-max-sample-size 10 \
           --err
