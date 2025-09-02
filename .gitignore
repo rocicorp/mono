@@ -88,3 +88,5 @@ packages/zero-client/docs
 
 Chinook_PostgreSql.sql
 WARP.md
+*.db-shm
+*.db-wal
