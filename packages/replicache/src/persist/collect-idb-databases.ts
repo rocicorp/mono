@@ -312,8 +312,7 @@ export async function dropAllDatabases(
   const store = new IDBDatabasesStore(kvStoreProvider.create);
   const databases = await store.getDatabases();
   const dbNames = Object.values(databases).map(db => db.name);
-  const result = await dropDatabases(store, dbNames, kvStoreProvider.drop);
-  return result;
+  return dropDatabases(store, dbNames, kvStoreProvider.drop);
 }
 
 /**
