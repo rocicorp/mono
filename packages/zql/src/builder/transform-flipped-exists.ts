@@ -22,15 +22,9 @@ export interface TransformResult {
  * For AND with multiple flips: Only transforms the FIRST flipped EXISTS.
  * This gives query authors control over optimization by ordering conditions.
  * 
- * Handles nested flips recursively.
+ * Handles nested flips in a single pass (no recursion needed).
  */
-export function transformFlippedExists(ast: AST, depth = 0): TransformResult {
-  // Prevent infinite recursion
-  if (depth > 10) {
-    console.warn('Max recursion depth reached in transformFlippedExists');
-    return { ast, pathToOriginalRoot: [] };
-  }
-  
+export function transformFlippedExists(ast: AST): TransformResult {
   // Check if the WHERE clause has any flipped EXISTS
   const flippedCondition = findFlippedExists(ast.where);
   
