@@ -268,7 +268,7 @@ When we encounter `flip: true` on an EXISTS condition:
 
 ### Handling AND/OR with Multiple Flipped EXISTS
 
-#### AND Case - Transform First Approach ✅ IMPLEMENTED
+#### AND Case - Transform First Approach 📋 PLANNED
 
 **Strategy:** Transform only the **first** flipped EXISTS, convert others to regular EXISTS.
 
@@ -378,11 +378,12 @@ if (condition.type === 'or') {
 
 ### Implementation Plan
 
-1. **Phase 1**: 📋 IN PROGRESS - AST transformation for single flipped EXISTS
+1. **Phase 1**: 📋 IN PROGRESS - AST transformation for flipped EXISTS
 
-   - `transformFlippedExists(ast: AST): { ast: AST, pathToRoot: string[] }`
+   - `transformFlippedExists(ast: AST): AST`
    - Handle WHERE conditions moving with parent
-   - Return path for later extraction
+   - Mark root AST as being the root when flipping down so we can later find the path to it
+   - Handle nested flipped exists. E.g., junction edges.
    - AND with multiple flips: Transform first, convert others to regular EXISTS
 
 2. **Phase 2**: 📋 IN PROGRESS - OR handling with Union approach
@@ -413,13 +414,10 @@ if (condition.type === 'or') {
 
 1. ✅ ExtractMatchingKeys operator - Extracts target table rows from nested structures
 2. ✅ SortToRootOrder operator - Restores original sort order after extraction
-3. ✅ AST transformation for single flipped EXISTS - Core transformation logic
-4. ✅ AND with multiple flips - "Transform first, convert others" approach
-5. ✅ Comprehensive test coverage - All transformation scenarios tested
-6. ✅ Nested flipped EXISTS - Handles complex nested cases with hierarchy preservation
 
 ### In Progress 🔄
 
+- **Phase 1**: AST transformation for flipped EXISTS
 - **Phase 2A**: Implement Union operator for OR case handling
 
 ### Upcoming 📋
