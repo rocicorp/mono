@@ -437,9 +437,6 @@ export const zeroOptions = {
     desc: [
       `A password used to administer zero-cache server, for example to access the`,
       `/statz endpoint.`,
-      ``,
-      `If this is not set a new random string will be used as the admin password.`,
-      `This random password will be printed to the logs on startup.`,
     ],
   },
 
