@@ -112,6 +112,14 @@ export function buildPipeline(
   // Uniquify all correlated subquery aliases across the entire AST tree
   const uniquifiedAst = uniquifyCorrelatedSubqueryConditionAliases(mappedAst);
 
+  // Now we see if we have flips
+  // If so, we do the flipping
+  // Then we build the pipeline as normal (because we've remove order by, limit, related, start, etc.)
+  // Finally, we can:
+  // 1. extract
+  // 2. re-sort
+  // 3. apply the start, limit, related, etc. items we removed
+
   // Build the pipeline with the transformed AST
   return buildPipelineInternal(uniquifiedAst, delegate, queryID, '');
 }
