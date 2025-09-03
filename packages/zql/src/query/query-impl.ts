@@ -240,9 +240,18 @@ export abstract class AbstractQuery<
 
   whereExists = (
     relationship: string,
-    cb?: (q: AnyQuery) => AnyQuery,
-  ): Query<TSchema, TTable, TReturn> =>
-    this.where(({exists}) => exists(relationship, cb));
+    cbOrOptions?: 
+      | ((q: AnyQuery) => AnyQuery)
+      | {flip?: boolean | undefined},
+    options?: {flip?: boolean | undefined},
+  ): Query<TSchema, TTable, TReturn> => {
+    // Handle overloads
+    if (typeof cbOrOptions === 'function') {
+      return this.where(({exists}) => exists(relationship, cbOrOptions, options));
+    } else {
+      return this.where(({exists}) => exists(relationship, cbOrOptions));
+    }
+  };
 
   related = (
     relationship: string,
@@ -529,6 +538,7 @@ export abstract class AbstractQuery<
   protected _exists = (
     relationship: string,
     cb: (query: AnyQuery) => AnyQuery = q => q,
+    options?: {flip?: boolean | undefined},
   ): Condition => {
     const related = this.#schema.relationships[this.#tableName][relationship];
     assert(related, 'Invalid relationship');
@@ -552,7 +562,7 @@ export abstract class AbstractQuery<
           undefined,
         ) as AnyQuery,
       ) as unknown as QueryImpl<any, any>;
-      return {
+      const condition: Condition = {
         type: 'correlatedSubquery',
         related: {
           system: this.#system,
@@ -567,6 +577,10 @@ export abstract class AbstractQuery<
         },
         op: 'EXISTS',
       };
+      if (options?.flip !== undefined) {
+        (condition as any).flip = options.flip;
+      }
+      return condition;
     }
 
     if (isTwoHop(related)) {
@@ -592,7 +606,26 @@ export abstract class AbstractQuery<
         ) as AnyQuery,
       );
 
-      return {
+      const innerCondition: Condition = {
+        type: 'correlatedSubquery',
+        related: {
+          system: this.#system,
+          correlation: {
+            parentField: secondRelation.sourceField,
+            childField: secondRelation.destField,
+          },
+          subquery: addPrimaryKeysToAst(
+            this.#schema.tables[destSchema],
+            (queryToDest as QueryImpl<any, any>)._ast,
+          ),
+        },
+        op: 'EXISTS',
+      };
+      if (options?.flip !== undefined) {
+        (innerCondition as any).flip = options.flip;
+      }
+      
+      const outerCondition: Condition = {
         type: 'correlatedSubquery',
         related: {
           system: this.#system,
@@ -607,26 +640,15 @@ export abstract class AbstractQuery<
               this.#schema.tables[junctionSchema],
               undefined,
             ),
-            where: {
-              type: 'correlatedSubquery',
-              related: {
-                system: this.#system,
-                correlation: {
-                  parentField: secondRelation.sourceField,
-                  childField: secondRelation.destField,
-                },
-
-                subquery: addPrimaryKeysToAst(
-                  this.#schema.tables[destSchema],
-                  (queryToDest as QueryImpl<any, any>)._ast,
-                ),
-              },
-              op: 'EXISTS',
-            },
+            where: innerCondition,
           },
         },
         op: 'EXISTS',
       };
+      if (options?.flip !== undefined) {
+        (outerCondition as any).flip = options.flip;
+      }
+      return outerCondition;
     }
 
     throw new Error(`Invalid relationship ${relationship}`);

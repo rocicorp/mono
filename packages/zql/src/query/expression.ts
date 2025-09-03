@@ -21,6 +21,10 @@ export type ParameterReference = {
   [toStaticParam](): Parameter;
 };
 
+export type ExistsOptions = {
+  flip?: boolean | undefined;
+};
+
 /**
  * A factory function that creates a condition. This is used to create
  * complex conditions that can be passed to the `where` method of a query.
@@ -51,12 +55,14 @@ export class ExpressionBuilder<
   readonly #exists: (
     relationship: string,
     cb?: (query: Query<TSchema, TTable>) => Query<TSchema, any>,
+    options?: ExistsOptions,
   ) => Condition;
 
   constructor(
     exists: (
       relationship: string,
       cb?: (query: Query<TSchema, TTable>) => Query<TSchema, any>,
+      options?: ExistsOptions,
     ) => Condition,
   ) {
     this.#exists = exists;
@@ -116,10 +122,18 @@ export class ExpressionBuilder<
 
   exists = <TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
-    cb?: (
-      query: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
-    ) => Query<TSchema, any>,
-  ): Condition => this.#exists(relationship, cb);
+    cbOrOptions?: 
+      | ((query: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>) => Query<TSchema, any>)
+      | ExistsOptions,
+    options?: ExistsOptions,
+  ): Condition => {
+    // Handle overloads
+    if (typeof cbOrOptions === 'function') {
+      return this.#exists(relationship, cbOrOptions, options);
+    } else {
+      return this.#exists(relationship, undefined, cbOrOptions);
+    }
+  };
 }
 
 export function and(...conditions: (Condition | undefined)[]): Condition {

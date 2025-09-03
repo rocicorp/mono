@@ -317,12 +317,21 @@ export interface Query<
 
   whereExists(
     relationship: AvailableRelationships<TTable, TSchema>,
+    options?: {flip?: boolean | undefined},
   ): Query<TSchema, TTable, TReturn>;
   whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb: (
       q: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
     ) => Query<TSchema, string>,
+    options?: {flip?: boolean | undefined},
+  ): Query<TSchema, TTable, TReturn>;
+  whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
+    relationship: TRelationship,
+    cbOrOptions?: 
+      | ((q: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>) => Query<TSchema, string>)
+      | {flip?: boolean | undefined},
+    options?: {flip?: boolean | undefined},
   ): Query<TSchema, TTable, TReturn>;
 
   /**
