@@ -384,7 +384,22 @@ export async function runBenchmarks<TSchema extends Schema>(
       }),
     );
 
-  await run();
+  // Check if JSON output is requested via environment variable
+  const format = process.env.BENCH_OUTPUT_FORMAT;
+
+  if (format === 'json') {
+    // Output JSON without samples for smaller, cleaner output
+    await run({
+      format: {
+        json: {
+          samples: false,
+          debug: false,
+        },
+      },
+    });
+  } else {
+    await run();
+  }
 }
 
 export async function bootstrap<TSchema extends Schema>({

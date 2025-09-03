@@ -92,3 +92,39 @@ jobs:
           --threshold-lower-boundary 0.9 \
           --threshold-max-sample-size 10 \
           --err
+
+  zql_benchmarks:
+    name: ZQL Benchmarks
+    permissions:
+      checks: write
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+      - uses: bencherdev/bencher@main
+
+      - run: npm ci
+
+      - name: Run ZQL benchmarks
+        working-directory: packages/zql-benchmarks
+        run: npm run bench:bmf > output.json
+
+      - name: Upload benchmarks results to bencher.dev
+        working-directory: packages/zql-benchmarks
+        run: |
+          cat output.json |
+          bencher run \
+          --project zero \
+          --testbed self-hosted \
+          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --adapter json \
+          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+          --start-point main \
+          --threshold-measure latency \
+          --threshold-test t_test \
+          --threshold-upper-boundary 1.1 \
+          --threshold-max-sample-size 10 \
+          --err

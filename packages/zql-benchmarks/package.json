@@ -13,7 +13,8 @@
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "test": "vitest run --silent=false --disable-console-intercept",
     "test:watch": "vitest watch",
-    "bench": "vitest bench --run --silent=false --disable-console-intercept",
+    "bench:bmf": "BENCH_OUTPUT_FORMAT=json vitest bench --run --silent=false --disable-console-intercept 2>&1 | npx tsx ../shared/src/tool/mitata-json-to-bmf.ts",
+    "bench:bmf:silent": "npm run bench:bmf --silent",
     "test-types": "vitest run --typecheck.only --no-browser.enabled",
     "test-types:watch": "vitest watch --typecheck.only --no-browser.enabled"
   },
