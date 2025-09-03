@@ -374,9 +374,22 @@ class PushWorker {
     // Record custom mutations for telemetry
     recordMutation('custom', entry.push.mutations.length);
 
+    const client = must(this.#clients.get(entry.clientID), 'unknown clientID');
+    const url =
+      client.userParams?.url ??
+      must(this.#pushURLs[0], 'ZERO_MUTATE_URL is not set');
+
+    this.#lc.debug?.(
+      'pushing to',
+      url,
+      'with',
+      entry.push.mutations.length,
+      'mutations',
+    );
+
     try {
       const response = await fetchFromAPIServer(
-        must(this.#pushURLs[0], 'ZERO_MUTATE_URL is not set'),
+        url,
         this.#pushURLs,
         {
           appID: this.#config.app.id,
@@ -387,7 +400,7 @@ class PushWorker {
           token: entry.jwt,
           cookie: entry.httpCookie,
         },
-        this.#clients.get(entry.clientID)?.userParams?.queryParams,
+        client?.userParams?.queryParams,
         entry.push,
       );
 
