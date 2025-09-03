@@ -15,7 +15,6 @@ import type {Stream} from './stream.ts';
 
 export interface ExtractMatchingKeysArgs {
   input: Input;
-  targetTable: string;
   targetPath: string[];
   targetSchema: SourceSchema;
 }

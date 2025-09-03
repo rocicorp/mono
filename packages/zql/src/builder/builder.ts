@@ -18,7 +18,9 @@ import type {
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import {findPathToRoot, transformFlippedExists} from '../ast/transform-flip.ts';
 import {Exists} from '../ivm/exists.ts';
+import {ExtractMatchingKeys} from '../ivm/extract-matching-keys.ts';
 import {FanIn} from '../ivm/fan-in.ts';
 import {FanOut} from '../ivm/fan-out.ts';
 import {
@@ -29,6 +31,7 @@ import {Filter} from '../ivm/filter.ts';
 import {Join} from '../ivm/join.ts';
 import type {Input, InputBase, Storage} from '../ivm/operator.ts';
 import {Skip} from '../ivm/skip.ts';
+import {SortToRootOrder} from '../ivm/sort-to-root-order.ts';
 import type {Source, SourceInput} from '../ivm/source.ts';
 import {Take} from '../ivm/take.ts';
 import type {DebugDelegate} from './debug-delegate.ts';
@@ -109,19 +112,76 @@ export function buildPipeline(
   // Apply mapAst if provided
   const mappedAst = delegate.mapAst ? delegate.mapAst(ast) : ast;
 
-  // Uniquify all correlated subquery aliases across the entire AST tree
-  const uniquifiedAst = uniquifyCorrelatedSubqueryConditionAliases(mappedAst);
+  const flipped = transformFlippedExists(mappedAst);
+  const uniquifiedAst = uniquifyCorrelatedSubqueryConditionAliases(
+    flipped?.transformedAst ?? mappedAst,
+  );
 
-  // Now we see if we have flips
-  // If so, we do the flipping
-  // Then we build the pipeline as normal (because we've remove order by, limit, related, start, etc.)
-  // Finally, we can:
-  // const flipped =
-  // 1. extract
-  // 2. re-sort
-  // 3. apply the start, limit, related, etc. items we removed
+  if (flipped && flipped.pathToRoot.length > 0) {
+    const startingSplitEditKeys = new Set<string>();
+    if (mappedAst.related) {
+      for (const csq of mappedAst.related) {
+        for (const key of csq.correlation.parentField) {
+          startingSplitEditKeys.add(key);
+        }
+      }
+    }
 
-  // Build the pipeline with the transformed AST
+    const pipeline = buildPipelineInternal(
+      uniquifiedAst,
+      delegate,
+      queryID,
+      '',
+      undefined,
+      startingSplitEditKeys,
+    );
+    const path = findPathToRoot(uniquifiedAst);
+    assert(
+      path !== null,
+      'A path to root was not found but we did join flipping. It must be found',
+    );
+
+    const source = delegate.getSource(mappedAst.table);
+    const connection = source?.connect(mappedAst.orderBy ?? []);
+    const rootSchema = connection?.getSchema();
+    connection?.destroy();
+
+    const extract = new ExtractMatchingKeys({
+      input: pipeline,
+      targetPath: path,
+      targetSchema: must(rootSchema, 'Root schema must be defined'),
+    });
+    const reSort = new SortToRootOrder({
+      input: extract,
+      storage: delegate.createStorage('sort-to-root'),
+      targetSort: ast.orderBy ?? [],
+    });
+
+    let end: Input = reSort;
+
+    if (mappedAst.start) {
+      end = new Skip(end, mappedAst.start);
+    }
+
+    if (mappedAst.limit !== undefined) {
+      const takeName = `${mappedAst.table}:take`;
+      end = new Take(
+        end,
+        delegate.createStorage(takeName),
+        mappedAst.limit,
+        undefined,
+      );
+    }
+
+    if (mappedAst.related) {
+      for (const csq of mappedAst.related) {
+        end = applyCorrelatedSubQuery(csq, delegate, queryID, end, '', false);
+      }
+    }
+
+    return end;
+  }
+
   return buildPipelineInternal(uniquifiedAst, delegate, queryID, '');
 }
 
@@ -208,6 +268,7 @@ function buildPipelineInternal(
   queryID: string,
   name: string,
   partitionKey?: CompoundKey | undefined,
+  startingSplitEditKeys?: Set<string> | undefined,
 ): Input {
   const source = delegate.getSource(ast.table);
   if (!source) {
@@ -220,6 +281,11 @@ function buildPipelineInternal(
   const splitEditKeys: Set<string> = partitionKey
     ? new Set(partitionKey)
     : new Set();
+  if (startingSplitEditKeys) {
+    for (const key of startingSplitEditKeys) {
+      splitEditKeys.add(key);
+    }
+  }
   const aliases = new Set<string>();
   for (const csq of csqsFromCondition) {
     aliases.add(csq.subquery.alias || '');

@@ -110,6 +110,7 @@ export class SortToRootOrder implements Operator {
     }
   }
 
+  // TODO: correct way to do this?
   *cleanup(_req: FetchRequest): Stream<Node> {
     // For cleanup, we also need to buffer and sort
     const buffered: Node[] = [];
