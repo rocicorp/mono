@@ -1,11 +1,10 @@
 import {afterAll, bench, describe, expect} from 'vitest';
 import {withRead, withWrite} from '../with-transactions.ts';
 import {getTestSQLiteDatabaseManager} from './sqlite-store-test-util.ts';
-import {createSQLiteStore} from './sqlite-store.ts';
+import {SQLiteStore} from './sqlite-store.ts';
 
 const walSQLite3DatabaseManager = getTestSQLiteDatabaseManager();
-const createWalStore = createSQLiteStore(walSQLite3DatabaseManager);
-const walStore = createWalStore('bench-wal', {
+const walStore = new SQLiteStore('bench-wal', walSQLite3DatabaseManager, {
   readPoolSize: 2,
   journalMode: 'WAL',
   synchronous: 'NORMAL',
@@ -13,12 +12,15 @@ const walStore = createWalStore('bench-wal', {
 });
 
 const defaultSQLite3DatabaseManager = getTestSQLiteDatabaseManager();
-const createDefaultStore = createSQLiteStore(defaultSQLite3DatabaseManager);
-const defaultStore = createDefaultStore('bench-default', {
-  readPoolSize: 2,
-  synchronous: 'NORMAL',
-  readUncommitted: false,
-});
+const defaultStore = new SQLiteStore(
+  'bench-default',
+  defaultSQLite3DatabaseManager,
+  {
+    readPoolSize: 2,
+    synchronous: 'NORMAL',
+    readUncommitted: false,
+  },
+);
 
 afterAll(() => {
   walSQLite3DatabaseManager.clearAllStoresForTesting();

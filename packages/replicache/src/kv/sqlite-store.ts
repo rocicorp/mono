@@ -354,18 +354,8 @@ export interface GenericSQLiteDatabaseManager {
 
 // we replace non-alphanumeric characters with underscores
 // because SQLite doesn't allow them in database names
-const safeFilename = (name: string) => name.replace(/[^a-zA-Z0-9]/g, '_');
-
-/**
- * Creates a function that returns new SQLite store instances.
- * This is the main entry point for using the SQLite store implementation.
- *
- * @param dbm The SQLite database manager implementation
- * @returns A function that creates new store instances
- */
-export function createSQLiteStore(dbm: SQLiteDatabaseManager) {
-  return (name: string, opts: SQLiteDatabaseManagerOptions) =>
-    new SQLiteStore(name, dbm, opts);
+function safeFilename(name: string) {
+  return name.replace(/[^a-zA-Z0-9]/g, '_');
 }
 
 export type SQLiteDatabaseManagerOptions = {

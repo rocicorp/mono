@@ -7,11 +7,17 @@ import {
   withWriteNoImplicitCommit,
 } from '../with-transactions.ts';
 import {getTestSQLiteDatabaseManager} from './sqlite-store-test-util.ts';
-import {createSQLiteStore} from './sqlite-store.ts';
+import {
+  SQLiteStore,
+  type SQLiteDatabaseManagerOptions,
+} from './sqlite-store.ts';
 import {runAll} from './store-test-util.ts';
 
 const sqlite3DatabaseManager = getTestSQLiteDatabaseManager();
-const createStore = createSQLiteStore(sqlite3DatabaseManager);
+
+function createStore(name: string, opts: SQLiteDatabaseManagerOptions) {
+  return new SQLiteStore(name, sqlite3DatabaseManager, opts);
+}
 
 const getNewStore = (name: string) =>
   createStore(name, {

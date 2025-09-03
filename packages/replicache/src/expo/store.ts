@@ -4,8 +4,8 @@ import {
   type SQLiteBindParams,
 } from 'expo-sqlite';
 import {
-  createSQLiteStore,
   SQLiteDatabaseManager,
+  SQLiteStore,
   type SQLiteDatabaseManagerOptions,
 } from '../kv/sqlite-store.ts';
 import type {StoreProvider} from '../kv/store.ts';
@@ -50,7 +50,7 @@ export function expoSQLiteStoreProvider(
 ): StoreProvider {
   return {
     create: (name: string) =>
-      createSQLiteStore(expoDbManagerInstance)(name, {
+      new SQLiteStore(name, expoDbManagerInstance, {
         // we default to 3 read connections for mobile devices
         readPoolSize: 3,
         busyTimeout: 200,
