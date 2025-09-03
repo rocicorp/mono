@@ -354,7 +354,7 @@ export interface GenericSQLiteDatabaseManager {
 
 // we replace non-alphanumeric characters with underscores
 // because SQLite doesn't allow them in database names
-function safeFilename(name: string) {
+export function safeFilename(name: string) {
   return name.replace(/[^a-zA-Z0-9]/g, '_');
 }
 
