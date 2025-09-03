@@ -94,15 +94,6 @@ export function normalizeZeroConfig(
 
   lc.info?.(`runtime env: taskID=${config.taskID}, hostIP=${hostIP}`);
 
-  if (!config.adminPassword) {
-    const adminPassword = nanoid();
-    lc.info?.(
-      `Admin password was not set. Using a new random password: ${adminPassword}`,
-    );
-    config.adminPassword = adminPassword;
-    env['ZERO_ADMIN_PASSWORD'] = adminPassword;
-  }
-
   return {
     ...config,
     taskID: config.taskID,
