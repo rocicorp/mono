@@ -1,3 +1,4 @@
+import {must} from '../../../shared/src/must.ts';
 import type {
   AST,
   Condition,
@@ -5,6 +6,7 @@ import type {
   CorrelatedSubquery,
   Ordering,
   Bound,
+  Correlation,
 } from '../../../zero-protocol/src/ast.js';
 
 export type ExtractedRootProperties = {
@@ -25,82 +27,197 @@ export type ASTWithRootMarker = AST & {
 };
 
 /**
- * Transforms an AST with a flipped EXISTS condition.
- * Only supports flips at the top level or inside AND branches.
- * Flips inside OR branches are not supported as they change semantics.
+ * Represents a table in the flip chain with its context
+ */
+type ChainNode = {
+  ast: AST;
+  alias: string;
+  correlation?: Correlation;
+  remainingConditions?: Condition | undefined;
+  isOriginalRoot: boolean;
+};
+
+/**
+ * Transforms an AST with flipped EXISTS conditions.
+ * Handles any depth of nested flips by extracting the chain and rebuilding.
  */
 export function transformFlippedExists(ast: AST): TransformResult | null {
-  const flippedCondition = findFlippedExistsCondition(ast.where);
-  if (!flippedCondition) {
+  // Extract the chain of flipped EXISTS
+  const chain = extractFlipChain(ast);
+
+  if (!chain || chain.length === 0) {
     return null;
   }
 
-  const {subquery, correlation} = flippedCondition.related;
+  // Rebuild the AST from the deepest node as the new root
+  const transformedAst = rebuildFromChain(chain);
 
-  // Strip presentation properties from root when moving to subquery position
-  // Remove the flipped condition from the original WHERE clause
-  // Keep other conditions to move down with the parent
-  const remainingConditions = removeFlippedCondition(
-    ast.where,
-    flippedCondition,
-  );
+  // Extract properties from the original root
+  const originalRoot = chain.find(node => node.isOriginalRoot);
+  const extractedProperties: ExtractedRootProperties = originalRoot
+    ? {
+        orderBy: originalRoot.ast.orderBy,
+        start: originalRoot.ast.start,
+        limit: originalRoot.ast.limit,
+        related: originalRoot.ast.related,
+      }
+    : {};
 
-  // Ensure the root has an alias when moved to subquery position
-  // This alias will be used in the path for ExtractMatchingKeys
-  const rootAlias = ast.alias || `${ast.table}_flipped`;
-
-  const rootAsSubquery: ASTWithRootMarker = {
-    table: ast.table,
-    alias: rootAlias,
-    wasRoot: true,
-    where: remainingConditions,
-    // Strip presentation properties when moving to subquery
-    // These don't have meaning in EXISTS context
-  };
-
-  // Invert the correlation for the flipped relationship
-  const invertedCorrelation = {
-    parentField: correlation.childField,
-    childField: correlation.parentField,
-  };
-
-  // Create new EXISTS condition with inverted correlation
-  const newExistsCondition: CorrelatedSubqueryCondition = {
-    type: 'correlatedSubquery' as const,
-    op: 'EXISTS',
-    related: {
-      ...flippedCondition.related,
-      correlation: invertedCorrelation,
-      subquery: rootAsSubquery,
-    },
-  };
-
-  // Build the transformed AST with subquery as new root
-  const transformedAst: AST = {
-    ...subquery,
-    where: combineConditions(subquery.where, newExistsCondition),
-    orderBy: subquery.orderBy,
-  };
-
-  // Extract properties to re-apply after extraction
-  const extractedProperties: ExtractedRootProperties = {
-    orderBy: ast.orderBy,
-    start: ast.start,
-    limit: ast.limit,
-    related: ast.related,
-  };
+  // Build the path from the new root to the original root
+  // This is the sequence of aliases to traverse to find the original root
+  const pathToRoot = buildPathToRoot(chain);
 
   return {
     transformedAst,
     extractedProperties,
-    pathToRoot: [rootAlias],
+    pathToRoot,
   };
+}
+
+/**
+ * Extracts the chain of tables involved in flipped EXISTS conditions.
+ * Returns them in order from root to deepest.
+ */
+function extractFlipChain(ast: AST): ChainNode[] | null {
+  const chain: ChainNode[] = [];
+  let current = ast;
+  let isFirst = true;
+
+  while (current) {
+    const flippedCondition = findFlippedExistsCondition(current.where);
+
+    if (!flippedCondition) {
+      // No more flips
+      if (chain.length === 0) {
+        // No flips at all
+        return null;
+      }
+      // Add the last non-flipped node (it becomes the new root)
+      chain.push({
+        ast: current,
+        alias: current.alias || `${current.table}_leaf`,
+        isOriginalRoot: false,
+      });
+      break;
+    }
+
+    // Extract this level's info
+    const remainingConditions = removeCondition(
+      current.where,
+      flippedCondition,
+    );
+    const nodeAlias = current.alias || `${current.table}_flipped`;
+
+    chain.push({
+      ast: current,
+      alias: nodeAlias,
+      correlation: flippedCondition.related.correlation,
+      remainingConditions,
+      isOriginalRoot: isFirst,
+    });
+
+    // Move to the next level
+    current = flippedCondition.related.subquery;
+    isFirst = false;
+  }
+
+  return chain.length > 0 ? chain : null;
+}
+
+/**
+ * Rebuilds the AST from the chain, making the deepest node the new root.
+ */
+function rebuildFromChain(chain: ChainNode[]): AST {
+  if (chain.length === 0) {
+    throw new Error('Cannot rebuild from empty chain');
+  }
+
+  // Start with the deepest node (last in chain) as the new root
+  const newRoot = chain[chain.length - 1];
+  let currentAst: AST = {
+    ...newRoot.ast,
+    alias: undefined, // Root doesn't need an alias at the top level
+  };
+
+  // Build nested EXISTS from the bottom up
+  // We need to create a nested structure, not just combine conditions
+  let currentSubquery: AST | null = null;
+
+  // Work backwards through the chain (excluding the new root)
+  for (let i = chain.length - 2; i >= 0; i--) {
+    const node = chain[i];
+
+    // Create the subquery for this level
+    const subquery: ASTWithRootMarker = {
+      table: node.ast.table,
+      alias: node.alias,
+      where: node.remainingConditions,
+      ...(node.isOriginalRoot ? {wasRoot: true} : {}),
+    };
+
+    // Invert the correlation (we're flipping the relationship)
+    const invertedCorrelation = {
+      parentField: must(node.correlation).childField,
+      childField: must(node.correlation).parentField,
+    };
+
+    // Create EXISTS condition pointing to this subquery
+    const existsCondition: CorrelatedSubqueryCondition = {
+      type: 'correlatedSubquery' as const,
+      op: 'EXISTS',
+      related: {
+        correlation: invertedCorrelation,
+        subquery,
+        system: 'client',
+      },
+    };
+
+    if (i === chain.length - 2) {
+      // First iteration - add EXISTS to the new root
+      currentAst = {
+        ...currentAst,
+        where: combineConditions(currentAst.where, existsCondition),
+      };
+      currentSubquery = subquery;
+    } else {
+      // Subsequent iterations - add EXISTS to the previous subquery
+      if (currentSubquery) {
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        currentSubquery.where = combineConditions(
+          currentSubquery.where,
+          existsCondition,
+        );
+        currentSubquery = subquery;
+      }
+    }
+  }
+
+  return currentAst;
+}
+
+/**
+ * Builds the path of aliases from the new root to the original root.
+ */
+function buildPathToRoot(chain: ChainNode[]): string[] {
+  const path: string[] = [];
+
+  // Find where the original root ended up
+  // It should be in the nested EXISTS conditions
+  // The path is the sequence of aliases to traverse
+  for (let i = chain.length - 2; i >= 0; i--) {
+    path.push(chain[i].alias);
+    if (chain[i].isOriginalRoot) {
+      break;
+    }
+  }
+
+  return path;
 }
 
 /**
  * Finds a flipped EXISTS condition in the WHERE clause.
  * Only looks at top level or inside AND branches.
- * Returns null if flip is inside OR (unsupported).
  */
 function findFlippedExistsCondition(
   condition: Condition | undefined,
@@ -140,10 +257,9 @@ function findFlippedExistsCondition(
 }
 
 /**
- * Removes the flipped condition from a WHERE clause tree.
- * Preserves all other conditions.
+ * Removes a specific condition from a WHERE clause tree.
  */
-function removeFlippedCondition(
+function removeCondition(
   condition: Condition | undefined,
   toRemove: CorrelatedSubqueryCondition,
 ): Condition | undefined {
@@ -157,7 +273,7 @@ function removeFlippedCondition(
   // AND node - recursively remove from children
   if (condition.type === 'and') {
     const filtered = condition.conditions
-      .map(c => removeFlippedCondition(c, toRemove))
+      .map(c => removeCondition(c, toRemove))
       .filter((c): c is Condition => c !== undefined);
 
     if (filtered.length === 0) return undefined;
@@ -171,7 +287,7 @@ function removeFlippedCondition(
   // OR node - recursively remove from children
   if (condition.type === 'or') {
     const filtered = condition.conditions
-      .map(c => removeFlippedCondition(c, toRemove))
+      .map(c => removeCondition(c, toRemove))
       .filter((c): c is Condition => c !== undefined);
 
     if (filtered.length === 0) return undefined;
@@ -188,9 +304,6 @@ function removeFlippedCondition(
 
 /**
  * Combines multiple conditions into a single condition.
- * Returns undefined if no conditions provided.
- * Returns single condition if only one provided.
- * Combines multiple with AND.
  */
 function combineConditions(
   ...conditions: (Condition | undefined)[]

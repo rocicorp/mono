@@ -28,7 +28,7 @@ describe('transformFlippedExists', () => {
 
     const expectedAst: AST = {
       table: 'orders',
-      alias: 'o',
+      // alias removed at root level by nested transform
       where: {
         type: 'correlatedSubquery',
         op: 'EXISTS',
@@ -37,7 +37,7 @@ describe('transformFlippedExists', () => {
             table: 'users',
             alias: 'users_flipped',  // Generated alias
             wasRoot: true,
-            // orderBy, limit removed when moved to subquery position
+            where: undefined,  // Nested transform adds explicit undefined
           } as ASTWithRootMarker,
           correlation: {
             parentField: ['userId'],  // Inverted

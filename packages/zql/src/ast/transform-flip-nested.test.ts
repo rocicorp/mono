@@ -1,12 +1,12 @@
 import {expect, test, describe} from 'vitest';
 import type {AST} from '../../../zero-protocol/src/ast.js';
 import {
-  transformNestedFlippedExists,
+  transformFlippedExists,
   findPathToRoot,
   type ASTWithRootMarker,
-} from './transform-flip-nested.js';
+} from './transform-flip.js';
 
-describe('transformNestedFlippedExists', () => {
+describe('transformFlippedExists', () => {
   test('transforms single nested flip (2 levels)', () => {
     // users WHERE EXISTS(foo WHERE EXISTS(bar)) with both flipped
     const input: AST = {
@@ -81,7 +81,7 @@ describe('transformNestedFlippedExists', () => {
       },
     };
 
-    const result = transformNestedFlippedExists(input);
+    const result = transformFlippedExists(input);
     expect(result).not.toBeNull();
     expect(result!.transformedAst).toEqual(expectedAst);
     expect(result!.extractedProperties).toEqual({
@@ -144,7 +144,7 @@ describe('transformNestedFlippedExists', () => {
     };
 
     // Expected: baz -> bar -> foo -> users
-    const result = transformNestedFlippedExists(input);
+    const result = transformFlippedExists(input);
     expect(result).not.toBeNull();
     
     // The new root should be baz
@@ -235,7 +235,7 @@ describe('transformNestedFlippedExists', () => {
       },
     };
 
-    const result = transformNestedFlippedExists(input);
+    const result = transformFlippedExists(input);
     expect(result).not.toBeNull();
     expect(result!.transformedAst).toEqual(expectedAst);
     expect(result!.extractedProperties.limit).toBe(20);
@@ -305,7 +305,7 @@ describe('transformNestedFlippedExists', () => {
       },
     };
 
-    const result = transformNestedFlippedExists(input);
+    const result = transformFlippedExists(input);
     expect(result).not.toBeNull();
     
     // New root should be items
@@ -368,7 +368,7 @@ describe('transformNestedFlippedExists', () => {
       },
     };
 
-    const result = transformNestedFlippedExists(input);
+    const result = transformFlippedExists(input);
     expect(result).not.toBeNull();
     
     // Path should use existing aliases where available
@@ -395,7 +395,7 @@ describe('transformNestedFlippedExists', () => {
       },
     };
 
-    const result = transformNestedFlippedExists(input);
+    const result = transformFlippedExists(input);
     expect(result).toBeNull();
   });
 
@@ -428,7 +428,7 @@ describe('transformNestedFlippedExists', () => {
       },
     };
 
-    const result = transformNestedFlippedExists(input);
+    const result = transformFlippedExists(input);
     expect(result).toBeNull();
   });
 });
