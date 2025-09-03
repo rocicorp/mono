@@ -111,9 +111,9 @@ export interface ZeroOptions<
    *
    * DEPRECATED: Use `userMutateParams` instead.
    */
-  push?: UserMutateParams;
-  mutate?: UserMutateParams;
-  query?: UserQueryParams;
+  push?: UserMutateParams | undefined;
+  mutate?: UserMutateParams | undefined;
+  query?: UserQueryParams | undefined;
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes.

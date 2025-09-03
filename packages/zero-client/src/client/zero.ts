@@ -25,6 +25,7 @@ import {
   mustGetBrowserGlobal,
 } from '../../../shared/src/browser-env.ts';
 import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
+import {h64} from '../../../shared/src/hash.ts';
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -566,6 +567,17 @@ export class Zero<
     const {clientSchema, hash} = clientSchemaFrom(schema);
     this.#clientSchema = clientSchema;
 
+    // Create a hash that includes storage key, URL configuration, and query parameters
+    const nameKey = JSON.stringify({
+      storageKey: this.storageKey,
+      mutateUrl: options.mutate?.url ?? options.push?.url ?? '',
+      queryUrl: options.query?.url ?? '',
+      mutateQueryParams:
+        options.mutate?.queryParams ?? options.push?.queryParams ?? {},
+      queryQueryParams: options.query?.queryParams ?? {},
+    });
+    const hashedKey = h64(nameKey).toString();
+
     const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
       // The schema stored in IDB is dependent upon both the ClientSchema
       // and the AST schema (i.e. PROTOCOL_VERSION).
@@ -573,7 +585,7 @@ export class Zero<
       logLevel: logOptions.logLevel,
       logSinks: [logOptions.logSink],
       mutators: replicacheMutators,
-      name: `zero-${userID}-${this.storageKey}`,
+      name: `zero-${userID}-${hashedKey}`,
       pusher: (req, reqID) => this.#pusher(req, reqID),
       puller: (req, reqID) => this.#puller(req, reqID),
       pushDelay: 0,
