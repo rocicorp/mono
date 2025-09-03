@@ -534,13 +534,11 @@ export function assertOrderingIncludesPK(
 }
 
 function uniquifyCorrelatedSubqueryConditionAliases(ast: AST): AST {
-  let count = 0;
-
   // Process an entire AST recursively
   const processAST = (node: AST): AST => {
     // Process WHERE conditions in this AST node
     const processedWhere = node.where
-      ? uniquifyCondition(node.where)
+      ? uniquifyCondition(node.where, false, {v: 0})
       : undefined;
 
     return {
@@ -550,15 +548,18 @@ function uniquifyCorrelatedSubqueryConditionAliases(ast: AST): AST {
   };
 
   // Process a condition tree, uniquifying aliases and recursing into subqueries
-  const uniquifyCondition = (cond: Condition): Condition => {
+  const uniquifyCondition = (
+    cond: Condition,
+    inCompound: boolean,
+    count: {v: number},
+  ): Condition => {
     if (cond.type === 'simple') {
       return cond;
     } else if (cond.type === 'correlatedSubquery') {
       // Uniquify the alias for this correlated subquery
-      const uniquifiedAlias =
-        (cond.related.subquery.alias ?? cond.related.subquery.table) +
-        '_' +
-        count++;
+      const uniquifiedAlias = inCompound
+        ? (cond.related.subquery.alias ?? '') + '_' + count.v++
+        : cond.related.subquery.alias;
 
       // Recursively process the subquery AST
       const processedSubquery = processAST(cond.related.subquery);
@@ -575,7 +576,9 @@ function uniquifyCorrelatedSubqueryConditionAliases(ast: AST): AST {
       };
     } else if (cond.type === 'and' || cond.type === 'or') {
       // Process all child conditions
-      const conditions = cond.conditions.map(c => uniquifyCondition(c));
+      const conditions = cond.conditions.map(c =>
+        uniquifyCondition(c, true, count),
+      );
       return {
         type: cond.type,
         conditions,

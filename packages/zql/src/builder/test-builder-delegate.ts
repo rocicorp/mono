@@ -35,7 +35,7 @@ export class TestBuilderDelegate implements BuilderDelegate {
   }
 
   createStorage(name: string): Storage {
-    assert(!Object.hasOwn(this.#storage, name));
+    assert(!Object.hasOwn(this.#storage, name), 'storage is missing ' + name);
     const storage = new MemoryStorage();
     this.#storage[name] = storage;
     return storage;
