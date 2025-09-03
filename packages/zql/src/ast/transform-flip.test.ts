@@ -1,6 +1,6 @@
 import {expect, test, describe} from 'vitest';
-import type {AST, Condition, CorrelatedSubqueryCondition} from '../../../zero-protocol/src/ast.js';
-import {transformFlippedExists, findRootInTransformedAst, type ASTWithRootMarker} from './transform-flip.js';
+import type {AST} from '../../../zero-protocol/src/ast.js';
+import {transformFlippedExists, findPathToRoot, type ASTWithRootMarker} from './transform-flip.js';
 
 describe('transformFlippedExists', () => {
   test('transforms simple flipped EXISTS', () => {
@@ -23,7 +23,7 @@ describe('transformFlippedExists', () => {
           },
           system: 'client',
         },
-      } as CorrelatedSubqueryCondition,
+      },
     };
 
     const expectedAst: AST = {
@@ -35,6 +35,7 @@ describe('transformFlippedExists', () => {
         related: {
           subquery: {
             table: 'users',
+            alias: 'users_flipped',  // Generated alias
             wasRoot: true,
             // orderBy, limit removed when moved to subquery position
           } as ASTWithRootMarker,
@@ -56,6 +57,7 @@ describe('transformFlippedExists', () => {
     expect(result).not.toBeNull();
     expect(result!.transformedAst).toEqual(expectedAst);
     expect(result!.extractedProperties).toEqual(expectedExtractedProperties);
+    expect(result!.pathToRoot).toEqual(['users_flipped']);
   });
 
   test('handles flipped EXISTS with additional WHERE conditions', () => {
@@ -76,12 +78,12 @@ describe('transformFlippedExists', () => {
               },
               system: 'client',
             },
-          } as CorrelatedSubqueryCondition,
+          },
           {
             type: 'simple',
-            left: {type: 'column', tableID: 'users', columnID: 'active'},
+            left: {type: 'column', name: 'active'},
             op: '=',
-            right: {type: 'literal', value: true, valueType: 'boolean'},
+            right: {type: 'literal', value: true},
           },
         ],
       },
@@ -95,12 +97,13 @@ describe('transformFlippedExists', () => {
         related: {
           subquery: {
             table: 'users',
+            alias: 'users_flipped',
             wasRoot: true,
             where: {
               type: 'simple',
-              left: {type: 'column', tableID: 'users', columnID: 'active'},
+              left: {type: 'column', name: 'active'},
               op: '=',
-              right: {type: 'literal', value: true, valueType: 'boolean'},
+              right: {type: 'literal', value: true},
             },
           } as ASTWithRootMarker,
           correlation: {
@@ -116,6 +119,7 @@ describe('transformFlippedExists', () => {
     expect(result).not.toBeNull();
     expect(result!.transformedAst).toEqual(expectedAst);
     expect(result!.extractedProperties).toEqual({});
+    expect(result!.pathToRoot).toEqual(['users_flipped']);
   });
 
   test('preserves subquery WHERE conditions', () => {
@@ -131,9 +135,9 @@ describe('transformFlippedExists', () => {
             table: 'orders',
             where: {
               type: 'simple',
-              left: {type: 'column', tableID: 'orders', columnID: 'status'},
+              left: {type: 'column', name: 'status'},
               op: '=',
-              right: {type: 'literal', value: 'completed', valueType: 'string'},
+              right: {type: 'literal', value: 'completed'},
             },
           },
           correlation: {
@@ -142,7 +146,7 @@ describe('transformFlippedExists', () => {
           },
           system: 'client',
         },
-      } as CorrelatedSubqueryCondition,
+      },
     };
 
     const expectedAst: AST = {
@@ -152,9 +156,9 @@ describe('transformFlippedExists', () => {
         conditions: [
           {
             type: 'simple',
-            left: {type: 'column', tableID: 'orders', columnID: 'status'},
+            left: {type: 'column', name: 'status'},
             op: '=',
-            right: {type: 'literal', value: 'completed', valueType: 'string'},
+            right: {type: 'literal', value: 'completed'},
           },
           {
             type: 'correlatedSubquery',
@@ -162,6 +166,7 @@ describe('transformFlippedExists', () => {
             related: {
               subquery: {
                 table: 'users',
+                alias: 'users_flipped',
                 wasRoot: true,
               } as ASTWithRootMarker,
               correlation: {
@@ -181,6 +186,7 @@ describe('transformFlippedExists', () => {
     expect(result!.extractedProperties).toEqual({
       orderBy: [['id', 'asc']],
     });
+    expect(result!.pathToRoot).toEqual(['users_flipped']);
   });
 
   test('returns null for non-flipped EXISTS', () => {
@@ -232,12 +238,12 @@ describe('transformFlippedExists', () => {
               },
               system: 'client',
             },
-          } as CorrelatedSubqueryCondition,
+          },
           {
             type: 'simple',
-            left: {type: 'column', tableID: 'users', columnID: 'active'},
+            left: {type: 'column', name: 'active'},
             op: '=',
-            right: {type: 'literal', value: true, valueType: 'boolean'},
+            right: {type: 'literal', value: true},
           },
         ],
       },
@@ -272,7 +278,7 @@ describe('transformFlippedExists', () => {
           },
           system: 'client',
         },
-      } as CorrelatedSubqueryCondition,
+      },
     };
 
     const expectedAst: AST = {
@@ -283,6 +289,7 @@ describe('transformFlippedExists', () => {
         related: {
           subquery: {
             table: 'users',
+            alias: 'users_flipped',
             wasRoot: true,
           } as ASTWithRootMarker,
           correlation: {
@@ -311,6 +318,7 @@ describe('transformFlippedExists', () => {
     expect(result).not.toBeNull();
     expect(result!.transformedAst).toEqual(expectedAst);
     expect(result!.extractedProperties).toEqual(expectedExtractedProperties);
+    expect(result!.pathToRoot).toEqual(['users_flipped']);
   });
 
   test('handles complex nested AND conditions', () => {
@@ -321,9 +329,9 @@ describe('transformFlippedExists', () => {
         conditions: [
           {
             type: 'simple',
-            left: {type: 'column', tableID: 'users', columnID: 'age'},
+            left: {type: 'column', name: 'age'},
             op: '>',
-            right: {type: 'literal', value: 18, valueType: 'number'},
+            right: {type: 'literal', value: 18},
           },
           {
             type: 'and',
@@ -340,12 +348,12 @@ describe('transformFlippedExists', () => {
                   },
                   system: 'client',
                 },
-              } as CorrelatedSubqueryCondition,
+              },
               {
                 type: 'simple',
-                left: {type: 'column', tableID: 'users', columnID: 'verified'},
+                left: {type: 'column', name: 'verified'},
                 op: '=',
-                right: {type: 'literal', value: true, valueType: 'boolean'},
+                right: {type: 'literal', value: true},
               },
             ],
           },
@@ -361,21 +369,22 @@ describe('transformFlippedExists', () => {
         related: {
           subquery: {
             table: 'users',
+            alias: 'users_flipped',
             wasRoot: true,
             where: {
               type: 'and',
               conditions: [
                 {
                   type: 'simple',
-                  left: {type: 'column', tableID: 'users', columnID: 'age'},
+                  left: {type: 'column', name: 'age'},
                   op: '>',
-                  right: {type: 'literal', value: 18, valueType: 'number'},
+                  right: {type: 'literal', value: 18},
                 },
                 {
                   type: 'simple',
-                  left: {type: 'column', tableID: 'users', columnID: 'verified'},
+                  left: {type: 'column', name: 'verified'},
                   op: '=',
-                  right: {type: 'literal', value: true, valueType: 'boolean'},
+                  right: {type: 'literal', value: true},
                 },
               ],
             },
@@ -393,6 +402,55 @@ describe('transformFlippedExists', () => {
     expect(result).not.toBeNull();
     expect(result!.transformedAst).toEqual(expectedAst);
     expect(result!.extractedProperties).toEqual({});
+    expect(result!.pathToRoot).toEqual(['users_flipped']);
+  });
+
+  test('preserves existing alias when flipping', () => {
+    const input: AST = {
+      table: 'users',
+      alias: 'u',  // Has existing alias
+      orderBy: [['name', 'asc']],
+      where: {
+        type: 'correlatedSubquery',
+        op: 'EXISTS',
+        flip: true,
+        related: {
+          subquery: {
+            table: 'orders',
+          },
+          correlation: {
+            parentField: ['id'],
+            childField: ['userId'],
+          },
+          system: 'client',
+        },
+      },
+    };
+
+    const expectedAst: AST = {
+      table: 'orders',
+      where: {
+        type: 'correlatedSubquery',
+        op: 'EXISTS',
+        related: {
+          subquery: {
+            table: 'users',
+            alias: 'u',  // Preserved existing alias
+            wasRoot: true,
+          } as ASTWithRootMarker,
+          correlation: {
+            parentField: ['userId'],
+            childField: ['id'],
+          },
+          system: 'client',
+        },
+      },
+    };
+
+    const result = transformFlippedExists(input);
+    expect(result).not.toBeNull();
+    expect(result!.transformedAst).toEqual(expectedAst);
+    expect(result!.pathToRoot).toEqual(['u']);  // Uses existing alias in path
   });
 
   test('handles pagination properties', () => {
@@ -419,7 +477,7 @@ describe('transformFlippedExists', () => {
           },
           system: 'client',
         },
-      } as CorrelatedSubqueryCondition,
+      },
     };
 
     const expectedAst: AST = {
@@ -431,6 +489,7 @@ describe('transformFlippedExists', () => {
         related: {
           subquery: {
             table: 'users',
+            alias: 'users_flipped',
             wasRoot: true,
             // All presentation properties stripped
           } as ASTWithRootMarker,
@@ -456,11 +515,12 @@ describe('transformFlippedExists', () => {
     expect(result).not.toBeNull();
     expect(result!.transformedAst).toEqual(expectedAst);
     expect(result!.extractedProperties).toEqual(expectedExtractedProperties);
+    expect(result!.pathToRoot).toEqual(['users_flipped']);
   });
 });
 
-describe('findRootInTransformedAst', () => {
-  test('finds root marked in simple transformed AST', () => {
+describe('findPathToRoot', () => {
+  test('finds path to root in simple transformed AST', () => {
     const ast: AST = {
       table: 'orders',
       where: {
@@ -469,6 +529,7 @@ describe('findRootInTransformedAst', () => {
         related: {
           subquery: {
             table: 'users',
+            alias: 'users_flipped',
             wasRoot: true,
           } as ASTWithRootMarker,
           correlation: {
@@ -480,17 +541,15 @@ describe('findRootInTransformedAst', () => {
       },
     };
 
-    const root = findRootInTransformedAst(ast);
-    expect(root).not.toBeNull();
-    expect(root).toEqual({
-      table: 'users',
-      wasRoot: true,
-    });
+    const path = findPathToRoot(ast);
+    expect(path).not.toBeNull();
+    expect(path).toEqual(['users_flipped']);
   });
 
-  test('finds root in deeply nested structure', () => {
+  test('finds path in deeply nested structure', () => {
     const markedRoot: ASTWithRootMarker = {
       table: 'users',
+      alias: 'u',
       wasRoot: true,
     };
 
@@ -505,6 +564,7 @@ describe('findRootInTransformedAst', () => {
             related: {
               subquery: {
                 table: 'categories',
+                alias: 'cat',
                 where: {
                   type: 'correlatedSubquery',
                   op: 'EXISTS',
@@ -529,9 +589,9 @@ describe('findRootInTransformedAst', () => {
       },
     };
 
-    const root = findRootInTransformedAst(ast);
-    expect(root).not.toBeNull();
-    expect(root).toEqual(markedRoot);
+    const path = findPathToRoot(ast);
+    expect(path).not.toBeNull();
+    expect(path).toEqual(['cat', 'u']);  // Path through categories to users
   });
 
   test('returns null when no root marked', () => {
@@ -543,6 +603,7 @@ describe('findRootInTransformedAst', () => {
         related: {
           subquery: {
             table: 'users',
+            alias: 'u',
             // No wasRoot marker
           },
           correlation: {
@@ -554,13 +615,14 @@ describe('findRootInTransformedAst', () => {
       },
     };
 
-    const root = findRootInTransformedAst(ast);
-    expect(root).toBeNull();
+    const path = findPathToRoot(ast);
+    expect(path).toBeNull();
   });
 
-  test('finds root in related subqueries', () => {
+  test('finds path through related subqueries', () => {
     const markedRoot: ASTWithRootMarker = {
       table: 'users',
+      alias: 'users_rel',
       wasRoot: true,
     };
 
@@ -578,8 +640,8 @@ describe('findRootInTransformedAst', () => {
       ],
     };
 
-    const root = findRootInTransformedAst(ast);
-    expect(root).not.toBeNull();
-    expect(root).toEqual(markedRoot);
+    const path = findPathToRoot(ast);
+    expect(path).not.toBeNull();
+    expect(path).toEqual(['users_rel']);
   });
 });

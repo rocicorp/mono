@@ -8,15 +8,16 @@ import type {
 } from '../../../zero-protocol/src/ast.js';
 
 export type ExtractedRootProperties = {
-  orderBy?: Ordering;
-  start?: Bound;
-  limit?: number;
-  related?: readonly CorrelatedSubquery[];
+  orderBy?: Ordering | undefined;
+  start?: Bound | undefined;
+  limit?: number | undefined;
+  related?: readonly CorrelatedSubquery[] | undefined;
 };
 
 export type TransformResult = {
   transformedAst: AST;
   extractedProperties: ExtractedRootProperties;
+  pathToRoot: string[];
 };
 
 export type ASTWithRootMarker = AST & {
@@ -35,15 +36,22 @@ export function transformFlippedExists(ast: AST): TransformResult | null {
   }
 
   const {subquery, correlation} = flippedCondition.related;
-  
+
   // Strip presentation properties from root when moving to subquery position
   // Remove the flipped condition from the original WHERE clause
   // Keep other conditions to move down with the parent
-  const remainingConditions = removeFlippedCondition(ast.where, flippedCondition);
+  const remainingConditions = removeFlippedCondition(
+    ast.where,
+    flippedCondition,
+  );
+
+  // Ensure the root has an alias when moved to subquery position
+  // This alias will be used in the path for ExtractMatchingKeys
+  const rootAlias = ast.alias || `${ast.table}_flipped`;
 
   const rootAsSubquery: ASTWithRootMarker = {
     table: ast.table,
-    alias: ast.alias,
+    alias: rootAlias,
     wasRoot: true,
     where: remainingConditions,
     // Strip presentation properties when moving to subquery
@@ -85,6 +93,7 @@ export function transformFlippedExists(ast: AST): TransformResult | null {
   return {
     transformedAst,
     extractedProperties,
+    pathToRoot: [rootAlias],
   };
 }
 
@@ -150,7 +159,7 @@ function removeFlippedCondition(
     const filtered = condition.conditions
       .map(c => removeFlippedCondition(c, toRemove))
       .filter((c): c is Condition => c !== undefined);
-    
+
     if (filtered.length === 0) return undefined;
     if (filtered.length === 1) return filtered[0];
     return {
@@ -164,7 +173,7 @@ function removeFlippedCondition(
     const filtered = condition.conditions
       .map(c => removeFlippedCondition(c, toRemove))
       .filter((c): c is Condition => c !== undefined);
-    
+
     if (filtered.length === 0) return undefined;
     if (filtered.length === 1) return filtered[0];
     return {
@@ -186,11 +195,13 @@ function removeFlippedCondition(
 function combineConditions(
   ...conditions: (Condition | undefined)[]
 ): Condition | undefined {
-  const validConditions = conditions.filter((c): c is Condition => c !== undefined);
-  
+  const validConditions = conditions.filter(
+    (c): c is Condition => c !== undefined,
+  );
+
   if (validConditions.length === 0) return undefined;
   if (validConditions.length === 1) return validConditions[0];
-  
+
   return {
     type: 'and',
     conditions: validConditions,
@@ -198,50 +209,75 @@ function combineConditions(
 }
 
 /**
- * Traverses a transformed AST to find the node marked as the original root.
- * Uses BFS to explore the AST tree structure.
+ * Traverses a transformed AST to find the path to the node marked as the original root.
+ * Returns an array of aliases representing the path to traverse.
  */
-export function findRootInTransformedAst(ast: AST): ASTWithRootMarker | null {
-  const queue: AST[] = [ast];
-  
+export function findPathToRoot(ast: AST): string[] | null {
+  type QueueItem = {
+    node: AST;
+    path: string[];
+  };
+
+  const queue: QueueItem[] = [{node: ast, path: []}];
+
   while (queue.length > 0) {
-    const current = queue.shift()!;
-    
+    const {node: current, path} = queue.shift()!;
+
     // Check if this node was the original root
     if ((current as ASTWithRootMarker).wasRoot) {
-      return current as ASTWithRootMarker;
+      return path;
     }
-    
+
     // Explore WHERE conditions for subqueries
     if (current.where) {
-      const subqueries = extractSubqueriesFromCondition(current.where);
-      queue.push(...subqueries);
+      const subqueriesWithAliases = extractSubqueriesWithAliasesFromCondition(
+        current.where,
+      );
+      for (const {subquery, alias} of subqueriesWithAliases) {
+        // Use alias if available, otherwise use table name
+        const relationshipName = alias || subquery.alias || subquery.table;
+        queue.push({
+          node: subquery,
+          path: [...path, relationshipName],
+        });
+      }
     }
-    
+
     // Explore related subqueries
     if (current.related) {
       for (const rel of current.related) {
-        queue.push(rel.subquery);
+        // For related, use the subquery's alias
+        const relationshipName = rel.subquery.alias || rel.subquery.table;
+        queue.push({
+          node: rel.subquery,
+          path: [...path, relationshipName],
+        });
       }
     }
   }
-  
+
   return null;
 }
 
 /**
- * Extracts all subqueries from a condition tree.
+ * Extracts all subqueries with their relationship aliases from a condition tree.
  */
-function extractSubqueriesFromCondition(condition: Condition): AST[] {
-  const subqueries: AST[] = [];
-  
+function extractSubqueriesWithAliasesFromCondition(
+  condition: Condition,
+): Array<{subquery: AST; alias: string | undefined}> {
+  const results: Array<{subquery: AST; alias: string | undefined}> = [];
+
   if (condition.type === 'correlatedSubquery') {
-    subqueries.push(condition.related.subquery);
+    // The alias for a subquery in EXISTS is the subquery's own alias
+    results.push({
+      subquery: condition.related.subquery,
+      alias: condition.related.subquery.alias,
+    });
   } else if (condition.type === 'and' || condition.type === 'or') {
     for (const child of condition.conditions) {
-      subqueries.push(...extractSubqueriesFromCondition(child));
+      results.push(...extractSubqueriesWithAliasesFromCondition(child));
     }
   }
-  
-  return subqueries;
+
+  return results;
 }
