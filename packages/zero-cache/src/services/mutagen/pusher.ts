@@ -189,10 +189,10 @@ class PushWorker {
     string,
     {
       wsID: string;
-      userParams?: UserMutateParams | undefined;
       downstream: Subscription<Downstream>;
     }
   >;
+  #clientGroupUserParams?: UserMutateParams | undefined;
 
   readonly #customMutations = getOrCreateCounter(
     'mutation',
@@ -244,12 +244,32 @@ class PushWorker {
       existing.downstream.cancel();
     }
 
+    // Handle client group level URL parameters
+    if (this.#clientGroupUserParams === undefined) {
+      // First client in the group - store its parameters
+      this.#clientGroupUserParams = userParams;
+    } else {
+      // Validate that subsequent clients have compatible parameters
+      const clientGroupParams = JSON.stringify(this.#clientGroupUserParams);
+      const clientParams = JSON.stringify(userParams);
+      if (clientGroupParams !== clientParams) {
+        this.#lc.error?.(
+          'Client provided different mutate parameters than client group',
+          {
+            clientID,
+            clientParams: userParams,
+            clientGroupParams: this.#clientGroupUserParams,
+          },
+        );
+      }
+    }
+
     const downstream = Subscription.create<Downstream>({
       cleanup: () => {
         this.#clients.delete(clientID);
       },
     });
-    this.#clients.set(clientID, {wsID, downstream, userParams});
+    this.#clients.set(clientID, {wsID, downstream});
     return downstream;
   }
 
@@ -374,9 +394,8 @@ class PushWorker {
     // Record custom mutations for telemetry
     recordMutation('custom', entry.push.mutations.length);
 
-    const client = must(this.#clients.get(entry.clientID), 'unknown clientID');
     const url =
-      client.userParams?.url ??
+      this.#clientGroupUserParams?.url ??
       must(this.#pushURLs[0], 'ZERO_MUTATE_URL is not set');
 
     this.#lc.debug?.(
@@ -400,7 +419,7 @@ class PushWorker {
           token: entry.jwt,
           cookie: entry.httpCookie,
         },
-        client?.userParams?.queryParams,
+        this.#clientGroupUserParams?.queryParams,
         entry.push,
       );
 
