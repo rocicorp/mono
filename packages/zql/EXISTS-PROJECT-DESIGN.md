@@ -256,9 +256,9 @@ When we encounter `flip: true` on an EXISTS condition:
     op: 'EXISTS',
     related: {
       subquery: { table: 'users', ... },  // Parent becomes subquery
-      correlation: { 
+      correlation: {
         parentField: ['userId'],  // Swap correlation
-        childField: ['id'] 
+        childField: ['id']
       }
     }
   }
@@ -281,12 +281,14 @@ orders WHERE EXISTS(users) AND EXISTS(reviews) // reviews converted to regular E
 ```
 
 **Benefits:**
+
 - **Query author control:** Put the most selective table first to control optimization
-- **Simple implementation:** Reuses existing single-flip transformation logic  
+- **Simple implementation:** Reuses existing single-flip transformation logic
 - **Predictable behavior:** First flip always wins
 - **Semantic preservation:** Non-flipped conditions stay with their logical parent
 
 **Implementation Logic:**
+
 1. Detect multiple flipped EXISTS in AND condition
 2. Transform only the first flipped EXISTS found
 3. Split conditions:
@@ -313,17 +315,19 @@ users WHERE EXISTS(orders WITH flip) OR EXISTS(reviews WITH flip)
 
 // Transformation Strategy:
 // 1. Create Pipeline 1: orders -> ExtractMatchingKeys(users)
-// 2. Create Pipeline 2: reviews -> ExtractMatchingKeys(users)  
+// 2. Create Pipeline 2: reviews -> ExtractMatchingKeys(users)
 // 3. Union(Pipeline1, Pipeline2) -> Distinct -> SortToRootOrder
 ```
 
 **Why Union Approach:**
+
 - **Preserves semantics:** Still returns users (not orders)
 - **Maintains performance:** Each branch starts from optimal table
 - **Database-like:** How SQL engines handle complex OR conditions
 - **Conceptually sound:** OR naturally maps to set union
 
 **Required Components:**
+
 ```typescript
 // New operators needed:
 class Union implements Operator {
@@ -341,15 +345,16 @@ function buildUnionPipeline(
   flippedConditions: CorrelatedSubqueryCondition[],
   originalRoot: AST
 ): Input {
-  const pipelines = flippedConditions.map(condition => 
+  const pipelines = flippedConditions.map(condition =>
     buildFlipPipeline(condition, originalRoot)
   );
-  
+
   return Union(pipelines) -> Distinct -> SortToRootOrder;
 }
 ```
 
 **Implementation Phases:**
+
 1. **Phase 2A:** Implement Union and Distinct operators
 2. **Phase 2B:** Detect OR with multiple flips in AST transformation
 3. **Phase 2C:** Generate union-based pipeline for OR cases
@@ -357,6 +362,7 @@ function buildUnionPipeline(
 
 **Conservative Fallback:**
 For now, OR with multiple flips can fall back to no transformation:
+
 ```typescript
 // In findFlippedExists():
 if (condition.type === 'or') {
@@ -372,15 +378,17 @@ if (condition.type === 'or') {
 
 ### Implementation Plan
 
-1. **Phase 1**: ✅ COMPLETE - AST transformation for single flipped EXISTS
-   - ✅ `transformFlippedExists(ast: AST): { ast: AST, pathToRoot: string[] }`
-   - ✅ Handle WHERE conditions moving with parent
-   - ✅ Return path for later extraction
-   - ✅ AND with multiple flips: Transform first, convert others to regular EXISTS
+1. **Phase 1**: 📋 IN PROGRESS - AST transformation for single flipped EXISTS
+
+   - `transformFlippedExists(ast: AST): { ast: AST, pathToRoot: string[] }`
+   - Handle WHERE conditions moving with parent
+   - Return path for later extraction
+   - AND with multiple flips: Transform first, convert others to regular EXISTS
 
 2. **Phase 2**: 📋 IN PROGRESS - OR handling with Union approach
+
    - **Phase 2A**: 🔄 NEXT - Implement Union operator
-   - **Phase 2B**: Implement Distinct operator  
+   - **Phase 2B**: Implement Distinct operator
    - **Phase 2C**: Detect OR with multiple flips in AST transformation
    - **Phase 2D**: Generate union-based pipeline for OR cases
    - **Phase 2E**: Handle mixed OR conditions (flipped + non-flipped)
@@ -402,6 +410,7 @@ if (condition.type === 'or') {
 ## Current Status & Next Steps
 
 ### Completed ✅
+
 1. ✅ ExtractMatchingKeys operator - Extracts target table rows from nested structures
 2. ✅ SortToRootOrder operator - Restores original sort order after extraction
 3. ✅ AST transformation for single flipped EXISTS - Core transformation logic
@@ -410,9 +419,11 @@ if (condition.type === 'or') {
 6. ✅ Nested flipped EXISTS - Handles complex nested cases with hierarchy preservation
 
 ### In Progress 🔄
+
 - **Phase 2A**: Implement Union operator for OR case handling
 
 ### Upcoming 📋
+
 1. **Phase 2B**: Implement Distinct operator for deduplication
 2. **Phase 2C**: Extend AST transformation to detect and handle OR cases
 3. **Phase 2D**: Integration - Update pipeline builder to use transformed ASTs
