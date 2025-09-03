@@ -108,8 +108,12 @@ export function buildPipeline(
 ): Input {
   // Apply mapAst if provided
   const mappedAst = delegate.mapAst ? delegate.mapAst(ast) : ast;
+
+  // Uniquify all correlated subquery aliases across the entire AST tree
+  const uniquifiedAst = uniquifyCorrelatedSubqueryConditionAliases(mappedAst);
+
   // Build the pipeline with the transformed AST
-  return buildPipelineInternal(mappedAst, delegate, queryID, '');
+  return buildPipelineInternal(uniquifiedAst, delegate, queryID, '');
 }
 
 export function bindStaticParameters(
@@ -200,7 +204,6 @@ function buildPipelineInternal(
   if (!source) {
     throw new Error(`Source not found: ${ast.table}`);
   }
-  ast = uniquifyCorrelatedSubqueryConditionAliases(ast);
 
   const csqsFromCondition = gatherCorrelatedSubqueryQueriesFromCondition(
     ast.where,
@@ -531,45 +534,55 @@ export function assertOrderingIncludesPK(
 }
 
 function uniquifyCorrelatedSubqueryConditionAliases(ast: AST): AST {
-  if (!ast.where) {
-    return ast;
-  }
-  const {where} = ast;
-  if (where.type !== 'and' && where.type !== 'or') {
-    return ast;
-  }
-
   let count = 0;
-  const uniquifyCorrelatedSubquery = (csqc: CorrelatedSubqueryCondition) => ({
-    ...csqc,
-    related: {
-      ...csqc.related,
-      subquery: {
-        ...csqc.related.subquery,
-        alias: (csqc.related.subquery.alias ?? '') + '_' + count++,
-      },
-    },
-  });
 
-  const uniquify = (cond: Condition): Condition => {
-    if (cond.type === 'simple') {
-      return cond;
-    } else if (cond.type === 'correlatedSubquery') {
-      return uniquifyCorrelatedSubquery(cond);
-    }
-    const conditions = [];
-    for (const c of cond.conditions) {
-      conditions.push(uniquify(c));
-    }
+  // Process an entire AST recursively
+  const processAST = (node: AST): AST => {
+    // Process WHERE conditions in this AST node
+    const processedWhere = node.where
+      ? uniquifyCondition(node.where)
+      : undefined;
+
     return {
-      type: cond.type,
-      conditions,
+      ...node,
+      where: processedWhere,
     };
   };
 
-  const result = {
-    ...ast,
-    where: uniquify(where),
+  // Process a condition tree, uniquifying aliases and recursing into subqueries
+  const uniquifyCondition = (cond: Condition): Condition => {
+    if (cond.type === 'simple') {
+      return cond;
+    } else if (cond.type === 'correlatedSubquery') {
+      // Uniquify the alias for this correlated subquery
+      const uniquifiedAlias =
+        (cond.related.subquery.alias ?? cond.related.subquery.table) +
+        '_' +
+        count++;
+
+      // Recursively process the subquery AST
+      const processedSubquery = processAST(cond.related.subquery);
+
+      return {
+        ...cond,
+        related: {
+          ...cond.related,
+          subquery: {
+            ...processedSubquery,
+            alias: uniquifiedAlias,
+          },
+        },
+      };
+    } else if (cond.type === 'and' || cond.type === 'or') {
+      // Process all child conditions
+      const conditions = cond.conditions.map(c => uniquifyCondition(c));
+      return {
+        type: cond.type,
+        conditions,
+      };
+    }
+    return cond;
   };
-  return result;
+
+  return processAST(ast);
 }

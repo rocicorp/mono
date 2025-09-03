@@ -1,3 +1,4 @@
+import {must} from '../../../shared/src/must.ts';
 import type {
   AST,
   Condition,
@@ -32,7 +33,7 @@ type ChainNode = {
   ast: AST;
   alias: string;
   correlation?: Correlation;
-  remainingConditions?: Condition;
+  remainingConditions?: Condition | undefined;
   isOriginalRoot: boolean;
 };
 
@@ -43,27 +44,29 @@ type ChainNode = {
 export function transformNestedFlippedExists(ast: AST): TransformResult | null {
   // Extract the chain of flipped EXISTS
   const chain = extractFlipChain(ast);
-  
+
   if (!chain || chain.length === 0) {
     return null;
   }
-  
+
   // Rebuild the AST from the deepest node as the new root
   const transformedAst = rebuildFromChain(chain);
-  
+
   // Extract properties from the original root
   const originalRoot = chain.find(node => node.isOriginalRoot);
-  const extractedProperties: ExtractedRootProperties = originalRoot ? {
-    orderBy: originalRoot.ast.orderBy,
-    start: originalRoot.ast.start,
-    limit: originalRoot.ast.limit,
-    related: originalRoot.ast.related,
-  } : {};
-  
+  const extractedProperties: ExtractedRootProperties = originalRoot
+    ? {
+        orderBy: originalRoot.ast.orderBy,
+        start: originalRoot.ast.start,
+        limit: originalRoot.ast.limit,
+        related: originalRoot.ast.related,
+      }
+    : {};
+
   // Build the path from the new root to the original root
   // This is the sequence of aliases to traverse to find the original root
   const pathToRoot = buildPathToRoot(chain);
-  
+
   return {
     transformedAst,
     extractedProperties,
@@ -79,10 +82,10 @@ function extractFlipChain(ast: AST): ChainNode[] | null {
   const chain: ChainNode[] = [];
   let current = ast;
   let isFirst = true;
-  
+
   while (current) {
     const flippedCondition = findFlippedExistsCondition(current.where);
-    
+
     if (!flippedCondition) {
       // No more flips
       if (chain.length === 0) {
@@ -97,11 +100,14 @@ function extractFlipChain(ast: AST): ChainNode[] | null {
       });
       break;
     }
-    
+
     // Extract this level's info
-    const remainingConditions = removeCondition(current.where, flippedCondition);
+    const remainingConditions = removeCondition(
+      current.where,
+      flippedCondition,
+    );
     const nodeAlias = current.alias || `${current.table}_flipped`;
-    
+
     chain.push({
       ast: current,
       alias: nodeAlias,
@@ -109,12 +115,12 @@ function extractFlipChain(ast: AST): ChainNode[] | null {
       remainingConditions,
       isOriginalRoot: isFirst,
     });
-    
+
     // Move to the next level
     current = flippedCondition.related.subquery;
     isFirst = false;
   }
-  
+
   return chain.length > 0 ? chain : null;
 }
 
@@ -125,22 +131,22 @@ function rebuildFromChain(chain: ChainNode[]): AST {
   if (chain.length === 0) {
     throw new Error('Cannot rebuild from empty chain');
   }
-  
+
   // Start with the deepest node (last in chain) as the new root
   const newRoot = chain[chain.length - 1];
   let currentAst: AST = {
     ...newRoot.ast,
     alias: undefined, // Root doesn't need an alias at the top level
   };
-  
+
   // Build nested EXISTS from the bottom up
   // We need to create a nested structure, not just combine conditions
   let currentSubquery: AST | null = null;
-  
+
   // Work backwards through the chain (excluding the new root)
   for (let i = chain.length - 2; i >= 0; i--) {
     const node = chain[i];
-    
+
     // Create the subquery for this level
     const subquery: ASTWithRootMarker = {
       table: node.ast.table,
@@ -148,17 +154,13 @@ function rebuildFromChain(chain: ChainNode[]): AST {
       where: node.remainingConditions,
       ...(node.isOriginalRoot ? {wasRoot: true} : {}),
     };
-    
+
     // Invert the correlation (we're flipping the relationship)
-    const invertedCorrelation = node.correlation ? {
-      parentField: node.correlation.childField,
-      childField: node.correlation.parentField,
-    } : {
-      // Default correlation if not specified
-      parentField: ['id'],
-      childField: [`${node.ast.table}Id`],
+    const invertedCorrelation = {
+      parentField: must(node.correlation).childField,
+      childField: must(node.correlation).parentField,
     };
-    
+
     // Create EXISTS condition pointing to this subquery
     const existsCondition: CorrelatedSubqueryCondition = {
       type: 'correlatedSubquery' as const,
@@ -169,7 +171,7 @@ function rebuildFromChain(chain: ChainNode[]): AST {
         system: 'client',
       },
     };
-    
+
     if (i === chain.length - 2) {
       // First iteration - add EXISTS to the new root
       currentAst = {
@@ -180,12 +182,17 @@ function rebuildFromChain(chain: ChainNode[]): AST {
     } else {
       // Subsequent iterations - add EXISTS to the previous subquery
       if (currentSubquery) {
-        currentSubquery.where = combineConditions(currentSubquery.where, existsCondition);
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        currentSubquery.where = combineConditions(
+          currentSubquery.where,
+          existsCondition,
+        );
         currentSubquery = subquery;
       }
     }
   }
-  
+
   return currentAst;
 }
 
@@ -194,7 +201,7 @@ function rebuildFromChain(chain: ChainNode[]): AST {
  */
 function buildPathToRoot(chain: ChainNode[]): string[] {
   const path: string[] = [];
-  
+
   // Find where the original root ended up
   // It should be in the nested EXISTS conditions
   // The path is the sequence of aliases to traverse
@@ -204,7 +211,7 @@ function buildPathToRoot(chain: ChainNode[]): string[] {
       break;
     }
   }
-  
+
   return path;
 }
 
