@@ -19,6 +19,7 @@ import type {
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import {Exists} from '../ivm/exists.ts';
+import {ExtractMatchingKeys} from '../ivm/extract-matching-keys.ts';
 import {FanIn} from '../ivm/fan-in.ts';
 import {FanOut} from '../ivm/fan-out.ts';
 import {
@@ -29,10 +30,12 @@ import {Filter} from '../ivm/filter.ts';
 import {Join} from '../ivm/join.ts';
 import type {Input, InputBase, Storage} from '../ivm/operator.ts';
 import {Skip} from '../ivm/skip.ts';
+import {SortToRootOrder} from '../ivm/sort-to-root-order.ts';
 import type {Source, SourceInput} from '../ivm/source.ts';
 import {Take} from '../ivm/take.ts';
 import type {DebugDelegate} from './debug-delegate.ts';
 import {createPredicate, type NoSubqueryCondition} from './filter.ts';
+import {transformFlippedExists} from './transform-flipped-exists.ts';
 
 export type StaticQueryParameters = {
   authData: Record<string, JSONValue>;
@@ -106,12 +109,62 @@ export function buildPipeline(
   delegate: BuilderDelegate,
   queryID: string,
 ): Input {
-  return buildPipelineInternal(
-    delegate.mapAst ? delegate.mapAst(ast) : ast,
-    delegate,
-    queryID,
-    '',
-  );
+  // Apply mapAst if provided
+  const mappedAst = delegate.mapAst ? delegate.mapAst(ast) : ast;
+
+  // Transform flipped EXISTS conditions
+  const {ast: transformedAst, pathToOriginalRoot} =
+    transformFlippedExists(mappedAst);
+
+  // Build the pipeline with the transformed AST
+  let pipeline = buildPipelineInternal(transformedAst, delegate, queryID, '');
+
+  // If we transformed the AST (path is not empty), we need to extract and reorder
+  if (pathToOriginalRoot.length > 0) {
+    const originalRootTable = pathToOriginalRoot[pathToOriginalRoot.length - 1];
+
+    // Get the schema by temporarily connecting to the source
+    const originalSort = mappedAst.orderBy || [];
+    const source = delegate.getSource(originalRootTable);
+    if (!source) {
+      throw new Error(
+        `Source not found for original root: ${originalRootTable}`,
+      );
+    }
+
+    const tempConnection = source.connect(originalSort);
+    const targetSchema = tempConnection.getSchema();
+    tempConnection.destroy();
+
+    if (!targetSchema) {
+      throw new Error(`Unable to get schema for ${originalRootTable}`);
+    }
+
+    // Extract the original root table rows from the transformed pipeline
+    const extractName = `extract(${originalRootTable})`;
+    const extracted = new ExtractMatchingKeys({
+      input: pipeline,
+      targetTable: originalRootTable,
+      targetPath: pathToOriginalRoot,
+      targetSchema,
+    });
+    delegate.addEdge(pipeline, extracted);
+    pipeline = delegate.decorateInput(extracted, extractName);
+
+    // Restore the original sort order
+    if (mappedAst.orderBy) {
+      const sortName = `sort(${originalRootTable})`;
+      const sorted = new SortToRootOrder({
+        input: pipeline,
+        storage: delegate.createStorage(sortName),
+        targetSort: mappedAst.orderBy,
+      });
+      delegate.addEdge(pipeline, sorted);
+      pipeline = delegate.decorateInput(sorted, sortName);
+    }
+  }
+
+  return pipeline;
 }
 
 export function bindStaticParameters(
