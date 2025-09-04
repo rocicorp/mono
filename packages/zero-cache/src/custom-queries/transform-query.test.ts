@@ -744,4 +744,54 @@ describe('CustomQueryTransformer', () => {
       ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
     );
   });
+
+  test('should reject disallowed custom URL', async () => {
+    const allowedUrl = 'https://allowed-api.example.com/transform';
+    const disallowedUrl = 'https://malicious.com/endpoint';
+
+    mockFetchFromAPIServer.mockRejectedValue(
+      new Error(
+        `URL "${disallowedUrl}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
+      ),
+    );
+
+    const transformer = new CustomQueryTransformer(
+      {
+        url: [allowedUrl],
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+
+    const userQueryParams = {
+      url: disallowedUrl,
+      queryParams: {workspace: '1'},
+    };
+
+    const result = await transformer.transform(
+      headerOptions,
+      [mockQueries[0]],
+      userQueryParams,
+    );
+
+    // Verify the disallowed URL caused an error
+    expect(result).toEqual([
+      {
+        error: 'zero',
+        details: `URL "${disallowedUrl}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
+        id: 'query1',
+        name: 'getUserById',
+      },
+    ]);
+
+    // Verify the disallowed URL was attempted to be used
+    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      disallowedUrl,
+      [allowedUrl],
+      mockShard,
+      headerOptions,
+      {workspace: '1'},
+      ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
+    );
+  });
 });
