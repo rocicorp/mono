@@ -28,5 +28,11 @@ export default defineConfig({
   define: makeDefine(),
   build: {
     target: 'esnext',
+    rollupOptions: {
+      input: {
+        main: '/index.html',
+        debug: '/debug.html',
+      },
+    },
   },
 });
