@@ -24,7 +24,7 @@ export async function fetchFromAPIServer(
     url,
     allowedUrls,
   });
-  
+
   if (!urlMatch(url, allowedUrls)) {
     throw new Error(
       `URL "${url}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
@@ -58,10 +58,10 @@ export async function fetchFromAPIServer(
   params.append('appID', shard.appID);
 
   urlObj.search = params.toString();
-  
+
   const finalUrl = urlObj.toString();
   lc.info?.('Executing fetch', {finalUrl});
-  
+
   const response = await fetch(finalUrl, {
     method: 'POST',
     headers,
@@ -103,10 +103,7 @@ export async function fetchFromAPIServer(
  * - "https://*.*.example.com" does not match "https://api.example.com" (only one subdomain)
  */
 export function urlMatch(url: string, allowedUrls: string[]): boolean {
-  assert(
-    url.includes('*') === false,
-    'Client provided URLs may not include `*`',
-  );
+  assert(url.includes('*') === false, 'URL to fetch may not include `*`');
   // ignore query parameters in the URL
   url = url.split('?')[0];
 
