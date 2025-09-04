@@ -178,6 +178,7 @@ export function buildPipeline(
 
     if (mappedAst.related) {
       for (const csq of mappedAst.related) {
+        // oops, need to do flippening here.
         end = applyCorrelatedSubQuery(csq, delegate, queryID, end, '', false);
       }
     }
