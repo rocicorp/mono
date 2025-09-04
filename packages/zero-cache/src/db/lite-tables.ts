@@ -216,6 +216,7 @@ export function computeZqlSpecs(
       // See row-key.ts: normalizedKeyOrder()
       primaryKey: v.parse(primaryKey.sort(), primaryKeySchema),
       unionKey: v.parse(unionKey.sort(), primaryKeySchema),
+      allKeys: keys.map(key => v.parse(key.sort(), primaryKeySchema)),
     };
 
     tableSpecs.set(tableSpec.name, {

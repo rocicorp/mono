@@ -19,7 +19,7 @@ describe('client schemas', () => {
     db.exec(/* sql */ `
       CREATE TABLE foo(
         id "text|NOT_NULL",
-        a int,
+        a "int|NOT_NULL",
         b bool,
         c json,
         d timestamp,
@@ -29,6 +29,7 @@ describe('client schemas', () => {
         _0_version TEXT
       );
       CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
+      CREATE UNIQUE INDEX foo_id_a_key ON foo (id ASC, a DESC);
 
       CREATE TABLE bar(
         id "text|NOT_NULL",
@@ -78,12 +79,45 @@ describe('client schemas', () => {
               id: {type: 'string'},
               d: {type: 'number'},
             },
+            primaryKey: ['id'],
+          },
+        },
+      } satisfies ClientSchema,
+    ],
+    [
+      {
+        tables: {
+          bar: {
+            columns: {
+              id: {type: 'string'},
+              d: {type: 'number'},
+            },
           },
           foo: {
             columns: {
               id: {type: 'string'},
               c: {type: 'json'},
             },
+          },
+        },
+      } satisfies ClientSchema,
+    ],
+    [
+      {
+        tables: {
+          bar: {
+            columns: {
+              id: {type: 'string'},
+              d: {type: 'number'},
+            },
+            primaryKey: ['id'],
+          },
+          foo: {
+            columns: {
+              id: {type: 'string'},
+              c: {type: 'json'},
+            },
+            primaryKey: ['id'],
           },
         },
       } satisfies ClientSchema,
@@ -106,6 +140,30 @@ describe('client schemas', () => {
               a: {type: 'number'},
               b: {type: 'boolean'},
             },
+          },
+        },
+      } satisfies ClientSchema,
+    ],
+    [
+      {
+        tables: {
+          bar: {
+            columns: {
+              e: {type: 'boolean'},
+              id: {type: 'string'},
+              f: {type: 'json'},
+              d: {type: 'number'},
+            },
+            primaryKey: ['id'],
+          },
+          foo: {
+            columns: {
+              c: {type: 'json'},
+              id: {type: 'string'},
+              a: {type: 'number'},
+              b: {type: 'boolean'},
+            },
+            primaryKey: ['id'],
           },
         },
       } satisfies ClientSchema,
@@ -131,6 +189,33 @@ describe('client schemas', () => {
               e: {type: 'number'},
               f: {type: 'number'},
             },
+          },
+        },
+      } satisfies ClientSchema,
+    ],
+    [
+      {
+        tables: {
+          bar: {
+            columns: {
+              e: {type: 'boolean'},
+              id: {type: 'string'},
+              f: {type: 'json'},
+              d: {type: 'number'},
+            },
+            primaryKey: ['id'],
+          },
+          foo: {
+            columns: {
+              c: {type: 'json'},
+              id: {type: 'string'},
+              a: {type: 'number'},
+              b: {type: 'boolean'},
+              d: {type: 'number'},
+              e: {type: 'number'},
+              f: {type: 'number'},
+            },
+            primaryKey: ['id'],
           },
         },
       } satisfies ClientSchema,
@@ -276,6 +361,116 @@ describe('client schemas', () => {
       ),
     ).toThrowErrorMatchingInlineSnapshot(
       `[Error: {"kind":"SchemaVersionNotSupported","message":"The \\"nopk\\" table is missing a primary key or non-null unique index and thus cannot be synced to the client"}]`,
+    );
+  });
+
+  test.each([
+    [
+      {
+        tables: {
+          foo: {
+            columns: {
+              c: {type: 'json'},
+              id: {type: 'string'},
+              a: {type: 'number'},
+              b: {type: 'boolean'},
+              d: {type: 'number'},
+              e: {type: 'number'},
+              f: {type: 'number'},
+            },
+            primaryKey: ['id'],
+          },
+        },
+      } satisfies ClientSchema,
+    ],
+    [
+      {
+        tables: {
+          foo: {
+            columns: {
+              c: {type: 'json'},
+              id: {type: 'string'},
+              a: {type: 'number'},
+              b: {type: 'boolean'},
+              d: {type: 'number'},
+              e: {type: 'number'},
+              f: {type: 'number'},
+            },
+            primaryKey: ['id', 'a'],
+          },
+        },
+      } satisfies ClientSchema,
+    ],
+    [
+      {
+        tables: {
+          foo: {
+            columns: {
+              c: {type: 'json'},
+              id: {type: 'string'},
+              a: {type: 'number'},
+              b: {type: 'boolean'},
+              d: {type: 'number'},
+              e: {type: 'number'},
+              f: {type: 'number'},
+            },
+            primaryKey: ['a', 'id'],
+          },
+        },
+      } satisfies ClientSchema,
+    ],
+  ] as [ClientSchema][])(
+    'all unique indexes can be primary key: %o',
+    clientSchema => {
+      checkClientSchema(SHARD_ID, clientSchema, tableSpecs, fullTables);
+    },
+  );
+
+  test('table with wrong primary key', () => {
+    expect(() =>
+      checkClientSchema(
+        SHARD_ID,
+        {
+          tables: {
+            foo: {
+              columns: {
+                c: {type: 'json'},
+                id: {type: 'string'},
+                a: {type: 'number'},
+                b: {type: 'boolean'},
+              },
+              primaryKey: ['a'],
+            },
+          },
+        },
+        tableSpecs,
+        fullTables,
+      ),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[Error: {"kind":"SchemaVersionNotSupported","message":"The \\"foo\\" table's primaryKey <a> is not associated with a non-null unique index."}]`,
+    );
+
+    expect(() =>
+      checkClientSchema(
+        SHARD_ID,
+        {
+          tables: {
+            foo: {
+              columns: {
+                c: {type: 'json'},
+                id: {type: 'string'},
+                a: {type: 'number'},
+                b: {type: 'boolean'},
+              },
+              primaryKey: ['id', 'a', 'b'],
+            },
+          },
+        },
+        tableSpecs,
+        fullTables,
+      ),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[Error: {"kind":"SchemaVersionNotSupported","message":"The \\"foo\\" table's primaryKey <id,a,b> is not associated with a non-null unique index."}]`,
     );
   });
 

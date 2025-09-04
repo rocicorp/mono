@@ -78,6 +78,12 @@ export type LiteTableSpecWithKeys = Omit<LiteTableSpec, 'primaryKey'> & {
    * can serve as a key.
    */
   unionKey: PrimaryKey;
+
+  /**
+   * All keys associated with a unique index over non-null
+   * columns, i.e. suitable as a primary key.
+   */
+  allKeys: PrimaryKey[];
 };
 
 export type LiteAndZqlSpec = {

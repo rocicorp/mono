@@ -1,5 +1,9 @@
 import {must} from '../../../../shared/src/must.ts';
-import {difference, intersection} from '../../../../shared/src/set-utils.ts';
+import {
+  difference,
+  equals,
+  intersection,
+} from '../../../../shared/src/set-utils.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
@@ -85,6 +89,21 @@ export function checkClientSchema(
         errors.push(
           `The "${table}"."${column}" column's upstream type "${serverType}" ` +
             `does not match the client type "${clientType}"`,
+        );
+      }
+    }
+    // Clients on PROTOCOL_VERSION 30+ send the primaryKey for each table.
+    // Validate that it corresponds to a non-null unique index upstream.
+    if (clientSpec.primaryKey) {
+      const clientPrimaryKey = new Set(clientSpec.primaryKey);
+      if (
+        !serverSpec.tableSpec.allKeys.some(key =>
+          equals(clientPrimaryKey, new Set(key)),
+        )
+      ) {
+        errors.push(
+          `The "${table}" table's primaryKey <${clientSpec.primaryKey.join(',')}> ` +
+            `is not associated with a non-null unique index.`,
         );
       }
     }

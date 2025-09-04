@@ -334,6 +334,11 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
+            "allKeys": [
+              [
+                "b",
+              ],
+            ],
             "columns": {
               "a": {
                 "characterMaximumLength": null,
@@ -405,6 +410,11 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
+            "allKeys": [
+              [
+                "b",
+              ],
+            ],
             "columns": {
               "a": {
                 "characterMaximumLength": null,
@@ -455,6 +465,13 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
+            "allKeys": [
+              [
+                "a",
+                "b",
+                "d",
+              ],
+            ],
             "columns": {
               "a": {
                 "characterMaximumLength": null,
@@ -520,6 +537,13 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
+            "allKeys": [
+              [
+                "a",
+                "b",
+                "d",
+              ],
+            ],
             "columns": {
               "a": {
                 "characterMaximumLength": null,
@@ -595,6 +619,13 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
+            "allKeys": [
+              [
+                "a",
+                "c",
+                "d",
+              ],
+            ],
             "columns": {
               "a": {
                 "characterMaximumLength": null,
@@ -671,6 +702,15 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
+            "allKeys": [
+              [
+                "b",
+              ],
+              [
+                "a",
+                "c",
+              ],
+            ],
             "columns": {
               "a": {
                 "characterMaximumLength": null,
@@ -745,6 +785,15 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
+            "allKeys": [
+              [
+                "c",
+              ],
+              [
+                "b",
+                "d",
+              ],
+            ],
             "columns": {
               "a": {
                 "characterMaximumLength": null,
@@ -826,6 +875,17 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
+            "allKeys": [
+              [
+                "id",
+              ],
+              [
+                "name",
+              ],
+              [
+                "order",
+              ],
+            ],
             "columns": {
               "createdAt": {
                 "characterMaximumLength": null,

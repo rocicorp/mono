@@ -619,7 +619,10 @@ test('clientSchemaFrom', () => {
               "the_issue_id": {
                 "type": "string"
               }
-            }
+            },
+            "primaryKey": [
+              "id"
+            ]
           },
           "issues": {
             "columns": {
@@ -638,7 +641,10 @@ test('clientSchemaFrom', () => {
               "title": {
                 "type": "string"
               }
-            }
+            },
+            "primaryKey": [
+              "id"
+            ]
           },
           "noMappings": {
             "columns": {
@@ -648,11 +654,14 @@ test('clientSchemaFrom', () => {
               "id": {
                 "type": "string"
               }
-            }
+            },
+            "primaryKey": [
+              "id"
+            ]
           }
         }
       },
-      "hash": "qw9u2r398f0z"
+      "hash": "3kmklq8wg87j5"
     }"
   `);
 });
@@ -698,11 +707,14 @@ test('array column', () => {
               "stringArray": {
                 "type": "json"
               }
-            }
+            },
+            "primaryKey": [
+              "id"
+            ]
           }
         }
       },
-      "hash": "qeez7tx1u29h"
+      "hash": "39k26n5eek28e"
     }"
   `);
 });

@@ -143,16 +143,20 @@ export function clientSchemaFrom(schema: Schema): {
   hash: string;
 } {
   const client = {
-    tables: mapEntries(schema.tables, (name, {serverName, columns}) => [
-      serverName ?? name,
-      {
-        columns: mapEntries(columns, (name, {serverName, type}) => [
-          serverName ?? name,
-          {type},
-        ]),
-      },
-    ]),
-  };
+    tables: mapEntries(
+      schema.tables,
+      (name, {serverName, columns, primaryKey}) => [
+        serverName ?? name,
+        {
+          columns: mapEntries(columns, (name, {serverName, type}) => [
+            serverName ?? name,
+            {type},
+          ]),
+          primaryKey: [...primaryKey],
+        },
+      ],
+    ),
+  } satisfies ClientSchema;
   const clientSchema = normalizeClientSchema(client);
   const hash = h64(JSON.stringify(clientSchema)).toString(36);
   return {clientSchema, hash};

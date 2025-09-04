@@ -12,6 +12,7 @@ test('normalize', () => {
           z: {type: 'number'},
           y: {type: 'string'},
         },
+        primaryKey: ['z', 'y'],
       },
       d: {
         columns: {
@@ -19,6 +20,7 @@ test('normalize', () => {
           a: {type: 'null'},
           b: {type: 'json'},
         },
+        primaryKey: ['b'],
       },
       g: {
         columns: {
@@ -26,6 +28,7 @@ test('normalize', () => {
           k: {type: 'string'},
           j: {type: 'json'},
         },
+        primaryKey: ['k', 'i'],
       },
     },
   };
@@ -41,7 +44,11 @@ test('normalize', () => {
             "z": {
               "type": "number"
             }
-          }
+          },
+          "primaryKey": [
+            "y",
+            "z"
+          ]
         },
         "d": {
           "columns": {
@@ -54,7 +61,10 @@ test('normalize', () => {
             "v": {
               "type": "null"
             }
-          }
+          },
+          "primaryKey": [
+            "b"
+          ]
         },
         "g": {
           "columns": {
@@ -67,7 +77,11 @@ test('normalize', () => {
             "k": {
               "type": "string"
             }
-          }
+          },
+          "primaryKey": [
+            "i",
+            "k"
+          ]
         }
       }
     }"
