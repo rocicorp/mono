@@ -124,7 +124,7 @@ test('idbName generation with URL configuration', async () => {
           {},
         queryQueryParams: testCase.config.query?.queryParams ?? {},
       }),
-    ).toString()}`;
+    ).toString(36)}`;
 
     // The idbName should start with the expected prefix
     expect(zero.idbName, `Test case: ${testCase.name}`).toMatch(

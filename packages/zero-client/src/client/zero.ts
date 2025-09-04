@@ -576,7 +576,7 @@ export class Zero<
         options.mutate?.queryParams ?? options.push?.queryParams ?? {},
       queryQueryParams: options.query?.queryParams ?? {},
     });
-    const hashedKey = h64(nameKey).toString();
+    const hashedKey = h64(nameKey).toString(36);
 
     const replicacheOptions: ReplicacheOptions<WithCRUD<MutatorDefs>> = {
       // The schema stored in IDB is dependent upon both the ClientSchema
