@@ -54,6 +54,17 @@ beforeAll(async () => {
   issueQuery = newQuery(queryDelegate, schema, 'issue');
 });
 
+test.only('flip', async () => {
+  const q = issueQuery
+    .whereExists('comments', q => q.where('authorId', '=', 'user1'), {
+      flip: true,
+    })
+    .related('comments');
+
+  const data = await q;
+  console.log(data);
+});
+
 test('discord report https://discord.com/channels/830183651022471199/1347550174968287233/1347552521865920616', () => {
   /**
    The discord query:

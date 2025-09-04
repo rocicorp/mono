@@ -8,10 +8,20 @@ await runBenchmarks(
   {
     suiteName: 'chinook_bench_hydrate',
     type: 'hydration',
+    only: 'flip',
     pgContent,
     zqlSchema: schema,
   },
   [
+    {
+      name: 'flip',
+      createQuery: q =>
+        q.track.whereExists(
+          'album',
+          a => a.where('title', 'Let There Be Rock'),
+          {flip: true},
+        ),
+    },
     {
       name: '(table scan) select * from album',
       createQuery: q => q.album,
