@@ -24,22 +24,22 @@ test('idbName generation with URL configuration', async () => {
     {
       name: 'basic mutate and query URLs',
       config: {
-        mutate: {url: 'https://example.com/mutate'},
-        query: {url: 'https://example.com/query'},
+        mutateURL: 'https://example.com/mutate',
+        getQueriesURL: 'https://example.com/query',
       },
     },
     {
       name: 'different mutate URL',
       config: {
-        mutate: {url: 'https://different.com/mutate'},
-        query: {url: 'https://example.com/query'},
+        mutateURL: 'https://different.com/mutate',
+        getQueriesURL: 'https://example.com/query',
       },
     },
     {
       name: 'different query URL',
       config: {
-        mutate: {url: 'https://example.com/mutate'},
-        query: {url: 'https://different.com/query'},
+        mutateURL: 'https://example.com/mutate',
+        getQueriesURL: 'https://different.com/query',
       },
     },
     {
@@ -47,55 +47,22 @@ test('idbName generation with URL configuration', async () => {
       config: {},
     },
     {
-      name: 'legacy push parameter',
+      name: 'only mutate URL provided',
       config: {
-        push: {url: 'https://example.com/mutate'},
-        query: {url: 'https://example.com/query'},
+        mutateURL: 'https://example.com/mutate',
       },
     },
     {
-      name: 'mutate takes precedence over push',
+      name: 'only query URL provided',
       config: {
-        push: {url: 'https://push.com/mutate'},
-        mutate: {url: 'https://mutate.com/mutate'},
-        query: {url: 'https://example.com/query'},
-      },
-    },
-    {
-      name: 'explicit undefined parameters',
-      config: {
-        mutate: undefined,
-        query: undefined,
-      },
-    },
-    {
-      name: 'with mutate query parameters',
-      config: {
-        mutate: {
-          url: 'https://example.com/mutate',
-          queryParams: {apiKey: 'test123', version: 'v2'},
-        },
-        query: {url: 'https://example.com/query'},
-      },
-    },
-    {
-      name: 'with query parameters for both mutate and query',
-      config: {
-        mutate: {
-          url: 'https://example.com/mutate',
-          queryParams: {apiKey: 'mutate123'},
-        },
-        query: {
-          url: 'https://example.com/query',
-          queryParams: {apiKey: 'query456', format: 'json'},
-        },
+        getQueriesURL: 'https://example.com/query',
       },
     },
     {
       name: 'different storage key produces different hash',
       config: {
-        mutate: {url: 'https://example.com/mutate'},
-        query: {url: 'https://example.com/query'},
+        mutateURL: 'https://example.com/mutate',
+        getQueriesURL: 'https://example.com/query',
       },
       storageKey: 'different-storage-key',
     },
@@ -115,14 +82,8 @@ test('idbName generation with URL configuration', async () => {
     const expectedName = `rep:zero-${userID}-${h64(
       JSON.stringify({
         storageKey: testStorageKey,
-        mutateUrl:
-          testCase.config.mutate?.url ?? testCase.config.push?.url ?? '',
-        queryUrl: testCase.config.query?.url ?? '',
-        mutateQueryParams:
-          testCase.config.mutate?.queryParams ??
-          testCase.config.push?.queryParams ??
-          {},
-        queryQueryParams: testCase.config.query?.queryParams ?? {},
+        mutateUrl: testCase.config.mutateURL ?? '',
+        queryUrl: testCase.config.getQueriesURL ?? '',
       }),
     ).toString(36)}`;
 

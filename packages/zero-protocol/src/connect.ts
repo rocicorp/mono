@@ -21,30 +21,14 @@ export const connectedMessageSchema = v.tuple([
   connectedBodySchema,
 ]);
 
-const userQueryMutateParamsSchema = v.object({
-  /**
-   * A client driven URL to send queries or mutations to.
-   * This URL must match one of the URLs set in the zero config.
-   *
-   * E.g., Given the following environment variable:
-   * ZERO_GET_QUERIES_URL=[https://*.example.com/query]
-   *
-   * Then this URL could be:
-   * https://myapp.example.com/query
-   */
-  url: v.string().optional(),
-  // The query string to use for query or mutation calls.
-  queryParams: v.record(v.string()).optional(),
-});
-
 const initConnectionBodySchema = v.object({
   desiredQueriesPatch: upQueriesPatchSchema,
   clientSchema: clientSchemaSchema.optional(),
   deleted: deleteClientsBodySchema.optional(),
   // parameters to configure the mutate endpoint
-  userPushParams: userQueryMutateParamsSchema.optional(),
+  userPushURL: v.string().optional(),
   // parameters to configure the query endpoint
-  userQueryParams: userQueryMutateParamsSchema.optional(),
+  userQueryURL: v.string().optional(),
 
   /**
    * `activeClients` is an optional array of client IDs that are currently active
@@ -62,9 +46,6 @@ export const initConnectionMessageSchema = v.tuple([
 
 export type ConnectedBody = v.Infer<typeof connectedBodySchema>;
 export type ConnectedMessage = v.Infer<typeof connectedMessageSchema>;
-export type UserMutateParams = v.Infer<typeof userQueryMutateParamsSchema>;
-export type UserQueryParams = v.Infer<typeof userQueryMutateParamsSchema>;
-
 export type InitConnectionBody = v.Infer<typeof initConnectionBodySchema>;
 export type InitConnectionMessage = v.Infer<typeof initConnectionMessageSchema>;
 

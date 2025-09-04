@@ -2,10 +2,6 @@ import type {LogLevel} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import * as v from '../../../shared/src/valita.ts';
-import type {
-  UserMutateParams,
-  UserQueryParams,
-} from '../../../zero-protocol/src/connect.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {OnError} from './on-error.ts';
@@ -102,18 +98,16 @@ export interface ZeroOptions<
   mutators?: MD | undefined;
 
   /**
-   * Custom mutations are pushed to zero-cache and then to
-   * your API server.
-   *
-   * push.queryParams can be used to augment the URL
-   * used to connect to your API server so it includes
-   * variables in the query string.
-   *
-   * DEPRECATED: Use `userMutateParams` instead.
+   * Custom URL for mutation requests sent to your API server.
+   * If not provided, uses the default configured in zero-cache.
    */
-  push?: UserMutateParams | undefined;
-  mutate?: UserMutateParams | undefined;
-  query?: UserQueryParams | undefined;
+  mutateURL?: string | undefined;
+
+  /**
+   * Custom URL for query requests sent to your API server.
+   * If not provided, uses the default configured in zero-cache.
+   */
+  getQueriesURL?: string | undefined;
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes.

@@ -4,7 +4,6 @@ import {assert} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import * as v from '../../../../shared/src/valita.ts';
-import type {UserMutateParams} from '../../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {
@@ -38,7 +37,7 @@ export interface Pusher extends RefCountedService {
   initConnection(
     clientID: string,
     wsID: string,
-    userPushParams: UserMutateParams | undefined,
+    userPushURL: string | undefined,
   ): Source<Downstream>;
   enqueuePush(
     clientID: string,
@@ -103,9 +102,9 @@ export class PusherService implements Service, Pusher {
   initConnection(
     clientID: string,
     wsID: string,
-    userPushParams: UserMutateParams | undefined,
+    userPushURL: string | undefined,
   ) {
-    return this.#pusher.initConnection(clientID, wsID, userPushParams);
+    return this.#pusher.initConnection(clientID, wsID, userPushURL);
   }
 
   enqueuePush(
@@ -192,7 +191,7 @@ class PushWorker {
       downstream: Subscription<Downstream>;
     }
   >;
-  #clientGroupUserParams?: UserMutateParams | undefined;
+  #userPushURL?: string | undefined;
 
   readonly #customMutations = getOrCreateCounter(
     'mutation',
@@ -231,7 +230,7 @@ class PushWorker {
   initConnection(
     clientID: string,
     wsID: string,
-    userParams: UserMutateParams | undefined,
+    userPushURL: string | undefined,
   ) {
     const existing = this.#clients.get(clientID);
     if (existing && existing.wsID === wsID) {
@@ -245,20 +244,18 @@ class PushWorker {
     }
 
     // Handle client group level URL parameters
-    if (this.#clientGroupUserParams === undefined) {
-      // First client in the group - store its parameters
-      this.#clientGroupUserParams = userParams;
+    if (this.#userPushURL === undefined) {
+      // First client in the group - store its URL
+      this.#userPushURL = userPushURL;
     } else {
       // Validate that subsequent clients have compatible parameters
-      const clientGroupParams = JSON.stringify(this.#clientGroupUserParams);
-      const clientParams = JSON.stringify(userParams);
-      if (clientGroupParams !== clientParams) {
+      if (this.#userPushURL !== userPushURL) {
         this.#lc.error?.(
           'Client provided different mutate parameters than client group',
           {
             clientID,
-            clientParams: userParams,
-            clientGroupParams: this.#clientGroupUserParams,
+            clientURL: userPushURL,
+            clientGroupURL: this.#userPushURL,
           },
         );
       }
@@ -395,7 +392,7 @@ class PushWorker {
     recordMutation('custom', entry.push.mutations.length);
 
     const url =
-      this.#clientGroupUserParams?.url ??
+      this.#userPushURL ??
       must(this.#pushURLs[0], 'ZERO_MUTATE_URL is not set');
 
     this.#lc.debug?.(
@@ -420,7 +417,6 @@ class PushWorker {
           token: entry.jwt,
           cookie: entry.httpCookie,
         },
-        this.#clientGroupUserParams?.queryParams,
         entry.push,
       );
 
