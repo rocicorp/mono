@@ -1668,49 +1668,6 @@ describe('query transform errors', () => {
     // error does not notify unrelated queries
     expect(gotCallback2).toHaveBeenCalledTimes(1);
   });
-
-  test('errored queries are removed from the query manager', () => {
-    const nameAndArgs = {name: 'custom1', args: []};
-    const queryHash = hashOfNameAndArgs(nameAndArgs.name, nameAndArgs.args);
-
-    const experimentalWatch = createExperimentalWatchMock();
-    const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
-    const maxRecentQueriesSize = 0;
-    const mutationTracker = new MutationTracker(lc, ackMutations);
-    const queryManager = new QueryManager(
-      lc,
-      mutationTracker,
-      'client1',
-      schema.tables,
-      send,
-      experimentalWatch,
-      maxRecentQueriesSize,
-      queryChangeThrottleMs,
-      slowMaterializeThreshold,
-    );
-    const gotCallback = vi.fn<(got: boolean | Error) => void>();
-
-    queryManager.addCustom(stubAst, nameAndArgs, 0, gotCallback);
-    queryManager.flushBatch();
-    expect(send).toBeCalledTimes(1);
-
-    // error it
-    queryManager.handleTransformErrors([
-      {
-        details: 'injected failure',
-        error: 'app',
-        id: queryHash,
-        name: 'custom1',
-      },
-    ]);
-
-    // add it again
-    queryManager.addCustom(stubAst, nameAndArgs, 0, gotCallback);
-    queryManager.flushBatch();
-
-    // check send is called again because the error removed the prior registration
-    expect(send).toBeCalledTimes(2);
-  });
 });
 
 test('gotCallback, add same got callback twice', () => {

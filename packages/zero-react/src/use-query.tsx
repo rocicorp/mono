@@ -207,7 +207,10 @@ function getSnapshot<TReturn>(
     switch (resultType) {
       case 'error':
         if (error) {
-          break;
+          return [
+            emptyArray,
+            makeError(error),
+          ] as unknown as QueryResult<TReturn>;
         }
         return emptySnapshotErrorUnknown as unknown as QueryResult<TReturn>;
       case 'complete':
@@ -219,6 +222,10 @@ function getSnapshot<TReturn>(
 
   switch (resultType) {
     case 'error':
+      if (error) {
+        return [data, makeError(error)];
+      }
+      return [data, resultTypeError];
     case 'complete':
       return [data, resultTypeComplete];
     case 'unknown':
@@ -457,17 +464,11 @@ class ViewWrapper<
       resultType,
       error,
     );
-    if (resultType === 'complete') {
+    if (resultType === 'complete' || resultType === 'error') {
       this.#complete = true;
       this.#completeResolver.resolve();
       this.#nonEmpty = true;
       this.#nonEmptyResolver.resolve();
-    }
-    if (resultType === 'error') {
-      this.#complete = true;
-      this.#completeResolver.reject(error);
-      this.#nonEmpty = true;
-      this.#nonEmptyResolver.reject(error);
     }
 
     if (
