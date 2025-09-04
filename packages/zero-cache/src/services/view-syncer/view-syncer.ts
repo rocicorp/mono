@@ -21,7 +21,6 @@ import type {ChangeDesiredQueriesMessage} from '../../../../zero-protocol/src/ch
 import type {
   InitConnectionBody,
   InitConnectionMessage,
-  UserQueryParams,
 } from '../../../../zero-protocol/src/connect.ts';
 import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts';
 import type {DeleteClientsMessage} from '../../../../zero-protocol/src/delete-clients.ts';
@@ -164,7 +163,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #keepaliveMs: number;
   readonly #slowHydrateThreshold: number;
   readonly #queryConfig: ZeroConfig['getQueries'];
-  #clientGroupUserParams?: UserQueryParams | undefined;
+
+  userQueryURL?: string | undefined;
 
   // The ViewSyncerService is only started in response to a connection,
   // so #lastConnectTime is always initialized to now(). This is necessary
@@ -546,21 +546,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#httpCookie = httpCookie;
 
       // Handle client group level URL parameters
-      const [, {userQueryParams}] = initConnectionMessage;
-      if (this.#clientGroupUserParams === undefined) {
+      const [, {userQueryURL}] = initConnectionMessage;
+      if (this.userQueryURL === undefined) {
         // First client in the group - store its parameters
-        this.#clientGroupUserParams = userQueryParams;
+        this.userQueryURL = userQueryURL;
       } else {
         // Validate that subsequent clients have compatible parameters
-        const clientGroupParams = JSON.stringify(this.#clientGroupUserParams);
-        const clientParams = JSON.stringify(userQueryParams);
-        if (clientGroupParams !== clientParams) {
+        if (this.userQueryURL !== userQueryURL) {
           this.#lc.error?.(
             'Client provided different query parameters than client group',
             {
               clientID,
-              clientParams: userQueryParams,
-              clientGroupParams: this.#clientGroupUserParams,
+              clientURL: userQueryURL,
+              clientGroupURL: this.userQueryURL,
             },
           );
         }
@@ -1047,7 +1045,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               : undefined,
           },
           filteredCustomQueries,
-          this.#clientGroupUserParams,
+          this.userQueryURL,
         );
 
       this.#processTransformedCustomQueries(
@@ -1279,7 +1277,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               cookie: this.#httpCookie,
             },
             filteredCustomQueries,
-            this.#clientGroupUserParams,
+            this.userQueryURL,
           );
 
         erroredQueries = this.#processTransformedCustomQueries(

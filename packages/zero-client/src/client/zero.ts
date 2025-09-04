@@ -35,11 +35,7 @@ import {Subscribable} from '../../../shared/src/subscribable.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
-import type {
-  ConnectedMessage,
-  UserMutateParams,
-  UserQueryParams,
-} from '../../../zero-protocol/src/connect.ts';
+import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
 import type {DeleteClientsBody} from '../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
@@ -570,11 +566,8 @@ export class Zero<
     // Create a hash that includes storage key, URL configuration, and query parameters
     const nameKey = JSON.stringify({
       storageKey: this.storageKey,
-      mutateUrl: options.mutate?.url ?? options.push?.url ?? '',
-      queryUrl: options.query?.url ?? '',
-      mutateQueryParams:
-        options.mutate?.queryParams ?? options.push?.queryParams ?? {},
-      queryQueryParams: options.query?.queryParams ?? {},
+      mutateUrl: options.mutateURL ?? '',
+      queryUrl: options.getQueriesURL ?? '',
     });
     const hashedKey = h64(nameKey).toString(36);
 
@@ -1254,8 +1247,8 @@ export class Zero<
           // The clientSchema only needs to be sent for the very first request.
           // Henceforth it is stored with the CVR and verified automatically.
           ...(this.#connectCookie === null ? {clientSchema} : {}),
-          userPushParams: this.#options.mutate ?? this.#options.push,
-          userQueryParams: this.#options.query,
+          userPushURL: this.#options.mutateURL,
+          userQueryURL: this.#options.getQueriesURL,
         },
       ]);
       this.#deletedClients = undefined;
@@ -1350,8 +1343,8 @@ export class Zero<
       wsid,
       this.#options.logLevel === 'debug',
       lc,
-      this.#options.mutate ?? this.#options.push,
-      this.#options.query,
+      this.#options.mutateURL,
+      this.#options.getQueriesURL,
       this.#options.maxHeaderLength,
       additionalConnectParams,
       await this.#activeClientsManager,
@@ -2083,8 +2076,8 @@ export async function createSocket(
   wsid: string,
   debugPerf: boolean,
   lc: ZeroLogContext,
-  userPushParams: UserMutateParams | undefined,
-  userQueryParams: UserQueryParams | undefined,
+  userPushURL: string | undefined,
+  userQueryURL: string | undefined,
   maxHeaderLength = 1024 * 8,
   additionalConnectParams: Record<string, string> | undefined,
   activeClientsManager: Pick<ActiveClientsManager, 'activeClients'>,
@@ -2143,8 +2136,8 @@ export async function createSocket(
         // The clientSchema only needs to be sent for the very first request.
         // Henceforth it is stored with the CVR and verified automatically.
         ...(baseCookie === null ? {clientSchema} : {}),
-        userPushParams,
-        userQueryParams,
+        userPushURL,
+        userQueryURL,
         activeClients: [...activeClients],
       },
     ],

@@ -154,7 +154,6 @@ describe('CustomQueryTransformer', () => {
       [pullUrl],
       mockShard,
       headerOptions,
-      undefined,
       [
         'transform',
         [
@@ -390,7 +389,6 @@ describe('CustomQueryTransformer', () => {
       ['https://api.example.com/pull'],
       mockShard,
       headerOptions,
-      undefined,
       ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
     );
 
@@ -407,7 +405,6 @@ describe('CustomQueryTransformer', () => {
       [pullUrl],
       mockShard,
       headerOptions,
-      undefined,
       [
         'transform',
         [{id: 'query2', name: 'getPostsByUser', args: ['user123', 10]}],
@@ -453,7 +450,6 @@ describe('CustomQueryTransformer', () => {
       [pullUrl],
       mockShard,
       headerOptions, // Cookies should not be forwarded
-      undefined,
       ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
     );
     expect(result).toEqual([transformResults[0]]);
@@ -494,7 +490,6 @@ describe('CustomQueryTransformer', () => {
       [pullUrl],
       mockShard,
       {...headerOptions, cookie: 'test-cookie'}, // Cookies should be forwarded
-      undefined,
       ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
     );
     expect(result).toEqual([transformResults[0]]);
@@ -595,7 +590,7 @@ describe('CustomQueryTransformer', () => {
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
   });
 
-  test('should use custom URL when userQueryParams.url is provided', async () => {
+  test('should use custom URL when userQueryURL is provided', async () => {
     const customUrl = 'https://custom-api.example.com/transform';
     const defaultUrl = 'https://default-api.example.com/transform';
 
@@ -619,15 +614,12 @@ describe('CustomQueryTransformer', () => {
       mockShard,
     );
 
-    const userQueryParams = {
-      url: customUrl,
-      queryParams: {workspace: '1'},
-    };
+    const userQueryURL = customUrl;
 
     await transformer.transform(
       headerOptions,
       [mockQueries[0]],
-      userQueryParams,
+      userQueryURL,
     );
 
     // Verify custom URL was used instead of default
@@ -637,104 +629,11 @@ describe('CustomQueryTransformer', () => {
       [defaultUrl, customUrl],
       mockShard,
       headerOptions,
-      {workspace: '1'},
       ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
     );
   });
 
-  test('should add query parameters from userQueryParams.queryParams', async () => {
-    const pullUrl = 'https://api.example.com/transform';
-
-    const mockSuccessResponse = () =>
-      new Response(
-        JSON.stringify([
-          'transformed',
-          [mockQueryResponses[0]],
-        ] satisfies TransformResponseMessage),
-        {status: 200},
-      );
-
-    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
-
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {
-        url: [pullUrl],
-        forwardCookies: false,
-      },
-      mockShard,
-    );
-
-    const userQueryParams = {
-      queryParams: {workspace: '1', user: '2', version: 'v3'},
-    };
-
-    await transformer.transform(
-      headerOptions,
-      [mockQueries[0]],
-      userQueryParams,
-    );
-
-    // Verify query parameters were passed
-    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
-      lc,
-      pullUrl,
-      [pullUrl],
-      mockShard,
-      headerOptions,
-      {workspace: '1', user: '2', version: 'v3'},
-      ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
-    );
-  });
-
-  test('should use custom URL and query parameters together', async () => {
-    const customUrl = 'https://custom-api.example.com/transform';
-    const defaultUrl = 'https://default-api.example.com/transform';
-
-    const mockSuccessResponse = () =>
-      new Response(
-        JSON.stringify([
-          'transformed',
-          [mockQueryResponses[0]],
-        ] satisfies TransformResponseMessage),
-        {status: 200},
-      );
-
-    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
-
-    const transformer = new CustomQueryTransformer(
-      lc,
-      {
-        url: [defaultUrl, customUrl],
-        forwardCookies: false,
-      },
-      mockShard,
-    );
-
-    const userQueryParams = {
-      url: customUrl,
-      queryParams: {workspace: '1', apiVersion: '2'},
-    };
-
-    await transformer.transform(
-      headerOptions,
-      [mockQueries[0]],
-      userQueryParams,
-    );
-
-    // Verify both custom URL and query parameters were used
-    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
-      lc,
-      customUrl,
-      [defaultUrl, customUrl],
-      mockShard,
-      headerOptions,
-      {workspace: '1', apiVersion: '2'},
-      ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
-    );
-  });
-
-  test('should use default URL when userQueryParams is undefined', async () => {
+  test('should use default URL when userQueryURL is undefined', async () => {
     const defaultUrl = 'https://default-api.example.com/transform';
 
     const mockSuccessResponse = () =>
@@ -759,14 +658,13 @@ describe('CustomQueryTransformer', () => {
 
     await transformer.transform(headerOptions, [mockQueries[0]], undefined);
 
-    // Verify default URL and undefined queryParams were used
+    // Verify default URL was used
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
       lc,
       defaultUrl,
       [defaultUrl],
       mockShard,
       headerOptions,
-      undefined,
       ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
     );
   });
@@ -790,15 +688,12 @@ describe('CustomQueryTransformer', () => {
       mockShard,
     );
 
-    const userQueryParams = {
-      url: disallowedUrl,
-      queryParams: {workspace: '1'},
-    };
+    const userQueryURL = disallowedUrl;
 
     const result = await transformer.transform(
       headerOptions,
       [mockQueries[0]],
-      userQueryParams,
+      userQueryURL,
     );
 
     // Verify the disallowed URL caused an error
@@ -818,7 +713,6 @@ describe('CustomQueryTransformer', () => {
       [allowedUrl],
       mockShard,
       headerOptions,
-      {workspace: '1'},
       ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
     );
   });

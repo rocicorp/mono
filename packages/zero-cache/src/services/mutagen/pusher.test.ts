@@ -594,51 +594,6 @@ describe('initConnection', () => {
     });
   });
 
-  test('initConnection passes userPushParams to fetch', async () => {
-    const fetch = (global.fetch = vi.fn());
-    fetch.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve({mutations: []}),
-    });
-
-    const pusher = new PusherService(
-      mockDB,
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
-    void pusher.run();
-
-    const userPushParams = {
-      queryParams: {workspace: '1', user: '2', foo: 'bar'},
-    };
-
-    pusher.initConnection(clientID, wsID, userPushParams);
-    pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
-
-    // Wait for the push to be processed
-    await new Promise(resolve => setTimeout(resolve, 0));
-
-    // Verify the custom URL was used
-    expect(fetch.mock.calls[0][0]).toMatchInlineSnapshot(
-      `"http://example.com/?workspace=1&user=2&foo=bar&schema=zero_0&appID=zero"`,
-    );
-
-    // Verify the headers were passed through
-    expect(fetch.mock.calls[0][1]?.headers).toEqual({
-      'Content-Type': 'application/json',
-      'X-Api-Key': 'api-key',
-      // eslint-disable-next-line @typescript-eslint/naming-convention
-      'Authorization': 'Bearer jwt',
-    });
-
-    await pusher.stop();
-  });
 
   test('uses client custom URL when userParams.url is provided', async () => {
     const fetch = (global.fetch = vi.fn());
@@ -660,19 +615,16 @@ describe('initConnection', () => {
     );
     void pusher.run();
 
-    const userPushParams = {
-      url: 'http://custom.com/push',
-      queryParams: {workspace: '1'},
-    };
+    const userPushURL = 'http://custom.com/push';
 
-    pusher.initConnection(clientID, wsID, userPushParams);
+    pusher.initConnection(clientID, wsID, userPushURL);
     pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
 
     await new Promise(resolve => setTimeout(resolve, 0));
 
     // Verify custom URL was used instead of default
     expect(fetch.mock.calls[0][0]).toEqual(
-      'http://custom.com/push?workspace=1&schema=zero_0&appID=zero'
+      'http://custom.com/push?schema=zero_0&appID=zero'
     );
 
     await pusher.stop();
@@ -724,9 +676,7 @@ describe('initConnection', () => {
       'cgid',
     );
     void pusher.run();
-    const stream = pusher.initConnection(clientID, wsID, {
-      url: 'http://malicious.com/endpoint',
-    });
+    const stream = pusher.initConnection(clientID, wsID, 'http://malicious.com/endpoint');
 
     pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
 

@@ -28,10 +28,6 @@ describe('fetchFromAPIServer', () => {
     apiKey: 'test-api-key',
     token: 'test-token',
   };
-  const queryParams = {
-    param1: 'value1',
-    param2: 'value2',
-  };
   const body = {test: 'data'};
 
   beforeEach(() => {
@@ -50,7 +46,6 @@ describe('fetchFromAPIServer', () => {
       [baseUrl],
       mockShard,
       headerOptions,
-      queryParams,
       body,
     );
 
@@ -79,7 +74,6 @@ describe('fetchFromAPIServer', () => {
       [baseUrl],
       mockShard,
       {apiKey: 'my-key'},
-      undefined,
       body,
     );
 
@@ -103,7 +97,6 @@ describe('fetchFromAPIServer', () => {
       [baseUrl],
       mockShard,
       {token: 'my-token'},
-      undefined,
       body,
     );
 
@@ -128,7 +121,6 @@ describe('fetchFromAPIServer', () => {
       [baseUrl],
       mockShard,
       {},
-      undefined,
       body,
     );
 
@@ -138,27 +130,6 @@ describe('fetchFromAPIServer', () => {
     expect(headers).not.toHaveProperty('X-Api-Key');
     expect(headers).not.toHaveProperty('Authorization');
     expect(headers).toHaveProperty('Content-Type', 'application/json');
-  });
-
-  test('should append query parameters to URL', async () => {
-    const mockResponse = new Response('{}', {status: 200});
-    mockFetch.mockResolvedValue(mockResponse);
-
-    await fetchFromAPIServer(
-      lc,
-      baseUrl,
-      [baseUrl],
-      mockShard,
-      {},
-      queryParams,
-      body,
-    );
-
-    const calledUrl = mockFetch.mock.calls[0][0] as string;
-    const url = new URL(calledUrl);
-
-    expect(url.searchParams.get('param1')).toBe('value1');
-    expect(url.searchParams.get('param2')).toBe('value2');
   });
 
   test('should append required schema and appID parameters', async () => {
@@ -171,7 +142,6 @@ describe('fetchFromAPIServer', () => {
       [baseUrl],
       mockShard,
       {},
-      undefined,
       body,
     );
 
@@ -180,29 +150,6 @@ describe('fetchFromAPIServer', () => {
 
     expect(url.searchParams.get('schema')).toBe('test_app_1');
     expect(url.searchParams.get('appID')).toBe('test_app');
-  });
-
-  test('should handle URLs that already have query parameters', async () => {
-    const mockResponse = new Response('{}', {status: 200});
-    mockFetch.mockResolvedValue(mockResponse);
-    const urlWithParams = 'https://api.example.com/endpoint?existing=param';
-
-    await fetchFromAPIServer(
-      lc,
-      urlWithParams,
-      [baseUrl],
-      mockShard,
-      {},
-      queryParams,
-      body,
-    );
-
-    const calledUrl = mockFetch.mock.calls[0][0] as string;
-    const url = new URL(calledUrl);
-
-    expect(url.searchParams.get('existing')).toBe('param');
-    expect(url.searchParams.get('param1')).toBe('value1');
-    expect(url.searchParams.get('schema')).toBe('test_app_1');
   });
 
   test('should throw an error if URL contains reserved parameter "schema"', async () => {
@@ -215,7 +162,6 @@ describe('fetchFromAPIServer', () => {
         [baseUrl],
         mockShard,
         {},
-        undefined,
         body,
       ),
     ).rejects.toThrow(
@@ -233,43 +179,6 @@ describe('fetchFromAPIServer', () => {
         [baseUrl],
         mockShard,
         {},
-        undefined,
-        body,
-      ),
-    ).rejects.toThrow(
-      'The push URL cannot contain the reserved query param "appID"',
-    );
-  });
-
-  test('should throw an error if query params contain reserved parameter "schema"', async () => {
-    const reservedQueryParams = {schema: 'reserved'};
-
-    await expect(
-      fetchFromAPIServer(
-        lc,
-        baseUrl,
-        [baseUrl],
-        mockShard,
-        {},
-        reservedQueryParams,
-        body,
-      ),
-    ).rejects.toThrow(
-      'The push URL cannot contain the reserved query param "schema"',
-    );
-  });
-
-  test('should throw an error if query params contain reserved parameter "appID"', async () => {
-    const reservedQueryParams = {appID: 'reserved'};
-
-    await expect(
-      fetchFromAPIServer(
-        lc,
-        baseUrl,
-        [baseUrl],
-        mockShard,
-        {},
-        reservedQueryParams,
         body,
       ),
     ).rejects.toThrow(
@@ -289,7 +198,6 @@ describe('fetchFromAPIServer', () => {
       [baseUrl],
       mockShard,
       {},
-      undefined,
       body,
     );
 
@@ -304,7 +212,7 @@ describe('fetchFromAPIServer', () => {
     mockFetch.mockResolvedValueOnce(mockResponse1);
 
     await expect(
-      fetchFromAPIServer(lc, baseUrl, [baseUrl], mockShard, {}, undefined, body),
+      fetchFromAPIServer(lc, baseUrl, [baseUrl], mockShard, {}, body),
     ).rejects.toThrow(ErrorForClient);
 
     // Second call - test the error details
@@ -318,7 +226,6 @@ describe('fetchFromAPIServer', () => {
         [baseUrl],
         mockShard,
         {},
-        undefined,
         body,
       );
     } catch (error) {
@@ -339,32 +246,10 @@ describe('fetchFromAPIServer', () => {
       [baseUrl],
       mockShard,
       {},
-      undefined,
       body,
     );
 
     expect(result).toBe(mockResponse);
-  });
-
-  test('should handle empty query params', async () => {
-    const mockResponse = new Response('{}', {status: 200});
-    mockFetch.mockResolvedValue(mockResponse);
-
-    await fetchFromAPIServer(
-      lc,
-      baseUrl,
-      [baseUrl],
-      mockShard,
-      {},
-      undefined,
-      body,
-    );
-
-    const calledUrl = mockFetch.mock.calls[0][0] as string;
-    const url = new URL(calledUrl);
-
-    expect(url.searchParams.get('schema')).toBe('test_app_1');
-    expect(url.searchParams.get('appID')).toBe('test_app');
   });
 
   test('should stringify body as JSON', async () => {
@@ -383,7 +268,6 @@ describe('fetchFromAPIServer', () => {
       [baseUrl],
       mockShard,
       {},
-      undefined,
       complexBody,
     );
 

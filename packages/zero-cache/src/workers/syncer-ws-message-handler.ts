@@ -188,7 +188,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
             stream: this.#pusher.initConnection(
               this.#syncContext.clientID,
               this.#syncContext.wsID,
-              msg[1].userPushParams,
+              msg[1].userPushURL,
             ),
           });
         }

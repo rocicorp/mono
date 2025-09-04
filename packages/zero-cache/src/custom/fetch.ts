@@ -18,13 +18,11 @@ export async function fetchFromAPIServer(
   allowedUrls: string[],
   shard: ShardID,
   headerOptions: HeaderOptions,
-  queryParams: Record<string, string> | undefined,
   body: ReadonlyJSONValue,
 ) {
   lc.info?.('fetchFromAPIServer called', {
     url,
     allowedUrls,
-    queryParams,
   });
   
   if (!urlMatch(url, allowedUrls)) {
@@ -48,9 +46,6 @@ export async function fetchFromAPIServer(
 
   const urlObj = new URL(url);
   const params = new URLSearchParams(urlObj.search);
-  for (const [key, value] of Object.entries(queryParams ?? {})) {
-    params.append(key, value);
-  }
 
   for (const reserved of reservedParams) {
     assert(
