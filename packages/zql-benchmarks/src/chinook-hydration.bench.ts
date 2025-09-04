@@ -19,7 +19,7 @@ await runBenchmarks(
         q.track.whereExists(
           'album',
           a => a.where('title', 'Let There Be Rock'),
-          {flip: true},
+          {root: true},
         ),
     },
     {
