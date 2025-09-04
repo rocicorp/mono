@@ -576,4 +576,172 @@ describe('CustomQueryTransformer', () => {
     await transformer.transform(headerOptions, [mockQueries[0]], undefined);
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
   });
+
+  test('should use custom URL when userQueryParams.url is provided', async () => {
+    const customUrl = 'https://custom-api.example.com/transform';
+    const defaultUrl = 'https://default-api.example.com/transform';
+
+    const mockSuccessResponse = () =>
+      new Response(
+        JSON.stringify([
+          'transformed',
+          [mockQueryResponses[0]],
+        ] satisfies TransformResponseMessage),
+        {status: 200},
+      );
+
+    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
+
+    const transformer = new CustomQueryTransformer(
+      {
+        url: [defaultUrl, customUrl],
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+
+    const userQueryParams = {
+      url: customUrl,
+      queryParams: {workspace: '1'},
+    };
+
+    await transformer.transform(
+      headerOptions,
+      [mockQueries[0]],
+      userQueryParams,
+    );
+
+    // Verify custom URL was used instead of default
+    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      customUrl,
+      [defaultUrl, customUrl],
+      mockShard,
+      headerOptions,
+      {workspace: '1'},
+      ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
+    );
+  });
+
+  test('should add query parameters from userQueryParams.queryParams', async () => {
+    const pullUrl = 'https://api.example.com/transform';
+
+    const mockSuccessResponse = () =>
+      new Response(
+        JSON.stringify([
+          'transformed',
+          [mockQueryResponses[0]],
+        ] satisfies TransformResponseMessage),
+        {status: 200},
+      );
+
+    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
+
+    const transformer = new CustomQueryTransformer(
+      {
+        url: [pullUrl],
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+
+    const userQueryParams = {
+      queryParams: {workspace: '1', user: '2', version: 'v3'},
+    };
+
+    await transformer.transform(
+      headerOptions,
+      [mockQueries[0]],
+      userQueryParams,
+    );
+
+    // Verify query parameters were passed
+    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      pullUrl,
+      [pullUrl],
+      mockShard,
+      headerOptions,
+      {workspace: '1', user: '2', version: 'v3'},
+      ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
+    );
+  });
+
+  test('should use custom URL and query parameters together', async () => {
+    const customUrl = 'https://custom-api.example.com/transform';
+    const defaultUrl = 'https://default-api.example.com/transform';
+
+    const mockSuccessResponse = () =>
+      new Response(
+        JSON.stringify([
+          'transformed',
+          [mockQueryResponses[0]],
+        ] satisfies TransformResponseMessage),
+        {status: 200},
+      );
+
+    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
+
+    const transformer = new CustomQueryTransformer(
+      {
+        url: [defaultUrl, customUrl],
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+
+    const userQueryParams = {
+      url: customUrl,
+      queryParams: {workspace: '1', apiVersion: '2'},
+    };
+
+    await transformer.transform(
+      headerOptions,
+      [mockQueries[0]],
+      userQueryParams,
+    );
+
+    // Verify both custom URL and query parameters were used
+    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      customUrl,
+      [defaultUrl, customUrl],
+      mockShard,
+      headerOptions,
+      {workspace: '1', apiVersion: '2'},
+      ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
+    );
+  });
+
+  test('should use default URL when userQueryParams is undefined', async () => {
+    const defaultUrl = 'https://default-api.example.com/transform';
+
+    const mockSuccessResponse = () =>
+      new Response(
+        JSON.stringify([
+          'transformed',
+          [mockQueryResponses[0]],
+        ] satisfies TransformResponseMessage),
+        {status: 200},
+      );
+
+    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
+
+    const transformer = new CustomQueryTransformer(
+      {
+        url: [defaultUrl],
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+
+    await transformer.transform(headerOptions, [mockQueries[0]], undefined);
+
+    // Verify default URL and undefined queryParams were used
+    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      defaultUrl,
+      [defaultUrl],
+      mockShard,
+      headerOptions,
+      undefined,
+      ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
+    );
+  });
 });
