@@ -112,7 +112,15 @@ export function buildPipeline(
   // Apply mapAst if provided
   const mappedAst = delegate.mapAst ? delegate.mapAst(ast) : ast;
 
-  const flipped = transformFlippedExists(mappedAst);
+  const source = delegate.getSource(mappedAst.table);
+  const connection = source?.connect(mappedAst.orderBy ?? []);
+  const rootSchema = connection?.getSchema();
+  connection?.destroy();
+
+  const flipped = transformFlippedExists(
+    mappedAst,
+    must(rootSchema, 'root schema must be defined'),
+  );
   const uniquifiedAst = uniquifyCorrelatedSubqueryConditionAliases(
     flipped?.transformedAst ?? mappedAst,
   );
@@ -140,11 +148,6 @@ export function buildPipeline(
       path !== null,
       'A path to root was not found but we did join flipping. It must be found',
     );
-
-    const source = delegate.getSource(mappedAst.table);
-    const connection = source?.connect(mappedAst.orderBy ?? []);
-    const rootSchema = connection?.getSchema();
-    connection?.destroy();
 
     const extract = new ExtractMatchingKeys({
       input: pipeline,

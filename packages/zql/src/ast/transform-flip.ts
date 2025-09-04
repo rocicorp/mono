@@ -8,6 +8,7 @@ import type {
   Bound,
   Correlation,
 } from '../../../zero-protocol/src/ast.js';
+import type {SourceSchema} from '../ivm/schema.ts';
 
 export type ExtractedRootProperties = {
   orderBy?: Ordering | undefined;
@@ -41,7 +42,10 @@ type ChainNode = {
  * Transforms an AST with flipped EXISTS conditions.
  * Handles any depth of nested flips by extracting the chain and rebuilding.
  */
-export function transformFlippedExists(ast: AST): TransformResult | null {
+export function transformFlippedExists(
+  ast: AST,
+  rootSchema: SourceSchema,
+): TransformResult | null {
   // Extract the chain of flipped EXISTS
   const chain = extractFlipChain(ast);
 
@@ -50,7 +54,7 @@ export function transformFlippedExists(ast: AST): TransformResult | null {
   }
 
   // Rebuild the AST from the deepest node as the new root
-  const transformedAst = rebuildFromChain(chain);
+  const transformedAst = rebuildFromChain(chain, rootSchema);
 
   // Extract properties from the original root
   const originalRoot = chain.find(node => node.isOriginalRoot);
@@ -127,7 +131,7 @@ function extractFlipChain(ast: AST): ChainNode[] | null {
 /**
  * Rebuilds the AST from the chain, making the deepest node the new root.
  */
-function rebuildFromChain(chain: ChainNode[]): AST {
+function rebuildFromChain(chain: ChainNode[], rootSchema: SourceSchema): AST {
   if (chain.length === 0) {
     throw new Error('Cannot rebuild from empty chain');
   }
@@ -152,7 +156,15 @@ function rebuildFromChain(chain: ChainNode[]): AST {
       table: node.ast.table,
       alias: node.alias,
       where: node.remainingConditions,
-      ...(node.isOriginalRoot ? {wasRoot: true} : {}),
+      orderBy: node.ast.orderBy,
+      ...(node.isOriginalRoot
+        ? {
+            wasRoot: true,
+            orderBy: node.ast.orderBy?.filter(([field]) =>
+              rootSchema.primaryKey.includes(field),
+            ),
+          }
+        : {}),
     };
 
     // Invert the correlation (we're flipping the relationship)
