@@ -111,24 +111,33 @@ export function buildPipeline(
 ): Input {
   // Apply mapAst if provided
   const mappedAst = delegate.mapAst ? delegate.mapAst(ast) : ast;
+  return buildPipelineMaybeWithFlipping(mappedAst, delegate, queryID, '');
+}
 
-  const source = delegate.getSource(mappedAst.table);
-  const connection = source?.connect(mappedAst.orderBy ?? []);
+function buildPipelineMaybeWithFlipping(
+  ast: AST,
+  delegate: BuilderDelegate,
+  queryID: string,
+  name: string,
+  partitionKey?: CompoundKey | undefined,
+) {
+  const source = delegate.getSource(ast.table);
+  const connection = source?.connect(ast.orderBy ?? []);
   const rootSchema = connection?.getSchema();
   connection?.destroy();
 
   const flipped = transformFlippedExists(
-    mappedAst,
+    ast,
     must(rootSchema, 'root schema must be defined'),
   );
-  const uniquifiedAst = uniquifyCorrelatedSubqueryConditionAliases(
-    flipped?.transformedAst ?? mappedAst,
+  const flippedAndUniquedAst = uniqifyCorrelatedSubqueryConditionAliases(
+    flipped?.transformedAst ?? ast,
   );
 
   if (flipped && flipped.pathToRoot.length > 0) {
     const startingSplitEditKeys = new Set<string>();
-    if (mappedAst.related) {
-      for (const csq of mappedAst.related) {
+    if (ast.related) {
+      for (const csq of ast.related) {
         for (const key of csq.correlation.parentField) {
           startingSplitEditKeys.add(key);
         }
@@ -136,14 +145,14 @@ export function buildPipeline(
     }
 
     const pipeline = buildPipelineInternal(
-      uniquifiedAst,
+      flippedAndUniquedAst,
       delegate,
       queryID,
       '',
-      undefined,
+      partitionKey,
       startingSplitEditKeys,
     );
-    const path = findPathToRoot(uniquifiedAst);
+    const path = findPathToRoot(flippedAndUniquedAst);
     assert(
       path !== null,
       'A path to root was not found but we did join flipping. It must be found',
@@ -162,23 +171,22 @@ export function buildPipeline(
 
     let end: Input = reSort;
 
-    if (mappedAst.start) {
-      end = new Skip(end, mappedAst.start);
+    if (ast.start) {
+      end = new Skip(end, ast.start);
     }
 
-    if (mappedAst.limit !== undefined) {
-      const takeName = `${mappedAst.table}:take`;
+    if (ast.limit !== undefined) {
+      const takeName = `${ast.table}:take`;
       end = new Take(
         end,
         delegate.createStorage(takeName),
-        mappedAst.limit,
+        ast.limit,
         undefined,
       );
     }
 
-    if (mappedAst.related) {
-      for (const csq of mappedAst.related) {
-        // oops, need to do flippening here.
+    if (ast.related) {
+      for (const csq of ast.related) {
         end = applyCorrelatedSubQuery(csq, delegate, queryID, end, '', false);
       }
     }
@@ -186,7 +194,13 @@ export function buildPipeline(
     return end;
   }
 
-  return buildPipelineInternal(uniquifiedAst, delegate, queryID, '');
+  return buildPipelineInternal(
+    flippedAndUniquedAst,
+    delegate,
+    queryID,
+    name,
+    partitionKey,
+  );
 }
 
 export function bindStaticParameters(
@@ -504,13 +518,21 @@ function applyCorrelatedSubQuery(
 
   assert(sq.subquery.alias, 'Subquery must have an alias');
 
-  const child = buildPipelineInternal(
-    sq.subquery,
-    delegate,
-    queryID,
-    `${name}.${sq.subquery.alias}`,
-    sq.correlation.childField,
-  );
+  const child = fromCondition
+    ? buildPipelineInternal(
+        sq.subquery,
+        delegate,
+        queryID,
+        `${name}.${sq.subquery.alias}`,
+        sq.correlation.childField,
+      )
+    : buildPipelineMaybeWithFlipping(
+        sq.subquery,
+        delegate,
+        queryID,
+        `${name}.${sq.subquery.alias}`,
+        sq.correlation.childField,
+      );
   const joinName = `${name}:join(${sq.subquery.alias})`;
   const join = new Join({
     parent: end,
@@ -612,7 +634,7 @@ export function assertOrderingIncludesPK(
   }
 }
 
-function uniquifyCorrelatedSubqueryConditionAliases(ast: AST): AST {
+function uniqifyCorrelatedSubqueryConditionAliases(ast: AST): AST {
   // Process an entire AST recursively
   const processAST = (node: AST): AST => {
     // Process WHERE conditions in this AST node

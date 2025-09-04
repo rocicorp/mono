@@ -9,6 +9,7 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
+import {assert} from '../../../shared/src/asserts.ts';
 
 const mockDelegate = {} as QueryDelegate;
 
@@ -51,7 +52,6 @@ const testSchema = createSchema({
 });
 
 test('whereExists accepts flip option', () => {
-
   // Test with flip option
   const query = new QueryImpl(
     mockDelegate,
@@ -61,16 +61,15 @@ test('whereExists accepts flip option', () => {
     defaultFormat,
     undefined,
     undefined,
-  ).whereExists('posts', {flip: true});
+  ).whereExists('posts', {root: true});
 
-  const ast = query.ast;
+  const {ast} = query;
   expect(ast.where).toBeDefined();
-  expect(ast.where?.type).toBe('correlatedSubquery');
-  expect((ast.where as any).flip).toBe(true);
+  assert(ast.where?.type === 'correlatedSubquery');
+  expect(ast.where?.root).toBe(true);
 });
 
 test('whereExists with callback and flip option', () => {
-
   // Test with callback and flip option
   const query = new QueryImpl(
     mockDelegate,
@@ -80,16 +79,15 @@ test('whereExists with callback and flip option', () => {
     defaultFormat,
     undefined,
     undefined,
-  ).whereExists('posts', q => q, {flip: true});
+  ).whereExists('posts', q => q, {root: true});
 
-  const ast = query.ast;
+  const {ast} = query;
   expect(ast.where).toBeDefined();
-  expect(ast.where?.type).toBe('correlatedSubquery');
-  expect((ast.where as any).flip).toBe(true);
+  assert(ast.where?.type === 'correlatedSubquery');
+  expect(ast.where?.root).toBe(true);
 });
 
 test('exists in where clause with flip option', () => {
-
   // Test exists method with flip option
   const query = new QueryImpl(
     mockDelegate,
@@ -99,16 +97,15 @@ test('exists in where clause with flip option', () => {
     defaultFormat,
     undefined,
     undefined,
-  ).where(({exists}) => exists('posts', {flip: true}));
+  ).where(({exists}) => exists('posts', {root: true}));
 
-  const ast = query.ast;
+  const {ast} = query;
   expect(ast.where).toBeDefined();
-  expect(ast.where?.type).toBe('correlatedSubquery');
-  expect((ast.where as any).flip).toBe(true);
+  assert(ast.where?.type === 'correlatedSubquery');
+  expect(ast.where?.root).toBe(true);
 });
 
 test('exists with callback and flip option', () => {
-
   // Test exists with callback and flip option
   const query = new QueryImpl(
     mockDelegate,
@@ -118,10 +115,10 @@ test('exists with callback and flip option', () => {
     defaultFormat,
     undefined,
     undefined,
-  ).where(({exists}) => exists('posts', q => q, {flip: true}));
+  ).where(({exists}) => exists('posts', q => q, {root: true}));
 
-  const ast = query.ast;
+  const {ast} = query;
   expect(ast.where).toBeDefined();
-  expect(ast.where?.type).toBe('correlatedSubquery');
-  expect((ast.where as any).flip).toBe(true);
+  assert(ast.where?.type === 'correlatedSubquery');
+  expect(ast.where?.root).toBe(true);
 });
