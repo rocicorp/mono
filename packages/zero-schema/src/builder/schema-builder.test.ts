@@ -621,7 +621,7 @@ test('clientSchemaFrom', () => {
               }
             },
             "primaryKey": [
-              "id"
+              "comment_id"
             ]
           },
           "issues": {
@@ -661,7 +661,7 @@ test('clientSchemaFrom', () => {
           }
         }
       },
-      "hash": "3kmklq8wg87j5"
+      "hash": "lw7fbb20qmea"
     }"
   `);
 });
