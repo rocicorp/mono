@@ -545,7 +545,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
       this.#httpCookie = httpCookie;
 
-      // Handle client group level URL parameters
+      // Handle custom query URL
       const [, {userQueryURL}] = initConnectionMessage;
       if (this.userQueryURL === undefined) {
         // First client in the group - store its parameters

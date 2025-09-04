@@ -60,8 +60,6 @@ export async function fetchFromAPIServer(
   urlObj.search = params.toString();
 
   const finalUrl = urlObj.toString();
-  lc.info?.('Executing fetch', {finalUrl});
-
   const response = await fetch(finalUrl, {
     method: 'POST',
     headers,
