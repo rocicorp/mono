@@ -594,7 +594,6 @@ describe('initConnection', () => {
     });
   });
 
-
   test('uses client custom URL when userParams.url is provided', async () => {
     const fetch = (global.fetch = vi.fn());
     fetch.mockResolvedValue({
@@ -624,7 +623,7 @@ describe('initConnection', () => {
 
     // Verify custom URL was used instead of default
     expect(fetch.mock.calls[0][0]).toEqual(
-      'http://custom.com/push?schema=zero_0&appID=zero'
+      'http://custom.com/push?schema=zero_0&appID=zero',
     );
 
     await pusher.stop();
@@ -657,7 +656,7 @@ describe('initConnection', () => {
 
     // Verify default URL was used
     expect(fetch.mock.calls[0][0]).toEqual(
-      'http://default.com/?schema=zero_0&appID=zero'
+      'http://default.com/?schema=zero_0&appID=zero',
     );
 
     await pusher.stop();
@@ -676,7 +675,11 @@ describe('initConnection', () => {
       'cgid',
     );
     void pusher.run();
-    const stream = pusher.initConnection(clientID, wsID, 'http://malicious.com/endpoint');
+    const stream = pusher.initConnection(
+      clientID,
+      wsID,
+      'http://malicious.com/endpoint',
+    );
 
     pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
 
@@ -691,7 +694,9 @@ describe('initConnection', () => {
         'pushResponse',
         {
           error: 'zeroPusher',
-          details: expect.stringContaining('URL "http://malicious.com/endpoint" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration'),
+          details: expect.stringContaining(
+            'URL "http://malicious.com/endpoint" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration',
+          ),
           mutationIDs: [{clientID, id: 1}],
         },
       ],

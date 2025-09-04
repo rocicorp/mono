@@ -616,11 +616,7 @@ describe('CustomQueryTransformer', () => {
 
     const userQueryURL = customUrl;
 
-    await transformer.transform(
-      headerOptions,
-      [mockQueries[0]],
-      userQueryURL,
-    );
+    await transformer.transform(headerOptions, [mockQueries[0]], userQueryURL);
 
     // Verify custom URL was used instead of default
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(

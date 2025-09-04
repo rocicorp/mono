@@ -115,14 +115,7 @@ describe('fetchFromAPIServer', () => {
     const mockResponse = new Response('{}', {status: 200});
     mockFetch.mockResolvedValue(mockResponse);
 
-    await fetchFromAPIServer(
-      lc,
-      baseUrl,
-      [baseUrl],
-      mockShard,
-      {},
-      body,
-    );
+    await fetchFromAPIServer(lc, baseUrl, [baseUrl], mockShard, {}, body);
 
     const callArgs = mockFetch.mock.calls[0];
     const headers = callArgs[1]?.headers as Record<string, string>;
@@ -136,14 +129,7 @@ describe('fetchFromAPIServer', () => {
     const mockResponse = new Response('{}', {status: 200});
     mockFetch.mockResolvedValue(mockResponse);
 
-    await fetchFromAPIServer(
-      lc,
-      baseUrl,
-      [baseUrl],
-      mockShard,
-      {},
-      body,
-    );
+    await fetchFromAPIServer(lc, baseUrl, [baseUrl], mockShard, {}, body);
 
     const calledUrl = mockFetch.mock.calls[0][0] as string;
     const url = new URL(calledUrl);
@@ -156,14 +142,7 @@ describe('fetchFromAPIServer', () => {
     const urlWithReserved = 'https://api.example.com/endpoint?schema=reserved';
 
     await expect(
-      fetchFromAPIServer(
-        lc,
-        urlWithReserved,
-        [baseUrl],
-        mockShard,
-        {},
-        body,
-      ),
+      fetchFromAPIServer(lc, urlWithReserved, [baseUrl], mockShard, {}, body),
     ).rejects.toThrow(
       'The push URL cannot contain the reserved query param "schema"',
     );
@@ -173,14 +152,7 @@ describe('fetchFromAPIServer', () => {
     const urlWithReserved = 'https://api.example.com/endpoint?appID=reserved';
 
     await expect(
-      fetchFromAPIServer(
-        lc,
-        urlWithReserved,
-        [baseUrl],
-        mockShard,
-        {},
-        body,
-      ),
+      fetchFromAPIServer(lc, urlWithReserved, [baseUrl], mockShard, {}, body),
     ).rejects.toThrow(
       'The push URL cannot contain the reserved query param "appID"',
     );
@@ -220,14 +192,7 @@ describe('fetchFromAPIServer', () => {
     mockFetch.mockResolvedValueOnce(mockResponse2);
 
     try {
-      await fetchFromAPIServer(
-        lc,
-        baseUrl,
-        [baseUrl],
-        mockShard,
-        {},
-        body,
-      );
+      await fetchFromAPIServer(lc, baseUrl, [baseUrl], mockShard, {}, body);
     } catch (error) {
       expect(error).toBeInstanceOf(ErrorForClient);
       const errorForClient = error as ErrorForClient;
