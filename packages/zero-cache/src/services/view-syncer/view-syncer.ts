@@ -291,6 +291,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     if (pullConfig.url) {
       this.#customQueryTransformer = new CustomQueryTransformer(
+        this.#lc,
         {
           url: pullConfig.url,
           forwardCookies: pullConfig.forwardCookies,

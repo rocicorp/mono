@@ -408,6 +408,7 @@ class PushWorker {
 
     try {
       const response = await fetchFromAPIServer(
+        this.#lc,
         url,
         this.#pushURLs,
         {
