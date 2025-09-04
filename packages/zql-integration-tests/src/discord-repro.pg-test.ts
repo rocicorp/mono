@@ -57,7 +57,7 @@ beforeAll(async () => {
 test.only('flip', async () => {
   const q = issueQuery
     .whereExists('comments', q => q.where('authorId', '=', 'user1'), {
-      flip: true,
+      root: true,
     })
     .related('comments');
 

@@ -22,7 +22,7 @@ export type ParameterReference = {
 };
 
 export type ExistsOptions = {
-  flip?: boolean | undefined;
+  root?: boolean | undefined;
 };
 
 /**
@@ -122,17 +122,18 @@ export class ExpressionBuilder<
 
   exists = <TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
-    cbOrOptions?: 
-      | ((query: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>) => Query<TSchema, any>)
+    cbOrOptions?:
+      | ((
+          query: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
+        ) => Query<TSchema, any>)
       | ExistsOptions,
     options?: ExistsOptions,
   ): Condition => {
     // Handle overloads
     if (typeof cbOrOptions === 'function') {
       return this.#exists(relationship, cbOrOptions, options);
-    } else {
-      return this.#exists(relationship, undefined, cbOrOptions);
     }
+    return this.#exists(relationship, undefined, cbOrOptions);
   };
 }
 

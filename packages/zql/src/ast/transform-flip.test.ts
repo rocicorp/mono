@@ -1,9 +1,19 @@
 import {expect, test, describe} from 'vitest';
 import type {AST} from '../../../zero-protocol/src/ast.js';
 import {transformFlippedExists, findPathToRoot, type ASTWithRootMarker} from './transform-flip.js';
+import type {SourceSchema} from '../ivm/schema.js';
+
+const mockRootSchema: SourceSchema = {
+  tableName: 'users',
+  columns: {
+    id: {type: 'string'},
+    name: {type: 'string'},
+  },
+  primaryKey: ['id'],
+};
 
 describe('transformFlippedExists', () => {
-  test('transforms simple flipped EXISTS', () => {
+  test('transforms simple EXISTS with root: true', () => {
     const input: AST = {
       table: 'users',
       orderBy: [['name', 'asc']],
@@ -11,7 +21,7 @@ describe('transformFlippedExists', () => {
       where: {
         type: 'correlatedSubquery',
         op: 'EXISTS',
-        flip: true,
+        root: true,  // Mark that the subquery (orders) should be the root
         related: {
           subquery: {
             table: 'orders',
@@ -28,16 +38,17 @@ describe('transformFlippedExists', () => {
 
     const expectedAst: AST = {
       table: 'orders',
-      // alias removed at root level by nested transform
+      alias: undefined,
       where: {
         type: 'correlatedSubquery',
         op: 'EXISTS',
         related: {
           subquery: {
             table: 'users',
-            alias: 'users_flipped',  // Generated alias
+            alias: 'users',  // Original alias preserved
             wasRoot: true,
-            where: undefined,  // Nested transform adds explicit undefined
+            where: undefined,
+            orderBy: undefined,
           } as ASTWithRootMarker,
           correlation: {
             parentField: ['userId'],  // Inverted
@@ -53,11 +64,11 @@ describe('transformFlippedExists', () => {
       limit: 10,
     };
 
-    const result = transformFlippedExists(input);
+    const result = transformFlippedExists(input, mockRootSchema);
     expect(result).not.toBeNull();
     expect(result!.transformedAst).toEqual(expectedAst);
     expect(result!.extractedProperties).toEqual(expectedExtractedProperties);
-    expect(result!.pathToRoot).toEqual(['users_flipped']);
+    expect(result!.pathToRoot).toEqual(['users']);
   });
 
   test('handles flipped EXISTS with additional WHERE conditions', () => {
@@ -69,7 +80,7 @@ describe('transformFlippedExists', () => {
           {
             type: 'correlatedSubquery',
             op: 'EXISTS',
-            flip: true,
+            root: true,
             related: {
               subquery: {table: 'orders'},
               correlation: {
@@ -91,13 +102,14 @@ describe('transformFlippedExists', () => {
 
     const expectedAst: AST = {
       table: 'orders',
+      alias: undefined,
       where: {
         type: 'correlatedSubquery',
         op: 'EXISTS',
         related: {
           subquery: {
             table: 'users',
-            alias: 'users_flipped',
+            alias: 'users',
             wasRoot: true,
             where: {
               type: 'simple',
@@ -105,6 +117,7 @@ describe('transformFlippedExists', () => {
               op: '=',
               right: {type: 'literal', value: true},
             },
+            orderBy: undefined,
           } as ASTWithRootMarker,
           correlation: {
             parentField: ['userId'],
@@ -115,11 +128,11 @@ describe('transformFlippedExists', () => {
       },
     };
 
-    const result = transformFlippedExists(input);
+    const result = transformFlippedExists(input, mockRootSchema);
     expect(result).not.toBeNull();
     expect(result!.transformedAst).toEqual(expectedAst);
     expect(result!.extractedProperties).toEqual({});
-    expect(result!.pathToRoot).toEqual(['users_flipped']);
+    expect(result!.pathToRoot).toEqual(['users']);
   });
 
   test('preserves subquery WHERE conditions', () => {
@@ -129,7 +142,7 @@ describe('transformFlippedExists', () => {
       where: {
         type: 'correlatedSubquery',
         op: 'EXISTS',
-        flip: true,
+        root: true,
         related: {
           subquery: {
             table: 'orders',
@@ -151,6 +164,7 @@ describe('transformFlippedExists', () => {
 
     const expectedAst: AST = {
       table: 'orders',
+      alias: undefined,
       where: {
         type: 'and',
         conditions: [
@@ -166,8 +180,9 @@ describe('transformFlippedExists', () => {
             related: {
               subquery: {
                 table: 'users',
-                alias: 'users_flipped',
+                alias: 'users',
                 wasRoot: true,
+                orderBy: [['id', 'asc']],  // Filtered to primary key only
               } as ASTWithRootMarker,
               correlation: {
                 parentField: ['userId'],
@@ -180,13 +195,13 @@ describe('transformFlippedExists', () => {
       },
     };
 
-    const result = transformFlippedExists(input);
+    const result = transformFlippedExists(input, mockRootSchema);
     expect(result).not.toBeNull();
     expect(result!.transformedAst).toEqual(expectedAst);
     expect(result!.extractedProperties).toEqual({
       orderBy: [['id', 'asc']],
     });
-    expect(result!.pathToRoot).toEqual(['users_flipped']);
+    expect(result!.pathToRoot).toEqual(['users']);
   });
 
   test('returns null for non-flipped EXISTS', () => {
@@ -207,7 +222,7 @@ describe('transformFlippedExists', () => {
       },
     };
 
-    const result = transformFlippedExists(input);
+    const result = transformFlippedExists(input, mockRootSchema);
     expect(result).toBeNull();
   });
 
@@ -216,7 +231,7 @@ describe('transformFlippedExists', () => {
       table: 'users',
     };
 
-    const result = transformFlippedExists(input);
+    const result = transformFlippedExists(input, mockRootSchema);
     expect(result).toBeNull();
   });
 
@@ -229,7 +244,7 @@ describe('transformFlippedExists', () => {
           {
             type: 'correlatedSubquery',
             op: 'EXISTS',
-            flip: true,
+            root: true,
             related: {
               subquery: {table: 'orders'},
               correlation: {
@@ -249,7 +264,7 @@ describe('transformFlippedExists', () => {
       },
     };
 
-    const result = transformFlippedExists(input);
+    const result = transformFlippedExists(input, mockRootSchema);
     expect(result).toBeNull(); // Should not transform flips inside OR
   });
 
@@ -269,7 +284,7 @@ describe('transformFlippedExists', () => {
       where: {
         type: 'correlatedSubquery',
         op: 'EXISTS',
-        flip: true,
+        root: true,
         related: {
           subquery: {table: 'orders'},
           correlation: {
@@ -283,14 +298,16 @@ describe('transformFlippedExists', () => {
 
     const expectedAst: AST = {
       table: 'orders',
+      alias: undefined,
       where: {
         type: 'correlatedSubquery',
         op: 'EXISTS',
         related: {
           subquery: {
             table: 'users',
-            alias: 'users_flipped',
+            alias: 'users',
             wasRoot: true,
+            orderBy: undefined,
           } as ASTWithRootMarker,
           correlation: {
             parentField: ['userId'],
@@ -314,11 +331,11 @@ describe('transformFlippedExists', () => {
       ],
     };
 
-    const result = transformFlippedExists(input);
+    const result = transformFlippedExists(input, mockRootSchema);
     expect(result).not.toBeNull();
     expect(result!.transformedAst).toEqual(expectedAst);
     expect(result!.extractedProperties).toEqual(expectedExtractedProperties);
-    expect(result!.pathToRoot).toEqual(['users_flipped']);
+    expect(result!.pathToRoot).toEqual(['users']);
   });
 
   test('handles complex nested AND conditions', () => {
@@ -339,7 +356,7 @@ describe('transformFlippedExists', () => {
               {
                 type: 'correlatedSubquery',
                 op: 'EXISTS',
-                flip: true,
+                root: true,
                 related: {
                   subquery: {table: 'orders'},
                   correlation: {
@@ -363,14 +380,16 @@ describe('transformFlippedExists', () => {
 
     const expectedAst: AST = {
       table: 'orders',
+      alias: undefined,
       where: {
         type: 'correlatedSubquery',
         op: 'EXISTS',
         related: {
           subquery: {
             table: 'users',
-            alias: 'users_flipped',
+            alias: 'users',
             wasRoot: true,
+            orderBy: undefined,
             where: {
               type: 'and',
               conditions: [
@@ -398,11 +417,11 @@ describe('transformFlippedExists', () => {
       },
     };
 
-    const result = transformFlippedExists(input);
+    const result = transformFlippedExists(input, mockRootSchema);
     expect(result).not.toBeNull();
     expect(result!.transformedAst).toEqual(expectedAst);
     expect(result!.extractedProperties).toEqual({});
-    expect(result!.pathToRoot).toEqual(['users_flipped']);
+    expect(result!.pathToRoot).toEqual(['users']);
   });
 
   test('preserves existing alias when flipping', () => {
@@ -413,7 +432,7 @@ describe('transformFlippedExists', () => {
       where: {
         type: 'correlatedSubquery',
         op: 'EXISTS',
-        flip: true,
+        root: true,
         related: {
           subquery: {
             table: 'orders',
@@ -429,6 +448,7 @@ describe('transformFlippedExists', () => {
 
     const expectedAst: AST = {
       table: 'orders',
+      alias: undefined,
       where: {
         type: 'correlatedSubquery',
         op: 'EXISTS',
@@ -437,6 +457,7 @@ describe('transformFlippedExists', () => {
             table: 'users',
             alias: 'u',  // Preserved existing alias
             wasRoot: true,
+            orderBy: undefined,
           } as ASTWithRootMarker,
           correlation: {
             parentField: ['userId'],
@@ -447,7 +468,7 @@ describe('transformFlippedExists', () => {
       },
     };
 
-    const result = transformFlippedExists(input);
+    const result = transformFlippedExists(input, mockRootSchema);
     expect(result).not.toBeNull();
     expect(result!.transformedAst).toEqual(expectedAst);
     expect(result!.pathToRoot).toEqual(['u']);  // Uses existing alias in path
@@ -461,11 +482,11 @@ describe('transformFlippedExists', () => {
         row: {id: 10},
       },
       limit: 20,
-      orderBy: [['created', 'desc']],
+      orderBy: [['created', 'desc'], ['id', 'asc']],
       where: {
         type: 'correlatedSubquery',
         op: 'EXISTS',
-        flip: true,
+        root: true,
         related: {
           subquery: {
             table: 'orders',
@@ -489,8 +510,9 @@ describe('transformFlippedExists', () => {
         related: {
           subquery: {
             table: 'users',
-            alias: 'users_flipped',
+            alias: 'users',
             wasRoot: true,
+            orderBy: [['id', 'asc']],  // Filtered to primary key only
             // All presentation properties stripped
           } as ASTWithRootMarker,
           correlation: {
@@ -508,14 +530,14 @@ describe('transformFlippedExists', () => {
         row: {id: 10},
       },
       limit: 20,
-      orderBy: [['created', 'desc']],
+      orderBy: [['created', 'desc'], ['id', 'asc']],
     };
 
-    const result = transformFlippedExists(input);
+    const result = transformFlippedExists(input, mockRootSchema);
     expect(result).not.toBeNull();
     expect(result!.transformedAst).toEqual(expectedAst);
     expect(result!.extractedProperties).toEqual(expectedExtractedProperties);
-    expect(result!.pathToRoot).toEqual(['users_flipped']);
+    expect(result!.pathToRoot).toEqual(['users']);
   });
 });
 
@@ -529,8 +551,9 @@ describe('findPathToRoot', () => {
         related: {
           subquery: {
             table: 'users',
-            alias: 'users_flipped',
+            alias: 'users',
             wasRoot: true,
+            orderBy: undefined,
           } as ASTWithRootMarker,
           correlation: {
             parentField: ['userId'],
@@ -543,7 +566,7 @@ describe('findPathToRoot', () => {
 
     const path = findPathToRoot(ast);
     expect(path).not.toBeNull();
-    expect(path).toEqual(['users_flipped']);
+    expect(path).toEqual(['users']);
   });
 
   test('finds path in deeply nested structure', () => {

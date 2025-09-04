@@ -39,23 +39,30 @@ type ChainNode = {
 };
 
 /**
- * Transforms an AST with flipped EXISTS conditions.
- * Handles any depth of nested flips by extracting the chain and rebuilding.
+ * Transforms an AST where an EXISTS has root: true.
+ * Makes the subquery of that EXISTS the new root of the query.
  */
 export function transformFlippedExists(
   ast: AST,
   rootSchema: SourceSchema,
 ): TransformResult | null {
-  // Extract the chain of flipped EXISTS
-  const chain = extractFlipChain(ast);
-
-  if (!chain || chain.length === 0) {
+  // Find the EXISTS with root: true and build the path to it
+  const rootInfo = findRootMarkedExists(ast, [], ast);
+  
+  if (!rootInfo) {
     return null;
   }
-
-  // Rebuild the AST from the deepest node as the new root
+  
+  const {chain} = rootInfo;
+  
+  if (chain.length <= 1) {
+    // No transformation needed
+    return null;
+  }
+  
+  // Rebuild the AST from the marked root
   const transformedAst = rebuildFromChain(chain, rootSchema);
-
+  
   // Extract properties from the original root
   const originalRoot = chain.find(node => node.isOriginalRoot);
   const extractedProperties: ExtractedRootProperties = originalRoot
@@ -66,11 +73,10 @@ export function transformFlippedExists(
         related: originalRoot.ast.related,
       }
     : {};
-
+  
   // Build the path from the new root to the original root
-  // This is the sequence of aliases to traverse to find the original root
   const pathToRoot = buildPathToRoot(chain);
-
+  
   return {
     transformedAst,
     extractedProperties,
@@ -79,54 +85,117 @@ export function transformFlippedExists(
 }
 
 /**
- * Extracts the chain of tables involved in flipped EXISTS conditions.
- * Returns them in order from root to deepest.
+ * Finds an EXISTS condition with root: true and builds the chain to it.
+ * Returns the chain from the current root to the marked root.
  */
-function extractFlipChain(ast: AST): ChainNode[] | null {
-  const chain: ChainNode[] = [];
-  let current = ast;
-  let isFirst = true;
+function findRootMarkedExists(
+  current: AST, 
+  chain: ChainNode[],
+  originalRoot: AST,
+): {chain: ChainNode[]} | null {
+  if (!current.where) {
+    return null;
+  }
+  
+  // Search for root: true in the current level
+  const result = searchForRootInCondition(
+    current.where, 
+    current, 
+    chain,
+    chain.length === 0,
+    originalRoot,
+  );
+  
+  if (result) {
+    return result;
+  }
+  
+  return null;
+}
 
-  while (current) {
-    const flippedCondition = findFlippedExistsCondition(current.where);
-
-    if (!flippedCondition) {
-      // No more flips
-      if (chain.length === 0) {
-        // No flips at all
-        return null;
-      }
-      // Add the last non-flipped node (it becomes the new root)
+/**
+ * Recursively searches for a condition with root: true and builds chain.
+ */
+function searchForRootInCondition(
+  condition: Condition,
+  parentAST: AST,
+  currentChain: ChainNode[],
+  isOriginalRoot: boolean,
+  originalRoot: AST,
+): {chain: ChainNode[]} | null {
+  if (condition.type === 'correlatedSubquery') {
+    const nodeAlias = parentAST.alias || parentAST.table;
+    
+    if (condition.root === true) {
+      // Found it! Build the final chain
+      const chain = [...currentChain];
+      
+      // Add the parent node
       chain.push({
-        ast: current,
-        alias: current.alias || `${current.table}_leaf`,
+        ast: parentAST,
+        alias: nodeAlias,
+        correlation: condition.related.correlation,
+        remainingConditions: removeCondition(parentAST.where, condition),
+        isOriginalRoot,
+      });
+      
+      // Add the target node (the one that should become root)
+      chain.push({
+        ast: condition.related.subquery,
+        alias: condition.related.subquery.alias || condition.related.subquery.table,
         isOriginalRoot: false,
       });
-      break;
+      
+      return {chain};
     }
-
-    // Extract this level's info
-    const remainingConditions = removeCondition(
-      current.where,
-      flippedCondition,
-    );
-    const nodeAlias = current.alias || `${current.table}_flipped`;
-
-    chain.push({
-      ast: current,
-      alias: nodeAlias,
-      correlation: flippedCondition.related.correlation,
-      remainingConditions,
-      isOriginalRoot: isFirst,
-    });
-
-    // Move to the next level
-    current = flippedCondition.related.subquery;
-    isFirst = false;
+    
+    // Not marked as root, but search deeper
+    if (condition.related.subquery.where) {
+      // Build chain so far
+      const newChain = [...currentChain];
+      newChain.push({
+        ast: parentAST,
+        alias: nodeAlias,
+        correlation: condition.related.correlation,
+        remainingConditions: removeCondition(parentAST.where, condition),
+        isOriginalRoot,
+      });
+      
+      // Recursively search in the subquery
+      const result = searchForRootInCondition(
+        condition.related.subquery.where,
+        condition.related.subquery,
+        newChain,
+        false,
+        originalRoot,
+      );
+      
+      if (result) {
+        return result;
+      }
+    }
+  } else if (condition.type === 'and') {
+    // Search all branches for AND conditions only
+    for (const child of condition.conditions) {
+      const result = searchForRootInCondition(
+        child,
+        parentAST,
+        currentChain,
+        isOriginalRoot,
+        originalRoot,
+      );
+      if (result) {
+        return result;
+      }
+    }
+  } else if (condition.type === 'or') {
+    // Don't support root: true inside OR as it changes semantics
+    return null;
   }
-
-  return chain.length > 0 ? chain : null;
+  
+  return null;
 }
+
 
 /**
  * Rebuilds the AST from the chain, making the deepest node the new root.
@@ -152,19 +221,16 @@ function rebuildFromChain(chain: ChainNode[], rootSchema: SourceSchema): AST {
     const node = chain[i];
 
     // Create the subquery for this level
+    const filteredOrderBy = node.isOriginalRoot && node.ast.orderBy
+      ? node.ast.orderBy.filter(([field]) => rootSchema.primaryKey.includes(field))
+      : node.ast.orderBy;
+    
     const subquery: ASTWithRootMarker = {
       table: node.ast.table,
       alias: node.alias,
       where: node.remainingConditions,
-      orderBy: node.ast.orderBy,
-      ...(node.isOriginalRoot
-        ? {
-            wasRoot: true,
-            orderBy: node.ast.orderBy?.filter(([field]) =>
-              rootSchema.primaryKey.includes(field),
-            ),
-          }
-        : {}),
+      ...(node.isOriginalRoot ? { wasRoot: true } : {}),
+      ...(filteredOrderBy && filteredOrderBy.length > 0 ? { orderBy: filteredOrderBy } : {}),
     };
 
     // Invert the correlation (we're flipping the relationship)
@@ -227,46 +293,6 @@ function buildPathToRoot(chain: ChainNode[]): string[] {
   return path;
 }
 
-/**
- * Finds a flipped EXISTS condition in the WHERE clause.
- * Only looks at top level or inside AND branches.
- */
-function findFlippedExistsCondition(
-  condition: Condition | undefined,
-  insideOr: boolean = false,
-): CorrelatedSubqueryCondition | null {
-  if (!condition) return null;
-
-  if (
-    condition.type === 'correlatedSubquery' &&
-    condition.op === 'EXISTS' &&
-    condition.flip === true
-  ) {
-    // Don't support flips inside OR branches
-    if (insideOr) {
-      return null;
-    }
-    return condition;
-  }
-
-  if (condition.type === 'and') {
-    // AND branches maintain the same insideOr context
-    for (const child of condition.conditions) {
-      const found = findFlippedExistsCondition(child, insideOr);
-      if (found) return found;
-    }
-  }
-
-  if (condition.type === 'or') {
-    // Mark that we're inside an OR - flips not supported here
-    for (const child of condition.conditions) {
-      const found = findFlippedExistsCondition(child, true);
-      if (found) return found; // Will be null due to insideOr check
-    }
-  }
-
-  return null;
-}
 
 /**
  * Removes a specific condition from a WHERE clause tree.
