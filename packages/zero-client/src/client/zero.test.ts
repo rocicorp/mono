@@ -735,6 +735,9 @@ describe('initConnection', () => {
                         "type": "string",
                       },
                     },
+                    "primaryKey": [
+                      "id",
+                    ],
                   },
                 },
               },
@@ -770,32 +773,35 @@ describe('initConnection', () => {
     mockSocket.onUpstream(msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
-          [
-            "initConnection",
-            {
-              "clientSchema": {
-                "tables": {
-                  "def": {
-                    "columns": {
-                      "id": {
-                        "type": "string",
-                      },
-                      "value": {
-                        "type": "string",
-                      },
-                    },
+      [
+        "initConnection",
+        {
+          "clientSchema": {
+            "tables": {
+              "def": {
+                "columns": {
+                  "id": {
+                    "type": "string",
+                  },
+                  "value": {
+                    "type": "string",
                   },
                 },
-              },
-              "deleted": {
-                "clientIDs": [
-                  "a",
+                "primaryKey": [
+                  "id",
                 ],
               },
-              "desiredQueriesPatch": [],
             },
-          ]
-        `);
+          },
+          "deleted": {
+            "clientIDs": [
+              "a",
+            ],
+          },
+          "desiredQueriesPatch": [],
+        },
+      ]
+    `);
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
     });
 
@@ -824,32 +830,35 @@ describe('initConnection', () => {
     mockSocket.onUpstream(msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
-          [
-            "initConnection",
-            {
-              "clientSchema": {
-                "tables": {
-                  "ijk": {
-                    "columns": {
-                      "id": {
-                        "type": "string",
-                      },
-                      "value": {
-                        "type": "string",
-                      },
+        [
+          "initConnection",
+          {
+            "clientSchema": {
+              "tables": {
+                "ijk": {
+                  "columns": {
+                    "id": {
+                      "type": "string",
+                    },
+                    "value": {
+                      "type": "string",
                     },
                   },
+                  "primaryKey": [
+                    "id",
+                  ],
                 },
               },
-              "deleted": {
-                "clientGroupIDs": [
-                  "a",
-                ],
-              },
-              "desiredQueriesPatch": [],
             },
-          ]
-        `);
+            "deleted": {
+              "clientGroupIDs": [
+                "a",
+              ],
+            },
+            "desiredQueriesPatch": [],
+          },
+        ]
+      `);
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
     });
 
@@ -897,6 +906,7 @@ describe('initConnection', () => {
                   type: 'string',
                 },
               },
+              primaryKey: ['id'],
             },
           },
         },
@@ -988,6 +998,7 @@ describe('initConnection', () => {
                   type: 'string',
                 },
               },
+              primaryKey: ['id'],
             },
           },
         },
@@ -1033,42 +1044,45 @@ describe('initConnection', () => {
     mockSocket.onUpstream(msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
-          [
-            "initConnection",
-            {
-              "clientSchema": {
-                "tables": {
-                  "e": {
-                    "columns": {
-                      "id": {
-                        "type": "string",
-                      },
-                      "value": {
-                        "type": "string",
+              [
+                "initConnection",
+                {
+                  "clientSchema": {
+                    "tables": {
+                      "e": {
+                        "columns": {
+                          "id": {
+                            "type": "string",
+                          },
+                          "value": {
+                            "type": "string",
+                          },
+                        },
+                        "primaryKey": [
+                          "id",
+                        ],
                       },
                     },
                   },
+                  "desiredQueriesPatch": [
+                    {
+                      "ast": {
+                        "orderBy": [
+                          [
+                            "id",
+                            "asc",
+                          ],
+                        ],
+                        "table": "e",
+                      },
+                      "hash": "29j3x0l4bxthp",
+                      "op": "put",
+                      "ttl": 300000,
+                    },
+                  ],
                 },
-              },
-              "desiredQueriesPatch": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "table": "e",
-                  },
-                  "hash": "29j3x0l4bxthp",
-                  "op": "put",
-                  "ttl": 300000,
-                },
-              ],
-            },
-          ]
-        `);
+              ]
+            `);
 
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
     });
@@ -1102,47 +1116,50 @@ describe('initConnection', () => {
     mockSocket.onUpstream(msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
-          [
-            "initConnection",
-            {
-              "clientSchema": {
-                "tables": {
-                  "e": {
-                    "columns": {
-                      "id": {
-                        "type": "string",
-                      },
-                      "value": {
-                        "type": "string",
+                [
+                  "initConnection",
+                  {
+                    "clientSchema": {
+                      "tables": {
+                        "e": {
+                          "columns": {
+                            "id": {
+                              "type": "string",
+                            },
+                            "value": {
+                              "type": "string",
+                            },
+                          },
+                          "primaryKey": [
+                            "id",
+                          ],
+                        },
                       },
                     },
-                  },
-                },
-              },
-              "deleted": {
-                "clientIDs": [
-                  "a",
-                ],
-              },
-              "desiredQueriesPatch": [
-                {
-                  "ast": {
-                    "orderBy": [
-                      [
-                        "id",
-                        "asc",
+                    "deleted": {
+                      "clientIDs": [
+                        "a",
                       ],
+                    },
+                    "desiredQueriesPatch": [
+                      {
+                        "ast": {
+                          "orderBy": [
+                            [
+                              "id",
+                              "asc",
+                            ],
+                          ],
+                          "table": "e",
+                        },
+                        "hash": "29j3x0l4bxthp",
+                        "op": "put",
+                        "ttl": 300000,
+                      },
                     ],
-                    "table": "e",
                   },
-                  "hash": "29j3x0l4bxthp",
-                  "op": "put",
-                  "ttl": 300000,
-                },
-              ],
-            },
-          ]
-        `);
+                ]
+              `);
 
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
     });
@@ -1208,6 +1225,7 @@ describe('initConnection', () => {
                 id: {type: 'string'},
                 value: {type: 'string'},
               },
+              primaryKey: ['id'],
             },
           },
         },

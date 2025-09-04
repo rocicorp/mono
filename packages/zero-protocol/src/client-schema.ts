@@ -1,3 +1,4 @@
+import {must} from '../../shared/src/must.ts';
 import {mapAllEntries} from '../../shared/src/objects.ts';
 import * as v from '../../shared/src/valita.ts';
 
@@ -19,6 +20,9 @@ export type ColumnSchema = v.Infer<typeof columnSchemaSchema>;
 
 export const tableSchemaSchema = v.object({
   columns: v.record(columnSchemaSchema),
+  // TODO: Make this non-optional when bumping the
+  //       MIN_SERVER_SUPPORTED_SYNC_PROTOCOL to 30+.
+  primaryKey: v.array(v.string()).optional(),
 });
 
 export type TableSchema = v.Infer<typeof tableSchemaSchema>;
@@ -39,12 +43,16 @@ const keyCmp = ([a]: [a: string, _: unknown], [b]: [b: string, _: unknown]) =>
 export function normalizeClientSchema(schema: ClientSchema): ClientSchema {
   return {
     tables: mapAllEntries(schema.tables, tables =>
-      tables
-        .sort(keyCmp)
-        .map(([name, table]) => [
-          name,
-          {columns: mapAllEntries(table.columns, e => e.sort(keyCmp))},
-        ]),
+      tables.sort(keyCmp).map(([name, table]) => [
+        name,
+        {
+          columns: mapAllEntries(table.columns, e => e.sort(keyCmp)),
+          primaryKey: must(
+            table.primaryKey,
+            `new clients always specify a primaryKey`,
+          ).sort(),
+        },
+      ]),
     ),
   };
 }
