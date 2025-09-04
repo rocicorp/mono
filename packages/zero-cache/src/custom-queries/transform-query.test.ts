@@ -7,6 +7,7 @@ import {
   type MockedFunction,
   test,
 } from 'vitest';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {CustomQueryTransformer} from './transform-query.ts';
 import {fetchFromAPIServer} from '../custom/fetch.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
@@ -28,6 +29,7 @@ describe('CustomQueryTransformer', () => {
     appID: 'test_app',
     shardNum: 1,
   };
+  const lc = createSilentLogContext();
 
   const pullUrl = 'https://api.example.com/pull';
   const headerOptions = {
@@ -132,6 +134,7 @@ describe('CustomQueryTransformer', () => {
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse);
 
     const transformer = new CustomQueryTransformer(
+      lc,
       {
         url: [pullUrl],
         forwardCookies: false,
@@ -146,6 +149,7 @@ describe('CustomQueryTransformer', () => {
 
     // Verify the API was called correctly
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      lc,
       pullUrl,
       [pullUrl],
       mockShard,
@@ -184,6 +188,7 @@ describe('CustomQueryTransformer', () => {
     mockFetchFromAPIServer.mockResolvedValue(mockMixedResponse);
 
     const transformer = new CustomQueryTransformer(
+      lc,
       {
         url: [pullUrl],
         forwardCookies: false,
@@ -218,6 +223,7 @@ describe('CustomQueryTransformer', () => {
     mockFetchFromAPIServer.mockResolvedValue(mockErrorResponse);
 
     const transformer = new CustomQueryTransformer(
+      lc,
       {
         url: [pullUrl],
         forwardCookies: false,
@@ -257,6 +263,7 @@ describe('CustomQueryTransformer', () => {
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse);
 
     const transformer = new CustomQueryTransformer(
+      lc,
       {
         url: [pullUrl],
         forwardCookies: false,
@@ -282,6 +289,7 @@ describe('CustomQueryTransformer', () => {
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
     const transformer = new CustomQueryTransformer(
+      lc,
       {
         url: [pullUrl],
         forwardCookies: false,
@@ -317,6 +325,7 @@ describe('CustomQueryTransformer', () => {
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
     const transformer = new CustomQueryTransformer(
+      lc,
       {
         url: [pullUrl],
         forwardCookies: false,
@@ -364,6 +373,7 @@ describe('CustomQueryTransformer', () => {
       .mockResolvedValueOnce(mockResponse2());
 
     const transformer = new CustomQueryTransformer(
+      lc,
       {
         url: [pullUrl],
         forwardCookies: false,
@@ -375,6 +385,7 @@ describe('CustomQueryTransformer', () => {
     await transformer.transform(headerOptions, [mockQueries[0]], undefined);
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
     expect(mockFetchFromAPIServer).toHaveBeenLastCalledWith(
+      lc,
       'https://api.example.com/pull',
       ['https://api.example.com/pull'],
       mockShard,
@@ -391,6 +402,7 @@ describe('CustomQueryTransformer', () => {
     );
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
     expect(mockFetchFromAPIServer).toHaveBeenLastCalledWith(
+      lc,
       pullUrl,
       [pullUrl],
       mockShard,
@@ -420,6 +432,7 @@ describe('CustomQueryTransformer', () => {
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
     const transformer = new CustomQueryTransformer(
+      lc,
       {
         url: [pullUrl],
         forwardCookies: false,
@@ -435,6 +448,7 @@ describe('CustomQueryTransformer', () => {
     );
 
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      lc,
       pullUrl,
       [pullUrl],
       mockShard,
@@ -459,6 +473,7 @@ describe('CustomQueryTransformer', () => {
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
     const transformer = new CustomQueryTransformer(
+      lc,
       {
         url: [pullUrl],
         forwardCookies: true,
@@ -474,6 +489,7 @@ describe('CustomQueryTransformer', () => {
     );
 
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      lc,
       pullUrl,
       [pullUrl],
       mockShard,
@@ -505,6 +521,7 @@ describe('CustomQueryTransformer', () => {
     mockFetchFromAPIServer.mockResolvedValue(mockErrorResponse());
 
     const transformer = new CustomQueryTransformer(
+      lc,
       {
         url: [pullUrl],
         forwardCookies: false,
@@ -547,6 +564,7 @@ describe('CustomQueryTransformer', () => {
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
     const transformer = new CustomQueryTransformer(
+      lc,
       {
         url: [pullUrl],
         forwardCookies: false,
@@ -593,6 +611,7 @@ describe('CustomQueryTransformer', () => {
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
     const transformer = new CustomQueryTransformer(
+      lc,
       {
         url: [defaultUrl, customUrl],
         forwardCookies: false,
@@ -613,6 +632,7 @@ describe('CustomQueryTransformer', () => {
 
     // Verify custom URL was used instead of default
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      lc,
       customUrl,
       [defaultUrl, customUrl],
       mockShard,
@@ -637,6 +657,7 @@ describe('CustomQueryTransformer', () => {
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
     const transformer = new CustomQueryTransformer(
+      lc,
       {
         url: [pullUrl],
         forwardCookies: false,
@@ -656,6 +677,7 @@ describe('CustomQueryTransformer', () => {
 
     // Verify query parameters were passed
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      lc,
       pullUrl,
       [pullUrl],
       mockShard,
@@ -681,6 +703,7 @@ describe('CustomQueryTransformer', () => {
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
     const transformer = new CustomQueryTransformer(
+      lc,
       {
         url: [defaultUrl, customUrl],
         forwardCookies: false,
@@ -701,6 +724,7 @@ describe('CustomQueryTransformer', () => {
 
     // Verify both custom URL and query parameters were used
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      lc,
       customUrl,
       [defaultUrl, customUrl],
       mockShard,
@@ -725,6 +749,7 @@ describe('CustomQueryTransformer', () => {
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
     const transformer = new CustomQueryTransformer(
+      lc,
       {
         url: [defaultUrl],
         forwardCookies: false,
@@ -736,6 +761,7 @@ describe('CustomQueryTransformer', () => {
 
     // Verify default URL and undefined queryParams were used
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      lc,
       defaultUrl,
       [defaultUrl],
       mockShard,
@@ -756,6 +782,7 @@ describe('CustomQueryTransformer', () => {
     );
 
     const transformer = new CustomQueryTransformer(
+      lc,
       {
         url: [allowedUrl],
         forwardCookies: false,
@@ -786,6 +813,7 @@ describe('CustomQueryTransformer', () => {
 
     // Verify the disallowed URL was attempted to be used
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      lc,
       disallowedUrl,
       [allowedUrl],
       mockShard,

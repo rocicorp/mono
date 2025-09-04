@@ -1,3 +1,4 @@
+import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {upstreamSchema, type ShardID} from '../types/shards.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
@@ -12,6 +13,7 @@ export type HeaderOptions = {
 };
 
 export async function fetchFromAPIServer(
+  lc: LogContext,
   url: string,
   allowedUrls: string[],
   shard: ShardID,
@@ -19,6 +21,12 @@ export async function fetchFromAPIServer(
   queryParams: Record<string, string> | undefined,
   body: ReadonlyJSONValue,
 ) {
+  lc.info?.('fetchFromAPIServer called', {
+    url,
+    allowedUrls,
+    queryParams,
+  });
+  
   if (!urlMatch(url, allowedUrls)) {
     throw new Error(
       `URL "${url}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
@@ -55,7 +63,11 @@ export async function fetchFromAPIServer(
   params.append('appID', shard.appID);
 
   urlObj.search = params.toString();
-  const response = await fetch(urlObj.toString(), {
+  
+  const finalUrl = urlObj.toString();
+  lc.info?.('Executing fetch', {finalUrl});
+  
+  const response = await fetch(finalUrl, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),

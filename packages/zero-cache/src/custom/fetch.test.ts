@@ -6,6 +6,7 @@ import {
   type MockedFunction,
   test,
 } from 'vitest';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {fetchFromAPIServer, urlMatch} from './fetch.ts';
 import {ErrorForClient} from '../types/error-for-client.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
@@ -20,6 +21,7 @@ describe('fetchFromAPIServer', () => {
     appID: 'test_app',
     shardNum: 1,
   };
+  const lc = createSilentLogContext();
 
   const baseUrl = 'https://api.example.com/endpoint';
   const headerOptions = {
@@ -43,6 +45,7 @@ describe('fetchFromAPIServer', () => {
     mockFetch.mockResolvedValue(mockResponse);
 
     await fetchFromAPIServer(
+      lc,
       baseUrl,
       [baseUrl],
       mockShard,
@@ -71,6 +74,7 @@ describe('fetchFromAPIServer', () => {
     mockFetch.mockResolvedValue(mockResponse);
 
     await fetchFromAPIServer(
+      lc,
       baseUrl,
       [baseUrl],
       mockShard,
@@ -94,6 +98,7 @@ describe('fetchFromAPIServer', () => {
     mockFetch.mockResolvedValue(mockResponse);
 
     await fetchFromAPIServer(
+      lc,
       baseUrl,
       [baseUrl],
       mockShard,
@@ -118,6 +123,7 @@ describe('fetchFromAPIServer', () => {
     mockFetch.mockResolvedValue(mockResponse);
 
     await fetchFromAPIServer(
+      lc,
       baseUrl,
       [baseUrl],
       mockShard,
@@ -139,6 +145,7 @@ describe('fetchFromAPIServer', () => {
     mockFetch.mockResolvedValue(mockResponse);
 
     await fetchFromAPIServer(
+      lc,
       baseUrl,
       [baseUrl],
       mockShard,
@@ -159,6 +166,7 @@ describe('fetchFromAPIServer', () => {
     mockFetch.mockResolvedValue(mockResponse);
 
     await fetchFromAPIServer(
+      lc,
       baseUrl,
       [baseUrl],
       mockShard,
@@ -180,6 +188,7 @@ describe('fetchFromAPIServer', () => {
     const urlWithParams = 'https://api.example.com/endpoint?existing=param';
 
     await fetchFromAPIServer(
+      lc,
       urlWithParams,
       [baseUrl],
       mockShard,
@@ -201,6 +210,7 @@ describe('fetchFromAPIServer', () => {
 
     await expect(
       fetchFromAPIServer(
+        lc,
         urlWithReserved,
         [baseUrl],
         mockShard,
@@ -218,6 +228,7 @@ describe('fetchFromAPIServer', () => {
 
     await expect(
       fetchFromAPIServer(
+        lc,
         urlWithReserved,
         [baseUrl],
         mockShard,
@@ -235,6 +246,7 @@ describe('fetchFromAPIServer', () => {
 
     await expect(
       fetchFromAPIServer(
+        lc,
         baseUrl,
         [baseUrl],
         mockShard,
@@ -252,6 +264,7 @@ describe('fetchFromAPIServer', () => {
 
     await expect(
       fetchFromAPIServer(
+        lc,
         baseUrl,
         [baseUrl],
         mockShard,
@@ -271,6 +284,7 @@ describe('fetchFromAPIServer', () => {
     mockFetch.mockResolvedValue(mockResponse);
 
     const result = await fetchFromAPIServer(
+      lc,
       baseUrl,
       [baseUrl],
       mockShard,
@@ -290,7 +304,7 @@ describe('fetchFromAPIServer', () => {
     mockFetch.mockResolvedValueOnce(mockResponse1);
 
     await expect(
-      fetchFromAPIServer(baseUrl, [baseUrl], mockShard, {}, undefined, body),
+      fetchFromAPIServer(lc, baseUrl, [baseUrl], mockShard, {}, undefined, body),
     ).rejects.toThrow(ErrorForClient);
 
     // Second call - test the error details
@@ -299,6 +313,7 @@ describe('fetchFromAPIServer', () => {
 
     try {
       await fetchFromAPIServer(
+        lc,
         baseUrl,
         [baseUrl],
         mockShard,
@@ -319,6 +334,7 @@ describe('fetchFromAPIServer', () => {
     mockFetch.mockResolvedValue(mockResponse);
 
     const result = await fetchFromAPIServer(
+      lc,
       baseUrl,
       [baseUrl],
       mockShard,
@@ -335,6 +351,7 @@ describe('fetchFromAPIServer', () => {
     mockFetch.mockResolvedValue(mockResponse);
 
     await fetchFromAPIServer(
+      lc,
       baseUrl,
       [baseUrl],
       mockShard,
@@ -361,6 +378,7 @@ describe('fetchFromAPIServer', () => {
     };
 
     await fetchFromAPIServer(
+      lc,
       baseUrl,
       [baseUrl],
       mockShard,

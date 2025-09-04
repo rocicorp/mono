@@ -1,3 +1,4 @@
+import type {LogContext} from '@rocicorp/logger';
 import type {TransformedAndHashed} from '../auth/read-authorizer.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
 import {
@@ -41,8 +42,10 @@ export class CustomQueryTransformer {
     url: string[];
     forwardCookies: boolean;
   };
+  readonly #lc: LogContext;
 
   constructor(
+    lc: LogContext,
     config: {
       url: string[];
       forwardCookies: boolean;
@@ -51,6 +54,7 @@ export class CustomQueryTransformer {
   ) {
     this.#config = config;
     this.#shard = shard;
+    this.#lc = lc;
     this.#cache = new TimedCache(5000); // 5 seconds cache TTL
   }
 
@@ -91,6 +95,7 @@ export class CustomQueryTransformer {
     let response: Response | undefined;
     try {
       response = await fetchFromAPIServer(
+        this.#lc,
         userQueryParams?.url ??
           must(
             this.#config.url[0],
