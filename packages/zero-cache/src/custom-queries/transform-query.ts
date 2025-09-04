@@ -6,6 +6,7 @@ import {
   type TransformRequestBody,
   type TransformRequestMessage,
 } from '../../../zero-protocol/src/custom-queries.ts';
+import type {UserQueryParams} from '../../../zero-protocol/src/connect.ts';
 import {fetchFromAPIServer, type HeaderOptions} from '../custom/fetch.ts';
 import type {ShardID} from '../types/shards.ts';
 import * as v from '../../../shared/src/valita.ts';
@@ -56,6 +57,7 @@ export class CustomQueryTransformer {
   async transform(
     headerOptions: HeaderOptions,
     queries: Iterable<CustomQueryRecord>,
+    userQueryParams: UserQueryParams | undefined,
   ): Promise<(TransformedAndHashed | ErroredQuery)[]> {
     const request: TransformRequestBody = [];
     const cachedResponses: TransformedAndHashed[] = [];
@@ -89,14 +91,15 @@ export class CustomQueryTransformer {
     let response: Response | undefined;
     try {
       response = await fetchFromAPIServer(
-        must(
-          this.#config.url[0],
-          'A ZERO_GET_QUERIES_URL must be configured for custom queries',
-        ),
+        userQueryParams?.url ??
+          must(
+            this.#config.url[0],
+            'A ZERO_GET_QUERIES_URL must be configured for custom queries',
+          ),
         this.#config.url,
         this.#shard,
         headerOptions,
-        undefined,
+        userQueryParams?.queryParams,
         ['transform', request] satisfies TransformRequestMessage,
       );
     } catch (e) {

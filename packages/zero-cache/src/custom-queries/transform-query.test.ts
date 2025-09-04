@@ -138,7 +138,11 @@ describe('CustomQueryTransformer', () => {
       },
       mockShard,
     );
-    const result = await transformer.transform(headerOptions, mockQueries);
+    const result = await transformer.transform(
+      headerOptions,
+      mockQueries,
+      undefined,
+    );
 
     // Verify the API was called correctly
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
@@ -186,7 +190,11 @@ describe('CustomQueryTransformer', () => {
       },
       mockShard,
     );
-    const result = await transformer.transform(headerOptions, mockQueries);
+    const result = await transformer.transform(
+      headerOptions,
+      mockQueries,
+      undefined,
+    );
 
     expect(result).toEqual([
       transformResults[0],
@@ -216,7 +224,11 @@ describe('CustomQueryTransformer', () => {
       },
       mockShard,
     );
-    const result = await transformer.transform(headerOptions, mockQueries);
+    const result = await transformer.transform(
+      headerOptions,
+      mockQueries,
+      undefined,
+    );
 
     expect(result).toEqual([
       {
@@ -251,7 +263,7 @@ describe('CustomQueryTransformer', () => {
       },
       mockShard,
     );
-    const result = await transformer.transform(headerOptions, []);
+    const result = await transformer.transform(headerOptions, [], undefined);
 
     expect(mockFetchFromAPIServer).not.toHaveBeenCalled();
     expect(result).toEqual([]);
@@ -278,12 +290,16 @@ describe('CustomQueryTransformer', () => {
     );
 
     // First call - should fetch
-    await transformer.transform(headerOptions, [mockQueries[0]]);
+    await transformer.transform(headerOptions, [mockQueries[0]], undefined);
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
 
     // Second call with same query - should use cache, not fetch
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
-    const result = await transformer.transform(headerOptions, [mockQueries[0]]);
+    const result = await transformer.transform(
+      headerOptions,
+      [mockQueries[0]],
+      undefined,
+    );
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1); // Still only called once
     expect(result).toEqual([transformResults[0]]);
   });
@@ -309,18 +325,18 @@ describe('CustomQueryTransformer', () => {
     );
 
     // First call
-    await transformer.transform(headerOptions, [mockQueries[0]]);
+    await transformer.transform(headerOptions, [mockQueries[0]], undefined);
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
 
     // Advance time by 4 seconds - should still use cache
     vi.advanceTimersByTime(4000);
-    await transformer.transform(headerOptions, [mockQueries[0]]);
+    await transformer.transform(headerOptions, [mockQueries[0]], undefined);
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
 
     // Advance time by 2 more seconds (6 total) - cache should expire, fetch again
     vi.advanceTimersByTime(2000);
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
-    await transformer.transform(headerOptions, [mockQueries[0]]);
+    await transformer.transform(headerOptions, [mockQueries[0]], undefined);
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
   });
 
@@ -356,7 +372,7 @@ describe('CustomQueryTransformer', () => {
     );
 
     // Cache first query
-    await transformer.transform(headerOptions, [mockQueries[0]]);
+    await transformer.transform(headerOptions, [mockQueries[0]], undefined);
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
     expect(mockFetchFromAPIServer).toHaveBeenLastCalledWith(
       'https://api.example.com/pull',
@@ -368,7 +384,11 @@ describe('CustomQueryTransformer', () => {
     );
 
     // Now call with both queries - only second should be fetched
-    const result = await transformer.transform(headerOptions, mockQueries);
+    const result = await transformer.transform(
+      headerOptions,
+      mockQueries,
+      undefined,
+    );
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
     expect(mockFetchFromAPIServer).toHaveBeenLastCalledWith(
       pullUrl,
@@ -411,6 +431,7 @@ describe('CustomQueryTransformer', () => {
     const result = await transformer.transform(
       {...headerOptions, cookie: 'test-cookie'},
       [mockQueries[0]],
+      undefined,
     );
 
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
@@ -449,6 +470,7 @@ describe('CustomQueryTransformer', () => {
     const result = await transformer.transform(
       {...headerOptions, cookie: 'test-cookie'},
       [mockQueries[0]],
+      undefined,
     );
 
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
@@ -491,9 +513,11 @@ describe('CustomQueryTransformer', () => {
     );
 
     // First call - should fetch and get error
-    const result1 = await transformer.transform(headerOptions, [
-      mockQueries[0],
-    ]);
+    const result1 = await transformer.transform(
+      headerOptions,
+      [mockQueries[0]],
+      undefined,
+    );
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
     expect(result1).toEqual([
       {
@@ -506,7 +530,7 @@ describe('CustomQueryTransformer', () => {
 
     // Second call - should fetch again because errors are not cached
     mockFetchFromAPIServer.mockResolvedValue(mockErrorResponse());
-    await transformer.transform(headerOptions, [mockQueries[0]]);
+    await transformer.transform(headerOptions, [mockQueries[0]], undefined);
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
   });
 
@@ -535,17 +559,21 @@ describe('CustomQueryTransformer', () => {
     };
 
     // Cache with first header options
-    await transformer.transform(headerOptions, [mockQueries[0]]);
+    await transformer.transform(headerOptions, [mockQueries[0]], undefined);
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
 
     // Call with different header options - should fetch again due to different cache key
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
-    await transformer.transform(differentHeaderOptions, [mockQueries[0]]);
+    await transformer.transform(
+      differentHeaderOptions,
+      [mockQueries[0]],
+      undefined,
+    );
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
 
     // Call again with original header options - should use cache
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
-    await transformer.transform(headerOptions, [mockQueries[0]]);
+    await transformer.transform(headerOptions, [mockQueries[0]], undefined);
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
   });
 });
