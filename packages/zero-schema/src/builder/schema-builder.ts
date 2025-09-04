@@ -152,7 +152,7 @@ export function clientSchemaFrom(schema: Schema): {
             serverName ?? name,
             {type},
           ]),
-          primaryKey: [...primaryKey],
+          primaryKey: primaryKey.map(k => columns[k].serverName ?? k),
         },
       ],
     ),
