@@ -1,4 +1,3 @@
-import {ZeroInspector} from '@rocicorp/zero/react';
 import Cookies from 'js-cookie';
 import {useState} from 'react';
 import {Route, Switch} from 'wouter';
@@ -9,11 +8,8 @@ import {ErrorPage} from './pages/error/error-page.tsx';
 import {IssuePage} from './pages/issue/issue-page.tsx';
 import {ListPage} from './pages/list/list-page.tsx';
 import {routes} from './routes.ts';
-import {useZero} from './hooks/use-zero.ts';
 
 export function Root() {
-  const z = useZero();
-
   const [contentReady, setContentReady] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(
     () => !Cookies.get('onboardingDismissed'),
@@ -54,7 +50,6 @@ export function Root() {
           setShowOnboarding(false);
         }}
       />
-      {import.meta.env.DEV && <ZeroInspector zero={z} />}
     </>
   );
 }
