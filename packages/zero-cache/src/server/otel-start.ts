@@ -12,6 +12,7 @@ import {
   otelMetricsEnabled,
   otelTracesEnabled,
 } from '../../../otel/src/enabled.ts';
+import type {LogConfig} from '../../../otel/src/log-options.ts';
 
 class OtelManager {
   static #instance: OtelManager;
@@ -27,15 +28,26 @@ class OtelManager {
     return OtelManager.#instance;
   }
 
-  startOtelAuto(lc?: LogContext) {
-    if (lc) {
+  startOtelAuto(lc?: LogContext, logConfig?: LogConfig) {
+    if (lc && logConfig?.otelDiag) {
       const log = lc.withContext('component', 'otel');
       diag.setLogger({
         verbose: (msg: string, ...args: unknown[]) => log.debug?.(msg, ...args),
         debug: (msg: string, ...args: unknown[]) => log.debug?.(msg, ...args),
         info: (msg: string, ...args: unknown[]) => log.info?.(msg, ...args),
         warn: (msg: string, ...args: unknown[]) => log.warn?.(msg, ...args),
-        error: (msg: string, ...args: unknown[]) => log.error?.(msg, ...args),
+        error: (msg: string, ...args: unknown[]) => {
+          // Check if this is a known non-critical error that should be a warning
+          if (
+            msg.includes('Request Timeout') ||
+            msg.includes('Unexpected server response: 502') ||
+            msg.includes('Export failed with retryable status')
+          ) {
+            log.warn?.(msg, ...args);
+          } else {
+            log.error?.(msg, ...args);
+          }
+        },
       });
     }
     if (this.#started || !otelEnabled()) {
@@ -84,5 +96,5 @@ class OtelManager {
   }
 }
 
-export const startOtelAuto = (lc?: LogContext) =>
-  OtelManager.getInstance().startOtelAuto(lc);
+export const startOtelAuto = (lc?: LogContext, logConfig?: LogConfig) =>
+  OtelManager.getInstance().startOtelAuto(lc, logConfig);

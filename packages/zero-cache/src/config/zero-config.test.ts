@@ -187,6 +187,11 @@ test('zero-cache --help', () => {
        ZERO_LOG_IVM_SAMPLING env                                                                                                                                     
                                                                    How often to collect IVM metrics. 1 out of N requests will be sampled where N is this value.      
                                                                                                                                                                      
+     --log-otel-diag boolean                                       default: false                                                                                    
+       ZERO_LOG_OTEL_DIAG env                                                                                                                                        
+                                                                   Enable OpenTelemetry diagnostic logging. When enabled, OTEL internal                              
+                                                                   diagnostics will be logged through the standard logging system.                                   
+                                                                                                                                                                     
      --app-id string                                               default: "zero"                                                                                   
        ZERO_APP_ID env                                                                                                                                               
                                                                    Unique identifier for the app.                                                                    
