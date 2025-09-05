@@ -6,6 +6,9 @@ export function QueryUsers() {
   if (details.type === 'unknown') {
     return <div>Loading...</div>;
   }
+  if (details.type === 'error') {
+    return <div>Error: {JSON.stringify(details.error?.details ?? null)}</div>;
+  }
   return (
     <div>
       Query Users Component

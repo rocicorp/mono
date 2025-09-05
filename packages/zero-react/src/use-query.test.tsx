@@ -11,6 +11,7 @@ import {
 } from './use-query.tsx';
 import {ZeroProvider} from './zero-provider.tsx';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
+import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 
 function newMockQuery(
   query: string,
@@ -606,5 +607,273 @@ describe('useSuspenseQuery', () => {
 
     view.listeners.forEach(cb => cb(undefined, 'complete'));
     await expect.poll(() => element.textContent).toBe('singularUndefined');
+  });
+
+  describe('error handling', () => {
+    test('plural query returns error details when query fails', async () => {
+      const q = newMockQuery('query' + unique);
+      const zero = newMockZero('client' + unique);
+      const materializeSpy = vi.spyOn(zero, 'materialize');
+
+      function Comp() {
+        const [data, details] = useSuspenseQuery(q, {suspendUntil: 'complete'});
+        return (
+          <div>
+            {details.type === 'error'
+              ? `Error: ${details.error?.queryName || 'Unknown error'}`
+              : JSON.stringify(data)}
+          </div>
+        );
+      }
+
+      root.render(
+        <ZeroProvider zero={zero}>
+          <Suspense fallback={<>loading</>}>
+            <Comp />
+          </Suspense>
+        </ZeroProvider>,
+      );
+
+      await expect.poll(() => element.textContent).toBe('loading');
+
+      const view = materializeSpy.mock.results[0].value as {
+        listeners: Set<
+          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+        >;
+      };
+
+      const error: ErroredQuery = {
+        error: 'app',
+        id: 'test-error-1',
+        name: 'Query failed',
+        details: {reason: 'Invalid syntax'},
+      };
+      view.listeners.forEach(cb => cb([], 'error', error));
+      await expect.poll(() => element.textContent).toBe('Error: Query failed');
+    });
+
+    test('singular query returns error details when query fails', async () => {
+      const q = newMockQuery('query' + unique, true);
+      const zero = newMockZero('client' + unique);
+      const materializeSpy = vi.spyOn(zero, 'materialize');
+
+      function Comp() {
+        const [data, details] = useSuspenseQuery(q, {suspendUntil: 'complete'});
+        return (
+          <div>
+            {details.type === 'error'
+              ? `Error: ${details.error?.queryName || 'Unknown error'}`
+              : JSON.stringify(data)}
+          </div>
+        );
+      }
+
+      root.render(
+        <ZeroProvider zero={zero}>
+          <Suspense fallback={<>loading</>}>
+            <Comp />
+          </Suspense>
+        </ZeroProvider>,
+      );
+
+      await expect.poll(() => element.textContent).toBe('loading');
+
+      const view = materializeSpy.mock.results[0].value as {
+        listeners: Set<
+          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+        >;
+      };
+
+      const error: ErroredQuery = {
+        error: 'app',
+        id: 'test-error-2',
+        name: 'Query failed',
+        details: {reason: 'Invalid syntax'},
+      };
+      view.listeners.forEach(cb => cb(undefined, 'error', error));
+      await expect.poll(() => element.textContent).toBe('Error: Query failed');
+    });
+
+    test('query transitions from error to success state', async () => {
+      const q = newMockQuery('query' + unique);
+      const zero = newMockZero('client' + unique);
+      const materializeSpy = vi.spyOn(zero, 'materialize');
+
+      function Comp() {
+        const [data, details] = useSuspenseQuery(q, {suspendUntil: 'partial'});
+        return (
+          <div>
+            {details.type === 'error'
+              ? `Error: ${details.error?.queryName}`
+              : `Data: ${JSON.stringify(data)}, Type: ${details.type}`}
+          </div>
+        );
+      }
+
+      root.render(
+        <ZeroProvider zero={zero}>
+          <Suspense fallback={<>loading</>}>
+            <Comp />
+          </Suspense>
+        </ZeroProvider>,
+      );
+
+      await expect.poll(() => element.textContent).toBe('loading');
+
+      const view = materializeSpy.mock.results[0].value as {
+        listeners: Set<
+          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+        >;
+      };
+
+      // First emit error
+      const error: ErroredQuery = {
+        error: 'app',
+        id: 'temp-failure',
+        name: 'Temporary failure',
+        details: {},
+      };
+      view.listeners.forEach(cb => cb([], 'error', error));
+      await expect
+        .poll(() => element.textContent)
+        .toBe('Error: Temporary failure');
+
+      // Then emit success
+      view.listeners.forEach(cb => cb([{a: 1}], 'complete'));
+      await expect
+        .poll(() => element.textContent)
+        .toBe('Data: [{"a":1}], Type: complete');
+    });
+
+    test('query can return partial data with error state', async () => {
+      const q = newMockQuery('query' + unique);
+      const zero = newMockZero('client' + unique);
+      const materializeSpy = vi.spyOn(zero, 'materialize');
+
+      function Comp() {
+        const [data, details] = useSuspenseQuery(q, {suspendUntil: 'partial'});
+        return (
+          <div>
+            Data: {JSON.stringify(data)}, Type: {details.type}, Error:{' '}
+            {details.type === 'error' ? details.error?.queryName : 'none'}
+          </div>
+        );
+      }
+
+      root.render(
+        <ZeroProvider zero={zero}>
+          <Suspense fallback={<>loading</>}>
+            <Comp />
+          </Suspense>
+        </ZeroProvider>,
+      );
+
+      await expect.poll(() => element.textContent).toBe('loading');
+
+      const view = materializeSpy.mock.results[0].value as {
+        listeners: Set<
+          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+        >;
+      };
+
+      const error: ErroredQuery = {
+        error: 'app',
+        id: 'partial-failure',
+        name: 'Partial failure',
+        details: {message: 'Some items failed'},
+      };
+      view.listeners.forEach(cb => cb([{a: 1}], 'error', error));
+      await expect
+        .poll(() => element.textContent)
+        .toBe('Data: [{"a":1}], Type: error, Error: Partial failure');
+    });
+
+    test('error state without suspense returns immediately', async () => {
+      const q = newMockQuery('query' + unique);
+      const zero = newMockZero('client' + unique);
+      const materializeSpy = vi.spyOn(zero, 'materialize');
+
+      function Comp() {
+        const [data, details] = useSuspenseQuery(q, {suspendUntil: 'partial'});
+        return (
+          <div>
+            {details.type === 'error'
+              ? `Error state: ${details.error?.queryName}`
+              : `Data: ${JSON.stringify(data)}`}
+          </div>
+        );
+      }
+
+      root.render(
+        <ZeroProvider zero={zero}>
+          <Suspense fallback={<>loading</>}>
+            <Comp />
+          </Suspense>
+        </ZeroProvider>,
+      );
+
+      await expect.poll(() => element.textContent).toBe('loading');
+
+      const view = materializeSpy.mock.results[0].value as {
+        listeners: Set<
+          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+        >;
+      };
+
+      // Emit error immediately
+      const error: ErroredQuery = {
+        error: 'zero',
+        id: 'immediate-error',
+        name: 'Immediate error',
+        details: {},
+      };
+      view.listeners.forEach(cb => cb([], 'error', error));
+      await expect
+        .poll(() => element.textContent)
+        .toBe('Error state: Immediate error');
+    });
+
+    test('HTTP error type is handled correctly', async () => {
+      const q = newMockQuery('query' + unique);
+      const zero = newMockZero('client' + unique);
+      const materializeSpy = vi.spyOn(zero, 'materialize');
+
+      function Comp() {
+        const [data, details] = useSuspenseQuery(q, {suspendUntil: 'partial'});
+        return (
+          <div>
+            {details.type === 'error' && details.error?.type === 'http'
+              ? `HTTP Error: ${details.error.status}`
+              : JSON.stringify(data)}
+          </div>
+        );
+      }
+
+      root.render(
+        <ZeroProvider zero={zero}>
+          <Suspense fallback={<>loading</>}>
+            <Comp />
+          </Suspense>
+        </ZeroProvider>,
+      );
+
+      await expect.poll(() => element.textContent).toBe('loading');
+
+      const view = materializeSpy.mock.results[0].value as {
+        listeners: Set<
+          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+        >;
+      };
+
+      const httpError: ErroredQuery = {
+        error: 'http',
+        status: 500,
+        id: 'q1',
+        name: 'q1',
+        details: 'Internal Server Error',
+      };
+      view.listeners.forEach(cb => cb([], 'error', httpError));
+      await expect.poll(() => element.textContent).toBe('HTTP Error: 500');
+    });
   });
 });

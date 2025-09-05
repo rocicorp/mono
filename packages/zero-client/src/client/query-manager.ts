@@ -10,6 +10,7 @@ import {
   type AST,
 } from '../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
+import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {UpQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import {
   hashOfAST,
@@ -204,6 +205,16 @@ export class QueryManager implements InspectorDelegate {
     return patch;
   }
 
+  handleTransformErrors(errors: ErroredQuery[]) {
+    for (const error of errors) {
+      const queryId = error.id;
+      const entry = this.#queries.get(queryId);
+      if (entry) {
+        entry.gotCallbacks.forEach(callback => callback(false, error));
+      }
+    }
+  }
+
   addCustom(
     ast: AST,
     {name, args}: CustomQueryID,
@@ -281,7 +292,7 @@ export class QueryManager implements InspectorDelegate {
     }
 
     let removed = false;
-    return () => {
+    const cleanupCb = () => {
       if (removed) {
         return;
       }
@@ -298,6 +309,7 @@ export class QueryManager implements InspectorDelegate {
 
       this.#remove(entry, queryId, gotCallback);
     };
+    return cleanupCb;
   }
 
   updateCustom({name, args}: CustomQueryID, ttl: TTL) {

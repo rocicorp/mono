@@ -1,7 +1,8 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Immutable} from '../../../shared/src/immutable.ts';
+import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {TTL} from '../query/ttl.ts';
-import type {Listener, TypedView} from '../query/typed-view.ts';
+import type {Listener, ResultType, TypedView} from '../query/typed-view.ts';
 import type {Change} from './change.ts';
 import type {Input, Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
@@ -32,7 +33,8 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   onDestroy: (() => void) | undefined;
 
   #dirty = false;
-  #complete = false;
+  #resultType: ResultType = 'unknown';
+  #error: ErroredQuery | undefined;
   readonly #updateTTL: (ttl: TTL) => void;
 
   constructor(
@@ -49,12 +51,18 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     input.setOutput(this);
 
     if (queryComplete === true) {
-      this.#complete = true;
+      this.#resultType = 'complete';
     } else {
-      void queryComplete.then(() => {
-        this.#complete = true;
-        this.#fireListeners();
-      });
+      void queryComplete
+        .then(() => {
+          this.#resultType = 'complete';
+          this.#fireListeners();
+        })
+        .catch(e => {
+          this.#resultType = 'error';
+          this.#error = e;
+          this.#fireListeners();
+        });
     }
     this.#hydrate();
   }
@@ -81,10 +89,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   }
 
   #fireListener(listener: Listener<V>) {
-    listener(
-      this.data as Immutable<V>,
-      this.#complete ? 'complete' : 'unknown',
-    );
+    listener(this.data as Immutable<V>, this.#resultType, this.#error);
   }
 
   destroy() {

@@ -546,7 +546,7 @@ export abstract class AbstractQuery<
           defaultFormat,
           this.customQueryID,
           undefined,
-        ),
+        ) as AnyQuery,
       ) as unknown as QueryImpl<any, any>;
       return {
         type: 'correlatedSubquery',
@@ -783,7 +783,13 @@ export class QueryImpl<
         : delegate.updateServerQuery(ast, newTTL);
     };
 
-    const gotCallback: GotCallback = got => {
+    const gotCallback: GotCallback = (got, error) => {
+      if (error) {
+        queryCompleteResolver.reject(error);
+        queryComplete = true;
+        return;
+      }
+
       if (got) {
         delegate.addMetric(
           'query-materialization-end-to-end',
@@ -847,6 +853,9 @@ export class QueryImpl<
           if (type === 'complete') {
             v.destroy();
             resolve(data as HumanReadable<TReturn>);
+          } else if (type === 'error') {
+            v.destroy();
+            resolve(Promise.reject(data));
           }
         });
       });

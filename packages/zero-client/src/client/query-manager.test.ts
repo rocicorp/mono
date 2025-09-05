@@ -28,12 +28,12 @@ import * as v from '../../../shared/src/valita.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
 import {upPutOpSchema} from '../../../zero-protocol/src/queries-patch.ts';
-import {hashOfNameAndArgs} from '../../../zero-protocol/src/query-hash.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import {MAX_TTL_MS, type TTL} from '../../../zql/src/query/ttl.ts';
 import {toGotQueriesKey} from './keys.ts';
 import {MutationTracker} from './mutation-tracker.ts';
 import {QueryManager} from './query-manager.ts';
+import {hashOfNameAndArgs} from '../../../zero-protocol/src/query-hash.ts';
 
 const slowMaterializeThreshold = Infinity; // Disable slow materialization logs for tests.
 
@@ -1599,6 +1599,74 @@ describe('queriesPatch with lastPatch', () => {
         op: 'del',
       },
     ]);
+  });
+});
+
+const stubAst: AST = {
+  table: 'issue',
+  orderBy: [['id', 'asc']],
+};
+
+describe('query transform errors', () => {
+  test('got is called with an error when a query fails to transform', () => {
+    const nameAndArgs = {name: 'custom1', args: []};
+    const nameAndArgs2 = {name: 'custom2', args: []};
+
+    const queryHash = hashOfNameAndArgs(nameAndArgs.name, nameAndArgs.args);
+    const experimentalWatch = createExperimentalWatchMock();
+    const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+    const maxRecentQueriesSize = 0;
+    const mutationTracker = new MutationTracker(lc, ackMutations);
+    const queryManager = new QueryManager(
+      lc,
+      mutationTracker,
+      'client1',
+      schema.tables,
+      send,
+      experimentalWatch,
+      maxRecentQueriesSize,
+      queryChangeThrottleMs,
+      slowMaterializeThreshold,
+    );
+
+    const gotCallback1 = vi.fn<(got: boolean | Error) => void>();
+    const gotCallback2 = vi.fn<(got: boolean | Error) => void>();
+    const gotCallback1Dupe = vi.fn<(got: boolean | Error) => void>();
+
+    queryManager.addCustom(stubAst, nameAndArgs, 0, gotCallback1);
+    // duplicate addition of same query
+    queryManager.addCustom(stubAst, nameAndArgs, 0, gotCallback1Dupe);
+    queryManager.addCustom(stubAst, nameAndArgs2, 0, gotCallback2);
+    queryManager.flushBatch();
+
+    function checkInitialGots(cb: Mock<(got: boolean | Error) => void>) {
+      expect(cb).toBeCalledTimes(1);
+      expect(cb).toBeCalledWith(false);
+    }
+
+    checkInitialGots(gotCallback1);
+    checkInitialGots(gotCallback1Dupe);
+    checkInitialGots(gotCallback2);
+
+    const err = {
+      details: 'injected failure',
+      error: 'app',
+      id: queryHash,
+      name: 'custom1',
+    } as const;
+
+    // set an error
+    queryManager.handleTransformErrors([err]);
+
+    function checkFinalGots(cb: Mock<(got: boolean | Error) => void>) {
+      expect(cb).toBeCalledTimes(2);
+      expect(cb).nthCalledWith(2, false, err);
+    }
+
+    checkFinalGots(gotCallback1);
+    checkFinalGots(gotCallback1Dupe);
+    // error does not notify unrelated queries
+    expect(gotCallback2).toHaveBeenCalledTimes(1);
   });
 });
 
