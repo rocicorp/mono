@@ -38,10 +38,7 @@ export default async function runWorker(
   const startMs = Date.now();
   const config = getNormalizedZeroConfig({env});
 
-  startOtelAuto(
-    createLogContext(config, {worker: 'dispatcher'}, false),
-    config,
-  );
+  startOtelAuto(createLogContext(config, {worker: 'dispatcher'}, false));
   const lc = createLogContext(config, {worker: 'dispatcher'}, true);
   initEventSink(lc, config);
 

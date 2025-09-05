@@ -37,7 +37,6 @@ export class QueryDelegateImpl implements QueryDelegate {
       level: 'info',
       slowHydrateThreshold: 0,
       slowRowThreshold: 0,
-      otelDiag: false,
     };
   }
 
