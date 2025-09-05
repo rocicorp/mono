@@ -4,4 +4,5 @@ export const testLogConfig = {
   ivmSampling: 0,
   slowRowThreshold: 0,
   slowHydrateThreshold: 0,
+  otelDiag: false,
 };
