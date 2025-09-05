@@ -369,7 +369,6 @@ describe('ViewStore', () => {
       cleanup();
     });
   });
-
 });
 
 describe('useSuspenseQuery', () => {
@@ -620,8 +619,8 @@ describe('useSuspenseQuery', () => {
         const [data, details] = useSuspenseQuery(q, {suspendUntil: 'complete'});
         return (
           <div>
-            {details.type === 'error' 
-              ? `Error: ${details.error?.queryName || 'Unknown error'}` 
+            {details.type === 'error'
+              ? `Error: ${details.error?.queryName || 'Unknown error'}`
               : JSON.stringify(data)}
           </div>
         );
@@ -638,14 +637,16 @@ describe('useSuspenseQuery', () => {
       await expect.poll(() => element.textContent).toBe('loading');
 
       const view = materializeSpy.mock.results[0].value as {
-        listeners: Set<(snap: unknown, resultType: ResultType, error?: ErroredQuery) => void>;
+        listeners: Set<
+          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+        >;
       };
 
-      const error: ErroredQuery = { 
+      const error: ErroredQuery = {
         error: 'app',
         id: 'test-error-1',
         name: 'Query failed',
-        details: { reason: 'Invalid syntax' }
+        details: {reason: 'Invalid syntax'},
       };
       view.listeners.forEach(cb => cb([], 'error', error));
       await expect.poll(() => element.textContent).toBe('Error: Query failed');
@@ -660,8 +661,8 @@ describe('useSuspenseQuery', () => {
         const [data, details] = useSuspenseQuery(q, {suspendUntil: 'complete'});
         return (
           <div>
-            {details.type === 'error' 
-              ? `Error: ${details.error?.queryName || 'Unknown error'}` 
+            {details.type === 'error'
+              ? `Error: ${details.error?.queryName || 'Unknown error'}`
               : JSON.stringify(data)}
           </div>
         );
@@ -678,14 +679,16 @@ describe('useSuspenseQuery', () => {
       await expect.poll(() => element.textContent).toBe('loading');
 
       const view = materializeSpy.mock.results[0].value as {
-        listeners: Set<(snap: unknown, resultType: ResultType, error?: ErroredQuery) => void>;
+        listeners: Set<
+          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+        >;
       };
 
       const error: ErroredQuery = {
         error: 'app',
         id: 'test-error-2',
         name: 'Query failed',
-        details: { reason: 'Invalid syntax' }
+        details: {reason: 'Invalid syntax'},
       };
       view.listeners.forEach(cb => cb(undefined, 'error', error));
       await expect.poll(() => element.textContent).toBe('Error: Query failed');
@@ -700,8 +703,8 @@ describe('useSuspenseQuery', () => {
         const [data, details] = useSuspenseQuery(q, {suspendUntil: 'partial'});
         return (
           <div>
-            {details.type === 'error' 
-              ? `Error: ${details.error?.queryName}` 
+            {details.type === 'error'
+              ? `Error: ${details.error?.queryName}`
               : `Data: ${JSON.stringify(data)}, Type: ${details.type}`}
           </div>
         );
@@ -718,7 +721,9 @@ describe('useSuspenseQuery', () => {
       await expect.poll(() => element.textContent).toBe('loading');
 
       const view = materializeSpy.mock.results[0].value as {
-        listeners: Set<(snap: unknown, resultType: ResultType, error?: ErroredQuery) => void>;
+        listeners: Set<
+          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+        >;
       };
 
       // First emit error
@@ -726,14 +731,18 @@ describe('useSuspenseQuery', () => {
         error: 'app',
         id: 'temp-failure',
         name: 'Temporary failure',
-        details: {}
+        details: {},
       };
       view.listeners.forEach(cb => cb([], 'error', error));
-      await expect.poll(() => element.textContent).toBe('Error: Temporary failure');
+      await expect
+        .poll(() => element.textContent)
+        .toBe('Error: Temporary failure');
 
       // Then emit success
       view.listeners.forEach(cb => cb([{a: 1}], 'complete'));
-      await expect.poll(() => element.textContent).toBe('Data: [{"a":1}], Type: complete');
+      await expect
+        .poll(() => element.textContent)
+        .toBe('Data: [{"a":1}], Type: complete');
     });
 
     test('query can return partial data with error state', async () => {
@@ -745,9 +754,8 @@ describe('useSuspenseQuery', () => {
         const [data, details] = useSuspenseQuery(q, {suspendUntil: 'partial'});
         return (
           <div>
-            Data: {JSON.stringify(data)}, 
-            Type: {details.type}, 
-            Error: {details.type === 'error' ? details.error?.queryName : 'none'}
+            Data: {JSON.stringify(data)}, Type: {details.type}, Error:{' '}
+            {details.type === 'error' ? details.error?.queryName : 'none'}
           </div>
         );
       }
@@ -763,17 +771,20 @@ describe('useSuspenseQuery', () => {
       await expect.poll(() => element.textContent).toBe('loading');
 
       const view = materializeSpy.mock.results[0].value as {
-        listeners: Set<(snap: unknown, resultType: ResultType, error?: ErroredQuery) => void>;
+        listeners: Set<
+          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+        >;
       };
 
       const error: ErroredQuery = {
         error: 'app',
         id: 'partial-failure',
         name: 'Partial failure',
-        details: { message: 'Some items failed' }
+        details: {message: 'Some items failed'},
       };
       view.listeners.forEach(cb => cb([{a: 1}], 'error', error));
-      await expect.poll(() => element.textContent)
+      await expect
+        .poll(() => element.textContent)
         .toBe('Data: [{"a":1}], Type: error, Error: Partial failure');
     });
 
@@ -786,8 +797,8 @@ describe('useSuspenseQuery', () => {
         const [data, details] = useSuspenseQuery(q, {suspendUntil: 'partial'});
         return (
           <div>
-            {details.type === 'error' 
-              ? `Error state: ${details.error?.queryName}` 
+            {details.type === 'error'
+              ? `Error state: ${details.error?.queryName}`
               : `Data: ${JSON.stringify(data)}`}
           </div>
         );
@@ -804,7 +815,9 @@ describe('useSuspenseQuery', () => {
       await expect.poll(() => element.textContent).toBe('loading');
 
       const view = materializeSpy.mock.results[0].value as {
-        listeners: Set<(snap: unknown, resultType: ResultType, error?: ErroredQuery) => void>;
+        listeners: Set<
+          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+        >;
       };
 
       // Emit error immediately
@@ -812,10 +825,12 @@ describe('useSuspenseQuery', () => {
         error: 'zero',
         id: 'immediate-error',
         name: 'Immediate error',
-        details: {}
+        details: {},
       };
       view.listeners.forEach(cb => cb([], 'error', error));
-      await expect.poll(() => element.textContent).toBe('Error state: Immediate error');
+      await expect
+        .poll(() => element.textContent)
+        .toBe('Error state: Immediate error');
     });
 
     test('HTTP error type is handled correctly', async () => {
@@ -828,7 +843,7 @@ describe('useSuspenseQuery', () => {
         return (
           <div>
             {details.type === 'error' && details.error?.type === 'http'
-              ? `HTTP Error: ${(details.error as any).status}` 
+              ? `HTTP Error: ${details.error.status}`
               : JSON.stringify(data)}
           </div>
         );
@@ -845,14 +860,18 @@ describe('useSuspenseQuery', () => {
       await expect.poll(() => element.textContent).toBe('loading');
 
       const view = materializeSpy.mock.results[0].value as {
-        listeners: Set<(snap: unknown, resultType: ResultType, error?: ErroredQuery) => void>;
+        listeners: Set<
+          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+        >;
       };
 
       const httpError: ErroredQuery = {
         error: 'http',
         status: 500,
-        message: 'Internal Server Error'
-      } as ErroredQuery;
+        id: 'q1',
+        name: 'q1',
+        details: 'Internal Server Error',
+      };
       view.listeners.forEach(cb => cb([], 'error', httpError));
       await expect.poll(() => element.textContent).toBe('HTTP Error: 500');
     });

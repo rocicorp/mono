@@ -4,6 +4,8 @@ import {assertArray, unreachable} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {stringCompare} from '../../../shared/src/string-compare.ts';
+import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
+import type {ResultType} from '../query/typed-view.ts';
 import {ArrayView} from './array-view.ts';
 import type {Change} from './change.ts';
 import {Join} from './join.ts';
@@ -1785,4 +1787,257 @@ test('edit to preserve relationships', () => {
       },
     ]
   `);
+});
+
+test('listeners receive error when queryComplete rejects - plural', async () => {
+  const ms = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
+  ms.push({row: {a: 2, b: 'b'}, type: 'add'});
+
+  const testError: ErroredQuery = {
+    error: 'app',
+    id: 'test-error-1',
+    name: 'Query execution failed',
+    details: {reason: 'Test rejection'},
+  };
+
+  const queryCompletePromise = Promise.reject(testError);
+
+  const view = new ArrayView(
+    ms.connect([['a', 'asc']]),
+    {singular: false, relationships: {}},
+    queryCompletePromise, // Pass rejecting promise
+    () => {},
+  );
+
+  let receivedData: unknown;
+  let receivedResultType: ResultType | undefined;
+  let receivedError: ErroredQuery | undefined;
+
+  view.addListener((data, resultType, error) => {
+    receivedData = data;
+    receivedResultType = resultType;
+    receivedError = error;
+  });
+
+  // Initial call should have unknown state with data
+  expect(receivedResultType).toBe('unknown');
+  expect(receivedData).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1},
+    {a: 2, b: 'b', [refCountSymbol]: 1},
+  ]);
+  expect(receivedError).toBeUndefined();
+
+  // Wait for promise rejection to propagate
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  // After rejection, should have error state
+  expect(receivedResultType).toBe('error');
+  expect(receivedData).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1},
+    {a: 2, b: 'b', [refCountSymbol]: 1},
+  ]);
+  expect(receivedError).toEqual(testError);
+});
+
+test('listeners receive error when queryComplete rejects - singular', async () => {
+  const ms = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
+
+  const testError: ErroredQuery = {
+    error: 'zero',
+    id: 'singular-error',
+    name: 'Singular query failed',
+    details: {},
+  };
+
+  const queryCompletePromise = Promise.reject(testError);
+
+  const view = new ArrayView(
+    ms.connect([['a', 'asc']]),
+    {singular: true, relationships: {}},
+    queryCompletePromise,
+    () => {},
+  );
+
+  let receivedData: unknown;
+  let receivedResultType: ResultType | undefined;
+  let receivedError: ErroredQuery | undefined;
+
+  view.addListener((data, resultType, error) => {
+    receivedData = data;
+    receivedResultType = resultType;
+    receivedError = error;
+  });
+
+  // Initial state
+  expect(receivedResultType).toBe('unknown');
+  expect(receivedData).toEqual({a: 1, b: 'a', [refCountSymbol]: 1});
+  expect(receivedError).toBeUndefined();
+
+  // Wait for rejection
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  // Error state - data preserved
+  expect(receivedResultType).toBe('error');
+  expect(receivedData).toEqual({a: 1, b: 'a', [refCountSymbol]: 1});
+  expect(receivedError).toEqual(testError);
+});
+
+test('all listeners receive error when queryComplete rejects', async () => {
+  const ms = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
+
+  const testError: ErroredQuery = {
+    error: 'http',
+    id: 'query-1',
+    name: 'query-1',
+    status: 500,
+    details: 'Internal server error',
+  };
+
+  const queryCompletePromise = Promise.reject(testError);
+
+  const view = new ArrayView(
+    ms.connect([['a', 'asc']]),
+    {singular: false, relationships: {}},
+    queryCompletePromise,
+    () => {},
+  );
+
+  const listener1Results: ResultType[] = [];
+  const listener2Results: ResultType[] = [];
+  const listener1Errors: (ErroredQuery | undefined)[] = [];
+  const listener2Errors: (ErroredQuery | undefined)[] = [];
+
+  view.addListener((_data, resultType, error) => {
+    listener1Results.push(resultType);
+    listener1Errors.push(error);
+  });
+
+  view.addListener((_data, resultType, error) => {
+    listener2Results.push(resultType);
+    listener2Errors.push(error);
+  });
+
+  // Both get initial unknown state
+  expect(listener1Results).toEqual(['unknown']);
+  expect(listener2Results).toEqual(['unknown']);
+
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  // Both get error state
+  expect(listener1Results).toEqual(['unknown', 'error']);
+  expect(listener2Results).toEqual(['unknown', 'error']);
+  expect(listener1Errors[1]).toEqual(testError);
+  expect(listener2Errors[1]).toEqual(testError);
+});
+
+test('listeners added after error still receive error state', async () => {
+  const ms = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
+
+  const testError: ErroredQuery = {
+    error: 'app',
+    id: 'late-listener-error',
+    name: 'Error before listener',
+    details: {},
+  };
+
+  const queryCompletePromise = Promise.reject(testError);
+
+  const view = new ArrayView(
+    ms.connect([['a', 'asc']]),
+    {singular: false, relationships: {}},
+    queryCompletePromise,
+    () => {},
+  );
+
+  // Wait for error to occur
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  // Add listener after error
+  let receivedResultType: ResultType | undefined;
+  let receivedError: ErroredQuery | undefined;
+
+  view.addListener((_data, resultType, error) => {
+    receivedResultType = resultType;
+    receivedError = error;
+  });
+
+  // Should immediately receive error state
+  expect(receivedResultType).toBe('error');
+  expect(receivedError).toEqual(testError);
+});
+
+test('error state persists through flush operations', async () => {
+  const ms = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}},
+    ['a'],
+  );
+  ms.push({row: {a: 1, b: 'a'}, type: 'add'});
+
+  const testError: ErroredQuery = {
+    error: 'app',
+    id: 'persistent-error',
+    name: 'Persistent error',
+    details: {},
+  };
+
+  const queryCompletePromise = Promise.reject(testError);
+
+  const view = new ArrayView(
+    ms.connect([['a', 'asc']]),
+    {singular: false, relationships: {}},
+    queryCompletePromise,
+    () => {},
+  );
+
+  let callCount = 0;
+  let lastResultType: ResultType | undefined;
+
+  view.addListener((_data, resultType, _error) => {
+    callCount++;
+    lastResultType = resultType;
+  });
+
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  expect(lastResultType).toBe('error');
+  const callsAfterError = callCount;
+
+  // Add more data and flush
+  ms.push({row: {a: 2, b: 'b'}, type: 'add'});
+  view.flush();
+
+  // Should still be in error state
+  expect(lastResultType).toBe('error');
+  expect(callCount).toBeGreaterThan(callsAfterError);
 });
