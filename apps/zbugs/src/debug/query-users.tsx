@@ -7,7 +7,12 @@ export function QueryUsers() {
     return <div>Loading...</div>;
   }
   if (details.type === 'error') {
-    return <div>Error: {JSON.stringify(details.error?.details ?? null)}</div>;
+    return (
+      <div>
+        <button onClick={details.refetch}>Retry</button>
+        Error: {JSON.stringify(details.error?.details ?? null)}
+      </div>
+    );
   }
   return (
     <div>
