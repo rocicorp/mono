@@ -12,7 +12,7 @@ import {
   otelMetricsEnabled,
   otelTracesEnabled,
 } from '../../../otel/src/enabled.ts';
-import type {LogConfig} from '../../../otel/src/log-options.ts';
+import type {NormalizedZeroConfig} from '../config/normalize.ts';
 
 class OtelManager {
   static #instance: OtelManager;
@@ -28,8 +28,8 @@ class OtelManager {
     return OtelManager.#instance;
   }
 
-  startOtelAuto(lc?: LogContext, logConfig?: LogConfig) {
-    if (lc && logConfig?.otelDiag) {
+  startOtelAuto(lc?: LogContext, config?: NormalizedZeroConfig) {
+    if (lc && config?.log.otelDiag) {
       const log = lc.withContext('component', 'otel');
       diag.setLogger({
         verbose: (msg: string, ...args: unknown[]) => log.debug?.(msg, ...args),
@@ -96,5 +96,5 @@ class OtelManager {
   }
 }
 
-export const startOtelAuto = (lc?: LogContext, logConfig?: LogConfig) =>
-  OtelManager.getInstance().startOtelAuto(lc, logConfig);
+export const startOtelAuto = (lc?: LogContext, config?: NormalizedZeroConfig) =>
+  OtelManager.getInstance().startOtelAuto(lc, config);

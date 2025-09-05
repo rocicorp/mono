@@ -23,10 +23,7 @@ export default async function runWorker(
 ): Promise<void> {
   const config = getNormalizedZeroConfig({env, argv});
 
-  startOtelAuto(
-    createLogContext(config, {worker: 'reaper'}, false),
-    config.log,
-  );
+  startOtelAuto(createLogContext(config, {worker: 'reaper'}, false), config);
   const lc = createLogContext(config, {worker: 'reaper'}, true);
   initEventSink(lc, config);
 
