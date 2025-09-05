@@ -97,6 +97,7 @@ class AnonymousTelemetryManager {
       exportIntervalMillis: 60000 * this.#viewSyncerCount,
       exporter: new OTLPMetricExporter({
         url: 'https://metrics.rocicorp.dev',
+        timeoutMillis: 30000,
       }),
     });
 
