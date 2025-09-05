@@ -121,7 +121,7 @@ beforeAll(async () => {
   }
   await initialSync(
     lc,
-    {appID: 'compiler_pg_test', shardNum: 0, publications: []},
+    {appID: 'compiler_bigint_pg_test', shardNum: 0, publications: []},
     sqlite,
     getConnectionURI(pg),
     {tableCopyWorkers: 1},

@@ -258,7 +258,7 @@ export abstract class AbstractQuery<
     assert(related, 'Invalid relationship');
     if (isOneHop(related)) {
       const {destSchema, destField, sourceField, cardinality} = related[0];
-      let q: AnyQuery = this[newQuerySymbol](
+      const q: AnyQuery = this[newQuerySymbol](
         this._delegate,
         this.#schema,
         destSchema,
@@ -273,9 +273,12 @@ export abstract class AbstractQuery<
         this.customQueryID,
         undefined,
       ) as AnyQuery;
-      if (cardinality === 'one') {
-        q = q.one();
-      }
+      // Intentionally not setting to `one` as it is a perf degradation
+      // and the user should not be making the mistake of setting cardinality to
+      // `one` when it is actually not.
+      // if (cardinality === 'one') {
+      //   q = q.one();
+      // }
       const sq = cb(q) as AbstractQuery<Schema, string>;
       assert(
         isCompoundKey(sourceField),

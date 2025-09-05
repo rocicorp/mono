@@ -721,57 +721,6 @@ describe('joins and filters', () => {
       ]
     `);
   });
-
-  test('schema applied one but really many', async () => {
-    const queryDelegate = new QueryDelegateImpl({callGot: true});
-    addData(queryDelegate);
-
-    const query = newQuery(queryDelegate, schema, 'issue').related(
-      'oneComment',
-    );
-    const data = await query;
-    expect(data).toMatchInlineSnapshot(`
-      [
-        {
-          "closed": false,
-          "createdAt": 1,
-          "description": "description 1",
-          "id": "0001",
-          "oneComment": {
-            "authorId": "0001",
-            "createdAt": 1,
-            "id": "0001",
-            "issueId": "0001",
-            "text": "comment 1",
-            Symbol(rc): 1,
-          },
-          "ownerId": "0001",
-          "title": "issue 1",
-          Symbol(rc): 1,
-        },
-        {
-          "closed": false,
-          "createdAt": 2,
-          "description": "description 2",
-          "id": "0002",
-          "oneComment": undefined,
-          "ownerId": "0002",
-          "title": "issue 2",
-          Symbol(rc): 1,
-        },
-        {
-          "closed": false,
-          "createdAt": 3,
-          "description": "description 3",
-          "id": "0003",
-          "oneComment": undefined,
-          "ownerId": null,
-          "title": "issue 3",
-          Symbol(rc): 1,
-        },
-      ]
-    `);
-  });
 });
 
 test('limit -1', () => {
