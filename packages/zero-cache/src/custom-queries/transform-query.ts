@@ -13,6 +13,7 @@ import * as v from '../../../shared/src/valita.ts';
 import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import {TimedCache} from '../../../shared/src/cache.ts';
 import {must} from '../../../shared/src/must.ts';
+import {ErrorForClient} from '../types/error-for-client.ts';
 
 export type HttpError = {
   error: 'http';
@@ -106,6 +107,9 @@ export class CustomQueryTransformer {
         ['transform', request] satisfies TransformRequestMessage,
       );
     } catch (e) {
+      if (e instanceof ErrorForClient) {
+        throw e;
+      }
       return request.map(r => ({
         error: 'zero',
         details: e instanceof Error ? e.message : String(e),
