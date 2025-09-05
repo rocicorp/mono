@@ -12,7 +12,6 @@ import {
   otelMetricsEnabled,
   otelTracesEnabled,
 } from '../../../otel/src/enabled.ts';
-import type {NormalizedZeroConfig} from '../config/normalize.ts';
 
 class OtelManager {
   static #instance: OtelManager;
@@ -28,8 +27,11 @@ class OtelManager {
     return OtelManager.#instance;
   }
 
-  startOtelAuto(lc?: LogContext, config?: NormalizedZeroConfig) {
-    if (lc && config?.log.otelDiag) {
+  startOtelAuto(lc?: LogContext) {
+    // Set default log level if none specified
+    process.env.OTEL_LOG_LEVEL ??= 'error';
+
+    if (lc) {
       const log = lc.withContext('component', 'otel');
       diag.setLogger({
         verbose: (msg: string, ...args: unknown[]) => log.debug?.(msg, ...args),
@@ -96,5 +98,5 @@ class OtelManager {
   }
 }
 
-export const startOtelAuto = (lc?: LogContext, config?: NormalizedZeroConfig) =>
-  OtelManager.getInstance().startOtelAuto(lc, config);
+export const startOtelAuto = (lc?: LogContext) =>
+  OtelManager.getInstance().startOtelAuto(lc);

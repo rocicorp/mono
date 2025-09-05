@@ -34,14 +34,6 @@ export const logOptions = {
       `How often to collect IVM metrics. 1 out of N requests will be sampled where N is this value.`,
     ],
   },
-
-  otelDiag: {
-    type: v.boolean().default(false),
-    desc: [
-      `Enable OpenTelemetry diagnostic logging. When enabled, OTEL internal`,
-      `diagnostics will be logged through the standard logging system.`,
-    ],
-  },
 };
 
 export type LogConfig = Config<typeof logOptions>;
