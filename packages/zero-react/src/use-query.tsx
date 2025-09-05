@@ -25,7 +25,8 @@ export type QueryResultDetails = Readonly<
 
 type QueryErrorDetails = {
   type: 'error';
-  error?:
+  refetch: (() => void) | undefined;
+  error:
     | {
         type: 'app';
         queryName: string;
@@ -184,6 +185,7 @@ function getSnapshot<TReturn>(
   singular: boolean,
   data: HumanReadable<TReturn>,
   resultType: ResultType,
+  refetchFn: () => void,
   error?: ErroredQuery | undefined,
 ): QueryResult<TReturn> {
   if (singular && data === undefined) {
@@ -192,7 +194,7 @@ function getSnapshot<TReturn>(
         if (error) {
           return [
             undefined,
-            makeError(error),
+            makeError(refetchFn, error),
           ] as unknown as QueryResult<TReturn>;
         }
         return emptySnapshotSingularErrorUnknown as unknown as QueryResult<TReturn>;
@@ -209,7 +211,7 @@ function getSnapshot<TReturn>(
         if (error) {
           return [
             emptyArray,
-            makeError(error),
+            makeError(refetchFn, error),
           ] as unknown as QueryResult<TReturn>;
         }
         return emptySnapshotErrorUnknown as unknown as QueryResult<TReturn>;
@@ -223,9 +225,17 @@ function getSnapshot<TReturn>(
   switch (resultType) {
     case 'error':
       if (error) {
-        return [data, makeError(error)];
+        return [data, makeError(refetchFn, error)];
       }
-      return [data, resultTypeError];
+      return [
+        data,
+        makeError(refetchFn, {
+          error: 'app',
+          id: 'unknown',
+          name: 'unknown',
+          details: 'An unknown error occurred',
+        }),
+      ];
     case 'complete':
       return [data, resultTypeComplete];
     case 'unknown':
@@ -233,9 +243,13 @@ function getSnapshot<TReturn>(
   }
 }
 
-function makeError(error: ErroredQuery): QueryErrorDetails {
+function makeError(
+  refetch: () => void,
+  error: ErroredQuery,
+): QueryErrorDetails {
   return {
     type: 'error',
+    refetch,
     error:
       error.error === 'app' || error.error === 'zero'
         ? {
@@ -462,6 +476,7 @@ class ViewWrapper<
       this.#format.singular,
       data,
       resultType,
+      this.#refetch,
       error,
     );
     if (resultType === 'complete' || resultType === 'error') {
@@ -483,6 +498,16 @@ class ViewWrapper<
     for (const internals of this.#reactInternals) {
       internals();
     }
+  };
+
+  /**
+   * Called by the user to force a refetch of the query
+   * in the case the query errored.
+   */
+  #refetch = () => {
+    this.#view?.destroy();
+    this.#view = undefined;
+    this.#materializeIfNeeded();
   };
 
   #materializeIfNeeded = () => {
