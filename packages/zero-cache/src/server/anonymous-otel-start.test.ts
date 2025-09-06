@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import {OTLPMetricExporter} from '@opentelemetry/exporter-metrics-otlp-http';
 import {
   MeterProvider,
@@ -14,10 +15,12 @@ import {
   shutdownAnonymousTelemetry,
   startAnonymousTelemetry,
 } from './anonymous-otel-start.js';
+import {TimeoutAwareOTLPExporter} from './timeout-aware-otlp-exporter.ts';
 
 // Mock the OTLP exporter and related OpenTelemetry components
 vi.mock('@opentelemetry/exporter-metrics-otlp-http');
 vi.mock('@opentelemetry/sdk-metrics');
+vi.mock('./timeout-aware-otlp-exporter.ts');
 
 // Mock the config
 vi.mock('../config/zero-config.js', () => ({
@@ -94,10 +97,16 @@ describe('Anonymous Telemetry Integration Tests', () => {
     mockMetricReader = vi.fn();
 
     // Mock exporter
-    mockExporter = vi.fn();
+    mockExporter = {
+      export: vi.fn(),
+      forceFlush: vi.fn().mockResolvedValue(undefined),
+      shutdown: vi.fn().mockResolvedValue(undefined),
+      selectAggregationTemporality: vi.fn(),
+    };
 
     // Setup mocks
     vi.mocked(OTLPMetricExporter).mockImplementation(() => mockExporter);
+    vi.mocked(TimeoutAwareOTLPExporter).mockImplementation(() => mockExporter);
     vi.mocked(PeriodicExportingMetricReader).mockImplementation(
       () => mockMetricReader,
     );
@@ -195,16 +204,21 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
       startAnonymousTelemetry(lc);
 
-      // Verify OTLP exporter was created with correct configuration
-      expect(OTLPMetricExporter).toHaveBeenCalledWith({
-        url: 'https://metrics.rocicorp.dev',
-      });
+      // Verify TimeoutAwareOTLPExporter was created with correct configuration
+      expect(TimeoutAwareOTLPExporter).toHaveBeenCalledWith(
+        {
+          url: 'https://metrics.rocicorp.dev',
+        },
+        expect.any(Object), // LogContext
+      );
 
-      // Verify metric reader was created
-      expect(PeriodicExportingMetricReader).toHaveBeenCalledWith({
-        exportIntervalMillis: 60000,
-        exporter: mockExporter,
-      });
+      // Verify metric reader was created with TimeoutAwareOTLPExporter
+      expect(PeriodicExportingMetricReader).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exportIntervalMillis: expect.any(Number), // Now includes random delay
+          exporter: expect.any(Object), // Should be TimeoutAwareOTLPExporter instance
+        }),
+      );
 
       // Verify meter provider was created
       expect(MeterProvider).toHaveBeenCalled();

@@ -1,6 +1,5 @@
 import type {ObservableResult} from '@opentelemetry/api';
 import {type Meter} from '@opentelemetry/api';
-import {OTLPMetricExporter} from '@opentelemetry/exporter-metrics-otlp-http';
 import {resourceFromAttributes} from '@opentelemetry/resources';
 import {
   MeterProvider,
@@ -18,6 +17,7 @@ import {
   getZeroConfig,
   type ZeroConfig,
 } from '../config/zero-config.js';
+import {TimeoutAwareOTLPExporter} from './timeout-aware-otlp-exporter.ts';
 
 class AnonymousTelemetryManager {
   static #instance: AnonymousTelemetryManager;
@@ -92,12 +92,17 @@ class AnonymousTelemetryManager {
     }
 
     const resource = resourceFromAttributes(this.#getAttributes());
-
+    // Add a random delay between 1 and 10 seconds to the export interval to avoid all clients exporting at the same time
+    const exportIntervalMillis =
+      60000 * this.#viewSyncerCount + Math.floor(Math.random() * 10000) + 1000;
     const metricReader = new PeriodicExportingMetricReader({
-      exportIntervalMillis: 60000 * this.#viewSyncerCount,
-      exporter: new OTLPMetricExporter({
-        url: 'https://metrics.rocicorp.dev',
-      }),
+      exportIntervalMillis,
+      exporter: new TimeoutAwareOTLPExporter(
+        {
+          url: 'https://metrics.rocicorp.dev',
+        },
+        this.#lc,
+      ),
     });
 
     this.#meterProvider = new MeterProvider({
@@ -108,7 +113,7 @@ class AnonymousTelemetryManager {
 
     this.#setupMetrics();
     this.#lc?.info?.(
-      `telemetry: started (exports every ${60 * this.#viewSyncerCount} seconds for ${this.#viewSyncerCount} view-syncers)`,
+      `telemetry: started (exports every ${exportIntervalMillis} ms for ${this.#viewSyncerCount} view-syncers)`,
     );
   }
 

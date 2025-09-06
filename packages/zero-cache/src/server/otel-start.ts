@@ -3,6 +3,10 @@ import {logs} from '@opentelemetry/api-logs';
 import {getNodeAutoInstrumentations} from '@opentelemetry/auto-instrumentations-node';
 import type {Instrumentation} from '@opentelemetry/instrumentation';
 import {resourceFromAttributes} from '@opentelemetry/resources';
+import {
+  MeterProvider,
+  PeriodicExportingMetricReader,
+} from '@opentelemetry/sdk-metrics';
 import {NodeSDK} from '@opentelemetry/sdk-node';
 import {ATTR_SERVICE_VERSION} from '@opentelemetry/semantic-conventions';
 import {LogContext} from '@rocicorp/logger';
@@ -12,6 +16,7 @@ import {
   otelMetricsEnabled,
   otelTracesEnabled,
 } from '../../../otel/src/enabled.ts';
+import {TimeoutAwareOTLPExporter} from './timeout-aware-otlp-exporter.ts';
 
 class OtelManager {
   static #instance: OtelManager;
@@ -58,6 +63,27 @@ class OtelManager {
     if (!this.#autoInstrumentations) {
       this.#autoInstrumentations = getNodeAutoInstrumentations();
     }
+
+    // Create custom metrics provider with timeout-aware exporter if metrics are enabled
+    let meterProvider: MeterProvider | undefined;
+    if (otelMetricsEnabled()) {
+      const metricsEndpoint =
+        process.env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT ||
+        process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
+
+      if (metricsEndpoint) {
+        const metricReader = new PeriodicExportingMetricReader({
+          exporter: new TimeoutAwareOTLPExporter({url: metricsEndpoint}, lc),
+          exportIntervalMillis: 30000, // 30 seconds default
+        });
+
+        meterProvider = new MeterProvider({
+          resource,
+          readers: [metricReader],
+        });
+      }
+    }
+
     // Set defaults to be backwards compatible with the previously
     // hard-coded exporters
     process.env.OTEL_EXPORTER_OTLP_PROTOCOL ??= 'http/json';
@@ -73,6 +99,8 @@ class OtelManager {
       instrumentations: this.#autoInstrumentations
         ? [this.#autoInstrumentations]
         : [],
+      // Use custom meter provider if we created one, otherwise let SDK handle it
+      ...(meterProvider ? {meterProvider} : {}),
     });
 
     // Start SDK: will deploy Trace, Metrics, and Logs pipelines as per env vars
