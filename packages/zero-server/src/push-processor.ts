@@ -61,6 +61,7 @@ export class PushProcessor<
       return handleMutationRequest(
         (transact, mutations) =>
           this.#processMutation(mutators, transact, mutations),
+        this.#dbProvider,
         queryOrQueryString,
         this.#logLevel,
       );
@@ -68,6 +69,7 @@ export class PushProcessor<
     return handleMutationRequest(
       (transact, mutation) =>
         this.#processMutation(mutators, transact, mutation),
+      this.#dbProvider,
       queryOrQueryString,
       must(body),
       this.#logLevel,
@@ -76,10 +78,10 @@ export class PushProcessor<
 
   #processMutation(
     mutators: MD,
-    transact: TransactFn,
+    transact: TransactFn<D>,
     _mutation: CustomMutation,
   ): Promise<MutationResponse> {
-    return transact(this.#dbProvider, (tx, name, args) =>
+    return transact((tx, name, args) =>
       this.#dispatchMutation(mutators, tx, name, args),
     );
   }
