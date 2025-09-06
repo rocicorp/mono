@@ -12,7 +12,6 @@ import type {
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {CustomQueryID} from './named.ts';
-import type {QueryDelegate} from './query-delegate.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
@@ -36,7 +35,6 @@ type ArraySelectors<E extends TableSchema> = {
 
 export type QueryReturn<Q> = Q extends Query<any, any, infer R> ? R : never;
 export type QueryTable<Q> = Q extends Query<any, infer T, any> ? T : never;
-export const delegateSymbol = Symbol('delegate');
 
 export type GetFilterType<
   TSchema extends TableSchema,
@@ -170,13 +168,13 @@ export interface Query<
    */
   hash(): string;
   readonly ast: AST;
+  completedAST(): AST;
   readonly customQueryID: CustomQueryID | undefined;
 
   nameAndArgs(
     name: string,
     args: ReadonlyArray<ReadonlyJSONValue>,
   ): Query<TSchema, TTable, TReturn>;
-  [delegateSymbol](delegate: QueryDelegate): Query<TSchema, TTable, TReturn>;
 
   /**
    * Related is used to add a related query to the current query. This is used

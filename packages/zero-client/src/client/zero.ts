@@ -85,11 +85,7 @@ import {
   isClientMetric,
 } from '../../../zql/src/query/metrics-delegate.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {
-  type AnyQuery,
-  materialize,
-  newQuery,
-} from '../../../zql/src/query/query-impl.ts';
+import {newQuery, type AnyQuery} from '../../../zql/src/query/query-impl.ts';
 import {
   type HumanReadable,
   type MaterializeOptions,
@@ -98,9 +94,12 @@ import {
   type QueryReturn,
   type QueryTable,
   type RunOptions,
-  delegateSymbol,
 } from '../../../zql/src/query/query.ts';
-import type {TypedView} from '../../../zql/src/query/typed-view.ts';
+import {
+  materializeQuery,
+  preloadQuery,
+  runQuery,
+} from '../../../zql/src/query/run.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
 import {ActiveClientsManager} from './active-clients-manager.ts';
@@ -161,6 +160,7 @@ import {version} from './version.ts';
 import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
+import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -845,19 +845,18 @@ export class Zero<
     query: Query<S, keyof S['tables'] & string, any>,
     options?: PreloadOptions | undefined,
   ) {
-    return query[delegateSymbol](this.#zeroContext).preload(options);
+    return preloadQuery(this.#zeroContext, query, options);
   }
 
   run<Q>(
     query: Q,
     runOptions?: RunOptions | undefined,
   ): Promise<HumanReadable<QueryReturn<Q>>> {
-    return (
-      (query as AnyQuery)
-        // eslint-disable-next-line no-unexpected-multiline
-        [delegateSymbol](this.#zeroContext)
-        .run(runOptions) as Promise<HumanReadable<QueryReturn<Q>>>
-    );
+    return runQuery(
+      this.#zeroContext,
+      query as AnyQuery,
+      runOptions,
+    ) as Promise<HumanReadable<QueryReturn<Q>>>;
   }
 
   materialize<Q>(
@@ -877,11 +876,18 @@ export class Zero<
       | undefined,
     maybeOptions?: MaterializeOptions | undefined,
   ) {
-    return materialize(
-      query,
+    if (typeof factoryOrOptions === 'function') {
+      return materializeQuery(
+        this.#zeroContext,
+        query as AnyQuery,
+        factoryOrOptions,
+        maybeOptions?.ttl,
+      );
+    }
+    return materializeQuery(
       this.#zeroContext,
-      factoryOrOptions,
-      maybeOptions,
+      query as AnyQuery,
+      maybeOptions?.ttl,
     );
   }
 
