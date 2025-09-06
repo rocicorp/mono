@@ -28,9 +28,23 @@ import {mark} from '../../perf-log.ts';
 import {preload} from '../../zero-preload.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {queries, type ListContext} from '../../../shared/queries.ts';
+import type {IssueRow} from '../../../shared/schema.ts';
 
 let firstRowRendered = false;
 const itemSize = 56;
+const pageSize = 100;
+
+type Anchor = {
+  startRow: IssueRow | undefined;
+  direction: 'down' | 'up';
+  estimatedIndex: number;
+};
+
+const startingAnchor = {
+  startRow: undefined,
+  direction: 'down',
+  estimatedIndex: 0,
+} as const;
 
 export function ListPage({onReady}: {onReady: () => void}) {
   const login = useLogin();
@@ -58,12 +72,17 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const open = status === 'open' ? true : status === 'closed' ? false : null;
 
-  const pageSize = 20;
-  const [limit, setLimit] = useState(pageSize);
+  const [anchor, setAnchor] = useState<Anchor>(startingAnchor);
+
   const q = queries.issueList(
     login.loginState?.decoded,
     {
-      sortDirection,
+      sortDirection:
+        anchor.direction === 'down'
+          ? sortDirection
+          : sortDirection === 'asc'
+            ? 'desc'
+            : 'asc',
       sortField,
       assignee,
       creator,
@@ -72,14 +91,42 @@ export function ListPage({onReady}: {onReady: () => void}) {
       textFilter,
     },
     z.userID,
-    limit,
+    pageSize,
+    anchor.startRow
+      ? {
+          id: anchor.startRow.id,
+          modified: anchor.startRow.modified,
+          created: anchor.startRow.created,
+        }
+      : null,
   );
 
+  const baseQ = queries.issueList(
+    login.loginState?.decoded,
+    {
+      sortDirection, // don't flip sort based on anchor
+      sortField,
+      assignee,
+      creator,
+      labels,
+      open,
+      textFilter,
+    },
+    z.userID,
+    0, // no limit
+    null, // no start
+  );
+
+  const [estimatedTotal, setEstimatedTotal] = useState(0);
+  const [total, setTotal] = useState<number | undefined>(undefined);
+
   useEffect(() => {
-    setLimit(pageSize);
+    setEstimatedTotal(0);
+    setTotal(undefined);
+    setAnchor(startingAnchor);
     virtualizer.scrollToIndex(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q.limit(0).hash()]); // limit set to 0 since we only scroll on query change, not limit change.
+  }, [baseQ.hash()]);
 
   // We don't want to cache every single keystroke. We already debounce
   // keystrokes for the URL, so we just reuse that.
@@ -87,13 +134,26 @@ export function ListPage({onReady}: {onReady: () => void}) {
     q,
     textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
   );
-  const isSearchComplete = issues.length < limit;
 
   useEffect(() => {
     if (issues.length > 0 || issuesResult.type === 'complete') {
       onReady();
     }
   }, [issues.length, issuesResult.type, onReady]);
+
+  useEffect(() => {
+    if (anchor.direction !== 'down') {
+      return;
+    }
+    const eTotal = anchor.estimatedIndex + issues.length;
+    if (eTotal > estimatedTotal) {
+      setEstimatedTotal(eTotal);
+    }
+    if (issuesResult.type === 'complete' && issues.length < pageSize) {
+      console.log(issues.length, issues, anchor);
+      setTotal(eTotal);
+    }
+  }, [anchor, issuesResult.type, issues, estimatedTotal]);
 
   useEffect(() => {
     if (issuesResult.type === 'complete') {
@@ -186,7 +246,20 @@ export function ListPage({onReady}: {onReady: () => void}) {
   };
 
   const Row = ({index, style}: {index: number; style: CSSProperties}) => {
-    const issue = issues[index];
+    const adjustedIndex = toIssueArrayIndex(index);
+    if (adjustedIndex < 0 || adjustedIndex >= issues.length) {
+      return (
+        <div
+          className={classNames('row')}
+          style={{
+            ...style,
+          }}
+        >
+          {' ' + index + ' ' + adjustedIndex + ' '}
+        </div>
+      );
+    }
+    const issue = issues[adjustedIndex];
     if (firstRowRendered === false) {
       mark('first issue row rendered');
       firstRowRendered = true;
@@ -213,6 +286,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
           title={issue.title}
           listContext={listContext}
         >
+          {' ' + index + ' ' + adjustedIndex + ' '}
           {issue.title}
         </IssueLink>
         <div className="issue-taglist">
@@ -238,24 +312,146 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const size = useElementSize(tableWrapperRef);
 
   const virtualizer = useVirtualizer({
-    count: issues.length,
+    count: total ?? estimatedTotal,
     estimateSize: () => itemSize,
     overscan: 5,
-    getItemKey: index => issues[index].id,
+    getItemKey: index => {
+      return index;
+      // const adjustedIndex = index - anchor.estimatedIndex;
+      // if (adjustedIndex >= issues.length) {
+      //   return 'sentinel';
+      // }
+      // if (adjustedIndex < 0) {
+      //   return 'buffer' + adjustedIndex;
+      // }
+      // return issues[adjustedIndex].id;
+    },
     getScrollElement: () => listRef.current,
   });
 
+  const toIssueArrayIndex = useCallback(
+    (index: number) =>
+      anchor.direction === 'down'
+        ? index - anchor.estimatedIndex
+        : anchor.estimatedIndex - index,
+    [anchor],
+  );
+
+  const toIndex = useCallback(
+    (issueArrayIndex: number) =>
+      anchor.direction === 'down'
+        ? index - anchor.estimatedIndex
+        : anchor.estimatedIndex - index,
+    [anchor],
+  );
+
   const virtualItems = virtualizer.getVirtualItems();
   useEffect(() => {
-    const [lastItem] = virtualItems.reverse();
+    const [firstItem] = virtualItems;
+    const lastItem = virtualItems[virtualItems.length - 1];
     if (!lastItem) {
       return;
     }
 
-    if (lastItem.index >= limit - pageSize / 4) {
-      setLimit(limit + pageSize);
+    // const distanceFromStart =
+    //   anchor.direction === 'up'
+    //     ? firstItem.index - (anchor.estimatedIndex - issues.length)
+    //     : firstItem.index - anchor.estimatedIndex;
+    // const distanceFromEnd =
+    //   anchor.direction === 'up'
+    //     ? anchor.estimatedIndex - lastItem.index
+    //     : anchor.estimatedIndex + issues.length - lastItem.index;
+    // console.log(
+    //   'hello',
+    //   JSON.stringify(
+    //     {
+    //       scrollDirection: virtualizer.scrollDirection,
+    //       // virtualItems,
+    //       // firstItem,
+    //       first: adjustIndex(firstItem.index),
+    //       // lastItem,
+    //       last: adjustIndex(lastItem.index),
+    //       anchor: {
+    //         direction: anchor.direction,
+    //         estimateIndex: anchor.estimatedIndex,
+    //         row: anchor.startRow?.title,
+    //       },
+    //       distanceFromEnd,
+    //       distanceFromStart,
+    //       issuesResult,
+    //     },
+    //     undefined,
+    //     2,
+    //   ),
+    // );
+
+    // if (issuesResult.type !== 'complete') {
+    //   return;
+    // }
+
+    if (anchor.estimatedIndex !== 0) {
+      if (firstItem.index <= pageSize / 5) {
+        console.log('anchoring to top');
+        setAnchor(startingAnchor);
+      }
+
+      const distanceFromStart =
+        anchor.direction === 'up'
+          ? firstItem.index - (anchor.estimatedIndex - issues.length)
+          : firstItem.index - anchor.estimatedIndex;
+      if (
+        virtualizer.scrollDirection === 'backward' &&
+        distanceFromStart <= pageSize / 5
+      ) {
+        console.log('page up');
+        // TODO adjustedIndex may be out of bounds of issues
+        const adjustedIndex = toIssueArrayIndex(lastItem.index);
+        console.log({
+          estimatedIndex: lastItem.index - 1,
+          direction: 'up',
+          row: issues[adjustedIndex],
+        });
+        setAnchor({
+          estimatedIndex: lastItem.index - 1,
+          direction: 'up',
+          startRow: issues[adjustedIndex],
+        });
+      }
     }
-  }, [limit, virtualItems]);
+
+    const distanceFromEnd =
+      anchor.direction === 'up'
+        ? anchor.estimatedIndex - lastItem.index
+        : anchor.estimatedIndex + issues.length - lastItem.index;
+    if (
+      virtualizer.scrollDirection === 'forward' &&
+      distanceFromEnd <= pageSize / 5
+    ) {
+      console.log('page down');
+      const [firstItem] = virtualItems;
+      const adjustedIndex = toIssueArrayIndex(firstItem.index);
+      console.log(
+        {
+          estimatedIndex: firstItem.index + 1,
+          direction: 'down',
+          row: issues[adjustedIndex],
+        },
+        issues[adjustedIndex + 1],
+      );
+      setAnchor({
+        estimatedIndex: firstItem.index + 1,
+        direction: 'down',
+        startRow: issues[adjustedIndex],
+      });
+    }
+  }, [
+    anchor,
+    virtualizer.scrollDirection,
+    issues,
+    issuesResult,
+    toIssueArrayIndex,
+    virtualItems,
+  ]);
 
   const [forceSearchMode, setForceSearchMode] = useState(false);
   const searchMode = forceSearchMode || Boolean(textFilter);
@@ -315,8 +511,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
           )}
           {issuesResult.type === 'complete' || issues.length > 0 ? (
             <span className="issue-count">
-              {issues.length}
-              {isSearchComplete ? '' : '+'}
+              {total ?? `${estimatedTotal - (estimatedTotal % 50)}+`}
             </span>
           ) : null}
         </h1>

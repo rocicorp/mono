@@ -40,6 +40,8 @@ const issueRowSort = z.object({
   modified: z.number(),
 });
 
+type IssueRowSort = z.infer<typeof issueRowSort>;
+
 export const queries = {
   allLabels: syncedQuery('allLabels', z.tuple([]), () => builder.label),
 
@@ -156,10 +158,15 @@ export const queries = {
 
   issueList: syncedQueryWithContext(
     'issueList',
-    z.tuple([listContextParams, z.string(), z.number()]),
-    (auth: AuthData | undefined, listContext, userID, limit) =>
+    z.tuple([
+      listContextParams,
+      z.string(),
+      z.number(),
+      issueRowSort.nullable(),
+    ]),
+    (auth: AuthData | undefined, listContext, userID, limit, start) =>
       applyIssuePermissions(
-        buildListQuery(listContext, null, 'next')
+        buildListQuery(listContext, start, 'next')
           .limit(limit)
           .related('viewState', q => q.where('userID', userID).one())
           .related('labels'),
@@ -182,10 +189,7 @@ export type ListContext = {
 
 function buildListQuery(
   listContext: ListContext['params'] | null,
-  start: Pick<
-    Row<Schema['tables']['issue']>,
-    'id' | 'created' | 'modified'
-  > | null,
+  start: IssueRowSort | null,
   dir: 'next' | 'prev',
 ) {
   if (!listContext) {
