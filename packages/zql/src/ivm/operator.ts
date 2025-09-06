@@ -106,3 +106,7 @@ export interface Storage {
   scan(options?: {prefix: string}): Stream<[string, JSONValue]>;
   del(key: string): void;
 }
+
+export const disableJoinStorage = {
+  value: false,
+};

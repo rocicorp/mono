@@ -14,7 +14,6 @@ import {
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
-import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Input} from '../../../zql/src/ivm/operator.ts';
 import type {Source, SourceInput} from '../../../zql/src/ivm/source.ts';
 import type {SourceFactory} from '../../../zql/src/ivm/test/source-factory.ts';
@@ -22,6 +21,10 @@ import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {Database} from '../db.ts';
 import {compile, sql} from '../internal/sql.ts';
 import {TableSource, toSQLiteTypeName} from '../table-source.ts';
+import {DatabaseStorage} from '../database-storage.ts';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 export const createSource: SourceFactory = (
   lc: LogContext,
@@ -92,6 +95,7 @@ export function mapResultToClientNames<T, S extends Schema>(
   return mapResult(result, schema, rootTable) as T;
 }
 
+let cg = 0;
 export function newQueryDelegate(
   lc: LogContext,
   logConfig: LogConfig,
@@ -101,6 +105,14 @@ export function newQueryDelegate(
   const sources = new Map<string, Source>();
   const clientToServerMapper = clientToServer(schema.tables);
   const serverToClientMapper = serverToClient(schema.tables);
+
+  const tempDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'test-source-factory-' + Math.random()),
+  );
+  const tempFile = path.join(tempDir, `test-source-factory.db`);
+  const dbStorage = DatabaseStorage.create(lc, tempFile);
+  const cgStorage = dbStorage.createClientGroupStorage('test-cg-' + cg++);
+
   return {
     getSource: (serverTableName: string) => {
       const clientTableName = serverToClientMapper.tableName(serverTableName);
@@ -154,7 +166,7 @@ export function newQueryDelegate(
     },
 
     createStorage() {
-      return new MemoryStorage();
+      return cgStorage.createStorage();
     },
     decorateSourceInput(input: SourceInput): Input {
       return input;

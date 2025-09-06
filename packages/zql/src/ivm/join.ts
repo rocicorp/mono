@@ -5,6 +5,7 @@ import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {Change, ChildChange} from './change.ts';
 import {compareValues, valuesEqual, type Node} from './data.ts';
 import {
+  disableJoinStorage,
   throwOutput,
   type FetchRequest,
   type Input,
@@ -76,6 +77,7 @@ export class Join implements Input {
     this.#parent = parent;
     this.#child = child;
     this.#storage = storage;
+
     this.#parentKey = parentKey;
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
@@ -367,37 +369,44 @@ export class Join implements Input {
     const childStream = () => {
       if (!storageUpdated) {
         if (mode === 'cleanup') {
-          this.#storage.del(
-            makeStorageKey(
-              this.#parentKey,
-              this.#parent.getSchema().primaryKey,
-              parentNodeRow,
-            ),
-          );
-          const empty =
-            [
-              ...take(
-                this.#storage.scan({
-                  prefix: makeStorageKeyPrefix(parentNodeRow, this.#parentKey),
-                }),
-                1,
+          if (!disableJoinStorage.value) {
+            this.#storage.del(
+              makeStorageKey(
+                this.#parentKey,
+                this.#parent.getSchema().primaryKey,
+                parentNodeRow,
               ),
-            ].length === 0;
-          method = empty ? 'cleanup' : 'fetch';
+            );
+            const empty =
+              [
+                ...take(
+                  this.#storage.scan({
+                    prefix: makeStorageKeyPrefix(
+                      parentNodeRow,
+                      this.#parentKey,
+                    ),
+                  }),
+                  1,
+                ),
+              ].length === 0;
+            method = empty ? 'cleanup' : 'fetch';
+          }
         }
 
         storageUpdated = true;
         // Defer the work to update storage until the child stream
         // is actually accessed
         if (mode === 'fetch') {
-          this.#storage.set(
-            makeStorageKey(
-              this.#parentKey,
-              this.#parent.getSchema().primaryKey,
-              parentNodeRow,
-            ),
-            true,
-          );
+          if (!disableJoinStorage.value) {
+            this.#storage.set(
+              makeStorageKey(
+                this.#parentKey,
+                this.#parent.getSchema().primaryKey,
+                parentNodeRow,
+              ),
+              true,
+            );
+          }
         }
       }
 

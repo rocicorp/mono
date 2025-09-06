@@ -56,6 +56,7 @@ import {DEFAULT_PRELOAD_TTL_MS, DEFAULT_TTL_MS, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
 export type AnyQuery = Query<Schema, string, any>;
+export const disableImplicitLimitOne = {value: false};
 
 export function materialize<S extends Schema, T, Q>(
   query: Q,
@@ -274,7 +275,9 @@ export abstract class AbstractQuery<
         undefined,
       ) as AnyQuery;
       if (cardinality === 'one') {
-        q = q.one();
+        if (!disableImplicitLimitOne.value) {
+          q = q.one();
+        }
       }
       const sq = cb(q) as AbstractQuery<Schema, string>;
       assert(
