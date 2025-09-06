@@ -8,6 +8,7 @@ import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {stringify} from '../../../../../shared/src/bigint-json.ts';
 import {deepEqual} from '../../../../../shared/src/json.ts';
 import {must} from '../../../../../shared/src/must.ts';
+import {isTableIgnored} from './ignored-tables.ts';
 import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
 import {
   equals,
@@ -158,6 +159,18 @@ async function checkAndUpdateUpstream(
     throw new AutoResetSignal(
       `Requested publications [${requested}] do not match configured ` +
         `publications: [${replicated}]`,
+    );
+  }
+
+  // Verify that ignored tables match what was initially synced.
+  const requestedIgnored = new Set(shard.ignoredTables || []);
+  const replicatedIgnored = upstreamReplica.ignoredTables;
+  if (!equals(requestedIgnored, replicatedIgnored)) {
+    lc.warn?.(`Dropping shard to change ignored tables to: [${[...requestedIgnored]}]`);
+    await sql.unsafe(dropShard(shard.appID, shard.shardNum));
+    throw new AutoResetSignal(
+      `Requested ignored tables [${[...requestedIgnored]}] do not match ` +
+        `initially synced ignored tables: [${[...replicatedIgnored]}]`,
     );
   }
 
@@ -432,6 +445,7 @@ class ChangeMaker {
   readonly #shardConfig: InternalShardConfig;
   readonly #initialSchema: PublishedSchema;
   readonly #upstreamDB: PostgresDB;
+  readonly #ignoredTables: Set<string>;
 
   #replicaIdentityTimer: NodeJS.Timeout | undefined;
   #error: ReplicationError | undefined;
@@ -452,6 +466,8 @@ class ChangeMaker {
       ['idle_timeout']: 10, // only used occasionally
       connection: {['application_name']: 'zero-schema-change-detector'},
     });
+    
+    this.#ignoredTables = shardConfig.ignoredTables || new Set();
   }
 
   async makeChanges(lsn: bigint, msg: Message): Promise<ChangeStreamMessage[]> {
@@ -504,6 +520,10 @@ class ChangeMaker {
         ];
 
       case 'delete': {
+        if (isTableIgnored(msg.relation, this.#ignoredTables)) {
+          return [];
+        }
+        
         if (!(msg.key ?? msg.old)) {
           throw new Error(
             `Invalid DELETE msg (missing key): ${stringify(msg)}`,
@@ -523,6 +543,10 @@ class ChangeMaker {
       }
 
       case 'update': {
+        if (isTableIgnored(msg.relation, this.#ignoredTables)) {
+          return [];
+        }
+        
         return [
           [
             'data',
@@ -537,10 +561,20 @@ class ChangeMaker {
       }
 
       case 'insert':
+        if (isTableIgnored(msg.relation, this.#ignoredTables)) {
+          return [];
+        }
+        
         return [['data', {...msg, relation: withoutColumns(msg.relation)}]];
       case 'truncate':
+        const filteredRelations = msg.relations.filter(rel => !isTableIgnored(rel, this.#ignoredTables));
+        
+        if (filteredRelations.length === 0) {
+          return [];
+        }
+        
         return [
-          ['data', {...msg, relations: msg.relations.map(withoutColumns)}],
+          ['data', {...msg, relations: filteredRelations.map(withoutColumns)}],
         ];
 
       case 'message':
