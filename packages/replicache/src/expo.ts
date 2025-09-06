@@ -1,2 +1,5 @@
-export {expoSQLiteStoreProvider} from './expo/store.ts';
-export type {SQLiteDatabaseManagerOptions} from './kv/sqlite-store.ts';
+export {
+  ExpoSQLiteStore,
+  expoSQLiteStoreProvider,
+  type ExpoSQLiteStoreOptions,
+} from './expo/store.ts';
