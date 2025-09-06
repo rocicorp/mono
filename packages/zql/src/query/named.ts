@@ -4,6 +4,8 @@ import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {SchemaQuery} from '../mutate/custom.ts';
 import {newQuery} from './query-impl.ts';
 import type {Query} from './query.ts';
+import type {MaybePromise} from '../../../shared/src/types.ts';
+import type {StandardSchemaV1} from '../../../shared/src/standard-schema.ts';
 
 export type QueryFn<
   TContext,
@@ -27,15 +29,26 @@ export type SyncedQuery<
 };
 
 function normalizeParser<T extends ReadonlyJSONValue[]>(
-  parser: ParseFn<T> | HasParseFn<T> | undefined,
+  parser: ParseFn<T> | HasParseFn<T> | StandardSchemaV1<T> | undefined,
 ): ParseFn<T> | undefined {
-  if (parser) {
-    if ('parse' in parser) {
-      return parser.parse.bind(parser);
-    }
-    return parser;
+  if (!parser) {
+    return undefined;
   }
-  return undefined;
+  if ('~standard' in parser) {
+    return async (args: unknown[]) => {
+      const res = await parser['~standard'].validate(args);
+      if (res.issues) {
+        throw new Error(
+          `Parse error: ${res.issues.map(i => i.message).join(', ')}`,
+        );
+      }
+      return res.value;
+    };
+  }
+  if ('parse' in parser) {
+    return parser.parse.bind(parser);
+  }
+  return parser;
 }
 
 export function syncedQuery<
@@ -44,7 +57,7 @@ export function syncedQuery<
   TReturnQuery extends Query<any, any, any>,
 >(
   name: TName,
-  parser: ParseFn<TArg> | HasParseFn<TArg> | undefined,
+  parser: ParseFn<TArg> | HasParseFn<TArg> | StandardSchemaV1<TArg> | undefined,
   fn: QueryFn<unknown, false, TArg, TReturnQuery>,
 ): SyncedQuery<TName, unknown, false, TArg, TReturnQuery> {
   const impl = syncedQueryImpl(name, fn, false);
@@ -62,7 +75,7 @@ export function syncedQueryWithContext<
   TReturnQuery extends Query<any, any, any>,
 >(
   name: TName,
-  parser: ParseFn<TArg> | HasParseFn<TArg> | undefined,
+  parser: ParseFn<TArg> | HasParseFn<TArg> | StandardSchemaV1<TArg> | undefined,
   fn: QueryFn<TContext, true, TArg, TReturnQuery>,
 ): SyncedQuery<TName, TContext, true, TArg, TReturnQuery> {
   const impl = syncedQueryImpl(name, fn, true);
@@ -85,18 +98,28 @@ function syncedQueryImpl<
   };
 }
 
+export type ValidatedQuery<
+  TName extends string,
+  TContext,
+  TArg extends ReadonlyJSONValue[],
+  TReturnQuery extends Query<any, any, any>,
+> = {
+  (context: TContext, ...args: TArg): Promise<{query: TReturnQuery}>;
+  queryName: TName;
+};
+
 export function withValidation<T extends SyncedQuery<any, any, any, any, any>>(
   fn: T,
 ): T extends SyncedQuery<infer N, infer C, any, any, infer R>
-  ? SyncedQuery<N, C, true, ReadonlyJSONValue[], R>
+  ? ValidatedQuery<N, C, ReadonlyJSONValue[], R>
   : never {
   if (!fn.parse) {
     throw new Error('ret does not have a parse function defined');
   }
-  const ret: any = (context: unknown, ...args: unknown[]) => {
+  const ret: any = async (context: unknown, ...args: unknown[]) => {
     const f = fn as any;
-    const parsed = f.parse(args);
-    return f.takesContext ? f(context, ...parsed) : f(...parsed);
+    const parsed = await f.parse(args);
+    return {query: f.takesContext ? f(context, ...parsed) : f(...parsed)};
   };
   ret.queryName = fn.queryName;
   ret.parse = fn.parse;
@@ -105,7 +128,9 @@ export function withValidation<T extends SyncedQuery<any, any, any, any, any>>(
   return ret;
 }
 
-export type ParseFn<T extends ReadonlyJSONValue[]> = (args: unknown[]) => T;
+export type ParseFn<T extends ReadonlyJSONValue[]> = (
+  args: unknown[],
+) => MaybePromise<T>;
 
 export type HasParseFn<T extends ReadonlyJSONValue[]> = {
   parse: ParseFn<T>;

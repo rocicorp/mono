@@ -19,13 +19,15 @@
     "@rocicorp/logger": "^5.4.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "@rocicorp/rails": "^0.10.0",
+    "arktype": "^2.1.22",
     "fast-check": "^3.18.0",
     "nanoid": "^5.1.2",
     "replicache": "15.2.1",
     "shared": "0.0.0",
     "typescript": "~5.8.2",
+    "valibot": "^1.1.0",
     "zero-protocol": "0.0.0",
-    "zod": "^3.21.4"
+    "zod": "^3.25.76"
   },
   "eslintConfig": {
     "extends": "../../eslint-config.json"
