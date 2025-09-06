@@ -28,6 +28,9 @@ class OtelManager {
   }
 
   startOtelAuto(lc?: LogContext) {
+    // Set default log level if none specified
+    process.env.OTEL_LOG_LEVEL ??= 'error';
+
     if (lc) {
       const log = lc.withContext('component', 'otel');
       diag.setLogger({
@@ -35,7 +38,18 @@ class OtelManager {
         debug: (msg: string, ...args: unknown[]) => log.debug?.(msg, ...args),
         info: (msg: string, ...args: unknown[]) => log.info?.(msg, ...args),
         warn: (msg: string, ...args: unknown[]) => log.warn?.(msg, ...args),
-        error: (msg: string, ...args: unknown[]) => log.error?.(msg, ...args),
+        error: (msg: string, ...args: unknown[]) => {
+          // Check if this is a known non-critical error that should be a warning
+          if (
+            msg.includes('Request Timeout') ||
+            msg.includes('Unexpected server response: 502') ||
+            msg.includes('Export failed with retryable status')
+          ) {
+            log.warn?.(msg, ...args);
+          } else {
+            log.error?.(msg, ...args);
+          }
+        },
       });
     }
     if (this.#started || !otelEnabled()) {
