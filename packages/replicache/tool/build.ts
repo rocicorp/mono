@@ -30,12 +30,13 @@ async function buildReplicache(options: BuildOptions) {
   const {ext, mode, external, ...restOfOptions} = options;
   const outfile = basePath('out', 'replicache.' + ext);
   const entryPoints = {
-    replicache: basePath('src', 'mod.ts'),
+    'out/replicache': basePath('src', 'mod.ts'),
     ...(forBundleSizeDashboard
       ? {}
       : {
-          impl: basePath('src', 'impl.ts'),
-          expo: basePath('src', 'expo.ts'),
+          'out/impl': basePath('src', 'impl.ts'),
+          'expo/index': basePath('src', 'expo.ts'),
+          'sqlite/index': basePath('src', 'sqlite.ts'),
         }),
   };
   const result = await esbuild.build({
@@ -48,9 +49,10 @@ async function buildReplicache(options: BuildOptions) {
     // Use neutral to remove the automatic define for process.env.NODE_ENV
     platform: 'neutral',
     define,
-    outdir: basePath('out'),
+    outdir: basePath('.'),
     entryPoints,
     outExtension: {'.js': `.${ext}`},
+    chunkNames: 'out/chunks/[hash]',
   });
   if (metafile) {
     await writeFile(outfile + '.meta.json', JSON.stringify(result.metafile));

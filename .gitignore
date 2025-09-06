@@ -90,3 +90,7 @@ Chinook_PostgreSql.sql
 WARP.md
 *.db-shm
 *.db-wal
+
+# We output files outside of out to make old React Native / Metro happy
+packages/replicache/expo
+packages/replicache/sqlite

@@ -289,7 +289,7 @@ class SQLiteStoreRWBase {
   }
 }
 
-export class SQLiteStoreRead extends SQLiteStoreRWBase implements Read {
+class SQLiteStoreRead extends SQLiteStoreRWBase implements Read {
   constructor(
     preparedStatements: SQLitePreparedStatements,
     release: () => void,
@@ -308,7 +308,7 @@ export class SQLiteStoreRead extends SQLiteStoreRWBase implements Read {
   }
 }
 
-export class SQLiteStoreWrite extends SQLiteStoreRWBase implements Write {
+class SQLiteStoreWrite extends SQLiteStoreRWBase implements Write {
   #committed = false;
 
   constructor(

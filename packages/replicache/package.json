@@ -77,11 +77,17 @@
     },
     "./expo": {
       "types": "./out/replicache/src/expo.d.ts",
-      "default": "./out/expo.js"
+      "default": "./expo/index.js"
+    },
+    "./sqlite": {
+      "types": "./out/replicache/src/sqlite.d.ts",
+      "default": "./sqlite/index.js"
     }
   },
   "files": [
     "out",
+    "expo",
+    "sqlite",
     "!*.tsbuildinfo"
   ],
   "eslintConfig": {
