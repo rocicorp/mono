@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -15,20 +14,14 @@ import type {
   System,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row as IVMRow} from '../../../zero-protocol/src/data.ts';
-import {
-  hashOfAST,
-  hashOfNameAndArgs,
-} from '../../../zero-protocol/src/query-hash.ts';
+import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   isOneHop,
   isTwoHop,
   type TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
-import {buildPipeline} from '../builder/builder.ts';
 import {NotImplementedError} from '../error.ts';
-import {ArrayView} from '../ivm/array-view.ts';
-import type {Input} from '../ivm/operator.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import {assertNoNotExists} from './assert-no-not-exists.ts';
 import {
@@ -39,48 +32,20 @@ import {
   type ExpressionFactory,
 } from './expression.ts';
 import type {CustomQueryID} from './named.ts';
-import type {GotCallback, QueryDelegate} from './query-delegate.ts';
+import type {QueryDelegate} from './query-delegate.ts';
 import {
-  delegateSymbol,
   type GetFilterType,
   type HumanReadable,
-  type MaterializeOptions,
   type PreloadOptions,
   type PullRow,
   type Query,
-  type QueryReturn,
-  type QueryTable,
   type RunOptions,
 } from './query.ts';
-import {DEFAULT_PRELOAD_TTL_MS, DEFAULT_TTL_MS, type TTL} from './ttl.ts';
+import {materializeQuery, preloadQuery, runQuery} from './run.ts';
+import {DEFAULT_TTL_MS, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
 export type AnyQuery = Query<Schema, string, any>;
-
-export function materialize<S extends Schema, T, Q>(
-  query: Q,
-  delegate: QueryDelegate,
-  factoryOrOptions?:
-    | ViewFactory<S, QueryTable<Q>, QueryReturn<Q>, T>
-    | MaterializeOptions
-    | undefined,
-  maybeOptions?: MaterializeOptions | undefined,
-) {
-  if (typeof factoryOrOptions === 'function') {
-    return (
-      (query as AnyQuery)
-        // eslint-disable-next-line no-unexpected-multiline
-        [delegateSymbol](delegate)
-        .materialize(factoryOrOptions, maybeOptions?.ttl)
-    );
-  }
-  return (
-    (query as AnyQuery)
-      // eslint-disable-next-line no-unexpected-multiline
-      [delegateSymbol](delegate)
-      .materialize(factoryOrOptions?.ttl)
-  );
-}
 
 const astSymbol = Symbol();
 
@@ -158,18 +123,6 @@ export abstract class AbstractQuery<
     this.#system = system;
     this.#currentJunction = currentJunction;
     this.customQueryID = customQueryID;
-  }
-
-  [delegateSymbol](delegate: QueryDelegate): Query<TSchema, TTable, TReturn> {
-    return this[newQuerySymbol](
-      delegate,
-      this.#schema,
-      this.#tableName,
-      this._ast,
-      this.format,
-      this.customQueryID,
-      this.#currentJunction,
-    );
   }
 
   nameAndArgs(
@@ -630,6 +583,10 @@ export abstract class AbstractQuery<
 
   #completedAST: AST | undefined;
 
+  completedAST(): AST {
+    return this._completeAst();
+  }
+
   protected _completeAst(): AST {
     if (!this.#completedAST) {
       const finalOrderBy = addPrimaryKeys(
@@ -765,79 +722,7 @@ export class QueryImpl<
       this._delegate,
       'materialize requires a query delegate to be set',
     );
-    let factory: ViewFactory<TSchema, TTable, TReturn, T> | undefined;
-    if (typeof factoryOrTTL === 'function') {
-      factory = factoryOrTTL;
-    } else {
-      ttl = factoryOrTTL ?? DEFAULT_TTL_MS;
-    }
-    const ast = this._completeAst();
-    const queryID = this.customQueryID
-      ? hashOfNameAndArgs(this.customQueryID.name, this.customQueryID.args)
-      : this.hash();
-    const queryCompleteResolver = resolver<true>();
-    let queryComplete = delegate.defaultQueryComplete;
-    const updateTTL = (newTTL: TTL) => {
-      this.customQueryID
-        ? delegate.updateCustomQuery(this.customQueryID, newTTL)
-        : delegate.updateServerQuery(ast, newTTL);
-    };
-
-    const gotCallback: GotCallback = (got, error) => {
-      if (error) {
-        queryCompleteResolver.reject(error);
-        queryComplete = true;
-        return;
-      }
-
-      if (got) {
-        delegate.addMetric(
-          'query-materialization-end-to-end',
-          performance.now() - t0,
-          queryID,
-          ast,
-        );
-        queryComplete = true;
-        queryCompleteResolver.resolve(true);
-      }
-    };
-
-    let removeCommitObserver: (() => void) | undefined;
-    const onDestroy = () => {
-      input.destroy();
-      removeCommitObserver?.();
-      removeAddedQuery();
-    };
-
-    const t0 = performance.now();
-
-    const removeAddedQuery = this.customQueryID
-      ? delegate.addCustomQuery(ast, this.customQueryID, ttl, gotCallback)
-      : delegate.addServerQuery(ast, ttl, gotCallback);
-
-    const input = buildPipeline(ast, delegate, queryID);
-
-    const view = delegate.batchViewUpdates(() =>
-      (factory ?? arrayViewFactory)(
-        this,
-        input,
-        this.format,
-        onDestroy,
-        cb => {
-          removeCommitObserver = delegate.onTransactionCommit(cb);
-        },
-        queryComplete || queryCompleteResolver.promise,
-        updateTTL,
-      ),
-    );
-
-    delegate.addMetric(
-      'query-materialization-client',
-      performance.now() - t0,
-      queryID,
-    );
-
-    return view as T;
+    return materializeQuery(delegate, this, factoryOrTTL, ttl) as T;
   }
 
   run(options?: RunOptions): Promise<HumanReadable<TReturn>> {
@@ -845,27 +730,7 @@ export class QueryImpl<
       this._delegate,
       'run requires a query delegate to be set',
     );
-    delegate.assertValidRunOptions(options);
-    const v: TypedView<HumanReadable<TReturn>> = this.materialize(options?.ttl);
-    if (options?.type === 'complete') {
-      return new Promise(resolve => {
-        v.addListener((data, type) => {
-          if (type === 'complete') {
-            v.destroy();
-            resolve(data as HumanReadable<TReturn>);
-          } else if (type === 'error') {
-            v.destroy();
-            resolve(Promise.reject(data));
-          }
-        });
-      });
-    }
-
-    options?.type satisfies 'unknown' | undefined;
-
-    const ret = v.data;
-    v.destroy();
-    return Promise.resolve(ret);
+    return runQuery(delegate, this, options);
   }
 
   preload(options?: PreloadOptions): {
@@ -876,35 +741,7 @@ export class QueryImpl<
       this._delegate,
       'preload requires a query delegate to be set',
     );
-    const ttl = options?.ttl ?? DEFAULT_PRELOAD_TTL_MS;
-    const ast = this._completeAst();
-    const {resolve, promise: complete} = resolver<void>();
-    if (this.customQueryID) {
-      const cleanup = delegate.addCustomQuery(
-        ast,
-        this.customQueryID,
-        ttl,
-        got => {
-          if (got) {
-            resolve();
-          }
-        },
-      );
-      return {
-        cleanup,
-        complete,
-      };
-    }
-
-    const cleanup = delegate.addServerQuery(ast, ttl, got => {
-      if (got) {
-        resolve();
-      }
-    });
-    return {
-      cleanup,
-      complete,
-    };
+    return preloadQuery(delegate, this, options);
   }
 }
 
@@ -935,32 +772,6 @@ function addPrimaryKeysToAst(schema: TableSchema, ast: AST): AST {
     ...ast,
     orderBy: addPrimaryKeys(schema, ast.orderBy),
   };
-}
-
-function arrayViewFactory<
-  TSchema extends Schema,
-  TTable extends string,
-  TReturn,
->(
-  _query: AbstractQuery<TSchema, TTable, TReturn>,
-  input: Input,
-  format: Format,
-  onDestroy: () => void,
-  onTransactionCommit: (cb: () => void) => void,
-  queryComplete: true | Promise<true>,
-  updateTTL: (ttl: TTL) => void,
-): TypedView<HumanReadable<TReturn>> {
-  const v = new ArrayView<HumanReadable<TReturn>>(
-    input,
-    format,
-    queryComplete,
-    updateTTL,
-  );
-  v.onDestroy = onDestroy;
-  onTransactionCommit(() => {
-    v.flush();
-  });
-  return v;
 }
 
 function isCompoundKey(field: readonly string[]): field is CompoundKey {
