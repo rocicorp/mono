@@ -66,6 +66,7 @@ export class ConnectionLoop {
 
   readonly #delegate: ConnectionLoopDelegate;
   #closed = false;
+  #abortSignal = new AbortController();
 
   /**
    * Number of pending send calls.
@@ -90,6 +91,7 @@ export class ConnectionLoop {
 
   close(): void {
     this.#closed = true;
+    this.#abortSignal.abort();
     if (this.#sendCounter > 0) {
       this.#sendResolver.resolve({error: closeError()});
     }
@@ -147,7 +149,8 @@ export class ConnectionLoop {
       const races = [this.#pendingResolver.promise];
       const t = delegate.watchdogTimer;
       if (t !== null) {
-        races.push(sleep(t));
+        // Wait for the watchdog timer to fire or the abort signal to be triggered.
+        races.push(sleep(t, this.#abortSignal.signal).catch(() => {}));
       }
       await Promise.race(races);
       if (this.#closed) break;
