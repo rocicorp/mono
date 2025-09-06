@@ -9,6 +9,7 @@ import {
   type AuthData,
   assertIsLoggedIn,
 } from './auth.ts';
+import {queries} from './queries.ts';
 
 export type AddEmojiArgs = {
   id: string;
@@ -110,10 +111,25 @@ export function createMutators(authData: AuthData | undefined) {
 
       async addLabel(
         tx: MutatorTx,
-        {issueID, labelID}: {issueID: string; labelID: string},
+        {
+          issueID,
+          labelID,
+        }: {
+          issueID: string;
+          labelID: string;
+        },
       ) {
         await assertIsCreatorOrAdmin(authData, tx.query.issue, issueID);
-        await tx.mutate.issueLabel.insert({issueID, labelID});
+        const issue = await queries.issueById(authData, issueID).run();
+        if (!issue) {
+          return;
+        }
+        await tx.mutate.issueLabel.insert({
+          issueID,
+          labelID,
+          created: issue.created,
+          modified: issue.modified,
+        });
       },
 
       async removeLabel(
@@ -204,8 +220,17 @@ export function createMutators(authData: AuthData | undefined) {
         }: {labelID: string; issueID: string; labelName: string},
       ) {
         assert(isAdmin(authData), 'Only admins can create labels');
+        const issue = await queries.issueById(authData, issueID).run();
+        if (!issue) {
+          return;
+        }
         await tx.mutate.label.insert({id: labelID, name: labelName});
-        await tx.mutate.issueLabel.insert({issueID, labelID});
+        await tx.mutate.issueLabel.insert({
+          issueID,
+          labelID,
+          created: issue.created,
+          modified: issue.modified,
+        });
       },
     },
 
