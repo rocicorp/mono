@@ -37,14 +37,28 @@ const pageSize = 100;
 type Anchor = {
   startRow: IssueRow | undefined;
   direction: 'down' | 'up';
-  estimatedIndex: number;
+  index: number;
 };
 
 const startingAnchor = {
   startRow: undefined,
   direction: 'down',
-  estimatedIndex: 0,
+  index: 0,
 } as const;
+
+const toIssueArrayIndex = (index: number, anchor: Anchor) =>
+  anchor.direction === 'down' ? index - anchor.index : anchor.index - index;
+
+const toBoundIssueArrayIndex = (
+  index: number,
+  anchor: Anchor,
+  length: number,
+) => Math.min(length - 1, Math.max(0, toIssueArrayIndex(index, anchor)));
+
+const toIndex = (issueArrayIndex: number, anchor: Anchor) =>
+  anchor.direction === 'down'
+    ? issueArrayIndex + anchor.index
+    : anchor.index - issueArrayIndex;
 
 export function ListPage({onReady}: {onReady: () => void}) {
   const login = useLogin();
@@ -113,7 +127,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       textFilter,
     },
     z.userID,
-    0, // no limit
+    null, // no limit
     null, // no start
   );
 
@@ -135,6 +149,11 @@ export function ListPage({onReady}: {onReady: () => void}) {
     textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
   );
 
+  const [baseIssues, baseIssuesResult] = useQuery(
+    baseQ,
+    textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
+  );
+
   useEffect(() => {
     if (issues.length > 0 || issuesResult.type === 'complete') {
       onReady();
@@ -145,7 +164,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     if (anchor.direction !== 'down') {
       return;
     }
-    const eTotal = anchor.estimatedIndex + issues.length;
+    const eTotal = anchor.index + issues.length;
     if (eTotal > estimatedTotal) {
       setEstimatedTotal(eTotal);
     }
@@ -246,20 +265,26 @@ export function ListPage({onReady}: {onReady: () => void}) {
   };
 
   const Row = ({index, style}: {index: number; style: CSSProperties}) => {
-    const adjustedIndex = toIssueArrayIndex(index);
-    if (adjustedIndex < 0 || adjustedIndex >= issues.length) {
+    const issueArrayIndex = toIssueArrayIndex(index, anchor);
+    if (issueArrayIndex < 0 || issueArrayIndex >= issues.length) {
       return (
         <div
           className={classNames('row')}
           style={{
             ...style,
           }}
-        >
-          {' ' + index + ' ' + adjustedIndex + ' '}
-        </div>
+        ></div>
       );
     }
-    const issue = issues[adjustedIndex];
+    const issue = issues[issueArrayIndex];
+    if (
+      baseIssuesResult.type === 'complete' &&
+      baseIssues[index].id !== issue.id
+    ) {
+      throw new Error(
+        `Base diff ${index}, ${baseIssues[index].id}, ${issue.id}`,
+      );
+    }
     if (firstRowRendered === false) {
       mark('first issue row rendered');
       firstRowRendered = true;
@@ -286,7 +311,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
           title={issue.title}
           listContext={listContext}
         >
-          {' ' + index + ' ' + adjustedIndex + ' '}
           {issue.title}
         </IssueLink>
         <div className="issue-taglist">
@@ -315,35 +339,8 @@ export function ListPage({onReady}: {onReady: () => void}) {
     count: total ?? estimatedTotal,
     estimateSize: () => itemSize,
     overscan: 5,
-    getItemKey: index => {
-      return index;
-      // const adjustedIndex = index - anchor.estimatedIndex;
-      // if (adjustedIndex >= issues.length) {
-      //   return 'sentinel';
-      // }
-      // if (adjustedIndex < 0) {
-      //   return 'buffer' + adjustedIndex;
-      // }
-      // return issues[adjustedIndex].id;
-    },
     getScrollElement: () => listRef.current,
   });
-
-  const toIssueArrayIndex = useCallback(
-    (index: number) =>
-      anchor.direction === 'down'
-        ? index - anchor.estimatedIndex
-        : anchor.estimatedIndex - index,
-    [anchor],
-  );
-
-  const toIndex = useCallback(
-    (issueArrayIndex: number) =>
-      anchor.direction === 'down'
-        ? index - anchor.estimatedIndex
-        : anchor.estimatedIndex - index,
-    [anchor],
-  );
 
   const virtualItems = virtualizer.getVirtualItems();
   useEffect(() => {
@@ -353,105 +350,67 @@ export function ListPage({onReady}: {onReady: () => void}) {
       return;
     }
 
-    // const distanceFromStart =
-    //   anchor.direction === 'up'
-    //     ? firstItem.index - (anchor.estimatedIndex - issues.length)
-    //     : firstItem.index - anchor.estimatedIndex;
-    // const distanceFromEnd =
-    //   anchor.direction === 'up'
-    //     ? anchor.estimatedIndex - lastItem.index
-    //     : anchor.estimatedIndex + issues.length - lastItem.index;
-    // console.log(
-    //   'hello',
-    //   JSON.stringify(
-    //     {
-    //       scrollDirection: virtualizer.scrollDirection,
-    //       // virtualItems,
-    //       // firstItem,
-    //       first: adjustIndex(firstItem.index),
-    //       // lastItem,
-    //       last: adjustIndex(lastItem.index),
-    //       anchor: {
-    //         direction: anchor.direction,
-    //         estimateIndex: anchor.estimatedIndex,
-    //         row: anchor.startRow?.title,
-    //       },
-    //       distanceFromEnd,
-    //       distanceFromStart,
-    //       issuesResult,
-    //     },
-    //     undefined,
-    //     2,
-    //   ),
-    // );
-
-    // if (issuesResult.type !== 'complete') {
-    //   return;
-    // }
-
-    if (anchor.estimatedIndex !== 0) {
-      if (firstItem.index <= pageSize / 5) {
-        console.log('anchoring to top');
-        setAnchor(startingAnchor);
-      }
-
-      const distanceFromStart =
-        anchor.direction === 'up'
-          ? firstItem.index - (anchor.estimatedIndex - issues.length)
-          : firstItem.index - anchor.estimatedIndex;
-      if (
-        virtualizer.scrollDirection === 'backward' &&
-        distanceFromStart <= pageSize / 5
-      ) {
-        console.log('page up');
-        // TODO adjustedIndex may be out of bounds of issues
-        const adjustedIndex = toIssueArrayIndex(lastItem.index);
-        console.log({
-          estimatedIndex: lastItem.index - 1,
-          direction: 'up',
-          row: issues[adjustedIndex],
-        });
-        setAnchor({
-          estimatedIndex: lastItem.index - 1,
-          direction: 'up',
-          startRow: issues[adjustedIndex],
-        });
-      }
+    if (anchor.index !== 0 && firstItem.index <= pageSize / 5) {
+      console.log('anchoring to top');
+      setAnchor(startingAnchor);
+      return;
     }
 
+    if (issuesResult.type !== 'complete') {
+      return;
+    }
+
+    const hasPrev = anchor.index !== 0;
+    const distanceFromStart =
+      anchor.direction === 'up'
+        ? firstItem.index - (anchor.index - issues.length)
+        : firstItem.index - anchor.index;
+    if (
+      hasPrev &&
+      virtualizer.scrollDirection === 'backward' &&
+      distanceFromStart <= pageSize / 5
+    ) {
+      const issueArrayIndex = toBoundIssueArrayIndex(
+        lastItem.index,
+        anchor,
+        issues.length,
+      );
+      const index = toIndex(issueArrayIndex, anchor) - 1;
+      const a = {
+        index,
+        direction: 'up',
+        startRow: issues[issueArrayIndex],
+      } as const;
+      console.log('page up', a);
+      setAnchor(a);
+      return;
+    }
+
+    const hasNext = issues.length === pageSize;
     const distanceFromEnd =
       anchor.direction === 'up'
-        ? anchor.estimatedIndex - lastItem.index
-        : anchor.estimatedIndex + issues.length - lastItem.index;
+        ? anchor.index - lastItem.index
+        : anchor.index + issues.length - lastItem.index;
     if (
+      hasNext &&
       virtualizer.scrollDirection === 'forward' &&
       distanceFromEnd <= pageSize / 5
     ) {
-      console.log('page down');
-      const [firstItem] = virtualItems;
-      const adjustedIndex = toIssueArrayIndex(firstItem.index);
-      console.log(
-        {
-          estimatedIndex: firstItem.index + 1,
-          direction: 'down',
-          row: issues[adjustedIndex],
-        },
-        issues[adjustedIndex + 1],
+      const issueArrayIndex = toBoundIssueArrayIndex(
+        firstItem.index,
+        anchor,
+        issues.length,
       );
-      setAnchor({
-        estimatedIndex: firstItem.index + 1,
+      const index = toIndex(issueArrayIndex, anchor) + 1;
+      const a = {
+        index,
         direction: 'down',
-        startRow: issues[adjustedIndex],
-      });
+        startRow: issues[issueArrayIndex],
+      } as const;
+      console.log('page down', a);
+      setAnchor(a);
     }
-  }, [
-    anchor,
-    virtualizer.scrollDirection,
-    issues,
-    issuesResult,
-    toIssueArrayIndex,
-    virtualItems,
-  ]);
+  }, [anchor, virtualizer.scrollDirection, issues, issuesResult, virtualItems]);
 
   const [forceSearchMode, setForceSearchMode] = useState(false);
   const searchMode = forceSearchMode || Boolean(textFilter);

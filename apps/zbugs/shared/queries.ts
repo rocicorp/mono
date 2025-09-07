@@ -161,17 +161,18 @@ export const queries = {
     z.tuple([
       listContextParams,
       z.string(),
-      z.number(),
+      z.number().nullable(),
       issueRowSort.nullable(),
     ]),
-    (auth: AuthData | undefined, listContext, userID, limit, start) =>
-      applyIssuePermissions(
-        buildListQuery(listContext, start, 'next')
-          .limit(limit)
-          .related('viewState', q => q.where('userID', userID).one())
-          .related('labels'),
-        auth?.role,
-      ),
+    (auth: AuthData | undefined, listContext, userID, limit, start) => {
+      let q = buildListQuery(listContext, start, 'next')
+        .related('viewState', q => q.where('userID', userID).one())
+        .related('labels');
+      if (limit) {
+        q = q.limit(limit);
+      }
+      return applyIssuePermissions(q, auth?.role);
+    },
   ),
 
   emojiChange: syncedQuery('emojiChange', idValidator, subjectID =>
@@ -214,25 +215,28 @@ function buildListQuery(
     q = q.start(start);
   }
 
-  return q.orderBy(sortField, orderByDir).where(({and, cmp, exists, or}) =>
-    and(
-      open != null ? cmp('open', open) : undefined,
-      creator ? exists('creator', q => q.where('login', creator)) : undefined,
-      assignee
-        ? exists('assignee', q => q.where('login', assignee))
-        : undefined,
-      textFilter
-        ? or(
-            cmp('title', 'ILIKE', `%${escapeLike(textFilter)}%`),
-            cmp('description', 'ILIKE', `%${escapeLike(textFilter)}%`),
-            exists('comments', q =>
-              q.where('body', 'ILIKE', `%${escapeLike(textFilter)}%`),
-            ),
-          )
-        : undefined,
-      ...(labels ?? []).map(label =>
-        exists('labels', q => q.where('name', label)),
+  return q
+    .orderBy(sortField, orderByDir)
+    .orderBy('id', orderByDir)
+    .where(({and, cmp, exists, or}) =>
+      and(
+        open != null ? cmp('open', open) : undefined,
+        creator ? exists('creator', q => q.where('login', creator)) : undefined,
+        assignee
+          ? exists('assignee', q => q.where('login', assignee))
+          : undefined,
+        textFilter
+          ? or(
+              cmp('title', 'ILIKE', `%${escapeLike(textFilter)}%`),
+              cmp('description', 'ILIKE', `%${escapeLike(textFilter)}%`),
+              exists('comments', q =>
+                q.where('body', 'ILIKE', `%${escapeLike(textFilter)}%`),
+              ),
+            )
+          : undefined,
+        ...(labels ?? []).map(label =>
+          exists('labels', q => q.where('name', label)),
+        ),
       ),
-    ),
-  );
+    );
 }
