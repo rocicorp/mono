@@ -114,7 +114,7 @@ describe('Diagnostic Logger Integration Tests', () => {
 
     startOtelAuto(mockLogContext);
 
-    // Diagnostic logger should be set up once (the shared function prevents duplicates)
+    // Diagnostic logger should be set up once (after SDK initialization, NodeSDK prevented from setting its own)
     expect(diag.setLogger).toHaveBeenCalledTimes(1);
     expect(mockLogContext.withContext).toHaveBeenCalledWith(
       'component',

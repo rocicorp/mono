@@ -33,8 +33,9 @@ class OtelManager {
     }
     this.#started = true;
 
-    // Set up diagnostic logger early, before SDK initialization
-    setupOtelDiagnosticLogger(lc);
+    // Store and temporarily remove OTEL_LOG_LEVEL to prevent NodeSDK from setting its own logger
+    const otelLogLevel = process.env.OTEL_LOG_LEVEL;
+    delete process.env.OTEL_LOG_LEVEL;
 
     // Use exponential histograms by default to reduce cardinality from auto-instrumentation
     // This affects HTTP server/client and other auto-instrumented histogram metrics
@@ -71,8 +72,11 @@ class OtelManager {
     // Start SDK: will deploy Trace, Metrics, and Logs pipelines as per env vars
     sdk.start();
 
-    // Ensure diagnostic logger is configured after SDK start (in case SDK overrode it)
-    setupOtelDiagnosticLogger(lc);
+    // Restore OTEL_LOG_LEVEL and set up our diagnostic logger with suppressOverrideMessage
+    if (otelLogLevel) {
+      process.env.OTEL_LOG_LEVEL = otelLogLevel;
+    }
+    setupOtelDiagnosticLogger(lc, true);
 
     logs.getLogger('zero-cache').emit({
       severityText: 'INFO',

@@ -89,6 +89,15 @@ describe('otel-diag-logger', () => {
     expect(mockSetLogger).toHaveBeenCalledTimes(1);
   });
 
+  test('setupOtelDiagnosticLogger can be forced to reconfigure', () => {
+    const result1 = setupOtelDiagnosticLogger(mockLogContext);
+    const result2 = setupOtelDiagnosticLogger(mockLogContext, true); // force = true
+
+    expect(result1).toBe(true);
+    expect(result2).toBe(true);
+    expect(mockSetLogger).toHaveBeenCalledTimes(2); // Should be called twice
+  });
+
   test('diagnostic logger routes messages to LogContext correctly', () => {
     setupOtelDiagnosticLogger(mockLogContext);
 

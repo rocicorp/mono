@@ -30,13 +30,21 @@ let diagLoggerConfigured = false;
 
 /**
  * Sets up the OpenTelemetry diagnostic logger with custom error handling and suppression.
- * This function can be called multiple times safely - it will only configure the logger once.
+ * This function can be called multiple times safely - it will only configure the logger once per LogContext.
  *
  * @param lc LogContext for routing OTEL diagnostic messages to the application logger
- * @returns true if the logger was configured, false if it was already configured
+ * @param force If true, will reconfigure even if already configured (useful after NodeSDK setup)
+ * @returns true if the logger was configured, false if it was already configured and not forced
  */
-export function setupOtelDiagnosticLogger(lc?: LogContext): boolean {
-  if (diagLoggerConfigured || !lc) {
+export function setupOtelDiagnosticLogger(
+  lc?: LogContext,
+  force = false,
+): boolean {
+  if (!lc) {
+    return false;
+  }
+
+  if (!force && diagLoggerConfigured) {
     return false;
   }
 
