@@ -37,18 +37,18 @@ const NEAR_PAGE_EDGE_THRESHOLD = PAGE_SIZE / 5;
 
 type Anchor = {
   startRow: IssueRow | undefined;
-  direction: 'down' | 'up';
+  direction: 'forward' | 'backward';
   index: number;
 };
 
 const TOP_ANCHOR = Object.freeze({
   startRow: undefined,
-  direction: 'down',
+  direction: 'forward',
   index: 0,
 });
 
 const toIssueArrayIndex = (index: number, anchor: Anchor) =>
-  anchor.direction === 'down' ? index - anchor.index : anchor.index - index;
+  anchor.direction === 'forward' ? index - anchor.index : anchor.index - index;
 
 const toBoundIssueArrayIndex = (
   index: number,
@@ -57,7 +57,7 @@ const toBoundIssueArrayIndex = (
 ) => Math.min(length - 1, Math.max(0, toIssueArrayIndex(index, anchor)));
 
 const toIndex = (issueArrayIndex: number, anchor: Anchor) =>
-  anchor.direction === 'down'
+  anchor.direction === 'forward'
     ? issueArrayIndex + anchor.index
     : anchor.index - issueArrayIndex;
 
@@ -89,15 +89,10 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const [anchor, setAnchor] = useState<Anchor>(TOP_ANCHOR);
 
-  const q = queries.issueList(
+  const q = queries.issueListV2(
     login.loginState?.decoded,
     {
-      sortDirection:
-        anchor.direction === 'down'
-          ? sortDirection
-          : sortDirection === 'asc'
-            ? 'desc'
-            : 'asc',
+      sortDirection,
       sortField,
       assignee,
       creator,
@@ -114,12 +109,13 @@ export function ListPage({onReady}: {onReady: () => void}) {
           created: anchor.startRow.created,
         }
       : null,
+    anchor.direction,
   );
 
-  const baseQ = queries.issueList(
+  const baseQ = queries.issueListV2(
     login.loginState?.decoded,
     {
-      sortDirection, // don't flip sort based on anchor
+      sortDirection,
       sortField,
       assignee,
       creator,
@@ -130,6 +126,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     z.userID,
     null, // no limit
     null, // no start
+    'forward', // fixed direction
   );
 
   const [estimatedTotal, setEstimatedTotal] = useState(0);
@@ -157,7 +154,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   }, [issues.length, issuesResult.type, onReady]);
 
   useEffect(() => {
-    if (anchor.direction !== 'down') {
+    if (anchor.direction !== 'forward') {
       return;
     }
     const eTotal = anchor.index + issues.length;
@@ -350,7 +347,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
     const hasPrev = anchor.index !== 0;
     const distanceFromStart =
-      anchor.direction === 'up'
+      anchor.direction === 'backward'
         ? firstItem.index - (anchor.index - issues.length)
         : firstItem.index - anchor.index;
     if (
@@ -366,7 +363,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       const index = toIndex(issueArrayIndex, anchor) - 1;
       const a = {
         index,
-        direction: 'up',
+        direction: 'backward',
         startRow: issues[issueArrayIndex],
       } as const;
       console.log('page up', a);
@@ -376,7 +373,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
     const hasNext = issues.length === PAGE_SIZE;
     const distanceFromEnd =
-      anchor.direction === 'up'
+      anchor.direction === 'backward'
         ? anchor.index - lastItem.index
         : anchor.index + issues.length - lastItem.index;
     if (
@@ -392,7 +389,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       const index = toIndex(issueArrayIndex, anchor) + 1;
       const a = {
         index,
-        direction: 'down',
+        direction: 'forward',
         startRow: issues[issueArrayIndex],
       } as const;
       console.log('page down', a);

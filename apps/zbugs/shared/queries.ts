@@ -151,21 +151,40 @@ export const queries = {
     ]),
     (auth: AuthData | undefined, listContext, issue, dir) =>
       applyIssuePermissions(
-        buildListQuery(listContext, issue, dir).one(),
+        buildListQuery(
+          listContext,
+          issue,
+          dir === 'next' ? 'forward' : 'backward',
+        ).one(),
         auth?.role,
       ),
   ),
 
   issueList: syncedQueryWithContext(
     'issueList',
+    z.tuple([listContextParams, z.string(), z.number()]),
+    (auth: AuthData | undefined, listContext, userID, limit) => {
+      return applyIssuePermissions(
+        buildListQuery(listContext, null, 'forward')
+          .limit(limit)
+          .related('viewState', q => q.where('userID', userID).one())
+          .related('labels'),
+        auth?.role,
+      );
+    },
+  ),
+
+  issueListV2: syncedQueryWithContext(
+    'issueListV2',
     z.tuple([
       listContextParams,
       z.string(),
       z.number().nullable(),
       issueRowSort.nullable(),
+      z.union([z.literal('forward'), z.literal('backward')]),
     ]),
-    (auth: AuthData | undefined, listContext, userID, limit, start) => {
-      let q = buildListQuery(listContext, start, 'next')
+    (auth: AuthData | undefined, listContext, userID, limit, start, dir) => {
+      let q = buildListQuery(listContext, start, dir)
         .related('viewState', q => q.where('userID', userID).one())
         .related('labels');
       if (limit) {
@@ -191,7 +210,7 @@ export type ListContext = {
 function buildListQuery(
   listContext: ListContext['params'] | null,
   start: IssueRowSort | null,
-  dir: 'next' | 'prev',
+  dir: 'forward' | 'backward',
 ) {
   if (!listContext) {
     return builder.issue.where(({or}) => or());
@@ -208,7 +227,11 @@ function buildListQuery(
   } = listContext;
 
   const orderByDir =
-    dir === 'next' ? sortDirection : sortDirection === 'asc' ? 'desc' : 'asc';
+    dir === 'forward'
+      ? sortDirection
+      : sortDirection === 'asc'
+        ? 'desc'
+        : 'asc';
 
   let q = builder.issue;
   if (start) {
