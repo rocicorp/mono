@@ -22,7 +22,8 @@ import {
 } from '../../zero/src/zero.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import {idSymbol, refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
-import {materialize, newQuery} from '../../zql/src/query/query-impl.ts';
+import {newQuery, type AnyQuery} from '../../zql/src/query/query-impl.ts';
+import {materializeQuery} from '../../zql/src/query/run.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
 import {useQuery, type UseQueryOptions} from './use-query.ts';
 import {ZeroProvider} from './use-zero.ts';
@@ -72,7 +73,20 @@ function newMockZero(
       | undefined,
     maybeOptions?: MaterializeOptions | undefined,
   ) {
-    return materialize(query, queryDelegate, factoryOrOptions, maybeOptions);
+    if (typeof factoryOrOptions === 'function') {
+      return materializeQuery(
+        queryDelegate,
+        query as AnyQuery,
+        factoryOrOptions,
+        maybeOptions?.ttl,
+      );
+    }
+    return materializeQuery(
+      queryDelegate,
+      query as AnyQuery,
+      undefined,
+      factoryOrOptions?.ttl,
+    );
   }
   return {
     clientID,

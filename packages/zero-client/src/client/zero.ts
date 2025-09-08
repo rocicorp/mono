@@ -82,13 +82,8 @@ import {
   isClientMetric,
 } from '../../../zql/src/query/metrics-delegate.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
+import {newQuery, type AnyQuery} from '../../../zql/src/query/query-impl.ts';
 import {
-  materialize,
-  newQuery,
-  type AnyQuery,
-} from '../../../zql/src/query/query-impl.ts';
-import {
-  delegateSymbol,
   type HumanReadable,
   type MaterializeOptions,
   type PreloadOptions,
@@ -97,6 +92,11 @@ import {
   type QueryTable,
   type RunOptions,
 } from '../../../zql/src/query/query.ts';
+import {
+  materializeQuery,
+  preloadQuery,
+  runQuery,
+} from '../../../zql/src/query/run.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
 import {ActiveClientsManager} from './active-clients-manager.ts';
@@ -841,19 +841,18 @@ export class Zero<
     query: Query<S, keyof S['tables'] & string, any>,
     options?: PreloadOptions | undefined,
   ) {
-    return query[delegateSymbol](this.#zeroContext).preload(options);
+    return preloadQuery(this.#zeroContext, query, options);
   }
 
   run<Q>(
     query: Q,
     runOptions?: RunOptions | undefined,
   ): Promise<HumanReadable<QueryReturn<Q>>> {
-    return (
-      (query as AnyQuery)
-        // eslint-disable-next-line no-unexpected-multiline
-        [delegateSymbol](this.#zeroContext)
-        .run(runOptions) as Promise<HumanReadable<QueryReturn<Q>>>
-    );
+    return runQuery(
+      this.#zeroContext,
+      query as AnyQuery,
+      runOptions,
+    ) as Promise<HumanReadable<QueryReturn<Q>>>;
   }
 
   materialize<Q>(
@@ -873,11 +872,18 @@ export class Zero<
       | undefined,
     maybeOptions?: MaterializeOptions | undefined,
   ) {
-    return materialize(
-      query,
+    if (typeof factoryOrOptions === 'function') {
+      return materializeQuery(
+        this.#zeroContext,
+        query as AnyQuery,
+        factoryOrOptions,
+        maybeOptions?.ttl,
+      );
+    }
+    return materializeQuery(
       this.#zeroContext,
-      factoryOrOptions,
-      maybeOptions,
+      query as AnyQuery,
+      maybeOptions?.ttl,
     );
   }
 
