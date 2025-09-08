@@ -8,7 +8,6 @@ import {
   type Node,
   type Output,
   type Query,
-  type ResultType,
   type Schema,
   type Stream,
   type TTL,
@@ -16,9 +15,34 @@ import {
   type ViewFactory,
 } from '../../zero-client/src/mod.js';
 import {idSymbol} from '../../zql/src/ivm/view-apply-change.ts';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 
-export type QueryResultDetails = {
-  readonly type: ResultType;
+export type QueryResultDetails = Readonly<
+  | {
+      type: 'complete';
+    }
+  | {
+      type: 'unknown';
+    }
+  | QueryErrorDetails
+>;
+
+type QueryErrorDetails = {
+  type: 'error';
+  refetch: (() => void) | undefined;
+  error:
+    | {
+        type: 'app';
+        queryName: string;
+        details: ReadonlyJSONValue;
+      }
+    | {
+        type: 'http';
+        queryName: string;
+        status: number;
+        details: ReadonlyJSONValue;
+      };
 };
 
 export type State = [Entry, QueryResultDetails];
@@ -30,6 +54,7 @@ export class SolidView implements Output {
   readonly #input: Input;
   readonly #format: Format;
   readonly #onDestroy: () => void;
+  readonly #refetch: () => void;
 
   #setState: SetStoreFunction<State>;
 
@@ -53,12 +78,14 @@ export class SolidView implements Output {
     queryComplete: true | Promise<true>,
     updateTTL: (ttl: TTL) => void,
     setState: SetStoreFunction<State>,
+    refetch: () => void,
   ) {
     this.#input = input;
     onTransactionCommit(this.#onTransactionCommit);
     this.#format = format;
     this.#onDestroy = onDestroy;
     this.#updateTTL = updateTTL;
+    this.#refetch = refetch;
 
     input.setOutput(this);
 
@@ -82,10 +109,34 @@ export class SolidView implements Output {
     }
 
     if (queryComplete !== true) {
-      void queryComplete.then(() => {
-        this.#setState(prev => [prev[0], COMPLETE]);
-      });
+      void queryComplete
+        .then(() => {
+          this.#setState(prev => [prev[0], COMPLETE]);
+        })
+        .catch((error: ErroredQuery) => {
+          this.#setState(prev => [prev[0], this.#makeError(error)]);
+        });
     }
+  }
+
+  #makeError(error: ErroredQuery): QueryErrorDetails {
+    return {
+      type: 'error',
+      refetch: this.#refetch,
+      error:
+        error.error === 'app' || error.error === 'zero'
+          ? {
+              type: 'app',
+              queryName: error.name,
+              details: error.details,
+            }
+          : {
+              type: 'http',
+              queryName: error.name,
+              status: error.status,
+              details: error.details,
+            },
+    };
   }
 
   destroy(): void {
@@ -216,7 +267,10 @@ function isEmptyRoot(entry: Entry) {
   return data === undefined || (Array.isArray(data) && data.length === 0);
 }
 
-export function createSolidViewFactory(setState: SetStoreFunction<State>) {
+export function createSolidViewFactory(
+  setState: SetStoreFunction<State>,
+  refetch?: () => void,
+) {
   function solidViewFactory<
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
@@ -238,6 +292,7 @@ export function createSolidViewFactory(setState: SetStoreFunction<State>) {
       queryComplete,
       updateTTL,
       setState,
+      refetch || (() => {}),
     );
   }
 
