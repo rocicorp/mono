@@ -38,12 +38,12 @@ export default async function runWorker(
   return runUntilKilled(
     lc,
     parent,
-    new CVRPurger(
-      lc,
-      cvrDB,
-      shard,
-      cvr.garbageCollectionInactivityThresholdHours * MS_PER_HOUR,
-    ),
+    new CVRPurger(lc, cvrDB, shard, {
+      inactivityThresholdMs:
+        cvr.garbageCollectionInactivityThresholdHours * MS_PER_HOUR,
+      initialBatchSize: cvr.garbageCollectionInitialBatchSize,
+      initialIntervalMs: cvr.garbageCollectionInitialIntervalSeconds * 1000,
+    }),
   );
 }
 

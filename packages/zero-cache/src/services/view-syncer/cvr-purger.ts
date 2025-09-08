@@ -6,9 +6,13 @@ import {RunningState} from '../running-state.ts';
 import type {Service} from '../service.ts';
 
 const MINUTE = 60 * 1000;
-const MIN_PURGE_INTERVAL_MS = MINUTE;
 const MAX_PURGE_INTERVAL_MS = 16 * MINUTE;
-const DEFAULT_CVRS_PER_PURGE = 1000;
+
+type Options = {
+  inactivityThresholdMs: number;
+  initialBatchSize: number;
+  initialIntervalMs: number;
+};
 
 export class CVRPurger implements Service {
   readonly id = 'reaper';
@@ -17,44 +21,58 @@ export class CVRPurger implements Service {
   readonly #db: PostgresDB;
   readonly #schema: string;
   readonly #inactivityThresholdMs: number;
+  readonly #initialBatchSize: number;
+  readonly #initialIntervalMs: number;
   readonly #state = new RunningState('reaper');
 
   constructor(
     lc: LogContext,
     db: PostgresDB,
     shard: ShardID,
-    inactivityThresholdMs: number,
+    {inactivityThresholdMs, initialBatchSize, initialIntervalMs}: Options,
   ) {
     this.#lc = lc;
     this.#db = db;
     this.#schema = cvrSchema(shard);
     this.#inactivityThresholdMs = inactivityThresholdMs;
+    this.#initialBatchSize = initialBatchSize;
+    this.#initialIntervalMs = initialIntervalMs;
   }
 
   async run() {
     let purgeable: number | undefined;
-    let maxCVRsPerPurge = DEFAULT_CVRS_PER_PURGE;
-    let purgeInterval = MIN_PURGE_INTERVAL_MS;
+    let maxCVRsPerPurge = this.#initialBatchSize;
+    let purgeInterval = this.#initialIntervalMs;
+
+    if (this.#initialBatchSize === 0) {
+      this.#lc.warn?.(
+        `CVR garbage collection is disabled (initialBatchSize = 0)`,
+      );
+      // Do nothing and just wait to be stopped.
+      await this.#state.stopped();
+    }
 
     while (this.#state.shouldRun()) {
       try {
+        const start = performance.now();
         const {purged, remaining} =
           await this.purgeInactiveCVRs(maxCVRsPerPurge);
 
         if (purgeable !== undefined && remaining > purgeable) {
           // If the number of purgeable CVRs has grown even after the purge,
           // increase the number purged per round to achieve a steady state.
-          maxCVRsPerPurge += DEFAULT_CVRS_PER_PURGE;
+          maxCVRsPerPurge += this.#initialBatchSize;
           this.#lc.info?.(`increased CVRs per purge to ${maxCVRsPerPurge}`);
         }
         purgeable = remaining;
 
         purgeInterval =
           purgeable > 0
-            ? MIN_PURGE_INTERVAL_MS
+            ? this.#initialIntervalMs
             : Math.min(purgeInterval * 2, MAX_PURGE_INTERVAL_MS);
+        const elapsed = performance.now() - start;
         this.#lc.info?.(
-          `purged ${purged} inactive CVRs. Next purge in ${purgeInterval} ms`,
+          `purged ${purged} inactive CVRs (${elapsed.toFixed(2)} ms). Next purge in ${purgeInterval} ms`,
         );
         await this.#state.sleep(purgeInterval);
       } catch (e) {
