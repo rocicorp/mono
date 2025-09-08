@@ -275,6 +275,26 @@ export const zeroOptions = {
         `necessarily purge all eligible CVRs immediately.`,
       ],
     },
+
+    garbageCollectionInitialIntervalSeconds: {
+      type: v.number().default(60),
+      desc: [
+        `The initial interval at which to check and garbage collect inactive CVRs.`,
+        `This interval is increased exponentially (up to 16 minutes) when there is`,
+        `nothing to purge.`,
+      ],
+    },
+
+    garbageCollectionInitialBatchSize: {
+      type: v.number().default(25),
+      desc: [
+        `The initial number of CVRs to purge per garbage collection interval.`,
+        `This number is increased linearly if the rate of new CVRs exceeds the rate of`,
+        `purged CVRs, in order to reach a steady state.`,
+        ``,
+        `Setting this to 0 effectively disables CVR garbage collection.`,
+      ],
+    },
   },
 
   queryHydrationStats: {
