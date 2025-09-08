@@ -162,7 +162,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
       setEstimatedTotal(eTotal);
     }
     if (issuesResult.type === 'complete' && issues.length < PAGE_SIZE) {
-      console.log(issues.length, issues, anchor);
       setTotal(eTotal);
     }
   }, [anchor, issuesResult.type, issues, estimatedTotal]);
