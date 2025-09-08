@@ -1,3 +1,4 @@
+import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {Value} from '../../../zero-protocol/src/data.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {Query} from '../query/query.ts';
@@ -24,6 +25,6 @@ export type ViewFactory<
   format: Format,
   onDestroy: () => void,
   onTransactionCommit: (cb: () => void) => void,
-  queryComplete: true | Promise<true>,
+  queryComplete: true | ErroredQuery | Promise<true>,
   updateTTL: (ttl: TTL) => void,
 ) => T;

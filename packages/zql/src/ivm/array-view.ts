@@ -40,7 +40,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   constructor(
     input: Input,
     format: Format,
-    queryComplete: true | Promise<true>,
+    queryComplete: true | ErroredQuery | Promise<true>,
     updateTTL: (ttl: TTL) => void,
   ) {
     this.#input = input;
@@ -52,6 +52,9 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
     if (queryComplete === true) {
       this.#resultType = 'complete';
+    } else if ('error' in queryComplete) {
+      this.#resultType = 'error';
+      this.#error = queryComplete;
     } else {
       void queryComplete
         .then(() => {

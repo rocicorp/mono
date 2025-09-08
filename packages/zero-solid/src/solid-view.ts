@@ -30,7 +30,7 @@ export type QueryResultDetails = Readonly<
 
 type QueryErrorDetails = {
   type: 'error';
-  refetch: (() => void) | undefined;
+  refetch: () => void;
   error:
     | {
         type: 'app';
@@ -75,7 +75,7 @@ export class SolidView implements Output {
     onTransactionCommit: (cb: () => void) => void,
     format: Format,
     onDestroy: () => void,
-    queryComplete: true | Promise<true>,
+    queryComplete: true | ErroredQuery | Promise<true>,
     updateTTL: (ttl: TTL) => void,
     setState: SetStoreFunction<State>,
     refetch: () => void,
@@ -98,17 +98,27 @@ export class SolidView implements Output {
 
     this.#setState = setState;
     this.#setState(
-      reconcile([initialRoot, queryComplete === true ? COMPLETE : UNKNOWN], {
-        // solidjs's types want a string, but a symbol works
-        key: idSymbol as unknown as string,
-      }),
+      reconcile(
+        [
+          initialRoot,
+          queryComplete === true
+            ? COMPLETE
+            : 'error' in queryComplete
+              ? this.#makeError(queryComplete)
+              : UNKNOWN,
+        ],
+        {
+          // solidjs's types want a string, but a symbol works
+          key: idSymbol as unknown as string,
+        },
+      ),
     );
 
     if (isEmptyRoot(initialRoot)) {
       this.#builderRoot = this.#createEmptyRoot();
     }
 
-    if (queryComplete !== true) {
+    if (queryComplete !== true && !('error' in queryComplete)) {
       void queryComplete
         .then(() => {
           this.#setState(prev => [prev[0], COMPLETE]);
@@ -281,7 +291,7 @@ export function createSolidViewFactory(
     format: Format,
     onDestroy: () => void,
     onTransactionCommit: (cb: () => void) => void,
-    queryComplete: true | Promise<true>,
+    queryComplete: true | ErroredQuery | Promise<true>,
     updateTTL: (ttl: TTL) => void,
   ) {
     return new SolidView(

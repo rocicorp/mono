@@ -49,6 +49,7 @@ import {
   newQueryDelegate,
 } from '../../../zqlite/src/test/source-factory.ts';
 import '../helpers/comparePg.ts';
+import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 
 const lc = createSilentLogContext();
 
@@ -742,7 +743,7 @@ function gatherRows(
       _format: Format,
       onDestroy: () => void,
       _onTransactionCommit: (cb: () => void) => void,
-      _queryComplete: true | Promise<true>,
+      _queryComplete: true | ErroredQuery | Promise<true>,
     ) => {
       const schema = input.getSchema();
       for (const node of input.fetch({})) {
