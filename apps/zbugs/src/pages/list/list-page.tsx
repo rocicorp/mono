@@ -31,8 +31,9 @@ import {queries, type ListContext} from '../../../shared/queries.ts';
 import type {IssueRow} from '../../../shared/schema.ts';
 
 let firstRowRendered = false;
-const itemSize = 56;
-const pageSize = 100;
+const ITEM_SIZE = 56;
+const PAGE_SIZE = 100;
+const NEAR_PAGE_EDGE_THRESHOLD = PAGE_SIZE / 5;
 
 type Anchor = {
   startRow: IssueRow | undefined;
@@ -40,11 +41,11 @@ type Anchor = {
   index: number;
 };
 
-const startingAnchor = {
+const TOP_ANCHOR = Object.freeze({
   startRow: undefined,
   direction: 'down',
   index: 0,
-} as const;
+});
 
 const toIssueArrayIndex = (index: number, anchor: Anchor) =>
   anchor.direction === 'down' ? index - anchor.index : anchor.index - index;
@@ -86,7 +87,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const open = status === 'open' ? true : status === 'closed' ? false : null;
 
-  const [anchor, setAnchor] = useState<Anchor>(startingAnchor);
+  const [anchor, setAnchor] = useState<Anchor>(TOP_ANCHOR);
 
   const q = queries.issueList(
     login.loginState?.decoded,
@@ -105,7 +106,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       textFilter,
     },
     z.userID,
-    pageSize,
+    PAGE_SIZE,
     anchor.startRow
       ? {
           id: anchor.startRow.id,
@@ -137,7 +138,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   useEffect(() => {
     setEstimatedTotal(0);
     setTotal(undefined);
-    setAnchor(startingAnchor);
+    setAnchor(TOP_ANCHOR);
     virtualizer.scrollToIndex(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseQ.hash()]);
@@ -163,7 +164,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     if (eTotal > estimatedTotal) {
       setEstimatedTotal(eTotal);
     }
-    if (issuesResult.type === 'complete' && issues.length < pageSize) {
+    if (issuesResult.type === 'complete' && issues.length < PAGE_SIZE) {
       console.log(issues.length, issues, anchor);
       setTotal(eTotal);
     }
@@ -324,7 +325,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const virtualizer = useVirtualizer({
     count: total ?? estimatedTotal,
-    estimateSize: () => itemSize,
+    estimateSize: () => ITEM_SIZE,
     overscan: 5,
     getScrollElement: () => listRef.current,
   });
@@ -337,9 +338,9 @@ export function ListPage({onReady}: {onReady: () => void}) {
       return;
     }
 
-    if (anchor.index !== 0 && firstItem.index <= pageSize / 5) {
+    if (anchor.index !== 0 && firstItem.index <= NEAR_PAGE_EDGE_THRESHOLD) {
       console.log('anchoring to top');
-      setAnchor(startingAnchor);
+      setAnchor(TOP_ANCHOR);
       return;
     }
 
@@ -355,7 +356,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     if (
       hasPrev &&
       virtualizer.scrollDirection === 'backward' &&
-      distanceFromStart <= pageSize / 5
+      distanceFromStart <= NEAR_PAGE_EDGE_THRESHOLD
     ) {
       const issueArrayIndex = toBoundIssueArrayIndex(
         lastItem.index,
@@ -373,7 +374,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       return;
     }
 
-    const hasNext = issues.length === pageSize;
+    const hasNext = issues.length === PAGE_SIZE;
     const distanceFromEnd =
       anchor.direction === 'up'
         ? anchor.index - lastItem.index
@@ -381,7 +382,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     if (
       hasNext &&
       virtualizer.scrollDirection === 'forward' &&
-      distanceFromEnd <= pageSize / 5
+      distanceFromEnd <= NEAR_PAGE_EDGE_THRESHOLD
     ) {
       const issueArrayIndex = toBoundIssueArrayIndex(
         firstItem.index,
