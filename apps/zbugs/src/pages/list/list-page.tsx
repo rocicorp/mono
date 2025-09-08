@@ -89,17 +89,19 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const [anchor, setAnchor] = useState<Anchor>(TOP_ANCHOR);
 
+  const listContextParams = {
+    sortDirection,
+    sortField,
+    assignee,
+    creator,
+    labels,
+    open,
+    textFilter,
+  } as const;
+
   const q = queries.issueListV2(
     login.loginState?.decoded,
-    {
-      sortDirection,
-      sortField,
-      assignee,
-      creator,
-      labels,
-      open,
-      textFilter,
-    },
+    listContextParams,
     z.userID,
     PAGE_SIZE,
     anchor.startRow
@@ -112,17 +114,11 @@ export function ListPage({onReady}: {onReady: () => void}) {
     anchor.direction,
   );
 
+  // For detecting if the base query, i.e. ignoring pagination parameters, has
+  // changed.
   const baseQ = queries.issueListV2(
     login.loginState?.decoded,
-    {
-      sortDirection,
-      sortField,
-      assignee,
-      creator,
-      labels,
-      open,
-      textFilter,
-    },
+    listContextParams,
     z.userID,
     null, // no limit
     null, // no start
