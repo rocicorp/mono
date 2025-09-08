@@ -3,6 +3,7 @@ import {useLogin} from './hooks/use-login.tsx';
 import {createMutators} from '../shared/mutators.ts';
 import {useMemo, type ReactNode} from 'react';
 import {schema} from '../shared/schema.ts';
+import type {CustomMutatorDefs, Schema, ZeroOptions} from '@rocicorp/zero';
 
 export function ZeroInit({children}: {children: ReactNode}) {
   const login = useLogin();
@@ -21,7 +22,13 @@ export function ZeroInit({children}: {children: ReactNode}) {
         }
         return login.loginState?.encoded;
       },
-    };
+      mutateURL: process.env.VERCEL_URL
+        ? `https://{process.env.VERCEL_URL}/api/push`
+        : undefined,
+      getQueriesURL: process.env.VERCEL_URL
+        ? `https://{process.env.VERCEL_URL}/api/pull`
+        : undefined,
+    } satisfies ZeroOptions<Schema, CustomMutatorDefs>;
   }, [login]);
 
   return <ZeroProvider {...props}>{children}</ZeroProvider>;
