@@ -1,7 +1,6 @@
 import {
   escapeLike,
   type Query,
-  type Row,
   syncedQuery,
   syncedQueryWithContext,
 } from '@rocicorp/zero';
@@ -10,6 +9,7 @@ import {INITIAL_COMMENT_LIMIT} from './consts.ts';
 import type {AuthData, Role} from './auth.ts';
 import z from 'zod';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyIssuePermissions<TQuery extends Query<Schema, 'issue', any>>(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   q: TQuery,
