@@ -281,7 +281,6 @@ describe('building the AST', () => {
             },
             "subquery": {
               "alias": "owner",
-              "limit": 1,
               "orderBy": [
                 [
                   "id",
@@ -378,7 +377,6 @@ describe('building the AST', () => {
             },
             "subquery": {
               "alias": "owner",
-              "limit": 1,
               "orderBy": [
                 [
                   "id",
@@ -489,7 +487,6 @@ describe('building the AST', () => {
             },
             "subquery": {
               "alias": "owner",
-              "limit": 1,
               "orderBy": [
                 [
                   "id",
@@ -2154,7 +2151,7 @@ describe('exists', () => {
   });
 });
 
-test('one in schema should imply limit 1 in the ast', () => {
+test('one in schema should not imply limit 1 in the ast -- the user needs to get this right so we do not degrade perf tracking extra data in take', () => {
   const issueQuery = newQuery(mockDelegate, schema, 'issue');
   const q1 = issueQuery.related('owner');
   const q2 = issueQuery.related('comments');
@@ -2163,7 +2160,7 @@ test('one in schema should imply limit 1 in the ast', () => {
     table: 'issue',
     related: [
       {
-        subquery: {limit: 1, table: 'user'},
+        subquery: {table: 'user'},
       },
     ],
   });
