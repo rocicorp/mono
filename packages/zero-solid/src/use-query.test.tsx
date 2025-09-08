@@ -32,6 +32,7 @@ import type {
   QueryReturn,
   QueryTable,
 } from '../../zql/src/query/query.ts';
+import {assert} from '../../shared/src/asserts.ts';
 
 function setupTestEnvironment() {
   const schema = createSchema({
@@ -167,6 +168,53 @@ test('useQuery with ttl', () => {
     '10m',
   );
   expect(materializeSpy).toHaveBeenCalledTimes(0);
+});
+
+test('useQuery gets an error', async () => {
+  const {tableQuery, queryDelegate} = setupTestEnvironment();
+  const querySignal = vi.fn(() => tableQuery);
+
+  const zero = newMockZero('useQuery-id', queryDelegate);
+  const {
+    result: [rows, resultType],
+  } = useQueryWithZeroProvider(zero, querySignal);
+
+  const lastRows = rows();
+
+  const expectedRows = [
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+    {a: 2, b: 'b', [refCountSymbol]: 1, [idSymbol]: '2'},
+  ];
+  expect(rows()).toEqual(expectedRows);
+  expect(resultType()).toEqual({type: 'unknown'});
+
+  must(queryDelegate.gotCallbacks[0])(true, {
+    id: 'q1',
+    details: 'Something went wrong',
+    error: 'app',
+    name: 'TestQuery',
+  });
+  // fails with `waitUntil`  which boggles the mind
+  // useQuery gets an error 1007ms
+  //  → Timed out in waitUntil!
+  await new Promise(r => setTimeout(r, 0));
+
+  const r = resultType();
+  assert(r.type === 'error');
+  expect(r.error).toEqual({
+    details: 'Something went wrong',
+    type: 'app',
+    queryName: 'TestQuery',
+  });
+  // same rows, no recomputation of the view
+  expect(rows()).toBe(lastRows);
+
+  r.refetch();
+  expect(resultType()).toEqual({type: 'unknown'});
+  expect(rows()).toEqual(expectedRows);
+  must(queryDelegate.gotCallbacks[1])(true);
+  await new Promise(r => setTimeout(r, 0));
+  expect(resultType()).toEqual({type: 'complete'});
 });
 
 test('useQuery query deps change', async () => {

@@ -1,4 +1,4 @@
-import {createComputed, onCleanup, type Accessor} from 'solid-js';
+import {createComputed, createSignal, onCleanup, type Accessor} from 'solid-js';
 import {createStore} from 'solid-js/store';
 import {
   type ClientID,
@@ -63,8 +63,15 @@ export function useQuery<
     },
     UNKNOWN,
   ]);
+  const initialRefetchKey = 0;
+  const [refetchKey, setRefetchKey] = createSignal(initialRefetchKey);
+
+  const refetch = () => {
+    setRefetchKey(k => k + 1);
+  };
 
   let view: SolidView | undefined = undefined;
+
   // Wrap in in createComputed to ensure a new view is created if the querySignal changes.
   createComputed<
     [
@@ -73,10 +80,19 @@ export function useQuery<
       Query<TSchema, TTable, TReturn> | undefined,
       string | undefined,
       TTL | undefined,
+      number,
     ]
   >(
-    ([prevView, prevClientID, prevQuery, prevQueryHash, prevTtl]) => {
+    ([
+      prevView,
+      prevClientID,
+      prevQuery,
+      prevQueryHash,
+      prevTtl,
+      prevRefetchKey,
+    ]) => {
       const zero = useZero()();
+      const currentRefetchKey = refetchKey(); // depend on refetchKey to force re-evaluation
       const {clientID} = zero;
       const query = querySignal();
       const queryHash = query.hash();
@@ -84,13 +100,18 @@ export function useQuery<
       if (
         !prevView ||
         clientID !== prevClientID ||
+        prevRefetchKey !== currentRefetchKey ||
         (query !== prevQuery &&
           (clientID === undefined || query.hash() !== prevQueryHash))
       ) {
         if (prevView) {
           prevView.destroy();
         }
-        view = zero.materialize(query, createSolidViewFactory(setState), {ttl});
+        view = zero.materialize(
+          query,
+          createSolidViewFactory(setState, refetch),
+          {ttl},
+        );
       } else {
         view = prevView;
         if (ttl !== prevTtl) {
@@ -98,9 +119,9 @@ export function useQuery<
         }
       }
 
-      return [view, clientID, query, queryHash, ttl];
+      return [view, clientID, query, queryHash, ttl, currentRefetchKey];
     },
-    [undefined, undefined, undefined, undefined, undefined],
+    [undefined, undefined, undefined, undefined, undefined, initialRefetchKey],
   );
 
   onCleanup(() => {

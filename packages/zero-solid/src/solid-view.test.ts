@@ -57,6 +57,7 @@ test('basics', () => {
     queryComplete,
     () => {},
     setState,
+    () => {},
   );
 
   const data0 = [
@@ -127,6 +128,7 @@ test('single-format', () => {
     true,
     () => {},
     setState,
+    () => {},
   );
 
   const data0 = {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'};
@@ -183,6 +185,7 @@ test('hydrate-empty', () => {
     queryComplete,
     () => {},
     setState,
+    () => {},
   );
 
   expect(data()).toEqual([]);
@@ -254,6 +257,7 @@ test('tree', () => {
     true,
     () => {},
     setState,
+    () => {},
   );
 
   const data0 = [
@@ -610,6 +614,7 @@ test('tree-single', () => {
     true,
     () => {},
     setState,
+    () => {},
   );
 
   const data0 = {
@@ -741,6 +746,7 @@ test('collapse', () => {
     true,
     () => {},
     setState,
+    () => {},
   );
 
   const data0: unknown[] = [];
@@ -1257,6 +1263,7 @@ test('collapse-single', () => {
     true,
     () => {},
     setState,
+    () => {},
   );
 
   const data0: unknown[] = [];
@@ -1348,6 +1355,7 @@ test('basic with edit pushes', () => {
     true,
     () => {},
     setState,
+    () => {},
   );
 
   const data0 = [
@@ -1425,6 +1433,7 @@ test('edit trigger reactivity at the column level', () => {
     true,
     () => {},
     setState,
+    () => {},
   );
 
   createEffect(() => {
@@ -1585,6 +1594,7 @@ test('tree edit', () => {
     true,
     () => {},
     setState,
+    () => {},
   );
 
   const data0 = [
@@ -1831,6 +1841,7 @@ test('edit to change the order', () => {
     true,
     () => {},
     setState,
+    () => {},
   );
 
   const data0 = [
@@ -1952,6 +1963,7 @@ test('edit to preserve relationships', () => {
     true,
     () => {},
     setState,
+    () => {},
   );
 
   const data0: unknown[] = [];
@@ -2178,6 +2190,7 @@ test('edit leaf', () => {
     true,
     () => {},
     setState,
+    () => {},
   );
 
   const data0: unknown[] = [];
@@ -2448,6 +2461,7 @@ test('queryComplete promise', async () => {
     queryCompleteResolver.promise,
     () => {},
     setState,
+    () => {},
   );
 
   expect(data()).toMatchInlineSnapshot(`

@@ -54,6 +54,7 @@ import {
 } from './query.ts';
 import {DEFAULT_PRELOAD_TTL_MS, DEFAULT_TTL_MS, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
+import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 
 export type AnyQuery = Query<Schema, string, any>;
 
@@ -779,7 +780,7 @@ export class QueryImpl<
       ? hashOfNameAndArgs(this.customQueryID.name, this.customQueryID.args)
       : this.hash();
     const queryCompleteResolver = resolver<true>();
-    let queryComplete = delegate.defaultQueryComplete;
+    let queryComplete: boolean | ErroredQuery = delegate.defaultQueryComplete;
     const updateTTL = (newTTL: TTL) => {
       this.customQueryID
         ? delegate.updateCustomQuery(this.customQueryID, newTTL)
@@ -789,7 +790,7 @@ export class QueryImpl<
     const gotCallback: GotCallback = (got, error) => {
       if (error) {
         queryCompleteResolver.reject(error);
-        queryComplete = true;
+        queryComplete = error;
         return;
       }
 
@@ -950,7 +951,7 @@ function arrayViewFactory<
   format: Format,
   onDestroy: () => void,
   onTransactionCommit: (cb: () => void) => void,
-  queryComplete: true | Promise<true>,
+  queryComplete: true | ErroredQuery | Promise<true>,
   updateTTL: (ttl: TTL) => void,
 ): TypedView<HumanReadable<TReturn>> {
   const v = new ArrayView<HumanReadable<TReturn>>(
