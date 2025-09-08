@@ -149,11 +149,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
     textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
   );
 
-  const [baseIssues, baseIssuesResult] = useQuery(
-    baseQ,
-    textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
-  );
-
   useEffect(() => {
     if (issues.length > 0 || issuesResult.type === 'complete') {
       onReady();
@@ -277,14 +272,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
       );
     }
     const issue = issues[issueArrayIndex];
-    if (
-      baseIssuesResult.type === 'complete' &&
-      baseIssues[index].id !== issue.id
-    ) {
-      throw new Error(
-        `Base diff ${index}, ${baseIssues[index].id}, ${issue.id}`,
-      );
-    }
     if (firstRowRendered === false) {
       mark('first issue row rendered');
       firstRowRendered = true;
