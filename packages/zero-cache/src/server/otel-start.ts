@@ -1,4 +1,3 @@
-import {diag} from '@opentelemetry/api';
 import {logs} from '@opentelemetry/api-logs';
 import {getNodeAutoInstrumentations} from '@opentelemetry/auto-instrumentations-node';
 import type {Instrumentation} from '@opentelemetry/instrumentation';
@@ -6,6 +5,7 @@ import {resourceFromAttributes} from '@opentelemetry/resources';
 import {NodeSDK} from '@opentelemetry/sdk-node';
 import {ATTR_SERVICE_VERSION} from '@opentelemetry/semantic-conventions';
 import {LogContext} from '@rocicorp/logger';
+import {setupOtelDiagnosticLogger} from './otel-diag-logger.js';
 import {
   otelEnabled,
   otelLogsEnabled,
@@ -28,34 +28,13 @@ class OtelManager {
   }
 
   startOtelAuto(lc?: LogContext) {
-    // Set default log level if none specified
-    process.env.OTEL_LOG_LEVEL ??= 'error';
-
-    if (lc) {
-      const log = lc.withContext('component', 'otel');
-      diag.setLogger({
-        verbose: (msg: string, ...args: unknown[]) => log.debug?.(msg, ...args),
-        debug: (msg: string, ...args: unknown[]) => log.debug?.(msg, ...args),
-        info: (msg: string, ...args: unknown[]) => log.info?.(msg, ...args),
-        warn: (msg: string, ...args: unknown[]) => log.warn?.(msg, ...args),
-        error: (msg: string, ...args: unknown[]) => {
-          // Check if this is a known non-critical error that should be a warning
-          if (
-            msg.includes('Request Timeout') ||
-            msg.includes('Unexpected server response: 502') ||
-            msg.includes('Export failed with retryable status')
-          ) {
-            log.warn?.(msg, ...args);
-          } else {
-            log.error?.(msg, ...args);
-          }
-        },
-      });
-    }
     if (this.#started || !otelEnabled()) {
       return;
     }
     this.#started = true;
+
+    // Set up diagnostic logger early, before SDK initialization
+    setupOtelDiagnosticLogger(lc);
 
     // Use exponential histograms by default to reduce cardinality from auto-instrumentation
     // This affects HTTP server/client and other auto-instrumented histogram metrics
@@ -91,6 +70,10 @@ class OtelManager {
 
     // Start SDK: will deploy Trace, Metrics, and Logs pipelines as per env vars
     sdk.start();
+
+    // Ensure diagnostic logger is configured after SDK start (in case SDK overrode it)
+    setupOtelDiagnosticLogger(lc);
+
     logs.getLogger('zero-cache').emit({
       severityText: 'INFO',
       body: 'OpenTelemetry SDK started successfully',
