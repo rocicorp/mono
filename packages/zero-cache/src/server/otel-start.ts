@@ -69,12 +69,12 @@ class OtelManager {
         : [],
     });
 
-    // Start SDK: will deploy Trace, Metrics, and Logs pipelines as per env vars
-    sdk.start();
-
-    // Restore OTEL_LOG_LEVEL and set up our diagnostic logger with suppressOverrideMessage
-    if (otelLogLevel) {
-      process.env.OTEL_LOG_LEVEL = otelLogLevel;
+    try {
+      sdk.start();
+    } finally {
+      if (otelLogLevel) {
+        process.env.OTEL_LOG_LEVEL = otelLogLevel;
+      }
     }
     setupOtelDiagnosticLogger(lc, true);
 
