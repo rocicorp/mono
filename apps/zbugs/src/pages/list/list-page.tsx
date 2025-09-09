@@ -32,8 +32,7 @@ import type {IssueRow} from '../../../shared/schema.ts';
 
 let firstRowRendered = false;
 const ITEM_SIZE = 56;
-const PAGE_SIZE = 100;
-const NEAR_PAGE_EDGE_THRESHOLD = PAGE_SIZE / 10;
+const MIN_PAGE_SIZE = 100;
 
 type Anchor = {
   startRow: IssueRow | undefined;
@@ -46,6 +45,8 @@ const TOP_ANCHOR = Object.freeze({
   direction: 'forward',
   index: 0,
 });
+
+const getNearPageEdgeThreshold = (pageSize: number) => Math.ceil(pageSize / 10);
 
 const toIssueArrayIndex = (index: number, anchor: Anchor) =>
   anchor.direction === 'forward' ? index - anchor.index : anchor.index - index;
@@ -99,11 +100,27 @@ export function ListPage({onReady}: {onReady: () => void}) {
     textFilter,
   } as const;
 
+  const listRef = useRef<HTMLDivElement>(null);
+  const tableWrapperRef = useRef<HTMLDivElement>(null);
+  const size = useElementSize(tableWrapperRef);
+
+  const [pageSize, setPageSize] = useState(MIN_PAGE_SIZE);
+  useEffect(() => {
+    // Make sure page size is enough to fill the scroll element at least
+    // 3 times.  Don't shrink page size.
+    const newPageSize = size
+      ? Math.max(MIN_PAGE_SIZE, Math.ceil(size?.height / ITEM_SIZE) * 3)
+      : MIN_PAGE_SIZE;
+    if (newPageSize > pageSize) {
+      setPageSize(pageSize);
+    }
+  }, [pageSize, size]);
+
   const q = queries.issueListV2(
     login.loginState?.decoded,
     listContextParams,
     z.userID,
-    PAGE_SIZE,
+    pageSize,
     anchor.startRow
       ? {
           id: anchor.startRow.id,
@@ -157,10 +174,10 @@ export function ListPage({onReady}: {onReady: () => void}) {
     if (eTotal > estimatedTotal) {
       setEstimatedTotal(eTotal);
     }
-    if (issuesResult.type === 'complete' && issues.length < PAGE_SIZE) {
+    if (issuesResult.type === 'complete' && issues.length < pageSize) {
       setTotal(eTotal);
     }
-  }, [anchor, issuesResult.type, issues, estimatedTotal]);
+  }, [anchor, issuesResult.type, issues, estimatedTotal, pageSize]);
 
   useEffect(() => {
     if (issuesResult.type === 'complete') {
@@ -311,10 +328,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
     );
   };
 
-  const listRef = useRef<HTMLDivElement>(null);
-  const tableWrapperRef = useRef<HTMLDivElement>(null);
-  const size = useElementSize(tableWrapperRef);
-
   const virtualizer = useVirtualizer({
     count: total ?? estimatedTotal,
     estimateSize: () => ITEM_SIZE,
@@ -330,7 +343,10 @@ export function ListPage({onReady}: {onReady: () => void}) {
       return;
     }
 
-    if (anchor.index !== 0 && firstItem.index <= NEAR_PAGE_EDGE_THRESHOLD) {
+    if (
+      anchor.index !== 0 &&
+      firstItem.index <= getNearPageEdgeThreshold(pageSize)
+    ) {
       console.log('anchoring to top');
       setAnchor(TOP_ANCHOR);
       return;
@@ -346,9 +362,11 @@ export function ListPage({onReady}: {onReady: () => void}) {
         ? firstItem.index - (anchor.index - issues.length)
         : firstItem.index - anchor.index;
 
-    if (hasPrev && distanceFromStart <= NEAR_PAGE_EDGE_THRESHOLD) {
+    const nearPageEdgeThreshold = getNearPageEdgeThreshold(pageSize);
+
+    if (hasPrev && distanceFromStart <= nearPageEdgeThreshold) {
       const issueArrayIndex = toBoundIssueArrayIndex(
-        lastItem.index + NEAR_PAGE_EDGE_THRESHOLD * 2,
+        lastItem.index + nearPageEdgeThreshold * 2,
         anchor,
         issues.length,
       );
@@ -364,14 +382,14 @@ export function ListPage({onReady}: {onReady: () => void}) {
     }
 
     const hasNext =
-      anchor.direction === 'backward' || issues.length === PAGE_SIZE;
+      anchor.direction === 'backward' || issues.length === pageSize;
     const distanceFromEnd =
       anchor.direction === 'backward'
         ? anchor.index - lastItem.index
         : anchor.index + issues.length - lastItem.index;
-    if (hasNext && distanceFromEnd <= NEAR_PAGE_EDGE_THRESHOLD) {
+    if (hasNext && distanceFromEnd <= nearPageEdgeThreshold) {
       const issueArrayIndex = toBoundIssueArrayIndex(
-        firstItem.index - NEAR_PAGE_EDGE_THRESHOLD * 2,
+        firstItem.index - nearPageEdgeThreshold * 2,
         anchor,
         issues.length,
       );
@@ -384,7 +402,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       console.log('page down', a);
       setAnchor(a);
     }
-  }, [anchor, issues, issuesResult, virtualItems]);
+  }, [anchor, issues, issuesResult, pageSize, virtualItems]);
 
   const [forceSearchMode, setForceSearchMode] = useState(false);
   const searchMode = forceSearchMode || Boolean(textFilter);
