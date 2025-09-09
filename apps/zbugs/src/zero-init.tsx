@@ -27,7 +27,5 @@ export function ZeroInit({children}: {children: ReactNode}) {
     } satisfies ZeroOptions<Schema, CustomMutatorDefs>;
   }, [login]);
 
-  console.log('ZeroOptions', props);
-
   return <ZeroProvider {...props}>{children}</ZeroProvider>;
 }
