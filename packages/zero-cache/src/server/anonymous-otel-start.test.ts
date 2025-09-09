@@ -198,13 +198,21 @@ describe('Anonymous Telemetry Integration Tests', () => {
       // Verify OTLP exporter was created with correct configuration
       expect(OTLPMetricExporter).toHaveBeenCalledWith({
         url: 'https://metrics.rocicorp.dev',
+        timeoutMillis: 30000,
       });
 
       // Verify metric reader was created
-      expect(PeriodicExportingMetricReader).toHaveBeenCalledWith({
-        exportIntervalMillis: 60000,
-        exporter: mockExporter,
-      });
+      expect(PeriodicExportingMetricReader).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exportIntervalMillis: expect.any(Number),
+          exporter: mockExporter,
+        }),
+      );
+
+      // Verify the export interval is within expected range (60000 + jitter)
+      const call = vi.mocked(PeriodicExportingMetricReader).mock.calls[0][0];
+      expect(call.exportIntervalMillis).toBeGreaterThanOrEqual(60000);
+      expect(call.exportIntervalMillis).toBeLessThan(70000);
 
       // Verify meter provider was created
       expect(MeterProvider).toHaveBeenCalled();
