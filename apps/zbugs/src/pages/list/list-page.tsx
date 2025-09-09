@@ -33,7 +33,7 @@ import type {IssueRow} from '../../../shared/schema.ts';
 let firstRowRendered = false;
 const ITEM_SIZE = 56;
 const PAGE_SIZE = 100;
-const NEAR_PAGE_EDGE_THRESHOLD = PAGE_SIZE / 5;
+const NEAR_PAGE_EDGE_THRESHOLD = PAGE_SIZE / 10;
 
 type Anchor = {
   startRow: IssueRow | undefined;
@@ -345,13 +345,10 @@ export function ListPage({onReady}: {onReady: () => void}) {
       anchor.direction === 'backward'
         ? firstItem.index - (anchor.index - issues.length)
         : firstItem.index - anchor.index;
-    if (
-      hasPrev &&
-      virtualizer.scrollDirection === 'backward' &&
-      distanceFromStart <= NEAR_PAGE_EDGE_THRESHOLD
-    ) {
+
+    if (hasPrev && distanceFromStart <= NEAR_PAGE_EDGE_THRESHOLD) {
       const issueArrayIndex = toBoundIssueArrayIndex(
-        lastItem.index,
+        lastItem.index + NEAR_PAGE_EDGE_THRESHOLD * 2,
         anchor,
         issues.length,
       );
@@ -366,18 +363,15 @@ export function ListPage({onReady}: {onReady: () => void}) {
       return;
     }
 
-    const hasNext = issues.length === PAGE_SIZE;
+    const hasNext =
+      anchor.direction === 'backward' || issues.length === PAGE_SIZE;
     const distanceFromEnd =
       anchor.direction === 'backward'
         ? anchor.index - lastItem.index
         : anchor.index + issues.length - lastItem.index;
-    if (
-      hasNext &&
-      virtualizer.scrollDirection === 'forward' &&
-      distanceFromEnd <= NEAR_PAGE_EDGE_THRESHOLD
-    ) {
+    if (hasNext && distanceFromEnd <= NEAR_PAGE_EDGE_THRESHOLD) {
       const issueArrayIndex = toBoundIssueArrayIndex(
-        firstItem.index,
+        firstItem.index - NEAR_PAGE_EDGE_THRESHOLD * 2,
         anchor,
         issues.length,
       );
@@ -390,7 +384,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       console.log('page down', a);
       setAnchor(a);
     }
-  }, [anchor, virtualizer.scrollDirection, issues, issuesResult, virtualItems]);
+  }, [anchor, issues, issuesResult, virtualItems]);
 
   const [forceSearchMode, setForceSearchMode] = useState(false);
   const searchMode = forceSearchMode || Boolean(textFilter);
