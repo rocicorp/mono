@@ -23,7 +23,7 @@ import {recordRowsSynced} from '../../server/anonymous-otel-start.ts';
 import {ErrorForClient, ErrorWithLevel} from '../../types/error-for-client.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
 import {rowIDString} from '../../types/row-key.ts';
-import {cvrSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
+import {cvrSchema, type ShardID, upstreamSchema} from '../../types/shards.ts';
 import type {Patch, PatchToVersion} from './client-handler.ts';
 import type {CVR, CVRSnapshot} from './cvr.ts';
 import {RowRecordCache} from './row-record-cache.ts';
@@ -561,37 +561,17 @@ export class CVRStore {
   deleteClient(clientID: string) {
     this.#writes.add({
       stats: {clients: 1},
-      write: tx =>
-        tx`DELETE FROM ${this.#cvr('clients')} WHERE "clientID" = ${clientID}`,
+      write: sql =>
+        sql`DELETE FROM ${this.#cvr('clients')} 
+            WHERE "clientGroupID" = ${this.#id} 
+              AND "clientID" = ${clientID}`,
     });
     this.#upstreamWrites.push(
       sql =>
-        sql`DELETE FROM ${sql(this.#upstreamSchemaName)}."mutations" WHERE "clientGroupID" = ${this.#id} AND "clientID" = ${clientID}`,
+        sql`DELETE FROM ${sql(this.#upstreamSchemaName)}."mutations" 
+            WHERE "clientGroupID" = ${this.#id} 
+              AND "clientID" = ${clientID}`,
     );
-  }
-
-  deleteClientGroup(clientGroupID: string) {
-    for (const name of [
-      'desires',
-      'clients',
-      'queries',
-      'instances',
-      'rows',
-      'rowsVersion',
-    ] as const) {
-      this.#writes.add({
-        stats: {[name]: 1},
-        write: tx =>
-          tx`DELETE FROM ${this.#cvr(
-            name,
-          )} WHERE "clientGroupID" = ${clientGroupID}`,
-      });
-      // delete mutation responses
-      this.#upstreamWrites.push(
-        sql =>
-          sql`DELETE FROM ${sql(this.#upstreamSchemaName)}."mutations" WHERE "clientGroupID" = ${clientGroupID}`,
-      );
-    }
   }
 
   putDesiredQuery(

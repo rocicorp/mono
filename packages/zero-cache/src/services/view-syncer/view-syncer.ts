@@ -898,12 +898,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
 
         if (deleted?.clientGroupIDs?.length) {
-          if (deleted?.clientGroupIDs) {
-            for (const clientGroupID of deleted.clientGroupIDs) {
-              assert(clientGroupID !== this.id, 'cannot delete self');
-              updater.deleteClientGroup(clientGroupID);
-            }
-          }
+          lc.debug?.(
+            `ignoring ${deleted.clientGroupIDs.length} deprecated client group deletes`,
+          );
         }
 
         return patches;
