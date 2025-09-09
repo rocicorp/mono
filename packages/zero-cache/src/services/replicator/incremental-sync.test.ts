@@ -28,6 +28,9 @@ import {ReplicationMessages} from './test-utils.ts';
 
 const TASK_ID = 'task-id';
 const REPLICA_ID = 'incremental_sync_test_id';
+const appID = {
+  appID: 'zero',
+};
 
 describe('replicator/incremental-sync', () => {
   let lc: LogContext;
@@ -56,6 +59,7 @@ describe('replicator/incremental-sync', () => {
       replica,
       'serving',
       true,
+      appID,
     );
   });
 
@@ -518,6 +522,7 @@ describe('replicator/incremental-sync', () => {
       replica,
       'serving',
       true,
+      appID,
     );
 
     void syncer.run(lc);
@@ -546,6 +551,7 @@ describe('replicator/incremental-sync', () => {
       replica,
       'serving',
       true,
+      appID,
     );
 
     void syncer.run(lc);

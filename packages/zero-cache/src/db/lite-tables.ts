@@ -132,6 +132,22 @@ export function listIndexes(db: Database): LiteIndexSpec[] {
   return ret;
 }
 
+export function listViews(replica: Database): string[] {
+  return replica
+    .prepare(
+      `
+    SELECT name 
+    FROM sqlite_master 
+    WHERE type = 'view' 
+      AND name NOT LIKE 'sqlite_%'
+      AND name NOT LIKE '_zero.%'
+      AND name NOT LIKE '_litestream_%'
+    `,
+    )
+    .all<{name: string}>()
+    .map(r => r.name as string);
+}
+
 /**
  * Computes a TableSpec "view" of the replicated data that is
  * suitable for processing / consumption for the client. This

@@ -80,6 +80,7 @@ export class TableSource implements Source {
   readonly #primaryKey: PrimaryKey;
   readonly #logConfig: LogConfig;
   readonly #lc: LogContext;
+  readonly #viewName: string | undefined;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
   #splitEditOverlay?: Overlay | undefined;
@@ -91,6 +92,7 @@ export class TableSource implements Source {
     tableName: string,
     columns: Record<string, SchemaValue>,
     primaryKey: readonly [string, ...string[]],
+    viewName?: string | undefined,
   ) {
     this.#lc = logContext;
     this.#logConfig = logConfig;
@@ -99,6 +101,7 @@ export class TableSource implements Source {
     this.#uniqueIndexes = getUniqueIndexes(db, tableName);
     this.#primaryKey = primaryKey;
     this.#stmts = this.#getStatementsFor(db);
+    this.#viewName = viewName;
 
     assert(
       this.#uniqueIndexes.has(JSON.stringify([...primaryKey].sort())),
@@ -476,7 +479,7 @@ export class TableSource implements Source {
     order: Ordering,
   ): SQLQuery {
     const {constraint, start, reverse} = request;
-    let query = sql`SELECT ${this.#allColumns} FROM ${sql.ident(this.#table)}`;
+    let query = sql`SELECT ${this.#allColumns} FROM ${sql.ident(this.#viewName ?? this.#table)}`;
     const constraints: SQLQuery[] = [];
 
     if (constraint) {

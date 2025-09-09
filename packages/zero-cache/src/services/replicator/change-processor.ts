@@ -6,6 +6,7 @@ import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {
   columnDef,
+  createFTS5Statements,
   createIndexStatement,
   createTableStatement,
 } from '../../db/create.ts';
@@ -50,6 +51,7 @@ import type {
   TableRename,
 } from '../change-source/protocol/current/data.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import {loadIndices} from '../../indices/load-indices.ts';
 import type {ReplicatorMode} from './replicator.ts';
 import {
   logDeleteOp,
@@ -61,6 +63,7 @@ import {
   ZERO_VERSION_COLUMN_NAME,
   updateReplicationWatermark,
 } from './schema/replication-state.ts';
+import {appSchema, type AppID} from '../../types/shards.ts';
 
 export type ChangeProcessorMode = ReplicatorMode | 'initial-sync';
 
@@ -89,6 +92,7 @@ export class ChangeProcessor {
   // and reloads them after a schema change. It is cached here to avoid
   // reading them from the DB on every transaction.
   readonly #tableSpecs = new Map<string, LiteTableSpec>();
+  readonly #appID: AppID;
 
   #currentTx: TransactionProcessor | null = null;
 
@@ -98,10 +102,12 @@ export class ChangeProcessor {
     db: StatementRunner,
     mode: ChangeProcessorMode,
     failService: (lc: LogContext, err: unknown) => void,
+    appID: AppID,
   ) {
     this.#db = db;
     this.#mode = mode;
     this.#failService = failService;
+    this.#appID = appID;
   }
 
   #fail(lc: LogContext, err: unknown) {
@@ -169,6 +175,7 @@ export class ChangeProcessor {
           this.#tableSpecs,
           commitVersion,
           jsonFormat,
+          this.#appID,
         );
       } catch (e) {
         if (e instanceof SqliteError && e.code === 'SQLITE_BUSY') {
@@ -300,6 +307,7 @@ class TransactionProcessor {
   readonly #version: LexiVersion;
   readonly #tableSpecs: Map<string, LiteTableSpec>;
   readonly #jsonFormat: JSONFormat;
+  readonly #appID: AppID;
 
   #schemaChanged = false;
 
@@ -310,10 +318,12 @@ class TransactionProcessor {
     tableSpecs: Map<string, LiteTableSpec>,
     commitVersion: LexiVersion,
     jsonFormat: JSONFormat,
+    appID: AppID,
   ) {
     this.#startMs = Date.now();
     this.#mode = mode;
     this.#jsonFormat = jsonFormat;
+    this.#appID = appID;
 
     switch (mode) {
       case 'serving':
@@ -490,6 +500,14 @@ class TransactionProcessor {
     if (changes === 0) {
       this.#upsert(table, row);
     }
+
+    // Check if this is an update to the indices table
+    if (table === appSchema(this.#appID) + '.indices') {
+      this.#lc.info?.(
+        'Indices configuration updated, rebuilding FTS tables...',
+      );
+      this.#rebuildFTSTables(this.#appID.appID);
+    }
   }
 
   processDelete(del: MessageDelete) {
@@ -628,6 +646,8 @@ class TransactionProcessor {
 
   processCreateIndex(create: IndexCreate) {
     const index = mapPostgresToLiteIndex(create.spec);
+
+    // Only create regular indices, not fulltext (those come from config)
     this.#db.db.exec(createIndexStatement(index));
 
     // indexes affect tables visibility (e.g. sync-ability is gated on
@@ -674,6 +694,189 @@ class TransactionProcessor {
       logResetOp(this.#db, this.#version, table);
     }
     this.#reloadTableSpecs();
+  }
+
+  #rebuildFTSTables(appID: string) {
+    // Load the new indices configuration
+    const {indices: indicesConfig} = loadIndices(this.#lc, this.#db, appID);
+
+    // Get existing FTS tables and their columns
+    const existingFTS = this.#getExistingFTSTables();
+
+    // Track what tables we've processed
+    const processedTables = new Set<string>();
+    const toCreate: Array<{
+      tableName: string;
+      columns: string[];
+      allColumns: string[];
+    }> = [];
+    const toDrop = new Set<string>();
+    let hasChanges = false;
+
+    if (indicesConfig && indicesConfig.tables) {
+      // Check each table in the new configuration
+      for (const [tableName, tableIndices] of Object.entries(
+        indicesConfig.tables,
+      )) {
+        const mappedTableName = liteTableName({
+          schema: 'public', // TODO: handle other schemas!
+          name: tableName,
+        });
+        const ftsTableName = `${mappedTableName}_fts`;
+        processedTables.add(ftsTableName);
+
+        if (tableIndices.fulltext && tableIndices.fulltext.length > 0) {
+          // Collect all columns to index from configuration
+          const ftsColumns = new Set<string>();
+          for (const ftConfig of tableIndices.fulltext) {
+            ftConfig.columns.forEach(col => ftsColumns.add(col));
+          }
+
+          // Get existing columns for this FTS table
+          const existingColumns = existingFTS.get(ftsTableName);
+
+          // Check if configuration has changed
+          const configChanged =
+            !existingColumns ||
+            existingColumns.size !== ftsColumns.size ||
+            ![...existingColumns].every(col => ftsColumns.has(col));
+
+          if (configChanged) {
+            // Configuration changed, need to rebuild
+            if (existingColumns) {
+              this.#lc.info?.(
+                `FTS configuration changed for ${mappedTableName}: ` +
+                  `[${[...existingColumns].join(', ')}] -> [${[...ftsColumns].join(', ')}]`,
+              );
+              toDrop.add(mappedTableName);
+            } else {
+              this.#lc.info?.(
+                `Creating new FTS table for ${mappedTableName} with columns: ${[...ftsColumns].join(', ')}`,
+              );
+            }
+
+            // Get table spec for all columns
+            const tableSpec = this.#tableSpecs.get(mappedTableName);
+            if (!tableSpec) {
+              this.#lc.warn?.(
+                `Table ${mappedTableName} not found in table specs`,
+              );
+              continue;
+            }
+
+            toCreate.push({
+              tableName: mappedTableName,
+              columns: Array.from(ftsColumns),
+              allColumns: Object.keys(tableSpec.columns),
+            });
+            hasChanges = true;
+          } else {
+            this.#lc.debug?.(
+              `FTS configuration unchanged for ${mappedTableName}, keeping existing`,
+            );
+          }
+        } else if (existingFTS.has(ftsTableName)) {
+          // Table no longer has FTS configuration but FTS table exists
+          this.#lc.info?.(
+            `Removing FTS table for ${mappedTableName} (no longer in configuration)`,
+          );
+          toDrop.add(mappedTableName);
+          hasChanges = true;
+        }
+      }
+    }
+
+    // Check for orphaned FTS tables (not in configuration anymore)
+    for (const ftsTableName of existingFTS.keys()) {
+      if (!processedTables.has(ftsTableName)) {
+        const baseTableName = ftsTableName.replace('_fts', '');
+        this.#lc.info?.(`Removing orphaned FTS table: ${ftsTableName}`);
+        toDrop.add(baseTableName);
+        hasChanges = true;
+      }
+    }
+
+    // Drop tables that need to be removed or rebuilt
+    for (const tableName of toDrop) {
+      this.#dropFTSTable(tableName);
+    }
+
+    // Create new or rebuilt FTS tables
+    for (const {tableName, columns, allColumns} of toCreate) {
+      const ftsStatements = createFTS5Statements(
+        tableName,
+        columns,
+        allColumns,
+      );
+
+      for (const stmt of ftsStatements) {
+        this.#db.db.exec(stmt);
+      }
+    }
+
+    // Only mark schema as changed if we actually made changes
+    if (hasChanges) {
+      this.#lc.info?.('FTS tables updated, marking schema as changed');
+      this.#schemaChanged = true;
+    } else {
+      this.#lc.debug?.('No FTS table changes needed');
+    }
+  }
+
+  #getExistingFTSTables(): Map<string, Set<string>> {
+    const result = new Map<string, Set<string>>();
+
+    // Get all FTS tables
+    const ftsTables = this.#db.db
+      .prepare(
+        `SELECT name, sql FROM sqlite_master 
+         WHERE type='table' AND name LIKE '%_fts' 
+         AND sql LIKE '%fts5%'`,
+      )
+      .all() as Array<{name: string; sql: string}>;
+
+    for (const {name, sql} of ftsTables) {
+      // Parse columns from the CREATE VIRTUAL TABLE statement
+      // Format: CREATE VIRTUAL TABLE ... USING fts5(col1, col2, content=..., ...)
+      const match = sql.match(/USING\s+fts5\s*\(([^)]+)\)/i);
+      if (match) {
+        const columnsPart = match[1];
+        const columns = new Set<string>();
+
+        // Split by comma and extract column names (skip options like content=, tokenize=)
+        const parts = columnsPart.split(',').map(s => s.trim());
+        for (const part of parts) {
+          // Skip FTS options (they contain '=')
+          if (!part.includes('=')) {
+            columns.add(part);
+          }
+        }
+
+        if (columns.size > 0) {
+          result.set(name, columns);
+        }
+      }
+    }
+
+    return result;
+  }
+
+  #dropFTSTable(tableName: string) {
+    const ftsTableName = `${tableName}_fts`;
+    const viewName = `${tableName}_view`;
+
+    // Drop triggers
+    this.#db.db.exec(`DROP TRIGGER IF EXISTS ${id(`${ftsTableName}_insert`)}`);
+    this.#db.db.exec(`DROP TRIGGER IF EXISTS ${id(`${ftsTableName}_update`)}`);
+    this.#db.db.exec(`DROP TRIGGER IF EXISTS ${id(`${ftsTableName}_delete`)}`);
+
+    // Drop view
+    this.#db.db.exec(`DROP VIEW IF EXISTS ${id(viewName)}`);
+
+    // Drop FTS table
+    this.#db.db.exec(`DROP TABLE IF EXISTS ${id(ftsTableName)}`);
+
+    this.#lc.debug?.(`Dropped FTS table and related objects for ${tableName}`);
   }
 
   /** @returns `true` if the schema was updated. */

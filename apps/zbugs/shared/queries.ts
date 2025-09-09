@@ -68,7 +68,8 @@ export const queries = {
               .related('emoji', emoji => emoji.related('creator'))
               .limit(10)
               .orderBy('created', 'desc'),
-          ),
+          )
+          .limit(1000),
         auth?.role,
       ),
   ),

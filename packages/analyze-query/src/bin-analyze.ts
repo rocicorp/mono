@@ -37,6 +37,7 @@ import {runAst, type RunResult} from './run-ast.ts';
 import {explainQueries} from './explain-queries.ts';
 import {
   computeZqlSpecs,
+  listViews,
   mustGetTableSpec,
 } from '../../zero-cache/src/db/lite-tables.ts';
 
@@ -195,6 +196,7 @@ const sources = new Map<string, TableSource>();
 const clientToServerMapper = clientToServer(schema.tables);
 const debug = new Debug();
 const tableSpecs = computeZqlSpecs(lc, db);
+const views = listViews(db);
 const host: QueryDelegate = {
   debug,
   getSource: (serverTableName: string) => {
@@ -203,6 +205,8 @@ const host: QueryDelegate = {
       return source;
     }
     const tableSpec = mustGetTableSpec(tableSpecs, serverTableName);
+    const viewName = `${serverTableName}_view`;
+    const view = views.includes(viewName);
     const {primaryKey} = tableSpec.tableSpec;
 
     source = new TableSource(
@@ -212,6 +216,7 @@ const host: QueryDelegate = {
       serverTableName,
       tableSpec.zqlSpec,
       primaryKey,
+      view ? viewName : undefined,
     );
 
     sources.set(serverTableName, source);

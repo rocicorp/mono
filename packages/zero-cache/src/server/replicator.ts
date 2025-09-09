@@ -67,6 +67,7 @@ export default async function runWorker(
     changeStreamer,
     replica,
     runningLocalChangeStreamer, // publish ReplicationStatusEvents
+    shard,
   );
 
   setUpMessageHandlers(lc, replicator, parent);

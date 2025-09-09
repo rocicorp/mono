@@ -56,7 +56,9 @@ export function createChangeProcessor(
     throw err;
   },
 ): ChangeProcessor {
-  return new ChangeProcessor(new StatementRunner(db), 'serving', failures);
+  return new ChangeProcessor(new StatementRunner(db), 'serving', failures, {
+    appID: 'zero',
+  });
 }
 
 export class ReplicationMessages<

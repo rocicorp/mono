@@ -133,6 +133,7 @@ export function indexDefinitionsQuery(publications: readonly string[]) {
         FROM UNNEST( (pg_index.indkey::smallint[])[:pg_index.indnkeyatts - 1] ) 
           WITH ORDINALITY as col(table_pos, index_pos)
         JOIN pg_attribute ON attrelid = pg_index.indrelid AND attnum = col.table_pos
+        WHERE col.table_pos > 0 -- Skip expression columns (0 or negative)
     ) AS index_column ON true
     LEFT JOIN pg_constraint ON pg_constraint.conindid = pc.oid
     WHERE pb.pubname IN (${literal(publications)})

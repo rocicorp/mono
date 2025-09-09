@@ -8,11 +8,19 @@ import {
   type Migration,
 } from '../../../../db/migration.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
-import {upstreamSchema, type ShardConfig} from '../../../../types/shards.ts';
+import {
+  appSchema,
+  upstreamSchema,
+  type ShardConfig,
+} from '../../../../types/shards.ts';
 import {AutoResetSignal} from '../../../change-streamer/schema/tables.ts';
 import {decommissionShard} from '../decommission.ts';
 import {publishedSchema} from './published.ts';
 import {
+  getIndicesHashFunctionDefinition,
+  getIndicesInitialRowDefinition,
+  getIndicesTableDefinition,
+  getIndicesTriggerDefinition,
   getMutationsTableDefinition,
   legacyReplicationSlot,
   metadataPublicationName,
@@ -189,6 +197,21 @@ function getIncrementalMigrations(
           ALTER PUBLICATION ${id(metadataPublicationName(shard.appID, shard.shardNum))} ADD TABLE ${id(upstreamSchema(shard))}."mutations";
         `);
         lc.info?.('Upgraded schema with new mutations table');
+      },
+    },
+
+    // Adds the `indices` table used to track FTS indices.
+    11: {
+      migrateSchema: async (lc, sql) => {
+        const schema = appSchema(shard);
+        await sql.unsafe(/*sql*/ `
+          ${getIndicesTableDefinition(schema)}
+          ${getIndicesHashFunctionDefinition(schema)}
+          ${getIndicesTriggerDefinition(schema)}
+          ${getIndicesInitialRowDefinition(schema)}
+          ALTER PUBLICATION ${id(metadataPublicationName(shard.appID, shard.shardNum))} ADD TABLE ${id(schema)}."indices";
+        `);
+        lc.info?.('Upgraded schema with new indices table');
       },
     },
   };

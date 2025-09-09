@@ -100,6 +100,11 @@ function globalSetup(appID: AppID): string {
     EXECUTE FUNCTION ${app}.set_permissions_hash();
 
   INSERT INTO ${app}.permissions (permissions) VALUES (NULL) ON CONFLICT DO NOTHING;
+
+  ${getIndicesTableDefinition(app)}
+  ${getIndicesHashFunctionDefinition(app)}
+  ${getIndicesTriggerDefinition(app)}
+  ${getIndicesInitialRowDefinition(app)}
 `;
 }
 
@@ -137,6 +142,42 @@ export function getMutationsTableDefinition(schema: string) {
   );`;
 }
 
+export function getIndicesTableDefinition(schema: string) {
+  return /*sql*/ `
+  CREATE TABLE IF NOT EXISTS ${schema}.indices (
+    "indices" JSONB,
+    "hash"    TEXT,
+    -- Ensure that there is only a single row in the table.
+    -- Application code can be agnostic to this column, and
+    -- simply invoke UPDATE statements on the indices columns.
+    "lock" BOOL PRIMARY KEY DEFAULT true CHECK (lock)
+  );`;
+}
+
+export function getIndicesHashFunctionDefinition(schema: string) {
+  return /*sql*/ `
+  CREATE OR REPLACE FUNCTION ${schema}.set_indices_hash()
+  RETURNS TRIGGER AS $$
+  BEGIN
+      NEW.hash = md5(NEW.indices::text);
+      RETURN NEW;
+  END;
+  $$ LANGUAGE plpgsql;`;
+}
+
+export function getIndicesTriggerDefinition(schema: string) {
+  return /*sql*/ `
+  CREATE OR REPLACE TRIGGER on_set_indices 
+    BEFORE INSERT OR UPDATE ON ${schema}.indices
+    FOR EACH ROW
+    EXECUTE FUNCTION ${schema}.set_indices_hash();`;
+}
+
+export function getIndicesInitialRowDefinition(schema: string) {
+  return /*sql*/ `
+  INSERT INTO ${schema}.indices (indices) VALUES (NULL) ON CONFLICT DO NOTHING;`;
+}
+
 export const SHARD_CONFIG_TABLE = 'shardConfig';
 
 export function shardSetup(
@@ -157,7 +198,7 @@ export function shardSetup(
 
   DROP PUBLICATION IF EXISTS ${id(metadataPublication)};
   CREATE PUBLICATION ${id(metadataPublication)}
-    FOR TABLE ${app}."schemaVersions", ${app}."permissions", TABLE ${shard}."clients", ${shard}."mutations";
+    FOR TABLE ${app}."schemaVersions", ${app}."permissions", ${app}."indices", TABLE ${shard}."clients", ${shard}."mutations";
 
   CREATE TABLE ${shard}."${SHARD_CONFIG_TABLE}" (
     "publications"  TEXT[] NOT NULL,

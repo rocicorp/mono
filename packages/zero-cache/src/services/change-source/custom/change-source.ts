@@ -7,7 +7,7 @@ import type {SchemaValue} from '../../../../../zero-schema/src/table-schema.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {computeZqlSpecs} from '../../../db/lite-tables.ts';
 import {StatementRunner} from '../../../db/statements.ts';
-import type {ShardConfig, ShardID} from '../../../types/shards.ts';
+import type {AppID, ShardConfig, ShardID} from '../../../types/shards.ts';
 import {stream} from '../../../types/streams.ts';
 import type {
   ChangeSource,
@@ -142,6 +142,7 @@ export async function initialSync(
   shard: ShardConfig,
   tx: Database,
   upstreamURI: string,
+  appID: AppID,
 ) {
   const {appID: id, publications} = shard;
   const changeSource = new CustomChangeSource(lc, upstreamURI, shard, {
@@ -156,6 +157,7 @@ export async function initialSync(
     (_, err) => {
       throw err;
     },
+    appID,
   );
 
   const statusPublisher = new ReplicationStatusPublisher(tx);

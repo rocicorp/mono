@@ -1,0 +1,18 @@
+{
+  "tables": {
+    "comment": {
+      "fulltext": [
+        {
+          "columns": ["body"]
+        }
+      ]
+    },
+    "issue": {
+      "fulltext": [
+        {
+          "columns": ["title", "description"]
+        }
+      ]
+    }
+  }
+}

@@ -14,6 +14,7 @@ import {Notifier} from './notifier.ts';
 import {ReplicationStatusPublisher} from './replication-status.ts';
 import type {ReplicaState, ReplicatorMode} from './replicator.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
+import type {AppID} from '../../types/shards.ts';
 
 /**
  * The {@link IncrementalSyncer} manages a logical replication stream from upstream,
@@ -29,6 +30,7 @@ export class IncrementalSyncer {
   readonly #mode: ReplicatorMode;
   readonly #publishReplicationStatus: boolean;
   readonly #notifier: Notifier;
+  readonly #appID: AppID;
 
   readonly #state = new RunningState('IncrementalSyncer');
 
@@ -45,6 +47,7 @@ export class IncrementalSyncer {
     replica: Database,
     mode: ReplicatorMode,
     publishReplicationStatus: boolean,
+    appID: AppID,
   ) {
     this.#taskID = taskID;
     this.#id = id;
@@ -53,6 +56,7 @@ export class IncrementalSyncer {
     this.#mode = mode;
     this.#publishReplicationStatus = publishReplicationStatus;
     this.#notifier = new Notifier();
+    this.#appID = appID;
   }
 
   async run(lc: LogContext) {
@@ -73,6 +77,7 @@ export class IncrementalSyncer {
         this.#replica,
         this.#mode,
         (lc: LogContext, err: unknown) => this.stop(lc, err),
+        this.#appID,
       );
 
       let downstream: Source<Downstream> | undefined;

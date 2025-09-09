@@ -9,6 +9,7 @@ import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {
+  createFTS5Statements,
   createIndexStatement,
   createTableStatement,
 } from '../../../db/create.ts';
@@ -40,6 +41,8 @@ import {id} from '../../../types/sql.ts';
 import {ReplicationStatusPublisher} from '../../replicator/replication-status.ts';
 import {initChangeLog} from '../../replicator/schema/change-log.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
+import {loadIndices} from '../../../indices/load-indices.ts';
+import {StatementRunner} from '../../../db/statements.ts';
 import {toLexiVersion} from './lsn.ts';
 import {ensureShardSchema} from './schema/init.ts';
 import {getPublicationInfo} from './schema/published.ts';
@@ -51,6 +54,7 @@ import {
   replicationSlotExpression,
   validatePublications,
 } from './schema/shard.ts';
+import type {IndicesConfig} from '../../../indices/indices-config.ts';
 
 export type InitialSyncOptions = {
   tableCopyWorkers: number;
@@ -174,6 +178,7 @@ export async function initialSync(
     );
     try {
       createLiteTables(tx, tables, initialVersion);
+      console.log('created lite tables', tables);
       statusPublisher.publish(
         lc,
         'Initializing',
@@ -199,6 +204,22 @@ export async function initialSync(
         {rows: 0, flushTime: 0},
       );
 
+      // Load indices configuration
+      let indicesConfig: IndicesConfig | undefined;
+      try {
+        indicesConfig = loadIndices(
+          lc,
+          new StatementRunner(tx),
+          shard.appID,
+        ).indices;
+      } catch (e) {
+        indicesConfig = {tables: {}};
+        lc.warn?.(
+          `Error loading custom index configuration. It may not be configured yet.`,
+          e,
+        );
+      }
+
       statusPublisher.publish(
         lc,
         'Indexing',
@@ -206,7 +227,7 @@ export async function initialSync(
         5000,
       );
       const indexStart = performance.now();
-      createLiteIndices(tx, indexes);
+      createLiteIndices(lc, tx, indexes, tables, indicesConfig, shard.appID);
       const index = performance.now() - indexStart;
       lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
 
@@ -361,9 +382,79 @@ function createLiteTables(
   }
 }
 
-function createLiteIndices(tx: Database, indices: IndexSpec[]) {
+function createLiteIndices(
+  lc: LogContext,
+  tx: Database,
+  indices: IndexSpec[],
+  tables: PublishedTableSpec[],
+  indicesConfig: IndicesConfig | undefined,
+  appID: string,
+) {
+  // Build a map of table names to their full column lists
+  const tableColumnMap = new Map<string, string[]>();
+  for (const table of tables) {
+    const liteTable = mapPostgresToLite(table, ''); // version not needed for column names
+    // Filter out the version column
+    const columns = Object.keys(liteTable.columns).filter(
+      col => col !== '_0_version',
+    );
+    tableColumnMap.set(liteTable.name, columns);
+  }
+
+  // Create regular indices from PostgreSQL
   for (const index of indices) {
-    tx.exec(createIndexStatement(mapPostgresToLiteIndex(index)));
+    const liteIndex = mapPostgresToLiteIndex(index);
+    tx.exec(createIndexStatement(liteIndex));
+  }
+
+  // Create FTS5 tables based on indices configuration
+  if (indicesConfig && indicesConfig.tables) {
+    for (const [tableName, tableIndices] of Object.entries(
+      indicesConfig.tables,
+    )) {
+      // Map PostgreSQL table name to lite table name
+      const liteTable = tables.find(t => t.name === tableName);
+      if (!liteTable) {
+        lc.warn?.(
+          `Table ${tableName} in indices config not found in published tables`,
+        );
+        continue;
+      }
+
+      const mappedTableName = liteTableName({schema: appID, name: tableName});
+
+      if (tableIndices.fulltext && tableIndices.fulltext.length > 0) {
+        // Collect all columns to index from all fulltext configurations for this table
+        const ftsColumns = new Set<string>();
+        let tokenizer = 'trigram'; // default tokenizer
+
+        for (const ftConfig of tableIndices.fulltext) {
+          ftConfig.columns.forEach(col => ftsColumns.add(col));
+          if (ftConfig.tokenizer) {
+            tokenizer = ftConfig.tokenizer;
+          }
+        }
+
+        lc.info?.(
+          `Creating FTS5 table for ${mappedTableName} with columns: ${Array.from(ftsColumns).join(', ')} (tokenizer: ${tokenizer})`,
+        );
+
+        // Get all columns for this table to create the view properly
+        const allColumns = tableColumnMap.get(mappedTableName);
+
+        const ftsStatements = createFTS5Statements(
+          mappedTableName,
+          Array.from(ftsColumns),
+          allColumns,
+        );
+
+        for (const stmt of ftsStatements) {
+          tx.exec(stmt);
+        }
+      }
+    }
+  } else {
+    lc.info?.('No indices configuration found, skipping FTS5 table creation');
   }
 }
 

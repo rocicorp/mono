@@ -16,6 +16,8 @@
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
     "preview": "vite preview",
     "zero": "tsx ../../packages/zero-cache/src/server/runner/main.ts",
+    "deploy:indices": "tsx ../../packages/zero-cache/src/scripts/deploy-permissions.ts --indices-path=./indices.json --schema-path=./shared/schema.ts",
+    "deploy:no-indices": "tsx ../../packages/zero-cache/src/scripts/deploy-permissions.ts --indices-path=./no-indices.json --schema-path=./shared/schema.ts",
     "zero-cache-dev": "tsx ../../packages/zero/src/zero-cache-dev.ts --schema-path=./shared/schema.ts",
     "zero-brk": "tsx --inspect-brk ../../packages/zero-cache/src/server/debug/single.ts",
     "transform-query": "tsx ../../packages/zero-cache/src/scripts/transform-query.ts",

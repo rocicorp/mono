@@ -6,6 +6,7 @@ import type {Source} from '../../types/streams.ts';
 import type {ChangeStreamer} from '../change-streamer/change-streamer.ts';
 import type {Service} from '../service.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
+import type {AppID} from '../../types/shards.ts';
 
 /** See {@link ReplicaStateNotifier.subscribe()}. */
 export type ReplicaState = {
@@ -65,6 +66,7 @@ export class ReplicatorService implements Replicator, Service {
     changeStreamer: ChangeStreamer,
     replica: Database,
     publishReplicationStatus: boolean,
+    appID: AppID,
   ) {
     this.id = id;
     this.#lc = lc
@@ -78,6 +80,7 @@ export class ReplicatorService implements Replicator, Service {
       replica,
       mode,
       publishReplicationStatus,
+      appID,
     );
   }
 

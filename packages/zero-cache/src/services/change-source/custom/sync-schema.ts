@@ -11,6 +11,6 @@ export async function initSyncSchema(
   upstreamURI: string,
 ): Promise<void> {
   await initReplica(log, debugName, dbPath, (log, tx) =>
-    initialSync(log, shard, tx, upstreamURI),
+    initialSync(log, shard, tx, upstreamURI, shard),
   );
 }

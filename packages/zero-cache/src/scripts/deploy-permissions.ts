@@ -1,9 +1,12 @@
+import {readFileSync} from 'node:fs';
 import {writeFile} from 'node:fs/promises';
+import {resolve} from 'node:path';
 import {ident as id, literal} from 'pg-format';
 import '../../../shared/src/dotenv.ts';
 import {colorConsole, createLogContext} from '../../../shared/src/logging.ts';
 import {parseOptions} from '../../../shared/src/options.ts';
 import {difference} from '../../../shared/src/set-utils.ts';
+import * as v from '../../../shared/src/valita.ts';
 import {mapCondition} from '../../../zero-protocol/src/ast.ts';
 import {
   type AssetPermissions,
@@ -12,6 +15,10 @@ import {
 } from '../../../zero-schema/src/compiled-permissions.ts';
 import {validator} from '../../../zero-schema/src/name-mapper.ts';
 import {ZERO_ENV_VAR_PREFIX} from '../config/zero-config.ts';
+import {
+  indicesConfigSchema,
+  type IndicesConfig,
+} from '../indices/indices-config.ts';
 import {getPublicationInfo} from '../services/change-source/pg/schema/published.ts';
 import {
   ensureGlobalTables,
@@ -35,10 +42,9 @@ const app = appSchema(shard);
 
 const lc = createLogContext(config);
 
-async function validatePermissions(
+async function getPublishedTablesForValidation(
   db: PostgresDB,
-  permissions: PermissionsConfig,
-) {
+): Promise<Map<string, string[]> | null> {
   const schema = upstreamSchema(shard);
 
   // Check if the shardConfig table has been initialized.
@@ -49,9 +55,9 @@ async function validatePermissions(
   if (result.length === 0) {
     colorConsole.warn(
       `zero-cache has not yet initialized the upstream database.\n` +
-        `Deploying ${app} permissions without validating against published tables/columns.`,
+        `Deploying ${app} configuration without validating against published tables/columns.`,
     );
-    return;
+    return null;
   }
 
   // Get the publications for the shard
@@ -61,13 +67,10 @@ async function validatePermissions(
   if (config.length === 0) {
     colorConsole.warn(
       `zero-cache has not yet initialized the upstream database.\n` +
-        `Deploying ${app} permissions without validating against published tables/columns.`,
+        `Deploying ${app} configuration without validating against published tables/columns.`,
     );
-    return;
+    return null;
   }
-  colorConsole.info(
-    `Validating permissions against tables and columns published for "${app}".`,
-  );
 
   const [{publications: shardPublications}] = config;
   const {tables, publications} = await getPublicationInfo(
@@ -80,13 +83,29 @@ async function validatePermissions(
     colorConsole.warn(
       `Upstream is missing expected publications "${[...missing]}".\n` +
         `You may need to re-initialize your replica.\n` +
-        `Deploying ${app} permissions without validating against published tables/columns.`,
+        `Deploying ${app} configuration without validating against published tables/columns.`,
     );
-    return;
+    return null;
   }
-  const tablesToColumns = new Map(
+  
+  return new Map(
     tables.map(t => [liteTableName(t), Object.keys(t.columns)]),
   );
+}
+
+async function validatePermissions(
+  db: PostgresDB,
+  permissions: PermissionsConfig,
+) {
+  const tablesToColumns = await getPublishedTablesForValidation(db);
+  if (!tablesToColumns) {
+    return;
+  }
+  
+  colorConsole.info(
+    `Validating permissions against tables and columns published for "${app}".`,
+  );
+  
   const validate = validator(tablesToColumns);
   try {
     for (const [table, perms] of Object.entries(permissions.tables)) {
@@ -114,6 +133,100 @@ function failWithMessage(msg: string) {
   colorConsole.error(msg);
   colorConsole.info('\nUse --force to deploy at your own risk.\n');
   process.exit(-1);
+}
+
+function loadIndices(indicesPath: string): IndicesConfig {
+  colorConsole.info(`Loading indices from ${indicesPath}`);
+  const configFile = resolve(indicesPath);
+  
+  let configContent: string;
+  try {
+    configContent = readFileSync(configFile, 'utf-8');
+  } catch (e) {
+    colorConsole.error(`Error reading indices file ${configFile}: ${e}`);
+    process.exit(1);
+  }
+
+  try {
+    const parsed = JSON.parse(configContent);
+    return v.parse(parsed, indicesConfigSchema);
+  } catch (e) {
+    colorConsole.error(`Invalid indices configuration: ${e}`);
+    process.exit(1);
+  }
+}
+
+async function validateIndices(
+  db: PostgresDB,
+  indices: IndicesConfig,
+) {
+  const tablesToColumns = await getPublishedTablesForValidation(db);
+  if (!tablesToColumns) {
+    return;
+  }
+  
+  colorConsole.info(
+    `Validating indices against tables and columns published for "${app}".`,
+  );
+
+  // Validate that referenced tables and columns exist
+  if (indices.tables) {
+    for (const [tableName, tableIndices] of Object.entries(indices.tables)) {
+      const columns = tablesToColumns.get(tableName);
+      if (!columns) {
+        failWithMessage(
+          `Table "${tableName}" referenced in indices config does not exist in published tables.`,
+        );
+      }
+      
+      if (tableIndices.fulltext) {
+        for (const ftIndex of tableIndices.fulltext) {
+          for (const column of ftIndex.columns) {
+            if (!columns?.includes(column)) {
+              failWithMessage(
+                `Column "${column}" referenced in indices for table "${tableName}" does not exist in published columns.`,
+              );
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+async function deployIndices(
+  upstreamURI: string,
+  indices: IndicesConfig,
+  force: boolean,
+) {
+  const db = pgClient(lc, upstreamURI);
+  try {
+    const {hash, changed} = await db.begin(async tx => {
+      if (force) {
+        colorConsole.warn(`--force specified. Skipping indices validation.`);
+      } else {
+        await validateIndices(tx, indices);
+      }
+
+      const {appID} = shard;
+      colorConsole.info(
+        `Deploying indices for --app-id "${appID}" to upstream@${db.options.host}`,
+      );
+      const [{hash: beforeHash}] = await tx<{hash: string}[]>`
+        SELECT hash from ${tx(app)}.indices`;
+      const [{hash}] = await tx<{hash: string}[]>`
+        UPDATE ${tx(app)}.indices SET indices = ${indices} RETURNING hash`;
+
+      return {hash: hash.substring(0, 7), changed: beforeHash !== hash};
+    });
+    if (changed) {
+      colorConsole.info(`Deployed new indices (hash=${hash})`);
+    } else {
+      colorConsole.info(`Indices unchanged (hash=${hash})`);
+    }
+  } finally {
+    await db.end();
+  }
 }
 
 async function deployPermissions(
@@ -192,6 +305,12 @@ if (!ret) {
     process.exit(-1);
   } else if (config.upstream.db) {
     await deployPermissions(config.upstream.db, permissions, config.force);
+    
+    // Deploy indices if provided
+    if (config.indices.path) {
+      const indices = loadIndices(config.indices.path);
+      await deployIndices(config.upstream.db, indices, config.force);
+    }
   } else {
     colorConsole.error(`No --output-file or --upstream-db specified`);
     // Shows the usage text.

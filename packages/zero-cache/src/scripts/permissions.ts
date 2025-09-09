@@ -70,6 +70,17 @@ export const deployPermissionsOptions = {
     desc: [`Deploy to upstream without validation. Use at your own risk.`],
     alias: 'f',
   },
+
+  indices: {
+    path: {
+      type: v.string().optional(),
+      desc: [
+        'Path to the indices configuration JSON file.',
+        'This file defines the fulltext search indices for your tables.',
+      ],
+      alias: 'i',
+    },
+  },
 };
 
 export async function loadSchemaAndPermissions(

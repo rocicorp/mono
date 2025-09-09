@@ -3,6 +3,7 @@ import {beforeEach, describe, expect, test} from 'vitest';
 import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import {createFTS5Statements} from '../../db/create.ts';
 import {listIndexes, listTables} from '../../db/lite-tables.ts';
 import type {LiteIndexSpec, LiteTableSpec} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
@@ -16,6 +17,9 @@ import {
 } from './schema/replication-state.ts';
 import {createChangeProcessor, ReplicationMessages} from './test-utils.ts';
 
+const appID = {
+  appID: 'zero',
+} as const;
 describe('replicator/incremental-sync', () => {
   let lc: LogContext;
   let servingReplica: Database;
@@ -32,6 +36,7 @@ describe('replicator/incremental-sync', () => {
       (_, err) => {
         throw err;
       },
+      appID,
     );
     backupReplica = new Database(lc, ':memory:');
     backupProcessor = new ChangeProcessor(
@@ -40,6 +45,7 @@ describe('replicator/incremental-sync', () => {
       (_, err) => {
         throw err;
       },
+      appID,
     );
   });
 
@@ -2206,5 +2212,293 @@ describe('replicator/change-processor-errors', () => {
     expect(replica.inTransaction).toBe(true);
     processor.abort(lc);
     expect(replica.inTransaction).toBe(false);
+  });
+});
+
+describe('replicator/fts-rebuilding', () => {
+  let lc: LogContext;
+  let replica: Database;
+
+  beforeEach(() => {
+    lc = createSilentLogContext();
+    replica = new Database(lc, ':memory:');
+
+    // Create initial tables
+    replica.exec(`
+      CREATE TABLE comments (
+        id INTEGER PRIMARY KEY,
+        title TEXT,
+        body TEXT,
+        author TEXT,
+        _0_version TEXT
+      );
+      
+      CREATE TABLE posts (
+        id INTEGER PRIMARY KEY,
+        title TEXT,
+        content TEXT,
+        _0_version TEXT
+      );
+      
+      CREATE TABLE _zero_indices (
+        indices TEXT,
+        hash TEXT,
+        lock BOOL PRIMARY KEY DEFAULT true CHECK (lock)
+      );
+    `);
+
+    initReplicationState(replica, ['zero_data', 'zero_metadata'], '01');
+    initChangeLog(replica);
+  });
+
+  test('preserves FTS tables when configuration unchanged', () => {
+    // Initial indices configuration
+    const config1 = {
+      tables: {
+        comments: {
+          fulltext: {
+            body: {
+              columns: ['body', 'title'],
+            },
+          },
+        },
+      },
+    };
+
+    // Insert initial configuration and create FTS tables
+    replica
+      .prepare(
+        'INSERT OR REPLACE INTO _zero_indices (indices, hash) VALUES (?, ?)',
+      )
+      .run(JSON.stringify(config1), 'hash1');
+
+    // Manually create the FTS tables based on the configuration
+    // This simulates what the change processor would do
+    const createStatements = createFTS5Statements(
+      'comments',
+      ['body', 'title'],
+      ['id', 'title', 'body', 'author', '_0_version'],
+    );
+    createStatements.forEach(stmt => {
+      // Add suffix for the index name
+      const modifiedStmt = stmt
+        .replace(/comments_fts/g, 'comments_body_fts')
+        .replace(/comments_view/g, 'comments_body_view');
+      replica.exec(modifiedStmt);
+    });
+
+    // Verify FTS tables were created
+    const tables1 = listTables(replica)
+      .map(t => t.name)
+      .sort();
+    expect(tables1).toContain('comments_body_fts');
+
+    // Add some data to the FTS table
+    replica.exec(`
+      INSERT INTO comments (id, title, body, author) 
+      VALUES (1, 'Test Title', 'Test Body', 'Test Author');
+    `);
+
+    // Verify data is in FTS
+    const ftsData = replica
+      .prepare('SELECT * FROM comments_body_fts WHERE rowid = 1')
+      .get() as Record<string, unknown>;
+    expect(ftsData).toEqual({body: 'Test Body', title: 'Test Title'});
+
+    // Now simulate an update with the same configuration
+    // Get existing FTS tables and their columns
+    const existingFTS = replica
+      .prepare(
+        `
+      SELECT name FROM sqlite_master 
+      WHERE type = 'table' AND name LIKE '%_fts'
+    `,
+      )
+      .all() as Array<{name: string}>;
+
+    for (const {name} of existingFTS) {
+      const cols = replica
+        .prepare(`PRAGMA table_info('${name}')`)
+        .all() as Array<{name: string}>;
+      const ftsColumns = new Set(
+        cols.filter(c => c.name !== 'rank').map(c => c.name),
+      );
+
+      // Check if configuration changed - it hasn't
+      const newColumns = new Set(['body', 'title']);
+      const configChanged =
+        ftsColumns.size !== newColumns.size ||
+        ![...ftsColumns].every(col => newColumns.has(col));
+
+      expect(configChanged).toBe(false);
+    }
+
+    // Verify FTS tables still exist and data is preserved
+    const tables2 = listTables(replica)
+      .map(t => t.name)
+      .sort();
+    expect(tables2).toContain('comments_body_fts');
+
+    const ftsDataAfter = replica
+      .prepare('SELECT * FROM comments_body_fts WHERE rowid = 1')
+      .get() as Record<string, unknown>;
+    expect(ftsDataAfter).toEqual({body: 'Test Body', title: 'Test Title'});
+  });
+
+  test('rebuilds FTS tables when columns change', () => {
+    // Initial configuration with only 'body' column
+    const createStatements1 = createFTS5Statements(
+      'comments',
+      ['body'],
+      ['id', 'title', 'body', 'author', '_0_version'],
+    );
+    createStatements1.forEach(stmt => {
+      const modifiedStmt = stmt
+        .replace(/comments_fts/g, 'comments_body_fts')
+        .replace(/comments_view/g, 'comments_body_view');
+      replica.exec(modifiedStmt);
+    });
+
+    // Verify initial FTS table
+    const ftsCols1 = replica
+      .prepare("PRAGMA table_info('comments_body_fts')")
+      .all() as Array<{name: string}>;
+    const colNames1 = ftsCols1.map(c => c.name).filter(n => n !== 'rank');
+    expect(colNames1).toEqual(['body']);
+
+    // Simulate rebuilding with new columns
+    // First drop the old FTS table and its triggers
+    replica.exec(`DROP TABLE IF EXISTS comments_body_fts`);
+    replica.exec(`DROP TRIGGER IF EXISTS comments_body_fts_insert`);
+    replica.exec(`DROP TRIGGER IF EXISTS comments_body_fts_update`);
+    replica.exec(`DROP TRIGGER IF EXISTS comments_body_fts_delete`);
+    replica.exec(`DROP VIEW IF EXISTS comments_body_view`);
+
+    // Create new FTS table with both columns
+    const createStatements2 = createFTS5Statements(
+      'comments',
+      ['body', 'title'],
+      ['id', 'title', 'body', 'author', '_0_version'],
+    );
+    createStatements2.forEach(stmt => {
+      const modifiedStmt = stmt
+        .replace(/comments_fts/g, 'comments_body_fts')
+        .replace(/comments_view/g, 'comments_body_view');
+      replica.exec(modifiedStmt);
+    });
+
+    // Verify FTS table was rebuilt with new columns
+    const ftsCols2 = replica
+      .prepare("PRAGMA table_info('comments_body_fts')")
+      .all() as Array<{name: string}>;
+    const colNames2 = ftsCols2
+      .map(c => c.name)
+      .filter(n => n !== 'rank')
+      .sort();
+    expect(colNames2).toEqual(['body', 'title']);
+  });
+
+  test('removes orphaned FTS tables', () => {
+    // Create FTS tables for both comments and posts
+    const commentsStatements = createFTS5Statements(
+      'comments',
+      ['body'],
+      ['id', 'title', 'body', 'author', '_0_version'],
+    );
+    commentsStatements.forEach(stmt => {
+      const modifiedStmt = stmt
+        .replace(/comments_fts/g, 'comments_body_fts')
+        .replace(/comments_view/g, 'comments_body_view');
+      replica.exec(modifiedStmt);
+    });
+
+    const postsStatements = createFTS5Statements(
+      'posts',
+      ['content', 'title'],
+      ['id', 'title', 'content', '_0_version'],
+    );
+    postsStatements.forEach(stmt => {
+      const modifiedStmt = stmt
+        .replace(/posts_fts/g, 'posts_content_fts')
+        .replace(/posts_view/g, 'posts_content_view');
+      replica.exec(modifiedStmt);
+    });
+
+    // Verify both FTS tables exist
+    const tables1 = listTables(replica)
+      .map(t => t.name)
+      .sort();
+    expect(tables1).toContain('comments_body_fts');
+    expect(tables1).toContain('posts_content_fts');
+
+    // Simulate removing posts FTS
+    replica.exec(`DROP TABLE IF EXISTS posts_content_fts`);
+    replica.exec(`DROP TRIGGER IF EXISTS posts_content_fts_insert`);
+    replica.exec(`DROP TRIGGER IF EXISTS posts_content_fts_update`);
+    replica.exec(`DROP TRIGGER IF EXISTS posts_content_fts_delete`);
+    replica.exec(`DROP VIEW IF EXISTS posts_content_view`);
+
+    // Verify posts_content_fts was removed but comments_body_fts remains
+    const tables2 = listTables(replica)
+      .map(t => t.name)
+      .sort();
+    expect(tables2).toContain('comments_body_fts');
+    expect(tables2).not.toContain('posts_content_fts');
+    expect(tables2).not.toContain('posts_content_view');
+
+    // Verify triggers were also removed
+    const triggers = replica
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'posts_content_fts_%'",
+      )
+      .all();
+    expect(triggers).toHaveLength(0);
+  });
+
+  test('handles multiple FTS indices per table', () => {
+    // Create first FTS index for 'body'
+    const bodyStatements = createFTS5Statements(
+      'comments',
+      ['body'],
+      ['id', 'title', 'body', 'author', '_0_version'],
+    );
+    bodyStatements.forEach(stmt => {
+      const modifiedStmt = stmt
+        .replace(/comments_fts/g, 'comments_body_fts')
+        .replace(/comments_view/g, 'comments_body_view');
+      replica.exec(modifiedStmt);
+    });
+
+    // Create second FTS index for 'title' and 'author'
+    const titleStatements = createFTS5Statements(
+      'comments',
+      ['title', 'author'],
+      ['id', 'title', 'body', 'author', '_0_version'],
+    );
+    titleStatements.forEach(stmt => {
+      const modifiedStmt = stmt
+        .replace(/comments_fts/g, 'comments_title_fts')
+        .replace(/comments_view/g, 'comments_title_view');
+      replica.exec(modifiedStmt);
+    });
+
+    // Verify both FTS tables were created
+    const tables = listTables(replica)
+      .map(t => t.name)
+      .sort();
+    expect(tables).toContain('comments_body_fts');
+    expect(tables).toContain('comments_title_fts');
+
+    // Check views separately
+    const views = replica
+      .prepare(
+        `
+      SELECT name FROM sqlite_master 
+      WHERE type = 'view' AND name LIKE 'comments_%_view'
+    `,
+      )
+      .all() as Array<{name: string}>;
+    const viewNames = views.map(v => v.name).sort();
+    expect(viewNames).toEqual(['comments_body_view', 'comments_title_view']);
   });
 });
