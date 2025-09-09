@@ -7,6 +7,7 @@ import {
   PeriodicExportingMetricReader,
 } from '@opentelemetry/sdk-metrics';
 import type {LogContext} from '@rocicorp/logger';
+import {setupOtelDiagnosticLogger} from './otel-diag-logger.js';
 import {execSync} from 'child_process';
 import {randomUUID} from 'crypto';
 import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'fs';
@@ -50,6 +51,10 @@ class AnonymousTelemetryManager {
 
   start(lc?: LogContext, config?: ZeroConfig) {
     this.#lc = lc;
+
+    // Set up OpenTelemetry diagnostic logger if not already configured
+    setupOtelDiagnosticLogger(lc);
+
     if (!config) {
       try {
         config = getZeroConfig();
@@ -93,10 +98,14 @@ class AnonymousTelemetryManager {
 
     const resource = resourceFromAttributes(this.#getAttributes());
 
+    // Add a random jitter to the export interval to avoid all view-syncers exporting at the same time
+    const exportIntervalMillis =
+      60000 * this.#viewSyncerCount + Math.floor(Math.random() * 10000);
     const metricReader = new PeriodicExportingMetricReader({
-      exportIntervalMillis: 60000 * this.#viewSyncerCount,
+      exportIntervalMillis,
       exporter: new OTLPMetricExporter({
         url: 'https://metrics.rocicorp.dev',
+        timeoutMillis: 30000,
       }),
     });
 
@@ -108,7 +117,7 @@ class AnonymousTelemetryManager {
 
     this.#setupMetrics();
     this.#lc?.info?.(
-      `telemetry: started (exports every ${60 * this.#viewSyncerCount} seconds for ${this.#viewSyncerCount} view-syncers)`,
+      `telemetry: started (exports every ${exportIntervalMillis / 1000} seconds for ${this.#viewSyncerCount} view-syncers)`,
     );
   }
 
