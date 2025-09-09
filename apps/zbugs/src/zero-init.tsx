@@ -22,12 +22,8 @@ export function ZeroInit({children}: {children: ReactNode}) {
         }
         return login.loginState?.encoded;
       },
-      mutateURL: process.env.VERCEL_URL
-        ? `https://{process.env.VERCEL_URL}/api/push`
-        : undefined,
-      getQueriesURL: process.env.VERCEL_URL
-        ? `https://{process.env.VERCEL_URL}/api/pull`
-        : undefined,
+      mutateURL: `${window.location.origin}/api/mutate`,
+      getQueriesURL: `${window.location.origin}/api/get-queries`,
     } satisfies ZeroOptions<Schema, CustomMutatorDefs>;
   }, [login]);
 
