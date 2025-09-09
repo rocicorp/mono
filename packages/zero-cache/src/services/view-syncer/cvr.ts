@@ -453,10 +453,8 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
     const client = this._cvr.clients[clientID];
     if (!client) {
-      // Client is not part of this client group. We still delete all the
-      // relevant data in the CVR db since this client is not supposed to come
-      // back.
-      this._cvrStore.deleteClient(clientID);
+      // Clients in different client groups are no longer deleted, leaving
+      // cleanup to inactive CVR purging logic.
       return [];
     }
 
@@ -472,13 +470,6 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
     return patches;
   }
-
-  deleteClientGroup(clientGroupID: string): void {
-    this._cvrStore.deleteClientGroup(clientGroupID);
-  }
-
-  // TODO: Add cleanup of no-longer-desired got queries and constituent rows in
-  // flush.
 }
 
 type Hash = string;

@@ -6261,7 +6261,7 @@ describe('view-syncer/cvr', () => {
     `);
   });
 
-  test('deleteClient from other group', async () => {
+  test('deleteClient from other group ignored', async () => {
     const initialState: DBState = {
       instances: [
         {
@@ -6468,7 +6468,7 @@ describe('view-syncer/cvr', () => {
       updater.deleteClient('client-b', ttlClockFromNumber(Date.now())),
     ).toEqual([]);
 
-    const {cvr: updated} = await updater.flush(
+    const {flushed} = await updater.flush(
       lc,
       LAST_CONNECT,
       Date.UTC(2024, 3, 23, 1),
@@ -6481,6 +6481,10 @@ describe('view-syncer/cvr', () => {
           {
             "clientGroupID": "abc123",
             "clientID": "client-a",
+          },
+          {
+            "clientGroupID": "def456",
+            "clientID": "client-b",
           },
           {
             "clientGroupID": "abc123",
@@ -6531,10 +6535,10 @@ describe('view-syncer/cvr', () => {
             "clientGroupID": "abc123",
             "clientSchema": null,
             "grantedAt": 1709251200000,
-            "lastActive": 1713834000000,
+            "lastActive": 1713830400000,
             "owner": "my-task",
             "replicaVersion": "120",
-            "ttlClock": 1713834000000,
+            "ttlClock": 1713830400000,
             "version": "1aa",
           },
         ],
@@ -6625,168 +6629,162 @@ describe('view-syncer/cvr', () => {
       }
     `);
 
-    expect(updated).toMatchInlineSnapshot(`
+    // No-op
+    expect(flushed).toBe(false);
+
+    expect(await getAllState(cvrDb)).toMatchInlineSnapshot(`
       {
-        "clientSchema": null,
-        "clients": {
-          "client-a": {
-            "desiredQueryIDs": [
-              "oneHash",
-            ],
-            "id": "client-a",
+        "clients": Result [
+          {
+            "clientGroupID": "abc123",
+            "clientID": "client-a",
           },
-          "client-c": {
-            "desiredQueryIDs": [
-              "oneHash",
-            ],
-            "id": "client-c",
+          {
+            "clientGroupID": "def456",
+            "clientID": "client-b",
           },
-        },
-        "id": "abc123",
-        "lastActive": 1713834000000,
-        "queries": {
-          "oneHash": {
-            "ast": {
+          {
+            "clientGroupID": "abc123",
+            "clientID": "client-c",
+          },
+        ],
+        "desires": Result [
+          {
+            "clientGroupID": "abc123",
+            "clientID": "client-a",
+            "deleted": null,
+            "inactivatedAt": null,
+            "patchVersion": "1a9:01",
+            "queryHash": "oneHash",
+            "ttl": "00:05:00",
+          },
+          {
+            "clientGroupID": "def456",
+            "clientID": "client-b",
+            "deleted": null,
+            "inactivatedAt": null,
+            "patchVersion": "1a9:01",
+            "queryHash": "oneHash",
+            "ttl": "00:05:00",
+          },
+          {
+            "clientGroupID": "abc123",
+            "clientID": "client-c",
+            "deleted": null,
+            "inactivatedAt": null,
+            "patchVersion": "1a9:01",
+            "queryHash": "oneHash",
+            "ttl": "00:05:00",
+          },
+        ],
+        "instances": Result [
+          {
+            "clientGroupID": "def456",
+            "clientSchema": null,
+            "grantedAt": null,
+            "lastActive": 1713830400000,
+            "owner": null,
+            "replicaVersion": "120",
+            "ttlClock": 1713830400000,
+            "version": "1aa",
+          },
+          {
+            "clientGroupID": "abc123",
+            "clientSchema": null,
+            "grantedAt": 1709251200000,
+            "lastActive": 1713830400000,
+            "owner": "my-task",
+            "replicaVersion": "120",
+            "ttlClock": 1713830400000,
+            "version": "1aa",
+          },
+        ],
+        "queries": Result [
+          {
+            "clientAST": {
               "table": "issues",
             },
-            "clientState": {
-              "client-a": {
-                "inactivatedAt": undefined,
-                "ttl": 300000,
-                "version": {
-                  "minorVersion": 1,
-                  "stateVersion": "1a9",
-                },
-              },
-              "client-c": {
-                "inactivatedAt": undefined,
-                "ttl": 300000,
-                "version": {
-                  "minorVersion": 1,
-                  "stateVersion": "1a9",
-                },
-              },
-            },
-            "id": "oneHash",
-            "patchVersion": undefined,
-            "transformationHash": undefined,
-            "transformationVersion": undefined,
-            "type": "client",
+            "clientGroupID": "abc123",
+            "deleted": null,
+            "internal": null,
+            "patchVersion": null,
+            "queryArgs": null,
+            "queryHash": "oneHash",
+            "queryName": null,
+            "transformationHash": null,
+            "transformationVersion": null,
           },
-        },
-        "replicaVersion": "120",
-        "ttlClock": 1713834000000,
-        "version": {
-          "stateVersion": "1aa",
-        },
+          {
+            "clientAST": {
+              "table": "issues",
+            },
+            "clientGroupID": "def456",
+            "deleted": null,
+            "internal": null,
+            "patchVersion": null,
+            "queryArgs": null,
+            "queryHash": "oneHash",
+            "queryName": null,
+            "transformationHash": null,
+            "transformationVersion": null,
+          },
+        ],
+        "rows": Result [
+          {
+            "clientGroupID": "abc123",
+            "patchVersion": "1a0",
+            "refCounts": {
+              "oneHash": 2,
+            },
+            "rowKey": {
+              "id": "123",
+            },
+            "rowVersion": "03",
+            "schema": "public",
+            "table": "issues",
+          },
+          {
+            "clientGroupID": "abc123",
+            "patchVersion": "1a0",
+            "refCounts": {
+              "oneHash": 2,
+            },
+            "rowKey": {
+              "id": "321",
+            },
+            "rowVersion": "03",
+            "schema": "public",
+            "table": "issues",
+          },
+          {
+            "clientGroupID": "def456",
+            "patchVersion": "1a0",
+            "refCounts": {
+              "oneHash": 1,
+            },
+            "rowKey": {
+              "id": "123",
+            },
+            "rowVersion": "03",
+            "schema": "public",
+            "table": "issues",
+          },
+          {
+            "clientGroupID": "def456",
+            "patchVersion": "1a0",
+            "refCounts": {
+              "oneHash": 1,
+            },
+            "rowKey": {
+              "id": "321",
+            },
+            "rowVersion": "03",
+            "schema": "public",
+            "table": "issues",
+          },
+        ],
       }
     `);
-
-    {
-      const cvr = await cvrStore.load(lc, LAST_CONNECT);
-      const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
-
-      updater.deleteClientGroup('def456');
-      const {cvr: updated2} = await updater.flush(
-        lc,
-        LAST_CONNECT,
-        Date.UTC(2024, 3, 23, 1),
-        ttlClockFromNumber(Date.UTC(2024, 3, 23, 1)),
-      );
-
-      expect(updated2).toEqual(updated);
-
-      expect(await getAllState(cvrDb)).toMatchInlineSnapshot(`
-        {
-          "clients": Result [
-            {
-              "clientGroupID": "abc123",
-              "clientID": "client-a",
-            },
-            {
-              "clientGroupID": "abc123",
-              "clientID": "client-c",
-            },
-          ],
-          "desires": Result [
-            {
-              "clientGroupID": "abc123",
-              "clientID": "client-a",
-              "deleted": null,
-              "inactivatedAt": null,
-              "patchVersion": "1a9:01",
-              "queryHash": "oneHash",
-              "ttl": "00:05:00",
-            },
-            {
-              "clientGroupID": "abc123",
-              "clientID": "client-c",
-              "deleted": null,
-              "inactivatedAt": null,
-              "patchVersion": "1a9:01",
-              "queryHash": "oneHash",
-              "ttl": "00:05:00",
-            },
-          ],
-          "instances": Result [
-            {
-              "clientGroupID": "abc123",
-              "clientSchema": null,
-              "grantedAt": 1709251200000,
-              "lastActive": 1713834000000,
-              "owner": "my-task",
-              "replicaVersion": "120",
-              "ttlClock": 1713834000000,
-              "version": "1aa",
-            },
-          ],
-          "queries": Result [
-            {
-              "clientAST": {
-                "table": "issues",
-              },
-              "clientGroupID": "abc123",
-              "deleted": null,
-              "internal": null,
-              "patchVersion": null,
-              "queryArgs": null,
-              "queryHash": "oneHash",
-              "queryName": null,
-              "transformationHash": null,
-              "transformationVersion": null,
-            },
-          ],
-          "rows": Result [
-            {
-              "clientGroupID": "abc123",
-              "patchVersion": "1a0",
-              "refCounts": {
-                "oneHash": 2,
-              },
-              "rowKey": {
-                "id": "123",
-              },
-              "rowVersion": "03",
-              "schema": "public",
-              "table": "issues",
-            },
-            {
-              "clientGroupID": "abc123",
-              "patchVersion": "1a0",
-              "refCounts": {
-                "oneHash": 2,
-              },
-              "rowKey": {
-                "id": "321",
-              },
-              "rowVersion": "03",
-              "schema": "public",
-              "table": "issues",
-            },
-          ],
-        }
-      `);
-    }
   });
 
   test('ttlClock only updates when we have meaningful flushes', async () => {
@@ -6956,71 +6954,6 @@ describe('view-syncer/cvr', () => {
 
     expect(
       await readMutationResults(upstreamDb, clientGroupID, clientID),
-    ).toEqual([]);
-  });
-
-  test('delete a client group', async () => {
-    const clientGroupID = 'abc123';
-    const initialState: DBState = {
-      instances: [
-        {
-          clientGroupID,
-          version: '1aa',
-          replicaVersion: '120',
-          lastActive: 0,
-          ttlClock: ttlClockFromNumber(0),
-          clientSchema: null,
-        },
-      ],
-      clients: [
-        {
-          clientGroupID,
-          clientID: 'client-a',
-        },
-        {
-          clientGroupID,
-          clientID: 'client-b',
-        },
-      ],
-      queries: [],
-      desires: [],
-      rows: [],
-    };
-
-    await setInitialState(cvrDb, initialState);
-
-    await Promise.all([
-      insertMutationResult(upstreamDb, clientGroupID, 'client-a', 1),
-      insertMutationResult(upstreamDb, clientGroupID, 'client-b', 2),
-      insertMutationResult(upstreamDb, 'other-group', 'client-c', 1),
-    ]);
-
-    const cvrStore = new CVRStore(
-      lc,
-      cvrDb,
-      upstreamDb,
-      SHARD,
-      'my-task',
-      clientGroupID,
-      ON_FAILURE,
-    );
-    const cvr = await cvrStore.load(lc, LAST_CONNECT);
-
-    const updater = new CVRConfigDrivenUpdater(cvrStore, cvr, SHARD);
-
-    updater.deleteClientGroup(clientGroupID);
-    await updater.flush(
-      lc,
-      LAST_CONNECT,
-      Date.UTC(2024, 3, 20),
-      ttlClockFromNumber(Date.UTC(2024, 3, 20)),
-    );
-
-    expect(
-      await readMutationResults(upstreamDb, clientGroupID, 'client-a'),
-    ).toEqual([]);
-    expect(
-      await readMutationResults(upstreamDb, clientGroupID, 'client-b'),
     ).toEqual([]);
   });
 });
