@@ -28,9 +28,39 @@ import {mark} from '../../perf-log.ts';
 import {preload} from '../../zero-preload.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {queries, type ListContext} from '../../../shared/queries.ts';
+import type {IssueRow} from '../../../shared/schema.ts';
 
 let firstRowRendered = false;
-const itemSize = 56;
+const ITEM_SIZE = 56;
+const MIN_PAGE_SIZE = 100;
+
+type Anchor = {
+  startRow: IssueRow | undefined;
+  direction: 'forward' | 'backward';
+  index: number;
+};
+
+const TOP_ANCHOR = Object.freeze({
+  startRow: undefined,
+  direction: 'forward',
+  index: 0,
+});
+
+const getNearPageEdgeThreshold = (pageSize: number) => Math.ceil(pageSize / 10);
+
+const toIssueArrayIndex = (index: number, anchor: Anchor) =>
+  anchor.direction === 'forward' ? index - anchor.index : anchor.index - index;
+
+const toBoundIssueArrayIndex = (
+  index: number,
+  anchor: Anchor,
+  length: number,
+) => Math.min(length - 1, Math.max(0, toIssueArrayIndex(index, anchor)));
+
+const toIndex = (issueArrayIndex: number, anchor: Anchor) =>
+  anchor.direction === 'forward'
+    ? issueArrayIndex + anchor.index
+    : anchor.index - issueArrayIndex;
 
 export function ListPage({onReady}: {onReady: () => void}) {
   const login = useLogin();
@@ -58,28 +88,70 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const open = status === 'open' ? true : status === 'closed' ? false : null;
 
-  const pageSize = 20;
-  const [limit, setLimit] = useState(pageSize);
-  const q = queries.issueList(
+  const [anchor, setAnchor] = useState<Anchor>(TOP_ANCHOR);
+
+  const listContextParams = {
+    sortDirection,
+    sortField,
+    assignee,
+    creator,
+    labels,
+    open,
+    textFilter,
+  } as const;
+
+  const listRef = useRef<HTMLDivElement>(null);
+  const tableWrapperRef = useRef<HTMLDivElement>(null);
+  const size = useElementSize(tableWrapperRef);
+
+  const [pageSize, setPageSize] = useState(MIN_PAGE_SIZE);
+  useEffect(() => {
+    // Make sure page size is enough to fill the scroll element at least
+    // 3 times.  Don't shrink page size.
+    const newPageSize = size
+      ? Math.max(MIN_PAGE_SIZE, Math.ceil(size?.height / ITEM_SIZE) * 3)
+      : MIN_PAGE_SIZE;
+    if (newPageSize > pageSize) {
+      setPageSize(pageSize);
+    }
+  }, [pageSize, size]);
+
+  const q = queries.issueListV2(
     login.loginState?.decoded,
-    {
-      sortDirection,
-      sortField,
-      assignee,
-      creator,
-      labels,
-      open,
-      textFilter,
-    },
+    listContextParams,
     z.userID,
-    limit,
+    pageSize,
+    anchor.startRow
+      ? {
+          id: anchor.startRow.id,
+          modified: anchor.startRow.modified,
+          created: anchor.startRow.created,
+        }
+      : null,
+    anchor.direction,
   );
 
+  // For detecting if the base query, i.e. ignoring pagination parameters, has
+  // changed.
+  const baseQ = queries.issueListV2(
+    login.loginState?.decoded,
+    listContextParams,
+    z.userID,
+    null, // no limit
+    null, // no start
+    'forward', // fixed direction
+  );
+
+  const [estimatedTotal, setEstimatedTotal] = useState(0);
+  const [total, setTotal] = useState<number | undefined>(undefined);
+
   useEffect(() => {
-    setLimit(pageSize);
+    setEstimatedTotal(0);
+    setTotal(undefined);
+    setAnchor(TOP_ANCHOR);
     virtualizer.scrollToIndex(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [q.limit(0).hash()]); // limit set to 0 since we only scroll on query change, not limit change.
+  }, [baseQ.hash()]);
 
   // We don't want to cache every single keystroke. We already debounce
   // keystrokes for the URL, so we just reuse that.
@@ -87,13 +159,25 @@ export function ListPage({onReady}: {onReady: () => void}) {
     q,
     textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
   );
-  const isSearchComplete = issues.length < limit;
 
   useEffect(() => {
     if (issues.length > 0 || issuesResult.type === 'complete') {
       onReady();
     }
   }, [issues.length, issuesResult.type, onReady]);
+
+  useEffect(() => {
+    if (anchor.direction !== 'forward') {
+      return;
+    }
+    const eTotal = anchor.index + issues.length;
+    if (eTotal > estimatedTotal) {
+      setEstimatedTotal(eTotal);
+    }
+    if (issuesResult.type === 'complete' && issues.length < pageSize) {
+      setTotal(eTotal);
+    }
+  }, [anchor, issuesResult.type, issues, estimatedTotal, pageSize]);
 
   useEffect(() => {
     if (issuesResult.type === 'complete') {
@@ -186,7 +270,18 @@ export function ListPage({onReady}: {onReady: () => void}) {
   };
 
   const Row = ({index, style}: {index: number; style: CSSProperties}) => {
-    const issue = issues[index];
+    const issueArrayIndex = toIssueArrayIndex(index, anchor);
+    if (issueArrayIndex < 0 || issueArrayIndex >= issues.length) {
+      return (
+        <div
+          className={classNames('row')}
+          style={{
+            ...style,
+          }}
+        ></div>
+      );
+    }
+    const issue = issues[issueArrayIndex];
     if (firstRowRendered === false) {
       mark('first issue row rendered');
       firstRowRendered = true;
@@ -233,29 +328,81 @@ export function ListPage({onReady}: {onReady: () => void}) {
     );
   };
 
-  const listRef = useRef<HTMLDivElement>(null);
-  const tableWrapperRef = useRef<HTMLDivElement>(null);
-  const size = useElementSize(tableWrapperRef);
-
   const virtualizer = useVirtualizer({
-    count: issues.length,
-    estimateSize: () => itemSize,
+    count: total ?? estimatedTotal,
+    estimateSize: () => ITEM_SIZE,
     overscan: 5,
-    getItemKey: index => issues[index].id,
     getScrollElement: () => listRef.current,
   });
 
   const virtualItems = virtualizer.getVirtualItems();
   useEffect(() => {
-    const [lastItem] = virtualItems.reverse();
+    const [firstItem] = virtualItems;
+    const lastItem = virtualItems[virtualItems.length - 1];
     if (!lastItem) {
       return;
     }
 
-    if (lastItem.index >= limit - pageSize / 4) {
-      setLimit(limit + pageSize);
+    if (
+      anchor.index !== 0 &&
+      firstItem.index <= getNearPageEdgeThreshold(pageSize)
+    ) {
+      console.log('anchoring to top');
+      setAnchor(TOP_ANCHOR);
+      return;
     }
-  }, [limit, virtualItems]);
+
+    if (issuesResult.type !== 'complete') {
+      return;
+    }
+
+    const hasPrev = anchor.index !== 0;
+    const distanceFromStart =
+      anchor.direction === 'backward'
+        ? firstItem.index - (anchor.index - issues.length)
+        : firstItem.index - anchor.index;
+
+    const nearPageEdgeThreshold = getNearPageEdgeThreshold(pageSize);
+
+    if (hasPrev && distanceFromStart <= nearPageEdgeThreshold) {
+      const issueArrayIndex = toBoundIssueArrayIndex(
+        lastItem.index + nearPageEdgeThreshold * 2,
+        anchor,
+        issues.length,
+      );
+      const index = toIndex(issueArrayIndex, anchor) - 1;
+      const a = {
+        index,
+        direction: 'backward',
+        startRow: issues[issueArrayIndex],
+      } as const;
+      console.log('page up', a);
+      setAnchor(a);
+      return;
+    }
+
+    const hasNext =
+      anchor.direction === 'backward' || issues.length === pageSize;
+    const distanceFromEnd =
+      anchor.direction === 'backward'
+        ? anchor.index - lastItem.index
+        : anchor.index + issues.length - lastItem.index;
+    if (hasNext && distanceFromEnd <= nearPageEdgeThreshold) {
+      const issueArrayIndex = toBoundIssueArrayIndex(
+        firstItem.index - nearPageEdgeThreshold * 2,
+        anchor,
+        issues.length,
+      );
+      const index = toIndex(issueArrayIndex, anchor) + 1;
+      const a = {
+        index,
+        direction: 'forward',
+        startRow: issues[issueArrayIndex],
+      } as const;
+      console.log('page down', a);
+      setAnchor(a);
+    }
+  }, [anchor, issues, issuesResult, pageSize, virtualItems]);
 
   const [forceSearchMode, setForceSearchMode] = useState(false);
   const searchMode = forceSearchMode || Boolean(textFilter);
@@ -315,8 +462,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
           )}
           {issuesResult.type === 'complete' || issues.length > 0 ? (
             <span className="issue-count">
-              {issues.length}
-              {isSearchComplete ? '' : '+'}
+              {total ?? `${estimatedTotal - (estimatedTotal % 50)}+`}
             </span>
           ) : null}
         </h1>

@@ -1,7 +1,6 @@
 import {
   escapeLike,
   type Query,
-  type Row,
   syncedQuery,
   syncedQueryWithContext,
 } from '@rocicorp/zero';
@@ -10,6 +9,7 @@ import {INITIAL_COMMENT_LIMIT} from './consts.ts';
 import type {AuthData, Role} from './auth.ts';
 import z from 'zod';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyIssuePermissions<TQuery extends Query<Schema, 'issue', any>>(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   q: TQuery,
@@ -39,6 +39,8 @@ const issueRowSort = z.object({
   created: z.number(),
   modified: z.number(),
 });
+
+type IssueRowSort = z.infer<typeof issueRowSort>;
 
 export const queries = {
   allLabels: syncedQuery('allLabels', z.tuple([]), () => builder.label),
@@ -149,7 +151,11 @@ export const queries = {
     ]),
     (auth: AuthData | undefined, listContext, issue, dir) =>
       applyIssuePermissions(
-        buildListQuery(listContext, issue, dir).one(),
+        buildListQuery(
+          listContext,
+          issue,
+          dir === 'next' ? 'forward' : 'backward',
+        ).one(),
         auth?.role,
       ),
   ),
@@ -157,14 +163,35 @@ export const queries = {
   issueList: syncedQueryWithContext(
     'issueList',
     z.tuple([listContextParams, z.string(), z.number()]),
-    (auth: AuthData | undefined, listContext, userID, limit) =>
-      applyIssuePermissions(
-        buildListQuery(listContext, null, 'next')
+    (auth: AuthData | undefined, listContext, userID, limit) => {
+      return applyIssuePermissions(
+        buildListQuery(listContext, null, 'forward')
           .limit(limit)
           .related('viewState', q => q.where('userID', userID).one())
           .related('labels'),
         auth?.role,
-      ),
+      );
+    },
+  ),
+
+  issueListV2: syncedQueryWithContext(
+    'issueListV2',
+    z.tuple([
+      listContextParams,
+      z.string(),
+      z.number().nullable(),
+      issueRowSort.nullable(),
+      z.union([z.literal('forward'), z.literal('backward')]),
+    ]),
+    (auth: AuthData | undefined, listContext, userID, limit, start, dir) => {
+      let q = buildListQuery(listContext, start, dir)
+        .related('viewState', q => q.where('userID', userID).one())
+        .related('labels');
+      if (limit) {
+        q = q.limit(limit);
+      }
+      return applyIssuePermissions(q, auth?.role);
+    },
   ),
 
   emojiChange: syncedQuery('emojiChange', idValidator, subjectID =>
@@ -182,11 +209,8 @@ export type ListContext = {
 
 function buildListQuery(
   listContext: ListContext['params'] | null,
-  start: Pick<
-    Row<Schema['tables']['issue']>,
-    'id' | 'created' | 'modified'
-  > | null,
-  dir: 'next' | 'prev',
+  start: IssueRowSort | null,
+  dir: 'forward' | 'backward',
 ) {
   if (!listContext) {
     return builder.issue.where(({or}) => or());
@@ -203,32 +227,39 @@ function buildListQuery(
   } = listContext;
 
   const orderByDir =
-    dir === 'next' ? sortDirection : sortDirection === 'asc' ? 'desc' : 'asc';
+    dir === 'forward'
+      ? sortDirection
+      : sortDirection === 'asc'
+        ? 'desc'
+        : 'asc';
 
   let q = builder.issue;
   if (start) {
     q = q.start(start);
   }
 
-  return q.orderBy(sortField, orderByDir).where(({and, cmp, exists, or}) =>
-    and(
-      open != null ? cmp('open', open) : undefined,
-      creator ? exists('creator', q => q.where('login', creator)) : undefined,
-      assignee
-        ? exists('assignee', q => q.where('login', assignee))
-        : undefined,
-      textFilter
-        ? or(
-            cmp('title', 'ILIKE', `%${escapeLike(textFilter)}%`),
-            cmp('description', 'ILIKE', `%${escapeLike(textFilter)}%`),
-            exists('comments', q =>
-              q.where('body', 'ILIKE', `%${escapeLike(textFilter)}%`),
-            ),
-          )
-        : undefined,
-      ...(labels ?? []).map(label =>
-        exists('labels', q => q.where('name', label)),
+  return q
+    .orderBy(sortField, orderByDir)
+    .orderBy('id', orderByDir)
+    .where(({and, cmp, exists, or}) =>
+      and(
+        open != null ? cmp('open', open) : undefined,
+        creator ? exists('creator', q => q.where('login', creator)) : undefined,
+        assignee
+          ? exists('assignee', q => q.where('login', assignee))
+          : undefined,
+        textFilter
+          ? or(
+              cmp('title', 'ILIKE', `%${escapeLike(textFilter)}%`),
+              cmp('description', 'ILIKE', `%${escapeLike(textFilter)}%`),
+              exists('comments', q =>
+                q.where('body', 'ILIKE', `%${escapeLike(textFilter)}%`),
+              ),
+            )
+          : undefined,
+        ...(labels ?? []).map(label =>
+          exists('labels', q => q.where('name', label)),
+        ),
       ),
-    ),
-  );
+    );
 }
