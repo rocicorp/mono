@@ -100,9 +100,7 @@ export const queries = {
             and(cmp('role', 'crew'), not(cmp('login', 'LIKE', 'rocibot%'))),
           );
         } else if (filter === 'creators') {
-          q = q.whereExists('createdIssues', q =>
-            q.orderBy('creatorID', 'desc').orderBy('modified', 'desc'),
-          );
+          q = q.whereExists('createdIssues');
         } else {
           throw new Error(`Unknown filter: ${filter}`);
         }
