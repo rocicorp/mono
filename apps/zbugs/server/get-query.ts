@@ -16,8 +16,7 @@ const queries = {
    * exists filter to be the root of the query.
    *
    * For example if there is an assignee filter, instead of the following form
-   * used on the client (because it returns the data shape useful for rendering
-   * in the UI, and is the simplest way to structure the query):
+   * used on the client:
    *
    * ```
    * issue
@@ -28,7 +27,7 @@ const queries = {
    *   .limit(l)
    * ```
    *
-   * this more efficient alternative form is used:
+   * this more efficient alternative form is used on the server:
    *
    * ```
    * user
@@ -49,6 +48,12 @@ const queries = {
    * matching assignees until the specified limit number of matches are found.
    * If the assignee filter is highly selective, many non-matching issues will
    * be checked.
+   *
+   * The original form is used on the client because it returns the data shape
+   * useful for rendering in the UI.  It will do the less efficient iteration
+   * of issues on the client, but this is ok because the number of rows synced
+   * to the client is small enough that the less efficient approach is still
+   * very fast.
    *
    * This code assumes a selectivity order, from most to least selective, of:
    * - assignee,
