@@ -49,11 +49,11 @@ const queries = {
    * If the assignee filter is highly selective, many non-matching issues will
    * be checked.
    *
-   * The original form is used on the client because it returns the data shape
-   * useful for rendering in the UI.  It will do the less efficient iteration
-   * of issues on the client, but this is ok because the number of rows synced
-   * to the client is small enough that the less efficient approach is still
-   * very fast.
+   * The form used on the client is structured as it is because it returns the
+   * data shape useful for rendering in the UI.  It will do the less efficient
+   * iteration of issues on the client, but this is ok because the number of
+   * rows synced to the client is small enough that the less efficient approach
+   * is still very fast.
    *
    * This code assumes a selectivity order, from most to least selective, of:
    * - assignee,
