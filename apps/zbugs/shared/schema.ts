@@ -105,6 +105,11 @@ const userRelationships = relationships(user, ({many}) => ({
     destField: ['creatorID'],
     destSchema: issue,
   }),
+  assignedIssues: many({
+    sourceField: ['id'],
+    destField: ['assigneeID'],
+    destSchema: issue,
+  }),
 }));
 
 const issueRelationships = relationships(issue, ({many, one}) => ({
