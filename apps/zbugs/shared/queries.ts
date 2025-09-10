@@ -229,6 +229,7 @@ export function buildListQuery(args: ListQueryArgs) {
     dir = 'forward',
     start,
   } = args;
+
   let q = issueQuery
     .related('viewState', q =>
       args.userID
@@ -242,14 +243,12 @@ export function buildListQuery(args: ListQueryArgs) {
   }
 
   const {sortField, sortDirection} = listContext;
-
   const orderByDir =
     dir === 'forward'
       ? sortDirection
       : sortDirection === 'asc'
         ? 'desc'
         : 'asc';
-
   q.orderBy(sortField, orderByDir).orderBy('id', orderByDir);
 
   if (start) {
@@ -260,28 +259,27 @@ export function buildListQuery(args: ListQueryArgs) {
   }
 
   const {open, creator, assignee, labels, textFilter} = listContext;
-  return applyIssuePermissions(
-    q.where(({and, cmp, exists, or}) =>
-      and(
-        open != null ? cmp('open', open) : undefined,
-        creator ? exists('creator', q => q.where('login', creator)) : undefined,
-        assignee
-          ? exists('assignee', q => q.where('login', assignee))
-          : undefined,
-        textFilter
-          ? or(
-              cmp('title', 'ILIKE', `%${escapeLike(textFilter)}%`),
-              cmp('description', 'ILIKE', `%${escapeLike(textFilter)}%`),
-              exists('comments', q =>
-                q.where('body', 'ILIKE', `%${escapeLike(textFilter)}%`),
-              ),
-            )
-          : undefined,
-        ...(labels ?? []).map(label =>
-          exists('labels', q => q.where('name', label)),
-        ),
+  q = q.where(({and, cmp, exists, or}) =>
+    and(
+      open != null ? cmp('open', open) : undefined,
+      creator ? exists('creator', q => q.where('login', creator)) : undefined,
+      assignee
+        ? exists('assignee', q => q.where('login', assignee))
+        : undefined,
+      textFilter
+        ? or(
+            cmp('title', 'ILIKE', `%${escapeLike(textFilter)}%`),
+            cmp('description', 'ILIKE', `%${escapeLike(textFilter)}%`),
+            exists('comments', q =>
+              q.where('body', 'ILIKE', `%${escapeLike(textFilter)}%`),
+            ),
+          )
+        : undefined,
+      ...(labels ?? []).map(label =>
+        exists('labels', q => q.where('name', label)),
       ),
     ),
-    role,
   );
+
+  return applyIssuePermissions(q, role);
 }
