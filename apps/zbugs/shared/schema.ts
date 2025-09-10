@@ -9,6 +9,7 @@ import {
   string,
   table,
   type Row,
+  type SchemaQuery,
 } from '@rocicorp/zero';
 import type {Role} from './auth.ts';
 
@@ -66,6 +67,8 @@ const label = table('label')
 const issueLabel = table('issueLabel')
   .columns({
     issueID: string(),
+    modified: number(), // denormalized from issue
+    created: number(), // denormalized from issue
     labelID: string(),
   })
   .primaryKey('issueID', 'labelID');
@@ -105,6 +108,11 @@ const userRelationships = relationships(user, ({many}) => ({
     destField: ['creatorID'],
     destSchema: issue,
   }),
+  assignedIssues: many({
+    sourceField: ['id'],
+    destField: ['assigneeID'],
+    destSchema: issue,
+  }),
 }));
 
 const issueRelationships = relationships(issue, ({many, one}) => ({
@@ -120,6 +128,11 @@ const issueRelationships = relationships(issue, ({many, one}) => ({
       destSchema: label,
     },
   ),
+  issueLabels: many({
+    sourceField: ['id'],
+    destField: ['issueID'],
+    destSchema: issueLabel,
+  }),
   comments: many({
     sourceField: ['id'],
     destField: ['issueID'],
@@ -170,11 +183,25 @@ const commentRelationships = relationships(comment, ({one, many}) => ({
   }),
 }));
 
-const issueLabelRelationships = relationships(issueLabel, ({one}) => ({
+const issueLabelRelationships = relationships(issueLabel, ({one, many}) => ({
   issue: one({
     sourceField: ['issueID'],
     destField: ['id'],
     destSchema: issue,
+  }),
+  // hacking around typing issues
+  issues: many({
+    sourceField: ['issueID'],
+    destField: ['id'],
+    destSchema: issue,
+  }),
+}));
+
+const labelRelationships = relationships(label, ({many}) => ({
+  issueLabels: many({
+    sourceField: ['id'],
+    destField: ['labelID'],
+    destSchema: issueLabel,
   }),
 }));
 
@@ -212,6 +239,7 @@ export const schema = createSchema({
     userRelationships,
     issueRelationships,
     commentRelationships,
+    labelRelationships,
     issueLabelRelationships,
     emojiRelationships,
   ],
@@ -225,7 +253,7 @@ export type IssueRow = Row<typeof schema.tables.issue>;
 export type CommentRow = Row<typeof schema.tables.comment>;
 export type UserRow = Row<typeof schema.tables.user>;
 
-export const builder = createBuilder(schema);
+export const builder: SchemaQuery<Schema> = createBuilder(schema);
 
 export const permissions: ReturnType<typeof definePermissions> =
   definePermissions<unknown, Schema>(schema, () => ({}));
