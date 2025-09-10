@@ -11,6 +11,48 @@ const queries = {
   ...sharedQueries,
   /**
    * Replace issueListV2 with a server optimized version.
+   *
+   * This optimization heuristically lifts the most selective
+   * exists filter to be the root of the query.
+   *
+   * For example if there is an assignee filter, instead of the following form
+   * used on the client (because it returns the data shape useful for rendering
+   * in the UI, and is the simplest way to structure the query):
+   *
+   * ```
+   * issue
+   *   .where(({exists}) => exists('assignee', q => q.where('login', assignee)))
+   *   .where(otherFilters)
+   *   .start(s)
+   *   .orderBy(o)
+   *   .limit(l)
+   * ```
+   *
+   * this more efficient alternative form is used:
+   *
+   * ```
+   * user
+   *   .where('login', assignee)
+   *   .related('assignedIssues', q => q
+   *     .where(otherFilters)
+   *     .start(s)
+   *     .orderBy(o)
+   *     .limit(l));
+   * ```
+   *
+   * This alternative form will return the same rows (assuming login is unique,
+   * or a superset of the rows if login is not unique), and thus will result in
+   * the rows needed by the form used on the client being synced to the client.
+   *
+   * This alternative form is more efficient, because the original form
+   * iterates over the issues in the specified order, checking each for
+   * matching assignees until the specified limit number of matches are found.
+   * If the assignee filter is highly selective, many non-matching issues will
+   * be checked.
+   *
+   * This code assumes a selectivity order, from most to least selective, of:
+   * - assignee,
+   * - creator
    */
   issueListV2: syncedQueryWithContext(
     sharedQueries.issueListV2.queryName,
