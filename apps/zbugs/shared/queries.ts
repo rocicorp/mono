@@ -100,7 +100,9 @@ export const queries = {
             and(cmp('role', 'crew'), not(cmp('login', 'LIKE', 'rocibot%'))),
           );
         } else if (filter === 'creators') {
-          q = q.whereExists('createdIssues');
+          q = q.whereExists('createdIssues', q =>
+            q.orderBy('creatorID', 'desc').orderBy('modified', 'desc'),
+          );
         } else {
           throw new Error(`Unknown filter: ${filter}`);
         }
@@ -151,15 +153,8 @@ export const queries = {
       issueRowSort.nullable(),
       z.union([z.literal('forward'), z.literal('backward')]),
     ]),
-    (auth: AuthData | undefined, listContext, userID, limit, start, dir) => {
-      let q = buildListQuery(listContext, start, dir)
-        .related('viewState', q => q.where('userID', userID).one())
-        .related('labels');
-      if (limit) {
-        q = q.limit(limit);
-      }
-      return applyIssuePermissions(q, auth?.role);
-    },
+    (auth: AuthData | undefined, listContext, userID, limit, start, dir) =>
+      issueListV2(listContext, limit, userID, auth, start, dir),
   ),
 
   emojiChange: syncedQuery('emojiChange', idValidator, subjectID =>
@@ -177,30 +172,21 @@ export const queries = {
       z.union([z.literal('next'), z.literal('prev')]),
     ]),
     (auth: AuthData | undefined, listContext, issue, dir) =>
-      applyIssuePermissions(
-        buildListQuery(
-          listContext,
-          issue,
-          dir === 'next' ? 'forward' : 'backward',
-        ).one(),
-        auth?.role,
-      ),
+      buildBaseListQuery({
+        listContext: listContext ?? undefined,
+        start: issue ?? undefined,
+        dir: dir === 'next' ? 'forward' : 'backward',
+        role: auth?.role,
+      }).one(),
   ),
 
   issueList: syncedQueryWithContext(
     'issueList',
     z.tuple([listContextParams, z.string(), z.number()]),
-    (auth: AuthData | undefined, listContext, userID, limit) => {
-      return applyIssuePermissions(
-        buildListQuery(listContext, null, 'forward')
-          .limit(limit)
-          .related('viewState', q => q.where('userID', userID).one())
-          .related('labels'),
-        auth?.role,
-      );
-    },
+    (auth: AuthData | undefined, listContext, userID, limit) =>
+      issueListV2(listContext, limit, userID, auth, null, 'forward'),
   ),
-};
+} as const;
 
 export type ListContext = {
   readonly href: string;
@@ -208,24 +194,61 @@ export type ListContext = {
   readonly params: ListContextParams;
 };
 
-function buildListQuery(
-  listContext: ListContext['params'] | null,
+function issueListV2(
+  listContext: ListContextParams,
+  limit: number | null,
+  userID: string,
+  auth: AuthData | undefined,
   start: IssueRowSort | null,
   dir: 'forward' | 'backward',
 ) {
+  return applyIssuePermissions(
+    buildListQuery({
+      listContext,
+      limit: limit ?? undefined,
+      userID,
+      role: auth?.role,
+      start: start ?? undefined,
+      dir,
+    }),
+    auth?.role,
+  );
+}
+
+export type ListQueryArgs = {
+  issueQuery?: (typeof builder)['issue'] | undefined;
+  listContext?: ListContext['params'] | undefined;
+  userID?: string;
+  role?: Role | undefined;
+  limit?: number | undefined;
+  start?: IssueRowSort | undefined;
+  dir?: 'forward' | 'backward' | undefined;
+};
+
+export function buildListQuery(args: ListQueryArgs) {
+  return buildBaseListQuery(args)
+    .related('viewState', q =>
+      args.userID
+        ? q.where('userID', args.userID).one()
+        : q.where(({or}) => or()),
+    )
+    .related('labels');
+}
+
+export function buildBaseListQuery(args: ListQueryArgs) {
+  const {
+    issueQuery = builder.issue,
+    limit,
+    listContext,
+    role,
+    dir = 'forward',
+    start,
+  } = args;
   if (!listContext) {
-    return builder.issue.where(({or}) => or());
+    return issueQuery.where(({or}) => or());
   }
 
-  const {
-    open,
-    creator,
-    assignee,
-    labels,
-    textFilter,
-    sortField,
-    sortDirection,
-  } = listContext;
+  const {sortField, sortDirection} = listContext;
 
   const orderByDir =
     dir === 'forward'
@@ -234,15 +257,29 @@ function buildListQuery(
         ? 'desc'
         : 'asc';
 
-  let q = builder.issue;
+  let q = issueQuery;
   if (start) {
     q = q.start(start);
   }
+  if (limit) {
+    q = q.limit(limit);
+  }
 
-  return q
-    .orderBy(sortField, orderByDir)
-    .orderBy('id', orderByDir)
-    .where(({and, cmp, exists, or}) =>
+  return buildBaseListQueryFilter(
+    q.orderBy(sortField, orderByDir).orderBy('id', orderByDir),
+    listContext,
+    role,
+  );
+}
+
+export function buildBaseListQueryFilter(
+  issueQuery: (typeof builder)['issue'],
+  listContext: ListContext['params'],
+  role: Role | undefined,
+) {
+  const {open, creator, assignee, labels, textFilter} = listContext;
+  return applyIssuePermissions(
+    issueQuery.where(({and, cmp, exists, or}) =>
       and(
         open != null ? cmp('open', open) : undefined,
         creator ? exists('creator', q => q.where('login', creator)) : undefined,
@@ -262,5 +299,7 @@ function buildListQuery(
           exists('labels', q => q.where('name', label)),
         ),
       ),
-    );
+    ),
+    role,
+  );
 }
