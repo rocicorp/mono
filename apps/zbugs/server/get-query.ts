@@ -20,7 +20,6 @@ const queries = {
         return builder.issue.where(({or}) => or());
       }
       const buildListQueryArgs = {
-        issueQuery: builder.issue,
         listContext,
         userID,
         role: auth?.role,
