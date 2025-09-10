@@ -32,7 +32,7 @@ const listContextParams = z.object({
   sortField: z.union([z.literal('modified'), z.literal('created')]),
   sortDirection: z.union([z.literal('asc'), z.literal('desc')]),
 });
-type ListContextParams = z.infer<typeof listContextParams>;
+export type ListContextParams = z.infer<typeof listContextParams>;
 
 const issueRowSort = z.object({
   id: z.string(),
@@ -142,6 +142,33 @@ export const queries = {
       ),
   ),
 
+  issueListV2: syncedQueryWithContext(
+    'issueListV2',
+    z.tuple([
+      listContextParams,
+      z.string(),
+      z.number().nullable(),
+      issueRowSort.nullable(),
+      z.union([z.literal('forward'), z.literal('backward')]),
+    ]),
+    (auth: AuthData | undefined, listContext, userID, limit, start, dir) => {
+      let q = buildListQuery(listContext, start, dir)
+        .related('viewState', q => q.where('userID', userID).one())
+        .related('labels');
+      if (limit) {
+        q = q.limit(limit);
+      }
+      return applyIssuePermissions(q, auth?.role);
+    },
+  ),
+
+  emojiChange: syncedQuery('emojiChange', idValidator, subjectID =>
+    builder.emoji
+      .where('subjectID', subjectID ?? '')
+      .related('creator', creator => creator.one()),
+  ),
+
+  // The below queries are DEPRECATED
   prevNext: syncedQueryWithContext(
     'prevNext',
     z.tuple([
@@ -172,32 +199,6 @@ export const queries = {
         auth?.role,
       );
     },
-  ),
-
-  issueListV2: syncedQueryWithContext(
-    'issueListV2',
-    z.tuple([
-      listContextParams,
-      z.string(),
-      z.number().nullable(),
-      issueRowSort.nullable(),
-      z.union([z.literal('forward'), z.literal('backward')]),
-    ]),
-    (auth: AuthData | undefined, listContext, userID, limit, start, dir) => {
-      let q = buildListQuery(listContext, start, dir)
-        .related('viewState', q => q.where('userID', userID).one())
-        .related('labels');
-      if (limit) {
-        q = q.limit(limit);
-      }
-      return applyIssuePermissions(q, auth?.role);
-    },
-  ),
-
-  emojiChange: syncedQuery('emojiChange', idValidator, subjectID =>
-    builder.emoji
-      .where('subjectID', subjectID ?? '')
-      .related('creator', creator => creator.one()),
   ),
 };
 
