@@ -170,7 +170,7 @@ export const queries = {
       z.union([z.literal('next'), z.literal('prev')]),
     ]),
     (auth: AuthData | undefined, listContext, issue, dir) =>
-      buildBaseListQuery({
+      buildListQuery({
         listContext: listContext ?? undefined,
         start: issue ?? undefined,
         dir: dir === 'next' ? 'forward' : 'backward',
@@ -200,17 +200,14 @@ function issueListV2(
   start: IssueRowSort | null,
   dir: 'forward' | 'backward',
 ) {
-  return applyIssuePermissions(
-    buildListQuery({
-      listContext,
-      limit: limit ?? undefined,
-      userID,
-      role: auth?.role,
-      start: start ?? undefined,
-      dir,
-    }),
-    auth?.role,
-  );
+  return buildListQuery({
+    listContext,
+    limit: limit ?? undefined,
+    userID,
+    role: auth?.role,
+    start: start ?? undefined,
+    dir,
+  });
 }
 
 export type ListQueryArgs = {
@@ -224,16 +221,6 @@ export type ListQueryArgs = {
 };
 
 export function buildListQuery(args: ListQueryArgs) {
-  return buildBaseListQuery(args)
-    .related('viewState', q =>
-      args.userID
-        ? q.where('userID', args.userID).one()
-        : q.where(({or}) => or()),
-    )
-    .related('labels');
-}
-
-export function buildBaseListQuery(args: ListQueryArgs) {
   const {
     issueQuery = builder.issue,
     limit,
@@ -255,7 +242,13 @@ export function buildBaseListQuery(args: ListQueryArgs) {
         ? 'desc'
         : 'asc';
 
-  let q = issueQuery;
+  let q = issueQuery
+    .related('viewState', q =>
+      args.userID
+        ? q.where('userID', args.userID).one()
+        : q.where(({or}) => or()),
+    )
+    .related('labels');
   if (start) {
     q = q.start(start);
   }
