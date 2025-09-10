@@ -70,5 +70,20 @@ const mockArgs = {
     'userID',
     10,
   ],
+  issueListV2: [
+    {
+      open: null,
+      assignee: null,
+      creator: null,
+      labels: null,
+      textFilter: null,
+      sortField: 'created',
+      sortDirection: 'asc',
+    },
+    'userID',
+    10,
+    {created: 100, id: 'id'},
+    'forward',
+  ],
   emojiChange: ['subjectID'],
 };
