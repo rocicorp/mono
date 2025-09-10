@@ -1,4 +1,4 @@
 export {
   expoSQLiteStoreProvider,
   type ExpoSQLiteStoreOptions,
-} from '../../replicache/src/kv/expo-sqlite/store.ts';
+} from './kv/expo-sqlite/store.ts';

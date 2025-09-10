@@ -2,6 +2,7 @@ import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type {FrozenJSONValue} from '../frozen-json.ts';
 import {ReadImpl} from './read-impl.ts';
 import type {Write} from './store.ts';
+import {transactionIsClosedRejection} from './throw-if-closed.ts';
 import {deleteSentinel, WriteImplBase} from './write-impl-base.ts';
 
 export class WriteImpl extends WriteImplBase implements Write {
@@ -13,6 +14,10 @@ export class WriteImpl extends WriteImplBase implements Write {
   }
 
   commit(): Promise<void> {
+    if (this.closed) {
+      return transactionIsClosedRejection();
+    }
+
     // HOT. Do not allocate entry tuple and destructure.
     this._pending.forEach((value, key) => {
       if (value === deleteSentinel) {
