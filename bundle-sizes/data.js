@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1757552642012,
+  "lastUpdate": 1757574708408,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -53385,6 +53385,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 31751,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0452ae2b68b7c09785c77dcdeed4693452df1709",
+          "message": "Change DeletedClients to use an array ID \"pairs\" (#4882)\n\nThis refactors the handling of deleted clients on the client side. Instead of tracking deleted clients by separate IDs, we now use tuples of `{clientGroupID, clientID}`. This change allows for more precise filtering: only deleted clients from the current client group are sent to the server.\n\nThe previous callback for garbage collecting client groups has been removed, as it was only triggered when deleting a group with no clients, something we no longer need to handle.\n\nAdditionally, the `clientGroupIDs` field in the protocol is now always an empty array. The server already tolerates its absence, and this makes it clearer what the message can contain.",
+          "timestamp": "2025-09-11T07:10:18Z",
+          "tree_id": "6be30b15782975ce094ff2dcf56cec565730d839",
+          "url": "https://github.com/rocicorp/mono/commit/0452ae2b68b7c09785c77dcdeed4693452df1709"
+        },
+        "date": 1757574696538,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 300916,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54309,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 110973,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31801,
             "unit": "bytes"
           }
         ]
