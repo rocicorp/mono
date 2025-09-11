@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1756932055471,
+  "lastUpdate": 1757552642012,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -53341,6 +53341,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 31840,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "mail@dpeek.com",
+            "name": "David",
+            "username": "dpeek"
+          },
+          "committer": {
+            "email": "aaron@aaronboodman.com",
+            "name": "Aaron Boodman",
+            "username": "aboodman"
+          },
+          "distinct": true,
+          "id": "ba0f4d5a69729e4d18c514c3395b41ffd2e35421",
+          "message": "Abort watchdog timer when ConnectionLoop is closed",
+          "timestamp": "2025-09-10T15:02:32-10:00",
+          "tree_id": "abb4836ff9ba264efbacf1f3c1009af0959172ba",
+          "url": "https://github.com/rocicorp/mono/commit/ba0f4d5a69729e4d18c514c3395b41ffd2e35421"
+        },
+        "date": 1757552629684,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 300802,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54278,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 110869,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31751,
             "unit": "bytes"
           }
         ]
