@@ -2,8 +2,11 @@
   "name": "eslint-plugin-rocicorp",
   "version": "1.0.0",
   "description": "Custom ESLint rules for Rocicorp",
-  "main": "index.js",
+  "main": "dist/index.js",
   "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run clean && npm run build",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -13,6 +16,10 @@
   ],
   "author": "Rocicorp",
   "license": "MIT",
+  "devDependencies": {
+    "@typescript-eslint/utils": "^6.7.4",
+    "typescript": "^5.0.0"
+  },
   "peerDependencies": {
     "eslint": ">=8.0.0",
     "@typescript-eslint/parser": ">=5.0.0",
