@@ -22,7 +22,7 @@
     "check-format": "prettier --check .",
     "check-types": "tsc && tsc --project tool/tsconfig.json",
     "check-types:watch": "tsc --watch",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "lint": "eslint src/",
     "build": "rm -rf out && tsc -p tsconfig.build.json && npx tsx tool/build.ts",
     "build-bundle-sizes": "rm -rf out && npx tsx tool/build.ts --bundle-sizes",
     "prepack": "npm run lint && npm run test && npm run build && mv README.md README-org.md && mv README-external.md README.md",
@@ -36,7 +36,7 @@
     "@rocicorp/resolver": "^1.0.2"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.7.0",
+    "@rocicorp/eslint-config": "^0.8.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "@types/command-line-usage": "^5.0.2",
     "@vitest/runner": "3.2.4",
@@ -84,8 +84,5 @@
     "out",
     "!*.tsbuildinfo"
   ],
-  "eslintConfig": {
-    "extends": "../../eslint-config.json"
-  },
   "prettier": "@rocicorp/prettier-config"
 }
