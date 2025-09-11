@@ -11,6 +11,7 @@ type MakeAllFieldsRequired<T> = {
   [K in keyof T]-?: MakeAllFieldsRequired<T[K]>;
 };
 
+/* eslint-disable @typescript-eslint/no-unused-expressions */
 (
   t: SchemaValue,
   inferredT: v.Infer<typeof schemaValueSchema>,

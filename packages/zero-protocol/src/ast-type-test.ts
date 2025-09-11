@@ -27,6 +27,7 @@ type MakeAllFieldsRequired<T> = {
   [K in keyof T]-?: MakeAllFieldsRequired<T[K]>;
 };
 
+/* eslint-disable @typescript-eslint/no-unused-expressions */
 (
   t: Omit<CorrelatedSubquery, 'subquery'>,
   inferredT: v.Infer<typeof correlatedSubquerySchemaOmitSubquery>,
