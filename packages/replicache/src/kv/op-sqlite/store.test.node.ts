@@ -3,7 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {expect, test, vi} from 'vitest';
 import {withRead, withWrite} from '../../with-transactions.ts';
-import {runSQLiteStoreTests} from '../sqlite-store-test-util.ts';
+import {
+  registerCreatedFile,
+  runSQLiteStoreTests,
+} from '../sqlite-store-test-util.ts';
 import {
   clearAllNamedOpSQLiteStoresForTesting,
   opSQLiteStoreProvider,
@@ -32,20 +35,25 @@ vi.mock('@op-engineering/op-sqlite', () => {
       encryptionKey?: string;
     }) => {
       const {name} = options;
-      const filename = path.resolve(__dirname, `${name}.db`);
+      // Add op_ prefix to match the actual store implementation
+      const prefixedName = `op_${name}`;
+      const filename = path.resolve(__dirname, `${prefixedName}.db`);
+
+      // Register the store name for cleanup (not the filename)
+      registerCreatedFile(name);
 
       // Get or create the actual database instance
       let db: ReturnType<typeof sqlite3>;
-      if (databases.has(name)) {
-        db = databases.get(name)!;
+      if (databases.has(prefixedName)) {
+        db = databases.get(prefixedName)!;
       } else {
         db = sqlite3(filename);
-        databases.set(name, db);
+        databases.set(prefixedName, db);
       }
 
       // Track connections to this database
-      const currentConnections = openConnections.get(name) || 0;
-      openConnections.set(name, currentConnections + 1);
+      const currentConnections = openConnections.get(prefixedName) || 0;
+      openConnections.set(prefixedName, currentConnections + 1);
 
       return {
         // eslint-disable-next-line require-await
@@ -76,27 +84,27 @@ vi.mock('@op-engineering/op-sqlite', () => {
           return [];
         },
         close: () => {
-          const connections = openConnections.get(name) || 1;
+          const connections = openConnections.get(prefixedName) || 1;
           if (connections <= 1) {
             // Last connection - actually close the database
             db.close();
-            databases.delete(name);
-            openConnections.delete(name);
+            databases.delete(prefixedName);
+            openConnections.delete(prefixedName);
           } else {
             // Still has other connections
-            openConnections.set(name, connections - 1);
+            openConnections.set(prefixedName, connections - 1);
           }
         },
         delete: () => {
           // Close any open connections first
-          if (databases.has(name)) {
-            const db = databases.get(name)!;
+          if (databases.has(prefixedName)) {
+            const db = databases.get(prefixedName)!;
             db.close();
-            databases.delete(name);
-            openConnections.delete(name);
+            databases.delete(prefixedName);
+            openConnections.delete(prefixedName);
           }
 
-          const filename = path.resolve(__dirname, `${name}.db`);
+          const filename = path.resolve(__dirname, `${prefixedName}.db`);
           if (fs.existsSync(filename)) {
             fs.unlinkSync(filename);
           }

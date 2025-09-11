@@ -1,6 +1,9 @@
 import {expect, test} from 'vitest';
 import {withRead, withWrite} from '../../with-transactions.ts';
-import {runSQLiteStoreTests} from '../sqlite-store-test-util.ts';
+import {
+  registerCreatedFile,
+  runSQLiteStoreTests,
+} from '../sqlite-store-test-util.ts';
 import {
   clearAllNamedZeroSQLiteStoresForTesting,
   zeroSQLiteStoreProvider,
@@ -14,14 +17,12 @@ const defaultStoreOptions = {
   readUncommitted: false,
 } as const;
 
-function getNewStore(name: string) {
-  const provider = zeroSQLiteStoreProvider(defaultStoreOptions);
-  return provider.create(name);
-}
-
 function createStore(name: string, opts?: ZeroSQLiteStoreOptions) {
   const provider = zeroSQLiteStoreProvider(opts);
-  return provider.create(name);
+  name = `zero_${name}`;
+  const store = provider.create(name);
+  registerCreatedFile(name);
+  return store;
 }
 
 // Run all shared SQLite store tests
@@ -29,7 +30,7 @@ runSQLiteStoreTests<ZeroSQLiteStoreOptions>({
   storeName: 'ZeroSQLiteStore',
   createStoreProvider: zeroSQLiteStoreProvider,
   clearAllNamedStores: clearAllNamedZeroSQLiteStoresForTesting,
-  createStoreWithDefaults: getNewStore,
+  createStoreWithDefaults: createStore,
   defaultStoreOptions,
 });
 

@@ -1,5 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import {afterEach, beforeEach, expect, test} from 'vitest';
 import {sleep} from '../../../shared/src/sleep.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
@@ -19,76 +17,42 @@ export interface SQLiteStoreTestConfig<TOptions = unknown> {
   defaultStoreOptions?: TOptions;
 }
 
-/**
- * Checks if a file is a SQLite database file that should be cleaned up
- */
-function isSQLiteFile(filename: string): boolean {
-  return (
-    filename.endsWith('.db') ||
-    filename.endsWith('.db-wal') ||
-    filename.endsWith('.db-shm') ||
-    filename === 'drop_test' ||
-    filename === 'pragma_test'
-  );
-}
+// Global set to track all created store names during tests
+const createdStoreNames = new Set<string>();
 
 /**
- * Cleans up SQLite files in a directory
+ * Registers a store name that was created during testing so it can be cleaned up later
  */
-function cleanupSQLiteFilesInDirectory(
-  dirPath: string,
-  extraFilter?: (filename: string) => boolean,
-): void {
-  if (!fs.existsSync(dirPath)) {
-    return;
-  }
-
-  const files = fs.readdirSync(dirPath);
-  for (const file of files) {
-    if (isSQLiteFile(file) && (extraFilter ? extraFilter(file) : true)) {
-      try {
-        fs.unlinkSync(path.join(dirPath, file));
-      } catch (error) {
-        // Ignore cleanup errors
-      }
-    }
-  }
+export function registerCreatedFile(storeName: string): void {
+  createdStoreNames.add(storeName);
 }
 
 /**
  * Shared cleanup function for SQLite store tests.
- * Removes database files from both test directory and repo root.
+ * Uses the store provider's drop method to properly clean up databases.
  */
-export function createCleanupFunction(
+function createCleanupFunction(
   clearAllNamedStores: () => void,
-  createdFilenames?: Set<string>,
+  storeProvider: StoreProvider,
 ) {
   return function cleanupTestDatabases() {
     clearAllNamedStores();
 
-    // Clean up tracked filenames (for stores that track created files)
-    if (createdFilenames) {
-      for (const filename of createdFilenames) {
-        if (fs.existsSync(filename)) {
-          try {
-            fs.unlinkSync(filename);
-          } catch (error) {
-            // Ignore cleanup errors
-          }
+    // Clean up tracked store names using the store provider's drop method
+    const cleanupPromises = Array.from(createdStoreNames).map(
+      async storeName => {
+        try {
+          await storeProvider.drop(storeName);
+        } catch (error) {
+          // Ignore cleanup errors
         }
-      }
-    }
-
-    // Clean up files in test directory
-    cleanupSQLiteFilesInDirectory(__dirname);
-
-    // Clean up database files in the repo root (current working directory)
-    // These are created by tests that use provider.create() directly with names like 'drop-test'
-    // Filter out node_modules to avoid accidentally deleting unrelated files
-    cleanupSQLiteFilesInDirectory(
-      process.cwd(),
-      filename => !filename.includes('node_modules'),
+      },
     );
+
+    // Wait for all cleanup operations to complete
+    void Promise.all(cleanupPromises).finally(() => {
+      createdStoreNames.clear();
+    });
   };
 }
 
@@ -108,7 +72,10 @@ export function runSQLiteStoreTests<TOptions = unknown>(
   } = config;
 
   // Create cleanup function
-  const cleanupTestDatabases = createCleanupFunction(clearAllNamedStores);
+  const cleanupTestDatabases = createCleanupFunction(
+    clearAllNamedStores,
+    createStoreProvider(defaultStoreOptions),
+  );
 
   beforeEach(() => {
     cleanupTestDatabases();
@@ -265,6 +232,7 @@ export function runSQLiteStoreTests<TOptions = unknown>(
     const storeName = `drop-test-${++storeCounter}`;
 
     const store1 = provider.create(storeName);
+    registerCreatedFile(storeName);
 
     await withWrite(store1, async wt => {
       await wt.put('persistent-key', 'persistent-value');
@@ -316,9 +284,10 @@ export function runSQLiteStoreTests<TOptions = unknown>(
 
   test('different configuration options', async () => {
     // Test with different configuration options
-    const storeWithOptions = createStoreProvider(defaultStoreOptions).create(
-      `pragma-test-${++storeCounter}`,
-    );
+    const storeName = `pragma-test-${++storeCounter}`;
+    const storeWithOptions =
+      createStoreProvider(defaultStoreOptions).create(storeName);
+    registerCreatedFile(storeName);
 
     await withWrite(storeWithOptions, async wt => {
       await wt.put('config-test', 'configured-value');

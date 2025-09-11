@@ -63,7 +63,6 @@ export class SQLiteStore implements Store {
     opts?: SQLiteStoreOptions,
   ) {
     this.#filename = safeFilename(name);
-
     this.#entry = getOrCreateEntry(name, create, opts);
   }
 
