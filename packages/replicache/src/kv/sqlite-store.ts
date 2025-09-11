@@ -331,7 +331,9 @@ function getOrCreateEntry(
   };
   stores.set(filename, newEntry);
   return newEntry;
-} /**
+}
+
+/**
  * Decrements the reference count for a shared store and cleans up resources
  * when the last reference is released.
  */
