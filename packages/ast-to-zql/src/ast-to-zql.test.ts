@@ -1,7 +1,7 @@
 import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {expect, test} from 'vitest';
 import {type AST} from '../../zero-protocol/src/ast.ts';
-import {ast} from '../../zql/src/query/query-impl.ts';
+import {ast, type AnyQuery} from '../../zql/src/query/query-impl.ts';
 import {staticQuery} from '../../zql/src/query/static-query.ts';
 import {generateQuery} from '../../zql/src/query/test/query-gen.ts';
 import {generateSchema} from '../../zql/src/query/test/schema-gen.ts';
@@ -653,12 +653,14 @@ test('round trip', () => {
     const code = astToZQL(ast(q));
     codes.push(code);
 
+    // eslint-disable-next-line @typescript-eslint/no-implied-eval, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment
     const q2 = new Function(
       'staticQuery',
       'schema',
       'tableName',
       `return staticQuery(schema, tableName)${code}`,
-    )(staticQuery, schema, ast(q).table);
+    )(staticQuery, schema, ast(q).table) as AnyQuery;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     expect(ast(q2)).toEqual(ast(q));
   }
 

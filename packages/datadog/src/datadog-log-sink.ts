@@ -157,7 +157,7 @@ export class DatadogLogSink implements LogSink {
               'response',
               response.status,
               response.statusText,
-              await response.text,
+              await response.text(),
             );
           }
         } catch (e) {

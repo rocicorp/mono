@@ -8,8 +8,8 @@ import {
   MAX_LOG_ENTRIES_PER_FLUSH,
 } from './datadog-log-sink.ts';
 
-const originalFetch = globalThis.fetch;
-const fetch = vi.fn<typeof originalFetch>();
+const _originalFetch = globalThis.fetch;
+const fetch = vi.fn<typeof _originalFetch>();
 globalThis.fetch = fetch;
 
 beforeEach(() => {
@@ -80,7 +80,7 @@ test('does not flush more than max entries', async () => {
 
   const numLogEntriesInRequest = (n: number) => {
     const body = fetch.mock.calls[n][1]?.body;
-    return String(body).split('\n').length;
+    return (body as string).split('\n').length;
   };
 
   // Wait for the resulting flush() to call fetch.
@@ -140,7 +140,7 @@ test('flushes MAX_LOG_ENTRIES_PER_FLUSH at a time until size is below FORCE_FLUS
 
   const numLogEntriesInRequest = (n: number) => {
     const body = fetch.mock.calls[n][1]?.body;
-    return String(body).split('\n').length;
+    return (body as string).split('\n').length;
   };
 
   // Wait for the resulting flush() to call fetch.
@@ -442,7 +442,11 @@ test('Errors in multi arg messages are converted to JSON', async () => {
   if (!body) {
     throw new Error('Expect body to be defined and non-null');
   }
-  const parsedBody = JSON.parse(body.toString());
+  const parsedBody = JSON.parse(body as string) as {
+    date: number;
+    status: string;
+    message: Array<string | { name: string; message: string; stack: string }>;
+  };
   expect(parsedBody.date).toEqual(1);
   expect(parsedBody.status).toEqual('info');
   expect(parsedBody.message.length).toEqual(3);
@@ -478,7 +482,11 @@ test('Errors in single arg messages are converted to JSON', async () => {
   if (!body) {
     throw new Error('Expect body to be defined and non-null');
   }
-  const parsedBody = JSON.parse(body.toString());
+  const parsedBody = JSON.parse(body as string) as {
+    date: number;
+    status: string;
+    message: { name: string; message: string; stack: string };
+  };
   expect(parsedBody.date).toEqual(1);
   expect(parsedBody.status).toEqual('info');
   expect(parsedBody.message.name).toEqual('Error');
@@ -788,6 +796,6 @@ async function microtasksUntil(p: () => boolean) {
     if (p()) {
       return;
     }
-    await 'microtask';
+    await Promise.resolve();
   }
 }

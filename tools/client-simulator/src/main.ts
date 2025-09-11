@@ -58,7 +58,7 @@ function run() {
           write: (data, _encoding, callback) => {
             try {
               const message = v.parse(
-                JSON.parse(data.toString()),
+                JSON.parse(String(data)),
                 downstreamSchema,
               );
               const type = message[0];
