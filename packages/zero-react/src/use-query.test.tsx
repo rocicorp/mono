@@ -1116,4 +1116,120 @@ describe('useSuspenseQuery', () => {
       expect((capturedDetails as any).refetch).toBeUndefined();
     });
   });
+
+  describe('view management after fix', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    test('concurrent getView calls ideally share the same view', async () => {
+      const viewStore = new ViewStore();
+      const zero = newMockZero('client1');
+      const query = newMockQuery('query1');
+
+      // Simulate concurrent calls
+      const promises = Array.from({length: 10}, () =>
+        Promise.resolve().then(() =>
+          viewStore.getView(zero, query, true, 'forever'),
+        ),
+      );
+
+      const views = await Promise.all(promises);
+
+      // Check if views are shared (ideal case)
+      const uniqueViews = new Set(views);
+      expect(uniqueViews.size).toBe(1);
+
+      // Subscribe to all views
+      const cleanups = views.map(v => v.subscribeReactInternals(() => {}));
+
+      // Clean up all
+      cleanups.forEach(cleanup => cleanup());
+      vi.advanceTimersByTime(100);
+
+      // Verify all views are eventually cleaned up
+      expect(getAllViewsSizeForTesting(viewStore)).toBe(0);
+    });
+
+    test('rapid mount/unmount/remount reuses view when possible', () => {
+      const viewStore = new ViewStore();
+      const zero = newMockZero('client1');
+      const query = newMockQuery('query1');
+
+      const views = [];
+
+      // Simulate React strict mode double-mounting
+      for (let i = 0; i < 5; i++) {
+        const view = viewStore.getView(zero, query, true, 'forever');
+        views.push(view);
+        const cleanup = view.subscribeReactInternals(() => {});
+
+        // Immediate cleanup (unmount)
+        cleanup();
+
+        // Immediate remount before timeout
+        const view2 = viewStore.getView(zero, query, true, 'forever');
+        views.push(view2);
+        const cleanup2 = view2.subscribeReactInternals(() => {});
+
+        // In ideal case, should reuse the same view
+        // There can be an edge case where we do not share the view.
+        // If this test is able to trigger that we should change expectation
+        // that ~99% of the time we share the view.
+        expect(view).toBe(view2);
+
+        cleanup2();
+      }
+
+      // Verify cleanup works regardless of whether views were shared
+      vi.advanceTimersByTime(100);
+      expect(getAllViewsSizeForTesting(viewStore)).toBe(0);
+    });
+
+    test('overlapping cleanup timers all resolve correctly', () => {
+      const viewStore = new ViewStore();
+      const zero = newMockZero('client1');
+      const query = newMockQuery('query1');
+
+      // Create multiple views that might or might not be shared
+      const subscriptions = [];
+
+      for (let i = 0; i < 3; i++) {
+        const view = viewStore.getView(zero, query, true, 'forever');
+        const cleanup = view.subscribeReactInternals(() => {});
+        subscriptions.push({view, cleanup});
+      }
+
+      // Stagger the cleanups to create overlapping timers
+      subscriptions[0].cleanup();
+      vi.advanceTimersByTime(3);
+
+      subscriptions[1].cleanup();
+      vi.advanceTimersByTime(3);
+
+      subscriptions[2].cleanup();
+      vi.advanceTimersByTime(3);
+
+      // Some timers still pending
+      expect(getAllViewsSizeForTesting(viewStore)).toBeGreaterThan(0);
+
+      vi.advanceTimersByTime(3);
+      // Some timers still pending
+      expect(getAllViewsSizeForTesting(viewStore)).toBeGreaterThan(0);
+
+      vi.advanceTimersByTime(3);
+      // Some timers still pending
+      expect(getAllViewsSizeForTesting(viewStore)).toBeGreaterThan(0);
+
+      // Advance past all cleanup timers
+      vi.advanceTimersByTime(100);
+
+      // All views should be cleaned up
+      expect(getAllViewsSizeForTesting(viewStore)).toBe(0);
+    });
+  });
 });

@@ -371,25 +371,14 @@ export class ViewStore {
     const hash = query.hash() + zero.clientID;
     let existing = this.#views.get(hash);
     if (!existing) {
-      existing = new ViewWrapper(
-        zero,
-        query,
-        format,
-        ttl,
-        view => {
-          const lastView = this.#views.get(hash);
-          // I don't think this can happen
-          // but lets guard against it so we don't
-          // leak resources.
-          if (lastView && lastView !== view) {
-            throw new Error('View already exists');
-          }
-          this.#views.set(hash, view);
-        },
-        () => {
-          this.#views.delete(hash);
-        },
-      );
+      existing = new ViewWrapper(zero, query, format, ttl, view => {
+        const currentView = this.#views.get(hash);
+        if (currentView && currentView !== view) {
+          // we replaced the view with a new one already.
+          return;
+        }
+        this.#views.delete(hash);
+      });
       this.#views.set(hash, existing);
     } else {
       existing.updateTTL(ttl);
@@ -433,7 +422,6 @@ class ViewWrapper<
   #zero: Zero<TSchema>;
   #view: TypedView<HumanReadable<TReturn>> | undefined;
   readonly #onDematerialized;
-  readonly #onMaterialized;
   readonly #query: Query<TSchema, TTable, TReturn>;
   readonly #format: Format;
   #snapshot: QueryResult<TReturn>;
@@ -449,14 +437,12 @@ class ViewWrapper<
     query: Query<TSchema, TTable, TReturn>,
     format: Format,
     ttl: TTL,
-    onMaterialized: (view: ViewWrapper<TSchema, TTable, TReturn>) => void,
-    onDematerialized: () => void,
+    onDematerialized: (view: ViewWrapper<TSchema, TTable, TReturn>) => void,
   ) {
     this.#zero = zero;
     this.#query = query;
     this.#format = format;
     this.#ttl = ttl;
-    this.#onMaterialized = onMaterialized;
     this.#onDematerialized = onDematerialized;
     this.#snapshot = getDefaultSnapshot(format.singular);
     this.#reactInternals = new Set();
@@ -517,8 +503,6 @@ class ViewWrapper<
 
     this.#view = this.#zero.materialize(this.#query, {ttl: this.#ttl});
     this.#view.addListener(this.#onData);
-
-    this.#onMaterialized(this);
   };
 
   getSnapshot = () => this.#snapshot;
@@ -532,23 +516,25 @@ class ViewWrapper<
       // only schedule a cleanup task if we have no listeners left
       if (this.#reactInternals.size === 0) {
         setTimeout(() => {
+          // We already destroyed the view
+          if (this.#view === undefined) {
+            return;
+          }
+
           // Someone re-registered a listener on this view before the timeout elapsed.
           // This happens often in strict-mode which forces a component
           // to mount, unmount, remount.
           if (this.#reactInternals.size > 0) {
             return;
           }
-          // We already destroyed the view
-          if (this.#view === undefined) {
-            return;
-          }
+
           this.#view.destroy();
           this.#view = undefined;
           this.#complete = false;
           this.#completeResolver = resolver();
           this.#nonEmpty = false;
           this.#nonEmptyResolver = resolver();
-          this.#onDematerialized();
+          this.#onDematerialized(this);
         }, 10);
       }
     };
