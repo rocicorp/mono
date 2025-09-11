@@ -61,7 +61,8 @@ export function setupOtelDiagnosticLogger(
           msg.includes('Request Timeout') ||
           msg.includes('Unexpected server response: 502') ||
           msg.includes('Export failed with retryable status') ||
-          msg.includes('Method Not Allowed')
+          msg.includes('Method Not Allowed') ||
+          msg.includes('socket hang up')
         ) {
           log.warn?.(msg, ...args);
         } else {

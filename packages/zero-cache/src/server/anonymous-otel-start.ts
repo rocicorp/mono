@@ -28,6 +28,8 @@ class AnonymousTelemetryManager {
   #meterProvider!: MeterProvider;
   #totalCrudMutations = 0;
   #totalCustomMutations = 0;
+  #totalCrudQueries = 0;
+  #totalCustomQueries = 0;
   #totalRowsSynced = 0;
   #totalConnectionsSuccess = 0;
   #totalConnectionsAttempted = 0;
@@ -154,6 +156,24 @@ class AnonymousTelemetryManager {
         description: 'Total number of mutations processed',
       },
     );
+    const crudQueriesCounter = this.#meter.createObservableCounter(
+      'zero.crud_queries_processed',
+      {
+        description: 'Total number of CRUD queries processed',
+      },
+    );
+    const customQueriesCounter = this.#meter.createObservableCounter(
+      'zero.custom_queries_processed',
+      {
+        description: 'Total number of custom queries processed',
+      },
+    );
+    const totalQueriesCounter = this.#meter.createObservableCounter(
+      'zero.queries_processed',
+      {
+        description: 'Total number of queries processed',
+      },
+    );
     const rowsSyncedCounter = this.#meter.createObservableCounter(
       'zero.rows_synced',
       {
@@ -213,6 +233,21 @@ class AnonymousTelemetryManager {
       result.observe(totalMutations, attrs);
       this.#lc?.debug?.(`telemetry: total_mutations=${totalMutations}`);
     });
+    crudQueriesCounter.addCallback((result: ObservableResult) => {
+      result.observe(this.#totalCrudQueries, attrs);
+      this.#lc?.debug?.(`telemetry: crud_queries=${this.#totalCrudQueries}`);
+    });
+    customQueriesCounter.addCallback((result: ObservableResult) => {
+      result.observe(this.#totalCustomQueries, attrs);
+      this.#lc?.debug?.(
+        `telemetry: custom_queries=${this.#totalCustomQueries}`,
+      );
+    });
+    totalQueriesCounter.addCallback((result: ObservableResult) => {
+      const totalQueries = this.#totalCrudQueries + this.#totalCustomQueries;
+      result.observe(totalQueries, attrs);
+      this.#lc?.debug?.(`telemetry: total_queries=${totalQueries}`);
+    });
     rowsSyncedCounter.addCallback((result: ObservableResult) => {
       result.observe(this.#totalRowsSynced, attrs);
       this.#lc?.debug?.(`telemetry: rows_synced=${this.#totalRowsSynced}`);
@@ -243,6 +278,14 @@ class AnonymousTelemetryManager {
       this.#totalCrudMutations += count;
     } else {
       this.#totalCustomMutations += count;
+    }
+  }
+
+  recordQuery(type: 'crud' | 'custom', count = 1) {
+    if (type === 'crud') {
+      this.#totalCrudQueries += count;
+    } else {
+      this.#totalCustomQueries += count;
     }
   }
 
@@ -429,6 +472,8 @@ export const startAnonymousTelemetry = (lc?: LogContext, config?: ZeroConfig) =>
   manager().start(lc, config);
 export const recordMutation = (type: 'crud' | 'custom', count = 1) =>
   manager().recordMutation(type, count);
+export const recordQuery = (type: 'crud' | 'custom', count = 1) =>
+  manager().recordQuery(type, count);
 export const recordRowsSynced = (count: number) =>
   manager().recordRowsSynced(count);
 export const recordConnectionSuccess = () =>

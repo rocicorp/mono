@@ -10,6 +10,7 @@ import {
   recordConnectionAttempted,
   recordConnectionSuccess,
   recordMutation,
+  recordQuery,
   recordRowsSynced,
   shutdownAnonymousTelemetry,
   startAnonymousTelemetry,
@@ -261,6 +262,27 @@ describe('Anonymous Telemetry Integration Tests', () => {
       );
 
       expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
+        'zero.crud_queries_processed',
+        {
+          description: 'Total number of CRUD queries processed',
+        },
+      );
+
+      expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
+        'zero.custom_queries_processed',
+        {
+          description: 'Total number of custom queries processed',
+        },
+      );
+
+      expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
+        'zero.queries_processed',
+        {
+          description: 'Total number of queries processed',
+        },
+      );
+
+      expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
         'zero.rows_synced',
         {
           description: 'Total number of rows synced',
@@ -294,7 +316,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
     test('should register callbacks for observable metrics', () => {
       // Each observable should have a callback registered
       expect(mockObservableGauge.addCallback).toHaveBeenCalledTimes(2); // 2 gauges (uptime, active_client_groups)
-      expect(mockObservableCounter.addCallback).toHaveBeenCalledTimes(7); // 7 counters (uptime_counter, crud_mutations, custom_mutations, total_mutations, rows_synced, connections_success, connections_attempted)
+      expect(mockObservableCounter.addCallback).toHaveBeenCalledTimes(10); // 10 counters (uptime_counter, crud_mutations, custom_mutations, total_mutations, crud_queries, custom_queries, total_queries, rows_synced, connections_success, connections_attempted)
     });
   });
 
@@ -303,6 +325,8 @@ describe('Anonymous Telemetry Integration Tests', () => {
       // Test basic metric recording without histogram functions
       expect(() => recordMutation('crud')).not.toThrow();
       expect(() => recordMutation('custom')).not.toThrow();
+      expect(() => recordQuery('crud')).not.toThrow();
+      expect(() => recordQuery('custom')).not.toThrow();
       expect(() => recordRowsSynced(42)).not.toThrow();
       expect(() => recordConnectionSuccess()).not.toThrow();
       expect(() => recordConnectionAttempted()).not.toThrow();
@@ -317,6 +341,17 @@ describe('Anonymous Telemetry Integration Tests', () => {
       // Mutations should be accumulated internally
       // The actual value will be observed when the callback is triggered
       expect(() => recordMutation('custom')).not.toThrow();
+    });
+
+    test('should accumulate query counts', () => {
+      // Record multiple queries
+      recordQuery('crud');
+      recordQuery('custom');
+      recordQuery('crud');
+
+      // Queries should be accumulated internally
+      // The actual value will be observed when the callback is triggered
+      expect(() => recordQuery('custom')).not.toThrow();
     });
 
     test('should accumulate rows synced counts', () => {
@@ -356,6 +391,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
       // Test that platform detection works without throwing
       expect(() => {
         recordMutation('crud');
+        recordQuery('crud');
         recordRowsSynced(10);
       }).not.toThrow();
     });
@@ -366,6 +402,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
       // Test that telemetry operations work properly
       expect(() => {
         recordMutation('crud');
+        recordQuery('custom');
         recordRowsSynced(50);
       }).not.toThrow();
     });
@@ -478,6 +515,8 @@ describe('Anonymous Telemetry Integration Tests', () => {
       // Add some test data
       recordMutation('crud');
       recordMutation('crud');
+      recordQuery('crud');
+      recordQuery('custom');
       recordRowsSynced(100);
 
       // Get the callbacks that were registered
@@ -582,6 +621,8 @@ describe('Anonymous Telemetry Integration Tests', () => {
       // Record some mutations and rows
       recordMutation('crud');
       recordMutation('crud');
+      recordQuery('crud');
+      recordQuery('custom');
       recordRowsSynced(50);
       recordRowsSynced(25);
 
@@ -624,6 +665,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
         // Record additional activity
         recordMutation('crud');
+        recordQuery('custom');
         recordRowsSynced(10);
 
         // Reset mocks for second observation
