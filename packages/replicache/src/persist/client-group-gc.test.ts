@@ -14,7 +14,6 @@ import {
   setClientGroups,
 } from './client-groups.ts';
 import {makeClientV6, setClientsForTesting} from './clients-test-helpers.ts';
-import type {OnClientsDeleted} from './clients.ts';
 
 const START_TIME = 0;
 const FIVE_MINS_IN_MS = 5 * 60 * 1000;
@@ -107,11 +106,9 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
 
   const enableMutationRecovery = true;
   const controller = new AbortController();
-  const onClientsDeleted = vi.fn<OnClientsDeleted>();
   initClientGroupGC(
     dagStore,
     enableMutationRecovery,
-    onClientsDeleted,
     new LogContext(),
     controller.signal,
   );
@@ -131,9 +128,6 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
     'client-group-1': clientGroup1,
     'client-group-2': clientGroup2,
   });
-
-  expect(onClientsDeleted).toHaveBeenCalledTimes(1);
-  expect(onClientsDeleted).toHaveBeenCalledWith([], ['client-group-3']);
 
   // Delete client1
   await setClientsForTesting(
@@ -280,12 +274,10 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
   );
 
   const enableMutationRecovery = false;
-  const onClientsDeleted = vi.fn<OnClientsDeleted>();
   const controller = new AbortController();
   initClientGroupGC(
     dagStore,
     enableMutationRecovery,
-    onClientsDeleted,
     new LogContext(),
     controller.signal,
   );

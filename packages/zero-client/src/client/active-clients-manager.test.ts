@@ -10,6 +10,7 @@ import {
 import {Queue} from '../../../shared/src/queue.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {ActiveClientsManager} from './active-clients-manager.ts';
+import {waitForPostMessage} from './test-utils.ts';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -883,19 +884,3 @@ describe('ActiveClientManager', () => {
     );
   });
 });
-
-// postMessage uses a message queue. By adding another message to the queue,
-// we can ensure that the first message is processed before the second one.
-function waitForPostMessage() {
-  return new Promise<void>(resolve => {
-    const name = nanoid();
-    const c1 = new BroadcastChannel(name);
-    const c2 = new BroadcastChannel(name);
-    c2.postMessage('');
-    c1.onmessage = () => {
-      c1.close();
-      c2.close();
-      resolve();
-    };
-  });
-}

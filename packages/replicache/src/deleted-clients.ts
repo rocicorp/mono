@@ -1,36 +1,113 @@
+import {stringCompare} from '../../shared/src/string-compare.ts';
 import * as v from '../../shared/src/valita.ts';
 import type {Read, Write} from './dag/store.ts';
 import {deepFreeze} from './frozen-json.ts';
-import type {ClientGroupID, ClientID} from './sync/ids.ts';
+import {getClients, setClients} from './persist/clients.ts';
+import {
+  clientGroupIDSchema,
+  clientIDSchema,
+  type ClientGroupID,
+  type ClientID,
+} from './sync/ids.ts';
 
 /**
  * We keep track of deleted clients in the {@linkcode DELETED_CLIENTS_HEAD_NAME}
  * head.
  */
-export const DELETED_CLIENTS_HEAD_NAME = 'deleted-clients';
+export const DELETED_CLIENTS_HEAD_NAME = 'deleted-clients-v2';
 
-export const deletedClientsSchema = v.readonlyObject({
-  clientIDs: v.readonlyArray(v.string()),
-  clientGroupIDs: v.readonlyArray(v.string()),
-});
+type ClientIDPair = {
+  clientGroupID: ClientGroupID;
+  clientID: ClientID;
+};
 
-// Before 11facd03a88b95667d1f171610548de5984dd928 this was an array of strings.
-// We need to allow reading that format.
-const legacyDeletedClientsSchema = v.readonlyArray(v.string());
+export type DeletedClients = readonly Readonly<ClientIDPair>[];
 
-export type DeletedClients = v.Infer<typeof deletedClientsSchema>;
+export type WritableDeletedClients = ClientIDPair[];
+
+export const deletedClientsSchema: v.Type<DeletedClients> = v.readonlyArray(
+  v.readonlyObject({
+    clientGroupID: clientGroupIDSchema,
+    clientID: clientIDSchema,
+  }),
+);
+
+function compare(a: ClientIDPair, b: ClientIDPair): number {
+  const cg = stringCompare(a.clientGroupID, b.clientGroupID);
+  if (cg !== 0) {
+    return cg;
+  }
+  return stringCompare(a.clientID, b.clientID);
+}
+
+export function normalizeDeletedClients(
+  deletedClients: DeletedClients,
+): DeletedClients {
+  // dedupe
+  return [...deletedClients]
+    .sort(compare)
+    .filter(
+      (item, index) =>
+        index === 0 ||
+        compare(item, [...deletedClients].sort(compare)[index - 1]) !== 0,
+    );
+}
+
+export function mergeDeletedClients(
+  a: DeletedClients,
+  b: DeletedClients,
+): DeletedClients {
+  const merged: WritableDeletedClients = [];
+  a = normalizeDeletedClients(a);
+  b = normalizeDeletedClients(b);
+  for (let i = 0, j = 0; i < a.length || j < b.length; ) {
+    if (i < a.length && (j >= b.length || compare(a[i], b[j]) < 0)) {
+      merged.push(a[i]);
+      i++;
+    } else if (j < b.length && (i >= a.length || compare(b[j], a[i]) < 0)) {
+      merged.push(b[j]);
+      j++;
+    } else {
+      // equal
+      merged.push(a[i]);
+      i++;
+      j++;
+    }
+  }
+  return merged;
+}
+
+export function removeFromDeletedClients(
+  old: DeletedClients,
+  toRemove: DeletedClients,
+): DeletedClients {
+  old = normalizeDeletedClients(old);
+  toRemove = normalizeDeletedClients(toRemove);
+  const result: WritableDeletedClients = [];
+  for (let i = 0, j = 0; i < old.length; ) {
+    if (j >= toRemove.length || compare(old[i], toRemove[j]) < 0) {
+      result.push(old[i]);
+      i++;
+    } else if (j < toRemove.length && compare(old[i], toRemove[j]) === 0) {
+      // equal, skip
+      i++;
+      j++;
+    } else {
+      // old[i] > toRemove[j]
+      j++;
+    }
+  }
+  return result;
+}
 
 export async function setDeletedClients(
   dagWrite: Write,
-  clientIDs: readonly ClientID[],
-  clientGroupIDs: readonly ClientGroupID[],
+  deletedClients: DeletedClients,
 ): Promise<DeletedClients> {
   // sort and dedupe
 
-  const data = {
-    clientIDs: normalize(clientIDs),
-    clientGroupIDs: normalize(clientGroupIDs),
-  };
+  const data = normalizeDeletedClients(deletedClients);
+
   const chunkData = deepFreeze(data);
   const chunk = dagWrite.createChunk(chunkData, []);
   await dagWrite.putChunk(chunk);
@@ -43,17 +120,18 @@ export async function getDeletedClients(
 ): Promise<DeletedClients> {
   const hash = await dagRead.getHead(DELETED_CLIENTS_HEAD_NAME);
   if (hash === undefined) {
-    return {clientIDs: [], clientGroupIDs: []};
+    return [];
   }
   const chunk = await dagRead.mustGetChunk(hash);
 
-  // Try legacy schema
-  const res = v.test(chunk.data, legacyDeletedClientsSchema);
-  if (res.ok) {
-    return {clientIDs: res.value, clientGroupIDs: []};
+  const res = v.test(chunk.data, deletedClientsSchema);
+  if (!res.ok) {
+    // If not ok then we ignore this. It might be in the old format but we do
+    // not know the clientGroupID of the old clients.
+    return [];
   }
 
-  return v.parse(chunk.data, deletedClientsSchema);
+  return res.value;
 }
 
 /**
@@ -62,33 +140,57 @@ export async function getDeletedClients(
  */
 export async function addDeletedClients(
   dagWrite: Write,
-  clientIDs: ClientID[],
-  clientGroupIDs: ClientGroupID[],
+  deletedClientsToAdd: DeletedClients,
 ): Promise<DeletedClients> {
-  const {clientIDs: oldClientIDs, clientGroupIDs: oldClientGroupIDs} =
-    await getDeletedClients(dagWrite);
+  const oldDeletedClients = await getDeletedClients(dagWrite);
 
   return setDeletedClients(
     dagWrite,
-    [...oldClientIDs, ...clientIDs],
-    [...oldClientGroupIDs, ...clientGroupIDs],
+    mergeDeletedClients(oldDeletedClients, deletedClientsToAdd),
   );
 }
 
 export async function removeDeletedClients(
   dagWrite: Write,
-  clientIDs: readonly ClientID[],
-  clientGroupIDs: readonly ClientGroupID[],
+  deletedClientsToRemove: DeletedClients,
 ): Promise<DeletedClients> {
-  const {clientIDs: oldClientIDs, clientGroupIDs: oldClientGroupIDs} =
-    await getDeletedClients(dagWrite);
-  const newDeletedClients = oldClientIDs.filter(
-    clientID => !clientIDs.includes(clientID),
+  const oldDeletedClients = await getDeletedClients(dagWrite);
+  return setDeletedClients(
+    dagWrite,
+    removeFromDeletedClients(oldDeletedClients, deletedClientsToRemove),
   );
-  const newDeletedClientGroups = oldClientGroupIDs.filter(
-    clientGroupID => !clientGroupIDs.includes(clientGroupID),
+}
+
+export async function confirmDeletedClients(
+  dagWrite: Write,
+  deletedClientIds: readonly ClientID[],
+  deletedClientGroupIds: readonly ClientGroupID[],
+): Promise<DeletedClients> {
+  const deletedClientIDSet = new Set(deletedClientIds);
+  const deletedClientGroupIDSet = new Set(deletedClientGroupIds);
+  const oldDeletedClients = await getDeletedClients(dagWrite);
+  const clients = new Map(await getClients(dagWrite));
+  for (const clientID of deletedClientIds) {
+    clients.delete(clientID);
+  }
+  for (const clientGroupID of deletedClientGroupIds) {
+    for (const [clientID, client] of clients) {
+      if (client.clientGroupID === clientGroupID) {
+        clients.delete(clientID);
+      }
+    }
+  }
+
+  await setClients(clients, dagWrite);
+
+  return setDeletedClients(
+    dagWrite,
+    oldDeletedClients.filter(
+      ({clientGroupID, clientID}) =>
+        !deletedClientGroupIDSet.has(clientGroupID) &&
+        !deletedClientIDSet.has(clientID),
+    ),
   );
-  return setDeletedClients(dagWrite, newDeletedClients, newDeletedClientGroups);
 }
 
 /**

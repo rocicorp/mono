@@ -1,6 +1,15 @@
 import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
-import {setDeletedClients} from '../../../replicache/src/deleted-clients.ts';
+import type {Write} from '../../../replicache/src/dag/store.ts';
+import {
+  setDeletedClients,
+  type DeletedClients,
+} from '../../../replicache/src/deleted-clients.ts';
+import {makeClientV6} from '../../../replicache/src/persist/clients-test-helpers.ts';
+import {
+  getClients,
+  setClients,
+} from '../../../replicache/src/persist/clients.ts';
 import {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
 import type {
   ClientGroupID,
@@ -28,9 +37,9 @@ import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import {
+  pushMessageSchema,
   type CRUDOp,
   type Mutation,
-  pushMessageSchema,
 } from '../../../zero-protocol/src/push.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
 import {
@@ -443,9 +452,12 @@ const mockQueryManager = {
 
 const mockDeleteClientsManager = {
   getDeletedClients: () =>
-    Promise.resolve({
-      clientIDs: ['old-deleted-client'],
-    }),
+    Promise.resolve([
+      {
+        clientGroupID: 'testClientGroupID',
+        clientID: 'old-deleted-client',
+      },
+    ]),
 } as unknown as DeleteClientsManager;
 
 describe('createSocket', () => {
@@ -756,7 +768,7 @@ describe('initConnection', () => {
   test('sent when connected message received but before ConnectionState.Connected desired queries > maxHeaderLength, with deletedClients', async () => {
     const r = await zeroForTestWithDeletedClients({
       maxHeaderLength: 0,
-      deletedClients: ['a'],
+      deletedClients: [{clientID: 'a'}],
       schema: createSchema({
         tables: [
           table('def')
@@ -813,7 +825,7 @@ describe('initConnection', () => {
   test('sent when connected message received but before ConnectionState.Connected desired queries > maxHeaderLength, with deletedClientGroups', async () => {
     const r = await zeroForTestWithDeletedClients({
       maxHeaderLength: 0,
-      deletedClientGroups: ['a'],
+      deletedClients: [{clientGroupID: 'other', clientID: 'a'}],
       schema: createSchema({
         tables: [
           table('ijk')
@@ -830,35 +842,30 @@ describe('initConnection', () => {
     mockSocket.onUpstream(msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
-        [
-          "initConnection",
-          {
-            "clientSchema": {
-              "tables": {
-                "ijk": {
-                  "columns": {
-                    "id": {
-                      "type": "string",
+          [
+            "initConnection",
+            {
+              "clientSchema": {
+                "tables": {
+                  "ijk": {
+                    "columns": {
+                      "id": {
+                        "type": "string",
+                      },
+                      "value": {
+                        "type": "string",
+                      },
                     },
-                    "value": {
-                      "type": "string",
-                    },
+                    "primaryKey": [
+                      "id",
+                    ],
                   },
-                  "primaryKey": [
-                    "id",
-                  ],
                 },
               },
+              "desiredQueriesPatch": [],
             },
-            "deleted": {
-              "clientGroupIDs": [
-                "a",
-              ],
-            },
-            "desiredQueriesPatch": [],
-          },
-        ]
-      `);
+          ]
+        `);
       expect(r.connectionState).toEqual(ConnectionState.Connecting);
     });
 
@@ -934,28 +941,61 @@ describe('initConnection', () => {
     MD extends CustomMutatorDefs = CustomMutatorDefs,
   >(
     options: Partial<ZeroOptions<S, MD>> & {
-      deletedClients?: ClientID[] | undefined;
-      deletedClientGroups?: ClientGroupID[] | undefined;
+      deletedClients?:
+        | {clientGroupID?: ClientGroupID | undefined; clientID: ClientID}[]
+        | undefined;
     },
   ): Promise<TestZero<S, MD>> {
     // We need to set the deleted clients before creating the zero instance but
     // we use a random name for the user ID. So we create a zero instance with a
     // random user ID, set the deleted clients, close it and then create a new
     // zero instance with the same user ID.
-    const r0 = zeroForTest(options);
-    await withWrite(r0.perdag, dagWrite =>
-      setDeletedClients(
-        dagWrite,
-        options.deletedClients ?? [],
-        options.deletedClientGroups ?? [],
-      ),
-    );
-    await r0.close();
+    const z = zeroForTest(options);
+    const clientGroupID = await z.clientGroupID;
+
+    const deletedClients =
+      options.deletedClients?.map(pair => ({
+        clientGroupID:
+          pair.clientGroupID === undefined ? clientGroupID : pair.clientGroupID,
+        clientID: pair.clientID,
+      })) ?? [];
+
+    await withWrite(z.perdag, async dagWrite => {
+      await setDeletedClients(dagWrite, deletedClients);
+      await addDeletedClientsToClientsMap(dagWrite, deletedClients);
+    });
+
+    await z.close();
+
+    // Wait until all the locks are released.
+    // This is needed because closing the Zero instance releases the locks
+    // asynchronously and we need to wait until they are released before creating
+    await vi.waitFor(async () => {
+      const locks = await navigator.locks.query();
+      return locks.held?.length === 0;
+    });
 
     return zeroForTest({
       ...options,
-      userID: r0.userID,
+      userID: z.userID,
     });
+  }
+
+  async function addDeletedClientsToClientsMap(
+    dagWrite: Write,
+    deletedClients: DeletedClients,
+  ) {
+    const clients = new Map(await getClients(dagWrite));
+    for (const {clientGroupID, clientID} of deletedClients) {
+      const c = makeClientV6({
+        clientGroupID,
+        heartbeatTimestampMs: Date.now(),
+        refreshHashes: [],
+      });
+
+      clients.set(clientID, c);
+    }
+    await setClients(clients, dagWrite);
   }
 
   test('sends desired queries patch in sec-protocol header with deletedClients', async () => {
@@ -970,7 +1010,7 @@ describe('initConnection', () => {
             .primaryKey('id'),
         ],
       }),
-      deletedClients: ['a'],
+      deletedClients: [{clientID: 'a'}],
     });
 
     const view = r.query.e.materialize();
@@ -978,12 +1018,12 @@ describe('initConnection', () => {
 
     const mockSocket = await r.socket;
 
-    expect(
-      valita.parse(
-        decodeSecProtocols(mockSocket.protocol).initConnectionMessage,
-        initConnectionMessageSchema,
-      ),
-    ).toEqual([
+    const initConnectionMessage = valita.parse(
+      decodeSecProtocols(mockSocket.protocol).initConnectionMessage,
+      initConnectionMessageSchema,
+    );
+
+    expect(initConnectionMessage).toEqual([
       'initConnection',
       {
         activeClients: [r.clientID],
@@ -1109,7 +1149,7 @@ describe('initConnection', () => {
             .primaryKey('id'),
         ],
       }),
-      deletedClients: ['a'],
+      deletedClients: [{clientID: 'a'}],
     });
     const mockSocket = await r.socket;
 
@@ -3891,7 +3931,7 @@ test('We should send a deleteClient when a Zero instance is closed', async () =>
   await vi.waitFor(() => {
     expect(mockSocket1.messages).toMatchInlineSnapshot(`[]`);
     expect(mockSocket2.messages.map(s => JSON.parse(s))).toEqual([
-      ['deleteClients', {clientIDs: [z1.clientID], clientGroupIDs: []}],
+      ['deleteClients', {clientIDs: [z1.clientID]}],
     ]);
   });
 

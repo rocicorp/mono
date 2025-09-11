@@ -9,7 +9,7 @@ import {
   setClientGroups,
   type ClientGroupMap,
 } from './client-groups.ts';
-import {getClients, type OnClientsDeleted} from './clients.ts';
+import {getClients} from './clients.ts';
 
 const GC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -21,18 +21,13 @@ export function getLatestGCUpdate(): Promise<ClientGroupMap> | undefined {
 export function initClientGroupGC(
   dagStore: Store,
   enableMutationRecovery: boolean,
-  onClientsDeleted: OnClientsDeleted,
   lc: LogContext,
   signal: AbortSignal,
 ): void {
   initBgIntervalProcess(
     'ClientGroupGC',
     () => {
-      latestGCUpdate = gcClientGroups(
-        dagStore,
-        enableMutationRecovery,
-        onClientsDeleted,
-      );
+      latestGCUpdate = gcClientGroups(dagStore, enableMutationRecovery);
       return latestGCUpdate;
     },
     () => GC_INTERVAL_MS,
@@ -50,7 +45,6 @@ export function initClientGroupGC(
 export function gcClientGroups(
   dagStore: Store,
   enableMutationRecovery: boolean,
-  onClientsDeleted: OnClientsDeleted,
 ): Promise<ClientGroupMap> {
   return withWrite(dagStore, async tx => {
     const clients = await getClients(tx);
@@ -71,7 +65,7 @@ export function gcClientGroups(
       }
     }
     await setClientGroups(clientGroups, tx);
-    onClientsDeleted([], [...removeClientGroups].sort());
+    // Client group GC doesn't delete individual clients, so we don't call onClientsDeleted
     return clientGroups;
   });
 }

@@ -1,5 +1,6 @@
 import {type LogLevel, type LogSink} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
+import {type DeletedClients} from '../../../replicache/src/deleted-clients.ts';
 import {
   ReplicacheImpl,
   type ReplicacheImplOptions,
@@ -25,11 +26,12 @@ import {
   mustGetBrowserGlobal,
 } from '../../../shared/src/browser-env.ts';
 import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
-import {h64} from '../../../shared/src/hash.ts';
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
+import {h64} from '../../../shared/src/hash.ts';
 import {must} from '../../../shared/src/must.ts';
 import {navigator} from '../../../shared/src/navigator.ts';
+import {emptyFunction} from '../../../shared/src/sentinels.ts';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import {Subscribable} from '../../../shared/src/subscribable.ts';
 import * as valita from '../../../shared/src/valita.ts';
@@ -75,6 +77,7 @@ import {
   type NameMapper,
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
+import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
 import {
   type ClientMetricMap,
@@ -83,12 +86,11 @@ import {
 } from '../../../zql/src/query/metrics-delegate.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {
+  type AnyQuery,
   materialize,
   newQuery,
-  type AnyQuery,
 } from '../../../zql/src/query/query-impl.ts';
 import {
-  delegateSymbol,
   type HumanReadable,
   type MaterializeOptions,
   type PreloadOptions,
@@ -96,7 +98,9 @@ import {
   type QueryReturn,
   type QueryTable,
   type RunOptions,
+  delegateSymbol,
 } from '../../../zql/src/query/query.ts';
+import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
 import {ActiveClientsManager} from './active-clients-manager.ts';
@@ -157,9 +161,6 @@ import {version} from './version.ts';
 import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
-import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
-import type {TypedView} from '../../../zql/src/query/typed-view.ts';
-import {emptyFunction} from '../../../shared/src/sentinels.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -622,8 +623,8 @@ export class Zero<
       enableClientGroupForking: false,
       enableMutationRecovery: false,
       enablePullAndPushInOpen: false, // Zero calls push in its connection management code
-      onClientsDeleted: (clientIDs, clientGroupIDs) =>
-        this.#deleteClientsManager.onClientsDeleted(clientIDs, clientGroupIDs),
+      onClientsDeleted: deletedClients =>
+        this.#deleteClientsManager.onClientsDeleted(deletedClients),
       zero: new ZeroRep(
         this.#zeroContext,
         this.#ivmMain,
@@ -650,8 +651,10 @@ export class Zero<
       rep.clientGroupID,
       this.clientID,
       this.#closeAbortController.signal,
-      (clientID: string) =>
-        this.#deleteClientsManager.onClientsDeleted([clientID], []),
+      (clientID: ClientID, clientGroupID: ClientGroupID) =>
+        this.#deleteClientsManager.onClientsDeleted([
+          {clientGroupID, clientID},
+        ]),
     );
 
     const onUpdateNeededCallback = (
@@ -733,6 +736,7 @@ export class Zero<
       msg => this.#send(msg),
       rep.perdag,
       this.#lc,
+      this.#rep.clientGroupID,
     );
 
     this.query = this.#registerQueries(schema);
@@ -2121,8 +2125,9 @@ export async function createSocket(
   // for a `protocol`.
   const WS = mustGetBrowserGlobal('WebSocket');
   const queriesPatchP = rep.query(tx => queryManager.getQueriesPatch(tx));
+  const deletedClientsArray = await deleteClientsManager.getDeletedClients();
   let deletedClients: DeleteClientsBody | undefined =
-    await deleteClientsManager.getDeletedClients();
+    convertDeletedClientsToBody(deletedClientsArray, clientGroupID);
   let queriesPatch: Map<string, UpQueriesPatchOp> | undefined =
     await queriesPatchP;
   const {activeClients} = activeClientsManager;
@@ -2190,6 +2195,25 @@ function skipEmptyDeletedClients(
   data.clientIDs = skipEmptyArray(clientIDs);
   data.clientGroupIDs = skipEmptyArray(clientGroupIDs);
   return data;
+}
+
+function convertDeletedClientsToBody(
+  deletedClients: DeletedClients,
+  clientGroupID: ClientGroupID,
+): DeleteClientsBody | undefined {
+  if (deletedClients.length === 0) {
+    return undefined;
+  }
+
+  const clientIDs = deletedClients
+    .filter(pair => pair.clientID && pair.clientGroupID === clientGroupID)
+    .map(pair => pair.clientID);
+  if (clientIDs.length === 0) {
+    return undefined;
+  }
+
+  // We no longer send clientGroupIDs
+  return {clientIDs};
 }
 
 /**

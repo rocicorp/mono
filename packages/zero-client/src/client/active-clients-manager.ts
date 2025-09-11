@@ -1,4 +1,8 @@
 import {resolver} from '@rocicorp/resolver';
+import type {
+  ClientGroupID,
+  ClientID,
+} from '../../../replicache/src/sync/ids.ts';
 import {BroadcastChannel} from '../../../shared/src/broadcast-channel.ts';
 import {getBrowserGlobal} from '../../../shared/src/browser-env.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
@@ -81,7 +85,9 @@ export class ActiveClientsManager {
    * A callback that is called when a client is deleted from the client group.
    * It receives the client ID of the deleted client.
    */
-  onDelete: ((clientID: string) => void) | undefined;
+  onDelete:
+    | ((clientID: ClientID, clientGroupID: ClientGroupID) => void)
+    | undefined;
 
   /**
    * Creates an instance of `ActiveClientsManager` for the specified client
@@ -197,7 +203,7 @@ export class ActiveClientsManager {
 
   #removeClient(clientID: string): void {
     if (this.#activeClients.delete(clientID)) {
-      this.onDelete?.(clientID);
+      this.onDelete?.(clientID, this.clientGroupID);
     }
   }
 }

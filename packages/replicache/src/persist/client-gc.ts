@@ -1,7 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
 import {initBgIntervalProcess} from '../bg-interval.ts';
 import type {Store} from '../dag/store.ts';
-import {addDeletedClients} from '../deleted-clients.ts';
+import {
+  addDeletedClients,
+  type WritableDeletedClients,
+} from '../deleted-clients.ts';
 import type {ClientID} from '../sync/ids.ts';
 import {withWrite} from '../with-transactions.ts';
 import type {Client, OnClientsDeleted} from './clients.ts';
@@ -59,7 +62,7 @@ function gcClients(
   return withWrite(dagStore, async dagWrite => {
     const now = Date.now();
     const clients = await getClients(dagWrite);
-    const deletedClients: ClientID[] = [];
+    const deletedClients: WritableDeletedClients = [];
     const newClients: Map<ClientID, Client> = new Map();
     for (const [id, client] of clients) {
       if (
@@ -68,7 +71,10 @@ function gcClients(
       ) {
         newClients.set(id, client);
       } else {
-        deletedClients.push(id);
+        deletedClients.push({
+          clientGroupID: client.clientGroupID,
+          clientID: id,
+        });
       }
     }
 
@@ -76,13 +82,11 @@ function gcClients(
       return clients;
     }
     await setClients(newClients, dagWrite);
-    const {clientIDs, clientGroupIDs} = await addDeletedClients(
+    const normalizedDeletedClients = await addDeletedClients(
       dagWrite,
       deletedClients,
-      // gcClients does not delete client groups
-      [],
     );
-    onClientsDeleted(clientIDs, clientGroupIDs);
+    await onClientsDeleted(normalizedDeletedClients);
     return newClients;
   });
 }

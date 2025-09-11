@@ -1,13 +1,10 @@
 import type {Store} from '../../../replicache/src/dag/store.ts';
 import {
+  confirmDeletedClients,
   getDeletedClients,
-  removeDeletedClients,
   type DeletedClients,
 } from '../../../replicache/src/deleted-clients.ts';
-import type {
-  ClientGroupID,
-  ClientID,
-} from '../../../replicache/src/sync/ids.ts';
+import type {ClientGroupID} from '../../../replicache/src/sync/ids.ts';
 import {
   withRead,
   withWrite,
@@ -32,27 +29,35 @@ export class DeleteClientsManager {
   readonly #send: (msg: DeleteClientsMessage) => void;
   readonly #lc: ZeroLogContext;
   readonly #dagStore: Store;
+  readonly #clientGroupID: Promise<ClientGroupID>;
 
   constructor(
     send: (msg: DeleteClientsMessage) => void,
     dagStore: Store,
     lc: ZeroLogContext,
+    clientGroupID: Promise<ClientGroupID>,
   ) {
     this.#send = send;
     this.#dagStore = dagStore;
     this.#lc = lc;
+    this.#clientGroupID = clientGroupID;
   }
 
   /**
    * This gets called by Replicache when it deletes clients from the persistent
    * storage.
    */
-  onClientsDeleted(
-    clientIDs: readonly ClientID[],
-    clientGroupIDs: readonly ClientGroupID[],
-  ): void {
-    this.#lc.debug?.('DeletedClientsManager, send:', clientIDs);
-    this.#send(['deleteClients', {clientIDs, clientGroupIDs}]);
+  async onClientsDeleted(deletedClients: DeletedClients): Promise<void> {
+    this.#lc.debug?.('DeletedClientsManager, send:', deletedClients);
+    const clientGroupID = await this.#clientGroupID;
+    this.#send([
+      'deleteClients',
+      {
+        clientIDs: deletedClients
+          .filter(dc => dc.clientGroupID === clientGroupID)
+          .map(dc => dc.clientID),
+      },
+    ]);
   }
 
   /**
@@ -60,11 +65,18 @@ export class DeleteClientsManager {
    * the clients that might have been deleted locally since the last connection.
    */
   async sendDeletedClientsToServer(): Promise<void> {
+    const clientGroupID = await this.#clientGroupID;
     const deleted = await withRead(this.#dagStore, dagRead =>
       getDeletedClients(dagRead),
     );
-    if (deleted.clientIDs.length > 0 || deleted.clientGroupIDs.length > 0) {
-      this.#send(['deleteClients', deleted]);
+
+    // Only send client ids that belong to this client group
+    const clientIDs = deleted
+      .filter(d => d.clientGroupID === clientGroupID)
+      .map(d => d.clientID);
+
+    if (clientIDs.length > 0) {
+      this.#send(['deleteClients', {clientIDs}]);
       this.#lc.debug?.('DeletedClientsManager, send:', deleted);
     }
   }
@@ -80,13 +92,17 @@ export class DeleteClientsManager {
       // then write them back to the dag.
       return withWrite(this.#dagStore, async dagWrite => {
         this.#lc.debug?.('clientsDeletedOnServer:', clientIDs, clientGroupIDs);
-        await removeDeletedClients(dagWrite, clientIDs, clientGroupIDs);
+        await confirmDeletedClients(dagWrite, clientIDs, clientGroupIDs);
       });
     }
     return promiseVoid;
   }
 
-  getDeletedClients(): Promise<DeletedClients> {
-    return withRead(this.#dagStore, getDeletedClients);
+  async getDeletedClients(): Promise<DeletedClients> {
+    const deletedClients = await withRead(this.#dagStore, read =>
+      getDeletedClients(read),
+    );
+    const clientGroupID = await this.#clientGroupID;
+    return deletedClients.filter(d => d.clientGroupID === clientGroupID);
   }
 }

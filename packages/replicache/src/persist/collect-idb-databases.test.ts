@@ -69,16 +69,16 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
     entries,
     now,
     expectedDatabases,
-    expectedClientsDeleted = [],
-    expectedClientGroupsDeleted = [],
+    expectedDeletedClients = [],
     enableMutationRecovery = true,
   }: {
     name: string;
     entries: Entries;
     now: number;
     expectedDatabases: string[];
-    expectedClientsDeleted?: ClientID[] | undefined;
-    expectedClientGroupsDeleted?: ClientGroupID[] | undefined;
+    expectedDeletedClients?:
+      | {clientGroupID: ClientGroupID; clientID: ClientID}[]
+      | undefined;
     enableMutationRecovery?: boolean | undefined;
   }) => {
     test(name + ' > time ' + now, async () => {
@@ -104,12 +104,49 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
           );
         }
         if (deletedClientIDs || deletedClientGroupIDs) {
+          const deletedClients: {
+            clientGroupID: ClientGroupID;
+            clientID: ClientID;
+          }[] = [];
+
+          // Add individual client IDs with their respective client group IDs
+          if (deletedClientIDs) {
+            for (const clientID of deletedClientIDs) {
+              // For tests, we need to determine the client group ID for each client
+              // Look it up from the clients map
+              const clientEntry = [...clients.entries()].find(
+                ([id]) => id === clientID,
+              );
+              const clientGroupID =
+                clientEntry?.[1].clientGroupID ?? 'make-client-group-id';
+              deletedClients.push({clientGroupID, clientID});
+            }
+          }
+
+          // Add client group IDs - for each group, add all clients in that group
+          if (deletedClientGroupIDs) {
+            for (const clientGroupID of deletedClientGroupIDs) {
+              // Find all clients in this group
+              const clientsInGroup = [...clients.entries()].filter(
+                ([, client]) => client.clientGroupID === clientGroupID,
+              );
+              for (const [clientID] of clientsInGroup) {
+                // Avoid duplicates
+                if (
+                  !deletedClients.some(
+                    dc =>
+                      dc.clientID === clientID &&
+                      dc.clientGroupID === clientGroupID,
+                  )
+                ) {
+                  deletedClients.push({clientGroupID, clientID});
+                }
+              }
+            }
+          }
+
           await withWrite(dagStore, dagWrite =>
-            setDeletedClients(
-              dagWrite,
-              deletedClientIDs ?? [],
-              deletedClientGroupIDs ?? [],
-            ),
+            setDeletedClients(dagWrite, deletedClients),
           );
         }
       }
@@ -138,14 +175,10 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
         expectedDatabases,
       );
 
-      if (
-        expectedClientsDeleted.length > 0 ||
-        expectedClientGroupsDeleted.length > 0
-      ) {
+      if (expectedDeletedClients.length > 0) {
         expect(onClientsDeleted).toHaveBeenCalledOnce();
         expect(onClientsDeleted).toHaveBeenLastCalledWith(
-          expectedClientsDeleted,
-          expectedClientGroupsDeleted,
+          expectedDeletedClients,
         );
       } else {
         expect(onClientsDeleted).not.toHaveBeenCalledOnce();
@@ -157,10 +190,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
           const dagStore = newDagStore(name);
           expect(
             await withRead(dagStore, read => getDeletedClients(read)),
-          ).toEqual({
-            clientIDs: expectedClientsDeleted,
-            clientGroupIDs: expectedClientGroupsDeleted,
-          });
+          ).toEqual(expectedDeletedClients);
         }
       }
     });
@@ -187,16 +217,18 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
       entries,
       now: 1000,
       expectedDatabases: [],
-      expectedClientsDeleted: ['clientA1'],
-      expectedClientGroupsDeleted: ['make-client-group-id'],
+      expectedDeletedClients: [
+        {clientGroupID: 'make-client-group-id', clientID: 'clientA1'},
+      ],
     });
     t({
       name: 'one idb, one client',
       entries,
       now: 2000,
       expectedDatabases: [],
-      expectedClientsDeleted: ['clientA1'],
-      expectedClientGroupsDeleted: ['make-client-group-id'],
+      expectedDeletedClients: [
+        {clientGroupID: 'make-client-group-id', clientID: 'clientA1'},
+      ],
     });
   }
 
@@ -232,16 +264,19 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
       entries,
       now: 1000,
       expectedDatabases: ['b'],
-      expectedClientsDeleted: ['clientA1'],
-      expectedClientGroupsDeleted: ['make-client-group-id'],
+      expectedDeletedClients: [
+        {clientGroupID: 'make-client-group-id', clientID: 'clientA1'},
+      ],
     });
     t({
       name: 'two idb, one client in each',
       entries,
       now: 2000,
       expectedDatabases: [],
-      expectedClientsDeleted: ['clientA1', 'clientB1'],
-      expectedClientGroupsDeleted: ['make-client-group-id'],
+      expectedDeletedClients: [
+        {clientGroupID: 'make-client-group-id', clientID: 'clientA1'},
+        {clientGroupID: 'make-client-group-id', clientID: 'clientB1'},
+      ],
     });
   }
 
@@ -290,19 +325,19 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
       entries,
       now: 2000,
       expectedDatabases: ['a'],
-      expectedClientsDeleted: ['clientB1'],
-      expectedClientGroupsDeleted: ['clientGroupB1'],
+      expectedDeletedClients: [
+        {clientGroupID: 'clientGroupB1', clientID: 'clientB1'},
+      ],
     });
     t({
       name: 'two idb, three clients',
       entries,
       now: 3000,
       expectedDatabases: [],
-      expectedClientsDeleted: ['clientA1', 'clientA2', 'clientB1'],
-      expectedClientGroupsDeleted: [
-        'clientGroupA1',
-        'clientGroupA2',
-        'clientGroupB1',
+      expectedDeletedClients: [
+        {clientGroupID: 'clientGroupA1', clientID: 'clientA1'},
+        {clientGroupID: 'clientGroupA2', clientID: 'clientA2'},
+        {clientGroupID: 'clientGroupB1', clientID: 'clientB1'},
       ],
     });
   }
@@ -366,16 +401,22 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
       entries,
       now: 4000,
       expectedDatabases: ['b'],
-      expectedClientsDeleted: ['clientA1', 'clientA2'],
-      expectedClientGroupsDeleted: ['clientGroupA1'],
+      expectedDeletedClients: [
+        {clientGroupID: 'clientGroupA1', clientID: 'clientA1'},
+        {clientGroupID: 'clientGroupA1', clientID: 'clientA2'},
+      ],
     });
     t({
       name: 'two idb, four clients',
       entries,
       now: 5000,
       expectedDatabases: [],
-      expectedClientsDeleted: ['clientA1', 'clientA2', 'clientB1', 'clientB2'],
-      expectedClientGroupsDeleted: ['clientGroupA1', 'clientGroupB1'],
+      expectedDeletedClients: [
+        {clientGroupID: 'clientGroupA1', clientID: 'clientA1'},
+        {clientGroupID: 'clientGroupA1', clientID: 'clientA2'},
+        {clientGroupID: 'clientGroupB1', clientID: 'clientB1'},
+        {clientGroupID: 'clientGroupB1', clientID: 'clientB2'},
+      ],
     });
   }
 
@@ -480,8 +521,9 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
       now: 5000,
       enableMutationRecovery: false,
       expectedDatabases: [],
-      expectedClientsDeleted: ['clientA1'],
-      expectedClientGroupsDeleted: ['clientGroupA1'],
+      expectedDeletedClients: [
+        {clientGroupID: 'clientGroupA1', clientID: 'clientA1'},
+      ],
     });
   }
 
@@ -515,8 +557,9 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
       entries,
       now: 5000,
       expectedDatabases: [],
-      expectedClientsDeleted: ['clientA1'],
-      expectedClientGroupsDeleted: ['clientGroupA1'],
+      expectedDeletedClients: [
+        {clientGroupID: 'clientGroupA1', clientID: 'clientA1'},
+      ],
     });
   }
 
@@ -557,8 +600,10 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
       entries,
       now: 5000,
       expectedDatabases: [],
-      expectedClientsDeleted: ['clientA1', 'clientA2'],
-      expectedClientGroupsDeleted: ['clientGroupA1'],
+      expectedDeletedClients: [
+        {clientGroupID: 'clientGroupA1', clientID: 'clientA1'},
+        {clientGroupID: 'clientGroupA1', clientID: 'clientA2'},
+      ],
     });
   }
 
@@ -613,8 +658,10 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
       entries,
       now: 5000,
       expectedDatabases: [],
-      expectedClientsDeleted: ['clientA1', 'clientB1'],
-      expectedClientGroupsDeleted: ['clientGroupA1', 'clientGroupB1'],
+      expectedDeletedClients: [
+        {clientGroupID: 'clientGroupA1', clientID: 'clientA1'},
+        {clientGroupID: 'clientGroupB1', clientID: 'clientB1'},
+      ],
     });
   }
 
@@ -669,8 +716,9 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
       entries,
       now: 5000,
       expectedDatabases: ['a'],
-      expectedClientsDeleted: ['clientB1'],
-      expectedClientGroupsDeleted: ['clientGroupB1'],
+      expectedDeletedClients: [
+        {clientGroupID: 'clientGroupB1', clientID: 'clientB1'},
+      ],
     });
 
     t({
@@ -678,8 +726,10 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
       entries,
       now: 5000,
       expectedDatabases: [],
-      expectedClientsDeleted: ['clientA1', 'clientB1'],
-      expectedClientGroupsDeleted: ['clientGroupA1', 'clientGroupB1'],
+      expectedDeletedClients: [
+        {clientGroupID: 'clientGroupA1', clientID: 'clientA1'},
+        {clientGroupID: 'clientGroupB1', clientID: 'clientB1'},
+      ],
       enableMutationRecovery: false,
     });
 
@@ -698,14 +748,22 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
         entries: entries2,
         now: 5000,
         expectedDatabases: [],
-        expectedClientsDeleted: [
-          'clientA1',
-          'clientB1',
-          'old-deleted-client-1',
-          'old-deleted-client-2',
-          'old-deleted-client-3',
+        expectedDeletedClients: [
+          {clientGroupID: 'clientGroupA1', clientID: 'clientA1'},
+          {clientGroupID: 'clientGroupB1', clientID: 'clientB1'},
+          {
+            clientGroupID: 'make-client-group-id',
+            clientID: 'old-deleted-client-1',
+          },
+          {
+            clientGroupID: 'make-client-group-id',
+            clientID: 'old-deleted-client-2',
+          },
+          {
+            clientGroupID: 'make-client-group-id',
+            clientID: 'old-deleted-client-3',
+          },
         ],
-        expectedClientGroupsDeleted: ['clientGroupA1', 'clientGroupB1'],
         enableMutationRecovery: false,
       });
     }
