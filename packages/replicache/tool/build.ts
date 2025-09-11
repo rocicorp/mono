@@ -35,7 +35,7 @@ async function buildReplicache(options: BuildOptions) {
       ? {}
       : {
           'impl': basePath('src', 'impl.ts'),
-          'expo': basePath('src', 'expo.ts'),
+          'expo-sqlite': basePath('src', 'expo-sqlite.ts'),
           'op-sqlite': basePath('src', 'op-sqlite.ts'),
         }),
   };
