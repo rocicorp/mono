@@ -12,19 +12,6 @@ import {opSQLiteStoreProvider, type OpSQLiteStoreOptions} from './store.ts';
 
 // Mock the @op-engineering/op-sqlite module with Node SQLite implementation
 vi.mock('@op-engineering/op-sqlite', () => {
-  // Map of database names to their actual sqlite3 instances
-  // This ensures that multiple stores with the same name share the same database
-  const databases = new Map<string, ReturnType<typeof sqlite3>>();
-  const openConnections = new Map<string, number>();
-
-  const clearAllDatabases = () => {
-    for (const db of databases.values()) {
-      db.close();
-    }
-    databases.clear();
-    openConnections.clear();
-  };
-
   const mockModule = {
     open: (options: {
       name: string;
@@ -39,18 +26,8 @@ vi.mock('@op-engineering/op-sqlite', () => {
       // Register the store name for cleanup (not the filename)
       registerCreatedFile(name);
 
-      // Get or create the actual database instance
-      let db: ReturnType<typeof sqlite3>;
-      if (databases.has(prefixedName)) {
-        db = databases.get(prefixedName)!;
-      } else {
-        db = sqlite3(filename);
-        databases.set(prefixedName, db);
-      }
-
-      // Track connections to this database
-      const currentConnections = openConnections.get(prefixedName) || 0;
-      openConnections.set(prefixedName, currentConnections + 1);
+      // Create a new database connection - SQLite handles file locking and concurrency
+      const db = sqlite3(filename);
 
       return {
         // eslint-disable-next-line require-await
@@ -81,26 +58,12 @@ vi.mock('@op-engineering/op-sqlite', () => {
           return [];
         },
         close: () => {
-          const connections = openConnections.get(prefixedName) || 1;
-          if (connections <= 1) {
-            // Last connection - actually close the database
-            db.close();
-            databases.delete(prefixedName);
-            openConnections.delete(prefixedName);
-          } else {
-            // Still has other connections
-            openConnections.set(prefixedName, connections - 1);
-          }
+          // SQLite handles this properly, just close the connection
+          db.close();
         },
         delete: () => {
-          // Close any open connections first
-          if (databases.has(prefixedName)) {
-            const db = databases.get(prefixedName)!;
-            db.close();
-            databases.delete(prefixedName);
-            openConnections.delete(prefixedName);
-          }
-
+          // Close the database and delete the file
+          db.close();
           const filename = path.resolve(__dirname, `${prefixedName}.db`);
           if (fs.existsSync(filename)) {
             fs.unlinkSync(filename);
@@ -108,8 +71,6 @@ vi.mock('@op-engineering/op-sqlite', () => {
         },
       };
     },
-    // Internal function for testing - clear all databases
-    clearAllDatabasesForTesting: clearAllDatabases,
   };
 
   return mockModule;

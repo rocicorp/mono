@@ -11,125 +11,91 @@ import {clearAllNamedStoresForTesting} from '../sqlite-store.ts';
 import {expoSQLiteStoreProvider, type ExpoSQLiteStoreOptions} from './store.ts';
 
 //Mock the expo-sqlite module with Node SQLite implementation
-vi.mock('expo-sqlite', () => {
-  // Map of database names to their actual sqlite3 instances
-  // This ensures that multiple stores with the same name share the same database
-  const databases = new Map<string, ReturnType<typeof sqlite3>>();
-  const openConnections = new Map<string, number>();
+vi.mock('expo-sqlite', () => ({
+  openDatabaseSync: (name: string) => {
+    // Add expo_ prefix to match the actual store implementation
+    const prefixedName = `expo_${name}`;
+    const filename = path.resolve(__dirname, `${prefixedName}.db`);
 
-  return {
-    openDatabaseSync: (name: string) => {
-      // Add expo_ prefix to match the actual store implementation
-      const prefixedName = `expo_${name}`;
-      const filename = path.resolve(__dirname, `${prefixedName}.db`);
+    // Register the store name for cleanup (not the filename)
+    registerCreatedFile(name);
 
-      // Register the store name for cleanup (not the filename)
-      registerCreatedFile(name);
+    // Create a new database connection - SQLite handles file locking and concurrency
+    const db = sqlite3(filename);
 
-      // Get or create the actual database instance
-      let db: ReturnType<typeof sqlite3>;
-      if (databases.has(prefixedName)) {
-        db = databases.get(prefixedName)!;
-      } else {
-        db = sqlite3(filename);
-        databases.set(prefixedName, db);
-      }
-
-      // Track connections to this database
-      const currentConnections = openConnections.get(prefixedName) || 0;
-      openConnections.set(prefixedName, currentConnections + 1);
-
-      const dbWrapper = {
-        execSync: (sql: string) => db.exec(sql),
-        prepareSync: (sql: string) => {
-          const stmt = db.prepare(sql);
-          return {
-            executeAsync: (params: unknown[] = []) => {
-              try {
-                let result: unknown[];
-                const isSelectQuery = /^\s*select/i.test(sql);
-                if (isSelectQuery) {
-                  result = params.length ? stmt.all(...params) : stmt.all();
-                } else {
-                  stmt.run(...params);
-                  result = [];
-                }
-                return Promise.resolve({
-                  getAllAsync: () => Promise.resolve(result),
-                });
-              } catch (error) {
-                return Promise.reject(error);
-              }
-            },
-            executeForRawResultAsync: (params: unknown[] = []) => {
-              try {
-                const isSelectQuery = /^\s*select/i.test(sql);
-                if (isSelectQuery) {
-                  const result = stmt.all(...params);
-                  return Promise.resolve({
-                    getFirstAsync: () =>
-                      Promise.resolve(
-                        result.length > 0
-                          ? Object.values(result[0] as Record<string, unknown>)
-                          : null,
-                      ),
-                  });
-                }
-                stmt.run(...params);
-                return Promise.resolve({
-                  getFirstAsync: () => Promise.resolve(null),
-                });
-              } catch (error) {
-                return Promise.reject(error);
-              }
-            },
-            executeSync: (params: unknown[] = []) => {
+    return {
+      execSync: (sql: string) => db.exec(sql),
+      prepareSync: (sql: string) => {
+        const stmt = db.prepare(sql);
+        return {
+          executeAsync: (params: unknown[] = []) => {
+            try {
+              let result: unknown[];
               const isSelectQuery = /^\s*select/i.test(sql);
               if (isSelectQuery) {
-                return stmt.all(...params);
+                result = params.length ? stmt.all(...params) : stmt.all();
+              } else {
+                stmt.run(...params);
+                result = [];
               }
-              return stmt.run(...params);
-            },
-            finalizeSync: () => {
-              // SQLite3 statements don't need explicit finalization
-            },
-          };
-        },
-        closeSync: () => {
-          const connections = openConnections.get(prefixedName) || 1;
-          if (connections <= 1) {
-            // Last connection - actually close the database
-            db.close();
-            databases.delete(prefixedName);
-            openConnections.delete(prefixedName);
-          } else {
-            // Still has other connections
-            openConnections.set(prefixedName, connections - 1);
-          }
-        },
-      };
-
-      return dbWrapper;
-    },
-    deleteDatabaseSync: (name: string) => {
-      // Add expo_ prefix to match the actual store implementation
-      const prefixedName = `expo_${name}`;
-
-      // Close any open connections first
-      if (databases.has(prefixedName)) {
-        const db = databases.get(prefixedName)!;
+              return Promise.resolve({
+                getAllAsync: () => Promise.resolve(result),
+              });
+            } catch (error) {
+              return Promise.reject(error);
+            }
+          },
+          executeForRawResultAsync: (params: unknown[] = []) => {
+            try {
+              const isSelectQuery = /^\s*select/i.test(sql);
+              if (isSelectQuery) {
+                const result = stmt.all(...params);
+                return Promise.resolve({
+                  getFirstAsync: () =>
+                    Promise.resolve(
+                      result.length > 0
+                        ? Object.values(result[0] as Record<string, unknown>)
+                        : null,
+                    ),
+                });
+              }
+              stmt.run(...params);
+              return Promise.resolve({
+                getFirstAsync: () => Promise.resolve(null),
+              });
+            } catch (error) {
+              return Promise.reject(error);
+            }
+          },
+          executeSync: (params: unknown[] = []) => {
+            const isSelectQuery = /^\s*select/i.test(sql);
+            if (isSelectQuery) {
+              return stmt.all(...params);
+            }
+            return stmt.run(...params);
+          },
+          finalizeSync: () => {
+            // SQLite3 statements don't need explicit finalization
+          },
+        };
+      },
+      closeSync: () => {
+        // SQLite handles this properly, just close the connection
         db.close();
-        databases.delete(prefixedName);
-        openConnections.delete(prefixedName);
-      }
+      },
+    };
+  },
+  deleteDatabaseSync: (name: string) => {
+    // Add expo_ prefix to match the actual store implementation
+    const prefixedName = `expo_${name}`;
+    const filename = path.resolve(__dirname, `${prefixedName}.db`);
 
-      const filename = path.resolve(__dirname, `${prefixedName}.db`);
-      if (fs.existsSync(filename)) {
-        fs.unlinkSync(filename);
-      }
-    },
-  };
-});
+    // Simply delete the file if it exists - SQLite handles any open connections
+    if (fs.existsSync(filename)) {
+      fs.unlinkSync(filename);
+    }
+  },
+}));
 
 const defaultStoreOptions = {
   busyTimeout: 200,
