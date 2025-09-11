@@ -249,7 +249,7 @@ export function buildListQuery(args: ListQueryArgs) {
       : sortDirection === 'asc'
         ? 'desc'
         : 'asc';
-  q.orderBy(sortField, orderByDir).orderBy('id', orderByDir);
+  q = q.orderBy(sortField, orderByDir).orderBy('id', orderByDir);
 
   if (start) {
     q = q.start(start);
