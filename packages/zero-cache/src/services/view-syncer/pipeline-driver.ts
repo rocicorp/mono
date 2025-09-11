@@ -36,7 +36,7 @@ import type {SchemaVersions} from '../../types/schema-versions.ts';
 import type {ShardID} from '../../types/shards.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
-import type {ClientGroupStorage} from './database-storage.ts';
+import type {ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
 import {
   ResetPipelinesSignal,
   Snapshotter,

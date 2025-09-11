@@ -64,12 +64,12 @@ import {links, type ZbugsHistoryState} from '../../routes.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
-import {queries} from '../../../shared/queries.ts';
+import {queries, type ListContextParams} from '../../../shared/queries.ts';
 import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
 import {preload} from '../../zero-preload.ts';
 import type {NotificationType} from '../../../shared/mutators.ts';
 
-const {emojiChange, issueDetail, prevNext} = queries;
+const {emojiChange, issueDetail, issueListV2} = queries;
 
 function softNavigate(path: string, state?: ZbugsHistoryState) {
   navigate(path, {state});
@@ -186,12 +186,25 @@ export function IssuePage({onReady}: {onReady: () => void}) {
         modified: displayed.modified,
       }
     : null;
-  const [next] = useQuery(
-    prevNext(
+
+  const listContextParams: ListContextParams = listContext?.params ?? {
+    open: null,
+    assignee: null,
+    creator: null,
+    labels: null,
+    textFilter: null,
+    sortField: 'modified',
+    sortDirection: 'asc',
+  };
+
+  const [[next]] = useQuery(
+    issueListV2(
       login.loginState?.decoded,
-      listContext?.params ?? null,
+      listContextParams,
+      z.userID,
+      1,
       start,
-      'next',
+      'forward',
     ),
     prevNextOptions,
   );
@@ -201,12 +214,14 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     }
   });
 
-  const [prev] = useQuery(
-    prevNext(
+  const [[prev]] = useQuery(
+    issueListV2(
       login.loginState?.decoded,
-      listContext?.params ?? null,
+      listContextParams,
+      z.userID,
+      1,
       start,
-      'prev',
+      'backward',
     ),
     prevNextOptions,
   );

@@ -122,6 +122,20 @@ test('zero-cache --help', () => {
                                                                    Note that garbage collection is an incremental, periodic process which does not                   
                                                                    necessarily purge all eligible CVRs immediately.                                                  
                                                                                                                                                                      
+     --cvr-garbage-collection-initial-interval-seconds number      default: 60                                                                                       
+       ZERO_CVR_GARBAGE_COLLECTION_INITIAL_INTERVAL_SECONDS env                                                                                                      
+                                                                   The initial interval at which to check and garbage collect inactive CVRs.                         
+                                                                   This interval is increased exponentially (up to 16 minutes) when there is                         
+                                                                   nothing to purge.                                                                                 
+                                                                                                                                                                     
+     --cvr-garbage-collection-initial-batch-size number            default: 25                                                                                       
+       ZERO_CVR_GARBAGE_COLLECTION_INITIAL_BATCH_SIZE env                                                                                                            
+                                                                   The initial number of CVRs to purge per garbage collection interval.                              
+                                                                   This number is increased linearly if the rate of new CVRs exceeds the rate of                     
+                                                                   purged CVRs, in order to reach a steady state.                                                    
+                                                                                                                                                                     
+                                                                   Setting this to 0 effectively disables CVR garbage collection.                                    
+                                                                                                                                                                     
      --query-hydration-stats boolean                               optional                                                                                          
        ZERO_QUERY_HYDRATION_STATS env                                                                                                                                
                                                                    Track and log the number of rows considered by query hydrations which                             

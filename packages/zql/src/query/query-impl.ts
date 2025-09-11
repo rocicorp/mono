@@ -54,6 +54,7 @@ import {
 } from './query.ts';
 import {DEFAULT_PRELOAD_TTL_MS, DEFAULT_TTL_MS, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
+import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 
 export type AnyQuery = Query<Schema, string, any>;
 
@@ -258,7 +259,7 @@ export abstract class AbstractQuery<
     assert(related, 'Invalid relationship');
     if (isOneHop(related)) {
       const {destSchema, destField, sourceField, cardinality} = related[0];
-      let q: AnyQuery = this[newQuerySymbol](
+      const q: AnyQuery = this[newQuerySymbol](
         this._delegate,
         this.#schema,
         destSchema,
@@ -273,9 +274,12 @@ export abstract class AbstractQuery<
         this.customQueryID,
         undefined,
       ) as AnyQuery;
-      if (cardinality === 'one') {
-        q = q.one();
-      }
+      // Intentionally not setting to `one` as it is a perf degradation
+      // and the user should not be making the mistake of setting cardinality to
+      // `one` when it is actually not.
+      // if (cardinality === 'one') {
+      //   q = q.one();
+      // }
       const sq = cb(q) as AbstractQuery<Schema, string>;
       assert(
         isCompoundKey(sourceField),
@@ -546,7 +550,7 @@ export abstract class AbstractQuery<
           defaultFormat,
           this.customQueryID,
           undefined,
-        ),
+        ) as AnyQuery,
       ) as unknown as QueryImpl<any, any>;
       return {
         type: 'correlatedSubquery',
@@ -776,14 +780,20 @@ export class QueryImpl<
       ? hashOfNameAndArgs(this.customQueryID.name, this.customQueryID.args)
       : this.hash();
     const queryCompleteResolver = resolver<true>();
-    let queryComplete = delegate.defaultQueryComplete;
+    let queryComplete: boolean | ErroredQuery = delegate.defaultQueryComplete;
     const updateTTL = (newTTL: TTL) => {
       this.customQueryID
         ? delegate.updateCustomQuery(this.customQueryID, newTTL)
         : delegate.updateServerQuery(ast, newTTL);
     };
 
-    const gotCallback: GotCallback = got => {
+    const gotCallback: GotCallback = (got, error) => {
+      if (error) {
+        queryCompleteResolver.reject(error);
+        queryComplete = error;
+        return;
+      }
+
       if (got) {
         delegate.addMetric(
           'query-materialization-end-to-end',
@@ -847,6 +857,9 @@ export class QueryImpl<
           if (type === 'complete') {
             v.destroy();
             resolve(data as HumanReadable<TReturn>);
+          } else if (type === 'error') {
+            v.destroy();
+            resolve(Promise.reject(data));
           }
         });
       });
@@ -938,7 +951,7 @@ function arrayViewFactory<
   format: Format,
   onDestroy: () => void,
   onTransactionCommit: (cb: () => void) => void,
-  queryComplete: true | Promise<true>,
+  queryComplete: true | ErroredQuery | Promise<true>,
   updateTTL: (ttl: TTL) => void,
 ): TypedView<HumanReadable<TReturn>> {
   const v = new ArrayView<HumanReadable<TReturn>>(

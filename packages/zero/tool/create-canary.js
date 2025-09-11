@@ -158,7 +158,10 @@ try {
 
   writePackageData(ZERO_PACKAGE_JSON_PATH, currentPackageData);
 
-  const dependencyPaths = [basePath('apps', 'zbugs', 'package.json')];
+  const dependencyPaths = [
+    basePath('apps', 'zbugs', 'package.json'),
+    basePath('apps', 'zql-viz', 'package.json'),
+  ];
 
   dependencyPaths.forEach(p => {
     const data = getPackageData(p);

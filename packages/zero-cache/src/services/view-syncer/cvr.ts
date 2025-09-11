@@ -4,6 +4,7 @@ import {
   stringify,
   type JSONObject,
 } from '../../../../shared/src/bigint-json.ts';
+import {recordQuery} from '../../server/anonymous-otel-start.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
 import {
   deepEqual,
@@ -301,9 +302,22 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
     // Find the new/changed desired queries.
     const needed: Set<string> = new Set();
-    for (const {hash, ttl = DEFAULT_TTL_MS} of queries) {
+
+    const recordQueryForTelemetry = (q: (typeof queries)[0]) => {
+      const {ast, name, args} = q;
+      if (ast) {
+        recordQuery('crud');
+      } else if (name && args) {
+        recordQuery('custom');
+      }
+    };
+
+    for (const q of queries) {
+      const {hash, ttl = DEFAULT_TTL_MS} = q;
       const query = this._cvr.queries[hash];
       if (!query) {
+        // New query - record for telemetry
+        recordQueryForTelemetry(q);
         needed.add(hash);
         continue;
       }
@@ -314,11 +328,14 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
       const oldClientState = query.clientState[clientID];
       // Old query was inactivated or never desired by this client.
       if (!oldClientState || oldClientState.inactivatedAt !== undefined) {
+        // Reactivated query - record for telemetry
+        recordQueryForTelemetry(q);
         needed.add(hash);
         continue;
       }
 
       if (compareTTL(ttl, oldClientState.ttl) > 0) {
+        // TTL update only - don't record for telemetry
         needed.add(hash);
       }
     }
@@ -332,6 +349,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
     for (const id of needed) {
       const q = must(queries.find(({hash}) => hash === id));
       const {ast, name, args} = q;
+
       const ttl = clampTTL(q.ttl ?? DEFAULT_TTL_MS);
       const query =
         this._cvr.queries[id] ?? newQueryRecord(id, ast, name, args);
@@ -453,10 +471,8 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
     const client = this._cvr.clients[clientID];
     if (!client) {
-      // Client is not part of this client group. We still delete all the
-      // relevant data in the CVR db since this client is not supposed to come
-      // back.
-      this._cvrStore.deleteClient(clientID);
+      // Clients in different client groups are no longer deleted, leaving
+      // cleanup to inactive CVR purging logic.
       return [];
     }
 
@@ -472,13 +488,6 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
 
     return patches;
   }
-
-  deleteClientGroup(clientGroupID: string): void {
-    this._cvrStore.deleteClientGroup(clientGroupID);
-  }
-
-  // TODO: Add cleanup of no-longer-desired got queries and constituent rows in
-  // flush.
 }
 
 type Hash = string;

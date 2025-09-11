@@ -45,7 +45,7 @@ import {StatementRunner} from '../db/statements.ts';
 import {
   DatabaseStorage,
   type ClientGroupStorage,
-} from '../services/view-syncer/database-storage.ts';
+} from '../../../zqlite/src/database-storage.ts';
 import {mapLiteDataTypeToZqlSchemaValue} from '../types/lite.ts';
 import {
   getSchema,

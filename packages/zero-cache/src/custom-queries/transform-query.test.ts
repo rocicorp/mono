@@ -17,6 +17,8 @@ import type {
   TransformResponseBody,
 } from '../../../zero-protocol/src/custom-queries.ts';
 import type {TransformedAndHashed} from '../auth/read-authorizer.ts';
+import {ErrorForClient} from '../types/error-for-client.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 
 // Mock the fetchFromAPIServer function
 vi.mock('../custom/fetch.ts');
@@ -707,6 +709,84 @@ describe('CustomQueryTransformer', () => {
       lc,
       disallowedUrl,
       [allowedUrl],
+      mockShard,
+      headerOptions,
+      ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
+    );
+  });
+
+  test('should re-throw ErrorForClient exceptions', async () => {
+    const errorForClient = new ErrorForClient(
+      {
+        kind: ErrorKind.AuthInvalidated,
+        message: 'Authentication token expired',
+      },
+      'error',
+    );
+
+    mockFetchFromAPIServer.mockRejectedValue(errorForClient);
+
+    const transformer = new CustomQueryTransformer(
+      lc,
+      {
+        url: [pullUrl],
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+
+    // This should re-throw the ErrorForClient exception
+    await expect(
+      transformer.transform(headerOptions, [mockQueries[0]], undefined),
+    ).rejects.toThrow(errorForClient);
+
+    // Verify the API was called
+    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      lc,
+      pullUrl,
+      [pullUrl],
+      mockShard,
+      headerOptions,
+      ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
+    );
+  });
+
+  test('should convert non-ErrorForClient exceptions to error responses', async () => {
+    const genericError = new Error('Network timeout');
+
+    mockFetchFromAPIServer.mockRejectedValue(genericError);
+
+    const transformer = new CustomQueryTransformer(
+      lc,
+      {
+        url: [pullUrl],
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+
+    // This should NOT throw, but return error responses
+    const result = await transformer.transform(
+      headerOptions,
+      [mockQueries[0]],
+      undefined,
+    );
+
+    // Verify it returns an error response instead of throwing
+    expect(result).toEqual([
+      {
+        error: 'zero',
+        details: 'Network timeout',
+        id: 'query1',
+        name: 'getUserById',
+      },
+    ]);
+
+    // Verify the API was called
+    expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      lc,
+      pullUrl,
+      [pullUrl],
       mockShard,
       headerOptions,
       ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],

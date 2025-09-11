@@ -91,7 +91,11 @@ describe('view-syncer/cvr', () => {
     cvrDb = await testDBs.create('cvr_purger_test_db');
     await cvrDb.begin(tx => setupCVRTables(lc, tx, SHARD));
 
-    purger = new CVRPurger(lc, cvrDb, SHARD, INACTIVITY_THRESHOLD_MS);
+    purger = new CVRPurger(lc, cvrDb, SHARD, {
+      inactivityThresholdMs: INACTIVITY_THRESHOLD_MS,
+      initialBatchSize: 25,
+      initialIntervalMs: 60000,
+    });
 
     for (const [clientGroupID, lastActive] of [
       ['new-1', Date.now()],

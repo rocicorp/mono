@@ -40,7 +40,7 @@ import {updateReplicationWatermark} from '../replicator/schema/replication-state
 import {type FakeReplicator} from '../replicator/test-utils.ts';
 import {CVRStore} from './cvr-store.ts';
 import {CVRQueryDrivenUpdater} from './cvr.ts';
-import {type ClientGroupStorage} from './database-storage.ts';
+import {type ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
 import {DrainCoordinator} from './drain-coordinator.ts';
 import {ttlClockFromNumber} from './ttl-clock.ts';
 import {

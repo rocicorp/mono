@@ -11,10 +11,34 @@ import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 import {useZero} from './zero-provider.tsx';
+import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 
-export type QueryResultDetails = Readonly<{
-  type: ResultType;
-}>;
+export type QueryResultDetails = Readonly<
+  | {
+      type: 'complete';
+    }
+  | {
+      type: 'unknown';
+    }
+  | QueryErrorDetails
+>;
+
+type QueryErrorDetails = {
+  type: 'error';
+  refetch: (() => void) | undefined;
+  error:
+    | {
+        type: 'app';
+        queryName: string;
+        details: ReadonlyJSONValue;
+      }
+    | {
+        type: 'http';
+        queryName: string;
+        status: number;
+        details: ReadonlyJSONValue;
+      };
+};
 
 export type QueryResult<TReturn> = readonly [
   HumanReadable<TReturn>,
@@ -138,11 +162,14 @@ const disabledSubscriber = () => () => {};
 
 const resultTypeUnknown = {type: 'unknown'} as const;
 const resultTypeComplete = {type: 'complete'} as const;
+const resultTypeError = {type: 'error'} as const;
 
 const emptySnapshotSingularUnknown = [undefined, resultTypeUnknown] as const;
 const emptySnapshotSingularComplete = [undefined, resultTypeComplete] as const;
+const emptySnapshotSingularErrorUnknown = [undefined, resultTypeError] as const;
 const emptySnapshotPluralUnknown = [emptyArray, resultTypeUnknown] as const;
 const emptySnapshotPluralComplete = [emptyArray, resultTypeComplete] as const;
+const emptySnapshotErrorUnknown = [emptyArray, resultTypeError] as const;
 
 function getDefaultSnapshot<TReturn>(singular: boolean): QueryResult<TReturn> {
   return (
@@ -157,26 +184,86 @@ function getDefaultSnapshot<TReturn>(singular: boolean): QueryResult<TReturn> {
 function getSnapshot<TReturn>(
   singular: boolean,
   data: HumanReadable<TReturn>,
-  resultType: string,
+  resultType: ResultType,
+  refetchFn: () => void,
+  error?: ErroredQuery | undefined,
 ): QueryResult<TReturn> {
   if (singular && data === undefined) {
-    return (resultType === 'complete'
-      ? emptySnapshotSingularComplete
-      : emptySnapshotSingularUnknown) as unknown as QueryResult<TReturn>;
+    switch (resultType) {
+      case 'error':
+        if (error) {
+          return [
+            undefined,
+            makeError(refetchFn, error),
+          ] as unknown as QueryResult<TReturn>;
+        }
+        return emptySnapshotSingularErrorUnknown as unknown as QueryResult<TReturn>;
+      case 'complete':
+        return emptySnapshotSingularComplete as unknown as QueryResult<TReturn>;
+      case 'unknown':
+        return emptySnapshotSingularUnknown as unknown as QueryResult<TReturn>;
+    }
   }
 
   if (!singular && (data as unknown[]).length === 0) {
-    return (
-      resultType === 'complete'
-        ? emptySnapshotPluralComplete
-        : emptySnapshotPluralUnknown
-    ) as QueryResult<TReturn>;
+    switch (resultType) {
+      case 'error':
+        if (error) {
+          return [
+            emptyArray,
+            makeError(refetchFn, error),
+          ] as unknown as QueryResult<TReturn>;
+        }
+        return emptySnapshotErrorUnknown as unknown as QueryResult<TReturn>;
+      case 'complete':
+        return emptySnapshotPluralComplete as unknown as QueryResult<TReturn>;
+      case 'unknown':
+        return emptySnapshotPluralUnknown as unknown as QueryResult<TReturn>;
+    }
   }
 
-  return [
-    data,
-    resultType === 'complete' ? resultTypeComplete : resultTypeUnknown,
-  ];
+  switch (resultType) {
+    case 'error':
+      if (error) {
+        return [data, makeError(refetchFn, error)];
+      }
+      return [
+        data,
+        makeError(refetchFn, {
+          error: 'app',
+          id: 'unknown',
+          name: 'unknown',
+          details: 'An unknown error occurred',
+        }),
+      ];
+    case 'complete':
+      return [data, resultTypeComplete];
+    case 'unknown':
+      return [data, resultTypeUnknown];
+  }
+}
+
+function makeError(
+  refetch: () => void,
+  error: ErroredQuery,
+): QueryErrorDetails {
+  return {
+    type: 'error',
+    refetch,
+    error:
+      error.error === 'app' || error.error === 'zero'
+        ? {
+            type: 'app',
+            queryName: error.name,
+            details: error.details,
+          }
+        : {
+            type: 'http',
+            queryName: error.name,
+            status: error.status,
+            details: error.details,
+          },
+  };
 }
 
 declare const TESTING: boolean;
@@ -379,13 +466,20 @@ class ViewWrapper<
   #onData = (
     snap: Immutable<HumanReadable<TReturn>>,
     resultType: ResultType,
+    error?: ErroredQuery | undefined,
   ) => {
     const data =
       snap === undefined
         ? snap
         : (deepClone(snap as ReadonlyJSONValue) as HumanReadable<TReturn>);
-    this.#snapshot = getSnapshot(this.#format.singular, data, resultType);
-    if (resultType === 'complete') {
+    this.#snapshot = getSnapshot(
+      this.#format.singular,
+      data,
+      resultType,
+      this.#refetch,
+      error,
+    );
+    if (resultType === 'complete' || resultType === 'error') {
       this.#complete = true;
       this.#completeResolver.resolve();
       this.#nonEmpty = true;
@@ -404,6 +498,16 @@ class ViewWrapper<
     for (const internals of this.#reactInternals) {
       internals();
     }
+  };
+
+  /**
+   * Called by the user to force a refetch of the query
+   * in the case the query errored.
+   */
+  #refetch = () => {
+    this.#view?.destroy();
+    this.#view = undefined;
+    this.#materializeIfNeeded();
   };
 
   #materializeIfNeeded = () => {

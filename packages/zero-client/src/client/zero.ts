@@ -1070,7 +1070,7 @@ export class Zero<
         return this.#mutationTracker.processPushResponse(downMessage[1]);
 
       case 'transformError':
-        // this.#queryManager.handleTransformError();
+        this.#queryManager.handleTransformErrors(downMessage[1]);
         break;
 
       case 'inspect':

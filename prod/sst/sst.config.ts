@@ -73,6 +73,7 @@ export default $config({
       OTEL_EXPORTER_OTLP_HEADERS: process.env.OTEL_EXPORTER_OTLP_HEADERS,
       OTEL_RESOURCE_ATTRIBUTES: process.env.OTEL_RESOURCE_ATTRIBUTES,
       OTEL_NODE_RESOURCE_DETECTORS: 'env,host,os',
+      OTEL_LOG_LEVEL: 'warn',
     };
 
     const ecsVolumeRole = IS_EBS_STAGE
