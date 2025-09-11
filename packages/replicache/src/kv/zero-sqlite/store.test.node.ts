@@ -4,11 +4,8 @@ import {
   registerCreatedFile,
   runSQLiteStoreTests,
 } from '../sqlite-store-test-util.ts';
-import {
-  clearAllNamedZeroSQLiteStoresForTesting,
-  zeroSQLiteStoreProvider,
-  type ZeroSQLiteStoreOptions,
-} from './store.ts';
+import {clearAllNamedStoresForTesting} from '../sqlite-store.ts';
+import {zeroSQLiteStoreProvider, type ZeroSQLiteStoreOptions} from './store.ts';
 
 const defaultStoreOptions = {
   busyTimeout: 200,
@@ -29,7 +26,7 @@ function createStore(name: string, opts?: ZeroSQLiteStoreOptions) {
 runSQLiteStoreTests<ZeroSQLiteStoreOptions>({
   storeName: 'ZeroSQLiteStore',
   createStoreProvider: zeroSQLiteStoreProvider,
-  clearAllNamedStores: clearAllNamedZeroSQLiteStoresForTesting,
+  clearAllNamedStores: clearAllNamedStoresForTesting,
   createStoreWithDefaults: createStore,
   defaultStoreOptions,
 });

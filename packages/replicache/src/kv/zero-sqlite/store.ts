@@ -5,21 +5,11 @@ import type {
   SQLiteDatabase,
   SQLiteStoreOptions,
 } from '../sqlite-store.ts';
-import {
-  clearAllNamedStoresForTesting,
-  dropStore,
-  SQLiteStore,
-} from '../sqlite-store.ts';
+import {dropStore, SQLiteStore} from '../sqlite-store.ts';
 import type {StoreProvider} from '../store.ts';
 export {safeFilename} from '../sqlite-store.ts';
 
 export type ZeroSQLiteStoreOptions = SQLiteStoreOptions;
-
-export function clearAllNamedZeroSQLiteStoresForTesting(): void {
-  // Just clear in-memory tracking (closes DB handles). Test code is responsible
-  // for deleting any underlying files it created.
-  clearAllNamedStoresForTesting();
-}
 
 export function dropZeroSQLiteStore(name: string): Promise<void> {
   return dropStore(name, filename => new ZeroSQLiteDatabase(filename));
@@ -41,7 +31,7 @@ export function zeroSQLiteStoreProvider(
 }
 
 class ZeroSQLitePreparedStatement implements PreparedStatement {
-  #statement: Statement;
+  readonly #statement: Statement;
 
   constructor(statement: Statement) {
     this.#statement = statement;
@@ -63,8 +53,8 @@ class ZeroSQLitePreparedStatement implements PreparedStatement {
 }
 
 class ZeroSQLiteDatabase implements SQLiteDatabase {
-  #db: open.Database;
-  #filename: string;
+  readonly #db: open.Database;
+  readonly #filename: string;
 
   constructor(filename: string, opts?: ZeroSQLiteStoreOptions) {
     this.#filename = filename;

@@ -7,11 +7,8 @@ import {
   registerCreatedFile,
   runSQLiteStoreTests,
 } from '../sqlite-store-test-util.ts';
-import {
-  clearAllNamedOpSQLiteStoresForTesting,
-  opSQLiteStoreProvider,
-  type OpSQLiteStoreOptions,
-} from './store.ts';
+import {clearAllNamedStoresForTesting} from '../sqlite-store.ts';
+import {opSQLiteStoreProvider, type OpSQLiteStoreOptions} from './store.ts';
 
 // Mock the @op-engineering/op-sqlite module with Node SQLite implementation
 vi.mock('@op-engineering/op-sqlite', () => {
@@ -129,7 +126,7 @@ const defaultStoreOptions = {
 runSQLiteStoreTests<OpSQLiteStoreOptions>({
   storeName: 'OpSQLiteStore',
   createStoreProvider: opSQLiteStoreProvider,
-  clearAllNamedStores: clearAllNamedOpSQLiteStoresForTesting,
+  clearAllNamedStores: clearAllNamedStoresForTesting,
   createStoreWithDefaults: createStore,
   defaultStoreOptions,
 });

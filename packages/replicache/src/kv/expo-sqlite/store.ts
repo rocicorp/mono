@@ -9,18 +9,10 @@ import type {
   SQLiteDatabase,
   SQLiteStoreOptions,
 } from '../sqlite-store.ts';
-import {
-  clearAllNamedStoresForTesting,
-  dropStore,
-  SQLiteStore,
-} from '../sqlite-store.ts';
+import {dropStore, SQLiteStore} from '../sqlite-store.ts';
 import type {StoreProvider} from '../store.ts';
 
 export type ExpoSQLiteStoreOptions = SQLiteStoreOptions;
-
-export function clearAllNamedExpoSQLiteStoresForTesting(): void {
-  clearAllNamedStoresForTesting();
-}
 
 export function dropExpoSQLiteStore(name: string): Promise<void> {
   return dropStore(name, filename => new ExpoSQLiteDatabase(filename));
@@ -42,7 +34,7 @@ export function expoSQLiteStoreProvider(
 }
 
 class ExpoSQLitePreparedStatement implements PreparedStatement {
-  #statement: SQLiteStatement;
+  readonly #statement: SQLiteStatement;
 
   constructor(statement: SQLiteStatement) {
     this.#statement = statement;
@@ -60,9 +52,9 @@ class ExpoSQLitePreparedStatement implements PreparedStatement {
 }
 
 class ExpoSQLiteDatabase implements SQLiteDatabase {
-  #db: DB;
-  #filename: string;
-  #statements: Set<SQLiteStatement> = new Set();
+  readonly #db: DB;
+  readonly #filename: string;
+  readonly #statements: Set<SQLiteStatement> = new Set();
 
   constructor(filename: string) {
     this.#filename = filename;

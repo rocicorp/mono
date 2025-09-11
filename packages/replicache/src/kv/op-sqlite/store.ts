@@ -4,11 +4,7 @@ import type {
   SQLiteDatabase,
   SQLiteStoreOptions,
 } from '../sqlite-store.ts';
-import {
-  clearAllNamedStoresForTesting,
-  dropStore,
-  SQLiteStore,
-} from '../sqlite-store.ts';
+import {dropStore, SQLiteStore} from '../sqlite-store.ts';
 import type {StoreProvider} from '../store.ts';
 
 // @ts-expect-error Odd export
@@ -19,10 +15,6 @@ export type OpSQLiteStoreOptions = SQLiteStoreOptions & {
   location?: 'default' | 'Library' | 'Documents' | 'Temporary';
   encryptionKey?: string;
 };
-
-export function clearAllNamedOpSQLiteStoresForTesting(): void {
-  clearAllNamedStoresForTesting();
-}
 
 function dropOpSQLiteStore(name: string): Promise<void> {
   return dropStore(
@@ -52,8 +44,8 @@ export function opSQLiteStoreProvider(
 }
 
 class OpSQLitePreparedStatement implements PreparedStatement {
-  #db: DB;
-  #sql: string;
+  readonly #db: DB;
+  readonly #sql: string;
 
   constructor(db: DB, sql: string) {
     this.#db = db;
@@ -71,8 +63,8 @@ class OpSQLitePreparedStatement implements PreparedStatement {
 }
 
 class OpSQLiteDatabase implements SQLiteDatabase {
-  #db: DB;
-  #filename: string;
+  readonly #db: DB;
+  readonly #filename: string;
 
   constructor(filename: string, opts?: OpSQLiteStoreOptions) {
     this.#filename = filename;

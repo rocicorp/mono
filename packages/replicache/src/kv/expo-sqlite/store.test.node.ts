@@ -7,11 +7,8 @@ import {
   registerCreatedFile,
   runSQLiteStoreTests,
 } from '../sqlite-store-test-util.ts';
-import {
-  clearAllNamedExpoSQLiteStoresForTesting,
-  expoSQLiteStoreProvider,
-  type ExpoSQLiteStoreOptions,
-} from './store.ts';
+import {clearAllNamedStoresForTesting} from '../sqlite-store.ts';
+import {expoSQLiteStoreProvider, type ExpoSQLiteStoreOptions} from './store.ts';
 
 //Mock the expo-sqlite module with Node SQLite implementation
 vi.mock('expo-sqlite', () => {
@@ -150,7 +147,7 @@ function createStore(name: string, opts?: ExpoSQLiteStoreOptions) {
 runSQLiteStoreTests<ExpoSQLiteStoreOptions>({
   storeName: 'ExpoSQLiteStore',
   createStoreProvider: expoSQLiteStoreProvider,
-  clearAllNamedStores: clearAllNamedExpoSQLiteStoresForTesting,
+  clearAllNamedStores: clearAllNamedStoresForTesting,
   createStoreWithDefaults: createStore,
   defaultStoreOptions,
 });
