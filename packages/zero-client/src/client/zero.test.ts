@@ -972,7 +972,7 @@ describe('initConnection', () => {
     // Use real timers for this delay since we're using fake timers in the test
     const now = Date.now();
     vi.useRealTimers();
-    await sleep(1);
+    await sleep(10);
     vi.useFakeTimers({now});
 
     return zeroForTest({
