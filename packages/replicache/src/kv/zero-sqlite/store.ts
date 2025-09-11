@@ -71,7 +71,7 @@ class ZeroSQLiteDatabase implements SQLiteDatabase {
   }
 
   destroy(): void {
-    // Use node file system to delete the database file (tests may also remove WAL/SHM)
+    // Use node file system to delete the database file
     if (existsSync(this.#filename)) unlinkSync(this.#filename);
   }
 
