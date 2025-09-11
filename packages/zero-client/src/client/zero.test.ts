@@ -24,7 +24,6 @@ import {
   overrideBrowserGlobal,
 } from '../../../shared/src/browser-env.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
-import {sleep} from '../../../shared/src/sleep.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {changeDesiredQueriesMessageSchema} from '../../../zero-protocol/src/change-desired-queries.ts';
@@ -968,12 +967,13 @@ describe('initConnection', () => {
 
     await z.close();
 
-    // Small delay to ensure the lock is released
-    // Use real timers for this delay since we're using fake timers in the test
-    const now = Date.now();
-    vi.useRealTimers();
-    await sleep(10);
-    vi.useFakeTimers({now});
+    // Wait until all the locks are released.
+    // This is needed because closing the Zero instance releases the locks
+    // asynchronously and we need to wait until they are released before creating
+    await vi.waitFor(async () => {
+      const locks = await navigator.locks.query();
+      return locks.held?.length === 0;
+    });
 
     return zeroForTest({
       ...options,
