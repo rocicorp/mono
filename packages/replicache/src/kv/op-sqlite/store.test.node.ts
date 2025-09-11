@@ -125,17 +125,12 @@ const defaultStoreOptions = {
   readUncommitted: false,
 } as const;
 
-function getNewStore(name: string) {
-  const provider = opSQLiteStoreProvider(defaultStoreOptions);
-  return provider.create(name);
-}
-
 // Run all shared SQLite store tests
 runSQLiteStoreTests<OpSQLiteStoreOptions>({
   storeName: 'OpSQLiteStore',
   createStoreProvider: opSQLiteStoreProvider,
   clearAllNamedStores: clearAllNamedOpSQLiteStoresForTesting,
-  createStoreWithDefaults: getNewStore,
+  createStoreWithDefaults: createStore,
   defaultStoreOptions,
 });
 

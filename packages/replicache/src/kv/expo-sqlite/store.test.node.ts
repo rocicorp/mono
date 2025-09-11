@@ -141,11 +141,6 @@ const defaultStoreOptions = {
   readUncommitted: false,
 } as const;
 
-function getNewStore(name: string) {
-  const provider = expoSQLiteStoreProvider(defaultStoreOptions);
-  return provider.create(name);
-}
-
 function createStore(name: string, opts?: ExpoSQLiteStoreOptions) {
   const provider = expoSQLiteStoreProvider(opts);
   return provider.create(name);
@@ -156,7 +151,7 @@ runSQLiteStoreTests<ExpoSQLiteStoreOptions>({
   storeName: 'ExpoSQLiteStore',
   createStoreProvider: expoSQLiteStoreProvider,
   clearAllNamedStores: clearAllNamedExpoSQLiteStoresForTesting,
-  createStoreWithDefaults: getNewStore,
+  createStoreWithDefaults: createStore,
   defaultStoreOptions,
 });
 
