@@ -1,6 +1,6 @@
 {
   "extends": ["@rocicorp/eslint-config"],
-  "plugins": ["./tools/eslint-plugin-rocicorp/dist"],
+  "plugins": ["rocicorp"],
   "rules": {
     "rocicorp/no-unhandled-query": "error",
     "no-restricted-syntax": [
