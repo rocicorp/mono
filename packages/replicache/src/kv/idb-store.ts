@@ -7,6 +7,10 @@ import {
   deepFreezeAllowUndefined,
 } from '../frozen-json.ts';
 import type {Read, Store, Write} from './store.ts';
+import {
+  storeIsClosedRejection,
+  transactionIsClosedRejection,
+} from './throw-if-closed.ts';
 import {WriteImplBase, deleteSentinel} from './write-impl-base.ts';
 
 const RELAXED = {durability: 'relaxed'} as const;
@@ -188,14 +192,6 @@ class WriteImpl extends WriteImplBase {
   get closed(): boolean {
     return this.#closed;
   }
-}
-
-function transactionIsClosedRejection() {
-  return Promise.reject(new Error('Transaction is closed'));
-}
-
-function storeIsClosedRejection() {
-  return Promise.reject(new Error('Store is closed'));
 }
 
 function writeImpl(db: IDBDatabase): Write {
