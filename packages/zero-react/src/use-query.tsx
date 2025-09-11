@@ -12,7 +12,6 @@ import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 import {useZero} from './zero-provider.tsx';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
-import {assert} from '../../shared/src/asserts.ts';
 
 export type QueryResultDetails = Readonly<
   | {
