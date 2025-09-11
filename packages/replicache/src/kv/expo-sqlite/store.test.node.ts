@@ -137,23 +137,3 @@ test('different configuration options', async () => {
 
   await storeWithOptions.close();
 });
-
-test('different configuration options', async () => {
-  // Test with different configuration options
-  const storeWithOptions = createStore('pragma-test', {
-    busyTimeout: 500,
-    journalMode: 'DELETE',
-    synchronous: 'FULL',
-    readUncommitted: true,
-  });
-
-  await withWrite(storeWithOptions, async wt => {
-    await wt.put('config-test', 'configured-value');
-  });
-
-  await withRead(storeWithOptions, async rt => {
-    expect(await rt.get('config-test')).equal('configured-value');
-  });
-
-  await storeWithOptions.close();
-});
