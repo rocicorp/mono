@@ -128,6 +128,16 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
             ></textarea>
           </ImageUploadArea>
         </div>
+        <div className="w-full px-4 mt-4">
+          <p className="aside">
+            Testing zero? Please make sure to delete your comment after.
+            <br />
+            Want a faster response? Join us on Discord.
+            <a href="https://discord.rocicorp.dev/" className="aside-cta">
+              Discord
+            </a>
+          </p>
+        </div>
       </ModalBody>
       <ModalActions>
         <Button
