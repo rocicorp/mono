@@ -35,7 +35,11 @@ import {
   transformAndHashQuery,
   type TransformedAndHashed,
 } from '../../auth/read-authorizer.ts';
-import {getServerVersion, type ZeroConfig} from '../../config/zero-config.ts';
+import {
+  getServerVersion,
+  isAdminPasswordValid,
+  type ZeroConfig,
+} from '../../config/zero-config.ts';
 import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import {
   getOrCreateCounter,
@@ -1888,7 +1892,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       case 'authenticate': {
         const password = body.value;
-        const ok = password === this.#config.adminPassword;
+        const ok = isAdminPasswordValid(lc, this.#config, password);
         if (ok) {
           this.#inspectorDelegate.setAuthenticated(this.id);
         } else {
