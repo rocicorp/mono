@@ -24,6 +24,10 @@ export type NormalizedZeroConfig = ZeroConfig & {
   numSyncWorkers: number;
 };
 
+export function isDevelopmentMode(): boolean {
+  return process.env.NODE_ENV === 'development';
+}
+
 export function assertNormalized(
   config: ZeroConfig,
 ): asserts config is NormalizedZeroConfig {
@@ -34,6 +38,13 @@ export function assertNormalized(
   assert(config.change.db, 'missing --change-db');
   assert(config.cvr.db, 'missing --cvr-db');
   assertNotUndefined(config.numSyncWorkers, 'missing --num-sync-workers');
+
+  if (!isDevelopmentMode()) {
+    assert(
+      config.adminPassword,
+      'missing --admin-password: required in production mode',
+    );
+  }
 }
 
 /**

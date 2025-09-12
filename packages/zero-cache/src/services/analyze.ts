@@ -1,16 +1,17 @@
+import type {LogContext} from '@rocicorp/logger';
 import auth from 'basic-auth';
 import type {FastifyReply, FastifyRequest} from 'fastify';
-import type {NormalizedZeroConfig} from '../config/normalize.ts';
-import type {LogContext} from '@rocicorp/logger';
+import {explainQueries} from '../../../analyze-query/src/explain-queries.ts';
 import {runAst} from '../../../analyze-query/src/run-ast.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
-import {Database} from '../../../zqlite/src/db.ts';
 import {Debug} from '../../../zql/src/builder/debug-delegate.ts';
-import type {LiteAndZqlSpec, LiteTableSpec} from '../db/specs.ts';
-import {computeZqlSpecs, mustGetTableSpec} from '../db/lite-tables.ts';
-import {TableSource} from '../../../zqlite/src/table-source.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
-import {explainQueries} from '../../../analyze-query/src/explain-queries.ts';
+import {Database} from '../../../zqlite/src/db.ts';
+import {TableSource} from '../../../zqlite/src/table-source.ts';
+import type {NormalizedZeroConfig} from '../config/normalize.ts';
+import {isAdminPasswordValid} from '../config/zero-config.ts';
+import {computeZqlSpecs, mustGetTableSpec} from '../db/lite-tables.ts';
+import type {LiteAndZqlSpec, LiteTableSpec} from '../db/specs.ts';
 
 export function setCors(res: FastifyReply) {
   return res
@@ -27,9 +28,8 @@ export async function handleAnalyzeQueryRequest(
   res: FastifyReply,
 ) {
   const credentials = auth(req);
-  const expectedPassword = config.adminPassword;
   void setCors(res);
-  if (!expectedPassword || credentials?.pass !== expectedPassword) {
+  if (!isAdminPasswordValid(lc, config, credentials?.pass)) {
     await res
       .code(401)
       .header('WWW-Authenticate', 'Basic realm="analyze query Protected Area"')
