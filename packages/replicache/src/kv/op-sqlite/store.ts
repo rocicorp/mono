@@ -1,4 +1,3 @@
-import type {DB} from '@op-engineering/op-sqlite';
 import type {
   PreparedStatement,
   SQLiteDatabase,
@@ -6,9 +5,7 @@ import type {
 } from '../sqlite-store.ts';
 import {dropStore, SQLiteStore} from '../sqlite-store.ts';
 import type {StoreProvider} from '../store.ts';
-
-// @ts-expect-error Odd export
-import {open} from '@op-engineering/op-sqlite';
+import {open, type DB} from './types.ts';
 
 export type OpSQLiteStoreOptions = SQLiteStoreOptions & {
   // OpSQLite-specific options
@@ -58,7 +55,7 @@ class OpSQLitePreparedStatement implements PreparedStatement {
   }
 
   async exec(params: string[]): Promise<void> {
-    await this.#db.executeRaw(this.#sql, params as never);
+    await this.#db.executeRaw(this.#sql, params);
   }
 }
 
