@@ -91,7 +91,7 @@ export default function runWorker(
       .withContext('clientGroupID', id)
       .withContext('instance', randomID());
     lc.debug?.(`creating view syncer`);
-    const inspectMetricsDelegate = new InspectorDelegate();
+    const inspectorDelegate = new InspectorDelegate();
     return new ViewSyncerService(
       config,
       logger,
@@ -107,12 +107,12 @@ export default function runWorker(
         shard,
         operatorStorage.createClientGroupStorage(id),
         id,
-        inspectMetricsDelegate,
+        inspectorDelegate,
       ),
       sub,
       drainCoordinator,
       config.log.slowHydrateThreshold,
-      inspectMetricsDelegate,
+      inspectorDelegate,
     );
   };
 
