@@ -5,6 +5,7 @@ import {nanoid} from '../util/nanoid.ts';
 import type {Store} from '../../../replicache/src/dag/store.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
@@ -68,6 +69,10 @@ export class MockSocket extends EventTarget {
     super();
     this.url = url;
     this.protocol = protocol;
+  }
+
+  get jsonMessages(): JSONValue[] {
+    return this.messages.map(message => JSON.parse(message));
   }
 
   send(message: string) {

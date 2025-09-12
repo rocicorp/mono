@@ -137,7 +137,7 @@ test('client queries', async () => {
     (await z.socket).messages.length = 0;
     const p = inspector.client.queries();
     await Promise.resolve();
-    expect((await z.socket).messages.map(s => JSON.parse(s))).toEqual([
+    expect((await z.socket).jsonMessages).toEqual([
       [
         'inspect',
         {
@@ -662,8 +662,8 @@ test('server version', async () => {
   await z.socket;
   const p = inspector.serverVersion();
   await Promise.resolve();
-  expect((await z.socket).messages).toEqual([
-    JSON.stringify(['inspect', {op: 'version', id: '000000000000000000000'}]),
+  expect((await z.socket).jsonMessages).toEqual([
+    ['inspect', {op: 'version', id: '000000000000000000000'}],
   ]);
 
   await z.triggerMessage([
@@ -739,4 +739,142 @@ test('clientZQL', async () => {
 
   view.destroy();
   await z.close();
+});
+
+describe('authenticate', () => {
+  test('authenticate rpc dance', async () => {
+    const z = zeroForTest({schema});
+    await z.triggerConnected();
+    await Promise.resolve();
+    const inspector = await z.inspect();
+    vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+    await z.socket;
+    const p = inspector.serverVersion();
+    await Promise.resolve();
+    expect((await z.socket).jsonMessages).toEqual([
+      ['inspect', {op: 'version', id: '000000000000000000000'}],
+    ]);
+    (await z.socket).messages.length = 0;
+
+    vi.stubGlobal('prompt', () => 'test-user');
+
+    await z.triggerMessage([
+      'inspect',
+      {
+        op: 'authenticated',
+        id: '000000000000000000000',
+        value: false,
+      },
+    ] satisfies InspectDownMessage);
+
+    expect((await z.socket).jsonMessages).toEqual([
+      [
+        'inspect',
+        {op: 'authenticate', id: '000000000000000000000', value: 'test-user'},
+      ],
+    ]);
+    (await z.socket).messages.length = 0;
+
+    await z.triggerMessage([
+      'inspect',
+      {
+        op: 'authenticated',
+        id: '000000000000000000000',
+        value: true,
+      },
+    ] satisfies InspectDownMessage);
+    expect((await z.socket).jsonMessages).toEqual([
+      ['inspect', {op: 'version', id: '000000000000000000000'}],
+    ]);
+    (await z.socket).messages.length = 0;
+
+    await z.triggerMessage([
+      'inspect',
+      {
+        op: 'version',
+        id: '000000000000000000000',
+        value: '1.2.34',
+      },
+    ] satisfies InspectDownMessage);
+
+    expect(await p).toBe('1.2.34');
+
+    await z.close();
+  });
+
+  test('cancel prompt', async () => {
+    const z = zeroForTest({schema});
+    await z.triggerConnected();
+    await Promise.resolve();
+    const inspector = await z.inspect();
+    vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+    await z.socket;
+    const p = inspector.serverVersion();
+    await Promise.resolve();
+    expect((await z.socket).jsonMessages).toEqual([
+      ['inspect', {op: 'version', id: '000000000000000000000'}],
+    ]);
+    (await z.socket).messages.length = 0;
+
+    vi.stubGlobal('prompt', () => null);
+
+    await z.triggerMessage([
+      'inspect',
+      {
+        op: 'authenticated',
+        id: '000000000000000000000',
+        value: false,
+      },
+    ] satisfies InspectDownMessage);
+
+    await expect(p).rejects.toThrowError(`Authentication failed`);
+    await z.close();
+  });
+
+  test('wrong password rejects', async () => {
+    const z = zeroForTest({schema});
+    await z.triggerConnected();
+    await Promise.resolve();
+    const inspector = await z.inspect();
+    vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+    await z.socket;
+    const p = inspector.serverVersion();
+    await Promise.resolve();
+    expect((await z.socket).jsonMessages).toEqual([
+      ['inspect', {op: 'version', id: '000000000000000000000'}],
+    ]);
+    (await z.socket).messages.length = 0;
+
+    vi.stubGlobal('prompt', () => 'test-user');
+
+    await z.triggerMessage([
+      'inspect',
+      {
+        op: 'authenticated',
+        id: '000000000000000000000',
+        value: false,
+      },
+    ] satisfies InspectDownMessage);
+
+    expect((await z.socket).jsonMessages).toEqual([
+      [
+        'inspect',
+        {op: 'authenticate', id: '000000000000000000000', value: 'test-user'},
+      ],
+    ]);
+    (await z.socket).messages.length = 0;
+
+    await z.triggerMessage([
+      'inspect',
+      {
+        op: 'authenticated',
+        id: '000000000000000000000',
+        value: false,
+      },
+    ] satisfies InspectDownMessage);
+
+    await expect(p).rejects.toThrowError(`Authentication failed`);
+
+    await z.close();
+  });
 });
