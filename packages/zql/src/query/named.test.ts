@@ -65,9 +65,7 @@ test('syncedQuery', () => {
     'invalid_type at .0 (expected string)',
   );
 
-  const vqWrapped = wv('ignored', '123');
-  expect(vqWrapped).toHaveProperty('query');
-  const vq = vqWrapped.query;
+  const vq = wv('ignored', '123');
   expectTypeOf(vq.run()).toEqualTypeOf<
     Promise<
       {
@@ -177,9 +175,7 @@ test('syncedQueryWithContext', () => {
     'invalid_type at .0 (expected string)',
   );
 
-  const vqWrapped = wv('user1', '123');
-  expect(vqWrapped).toHaveProperty('query');
-  const vq = vqWrapped.query;
+  const vq = wv('user1', '123');
   expectTypeOf(vq.run()).toEqualTypeOf<
     Promise<
       {
@@ -397,21 +393,18 @@ test('withValidation with async syncedQuery', () => {
 
   const vqPromise = wv('ignored', '111');
 
-  // Type check: should be a Promise of {query: ...} after withValidation
-  expectTypeOf(vqPromise).toMatchTypeOf<Promise<{query: any}>>();
+  // Type check: should be a Promise of Query after withValidation
+  expectTypeOf(vqPromise).toMatchTypeOf<Promise<Query<any, any, any>>>();
 
   // Verify it's a Promise
   expect(vqPromise).toBeInstanceOf(Promise);
 
-  // Test that sync withValidation wraps correctly
+  // Test that sync withValidation returns query directly
   const syncDef = syncedQuery('mySyncValidatedQuery', idArgs, (id: string) =>
     builder.issue.where('id', id),
   );
   const wvSync = withValidation(syncDef);
-  const vqWrappedSync = wvSync('ignored', '111');
-
-  expect(vqWrappedSync).toHaveProperty('query');
-  const vq = (vqWrappedSync as any).query;
+  const vq = wvSync('ignored', '111');
 
   expect(vq.customQueryID).toEqual({
     name: 'mySyncValidatedQuery',

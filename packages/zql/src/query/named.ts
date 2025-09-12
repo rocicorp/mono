@@ -137,16 +137,14 @@ function syncedQueryImpl<
   };
 }
 
-export type WithValidationReturn<R> = R extends Promise<infer Q>
-  ? Promise<{query: Q}>
-  : {query: R};
+export type WithValidationReturn<R> = R;
 
-// withValidation returns a function that returns wrapped queries, not a SyncedQuery
+// withValidation returns a function that returns queries directly, not wrapped
 export function withValidation<T extends SyncedQuery<any, any, any, any, any>>(
   fn: T,
 ): T extends SyncedQuery<infer N, infer C, any, any, infer R>
   ? {
-      (context: C, ...args: ReadonlyJSONValue[]): WithValidationReturn<R>;
+      (context: C, ...args: ReadonlyJSONValue[]): R;
       queryName: N;
       parse: typeof fn.parse;
       takesContext: true;
@@ -159,12 +157,7 @@ export function withValidation<T extends SyncedQuery<any, any, any, any, any>>(
     const f = fn as any;
     const parsed = f.parse(args);
     const result = f.takesContext ? f(context, ...parsed) : f(...parsed);
-    
-    // Wrap the result in an object to prevent automatic promise unwrapping
-    if (result instanceof Promise) {
-      return result.then((query: any) => ({query}));
-    }
-    return {query: result};
+    return result;
   };
   ret.queryName = fn.queryName;
   ret.parse = fn.parse;
