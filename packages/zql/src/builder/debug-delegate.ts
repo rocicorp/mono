@@ -1,4 +1,10 @@
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {
+  RowCountsByQuery,
+  RowCountsBySource,
+  RowsByQuery,
+  RowsBySource,
+} from '../../../zero-protocol/src/analyze-query-result.ts';
+import {type Row} from '../../../zero-protocol/src/data.ts';
 
 export const runtimeDebugFlags = {
   trackRowCountsVended: false,
@@ -7,10 +13,6 @@ export const runtimeDebugFlags = {
 
 type SourceName = string;
 type SQL = string;
-export type RowCountsBySource = Record<SourceName, RowCountsByQuery>;
-export type RowsBySource = Record<SourceName, RowsByQuery>;
-type RowCountsByQuery = Record<SQL, number>;
-type RowsByQuery = Record<SQL, Row[]>;
 
 export interface DebugDelegate {
   initQuery(table: SourceName, query: SQL): void;

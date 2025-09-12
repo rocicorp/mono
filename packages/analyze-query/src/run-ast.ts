@@ -1,65 +1,53 @@
+import {LogContext} from '@rocicorp/logger';
+import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
+import {formatOutput} from '../../ast-to-zql/src/format.ts';
+import {assert} from '../../shared/src/asserts.ts';
+import {must} from '../../shared/src/must.ts';
+import {transformAndHashQuery} from '../../zero-cache/src/auth/read-authorizer.ts';
+import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
+import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
+import {hydrate} from '../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
+import type {AnalyzeQueryResult} from '../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
+import {mapAST} from '../../zero-protocol/src/ast.ts';
+import type {Row} from '../../zero-protocol/src/data.ts';
+import {hashOfAST} from '../../zero-protocol/src/query-hash.ts';
+import type {PermissionsConfig} from '../../zero-schema/src/compiled-permissions.ts';
+import type {NameMapper} from '../../zero-schema/src/name-mapper.ts';
 import {
   buildPipeline,
   type BuilderDelegate,
 } from '../../zql/src/builder/builder.ts';
-import {hydrate} from '../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
-import {transformAndHashQuery} from '../../zero-cache/src/auth/read-authorizer.ts';
-import {assert} from '../../shared/src/asserts.ts';
-import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
-import type {Row} from '../../zero-protocol/src/data.ts';
-import {hashOfAST} from '../../zero-protocol/src/query-hash.ts';
-import {mapAST} from '../../zero-protocol/src/ast.ts';
-import type {NameMapper} from '../../zero-schema/src/name-mapper.ts';
-import {LogContext} from '@rocicorp/logger';
-import type {PermissionsConfig} from '../../zero-schema/src/compiled-permissions.ts';
-import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
-import {formatOutput} from '../../ast-to-zql/src/format.ts';
 import type {Database} from '../../zqlite/src/db.ts';
-import {must} from '../../shared/src/must.ts';
-import type {
-  RowCountsBySource,
-  RowsBySource,
-} from '../../zql/src/builder/debug-delegate.ts';
-import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
 
-export type RunResult = {
-  warnings: string[];
-  syncedRows: Record<string, Row[]>;
-  syncedRowCount: number;
-  start: number;
-  end: number;
-  afterPermissions: string | undefined;
-  vendedRowCounts: RowCountsBySource | undefined;
-  vendedRows: RowsBySource | undefined;
-  plans?: Record<string, string[]> | undefined;
+export type RunAstOptions = {
+  applyPermissions?: boolean | undefined;
+  authData?: string | undefined;
+  clientToServerMapper?: NameMapper | undefined;
+  db: Database;
+  host: BuilderDelegate;
+  permissions?: PermissionsConfig | undefined;
+  syncedRows?: boolean | undefined;
+  tableSpecs: Map<string, LiteAndZqlSpec>;
+  vendedRows?: boolean | undefined;
 };
 
 export async function runAst(
   lc: LogContext,
   ast: AST,
   isTransformed: boolean,
-  options: {
-    applyPermissions: boolean;
-    authData?: string | undefined;
-    clientToServerMapper?: NameMapper | undefined;
-    permissions?: PermissionsConfig | undefined;
-    outputSyncedRows: boolean;
-    db: Database;
-    tableSpecs: Map<string, LiteAndZqlSpec>;
-    host: BuilderDelegate;
-  },
-): Promise<RunResult> {
+  options: RunAstOptions,
+): Promise<AnalyzeQueryResult> {
   const {clientToServerMapper, permissions, host, db} = options;
-  const result: RunResult = {
+  const result: AnalyzeQueryResult = {
     warnings: [],
-    syncedRows: {},
+    syncedRows: undefined,
     syncedRowCount: 0,
     start: 0,
     end: 0,
     afterPermissions: undefined,
-    vendedRowCounts: host.debug?.getVendedRowCounts(),
-    vendedRows: host.debug?.getVendedRows(),
+    vendedRowCounts: undefined,
+    vendedRows: undefined,
   };
 
   if (!isTransformed) {
@@ -95,7 +83,7 @@ export async function runAst(
   for (const rowChange of hydrate(pipeline, hashOfAST(ast), tableSpecs)) {
     assert(rowChange.type === 'add');
     syncedRowCount++;
-    if (options.outputSyncedRows) {
+    if (options.syncedRows) {
       let rows: Row[] = rowsByTable[rowChange.table];
       const s = rowChange.table + '.' + JSON.stringify(rowChange.row);
       if (seenByTable.has(s)) {
@@ -111,11 +99,15 @@ export async function runAst(
   }
 
   const end = performance.now();
-  result.syncedRows = rowsByTable;
+  if (options.syncedRows) {
+    result.syncedRows = rowsByTable;
+  }
   result.start = start;
   result.end = end;
   result.syncedRowCount = syncedRowCount;
-  result.vendedRowCounts = host.debug?.getVendedRowCounts();
-  result.vendedRows = host.debug?.getVendedRows();
+  if (options.vendedRows) {
+    result.vendedRowCounts = host.debug?.getVendedRowCounts();
+    result.vendedRows = host.debug?.getVendedRows();
+  }
   return result;
 }

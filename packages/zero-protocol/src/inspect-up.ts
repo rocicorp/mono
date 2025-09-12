@@ -1,4 +1,5 @@
 import * as v from '../../shared/src/valita.ts';
+import {astSchema} from './ast.ts';
 
 const inspectUpBase = v.object({
   id: v.string(),
@@ -32,11 +33,29 @@ export type InspectAuthenticateUpBody = v.Infer<
   typeof inspectAuthenticateUpSchema
 >;
 
+const analyzeQueryOptionsSchema = v.object({
+  vendedRows: v.boolean().optional(),
+  syncedRows: v.boolean().optional(),
+});
+
+export type AnalyzeQueryOptions = v.Infer<typeof analyzeQueryOptionsSchema>;
+
+export const inspectAnalyzeQueryUpSchema = inspectUpBase.extend({
+  op: v.literal('analyze-query'),
+  value: astSchema,
+  options: analyzeQueryOptionsSchema.optional(),
+});
+
+export type InspectAnalyzeQueryUpBody = v.Infer<
+  typeof inspectAnalyzeQueryUpSchema
+>;
+
 const inspectUpBodySchema = v.union(
   inspectQueriesUpBodySchema,
   inspectMetricsUpSchema,
   inspectVersionUpSchema,
   inspectAuthenticateUpSchema,
+  inspectAnalyzeQueryUpSchema,
 );
 
 export const inspectUpMessageSchema = v.tuple([
