@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 // Convert mitata JSON output (without samples) to Bencher Metric Format (BMF)
 
 // BMF - Bencher Metric Format
@@ -80,6 +81,15 @@ async function main() {
     }
     const content = Buffer.concat(chunks).toString('utf-8');
 
+    // Debug: Log the raw input received
+    if (process.env.DEBUG_MITATA_CONVERTER) {
+      console.error(`[DEBUG] Raw input (${content.length} bytes):`);
+      console.error(content.substring(0, 500));
+      if (content.length > 500) {
+        console.error('... (truncated)');
+      }
+    }
+
     // Split content by lines and find JSON objects
     // Mitata outputs complete JSON objects, so we can split by lines and look for objects
     const lines = content.split('\n');
@@ -93,10 +103,17 @@ async function main() {
           if (parsed.benchmarks) {
             allBenchmarks.push(...parsed.benchmarks);
           }
-        } catch {
-          // Skip invalid JSON lines
+        } catch (e) {
+          // Log parse errors when debugging
+          if (process.env.DEBUG_MITATA_CONVERTER) {
+            console.error(`[DEBUG] Failed to parse line ${i}: ${e}`);
+          }
         }
       }
+    }
+
+    if (process.env.DEBUG_MITATA_CONVERTER) {
+      console.error(`[DEBUG] Found ${allBenchmarks.length} benchmarks`);
     }
 
     if (allBenchmarks.length === 0) {
