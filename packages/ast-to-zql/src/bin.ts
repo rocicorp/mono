@@ -5,7 +5,7 @@ import {createInterface} from 'node:readline';
 import {parseOptions} from '../../shared/src/options.ts';
 import * as v from '../../shared/src/valita.ts';
 import {loadSchemaAndPermissions} from '../../zero-cache/src/scripts/permissions.ts';
-import {mapAST} from '../../zero-protocol/src/ast.ts';
+import {mapAST, type AST} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {serverToClient} from '../../zero-schema/src/name-mapper.ts';
 import {astToZQL} from './ast-to-zql.ts';
@@ -67,13 +67,16 @@ async function main(): Promise<void> {
       process.exit(1);
     }
 
-    let ast = JSON.parse(input);
+    let ast = JSON.parse(input) as AST;
     if (schema) {
       const mapper = serverToClient(schema.tables);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       ast = mapAST(ast, mapper);
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     const zql = astToZQL(ast);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const code = `query.${ast.table}${zql}`;
 
     console.log(await formatOutput(code));

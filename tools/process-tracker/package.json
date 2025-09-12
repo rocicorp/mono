@@ -8,7 +8,7 @@
     "check-types": "tsc",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+    "lint": "eslint src/"
   },
   "dependencies": {
     "@rocicorp/logger": "^5.4.0",
@@ -16,13 +16,10 @@
     "pidusage": "^4.0.0"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.7.0",
+    "@rocicorp/eslint-config": "^0.8.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "@types/pidusage": "^2.0.5",
     "shared": "0.0.0"
-  },
-  "eslintConfig": {
-    "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config"
 }
