@@ -9,7 +9,7 @@ export type QueryFn<
   TContext,
   TTakesContext extends boolean,
   TArg extends ReadonlyJSONValue[],
-  TReturnQuery extends Query<any, any, any>,
+  TReturnQuery extends Query<any, any, any> | Promise<Query<any, any, any>>,
 > = TTakesContext extends false
   ? {(...args: TArg): TReturnQuery}
   : {(context: TContext, ...args: TArg): TReturnQuery};
@@ -19,7 +19,7 @@ export type SyncedQuery<
   TContext,
   TTakesContext extends boolean,
   TArg extends ReadonlyJSONValue[],
-  TReturnQuery extends Query<any, any, any>,
+  TReturnQuery extends Query<any, any, any> | Promise<Query<any, any, any>>,
 > = QueryFn<TContext, TTakesContext, TArg, TReturnQuery> & {
   queryName: TName;
   parse: ParseFn<TArg> | undefined;
@@ -38,6 +38,7 @@ function normalizeParser<T extends ReadonlyJSONValue[]>(
   return undefined;
 }
 
+// Overload for async functions
 export function syncedQuery<
   TName extends string,
   TArg extends ReadonlyJSONValue[],
@@ -45,8 +46,30 @@ export function syncedQuery<
 >(
   name: TName,
   parser: ParseFn<TArg> | HasParseFn<TArg> | undefined,
-  fn: QueryFn<unknown, false, TArg, TReturnQuery>,
-): SyncedQuery<TName, unknown, false, TArg, TReturnQuery> {
+  fn: (...args: TArg) => Promise<TReturnQuery>,
+): SyncedQuery<TName, unknown, false, TArg, Promise<TReturnQuery>>;
+
+// Overload for sync functions
+export function syncedQuery<
+  TName extends string,
+  TArg extends ReadonlyJSONValue[],
+  TReturnQuery extends Query<any, any, any>,
+>(
+  name: TName,
+  parser: ParseFn<TArg> | HasParseFn<TArg> | undefined,
+  fn: (...args: TArg) => TReturnQuery,
+): SyncedQuery<TName, unknown, false, TArg, TReturnQuery>;
+
+// Implementation
+export function syncedQuery<
+  TName extends string,
+  TArg extends ReadonlyJSONValue[],
+  TReturnQuery extends Query<any, any, any>,
+>(
+  name: TName,
+  parser: ParseFn<TArg> | HasParseFn<TArg> | undefined,
+  fn: (...args: TArg) => TReturnQuery | Promise<TReturnQuery>,
+): SyncedQuery<TName, unknown, false, TArg, TReturnQuery | Promise<TReturnQuery>> {
   const impl = syncedQueryImpl(name, fn, false);
   const ret: any = (...args: TArg) => impl(undefined, args);
   ret.queryName = name;
@@ -55,6 +78,7 @@ export function syncedQuery<
   return ret;
 }
 
+// Overload for async functions
 export function syncedQueryWithContext<
   TName extends string,
   TContext,
@@ -63,8 +87,32 @@ export function syncedQueryWithContext<
 >(
   name: TName,
   parser: ParseFn<TArg> | HasParseFn<TArg> | undefined,
-  fn: QueryFn<TContext, true, TArg, TReturnQuery>,
-): SyncedQuery<TName, TContext, true, TArg, TReturnQuery> {
+  fn: (context: TContext, ...args: TArg) => Promise<TReturnQuery>,
+): SyncedQuery<TName, TContext, true, TArg, Promise<TReturnQuery>>;
+
+// Overload for sync functions
+export function syncedQueryWithContext<
+  TName extends string,
+  TContext,
+  TArg extends ReadonlyJSONValue[],
+  TReturnQuery extends Query<any, any, any>,
+>(
+  name: TName,
+  parser: ParseFn<TArg> | HasParseFn<TArg> | undefined,
+  fn: (context: TContext, ...args: TArg) => TReturnQuery,
+): SyncedQuery<TName, TContext, true, TArg, TReturnQuery>;
+
+// Implementation
+export function syncedQueryWithContext<
+  TName extends string,
+  TContext,
+  TArg extends ReadonlyJSONValue[],
+  TReturnQuery extends Query<any, any, any>,
+>(
+  name: TName,
+  parser: ParseFn<TArg> | HasParseFn<TArg> | undefined,
+  fn: (context: TContext, ...args: TArg) => TReturnQuery | Promise<TReturnQuery>,
+): SyncedQuery<TName, TContext, true, TArg, TReturnQuery | Promise<TReturnQuery>> {
   const impl = syncedQueryImpl(name, fn, true);
   const ret: any = (context: TContext, ...args: TArg) => impl(context, args);
   ret.queryName = name;
