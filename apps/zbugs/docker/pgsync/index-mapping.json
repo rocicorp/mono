@@ -1,0 +1,80 @@
+{
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0,
+    "analysis": {
+      "analyzer": {
+        "default": {
+          "type": "standard",
+          "stopwords": "_english_"
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "id": {
+        "type": "keyword"
+      },
+      "shortID": {
+        "type": "integer"
+      },
+      "title": {
+        "type": "text",
+        "analyzer": "standard"
+      },
+      "description": {
+        "type": "text",
+        "analyzer": "standard"
+      },
+      "comments": {
+        "type": "nested",
+        "properties": {
+          "id": {
+            "type": "keyword"
+          },
+          "body": {
+            "type": "text",
+            "analyzer": "standard"
+          },
+          "creatorID": {
+            "type": "keyword"
+          },
+          "created": {
+            "type": "date",
+            "format": "epoch_millis"
+          }
+        }
+      },
+      "open": {
+        "type": "boolean"
+      },
+      "created": {
+        "type": "date",
+        "format": "epoch_millis"
+      },
+      "modified": {
+        "type": "date",
+        "format": "epoch_millis"
+      },
+      "creatorID": {
+        "type": "keyword"
+      },
+      "creatorName": {
+        "type": "keyword"
+      },
+      "assigneeID": {
+        "type": "keyword"
+      },
+      "assigneeName": {
+        "type": "keyword"
+      },
+      "labels": {
+        "type": "keyword"
+      },
+      "visibility": {
+        "type": "keyword"
+      }
+    }
+  }
+}

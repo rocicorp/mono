@@ -73,3 +73,62 @@ Services will be available at:
       46 +  - Comment search
       47 +  - Filter by status, assignee, creator, labels
       48 +  - Autocomplete for users and labels
+
+Perfect! I've successfully set up PGSync with OpenSearch for your bug tracker. Here's what was added:
+
+Components Added:
+
+1. Redis (port 6379): For change tracking and queuing
+2. PGSync: Syncs PostgreSQL data to OpenSearch in real-time
+3. Configuration files:
+
+
+    - pgsync/schema.json: Defines the data relationships
+    - pgsync/index-mapping.json: OpenSearch index structure
+    - share_sql/pgsync_setup.sql: PostgreSQL publication setup
+    - pgsync/bootstrap.sh: Initialization script
+
+How It Works:
+
+1. Initial Load: PGSync bootstraps all existing data to OpenSearch
+2. Real-time Sync: Uses PostgreSQL logical replication to capture changes
+3. Denormalization: Automatically nests comments within issues and resolves user names and labels
+
+To Start Everything:
+
+cd docker
+docker compose up --build
+
+Services Available:
+
+- PostgreSQL: localhost:6434
+- OpenSearch: localhost:9200
+- OpenSearch Dashboards: localhost:5601
+- Redis: localhost:6379
+
+Search Query Example:
+
+curl -X GET "localhost:9200/issues/\_search" \
+ -H 'Content-Type: application/json' \
+ -d '{
+"query": {
+"bool": {
+"must": [
+{
+"multi_match": {
+"query": "search term",
+"fields": ["title", "description", "comment.body"]
+}
+}
+],
+"filter": [
+{"term": {"assigneeName": "john"}},
+{"terms": {"labels": ["bug", "urgent"]}}
+]
+}
+},
+"sort": [{"created": "desc"}]
+}'
+
+PGSync handles all the complexity of keeping the denormalized data in sync when issues, comments, users, or labels
+change.
