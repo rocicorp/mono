@@ -125,18 +125,32 @@ function syncedQueryImpl<
   TName extends string,
   TContext,
   TArg extends ReadonlyJSONValue[],
-  TReturnQuery extends Query<any, any, any>,
+  TReturnQuery extends Query<any, any, any> | Promise<Query<any, any, any>>,
 >(name: TName, fn: any, takesContext: boolean) {
   return (context: TContext, args: TArg) => {
-    const q = takesContext ? fn(context, ...args) : fn(...args);
-    return q.nameAndArgs(name, args) as TReturnQuery;
+    const result = takesContext ? fn(context, ...args) : fn(...args);
+    // Check if result is a Promise (not a Query with a then method)
+    if (result instanceof Promise) {
+      return result.then((q: Query<any, any, any>) => q.nameAndArgs(name, args));
+    }
+    return result.nameAndArgs(name, args) as TReturnQuery;
   };
 }
 
+export type WithValidationReturn<R> = R extends Promise<infer Q>
+  ? Promise<{query: Q}>
+  : {query: R};
+
+// withValidation returns a function that returns wrapped queries, not a SyncedQuery
 export function withValidation<T extends SyncedQuery<any, any, any, any, any>>(
   fn: T,
 ): T extends SyncedQuery<infer N, infer C, any, any, infer R>
-  ? SyncedQuery<N, C, true, ReadonlyJSONValue[], R>
+  ? {
+      (context: C, ...args: ReadonlyJSONValue[]): WithValidationReturn<R>;
+      queryName: N;
+      parse: typeof fn.parse;
+      takesContext: true;
+    }
   : never {
   if (!fn.parse) {
     throw new Error('ret does not have a parse function defined');
@@ -144,7 +158,13 @@ export function withValidation<T extends SyncedQuery<any, any, any, any, any>>(
   const ret: any = (context: unknown, ...args: unknown[]) => {
     const f = fn as any;
     const parsed = f.parse(args);
-    return f.takesContext ? f(context, ...parsed) : f(...parsed);
+    const result = f.takesContext ? f(context, ...parsed) : f(...parsed);
+    
+    // Wrap the result in an object to prevent automatic promise unwrapping
+    if (result instanceof Promise) {
+      return result.then((query: any) => ({query}));
+    }
+    return {query: result};
   };
   ret.queryName = fn.queryName;
   ret.parse = fn.parse;
