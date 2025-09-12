@@ -203,6 +203,7 @@ function asTestZero<S extends Schema, MD extends CustomMutatorDefs | undefined>(
 }
 
 export const RUN_LOOP_INTERVAL_MS = 5_000;
+export const MAX_LOOPS_PER_WINDOW = 2;
 
 /**
  * How frequently we should ping the server to keep the connection alive.
@@ -1620,11 +1621,43 @@ export class Zero<
     let gotError = false;
     let backoffMs = RUN_LOOP_INTERVAL_MS;
     let additionalConnectParams: Record<string, string> | undefined;
+    let loopWindowStart = Date.now();
+    let loopsPerWindow = 1;
 
     while (!this.closed) {
       runLoopCounter++;
       let lc = getLogContext();
       backoffMs = RUN_LOOP_INTERVAL_MS;
+
+      if (Date.now() - loopWindowStart > RUN_LOOP_INTERVAL_MS) {
+        loopWindowStart = Date.now();
+        loopsPerWindow = 1;
+      } else {
+        ++loopsPerWindow;
+      }
+
+      if (loopsPerWindow > MAX_LOOPS_PER_WINDOW) {
+        // Force a sleep to avoid a busy loop.
+        // This was introduced since re-auth can get into a busy loop in the following case:
+        // 1. Mutation is pushed
+        // 2. Server returns an auth error
+        // 3. Zero tries to re-auth immediately
+        // 4. Re-auth succeeds
+        // 5. Zero tries to push the mutation again
+        // 6. Server returns an auth error again
+        // 7. Go back to step 3.
+        //
+        // The key problem is if re-auth says it succeeds but the server still
+        // returns an auth error on push. I.e., the auth server and api server disagree on credentials.
+        lc.debug?.(
+          'Too many loops in a window, sleeping for',
+          backoffMs,
+          'ms to avoid busy looping.',
+          'loopsPerWindow:',
+          loopsPerWindow,
+        );
+        await sleep(backoffMs);
+      }
 
       try {
         switch (this.#connectionState) {
