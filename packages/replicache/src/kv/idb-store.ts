@@ -8,6 +8,10 @@ import {
   deepFreezeAllowUndefined,
 } from '../frozen-json.ts';
 import type {Read, Store, Write} from './store.ts';
+import {
+  storeIsClosedRejection,
+  transactionIsClosedRejection,
+} from './throw-if-closed.ts';
 import {WriteImplBase, deleteSentinel} from './write-impl-base.ts';
 
 const RELAXED = {durability: 'relaxed'} as const;
@@ -23,10 +27,16 @@ export class IDBStore implements Store {
   }
 
   read(): Promise<Read> {
+    if (this.#closed) {
+      return storeIsClosedRejection();
+    }
     return this.#withReopen(readImpl);
   }
 
   write(): Promise<Write> {
+    if (this.#closed) {
+      return storeIsClosedRejection();
+    }
     return this.#withReopen(writeImpl);
   }
 
@@ -111,6 +121,9 @@ class ReadImpl implements Read {
   }
 
   has(key: string): Promise<boolean> {
+    if (this.#closed) {
+      return transactionIsClosedRejection();
+    }
     return new Promise((resolve, reject) => {
       const req = objectStore(this.#tx).count(key);
       req.onsuccess = () => resolve(req.result > 0);
@@ -119,6 +132,9 @@ class ReadImpl implements Read {
   }
 
   get(key: string): Promise<FrozenJSONValue | undefined> {
+    if (this.#closed) {
+      return transactionIsClosedRejection();
+    }
     return new Promise((resolve, reject) => {
       const req = objectStore(this.#tx).get(key);
       req.onsuccess = () => resolve(deepFreezeAllowUndefined(req.result));
@@ -146,6 +162,9 @@ class WriteImpl extends WriteImplBase {
   }
 
   commit(): Promise<void> {
+    if (this.#closed) {
+      return transactionIsClosedRejection();
+    }
     if (this._pending.size === 0) {
       return promiseVoid;
     }
@@ -168,6 +187,7 @@ class WriteImpl extends WriteImplBase {
   release(): void {
     // We rely on IDB locking so no need to do anything here.
     this.#closed = true;
+    super.release();
   }
 
   get closed(): boolean {

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-unused-expressions, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/require-await, @typescript-eslint/unbound-method, @typescript-eslint/restrict-template-expressions, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument, @typescript-eslint/prefer-promise-reject-errors, @typescript-eslint/no-base-to-string, @typescript-eslint/only-throw-error, @typescript-eslint/no-empty-object-type, @typescript-eslint/await-thenable, @typescript-eslint/no-floating-promises, @typescript-eslint/no-misused-promises, @typescript-eslint/naming-convention, @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/no-unused-vars, require-await, no-unused-private-class-members */
 import type {FrozenJSONValue} from '../frozen-json.ts';
 import type {Read} from './store.ts';
+import {maybeTransactionIsClosedRejection} from './throw-if-closed.ts';
 
 export class ReadImpl implements Read {
   readonly #map: Map<string, FrozenJSONValue>;
@@ -22,10 +23,16 @@ export class ReadImpl implements Read {
   }
 
   has(key: string): Promise<boolean> {
-    return Promise.resolve(this.#map.has(key));
+    return (
+      maybeTransactionIsClosedRejection(this) ??
+      Promise.resolve(this.#map.has(key))
+    );
   }
 
   get(key: string): Promise<FrozenJSONValue | undefined> {
-    return Promise.resolve(this.#map.get(key));
+    return (
+      maybeTransactionIsClosedRejection(this) ??
+      Promise.resolve(this.#map.get(key))
+    );
   }
 }
