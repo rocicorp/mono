@@ -1,0 +1,85 @@
+[
+  {
+    "database": "postgres",
+    "index": "issues",
+    "nodes": {
+      "table": "issue",
+      "columns": [
+        "id",
+        "shortID", 
+        "title",
+        "description",
+        "open",
+        "created",
+        "modified",
+        "creatorID",
+        "assigneeID",
+        "visibility"
+      ],
+      "children": [
+        {
+          "table": "comment",
+          "columns": ["id", "body", "created", "creatorID"],
+          "relationship": {
+            "variant": "object",
+            "type": "one_to_many",
+            "foreign_key": "issueID"
+          },
+          "children": [
+            {
+              "table": "user",
+              "columns": ["login"],
+              "relationship": {
+                "variant": "scalar",
+                "type": "one_to_one",
+                "foreign_key": "creatorID"
+              },
+              "label": "creatorName"
+            }
+          ]
+        },
+        {
+          "table": "user",
+          "columns": ["login"],
+          "relationship": {
+            "variant": "scalar",
+            "type": "one_to_one",
+            "foreign_key": "creatorID"
+          },
+          "label": "creatorName"
+        },
+        {
+          "table": "user",
+          "columns": ["login"],
+          "relationship": {
+            "variant": "scalar",
+            "type": "one_to_one",
+            "foreign_key": "assigneeID"
+          },
+          "label": "assigneeName"
+        },
+        {
+          "table": "issueLabel",
+          "columns": ["labelID"],
+          "relationship": {
+            "variant": "scalar",
+            "type": "one_to_many",
+            "foreign_key": "issueID"
+          },
+          "children": [
+            {
+              "table": "label",
+              "columns": ["name"],
+              "relationship": {
+                "variant": "scalar",
+                "type": "one_to_one",
+                "foreign_key": "labelID"
+              },
+              "label": "labels"
+            }
+          ]
+        }
+      ]
+    }
+  }
+]
