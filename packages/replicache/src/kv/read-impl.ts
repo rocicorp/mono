@@ -1,5 +1,6 @@
 import type {FrozenJSONValue} from '../frozen-json.ts';
 import type {Read} from './store.ts';
+import {maybeTransactionIsClosedRejection} from './throw-if-closed.ts';
 
 export class ReadImpl implements Read {
   readonly #map: Map<string, FrozenJSONValue>;
@@ -21,10 +22,16 @@ export class ReadImpl implements Read {
   }
 
   has(key: string): Promise<boolean> {
-    return Promise.resolve(this.#map.has(key));
+    return (
+      maybeTransactionIsClosedRejection(this) ??
+      Promise.resolve(this.#map.has(key))
+    );
   }
 
   get(key: string): Promise<FrozenJSONValue | undefined> {
-    return Promise.resolve(this.#map.get(key));
+    return (
+      maybeTransactionIsClosedRejection(this) ??
+      Promise.resolve(this.#map.get(key))
+    );
   }
 }

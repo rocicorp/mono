@@ -3,6 +3,7 @@ import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type {FrozenJSONValue} from '../frozen-json.ts';
 import {ReadImpl} from './read-impl.ts';
 import type {Read, Store, Write} from './store.ts';
+import {throwIfStoreClosed} from './throw-if-closed.ts';
 import {WriteImpl} from './write-impl.ts';
 
 type StorageMap = Map<string, FrozenJSONValue>;
@@ -55,11 +56,13 @@ export class MemStore implements Store {
   }
 
   async read(): Promise<Read> {
+    throwIfStoreClosed(this);
     const release = await this.#rwLock.read();
     return new ReadImpl(this.#map, release);
   }
 
   async write(): Promise<Write> {
+    throwIfStoreClosed(this);
     const release = await this.#rwLock.write();
     return new WriteImpl(this.#map, release);
   }

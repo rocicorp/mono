@@ -10,6 +10,10 @@ import {
   deepFreezeAllowUndefined,
 } from '../frozen-json.ts';
 import type {Read} from './store.ts';
+import {
+  maybeTransactionIsClosedRejection,
+  transactionIsClosedRejection,
+} from './throw-if-closed.ts';
 
 export const deleteSentinel = Symbol();
 type DeleteSentinel = typeof deleteSentinel;
@@ -24,6 +28,9 @@ export class WriteImplBase {
   }
 
   has(key: string): Promise<boolean> {
+    if (this.#read.closed) {
+      return transactionIsClosedRejection();
+    }
     switch (this._pending.get(key)) {
       case undefined:
         return this.#read.has(key);
@@ -35,6 +42,9 @@ export class WriteImplBase {
   }
 
   async get(key: string): Promise<FrozenJSONValue | undefined> {
+    if (this.#read.closed) {
+      return transactionIsClosedRejection();
+    }
     const v = this._pending.get(key);
     switch (v) {
       case deleteSentinel:
@@ -48,14 +58,18 @@ export class WriteImplBase {
     }
   }
 
-  put(key: string, value: ReadonlyJSONValue): Promise<void> {
-    this._pending.set(key, deepFreeze(value));
-    return promiseVoid;
+  put(key: string, value: ReadonlyJSONValue) {
+    return (
+      maybeTransactionIsClosedRejection(this.#read) ??
+      (this._pending.set(key, deepFreeze(value)), promiseVoid)
+    );
   }
 
   del(key: string): Promise<void> {
-    this._pending.set(key, deleteSentinel);
-    return promiseVoid;
+    return (
+      maybeTransactionIsClosedRejection(this.#read) ??
+      (this._pending.set(key, deleteSentinel), promiseVoid)
+    );
   }
 
   release(): void {

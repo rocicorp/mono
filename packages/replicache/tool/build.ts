@@ -34,8 +34,9 @@ async function buildReplicache(options: BuildOptions) {
     ...(forBundleSizeDashboard
       ? {}
       : {
-          impl: basePath('src', 'impl.ts'),
-          expo: basePath('src', 'expo.ts'),
+          'impl': basePath('src', 'impl.ts'),
+          'expo-sqlite': basePath('src', 'expo-sqlite.ts'),
+          'op-sqlite': basePath('src', 'op-sqlite.ts'),
         }),
   };
   const result = await esbuild.build({
@@ -67,7 +68,7 @@ async function buildCLI() {
   });
 }
 
-const external = ['node:*', 'expo*'];
+const external = ['node:*', 'expo*', '@op-engineering/op-sqlite'];
 
 if (perf) {
   await buildReplicache({minify: true, ext: 'js', mode: 'release', external});

@@ -5,5 +5,10 @@
     "emitDeclarationOnly": true,
     "outDir": "out"
   },
-  "include": ["src/mod.ts", "src/impl.ts", "src/expo.ts"]
+  "include": [
+    "src/mod.ts",
+    "src/impl.ts",
+    "src/expo-sqlite.ts",
+    "src/op-sqlite.ts"
+  ]
 }

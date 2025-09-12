@@ -205,7 +205,7 @@ describe('write', () => {
       await withWrite(kv, async kvw => {
         await kvw.put(chunkRefCountKey(h), v);
       });
-      await withWrite(kv, async kvw => {
+      await withWriteNoImplicitCommit(kv, async kvw => {
         const w = new WriteImpl(kvw, chunkHasher, assertHash);
         let err;
         try {
