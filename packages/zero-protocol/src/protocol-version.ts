@@ -36,7 +36,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 28 adds more inspect/metrics (0.23)
 // -- version 29 adds error responses for custom queries (0.23)
 // -- version 30 adds an optional primaryKey to the ClientSchema (0.24)
-export const PROTOCOL_VERSION = 30;
+// -- version 31 adds admin password authentication to inspector RPC calls (0.24)
+export const PROTOCOL_VERSION = 31;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version
