@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1757574708408,
+  "lastUpdate": 1757668540743,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -53429,6 +53429,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 31801,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "bd6a01ce9fadf239cb188078c42c8b9d5ab4b949",
+          "message": "feat(replicache): Expose replicache/expo-sqlite and replicache/op-sqlite (#4887)\n\nThis PR reintroduces the `SQLiteStore` abstraction, now using a single connection per store instead of multiple. The previous approach with multiple connections was incompatible with async `op-sqlite`, so this update resolves that issue.\n\nThe PR adds and exports two new modules: `replicache/expo-sqlite` and `replicache/op-sqlite`. Each provides an implementation of the `StorageProvider` interface, which can be supplied via the `kvStore` option. This should make it easier to use SQLite-based storage across different environments.\n\nAdditionally, there is a third implementation using `@rocicorp/zero-sqlite3`, intended only for testing purposes. It is not exported for production use.\n\nFor Zero we export `opSQLiteStoreProvider` and `expoSQLiteStoreProvider` from `@rocicorp/zero/react-native`",
+          "timestamp": "2025-09-12T09:14:15Z",
+          "tree_id": "cf6593440c0a30a94ae7dc5e65b669de7fd86ebc",
+          "url": "https://github.com/rocicorp/mono/commit/bd6a01ce9fadf239cb188078c42c8b9d5ab4b949"
+        },
+        "date": 1757668528405,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302332,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54479,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111472,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31869,
             "unit": "bytes"
           }
         ]
