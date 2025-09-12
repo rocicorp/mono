@@ -1,17 +1,17 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/restrict-template-expressions, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unused-expressions, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-base-to-string, @typescript-eslint/unbound-method, require-await, @typescript-eslint/require-await, @typescript-eslint/naming-convention, @typescript-eslint/no-floating-promises, @typescript-eslint/no-misused-promises, @typescript-eslint/prefer-promise-reject-errors, @typescript-eslint/only-throw-error, @typescript-eslint/no-empty-object-type, @typescript-eslint/await-thenable, @typescript-eslint/no-unnecessary-type-assertion, @typescript-eslint/no-unused-vars, @typescript-eslint/restrict-plus-operands, no-unused-private-class-members */
+import type {LogContext} from '@rocicorp/logger';
 import auth from 'basic-auth';
 import type {FastifyReply, FastifyRequest} from 'fastify';
-import type {NormalizedZeroConfig} from '../config/normalize.ts';
-import type {LogContext} from '@rocicorp/logger';
+import {explainQueries} from '../../../analyze-query/src/explain-queries.ts';
 import {runAst} from '../../../analyze-query/src/run-ast.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
-import {Database} from '../../../zqlite/src/db.ts';
 import {Debug} from '../../../zql/src/builder/debug-delegate.ts';
-import type {LiteAndZqlSpec, LiteTableSpec} from '../db/specs.ts';
-import {computeZqlSpecs, mustGetTableSpec} from '../db/lite-tables.ts';
-import {TableSource} from '../../../zqlite/src/table-source.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
-import {explainQueries} from '../../../analyze-query/src/explain-queries.ts';
+import {Database} from '../../../zqlite/src/db.ts';
+import {TableSource} from '../../../zqlite/src/table-source.ts';
+import type {NormalizedZeroConfig} from '../config/normalize.ts';
+import {isAdminPasswordValid} from '../config/zero-config.ts';
+import {computeZqlSpecs, mustGetTableSpec} from '../db/lite-tables.ts';
+import type {LiteAndZqlSpec, LiteTableSpec} from '../db/specs.ts';
 
 export function setCors(res: FastifyReply) {
   return res
@@ -28,9 +28,8 @@ export async function handleAnalyzeQueryRequest(
   res: FastifyReply,
 ) {
   const credentials = auth(req);
-  const expectedPassword = config.adminPassword;
   void setCors(res);
-  if (!expectedPassword || credentials?.pass !== expectedPassword) {
+  if (!isAdminPasswordValid(lc, config, credentials?.pass)) {
     await res
       .code(401)
       .header('WWW-Authenticate', 'Basic realm="analyze query Protected Area"')

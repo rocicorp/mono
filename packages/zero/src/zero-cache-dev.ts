@@ -116,6 +116,12 @@ async function main() {
         ['ZERO_NUM_SYNC_WORKERS']: '3',
         ['ZERO_CVR_MAX_CONNS']: '6',
         ['ZERO_UPSTREAM_MAX_CONNS']: '6',
+
+        // Default NODE_ENV to development mode.
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore NODE_ENV is not always set. Please ignore error.
+        ['NODE_ENV']: 'development',
+
         // But let the developer override any of these dev defaults.
         ...process.env,
       };
