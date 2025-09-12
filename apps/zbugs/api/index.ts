@@ -180,9 +180,8 @@ async function mutateHandler(
 
   const response = await handleMutationRequest(
     transact =>
-      transact(dbProvider, (tx, name, args) =>
-        getMutation(mutators, name)(tx, args),
-      ),
+      transact((tx, name, args) => getMutation(mutators, name)(tx, args)),
+    dbProvider,
     request.query,
     request.body,
     'info',
