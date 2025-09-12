@@ -36,8 +36,10 @@
     "@rocicorp/resolver": "^1.0.2"
   },
   "devDependencies": {
+    "@op-engineering/op-sqlite": "^15.0.1",
     "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.3.0",
+    "@rocicorp/zero-sqlite3": "^1.0.8",
     "@types/command-line-usage": "^5.0.2",
     "@vitest/runner": "3.2.4",
     "command-line-args": "^6.0.1",
@@ -52,10 +54,18 @@
     "vitest": "3.2.4"
   },
   "peerDependencies": {
-    "expo-sqlite": "^15.2.14"
+    "expo-sqlite": "^15.2.14",
+    "@op-engineering/op-sqlite": "^15.0.1",
+    "@rocicorp/zero-sqlite3": "^1.0.8"
   },
   "peerDependenciesMeta": {
     "expo-sqlite": {
+      "optional": true
+    },
+    "@op-engineering/op-sqlite": {
+      "optional": true
+    },
+    "@rocicorp/zero-sqlite3": {
       "optional": true
     }
   },
@@ -75,9 +85,17 @@
       "types": "./out/replicache/src/impl.d.ts",
       "default": "./out/impl.js"
     },
-    "./expo": {
-      "types": "./out/replicache/src/expo.d.ts",
-      "default": "./out/expo.js"
+    "./expo-sqlite": {
+      "types": "./out/replicache/src/expo-sqlite.d.ts",
+      "default": "./out/expo-sqlite.js"
+    },
+    "./op-sqlite": {
+      "types": "./out/replicache/src/op-sqlite.d.ts",
+      "default": "./out/op-sqlite.js"
+    },
+    "./zero-sqlite": {
+      "types": "./out/replicache/src/zero-sqlite.d.ts",
+      "default": "./out/zero-sqlite.js"
     }
   },
   "files": [

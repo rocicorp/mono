@@ -1,2 +1,8 @@
-export {expoSQLiteStoreProvider} from '../../replicache/src/expo/store.ts';
-export type {SQLiteDatabaseManagerOptions} from '../../replicache/src/kv/sqlite-store.ts';
+export {
+  expoSQLiteStoreProvider,
+  type ExpoSQLiteStoreOptions,
+} from '../../replicache/src/kv/expo-sqlite/store.ts';
+export {
+  opSQLiteStoreProvider,
+  type OpSQLiteStoreOptions,
+} from '../../replicache/src/kv/op-sqlite/store.ts';
