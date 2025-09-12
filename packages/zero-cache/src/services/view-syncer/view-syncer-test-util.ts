@@ -25,7 +25,12 @@ import {
   definePermissions,
 } from '../../../../zero-schema/src/permissions.ts';
 import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
+import {
+  CREATE_STORAGE_TABLE,
+  DatabaseStorage,
+} from '../../../../zqlite/src/database-storage.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
 import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {TestDBs} from '../../test/db.ts';
@@ -39,10 +44,6 @@ import type {ReplicaState} from '../replicator/replicator.ts';
 import {initChangeLog} from '../replicator/schema/change-log.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {fakeReplicator, ReplicationMessages} from '../replicator/test-utils.ts';
-import {
-  CREATE_STORAGE_TABLE,
-  DatabaseStorage,
-} from '../../../../zqlite/src/database-storage.ts';
 import {DrainCoordinator} from './drain-coordinator.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
 import {initViewSyncerSchema} from './schema/init.ts';
@@ -675,7 +676,10 @@ export async function setup(
   ).createClientGroupStorage(serviceID);
   const inspectorDelegate = new InspectorDelegate();
   const vs = new ViewSyncerService(
-    {getQueries: queryConfig, adminPassword: TEST_ADMIN_PASSWORD},
+    {
+      getQueries: queryConfig,
+      adminPassword: TEST_ADMIN_PASSWORD,
+    } as NormalizedZeroConfig,
     lc,
     SHARD,
     TASK_ID,

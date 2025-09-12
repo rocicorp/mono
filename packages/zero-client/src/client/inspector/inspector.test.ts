@@ -176,7 +176,7 @@ test('client queries', async () => {
       },
     ],
     [
-      {
+      expect.objectContaining({
         clientID: z.clientID,
         clientZQL: null,
         serverZQL: 'issues',
@@ -189,7 +189,8 @@ test('client queries', async () => {
         rowCount: 10,
         ttl: '1m',
         metrics: emptyMetrics,
-      },
+        analyze: expect.any(Function),
+      }),
     ],
   );
   const d = Date.UTC(2025, 2, 25, 14, 52, 10);
@@ -218,7 +219,7 @@ test('client queries', async () => {
       },
     ],
     [
-      {
+      expect.objectContaining({
         clientID: z.clientID,
         clientZQL: null,
         serverZQL: "issues.where('owner_id', 'arv')",
@@ -231,7 +232,8 @@ test('client queries', async () => {
         rowCount: 10,
         ttl: '1m',
         metrics: emptyMetrics,
-      },
+        analyze: expect.any(Function),
+      }),
     ],
   );
 
@@ -739,6 +741,370 @@ test('clientZQL', async () => {
 
   view.destroy();
   await z.close();
+});
+
+describe('query analyze', () => {
+  test('analyze method calls correct protocol', async () => {
+    const z = zeroForTest({schema});
+    await z.triggerConnected();
+
+    const inspector = await z.inspect();
+    const socket = await z.socket;
+
+    // Create a query to analyze
+    const ast: AST = {table: 'issues'};
+    const analyzeOptions = {
+      syncedRows: true,
+      vendedRows: true,
+    };
+
+    // Setup queries first
+    const queries = await (async () => {
+      const idPromise = new Promise<string>(resolve => {
+        const cleanup = socket.onUpstream(message => {
+          const data = JSON.parse(message);
+          if (data[0] === 'inspect' && data[1].op === 'queries') {
+            cleanup();
+            resolve(data[1].id);
+          }
+        });
+      });
+
+      const p = inspector.client.queries();
+      const id = await idPromise;
+
+      await z.triggerMessage([
+        'inspect',
+        {
+          op: 'queries',
+          id,
+          value: [
+            {
+              clientID: z.clientID,
+              queryID: '1',
+              ast,
+              name: null,
+              args: null,
+              deleted: false,
+              got: true,
+              inactivatedAt: null,
+              rowCount: 5,
+              ttl: 60_000,
+              metrics: null,
+            },
+          ],
+        },
+      ]);
+
+      return p;
+    })();
+
+    const query = queries[0];
+
+    vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+    (await z.socket).messages.length = 0; // Clear previous messages
+
+    const analyzePromise = query.analyze(analyzeOptions);
+    await Promise.resolve(); // Allow the RPC call to be sent
+    expect((await z.socket).jsonMessages).toEqual([
+      [
+        'inspect',
+        {
+          op: 'analyze-query',
+          id: '000000000000000000000',
+          value: ast,
+          options: analyzeOptions,
+        },
+      ],
+    ]);
+
+    // Mock the server response
+    const mockAnalyzeResult = {
+      warnings: [],
+      syncedRowCount: 5,
+      start: 1000,
+      end: 1050,
+      syncedRows: {
+        issues: [
+          {id: '1', title: 'Test Issue'},
+          {id: '2', title: 'Another Issue'},
+        ],
+      },
+      vendedRowCounts: {
+        issues: {
+          'SELECT * FROM issues': 5,
+        },
+      },
+      plans: {
+        'SELECT * FROM issues': ['SCAN issues'],
+      },
+    };
+
+    // Use the fixed ID from the mocked Math.random
+    await z.triggerMessage([
+      'inspect',
+      {
+        op: 'analyze-query',
+        id: '000000000000000000000',
+        value: mockAnalyzeResult,
+      },
+    ]);
+
+    const result = await analyzePromise;
+    expect(result).toEqual(mockAnalyzeResult);
+
+    await z.close();
+  });
+
+  test('analyze method works with queries that have server AST', async () => {
+    const userID = nanoid();
+    const z = zeroForTest({userID, schema, kvStore: 'idb'});
+    await z.triggerConnected();
+
+    const inspector = await z.inspect();
+    const socket = await z.socket;
+
+    // Setup a query with server AST
+    const queries = await (async () => {
+      const idPromise = new Promise<string>(resolve => {
+        const cleanup = socket.onUpstream(message => {
+          const data = JSON.parse(message);
+          if (data[0] === 'inspect' && data[1].op === 'queries') {
+            cleanup();
+            resolve(data[1].id);
+          }
+        });
+      });
+
+      const p = inspector.client.queries();
+      const id = await idPromise;
+
+      await z.triggerMessage([
+        'inspect',
+        {
+          op: 'queries',
+          id,
+          value: [
+            {
+              clientID: z.clientID,
+              queryID: '1',
+              ast: {
+                table: 'issues',
+                where: {
+                  type: 'simple',
+                  left: {type: 'column', name: 'id'},
+                  op: '=',
+                  right: {type: 'literal', value: '1'},
+                },
+              },
+              name: null,
+              args: null,
+              deleted: false,
+              got: true,
+              inactivatedAt: null,
+              rowCount: 1,
+              ttl: 60_000,
+              metrics: null,
+            },
+          ],
+        },
+      ]);
+
+      return p;
+    })();
+
+    const query = queries[0];
+
+    vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+    (await z.socket).messages.length = 0; // Clear previous messages
+
+    const analyzePromise = query.analyze({syncedRows: false});
+    await Promise.resolve(); // Allow the RPC call to be sent
+    expect((await z.socket).jsonMessages).toEqual([
+      [
+        'inspect',
+        {
+          op: 'analyze-query',
+          id: '000000000000000000000',
+          value: {
+            table: 'issues',
+            where: {
+              type: 'simple',
+              left: {type: 'column', name: 'id'},
+              op: '=',
+              right: {type: 'literal', value: '1'},
+            },
+          },
+          options: {syncedRows: false},
+        },
+      ],
+    ]);
+
+    const mockResult = {
+      warnings: [],
+      syncedRowCount: 1,
+      start: 2000,
+      end: 2050,
+    };
+
+    // Use the fixed ID from the mocked Math.random
+    await z.triggerMessage([
+      'inspect',
+      {
+        op: 'analyze-query',
+        id: '000000000000000000000',
+        value: mockResult,
+      },
+    ]);
+
+    const result = await analyzePromise;
+    expect(result).toEqual(mockResult);
+
+    await z.close();
+  });
+
+  test('analyze method throws when no server AST available', async () => {
+    const z = zeroForTest({schema});
+    await z.triggerConnected();
+
+    const inspector = await z.inspect();
+    const socket = await z.socket;
+
+    // Setup a query without server AST
+    const queries = await (async () => {
+      const idPromise = new Promise<string>(resolve => {
+        const cleanup = socket.onUpstream(message => {
+          const data = JSON.parse(message);
+          if (data[0] === 'inspect' && data[1].op === 'queries') {
+            cleanup();
+            resolve(data[1].id);
+          }
+        });
+      });
+
+      const p = inspector.client.queries();
+      const id = await idPromise;
+
+      await z.triggerMessage([
+        'inspect',
+        {
+          op: 'queries',
+          id,
+          value: [
+            {
+              clientID: z.clientID,
+              queryID: '1',
+              ast: null, // No server AST
+              name: null,
+              args: null,
+              deleted: false,
+              got: true,
+              inactivatedAt: null,
+              rowCount: 0,
+              ttl: 60_000,
+              metrics: null,
+            },
+          ],
+        },
+      ]);
+
+      return p;
+    })();
+
+    const query = queries[0];
+
+    await expect(query.analyze()).rejects.toThrow(
+      'No server AST available for this query',
+    );
+
+    await z.close();
+  });
+
+  test('analyze method handles default options', async () => {
+    const z = zeroForTest({schema});
+    await z.triggerConnected();
+
+    const inspector = await z.inspect();
+    const socket = await z.socket;
+
+    const queries = await (async () => {
+      const idPromise = new Promise<string>(resolve => {
+        const cleanup = socket.onUpstream(message => {
+          const data = JSON.parse(message);
+          if (data[0] === 'inspect' && data[1].op === 'queries') {
+            cleanup();
+            resolve(data[1].id);
+          }
+        });
+      });
+
+      const p = inspector.client.queries();
+      const id = await idPromise;
+
+      await z.triggerMessage([
+        'inspect',
+        {
+          op: 'queries',
+          id,
+          value: [
+            {
+              clientID: z.clientID,
+              queryID: '1',
+              ast: {table: 'users'},
+              name: null,
+              args: null,
+              deleted: false,
+              got: true,
+              inactivatedAt: null,
+              rowCount: 5,
+              ttl: 60_000,
+              metrics: null,
+            },
+          ],
+        },
+      ]);
+
+      return p;
+    })();
+
+    const query = queries[0];
+    vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+    (await z.socket).messages.length = 0;
+
+    const analyzePromise = query.analyze(); // No options provided
+    await Promise.resolve(); // Allow the RPC call to be sent
+    expect((await z.socket).jsonMessages).toEqual([
+      [
+        'inspect',
+        {
+          op: 'analyze-query',
+          id: '000000000000000000000',
+          value: {table: 'users'},
+          options: undefined,
+        },
+      ],
+    ]);
+
+    // Use the fixed ID from the mocked Math.random
+    await z.triggerMessage([
+      'inspect',
+      {
+        op: 'analyze-query',
+        id: '000000000000000000000',
+        value: {
+          warnings: [],
+          syncedRowCount: 5,
+          start: 3000,
+          end: 3100,
+        },
+      },
+    ]);
+
+    const result = await analyzePromise;
+    expect(result.syncedRowCount).toBe(5);
+
+    await z.close();
+  });
 });
 
 describe('authenticate', () => {

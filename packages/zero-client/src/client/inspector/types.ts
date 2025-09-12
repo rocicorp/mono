@@ -1,6 +1,8 @@
 import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
 import type {ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
+import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {AnalyzeQueryOptions} from '../../../../zero-protocol/src/inspect-up.ts';
 import type {TTL} from '../../../../zql/src/query/ttl.ts';
 
 export interface GetInspector {
@@ -52,4 +54,6 @@ export interface Query {
   readonly clientZQL: string | null;
   readonly serverZQL: string | null;
   readonly metrics: Metrics | null;
+
+  analyze(options?: AnalyzeQueryOptions): Promise<AnalyzeQueryResult>;
 }
