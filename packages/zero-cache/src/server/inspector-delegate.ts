@@ -8,6 +8,7 @@ import {
   type MetricMap,
   type MetricsDelegate,
 } from '../../../zql/src/query/metrics-delegate.ts';
+import {isDevelopmentMode} from '../config/normalize.ts';
 
 /**
  * Server-side metrics collected for queries during materialization and update.
@@ -97,6 +98,9 @@ export class InspectorDelegate implements MetricsDelegate {
    * per "worker".
    */
   isAuthenticated(clientGroupID: ClientGroupID): boolean {
+    if (isDevelopmentMode()) {
+      return true;
+    }
     return authenticatedClientIDs.has(clientGroupID);
   }
 
