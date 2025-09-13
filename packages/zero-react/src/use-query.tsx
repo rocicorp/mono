@@ -77,6 +77,7 @@ const reactUse = (React as unknown as {use?: (p: Promise<unknown>) => void})
 const suspend: (p: Promise<unknown>) => void = reactUse
   ? reactUse
   : p => {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
       throw p;
     };
 
