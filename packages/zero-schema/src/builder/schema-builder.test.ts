@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/naming-convention, @typescript-eslint/no-unused-vars, @typescript-eslint/no-unsafe-argument */
 import {expect, expectTypeOf, test} from 'vitest';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {relationships} from './relationship-builder.ts';

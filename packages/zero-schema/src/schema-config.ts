@@ -60,6 +60,7 @@ export async function stringifySchema(module: unknown) {
   }
   const schemaConfig = module;
   const permissions = v.parse(
+    // eslint-disable-next-line @typescript-eslint/await-thenable
     await schemaConfig.permissions,
     permissionsConfigSchema,
   );
@@ -82,13 +83,16 @@ export function parseSchema(
   permissions: PermissionsConfig;
 } {
   try {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const config = JSON.parse(input);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const permissions = v.parse(config.permissions, permissionsConfigSchema);
     return {
       permissions,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
       schema: config.schema,
     };
   } catch (e) {
-    throw new Error(`Failed to parse schema config from ${source}: ${e}`);
+    throw new Error(`Failed to parse schema config from ${source}: ${String(e)}`);
   }
 }

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-expressions */
 import {expect, expectTypeOf, test} from 'vitest';
 import {relationships} from './builder/relationship-builder.ts';
 import {createSchema} from './builder/schema-builder.ts';

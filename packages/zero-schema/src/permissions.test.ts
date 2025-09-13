@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method */
 import {expect, test} from 'vitest';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
 import type {Schema as ZeroSchema} from './builder/schema-builder.ts';

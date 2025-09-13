@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/await-thenable, @typescript-eslint/unbound-method, @typescript-eslint/no-unsafe-assignment */
 import {renderHook, testEffect} from '@solidjs/testing-library';
 import {
   createEffect,
