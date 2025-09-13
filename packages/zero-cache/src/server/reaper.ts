@@ -49,8 +49,8 @@ export default async function runWorker(
     }),
     // Periodically computes and exports active users gauge to anonymous telemetry
     new ActiveUsersGauge(lc, cvrDB, shard, {
-      // Default 60s refresh; can be made configurable later if needed
-      updateIntervalMs: 60_000,
+      // Default 10minutes refresh; can be made configurable later if needed
+      updateIntervalMs: 10 * 60 * 1000,
     }),
   );
 }
