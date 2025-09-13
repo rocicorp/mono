@@ -17,28 +17,31 @@ import {
   zeroOptions,
 } from '../../zero-cache/src/config/zero-config.ts';
 import {
+  computeZqlSpecs,
+  mustGetTableSpec,
+} from '../../zero-cache/src/db/lite-tables.ts';
+import {
   deployPermissionsOptions,
   loadSchemaAndPermissions,
 } from '../../zero-cache/src/scripts/permissions.ts';
 import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
+import type {AnalyzeQueryResult} from '../../zero-protocol/src/analyze-query-result.ts';
 import {type AST} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
+import {
+  Debug,
+  runtimeDebugFlags,
+} from '../../zql/src/builder/debug-delegate.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {completedAST, newQuery} from '../../zql/src/query/query-impl.ts';
 import {type PullRow, type Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
-import {runtimeDebugFlags} from '../../zql/src/builder/debug-delegate.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
-import {Debug} from '../../zql/src/builder/debug-delegate.ts';
-import {runAst, type RunResult} from './run-ast.ts';
 import {explainQueries} from './explain-queries.ts';
-import {
-  computeZqlSpecs,
-  mustGetTableSpec,
-} from '../../zero-cache/src/db/lite-tables.ts';
+import {runAst} from './run-ast.ts';
 
 const options = {
   schema: deployPermissionsOptions.schema,
@@ -246,7 +249,7 @@ const host: QueryDelegate = {
   addMetric() {},
 };
 
-let result: RunResult;
+let result: AnalyzeQueryResult;
 
 if (config.ast) {
   // the user likely has a transformed AST since the wire and storage formats are the transformed AST
@@ -255,7 +258,7 @@ if (config.ast) {
     authData: config.authData,
     clientToServerMapper,
     permissions,
-    outputSyncedRows: config.outputSyncedRows,
+    syncedRows: config.outputSyncedRows,
     db,
     tableSpecs,
     host,
@@ -269,7 +272,7 @@ if (config.ast) {
   process.exit(1);
 }
 
-function runQuery(queryString: string): Promise<RunResult> {
+function runQuery(queryString: string): Promise<AnalyzeQueryResult> {
   const z = {
     query: Object.fromEntries(
       Object.entries(schema.tables).map(([name]) => [
@@ -288,7 +291,7 @@ function runQuery(queryString: string): Promise<RunResult> {
     authData: config.authData,
     clientToServerMapper,
     permissions,
-    outputSyncedRows: config.outputSyncedRows,
+    syncedRows: config.outputSyncedRows,
     db,
     tableSpecs,
     host,
@@ -315,7 +318,7 @@ async function runHash(hash: string) {
     authData: config.authData,
     clientToServerMapper,
     permissions,
-    outputSyncedRows: config.outputSyncedRows,
+    syncedRows: config.outputSyncedRows,
     db,
     tableSpecs,
     host,
@@ -324,7 +327,7 @@ async function runHash(hash: string) {
 
 if (config.outputSyncedRows) {
   colorConsole.log(chalk.blue.bold('=== Synced Rows: ===\n'));
-  for (const [table, rows] of Object.entries(result.syncedRows)) {
+  for (const [table, rows] of Object.entries(result.syncedRows ?? {})) {
     colorConsole.log(chalk.bold(table + ':'), rows);
   }
 }
