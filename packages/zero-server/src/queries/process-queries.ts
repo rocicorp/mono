@@ -30,7 +30,7 @@ export async function handleGetQueriesRequest<S extends Schema>(
 
   let body: ReadonlyJSONValue;
   if (requestOrJsonBody instanceof Request) {
-    body = await requestOrJsonBody.json();
+    body = await requestOrJsonBody.json() as ReadonlyJSONValue;
   } else {
     body = requestOrJsonBody;
   }

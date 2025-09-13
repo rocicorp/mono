@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/require-await, require-await */
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
@@ -382,7 +383,6 @@ test('continues processing if all mutations throw in error mode with "MutationAl
     version: 1,
   });
   const c = {c: 0};
-  // eslint-disable-next-line require-await
   db.transaction = async () => {
     c.c++;
     if (c.c % 2 === 0) {
@@ -426,7 +426,6 @@ test('bails processing if all mutations throw in error mode with "OutOfOrderMuta
     version: 1,
   });
   const c = {c: 0};
-  // eslint-disable-next-line require-await
   db.transaction = async () => {
     c.c++;
     if (c.c % 2 === 0) {
@@ -472,7 +471,6 @@ test('bails processing if a mutation throws an unknown error in error mode', asy
     version: 1,
   });
   const c = {c: 0};
-  // eslint-disable-next-line require-await
   db.transaction = async () => {
     c.c++;
     if (c.c % 2 === 0) {
@@ -560,7 +558,6 @@ test('a mutation throws an app error then an ooo mutation error', async () => {
     version: 1,
   });
   const c = {c: 0};
-  // eslint-disable-next-line require-await
   db.transaction = async () => {
     if (c.c++ === 0) {
       throw new Error('application error');
@@ -605,7 +602,6 @@ test('mutation throws an app error then an already processed error', async () =>
     version: 1,
   });
   const c = {c: 0};
-  // eslint-disable-next-line require-await
   db.transaction = async () => {
     if (c.c++ === 0) {
       throw new Error('application error');

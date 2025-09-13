@@ -142,9 +142,9 @@ async function main() {
     lc.info?.(`Detected ${path} change.`);
     await deployPermissions();
   };
-  watcher.on('add', onFileChange);
-  watcher.on('change', onFileChange);
-  watcher.on('unlink', onFileChange);
+  watcher.on('add', () => void onFileChange());
+  watcher.on('change', () => void onFileChange());
+  watcher.on('unlink', () => void onFileChange());
 }
 
 void main();

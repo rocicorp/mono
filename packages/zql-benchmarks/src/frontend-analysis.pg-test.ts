@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+/* eslint-disable no-console, @typescript-eslint/no-unused-expressions */
 import {B, do_not_optimize, type trial} from 'mitata';
 import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
 import {bootstrap} from '../../zql-integration-tests/src/helpers/runner.ts';
@@ -335,7 +335,7 @@ function log(strings: TemplateStringsArray, ...values: unknown[]): void {
   strings.forEach((string, i) => {
     result += string;
     if (i < values.length) {
-      result += values[i];
+      result += String(values[i]);
     }
   });
 

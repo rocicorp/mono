@@ -104,7 +104,7 @@ export async function handleMutationRequest(
     const url = new URL(queryOrQueryString.url);
     queryString = url.searchParams;
 
-    body = await queryOrQueryString.json();
+    body = await queryOrQueryString.json() as ReadonlyJSONValue;
   } else {
     queryString = queryOrQueryString;
   }
@@ -175,7 +175,7 @@ class Transactor {
         // level error.
         if (caughtError !== undefined) {
           this.#lc.warn?.(
-            `Mutation ${mutation.id} for client ${mutation.clientID} was retried after an error: ${caughtError}`,
+            `Mutation ${mutation.id} for client ${mutation.clientID} was retried after an error: ${caughtError instanceof Error ? caughtError.message : JSON.stringify(caughtError)}`,
           );
           return makeAppErrorResponse(mutation, caughtError);
         }
@@ -341,5 +341,5 @@ export function getMutation(
   }
 
   assert(typeof mutator === 'function', () => `could not find mutator ${name}`);
-  return mutator;
+  return mutator as CustomMutatorImpl<any, any>;
 }
