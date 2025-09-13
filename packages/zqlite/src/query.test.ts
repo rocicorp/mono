@@ -88,10 +88,10 @@ beforeEach(() => {
 });
 
 test('row type', () => {
-  const query = newQuery(queryDelegate, schema, 'issue')
+  const _query = newQuery(queryDelegate, schema, 'issue')
     .whereExists('labels', q => q.where('name', '=', 'bug'))
     .related('labels');
-  type RT = ReturnType<typeof query.run>;
+  type RT = ReturnType<typeof _query.run>;
   expectTypeOf<RT>().toEqualTypeOf<
     Promise<
       {
@@ -193,6 +193,7 @@ test('null compare', async () => {
 });
 
 test('or', async () => {
+  // eslint-disable-next-line @typescript-eslint/unbound-method
   const query = newQuery(queryDelegate, schema, 'issue').where(({or, cmp}) =>
     or(cmp('ownerId', '=', '0001'), cmp('ownerId', '=', '0002')),
   );

@@ -85,7 +85,7 @@ describe('view-syncer/database-storage', () => {
 
   test('get non-existent', () => {
     const store = storage.createClientGroupStorage('foo-bar').createStorage();
-    expect(store.get('foo')).toBeUndefined;
+    expect(store.get('foo')).toBeUndefined();
   });
 
   test('del', () => {

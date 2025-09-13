@@ -76,5 +76,8 @@ export function decodeSecProtocols(secProtocol: string): {
 } {
   const binString = atob(decodeURIComponent(secProtocol));
   const bytes = Uint8Array.from(binString, c => c.charCodeAt(0));
-  return JSON.parse(new TextDecoder().decode(bytes));
+  return JSON.parse(new TextDecoder().decode(bytes)) as {
+    initConnectionMessage: InitConnectionMessage | undefined;
+    authToken: string | undefined;
+  };
 }

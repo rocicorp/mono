@@ -737,7 +737,7 @@ test('getByKey', () => {
       id: '5',
       a: (BigInt(Number.MAX_SAFE_INTEGER) + 1n) as unknown as Value,
     }),
-  ).toBeUndefined;
+  ).toBeUndefined();
 });
 
 describe('optional filters to sql', () => {

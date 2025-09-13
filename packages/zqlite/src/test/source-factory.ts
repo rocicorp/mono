@@ -76,7 +76,7 @@ export function mapResultToClientNames<T, S extends Schema>(
           serverCol,
         );
         mappedResult[clientCol] = v;
-      } catch (e) {
+      } catch {
         const relationship = schema.relationships[rootTable][serverCol];
         mappedResult[serverCol] = mapResult(
           v,

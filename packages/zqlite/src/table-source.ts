@@ -3,6 +3,7 @@ import type {LogContext} from '@rocicorp/logger';
 import type {LogConfig} from '../../otel/src/log-options.ts';
 import {timeSampled} from '../../otel/src/maybe-time.ts';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
+import type {JSONValue} from '../../shared/src/json.ts';
 import {must} from '../../shared/src/must.ts';
 import {difference} from '../../shared/src/set-utils.ts';
 import type {Writable} from '../../shared/src/writable.ts';
@@ -102,7 +103,7 @@ export class TableSource implements Source {
 
     assert(
       this.#uniqueIndexes.has(JSON.stringify([...primaryKey].sort())),
-      `primary key ${primaryKey} does not have a UNIQUE index`,
+      `primary key ${[...primaryKey].join(',')} does not have a UNIQUE index`,
     );
   }
 
@@ -740,9 +741,9 @@ function getUniqueIndexes(
   const indexes = stmt.all<{columnsJSON: string}>(...sqlAndBindings.values);
   return new Map(
     indexes.map(({columnsJSON}) => {
-      const columns = JSON.parse(columnsJSON);
+      const columns = JSON.parse(columnsJSON) as string[];
       const set = new Set<string>(columns);
-      return [JSON.stringify(columns.sort()), set];
+      return [JSON.stringify([...columns].sort()), set] as const;
     }),
   );
 }
@@ -794,7 +795,7 @@ export function fromSQLiteTypes(
       throw new Error(
         `Invalid column "${key}". Synced columns include ${Object.keys(
           valueTypes,
-        ).sort()}`,
+        ).sort().join(',')}`,
       );
     }
     newRow[key] = fromSQLiteType(valueType.type, row[key], key);
@@ -815,15 +816,18 @@ function fromSQLiteType(valueType: ValueType, v: Value, column: string): Value {
       if (typeof v === 'bigint') {
         if (v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER) {
           throw new UnsupportedValueError(
-            `value ${v} (in column ${column}) is outside of supported bounds`,
+            `value ${String(v)} (in column ${column}) is outside of supported bounds`,
           );
         }
         return Number(v);
       }
       return v;
     case 'json':
-      return JSON.parse(v as string);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-return
+      return JSON.parse(v as string) as JSONValue;
   }
+  // Unreachable but satisfies exhaustiveness check
+  unreachable(valueType);
 }
 
 export class UnsupportedValueError extends Error {

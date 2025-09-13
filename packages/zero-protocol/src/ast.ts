@@ -331,17 +331,18 @@ interface ASTTransform {
 
 function transformAST(ast: AST, transform: ASTTransform): Required<AST> {
   // Name mapping functions (e.g. to server names)
-  const {tableName, columnName} = transform;
-  const colName = (c: string) => columnName(ast.table, c);
+  const tableNameFn = (orig: string) => transform.tableName(orig);
+  const columnNameFn = (origTable: string, origColumn: string) => transform.columnName(origTable, origColumn);
+  const colName = (c: string) => columnNameFn(ast.table, c);
   const key = (table: string, k: CompoundKey) => {
-    const serverKey = k.map(col => columnName(table, col));
+    const serverKey = k.map(col => columnNameFn(table, col));
     return mustCompoundKey(serverKey);
   };
 
   const where = ast.where ? transform.where(ast.where) : undefined;
   const transformed = {
     schema: ast.schema,
-    table: tableName(ast.table),
+    table: tableNameFn(ast.table),
     alias: ast.alias,
     where: where ? transformWhere(where, ast.table, transform) : undefined,
     related: ast.related
@@ -384,11 +385,11 @@ function transformWhere(
   transform: ASTTransform,
 ): Condition {
   // Name mapping functions (e.g. to server names)
-  const {columnName} = transform;
+  const columnNameFn = (origTable: string, origColumn: string) => transform.columnName(origTable, origColumn);
   const condValue = (c: ConditionValue) =>
-    c.type !== 'column' ? c : {...c, name: columnName(table, c.name)};
+    c.type !== 'column' ? c : {...c, name: columnNameFn(table, c.name)};
   const key = (table: string, k: CompoundKey) => {
-    const serverKey = k.map(col => columnName(table, col));
+    const serverKey = k.map(col => columnNameFn(table, col));
     return mustCompoundKey(serverKey);
   };
 

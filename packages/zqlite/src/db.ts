@@ -285,13 +285,13 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
 
   return(): IteratorResult<T> {
     this.#log();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-return
     return this.#it.return?.() as any;
   }
 
   throw(e: unknown): IteratorResult<T> {
     this.#log();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-return
     return this.#it.throw?.(e) as any;
   }
 }
