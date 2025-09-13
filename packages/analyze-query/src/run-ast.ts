@@ -1,4 +1,5 @@
 import type {AST} from '../../zero-protocol/src/ast.ts';
+import type {JWTPayload} from 'jose';
 import {
   buildPipeline,
   type BuilderDelegate,
@@ -67,7 +68,7 @@ export async function runAst(
     ast = mapAST(ast, must(clientToServerMapper));
   }
   if (options.applyPermissions) {
-    const authData = options.authData ? JSON.parse(options.authData) : {};
+    const authData: JWTPayload = options.authData ? (JSON.parse(options.authData) as JWTPayload) : {};
     if (!options.authData) {
       result.warnings.push(
         'No auth data provided. Permission rules will compare to `NULL` wherever an auth data field is referenced.',

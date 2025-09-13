@@ -511,7 +511,7 @@ function literalValueComparison(
         return sqlConvertSingularLiteralArg(valuePos.value);
       }
       throw new Error(
-        `Literal of unexpected type. ${valuePos.value} of type ${typeof valuePos.value}`,
+        `Literal of unexpected type. ${String(valuePos.value)} of type ${typeof valuePos.value}`,
       );
     }
     case 'static':
@@ -638,6 +638,7 @@ function getServerColumn(spec: ServerSpec, table: Table, zqlColumn: string) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractZqlResult(pgResult: Array<any>): JSONValue {
   const bigIntJson: BigIntJSONValue = parseBigIntJson(
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
     pgResult[0][ZQL_RESULT_KEY],
   );
   assertJSONValue(bigIntJson);
@@ -655,14 +656,14 @@ function findPathToBigInt(v: BigIntJSONValue): string | undefined {
   const typeOfV = typeof v;
   switch (typeOfV) {
     case 'bigint':
-      return ` = ${v}`;
+      return ` = ${(v as bigint).toString()}`;
     case 'object': {
       if (v === null) {
         return;
       }
       if (Array.isArray(v)) {
         for (let i = 0; i < v.length; i++) {
-          const path = findPathToBigInt(v[i]);
+          const path = findPathToBigInt(v[i] as BigIntJSONValue);
           if (path) {
             return `[${i}]${path}`;
           }

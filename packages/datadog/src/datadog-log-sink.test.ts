@@ -451,9 +451,13 @@ test('Errors in multi arg messages are converted to JSON', async () => {
   expect(parsedBody.status).toEqual('info');
   expect(parsedBody.message.length).toEqual(3);
   expect(parsedBody.message[0]).toEqual('Logging an error');
-  expect(parsedBody.message[1].name).toEqual('Error');
-  expect(parsedBody.message[1].message).toEqual('Test error msg');
-  expect(parsedBody.message[1].stack).toBeDefined();
+  const errorMessage = parsedBody.message[1];
+  expect(typeof errorMessage).toBe('object');
+  if (typeof errorMessage === 'object') {
+    expect(errorMessage.name).toEqual('Error');
+    expect(errorMessage.message).toEqual('Test error msg');
+    expect(errorMessage.stack).toBeDefined();
+  }
   expect(parsedBody.message[2]).toEqual('after');
 });
 

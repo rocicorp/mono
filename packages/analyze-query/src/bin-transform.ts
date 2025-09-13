@@ -15,6 +15,7 @@ import {
 import {loadSchemaAndPermissions} from '../../zero-cache/src/scripts/permissions.ts';
 import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
+import type {AST} from '../../zero-protocol/src/ast.ts';
 
 const options = {
   cvr: {db: v.string()},
@@ -45,10 +46,10 @@ const rows =
 const queryAst = transformAndHashQuery(
   lc,
   '',
-  rows[0].clientAST,
+  rows[0].clientAST as AST,
   permissions,
   {},
-  rows[0].internal,
+  rows[0].internal as boolean | null | undefined,
 ).transformedAst;
 
 console.log('\n=== AST ===\n');

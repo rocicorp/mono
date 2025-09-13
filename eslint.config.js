@@ -4,6 +4,9 @@ export default [
   ...rocicorpConfig,
   {
     rules: {
+      // Disable these rules to allow explicit undefined in optional parameters as per project convention
+      '@typescript-eslint/no-duplicate-type-constituents': 'off',
+      '@typescript-eslint/no-redundant-type-constituents': 'off',
       'no-restricted-syntax': [
         'error',
         {
