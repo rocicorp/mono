@@ -12,6 +12,7 @@ import {
   recordMutation,
   recordQuery,
   recordRowsSynced,
+  setActiveUsersGetter,
   shutdownAnonymousTelemetry,
   startAnonymousTelemetry,
 } from './anonymous-otel-start.js';
@@ -310,12 +311,19 @@ describe('Anonymous Telemetry Integration Tests', () => {
         },
       );
 
+      expect(mockMeter.createObservableGauge).toHaveBeenCalledWith(
+        'zero.active_users_last_day',
+        {
+          description: 'Count of CVR instances active in the last 24h',
+        },
+      );
+
       // Note: Histogram metrics are not currently implemented in the anonymous telemetry
     });
 
     test('should register callbacks for observable metrics', () => {
       // Each observable should have a callback registered
-      expect(mockObservableGauge.addCallback).toHaveBeenCalledTimes(2); // 2 gauges (uptime, active_client_groups)
+      expect(mockObservableGauge.addCallback).toHaveBeenCalledTimes(3); // 3 gauges (uptime, active_client_groups, active_users)
       expect(mockObservableCounter.addCallback).toHaveBeenCalledTimes(10); // 10 counters (uptime_counter, crud_mutations, custom_mutations, total_mutations, crud_queries, custom_queries, total_queries, rows_synced, connections_success, connections_attempted)
     });
   });
@@ -570,6 +578,28 @@ describe('Anonymous Telemetry Integration Tests', () => {
   });
 
   describe('Integration Tests for Telemetry Calls', () => {
+    test('should observe active users via getter', () => {
+      // Set the active users getter
+      setActiveUsersGetter(() => 7);
+
+      // Find the callback associated with the active users gauge
+      const dauCallback = mockObservableGauge.addCallback.mock.calls
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .find((call: any) =>
+          call[0].toString().includes('activeUsersGetter'),
+        )?.[0];
+
+      if (dauCallback) {
+        const mockResult = {observe: vi.fn()};
+        dauCallback(mockResult);
+        expect(mockResult.observe).toHaveBeenCalledWith(
+          7,
+          expect.objectContaining({
+            'zero.telemetry.type': 'anonymous',
+          }),
+        );
+      }
+    });
     test('should record rows synced with correct count', () => {
       const rowCount1 = 42;
       const rowCount2 = 15;
