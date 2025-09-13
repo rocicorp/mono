@@ -205,7 +205,7 @@ class AnonymousTelemetryManager {
     );
 
     const activeUsersGauge = this.#meter.createObservableGauge(
-      'zero.gauge_active_users',
+      'zero.active_users_last_day',
       {
         description: 'Count of CVR instances active in the last 24h',
       },
@@ -281,9 +281,15 @@ class AnonymousTelemetryManager {
     });
 
     activeUsersGauge.addCallback((result: ObservableResult) => {
-      const activeUsers = this.#activeUsersGetter?.() ?? 0;
-      result.observe(activeUsers, attrs);
-      this.#lc?.debug?.(`telemetry: gauge_active_users=${activeUsers}`);
+      if (this.#activeUsersGetter) {
+        const activeUsers = this.#activeUsersGetter();
+        result.observe(activeUsers, attrs);
+        this.#lc?.debug?.(`telemetry: active_users_last_day=${activeUsers}`);
+      } else {
+        this.#lc?.debug?.(
+          'telemetry: no active users getter available, skipping observation',
+        );
+      }
     });
   }
 

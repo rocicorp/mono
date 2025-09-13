@@ -23,6 +23,7 @@ export class ActiveUsersGauge implements Service {
 
   // latest computed value exposed via the observable gauge callback
   #value = 0;
+  #getterSet = false;
 
   constructor(
     lc: LogContext,
@@ -34,23 +35,25 @@ export class ActiveUsersGauge implements Service {
     this.#db = db;
     this.#schema = cvrSchema(shard);
     this.#updateIntervalMs = opts.updateIntervalMs ?? 60 * 1000; // default 1 minute
-
-    // Expose value to anonymous telemetry exporter
-    setActiveUsersGetter(() => this.#value);
   }
 
   async run(): Promise<void> {
     while (this.#state.shouldRun()) {
       try {
         const since = Date.now() - DAY;
-        await this.#db.begin(async sql => {
-          const [{cnt}] = await sql<[{cnt: bigint}]>`
-            SELECT COUNT(*) AS cnt
-            FROM ${sql(this.#schema)}.instances
-            WHERE "lastActive" > ${since}
-          `;
-          this.#value = Number(cnt);
-        });
+        const [{cnt}] = await this.#db<[{cnt: bigint}]>`
+          SELECT COUNT(*) AS cnt
+          FROM ${this.#db(this.#schema)}.instances
+          WHERE "lastActive" > ${since}
+        `;
+        this.#value = Number(cnt);
+
+        // Set the getter after the first value is computed
+        if (!this.#getterSet) {
+          setActiveUsersGetter(() => this.#value);
+          this.#getterSet = true;
+        }
+
         this.#lc.debug?.(`updated active-users gauge to ${this.#value}`);
       } catch (e) {
         this.#lc.warn?.('error updating active-users gauge', e);

@@ -312,7 +312,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
       );
 
       expect(mockMeter.createObservableGauge).toHaveBeenCalledWith(
-        'zero.gauge_active_users',
+        'zero.active_users_last_day',
         {
           description: 'Count of CVR instances active in the last 24h',
         },
