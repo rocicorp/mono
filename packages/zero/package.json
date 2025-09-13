@@ -72,8 +72,6 @@
     "parse-prometheus-text-format": "^1.1.1",
     "semver": "^7.5.4",
     "tsx": "^4.19.1",
-    "typedoc": "^0.28.2",
-    "typedoc-plugin-markdown": "^4.6.1",
     "url-pattern": "^1.0.3",
     "ws": "^8.18.1"
   },
@@ -84,6 +82,8 @@
     "esbuild": "^0.25.0",
     "replicache": "15.2.1",
     "shared": "0.0.0",
+    "typedoc": "^0.28.2",
+    "typedoc-plugin-markdown": "^4.6.1",
     "typescript": "~5.8.2",
     "vitest": "3.2.4",
     "zero-client": "0.0.0",
