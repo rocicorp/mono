@@ -198,8 +198,8 @@ async function* diffNodes(
 
   if (isDataNodeImpl(last) && isDataNodeImpl(current)) {
     yield* diffEntries(
-      (last as DataNodeImpl).entries,
-      (current as DataNodeImpl).entries,
+      last.entries,
+      current.entries,
     );
     return;
   }

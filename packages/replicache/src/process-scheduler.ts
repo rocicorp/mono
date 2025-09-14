@@ -72,7 +72,7 @@ export class ProcessScheduler {
       // this._runPromise is also awaited below and errors are explicitly
       // propagated to promises returned from schedule.
       // eslint-disable-next-line no-empty
-    } catch (_) {}
+    } catch {}
     await this.#throttlePromise;
     if (!this.#scheduledResolver) {
       return;

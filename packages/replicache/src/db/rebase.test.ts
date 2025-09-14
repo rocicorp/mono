@@ -492,7 +492,7 @@ async function testThrowsErrorOnClientIDMismatch(
             formatVersion,
             undefined,
           );
-    } catch (_) {
+    } catch {
       expect(formatVersion).to.be.greaterThanOrEqual(FormatVersion.DD31);
       return;
     }

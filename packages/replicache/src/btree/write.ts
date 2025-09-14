@@ -178,6 +178,7 @@ export class BTreeWrite extends BTreeRead {
       const newRoot = gatherNewChunks(
         this.rootHash,
         newChunks,
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         dagWrite.createChunk,
         this.#modified,
         this._formatVersion,

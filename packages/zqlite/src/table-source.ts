@@ -743,7 +743,7 @@ function getUniqueIndexes(
     indexes.map(({columnsJSON}) => {
       const columns = JSON.parse(columnsJSON) as string[];
       const set = new Set<string>(columns);
-      return [JSON.stringify([...columns].sort()), set] as const;
+      return [JSON.stringify(columns.sort()), set] as const;
     }),
   );
 }
