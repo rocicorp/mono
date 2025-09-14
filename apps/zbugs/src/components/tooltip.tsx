@@ -35,7 +35,8 @@ const TooltipContext = createContext<ContextType>(null);
 
 const useTooltipContext = () => {
   const context = useContext(TooltipContext);
-  if (context === null) {
+  // eslint-disable-next-line eqeqeq -- Intentionally using loose equality to check for both null and undefined
+  if (context == null) {
     throw new Error('Tooltip components must be wrapped in <Tooltip />');
   }
   return context;
@@ -79,10 +80,12 @@ function useTooltip({
   const hover = useHover(context, {
     move: false,
     delay,
-    enabled: controlledOpen === null,
+    // eslint-disable-next-line eqeqeq -- Intentionally using loose equality to check for both null and undefined
+    enabled: controlledOpen == null,
   });
   const focus = useFocus(context, {
-    enabled: controlledOpen === null,
+    // eslint-disable-next-line eqeqeq -- Intentionally using loose equality to check for both null and undefined
+    enabled: controlledOpen == null,
   });
   const dismiss = useDismiss(context);
   const role = useRole(context, {

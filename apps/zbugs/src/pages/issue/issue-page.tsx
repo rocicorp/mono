@@ -141,7 +141,8 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const editDescriptionRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (displayed?.shortID !== null && displayed && idField !== 'shortID') {
+    // eslint-disable-next-line eqeqeq -- Intentionally using loose equality to check for both null and undefined
+    if (displayed?.shortID != null && idField !== 'shortID') {
       navigate(links.issue(displayed), {
         replace: true,
         state: zbugsHistoryState,
