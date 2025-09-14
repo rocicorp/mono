@@ -24,7 +24,7 @@ export interface Read extends GetChunk, MustGetChunk, Release {
 }
 
 export interface Write extends Read {
-  createChunk<V>(data: V, refs: Refs): Chunk<V>;
+  createChunk<V>(this: undefined, data: V, refs: Refs): Chunk<V>;
   putChunk<V>(c: Chunk<V>): Promise<void>;
   setHead(name: string, hash: Hash): Promise<void>;
   removeHead(name: string): Promise<void>;

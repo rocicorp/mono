@@ -448,6 +448,7 @@ test('accessors', async () => {
   expect(local.valueHash).to.equal(valueHash);
 
   const fakeRead = {
+    // eslint-disable-next-line require-await
     async mustGetChunk() {
       // This test does not read from the dag and if it does, lets just fail.
       throw new Error('Method not implemented.');
