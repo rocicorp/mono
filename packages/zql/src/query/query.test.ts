@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/no-floating-promises */
-/* eslint-disable @typescript-eslint/ban-types */
 import {describe, expectTypeOf, test} from 'vitest';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {toStaticParam} from '../../../zero-protocol/src/ast.ts';

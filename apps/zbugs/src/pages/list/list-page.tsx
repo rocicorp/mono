@@ -150,7 +150,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     setTotal(undefined);
     setAnchor(TOP_ANCHOR);
     virtualizer.scrollToIndex(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // We only want to react to baseQ changes, not virtualizer or other deps
   }, [baseQ.hash()]);
 
   // We don't want to cache every single keystroke. We already debounce

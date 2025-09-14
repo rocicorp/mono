@@ -60,7 +60,7 @@ export type TableMutator<S extends TableSchema> = {
 
 export type DBMutator<S extends Schema> =
   S['enableLegacyMutators'] extends false
-    ? {} // eslint-disable-line @typescript-eslint/ban-types -- {} is needed here for intersection type identity
+    ? {} // {} is needed here for intersection type identity
     : {
         [K in keyof S['tables']]: TableMutator<S['tables'][K]>;
       };

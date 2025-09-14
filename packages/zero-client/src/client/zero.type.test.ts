@@ -134,10 +134,10 @@ test('legacy mutators disabled - table mutators do not exist', () => {
 
   // Type test: DBMutator should be empty when enableLegacyMutators is false
   type TestDBMutator = DBMutator<typeof schema>;
-  expectTypeOf<TestDBMutator>().toEqualTypeOf<{}>(); // eslint-disable-line @typescript-eslint/ban-types
+  expectTypeOf<TestDBMutator>().toEqualTypeOf<{}>(); // {} is needed for type test
 
   // Verify table mutators do not exist when legacy mutators disabled
-  expectTypeOf(z.mutate).toEqualTypeOf<{}>(); // eslint-disable-line @typescript-eslint/ban-types
+  expectTypeOf(z.mutate).toEqualTypeOf<{}>(); // {} is needed for type test
 
   // @ts-expect-error - issues table should not exist when legacy mutators disabled
   z.mutate.issues;

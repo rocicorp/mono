@@ -105,7 +105,7 @@ test('calling function returned by initBgIntervalProcess, stops interval', async
 test('error thrown during process (before stop is called) is logged to error', async () => {
   const lc = new LogContext();
   const errorStub = vi.spyOn(console, 'error').mockImplementation(() => {});
-  const process = () => Promise.reject('TestErrorBeforeStop');
+  const process = () => Promise.reject(new Error('TestErrorBeforeStop'));
   const controller = new AbortController();
   initBgIntervalProcess(
     'testProcess',

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call -- Performance testing code with intentional unsafe operations */
 import {deleteDB, type IDBPDatabase, openDB} from 'idb/with-async-ittr';
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore Invalid module when using node16 module resolution.

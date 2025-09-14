@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-argument -- Performance testing code with intentional unsafe operations */
 import commandLineArgs from 'command-line-args';
 import commandLineUsage from 'command-line-usage';
 import getPort from 'get-port';
