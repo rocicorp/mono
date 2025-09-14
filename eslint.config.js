@@ -24,8 +24,12 @@ export default [
       '@typescript-eslint/naming-convention': 'off',
       '@typescript-eslint/prefer-promise-reject-errors': 'off',
       '@typescript-eslint/restrict-plus-operands': 'off',
+      '@typescript-eslint/await-thenable': 'off',
+      '@typescript-eslint/no-empty-object-type': 'off',
+      '@typescript-eslint/only-throw-error': 'off',
       '@typescript-eslint/require-await': 'off',
       'require-await': 'off',
+      'no-unused-private-class-members': 'off',
       'no-restricted-syntax': [
         'error',
         {

@@ -53,6 +53,7 @@ const rehypeImageToVideo: Plugin = () => tree => {
           }
 
           if (!width || !height) {
+            // eslint-disable-next-line no-console
             console.warn('Missing width or height in node:', properties);
           }
 

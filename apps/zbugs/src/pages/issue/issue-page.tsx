@@ -15,7 +15,7 @@ import {
 } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {toast, ToastContainer} from 'react-toastify';
-import {assert} from 'shared/src/asserts.js';
+import {assert} from '../../../../../packages/shared/src/asserts.js';
 import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {findLastIndex} from '../../../../../packages/shared/src/find-last-index.ts';
@@ -141,7 +141,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const editDescriptionRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (displayed?.shortID != null && idField !== 'shortID') {
+    if (displayed?.shortID !== null && displayed && idField !== 'shortID') {
       navigate(links.issue(displayed), {
         replace: true,
         state: zbugsHistoryState,

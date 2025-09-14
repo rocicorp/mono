@@ -30,6 +30,7 @@ export const EmojiPicker = memo(({onEmojiChange}: Props) => {
     if (!isNaN(v)) {
       const db = new Database({dataSource: emojiDataSource});
       db.setPreferredSkinTone(v).catch(err => {
+        // eslint-disable-next-line no-console
         console.error('Failed to set preferred skin tone:', err);
       });
     }

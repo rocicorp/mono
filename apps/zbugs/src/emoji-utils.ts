@@ -1,5 +1,5 @@
 import type {Row} from '@rocicorp/zero';
-import {assert} from 'shared/src/asserts.js';
+import {assert} from '../../../packages/shared/src/asserts.js';
 import type {Schema} from '../shared/schema.ts';
 
 export type Emoji = Row<Schema['tables']['emoji']> & {
