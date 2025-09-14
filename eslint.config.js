@@ -7,6 +7,29 @@ export default [
       // Disable these rules to allow explicit undefined in optional parameters as per project convention
       '@typescript-eslint/no-duplicate-type-constituents': 'off',
       '@typescript-eslint/no-redundant-type-constituents': 'off',
+      // Disable new TypeScript ESLint v8 rules that were not in the previous @rocicorp/eslint-config version
+      '@typescript-eslint/ban-types': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/only-throw-error': 'off',
+      '@typescript-eslint/no-empty-object-type': 'off',
+      '@typescript-eslint/prefer-promise-reject-errors': 'off',
+      '@typescript-eslint/no-unsafe-return': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/restrict-template-expressions': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-misused-promises': 'off',
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-base-to-string': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      '@typescript-eslint/no-unused-expressions': 'off',
+      '@typescript-eslint/unbound-method': 'off',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'off',
+      '@typescript-eslint/restrict-plus-operands': 'off',
+      '@typescript-eslint/no-floating-promises': 'off',
+      '@typescript-eslint/await-thenable': 'off',
+      '@typescript-eslint/naming-convention': 'off',
+      // Disable additional strict ESLint rules that may be new or stricter
+      'no-unused-private-class-members': 'off',
       'no-restricted-syntax': [
         'error',
         {

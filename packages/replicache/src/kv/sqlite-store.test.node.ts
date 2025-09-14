@@ -421,7 +421,7 @@ test('error handling in database operations', async () => {
   try {
     // This should work normally
     await readTx.get('valid-key');
-  } catch (e) {
+  } catch (_) {
     readErrorThrown = true;
   }
 
@@ -436,7 +436,7 @@ test('error handling in database operations', async () => {
     // This should work normally
     await writeTx.put('valid-key', 'valid-value');
     await writeTx.commit();
-  } catch (e) {
+  } catch (_) {
     writeErrorThrown = true;
   }
 

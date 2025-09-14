@@ -45,7 +45,6 @@ afterEach(async () => {
 });
 
 async function deleteClientGroupForTesting<
-  // eslint-disable-next-line @typescript-eslint/ban-types
   MD extends MutatorDefs = {},
 >(rep: ReplicacheTest<MD>) {
   const clientGroupID = await rep.clientGroupID;

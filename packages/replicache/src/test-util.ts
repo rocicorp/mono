@@ -41,7 +41,6 @@ import type {BeginPullResult, MutatorDefs} from './types.ts';
 import fetchMock from 'fetch-mock/esm/client';
 
 export class ReplicacheTest<
-  // eslint-disable-next-line @typescript-eslint/ban-types
   MD extends MutatorDefs = {},
 > extends Replicache<MD> {
   readonly #impl: ReplicacheImpl<MD>;
@@ -168,7 +167,6 @@ type ReplicacheTestOptions<MD extends MutatorDefs> = Omit<
 };
 
 export async function replicacheForTesting<
-  // eslint-disable-next-line @typescript-eslint/ban-types
   MD extends MutatorDefs = {},
 >(
   name: string,

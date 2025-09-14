@@ -210,7 +210,6 @@ export interface ReplicacheImplOptions {
   zero?: ZeroOption | undefined;
 }
 
-// eslint-disable-next-line @typescript-eslint/ban-types
 export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   /** The URL to use when doing a pull request. */
   pullURL: string;

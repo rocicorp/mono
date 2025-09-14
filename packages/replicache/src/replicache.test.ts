@@ -1695,7 +1695,6 @@ test('pull and index update', async () => {
 });
 
 async function populateDataUsingPull<
-  // eslint-disable-next-line @typescript-eslint/ban-types
   MD extends MutatorDefs = {},
 >(rep: ReplicacheTest<MD>, data: Record<string, ReadonlyJSONValue>) {
   const {clientID} = rep;
