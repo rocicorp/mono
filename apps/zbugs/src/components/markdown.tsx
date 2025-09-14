@@ -13,8 +13,7 @@ function isElement(node: Parent | null): node is Element {
 /**
  * Custom rehype plugin to transform <img> with video extensions to <video>.
  */
-const rehypeImageToVideo: Plugin = () => {
-  return tree => {
+const rehypeImageToVideo: Plugin = () => tree => {
     visit(
       tree,
       'element',
@@ -119,10 +118,8 @@ const rehypeImageToVideo: Plugin = () => {
       },
     );
   };
-};
 
-export const Markdown = memo(({children}: {children: string}) => {
-  return (
+export const Markdown = memo(({children}: {children: string}) => (
     <MarkdownBase
       remarkPlugins={[remarkGfm]}
       rehypePlugins={[rehypeImageToVideo]}
@@ -207,5 +204,4 @@ export const Markdown = memo(({children}: {children: string}) => {
     >
       {children}
     </MarkdownBase>
-  );
-});
+  ));

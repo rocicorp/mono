@@ -17,7 +17,7 @@ type Props = {
   onSelect?: ((selection: Selection) => void) | undefined;
 };
 
-export const Filter = memo(function Filter({onSelect}: Props) {
+export const Filter = memo(({onSelect}: Props) => {
   const [isOpen, setIsOpen] = useState(false);
 
   const [unsortedLabels] = useQuery(queries.allLabels());

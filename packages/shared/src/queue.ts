@@ -63,6 +63,7 @@ export class Queue<T> {
   dequeue(timeoutValue?: T, timeoutMs: number = 0): Promise<T> | T {
     const produced = this.#produced.shift();
     if (produced) {
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
       return produced.value ?? Promise.reject(produced.rejection);
     }
     const r = resolver<T>();

@@ -15,8 +15,7 @@ export type Props = {
  * We like mousedown here at Rocicorp.
  */
 export const Link = memo(
-  ({children, href, className, title, state, eventName}: Props) => {
-    return (
+  ({children, href, className, title, state, eventName}: Props) => (
       <a
         href={href}
         title={title}
@@ -26,6 +25,5 @@ export const Link = memo(
       >
         {children}
       </a>
-    );
-  },
+    ),
 );

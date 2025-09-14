@@ -58,7 +58,7 @@ function useTooltip({
   const setOpen = setControlledOpen ?? setUncontrolledOpen;
   const arrowRef = useRef<SVGSVGElement>(null);
   const floatingData = useFloating({
-    open: open,
+    open,
     onOpenChange: setOpen,
     placement: 'top',
     middleware: [

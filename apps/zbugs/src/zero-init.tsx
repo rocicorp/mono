@@ -8,8 +8,7 @@ import type {CustomMutatorDefs, Schema, ZeroOptions} from '@rocicorp/zero';
 export function ZeroInit({children}: {children: ReactNode}) {
   const login = useLogin();
 
-  const props = useMemo(() => {
-    return {
+  const props = useMemo(() => ({
       schema,
       server: import.meta.env.VITE_PUBLIC_SERVER,
       userID: login.loginState?.decoded?.sub ?? 'anon',
@@ -24,8 +23,7 @@ export function ZeroInit({children}: {children: ReactNode}) {
       },
       mutateURL: `${window.location.origin}/api/mutate`,
       getQueriesURL: `${window.location.origin}/api/get-queries`,
-    } satisfies ZeroOptions<Schema, CustomMutatorDefs>;
-  }, [login]);
+    } satisfies ZeroOptions<Schema, CustomMutatorDefs>), [login]);
 
   return <ZeroProvider {...props}>{children}</ZeroProvider>;
 }

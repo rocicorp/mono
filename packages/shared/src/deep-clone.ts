@@ -32,6 +32,7 @@ export function internalDeepClone(
 
       const obj: JSONValue = {};
 
+      // eslint-disable-next-line @typescript-eslint/no-for-in-array
       for (const k in value) {
         if (hasOwn(value, k)) {
           const v = (value as Record<string, ReadonlyJSONValue>)[k];

@@ -25,7 +25,7 @@ export function useKeypress(
 }
 
 function shouldAllow(el: HTMLElement): boolean {
-  const tagName = el.tagName;
+  const {tagName} = el;
   switch (tagName) {
     case 'TEXTAREA':
     case 'SELECT':

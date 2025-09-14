@@ -329,6 +329,7 @@ export function parseOptionsAdvanced<T extends Options>(
     env: processEnv = process.env,
     emitDeprecationWarnings = true,
     logger = console,
+    // eslint-disable-next-line @typescript-eslint/unbound-method
     exit = process.exit,
   } = opts;
   // The main logic for converting a valita Type spec to an Option (i.e. flag) spec.

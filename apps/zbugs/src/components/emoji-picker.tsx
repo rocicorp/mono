@@ -43,12 +43,12 @@ export const EmojiPicker = memo(({onEmojiChange}: Props) => {
       return;
     }
     onEmojiChange({
-      unicode: unicode,
+      unicode,
       annotation: (detail.emoji as NativeEmoji).annotation,
     });
   };
   const onSkinToneChange = (e: SkinToneChangeEvent) => {
-    const skinTone = e.detail.skinTone;
+    const {skinTone} = e.detail;
     setUserPref(z, SKIN_TONE_PREF, skinTone + '');
   };
 

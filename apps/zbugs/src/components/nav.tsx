@@ -231,7 +231,7 @@ function getStatus(
     }
   }
   if (listContext) {
-    const open = listContext.params.open;
+    const {open} = listContext.params;
     switch (open) {
       case true:
         return 'open';

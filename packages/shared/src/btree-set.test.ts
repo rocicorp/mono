@@ -242,6 +242,7 @@ suite('fast-check', () => {
             continue;
           }
           const vs = [...set.values()];
+          // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
           const v = vs[Math.floor(Math.random() * vs.length)]!;
           orderedSet.delete(v);
           set.delete(v);

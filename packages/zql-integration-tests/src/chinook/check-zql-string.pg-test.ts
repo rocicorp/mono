@@ -36,6 +36,7 @@ const z = {
   ),
 };
 
+// eslint-disable-next-line @typescript-eslint/no-implied-eval
 const f = new Function('z', `return z.query.${QUERY_STRING};`);
 const query: AnyStaticQuery = f(z);
 
