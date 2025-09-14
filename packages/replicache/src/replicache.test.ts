@@ -317,7 +317,6 @@ test('name', async () => {
 test('register with error', async () => {
   const rep = await replicacheForTesting('regerr', {
     mutators: {
-      // eslint-disable-next-line require-await
       err: async (_: WriteTransaction, args: number) => {
         throw args;
       },
@@ -2050,7 +2049,6 @@ test('mutation timestamps are immutable', async () => {
         await tx.set('foo', 'bar');
       },
     },
-    // eslint-disable-next-line require-await
     pusher: async req => {
       pending = req.mutations;
       return {

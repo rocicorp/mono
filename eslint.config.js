@@ -28,7 +28,9 @@ export default [
       '@typescript-eslint/no-floating-promises': 'off',
       '@typescript-eslint/await-thenable': 'off',
       '@typescript-eslint/naming-convention': 'off',
+      '@typescript-eslint/require-await': 'off',
       // Disable additional strict ESLint rules that may be new or stricter
+      'require-await': 'off',
       'no-unused-private-class-members': 'off',
       'no-restricted-syntax': [
         'error',

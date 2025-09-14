@@ -339,7 +339,6 @@ test('Client Group not found on server', async () => {
     },
   );
 
-  // eslint-disable-next-line require-await
   const puller: Puller = async () => ({
     response: {error: 'ClientStateNotFound'},
     httpRequestInfo: {
@@ -375,7 +374,6 @@ test('Version not supported on server', async () => {
       resolve();
     }));
 
-    // eslint-disable-next-line require-await
     const puller: Puller = async () => ({
       response,
       httpRequestInfo: {

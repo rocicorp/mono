@@ -239,7 +239,6 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
   fetchMock.postAny({});
   let pusherCallCount = 0;
 
-  // eslint-disable-next-line require-await
   rep.pusher = async () => {
     pusherCallCount++;
     return {
@@ -287,7 +286,6 @@ test('Version not supported on server', async () => {
 
     const onUpdateNeededStub = (rep.onUpdateNeeded = vi.fn());
 
-    // eslint-disable-next-line require-await
     const pusher: Pusher = async () => ({
       response,
       httpRequestInfo: {
@@ -331,7 +329,6 @@ test('ClientStateNotFound on server', async () => {
 
   const onUpdateNeededStub = (rep.onUpdateNeeded = vi.fn());
 
-  // eslint-disable-next-line require-await
   const pusher: Pusher = async () => ({
     response: {error: 'ClientStateNotFound'},
     httpRequestInfo: {

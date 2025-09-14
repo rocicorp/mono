@@ -25,7 +25,6 @@ type FakePusherArgs = {
 };
 
 function makeFakePusher(options: FakePusherArgs): Pusher {
-  // eslint-disable-next-line require-await
   return async (pushReq, requestID): Promise<PusherResult> => {
     expect(options.expPush).to.be.true;
 
