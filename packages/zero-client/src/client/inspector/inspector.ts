@@ -29,7 +29,10 @@ import {
   type InspectQueryRow,
   type ServerMetrics as ServerMetricsJSON,
 } from '../../../../zero-protocol/src/inspect-down.ts';
-import type {InspectUpBody} from '../../../../zero-protocol/src/inspect-up.ts';
+import type {
+  AnalyzeQueryOptions,
+  InspectUpBody,
+} from '../../../../zero-protocol/src/inspect-up.ts';
 import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   ClientMetricMap,
@@ -40,7 +43,6 @@ import {nanoid} from '../../util/nanoid.ts';
 import {ENTITIES_KEY_PREFIX} from '../keys.ts';
 import type {MutatorDefs} from '../replicache-types.ts';
 import type {
-  AnalyzeQueryOptions,
   ClientGroup as ClientGroupInterface,
   Client as ClientInterface,
   Inspector as InspectorInterface,
