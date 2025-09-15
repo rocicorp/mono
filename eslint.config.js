@@ -7,7 +7,7 @@ export default [
       // Disable these rules to allow explicit undefined in optional parameters as per project convention
       '@typescript-eslint/no-duplicate-type-constituents': 'off',
       '@typescript-eslint/no-redundant-type-constituents': 'off',
-      // Only disable rules that have very high frequency (100+ errors) in the codebase
+      // Only disable the most problematic rules that would require extensive refactoring
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-return': 'off', 
       '@typescript-eslint/no-unsafe-member-access': 'off',
@@ -15,21 +15,9 @@ export default [
       '@typescript-eslint/no-unsafe-argument': 'off',
       '@typescript-eslint/restrict-template-expressions': 'off',
       '@typescript-eslint/no-base-to-string': 'off',
-      '@typescript-eslint/no-unused-expressions': 'off', // TODO: Enable after fixing test patterns
-      '@typescript-eslint/no-unused-vars': 'error',
       '@typescript-eslint/unbound-method': 'off',
-      '@typescript-eslint/no-unnecessary-type-assertion': 'error',
-      '@typescript-eslint/no-floating-promises': 'error',
-      '@typescript-eslint/no-misused-promises': 'off', // TODO: Enable after fixing Promise handlers
-      '@typescript-eslint/naming-convention': 'error',
-      '@typescript-eslint/prefer-promise-reject-errors': 'off',
-      '@typescript-eslint/restrict-plus-operands': 'off',
-      '@typescript-eslint/await-thenable': 'off',
-      '@typescript-eslint/no-empty-object-type': 'off',
-      '@typescript-eslint/only-throw-error': 'off',
-      '@typescript-eslint/require-await': 'off', // TODO: Enable after fixing async functions
-      'require-await': 'off', // TODO: Enable after fixing async functions
-      'no-unused-private-class-members': 'error',
+      // Rules that are enabled by default in @rocicorp/eslint-config v0.8.0 and should remain enabled
+      // (removing overrides to use default behavior)
       'no-restricted-syntax': [
         'error',
         {
