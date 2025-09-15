@@ -211,7 +211,11 @@ describe('compiling ZQL to SQL', () => {
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
       );
-      const zqlResult = mapResultToClientNames(await query, schema, 'issue');
+      const zqlResult = mapResultToClientNames(
+        await query.run(),
+        schema,
+        'issue',
+      );
       expect(zqlResult).toEqualPg(pgResult);
       expect(zqlResult).toMatchInlineSnapshot(`
         [
@@ -276,7 +280,11 @@ describe('compiling ZQL to SQL', () => {
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
       );
-      const zqlResult = mapResultToClientNames(await query, schema, 'issue');
+      const zqlResult = mapResultToClientNames(
+        await query.run(),
+        schema,
+        'issue',
+      );
       expect(zqlResult).toEqualPg(pgResult);
       expect(zqlResult).toMatchInlineSnapshot(`
         [
@@ -323,7 +331,11 @@ describe('compiling ZQL to SQL', () => {
       const pgResult2 = extractZqlResult(
         await runPgQuery(sqlQuery2.text, sqlQuery2.values as JSONValue[]),
       );
-      const zqlResult2 = mapResultToClientNames(await q2, schema, 'issue');
+      const zqlResult2 = mapResultToClientNames(
+        await q2.run(),
+        schema,
+        'issue',
+      );
       expect(zqlResult2).toEqualPg(pgResult2);
       expect(zqlResult2).toMatchInlineSnapshot(`
         [

@@ -667,19 +667,6 @@ export abstract class AbstractQuery<
     return this.#completedAST;
   }
 
-  then<TResult1 = HumanReadable<TReturn>, TResult2 = never>(
-    onFulfilled?:
-      | ((value: HumanReadable<TReturn>) => TResult1 | PromiseLike<TResult1>)
-      | undefined
-      | null,
-    onRejected?:
-      | ((reason: any) => TResult2 | PromiseLike<TResult2>)
-      | undefined
-      | null,
-  ): PromiseLike<TResult1 | TResult2> {
-    return this.run().then(onFulfilled, onRejected);
-  }
-
   abstract materialize(
     ttl?: TTL | undefined,
   ): TypedView<HumanReadable<TReturn>>;
