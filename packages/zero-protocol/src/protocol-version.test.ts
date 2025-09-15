@@ -11,6 +11,6 @@ test('protocol version', () => {
   // If this test fails upstream or downstream schema has changed such that
   // old code will not understand the new schema, bump the
   // PROTOCOL_VERSION and update the expected values.
-  expect(hash).toBe('29dy0pj406bur');
-  expect(PROTOCOL_VERSION).toBe(31);
+  expect(hash).toEqual('2w9hr74j7pvnw');
+  expect(PROTOCOL_VERSION).toBe(32);
 });

@@ -3,7 +3,10 @@ import auth from 'basic-auth';
 import type {FastifyReply, FastifyRequest} from 'fastify';
 import {explainQueries} from '../../../analyze-query/src/explain-queries.ts';
 import {runAst} from '../../../analyze-query/src/run-ast.ts';
+import * as valita from '../../../shared/src/valita.ts';
+import type {AnalyzeQueryResult} from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {astSchema} from '../../../zero-protocol/src/ast.ts';
 import {Debug} from '../../../zql/src/builder/debug-delegate.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import {Database} from '../../../zqlite/src/db.ts';
@@ -37,10 +40,22 @@ export async function handleAnalyzeQueryRequest(
     return;
   }
 
-  const body = req.body as {
-    ast: AST;
-  };
+  const ast = valita.parse(req.body, astSchema);
+  const result = await analyzeQuery(lc, config, ast);
+  await res.send(result);
+}
 
+type AnalyzeQueryOptions = {
+  syncedRows?: boolean | undefined;
+  vendedRows?: boolean | undefined;
+};
+
+export async function analyzeQuery(
+  lc: LogContext,
+  config: NormalizedZeroConfig,
+  ast: AST,
+  options: AnalyzeQueryOptions = {},
+): Promise<AnalyzeQueryResult> {
   const db = new Database(lc, config.replica.file);
   const fullTables = new Map<string, LiteTableSpec>();
   const tableSpecs = new Map<string, LiteAndZqlSpec>();
@@ -48,9 +63,12 @@ export async function handleAnalyzeQueryRequest(
 
   computeZqlSpecs(lc, db, tableSpecs, fullTables);
 
-  const result = await runAst(lc, body.ast, true, {
+  const {syncedRows = true, vendedRows = false} = options;
+
+  const result = await runAst(lc, ast, true, {
     applyPermissions: false,
-    outputSyncedRows: true,
+    syncedRows,
+    vendedRows,
     db,
     tableSpecs,
     host: {
@@ -86,6 +104,5 @@ export async function handleAnalyzeQueryRequest(
   });
 
   result.plans = explainQueries(result.vendedRowCounts ?? {}, db);
-
-  await res.send(result);
+  return result;
 }

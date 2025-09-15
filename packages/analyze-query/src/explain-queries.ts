@@ -1,4 +1,4 @@
-import type {RowCountsBySource} from '../../zql/src/builder/debug-delegate.ts';
+import type {RowCountsBySource} from '../../zero-protocol/src/analyze-query-result.ts';
 import type {Database} from '../../zqlite/src/db.ts';
 
 export function explainQueries(counts: RowCountsBySource, db: Database) {

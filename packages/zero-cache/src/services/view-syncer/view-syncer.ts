@@ -36,6 +36,7 @@ import {
   transformAndHashQuery,
   type TransformedAndHashed,
 } from '../../auth/read-authorizer.ts';
+import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import {
   getServerVersion,
   isAdminPasswordValid,
@@ -54,6 +55,7 @@ import {rowIDString, type RowKey} from '../../types/row-key.ts';
 import type {ShardID} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
+import {analyzeQuery} from '../analyze.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.ts';
 import type {ActivityBasedService} from '../service.ts';
@@ -156,11 +158,6 @@ export const TTL_CLOCK_INTERVAL = 60_000;
  */
 export const TTL_TIMER_HYSTERESIS = 50; // ms
 
-type PartialZeroConfig = Pick<
-  ZeroConfig,
-  'getQueries' | 'serverVersion' | 'adminPassword'
->;
-
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
   readonly #shard: ShardID;
@@ -254,10 +251,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   readonly #inspectorDelegate: InspectorDelegate;
 
-  readonly #config: Pick<ZeroConfig, 'serverVersion' | 'adminPassword'>;
+  readonly #config: NormalizedZeroConfig;
 
   constructor(
-    config: PartialZeroConfig,
+    config: NormalizedZeroConfig,
     lc: LogContext,
     shard: ShardID,
     taskID: string,
@@ -1906,6 +1903,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           value: ok,
         });
 
+        break;
+      }
+
+      case 'analyze-query': {
+        const ast = body.value;
+        const result = await analyzeQuery(lc, this.#config, ast, body.options);
+        client.sendInspectResponse(lc, {
+          op: 'analyze-query',
+          id: body.id,
+          value: result,
+        });
         break;
       }
 

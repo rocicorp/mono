@@ -1,7 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unused-expressions, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/await-thenable, @typescript-eslint/no-misused-promises, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-floating-promises, @typescript-eslint/unbound-method, @typescript-eslint/restrict-template-expressions, @typescript-eslint/no-unsafe-argument, @typescript-eslint/require-await, @typescript-eslint/no-empty-object-type, @typescript-eslint/prefer-promise-reject-errors, @typescript-eslint/only-throw-error */
 import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
 import type {ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
+import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {AnalyzeQueryOptions} from '../../../../zero-protocol/src/inspect-up.ts';
 import type {TTL} from '../../../../zql/src/query/ttl.ts';
 
 export interface GetInspector {
@@ -53,4 +55,6 @@ export interface Query {
   readonly clientZQL: string | null;
   readonly serverZQL: string | null;
   readonly metrics: Metrics | null;
+
+  analyze(options?: AnalyzeQueryOptions): Promise<AnalyzeQueryResult>;
 }
