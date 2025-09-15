@@ -498,7 +498,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     const input = buildPipeline(rowQueryAst, this.#builderDelegate, 'query-id');
     try {
       const res = input.fetch({});
-      for (const _ of res) {
+      for (const _row of res) {
         // if any row is returned at all, the
         // rule passes.
         return true;

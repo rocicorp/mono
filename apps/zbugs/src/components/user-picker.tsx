@@ -111,7 +111,7 @@ function preloadAvatar(user: User) {
         reader.readAsDataURL(blob);
       })
       .catch(err => {
-        rej('Error fetching the image: ' + err);
+        rej(new Error('Error fetching the image: ' + err));
       });
   });
 }

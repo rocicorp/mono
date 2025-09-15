@@ -31,11 +31,11 @@ describe('jwk', async () => {
 });
 
 test('token config options', async () => {
-  await expect(tokenConfigOptions({})).toEqual([]);
-  await expect(tokenConfigOptions({secret: 'abc'})).toEqual(['secret']);
-  await expect(tokenConfigOptions({jwk: 'def'})).toEqual(['jwk']);
-  await expect(tokenConfigOptions({jwksUrl: 'ghi'})).toEqual(['jwksUrl']);
-  await expect(tokenConfigOptions({jwksUrl: 'jkl', secret: 'mno'})).toEqual([
+  expect(tokenConfigOptions({})).toEqual([]);
+  expect(tokenConfigOptions({secret: 'abc'})).toEqual(['secret']);
+  expect(tokenConfigOptions({jwk: 'def'})).toEqual(['jwk']);
+  expect(tokenConfigOptions({jwksUrl: 'ghi'})).toEqual(['jwksUrl']);
+  expect(tokenConfigOptions({jwksUrl: 'jkl', secret: 'mno'})).toEqual([
     'secret',
     'jwksUrl',
   ]);

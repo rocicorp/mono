@@ -201,6 +201,7 @@ export function ImageUploadArea({
     maxSize: 10 * 1024 * 1024,
     noClick: true,
     noKeyboard: true,
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
     onDrop,
   });
 

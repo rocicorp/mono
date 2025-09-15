@@ -26,6 +26,7 @@ test('formatEmojiCreatorList', () => {
 
   // Missing creator
   const badEmoji = makeEmoji('a', 'holden');
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
   (badEmoji as Writable<Emoji>).creator = undefined;
   expect(formatEmojiCreatorList([badEmoji], 'me-id')).toBe('');
   expect(
