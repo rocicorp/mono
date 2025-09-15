@@ -7,7 +7,6 @@ import * as valita from '../../../shared/src/valita.ts';
 import type {AnalyzeQueryResult} from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {astSchema} from '../../../zero-protocol/src/ast.ts';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {Debug} from '../../../zql/src/builder/debug-delegate.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import {Database} from '../../../zqlite/src/db.ts';
