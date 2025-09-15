@@ -448,6 +448,7 @@ test('accessors', async () => {
   expect(local.valueHash).to.equal(valueHash);
 
   const fakeRead = {
+    // eslint-disable-next-line require-await, @typescript-eslint/require-await
     async mustGetChunk() {
       // This test does not read from the dag and if it does, lets just fail.
       throw new Error('Method not implemented.');
@@ -531,10 +532,10 @@ test('getMutationID across commits with different clients', async () => {
 
 test('chunkIndexDefinitionEqualIgnoreName', () => {
   const t = (a: ChunkIndexDefinition, b = a) => {
-    expect(chunkIndexDefinitionEqualIgnoreName(a, b)).true;
+    expect(chunkIndexDefinitionEqualIgnoreName(a, b)).to.equal(true);
   };
   const f = (a: ChunkIndexDefinition, b = a) => {
-    expect(chunkIndexDefinitionEqualIgnoreName(a, b)).false;
+    expect(chunkIndexDefinitionEqualIgnoreName(a, b)).to.equal(false);
   };
 
   t({name: 'a', jsonPointer: '/a', keyPrefix: ''});

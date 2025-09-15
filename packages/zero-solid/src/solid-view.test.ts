@@ -2484,6 +2484,7 @@ test('queryComplete promise', async () => {
   expect(resultDetails()).toEqual({type: 'unknown'});
 
   queryCompleteResolver.resolve(true);
+  // eslint-disable-next-line @typescript-eslint/await-thenable
   await 1;
   expect(resultDetails()).toEqual({type: 'complete'});
 });

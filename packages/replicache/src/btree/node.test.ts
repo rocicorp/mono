@@ -309,8 +309,8 @@ describe('btree node', () => {
       const dagStore = new TestStore();
       await withRead(dagStore, async dagRead => {
         const r = new BTreeRead(dagRead, formatVersion);
-        expect(await r.get('a')).to.be.undefined;
-        expect(await r.has('b')).to.be.false;
+        expect(await r.get('a')).to.equal(undefined);
+        expect(await r.has('b')).to.equal(false);
         expect(await asyncIterToArray(r.scan(''))).to.deep.equal([]);
       });
     });
@@ -331,8 +331,8 @@ describe('btree node', () => {
           getEntrySize,
           chunkHeaderSize,
         );
-        expect(await w.get('a')).to.be.undefined;
-        expect(await w.has('b')).to.be.false;
+        expect(await w.get('a')).to.equal(undefined);
+        expect(await w.has('b')).to.equal(false);
         expect(await asyncIterToArray(w.scan(''))).to.deep.equal([]);
 
         const h = await w.flush();
@@ -357,7 +357,7 @@ describe('btree node', () => {
       });
 
       rootHash = await doWrite(rootHash, dagStore, formatVersion, async w => {
-        expect(await w.del('a')).to.be.true;
+        expect(await w.del('a')).to.equal(true);
       });
 
       // We do not restore back to empty hash when empty.
@@ -460,26 +460,26 @@ describe('btree node', () => {
           chunkHeaderSize,
         );
 
-        expect(await source.has('b')).to.be.true;
-        expect(await source.has('d')).to.be.true;
-        expect(await source.has('f')).to.be.true;
-        expect(await source.has('h')).to.be.true;
-        expect(await source.has('j')).to.be.true;
-        expect(await source.has('l')).to.be.true;
-        expect(await source.has('n')).to.be.true;
-        expect(await source.has('p')).to.be.true;
-        expect(await source.has('r')).to.be.true;
+        expect(await source.has('b')).to.equal(true);
+        expect(await source.has('d')).to.equal(true);
+        expect(await source.has('f')).to.equal(true);
+        expect(await source.has('h')).to.equal(true);
+        expect(await source.has('j')).to.equal(true);
+        expect(await source.has('l')).to.equal(true);
+        expect(await source.has('n')).to.equal(true);
+        expect(await source.has('p')).to.equal(true);
+        expect(await source.has('r')).to.equal(true);
 
-        expect(await source.has('a')).to.be.false;
-        expect(await source.has('c')).to.be.false;
-        expect(await source.has('e')).to.be.false;
-        expect(await source.has('g')).to.be.false;
-        expect(await source.has('i')).to.be.false;
-        expect(await source.has('k')).to.be.false;
-        expect(await source.has('m')).to.be.false;
-        expect(await source.has('o')).to.be.false;
-        expect(await source.has('q')).to.be.false;
-        expect(await source.has('s')).to.be.false;
+        expect(await source.has('a')).to.equal(false);
+        expect(await source.has('c')).to.equal(false);
+        expect(await source.has('e')).to.equal(false);
+        expect(await source.has('g')).to.equal(false);
+        expect(await source.has('i')).to.equal(false);
+        expect(await source.has('k')).to.equal(false);
+        expect(await source.has('m')).to.equal(false);
+        expect(await source.has('o')).to.equal(false);
+        expect(await source.has('q')).to.equal(false);
+        expect(await source.has('s')).to.equal(false);
       });
     });
 

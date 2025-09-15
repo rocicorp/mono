@@ -37,7 +37,7 @@ export function restoreMakeImplForTest() {
   makeImpl = defaultMakeImpl;
 }
 
-export class Replicache<MD extends MutatorDefs = {}> {
+export class Replicache<MD extends MutatorDefs = Record<string, never>> {
   readonly #impl: ReplicacheImpl<MD>;
 
   constructor(options: ReplicacheOptions<MD>) {

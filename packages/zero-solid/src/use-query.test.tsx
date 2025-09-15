@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/await-thenable, @typescript-eslint/unbound-method, @typescript-eslint/no-unsafe-assignment */
 import {renderHook, testEffect} from '@solidjs/testing-library';
 import {
   createEffect,
@@ -120,6 +119,7 @@ test('useQuery', async () => {
   expect(resultType()).toEqual({type: 'unknown'});
 
   must(queryDelegate.gotCallbacks[0])(true);
+  // eslint-disable-next-line @typescript-eslint/await-thenable
   await 1;
 
   ms.push({row: {a: 3, b: 'c'}, type: 'add'});
@@ -253,6 +253,7 @@ test('useQuery query deps change', async () => {
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  // eslint-disable-next-line @typescript-eslint/await-thenable
   await 1;
 
   expect(rowLog).toEqual([]);
@@ -267,6 +268,7 @@ test('useQuery query deps change', async () => {
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  // eslint-disable-next-line @typescript-eslint/await-thenable
   await 1;
 
   expect(rowLog).toEqual([]);
@@ -313,6 +315,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates', async (
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  // eslint-disable-next-line @typescript-eslint/await-thenable
   await 1;
 
   expect(row0Log).toEqual([]);
@@ -328,6 +331,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates', async (
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  // eslint-disable-next-line @typescript-eslint/await-thenable
   await 1;
 
   expect(row0Log).toEqual([]);
@@ -345,6 +349,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates', async (
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  // eslint-disable-next-line @typescript-eslint/await-thenable
   await 1;
 
   expect(row0Log).toEqual([]);
@@ -469,6 +474,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  // eslint-disable-next-line @typescript-eslint/await-thenable
   await 1;
 
   expect(row0IDLog).toEqual([]);
@@ -516,6 +522,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  // eslint-disable-next-line @typescript-eslint/await-thenable
   await 1;
 
   expect(row0IDLog).toEqual([]);
@@ -568,6 +575,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  // eslint-disable-next-line @typescript-eslint/await-thenable
   await 1;
 
   expect(row0IDLog).toEqual([]);
@@ -612,6 +620,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  // eslint-disable-next-line @typescript-eslint/await-thenable
   await 1;
 
   expect(row0IDLog).toEqual([]);
@@ -657,6 +666,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
+  // eslint-disable-next-line @typescript-eslint/await-thenable
   await 1;
 
   expect(row0IDLog).toEqual([]);

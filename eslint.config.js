@@ -4,10 +4,10 @@ export default [
   ...rocicorpConfig,
   {
     rules: {
-      // Disable these rules to allow explicit undefined in optional parameters as per project convention
+      // Project convention: explicit undefined on optional parameters (see CLAUDE.md)
       '@typescript-eslint/no-duplicate-type-constituents': 'off',
       '@typescript-eslint/no-redundant-type-constituents': 'off',
-      // Only disable the most problematic rules that would require extensive refactoring
+      // Only keep essential safety-net overrides for the most problematic operations
       '@typescript-eslint/no-unsafe-assignment': 'off',
       '@typescript-eslint/no-unsafe-return': 'off', 
       '@typescript-eslint/no-unsafe-member-access': 'off',
@@ -16,8 +16,7 @@ export default [
       '@typescript-eslint/restrict-template-expressions': 'off',
       '@typescript-eslint/no-base-to-string': 'off',
       '@typescript-eslint/unbound-method': 'off',
-      // Rules that are enabled by default in @rocicorp/eslint-config v0.8.0 and should remain enabled
-      // (removing overrides to use default behavior)
+      // Project-specific custom rules
       'no-restricted-syntax': [
         'error',
         {
