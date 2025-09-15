@@ -368,7 +368,7 @@ function binarySearch(
   let high = view.length - 1;
   while (low <= high) {
     const mid = (low + high) >>> 1;
-    const comparison = comparator(view[mid] as Row, target as Row);
+    const comparison = comparator(view[mid] as Row, target);
     if (comparison < 0) {
       low = mid + 1;
     } else if (comparison > 0) {

@@ -52,7 +52,7 @@ export function CommentComposer({
   useEffect(() => {
     const textareas = document.querySelectorAll(
       '.autoResize',
-    ) as NodeListOf<HTMLTextAreaElement>;
+    );
 
     const handleResize = (textarea: HTMLTextAreaElement) => {
       autoResizeTextarea(textarea);

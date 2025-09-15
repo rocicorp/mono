@@ -203,7 +203,7 @@ const testWithOneRelationshipsRelationships = relationships(
   }),
 );
 
-const schema = createSchema({
+const _schema = createSchema({
   tables: [
     testSchema,
     testSchemaWithNulls,
@@ -224,7 +224,7 @@ const schema = createSchema({
   ],
 });
 
-type Schema = typeof schema;
+type Schema = typeof _schema;
 type SchemaWithEnums = Schema['tables']['testWithEnums'];
 type TestSchemaWithMoreRelationships =
   Schema['tables']['testWithMoreRelationships'];
@@ -236,7 +236,7 @@ describe('types', () => {
 
     // no select? All fields are returned.
     expectTypeOf(query.materialize().data).toMatchTypeOf<
-      ReadonlyArray<Row<typeof schema.tables.test>>
+      ReadonlyArray<Row<typeof _schema.tables.test>>
     >();
   });
 

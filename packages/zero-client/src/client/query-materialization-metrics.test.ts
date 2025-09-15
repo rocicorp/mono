@@ -191,7 +191,7 @@ describe('query materialization metrics', () => {
       for (let i = 0; i < 3; i++) {
         const query = createTestQuery(context);
         queries.push(query);
-        views.push(query.materialize() as MockView);
+        views.push(query.materialize());
       }
 
       // Verify all client metrics were recorded
@@ -238,7 +238,7 @@ describe('query materialization metrics', () => {
 
       const query = createTestQuery(context);
 
-      const view = query.materialize() as MockView;
+      const view = query.materialize();
 
       // Should capture precise timing (accounting for floating-point precision)
       expect(addMetricSpy).toHaveBeenCalledWith(
@@ -256,7 +256,7 @@ describe('query materialization metrics', () => {
 
       const query = createTestQuery(context);
 
-      const view = query.materialize() as MockView;
+      const view = query.materialize();
 
       // Should record client metric
       expect(addMetricSpy).toHaveBeenCalledWith(
@@ -333,7 +333,7 @@ describe('query materialization metrics', () => {
 
       const query = createTestQuery(context);
 
-      const view = query.materialize() as MockView;
+      const view = query.materialize();
 
       // Never call gotCallback
 
@@ -352,7 +352,7 @@ describe('query materialization metrics', () => {
 
       const query = createTestQuery(context);
 
-      const view = query.materialize() as MockView;
+      const view = query.materialize();
 
       // Client-side metric should be recorded immediately
       expect(addMetricSpy).toHaveBeenCalledWith(
@@ -380,13 +380,13 @@ describe('query materialization metrics', () => {
       // First query
       const query1 = createTestQuery(context);
 
-      const view1 = query1.materialize() as MockView;
+      const view1 = query1.materialize();
       const firstGotCallback = gotCallback!;
 
       // Second query
       const query2 = createTestQuery(context);
 
-      const view2 = query2.materialize() as MockView;
+      const view2 = query2.materialize();
       const secondGotCallback = gotCallback!;
 
       // First query completes
@@ -433,7 +433,7 @@ describe('query materialization metrics', () => {
 
       const query = createTestQuery(context);
 
-      const view = query.materialize() as MockView;
+      const view = query.materialize();
 
       // Server responds with false (query not available)
       gotCallback!(false);
@@ -453,7 +453,7 @@ describe('query materialization metrics', () => {
 
       const query = createTestQuery(context);
 
-      const view = query.materialize() as MockView;
+      const view = query.materialize();
 
       // Server responds immediately
       gotCallback!(true);
@@ -512,7 +512,7 @@ describe('query materialization metrics', () => {
 
       const query = createTestQuery(context);
 
-      const view = query.materialize() as MockView & {data: unknown[]};
+      const view = query.materialize();
 
       // Verify view has data - should be ordered by id ascending
       expect(view.data).toHaveLength(2);
@@ -589,7 +589,7 @@ describe('query materialization metrics', () => {
       for (let i = 0; i < 5; i++) {
         const query = createTestQuery(context);
 
-        const view = query.materialize() as MockView;
+        const view = query.materialize();
         view.destroy();
       }
 
@@ -611,7 +611,7 @@ describe('query materialization metrics', () => {
       const query = createTestQuery(context);
 
       mockTime = 1050.456;
-      const view = query.materialize() as MockView;
+      const view = query.materialize();
 
       // Should capture the precise timing
       expect(performanceNowSpy).toHaveBeenCalled();

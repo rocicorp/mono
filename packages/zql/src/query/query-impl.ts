@@ -185,7 +185,7 @@ export abstract class AbstractQuery<
       this.format,
       {
         name,
-        args: args as ReadonlyArray<ReadonlyJSONValue>,
+        args,
       },
       this.#currentJunction,
     );

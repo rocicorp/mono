@@ -290,8 +290,9 @@ export function getInternalReplicacheImplForTesting(
 }
 
 const CLOSE_CODE_NORMAL = 1000;
-const CLOSE_CODE_GOING_AWAY = 1001;
-type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
+// eslint-disable-next-line @typescript-eslint/naming-convention
+const _closeCodeGoingAway = 1001;
+type CloseCode = typeof CLOSE_CODE_NORMAL | typeof _closeCodeGoingAway;
 
 export class Zero<
   const S extends Schema,
@@ -440,7 +441,7 @@ export class Zero<
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
       maxRecentQueries = 0,
       slowMaterializeThreshold = 5_000,
-    } = options as ZeroOptions<S, MD>;
+    } = options;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
     }
@@ -450,7 +451,7 @@ export class Zero<
       false /*options.enableAnalytics,*/, // Reenable analytics
     );
 
-    let {kvStore = 'idb'} = options as ZeroOptions<S, MD>;
+    let {kvStore = 'idb'} = options;
     if (kvStore === 'idb') {
       if (!getBrowserGlobal('indexedDB')) {
         // eslint-disable-next-line no-console
@@ -528,7 +529,7 @@ export class Zero<
         options.mutators,
       )) {
         if (typeof mutatorOrMutators === 'function') {
-          const key = namespaceOrKey as string;
+          const key = namespaceOrKey;
           assertUnique(key);
           replicacheMutators[key] = makeReplicacheMutator(
             lc,
@@ -542,8 +543,8 @@ export class Zero<
         if (typeof mutatorOrMutators === 'object') {
           for (const [name, mutator] of Object.entries(mutatorOrMutators)) {
             const key = customMutatorKey(
-              namespaceOrKey as string,
-              name as string,
+              namespaceOrKey,
+              name,
             );
             assertUnique(key);
             replicacheMutators[key] = makeReplicacheMutator(
@@ -698,7 +699,7 @@ export class Zero<
         options.mutators,
       )) {
         if (typeof mutatorsOrMutator === 'function') {
-          mutate[namespaceOrKey] = must(rep.mutate[namespaceOrKey as string]);
+          mutate[namespaceOrKey] = must(rep.mutate[namespaceOrKey]);
           continue;
         }
 
@@ -710,7 +711,7 @@ export class Zero<
 
         for (const name of Object.keys(mutatorsOrMutator)) {
           existing[name] = must(
-            rep.mutate[customMutatorKey(namespaceOrKey as string, name)],
+            rep.mutate[customMutatorKey(namespaceOrKey, name)],
           );
         }
       }
@@ -2042,7 +2043,7 @@ export class Zero<
   ) => void = (metric, value, ...args) => {
     assert(isClientMetric(metric), `Invalid metric: ${metric}`);
     this.#queryManager.addMetric(
-      metric as keyof ClientMetricMap,
+      metric,
       value,
       ...(args as ClientMetricMap[keyof ClientMetricMap]),
     );

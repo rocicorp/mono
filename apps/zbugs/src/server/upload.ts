@@ -41,8 +41,11 @@ export async function getPresignedUrl(
 
   const key = nanoid();
   const command = new PutObjectCommand({
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     Bucket: BUCKET_NAME,
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     Key: key,
+    // eslint-disable-next-line @typescript-eslint/naming-convention
     ContentType: contentType,
   });
 

@@ -5,7 +5,6 @@ import React, {
   useRef,
   useState,
   type MouseEvent,
-  type RefObject,
 } from 'react';
 import ReactDOM from 'react-dom';
 import CloseIcon from '../assets/icons/close.svg?react';
@@ -38,7 +37,7 @@ export function Modal({
   children,
   isDirty,
 }: Props) {
-  const ref = useRef<HTMLDivElement>(null) as RefObject<HTMLDivElement>;
+  const ref = useRef<HTMLDivElement>(null);
   const outerRef = useRef(null);
 
   const wrapperClasses = classnames(

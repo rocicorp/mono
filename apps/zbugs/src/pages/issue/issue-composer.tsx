@@ -41,7 +41,7 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
   useEffect(() => {
     const textareas = document.querySelectorAll(
       '.autoResize',
-    ) as NodeListOf<HTMLTextAreaElement>;
+    );
 
     textareas.forEach(textarea => {
       const handleInput = () => autoResizeTextarea(textarea);

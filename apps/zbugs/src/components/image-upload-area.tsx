@@ -48,6 +48,7 @@ const getPresignedUrl = async (
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      // eslint-disable-next-line @typescript-eslint/naming-convention
       'Authorization': `Bearer ${jwt}`,
     },
     body: JSON.stringify({contentType}),

@@ -122,7 +122,7 @@ export type CustomQueryID = {
  * Returns a set of query builders for the given schema.
  */
 export function createBuilder<S extends Schema>(s: S): SchemaQuery<S> {
-  return makeQueryBuilders(s) as SchemaQuery<S>;
+  return makeQueryBuilders(s);
 }
 
 /**

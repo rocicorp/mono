@@ -33,7 +33,7 @@ type MutatorTx = Transaction<Schema>;
 afterEach(() => vi.restoreAllMocks());
 
 test('argument types are preserved on the generated mutator interface', () => {
-  const mutators = {
+  const _mutators = {
     issue: {
       setTitle: (tx: MutatorTx, {id, title}: {id: string; title: string}) =>
         tx.mutate.issue.update({id, title}),
@@ -65,7 +65,7 @@ test('argument types are preserved on the generated mutator interface', () => {
     },
   } as const;
 
-  type MutatorsInterface = MakeCustomMutatorInterfaces<Schema, typeof mutators>;
+  type MutatorsInterface = MakeCustomMutatorInterfaces<Schema, typeof _mutators>;
 
   expectTypeOf<MutatorsInterface>().toEqualTypeOf<{
     readonly issue: {

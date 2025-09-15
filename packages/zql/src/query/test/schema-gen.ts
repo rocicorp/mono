@@ -8,13 +8,6 @@ import type {
 } from '../../../../zero-schema/src/table-schema.ts';
 import {generateUniqueValues, selectRandom, shuffle, type Rng} from './util.ts';
 
-const dbTypes = {
-  string: ['text', 'varchar', 'char'],
-  number: ['int', 'bigint', 'decimal'],
-  boolean: ['bool'],
-  json: ['jsonb', 'json'],
-} as const;
-
 export function generateSchema(
   rng: Rng,
   faker: Faker,
@@ -125,7 +118,7 @@ function generateColumn(name: string, rng: Rng): [string, SchemaValue] {
         'number',
         'number',
         'json',
-      ]) as keyof typeof dbTypes,
+      ]),
       optional: rng() < 0.5,
     },
   ];
