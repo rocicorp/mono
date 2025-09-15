@@ -25,7 +25,7 @@ export async function fillPgAndSync(
       columns.reduce(
         (acc, c) => ({
           ...acc,
-          [mapper.columnName(table, c)]: row[c as keyof typeof row],
+          [mapper.columnName(table, c)]: row[c],
         }),
         {} as Record<string, unknown>,
       ),

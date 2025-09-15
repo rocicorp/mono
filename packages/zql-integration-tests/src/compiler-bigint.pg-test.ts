@@ -148,12 +148,12 @@ beforeAll(async () => {
       sqlite.prepare('SELECT * FROM "issue"').all<Row>(),
       schema,
       'issue',
-    ) as Schema['tables']['issue'][],
+    ),
     mapResultToClientNames(
       sqlite.prepare('SELECT * FROM "comment"').all<Row>(),
       schema,
       'comment',
-    ) as Schema['tables']['comment'][],
+    ),
   ];
   expect(
     issueLiteRows.map(row => fromSQLiteTypes(schema.tables.issue.columns, row)),

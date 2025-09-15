@@ -2488,7 +2488,7 @@ test('queryComplete promise', async () => {
   expect(resultDetails()).toEqual({type: 'complete'});
 });
 
-const schema = createSchema({
+const _schema = createSchema({
   tables: [
     table('test')
       .columns({
@@ -2524,7 +2524,7 @@ test('factory', () => {
   ]);
 
   const view: SolidView = createSolidViewFactory(setState)(
-    undefined as unknown as Query<typeof schema, 'test', TestReturn>,
+    undefined as unknown as Query<typeof _schema, 'test', TestReturn>,
     ms.connect([
       ['b', 'asc'],
       ['a', 'asc'],

@@ -152,7 +152,7 @@ beforeAll(async () => {
       sqlite.prepare('SELECT * FROM "item"').all<Row>(),
       schema,
       'item',
-    ) as Schema['tables']['item'][],
+    ),
   ];
   expect(
     itemLiteRows.map(row => fromSQLiteTypes(schema.tables.item.columns, row)),
