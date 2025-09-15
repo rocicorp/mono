@@ -104,6 +104,5 @@ export async function analyzeQuery(
   });
 
   result.plans = explainQueries(result.vendedRowCounts ?? {}, db);
-  db.close();
   return result;
 }
