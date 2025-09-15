@@ -106,7 +106,7 @@ test('supports mutators without a namespace', async () => {
     createdAt: 1743018138477,
   }).client;
 
-  const issues = await z.query.issue;
+  const issues = await z.query.issue.run();
   expect(issues[0].title).toEqual('no-namespace');
 });
 
@@ -183,15 +183,15 @@ test('custom mutators write to the local store', async () => {
   }).client;
 
   await z.markQueryAsGot(z.query.issue);
-  let issues = await z.query.issue;
+  let issues = await z.query.issue.run();
   expect(issues[0].title).toEqual('foo');
 
   await z.mutate.issue.setTitle({id: '1', title: 'bar'}).client;
-  issues = await z.query.issue;
+  issues = await z.query.issue.run();
   expect(issues[0].title).toEqual('bar');
 
   await z.mutate.customNamespace.clown('1').client;
-  issues = await z.query.issue;
+  issues = await z.query.issue.run();
   expect(issues[0].title).toEqual('🤡');
 
   await z.mutate.issue.create({
@@ -202,12 +202,12 @@ test('custom mutators write to the local store', async () => {
     description: '',
     createdAt: 1743018138477,
   }).client;
-  issues = await z.query.issue;
+  issues = await z.query.issue.run();
   expect(issues.length).toEqual(2);
 
   await z.mutate.issue.deleteTwoIssues({id1: issues[0].id, id2: issues[1].id})
     .client;
-  issues = await z.query.issue;
+  issues = await z.query.issue.run();
   expect(issues.length).toEqual(0);
 });
 
@@ -249,12 +249,12 @@ test('custom mutators can query the local store during an optimistic mutation', 
 
   const q = z.query.issue.where('closed', false);
   await z.markQueryAsGot(q);
-  let issues = await q;
+  let issues = await q.run();
   expect(issues.length).toEqual(10);
 
   await z.mutate.issue.closeAll().client;
 
-  issues = await q;
+  issues = await q.run();
   expect(issues.length).toEqual(0);
 });
 
@@ -865,7 +865,7 @@ test('unnamed queries do not get registered with the query manager if `enableLeg
   await z.triggerConnected();
   await z.waitForConnectionState(ConnectionState.Connected);
 
-  await z.query.issue.where('id', '1').one();
+  await z.query.issue.where('id', '1').one().run();
 
   expect(addLegacySpy).not.toHaveBeenCalled();
   await z.close();
@@ -881,7 +881,7 @@ test('unnamed queries do get registered with the query manager if `enableLegacyQ
   await z.triggerConnected();
   await z.waitForConnectionState(ConnectionState.Connected);
 
-  await z.query.issue.where('id', '1').one();
+  await z.query.issue.where('id', '1').one().run();
 
   expect(addLegacySpy).toHaveBeenCalled();
   await z.close();
