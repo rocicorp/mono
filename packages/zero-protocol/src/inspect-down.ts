@@ -1,6 +1,7 @@
 import {jsonSchema} from '../../shared/src/json-schema.ts';
 import {tdigestSchema} from '../../shared/src/tdigest-schema.ts';
 import * as v from '../../shared/src/valita.ts';
+import {analyzeQueryResultSchema} from './analyze-query-result.ts';
 import {astSchema} from './ast.ts';
 
 const serverMetricsSchema = v.object({
@@ -62,11 +63,21 @@ export type InspectAuthenticatedDown = v.Infer<
   typeof inspectAuthenticatedDownSchema
 >;
 
+export const inspectAnalyzeQueryDownSchema = inspectBaseDownSchema.extend({
+  op: v.literal('analyze-query'),
+  value: analyzeQueryResultSchema,
+});
+
+export type InspectAnalyzeQueryDown = v.Infer<
+  typeof inspectAnalyzeQueryDownSchema
+>;
+
 export const inspectDownBodySchema = v.union(
   inspectQueriesDownSchema,
   inspectMetricsDownSchema,
   inspectVersionDownSchema,
   inspectAuthenticatedDownSchema,
+  inspectAnalyzeQueryDownSchema,
 );
 
 export const inspectDownMessageSchema = v.tuple([

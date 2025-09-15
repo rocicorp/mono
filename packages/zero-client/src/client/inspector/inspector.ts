@@ -16,9 +16,11 @@ import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
 import {mapValues} from '../../../../shared/src/objects.ts';
 import {TDigest, type ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
 import * as valita from '../../../../shared/src/valita.ts';
+import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import {
+  inspectAnalyzeQueryDownSchema,
   inspectAuthenticatedDownSchema,
   inspectMetricsDownSchema,
   inspectQueriesDownSchema,
@@ -27,7 +29,10 @@ import {
   type InspectQueryRow,
   type ServerMetrics as ServerMetricsJSON,
 } from '../../../../zero-protocol/src/inspect-down.ts';
-import type {InspectUpBody} from '../../../../zero-protocol/src/inspect-up.ts';
+import type {
+  AnalyzeQueryOptions,
+  InspectUpBody,
+} from '../../../../zero-protocol/src/inspect-up.ts';
 import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   ClientMetricMap,
@@ -255,7 +260,7 @@ class Client implements ClientInterface {
       {op: 'queries', clientID: this.id},
       inspectQueriesDownSchema,
     );
-    return rows.map(row => new Query(row, this.#delegate));
+    return rows.map(row => new Query(row, this.#delegate, this.#socket));
   }
 
   map(): Promise<Map<string, ReadonlyJSONValue>> {
@@ -338,7 +343,7 @@ class ClientGroup implements ClientGroupInterface {
       {op: 'queries'},
       inspectQueriesDownSchema,
     );
-    return rows.map(row => new Query(row, this.#delegate));
+    return rows.map(row => new Query(row, this.#delegate, this.#socket));
   }
 }
 
@@ -415,6 +420,8 @@ async function clientsWithQueries(
 }
 
 class Query implements QueryInterface {
+  readonly #socket: GetWebSocket;
+
   readonly name: string | null;
   readonly args: ReadonlyArray<ReadonlyJSONValue> | null;
   readonly got: boolean;
@@ -427,8 +434,15 @@ class Query implements QueryInterface {
   readonly metrics: Metrics | null;
   readonly clientZQL: string | null;
   readonly serverZQL: string | null;
+  readonly #serverAST: AST | null;
 
-  constructor(row: InspectQueryRow, delegate: InspectorDelegate) {
+  constructor(
+    row: InspectQueryRow,
+    delegate: InspectorDelegate,
+    socket: GetWebSocket,
+  ) {
+    this.#socket = socket;
+
     const {ast, queryID, inactivatedAt} = row;
     // Use own properties to make this more useful in dev tools. For example, in
     // Chrome dev tools, if you do console.table(queries) you'll see the
@@ -443,6 +457,7 @@ class Query implements QueryInterface {
     this.got = row.got;
     this.rowCount = row.rowCount;
     this.deleted = row.deleted;
+    this.#serverAST = ast;
     this.serverZQL = ast ? ast.table + astToZQL(ast) : null;
     const clientAST = delegate.getAST(queryID);
     this.clientZQL = clientAST ? clientAST.table + astToZQL(clientAST) : null;
@@ -452,6 +467,19 @@ class Query implements QueryInterface {
     const serverMetrics = row.metrics;
 
     this.metrics = mergeMetrics(clientMetrics, serverMetrics);
+  }
+
+  async analyze(options?: AnalyzeQueryOptions): Promise<AnalyzeQueryResult> {
+    assert(this.#serverAST, 'No server AST available for this query');
+    return rpc(
+      await this.#socket(),
+      {
+        op: 'analyze-query',
+        value: this.#serverAST,
+        options,
+      },
+      inspectAnalyzeQueryDownSchema,
+    );
   }
 }
 

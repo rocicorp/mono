@@ -98,10 +98,7 @@ export class InspectorDelegate implements MetricsDelegate {
    * per "worker".
    */
   isAuthenticated(clientGroupID: ClientGroupID): boolean {
-    if (isDevelopmentMode()) {
-      return true;
-    }
-    return authenticatedClientIDs.has(clientGroupID);
+    return isDevelopmentMode() || authenticatedClientIDs.has(clientGroupID);
   }
 
   setAuthenticated(clientGroupID: ClientGroupID): void {
