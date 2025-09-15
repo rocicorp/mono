@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/naming-convention, @typescript-eslint/require-await -- Performance testing code with intentional unsafe operations */
 import {resolver} from '@rocicorp/resolver';
 import {ReplicacheImpl} from '../../../replicache/src/impl.ts';
 import type {IndexDefinitions} from '../../../replicache/src/index-defs.ts';

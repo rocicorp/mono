@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/restrict-template-expressions -- Performance testing code with intentional template literal usage */
 import {type Benchmark, runBenchmark} from './benchmark.ts';
 import {benchmarks as compareBenchmarks} from './benchmarks/compare-utf8.ts';
 import {benchmarks as hashBenchmarks} from './benchmarks/hash.ts';

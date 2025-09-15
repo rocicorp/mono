@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/await-thenable, @typescript-eslint/naming-convention, @typescript-eslint/no-unused-vars */
 import {resolver} from '@rocicorp/resolver';
 import {expect, test, vi} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';

@@ -142,9 +142,9 @@ async function main() {
     lc.info?.(`Detected ${path} change.`);
     await deployPermissions();
   };
-  watcher.on('add', () => void onFileChange());
-  watcher.on('change', () => void onFileChange());
-  watcher.on('unlink', () => void onFileChange());
+  watcher.on('add', onFileChange); // eslint-disable-line @typescript-eslint/no-misused-promises
+  watcher.on('change', onFileChange); // eslint-disable-line @typescript-eslint/no-misused-promises
+  watcher.on('unlink', onFileChange); // eslint-disable-line @typescript-eslint/no-misused-promises
 }
 
 void main();
