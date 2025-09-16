@@ -13,7 +13,7 @@ We deploy this continuously (on trunk) to aws and is our dogfood of Zero.
 
 ### 1. Install dependencies
 
-First, install and build dependencies the `mono` repository root:
+Install and build dependencies the `mono` repository root:
 
 ```bash
 # In repository root
@@ -21,23 +21,7 @@ npm install
 npm run build
 ```
 
-Then, install dependencies in the `zbugs` directory:
-
-```bash
-# In apps/zbugs
-npm install
-```
-
-### 2. Run the "upstream" Postgres database
-
-```bash
-# In apps/zbugs
-npm run db-up
-npm run db-migrate
-npm run db-seed
-```
-
-### 3. Run the zero-cache server
+### 2. Create env file
 
 > In a a new terminal window
 
@@ -48,14 +32,23 @@ Create a `.env` file in the `zbugs` directory based on the example:
 cp .env.example .env
 ```
 
-Then start the server:
+### 3. Run the "upstream" Postgres database
+
+```bash
+# In apps/zbugs
+npm run db-up
+npm run db-migrate
+npm run db-seed
+```
+
+### 4. Run the zero-cache server
 
 ```bash
 # In apps/zbugs
 npm run zero-cache-dev
 ```
 
-### 4. Run the web app
+### 5. Run the web app
 
 > In yet another another terminal window
 
