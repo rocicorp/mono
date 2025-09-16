@@ -57,11 +57,14 @@ export async function notify(
   assertIsLoggedIn(authData);
 
   const {issueID, kind} = args;
-  const issue = await tx.query.issue.where('id', issueID).one();
+  const issue = await tx.query.issue.where('id', issueID).one().run();
   assert(issue);
 
   const modifierUserID = authData.sub;
-  const modifierUser = await tx.query.user.where('id', modifierUserID).one();
+  const modifierUser = await tx.query.user
+    .where('id', modifierUserID)
+    .one()
+    .run();
   assert(modifierUser);
 
   // include the actor only for the initial `create-issue` action
@@ -143,7 +146,8 @@ export async function notify(
         } else {
           const newAssignee = await tx.query.user
             .where('id', update.assigneeID)
-            .one();
+            .one()
+            .run();
           if (newAssignee) {
             changes.push(`Assignee changed to ${newAssignee.login}`);
           }
@@ -185,7 +189,7 @@ export async function notify(
 
     case 'add-emoji-to-comment': {
       const {commentID, emoji} = args;
-      const comment = await tx.query.comment.where('id', commentID).one();
+      const comment = await tx.query.comment.where('id', commentID).one().run();
       assert(comment);
 
       await sendNotifications({

@@ -69,7 +69,10 @@ export function createMutators(authData: AuthData | undefined) {
         tx: MutatorTx,
         change: UpdateValue<typeof schema.tables.issue> & {modified: number},
       ) {
-        const oldIssue = await tx.query.issue.where('id', change.id).one();
+        const oldIssue = await tx.query.issue
+          .where('id', change.id)
+          .one()
+          .run();
         assert(oldIssue);
 
         await assertIsCreatorOrAdmin(authData, tx.query.issue, change.id);

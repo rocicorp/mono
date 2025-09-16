@@ -144,7 +144,7 @@ export interface Query<
   TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
-> extends PromiseLike<HumanReadable<TReturn>> {
+> {
   /**
    * Format is used to specify the shape of the query results. This is used by
    * {@linkcode one} and it also describes the shape when using
