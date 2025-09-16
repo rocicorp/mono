@@ -816,6 +816,7 @@ function fromSQLiteType(valueType: ValueType, v: Value, column: string): Value {
       if (typeof v === 'bigint') {
         if (v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER) {
           throw new UnsupportedValueError(
+            // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
             `value ${v} (in column ${column}) is outside of supported bounds`,
           );
         }

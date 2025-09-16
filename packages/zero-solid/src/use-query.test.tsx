@@ -324,6 +324,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates', async (
   resetLogs();
 
   // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  // eslint-disable-next-line @typescript-eslint/unbound-method
   setQuery(tableQuery.where(({or, cmp}) => or(cmp('a', 1), cmp('a', 10))));
   expect(row0Log).toEqual([]);
   expect(row1Log).toEqual([]);
@@ -340,6 +341,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates', async (
   resetLogs();
 
   // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  // eslint-disable-next-line @typescript-eslint/unbound-method
   setQuery(tableQuery.where(({or, cmp}) => or(cmp('a', 1), cmp('a', 2))));
   expect(row0Log).toEqual([]);
   expect(row1Log).toEqual([
@@ -485,8 +487,10 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   resetLogs();
 
   // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  // eslint-disable-next-line @typescript-eslint/unbound-method
   setQuery(
     issueQuery
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i10')))
       .related('comments'),
   );
@@ -533,8 +537,10 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   resetLogs();
 
   // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  // eslint-disable-next-line @typescript-eslint/unbound-method
   setQuery(
     issueQuery
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i2')))
       .related('comments'),
   );
@@ -584,8 +590,10 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   resetLogs();
 
   // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  // eslint-disable-next-line @typescript-eslint/unbound-method
   setQuery(
     issueQuery
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i2')))
       .related('comments', q => q.where('id', 'c1')),
   );
@@ -630,9 +638,12 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   resetLogs();
 
   // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  // eslint-disable-next-line @typescript-eslint/unbound-method
   setQuery(
     issueQuery
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i2')))
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       .related('comments', q => q.where('id', 'c2')),
   );
   expect(rows()).toMatchInlineSnapshot(`
@@ -731,6 +742,7 @@ test('useQuery ttl dep changed', () => {
   expect(materializeSpy).toHaveBeenCalledTimes(1);
   expect(materializeSpy.mock.calls[0][0]).toBe(query);
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const view = materializeSpy.mock.results[0].value;
   const destroySpy = vi.spyOn(view, 'destroy');
   const updateTTLSpy = vi.spyOn(view, 'updateTTL');
@@ -764,7 +776,9 @@ test('useQuery view disposed when owner cleaned up', () => {
   expect(materializeSpy).toHaveBeenCalledTimes(1);
   expect(materializeSpy.mock.calls[0][0]).toBe(query);
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const view = materializeSpy.mock.results[0].value;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const destroySpy = vi.spyOn(view, 'destroy');
 
   expect(destroySpy).toHaveBeenCalledTimes(0);
@@ -794,7 +808,9 @@ test('useQuery view disposed when zero instance changes, new view created', () =
 
   expect(mockZero0MaterializeSpy).toHaveBeenCalledTimes(1);
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const view = mockZero0MaterializeSpy.mock.results[0].value;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const destroySpy = vi.spyOn(view, 'destroy');
 
   expect(destroySpy).toHaveBeenCalledTimes(0);
@@ -839,6 +855,7 @@ test('useQuery view disposed when query changes and new view is created', () => 
   expect(materializeSpy).toHaveBeenCalledTimes(1);
   expect(materializeSpy.mock.calls[0][0]).toBe(queries[0]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const view0 = materializeSpy.mock.results[0].value;
   const destroy0Spy = vi.spyOn(view0, 'destroy');
 
@@ -852,7 +869,9 @@ test('useQuery view disposed when query changes and new view is created', () => 
   expect(materializeSpy.mock.calls[0][0]).toBe(queries[0]);
   expect(materializeSpy.mock.calls[1][0]).toBe(queries[1]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const view1 = materializeSpy.mock.results[1].value;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const destroy1Spy = vi.spyOn(view1, 'destroy');
 
   expect(destroy1Spy).toHaveBeenCalledTimes(0);
@@ -867,7 +886,10 @@ test('useQuery view disposed when query changes and new view is created', () => 
   expect(materializeSpy.mock.calls[1][0]).toBe(queries[1]);
   expect(materializeSpy.mock.calls[2][0]).toBe(queries[2]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const view2 = materializeSpy.mock.results[2].value;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const destroy2Spy = vi.spyOn(view2, 'destroy');
 
   expect(destroy2Spy).toHaveBeenCalledTimes(0);
@@ -901,8 +923,11 @@ test('useQuery when ZeroProvider is used, view is reused if query instance chang
   expect(materializeSpy).toHaveBeenCalledTimes(1);
   expect(materializeSpy.mock.calls[0][0]).toBe(queries[0]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const view0 = materializeSpy.mock.results[0].value;
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const destroy0Spy = vi.spyOn(view0, 'destroy');
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 
   expect(destroy0Spy).toHaveBeenCalledTimes(0);
 
