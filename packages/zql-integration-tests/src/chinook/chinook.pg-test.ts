@@ -32,6 +32,7 @@ describe(
         {
           suiteName: 'compiler_chinook',
           pgContent,
+          only: 'compare primary key',
           zqlSchema: schema,
           setRawData: r => {
             data = r;

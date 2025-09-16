@@ -667,14 +667,14 @@ export async function runAndCompare(
   queries: QueryInstances,
   manualVerification: unknown,
 ) {
-  const pgResult = await queries.pg;
+  const pgResult = await queries.pg.run();
   // Might we worth being able to configure ZQLite to return client vs server names
   const sqliteResult = mapResultToClientNames(
-    await queries.sqlite,
+    await queries.sqlite.run(),
     zqlSchema,
     ast(queries.sqlite).table,
   );
-  const memoryResult = await queries.memory;
+  const memoryResult = await queries.memory.run();
 
   // - is PG
   // + is SQLite / Memory
@@ -857,7 +857,7 @@ async function checkRemove(
     });
 
     // pg cannot be materialized.
-    const pgResult = await queries.pg;
+    const pgResult = await queries.pg.run();
     expect(
       mapResultToClientNames(
         zqliteMaterialized.data,
@@ -908,7 +908,7 @@ async function checkAddBack(
       row,
     });
 
-    const pgResult = await queries.pg;
+    const pgResult = await queries.pg.run();
     expect(
       mapResultToClientNames(
         zqliteMaterialized.data,
@@ -989,7 +989,7 @@ async function checkEditToRandom(
       row: editedRow,
     });
 
-    const pgResult = await queries.pg;
+    const pgResult = await queries.pg.run();
     expect(
       mapResultToClientNames(
         zqliteMaterialized.data,
@@ -1064,7 +1064,7 @@ async function checkEditToMatch(
       row: original,
     });
 
-    const pgResult = await queries.pg;
+    const pgResult = await queries.pg.run();
     expect(
       mapResultToClientNames(
         zqliteMaterialized.data,
