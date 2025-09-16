@@ -2392,6 +2392,10 @@ test('VersionNotSupported custom onUpdateNeeded handler', async () => {
   expect(r.connectionState).toBe(ConnectionState.Disconnected);
 
   expect(fake).toBeCalledTimes(1);
+  expect(fake).toHaveBeenCalledWith({
+    type: 'VersionNotSupported',
+    message: 'server test message',
+  });
 });
 
 test('SchemaVersionNotSupported default handler', async () => {
@@ -2434,6 +2438,10 @@ test('SchemaVersionNotSupported custom onUpdateNeeded handler', async () => {
   expect(r.connectionState).toBe(ConnectionState.Disconnected);
 
   expect(fake).toBeCalledTimes(1);
+  expect(fake).toHaveBeenCalledWith({
+    type: 'SchemaVersionNotSupported',
+    message: 'server test message',
+  });
 });
 
 test('ClientNotFound default handler', async () => {
@@ -3901,6 +3909,23 @@ test('onError is called on error', async () => {
       ],
     ]
   `);
+});
+
+test('onError includes server error reason', async () => {
+  const onErrorSpy = vi.fn();
+  const z = zeroForTest({onError: onErrorSpy});
+
+  await z.triggerConnected();
+  expect(z.connectionState).toBe(ConnectionState.Connected);
+
+  const server_message = 'table missing on remote';
+  await z.triggerError(ErrorKind.VersionNotSupported, server_message);
+
+  expect(onErrorSpy).toBeCalledTimes(1);
+  const [errorMessage, errorObject] = onErrorSpy.mock.calls[0];
+  expect(errorMessage).toContain('VersionNotSupported');
+  expect(errorMessage).toContain(server_message);
+  expect(errorObject).toBeInstanceOf(ServerError);
 });
 
 test('We should send a deleteClient when a Zero instance is closed', async () => {
