@@ -21,23 +21,7 @@ npm install
 npm run build
 ```
 
-Then, install dependencies in the `zbugs` directory:
-
-```bash
-# In apps/zbugs
-npm install
-```
-
-### 2. Run the "upstream" Postgres database
-
-```bash
-# In apps/zbugs
-npm run db-up
-npm run db-migrate
-npm run db-seed
-```
-
-### 3. Run the zero-cache server
+### 2. Create env file
 
 > In a a new terminal window
 
