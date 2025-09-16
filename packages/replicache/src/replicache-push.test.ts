@@ -294,7 +294,7 @@ test('Version not supported on server', async () => {
       },
     });
 
-    rep.pusher = pusher as Pusher;
+    rep.pusher = pusher;
 
     await rep.mutate.noop();
     await rep.push({now: true});
@@ -337,7 +337,7 @@ test('ClientStateNotFound on server', async () => {
     },
   });
 
-  rep.pusher = pusher as Pusher;
+  rep.pusher = pusher;
 
   await rep.mutate.noop();
   await rep.push({now: true});

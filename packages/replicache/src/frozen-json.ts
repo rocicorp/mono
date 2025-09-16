@@ -212,5 +212,5 @@ export function deepFreezeAllowUndefined(v: P | undefined): R | undefined {
   if (v === undefined) {
     return undefined;
   }
-  return deepFreeze(v) as R;
+  return deepFreeze(v);
 }

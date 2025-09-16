@@ -349,12 +349,14 @@ export class DataNodeImpl extends NodeImpl<FrozenJSONValue> {
     return Promise.resolve(this.#splice(tree, i, 1));
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await
   async *keys(_tree: BTreeRead): AsyncGenerator<string, void> {
     for (const entry of this.entries) {
       yield entry[0];
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await
   async *entriesIter(
     _tree: BTreeRead,
   ): AsyncGenerator<Entry<FrozenJSONValue>, void> {

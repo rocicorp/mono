@@ -246,8 +246,8 @@ test.skip('mut [type checking only]', async () => {
 
       j: async (tx: WriteTransaction, custom: CustomType) => {
         use(tx, custom);
-        custom.n as number;
-        custom.s as string;
+        custom.n;
+        custom.s;
         // @ts-expect-error xxx
         custom.n as boolean;
 
@@ -256,8 +256,8 @@ test.skip('mut [type checking only]', async () => {
 
       k: async (tx: WriteTransaction, custom: CustomInterface) => {
         use(tx, custom);
-        custom.n as number;
-        custom.s as string;
+        custom.n;
+        custom.s;
         // @ts-expect-error xxx
         custom.n as boolean;
 
@@ -267,8 +267,8 @@ test.skip('mut [type checking only]', async () => {
 
       l: async (tx: WriteTransaction, custom: ToRecord<CustomInterface>) => {
         use(tx, custom);
-        custom.n as number;
-        custom.s as string;
+        custom.n;
+        custom.s;
         // @ts-expect-error xxx
         custom.n as boolean;
 
@@ -277,17 +277,17 @@ test.skip('mut [type checking only]', async () => {
     },
   });
 
-  rep.mutate.a() as Promise<number>;
-  rep.mutate.b(4) as Promise<string>;
+  rep.mutate.a();
+  rep.mutate.b(4);
 
-  rep.mutate.c() as Promise<void>;
-  rep.mutate.d(2) as Promise<void>;
+  rep.mutate.c();
+  rep.mutate.d(2);
 
-  rep.mutate.e() as Promise<number>;
-  rep.mutate.f(4) as Promise<string>;
+  rep.mutate.e();
+  rep.mutate.f(4);
 
-  rep.mutate.g() as Promise<void>;
-  rep.mutate.h(2) as Promise<void>;
+  rep.mutate.g();
+  rep.mutate.h(2);
 
   // @ts-expect-error Expected 1 arguments, but got 0.ts(2554)
   await rep.mutate.b();
@@ -366,8 +366,8 @@ test.skip('scan without index [type checking only]', async () => {
   });
 
   await rep.query(async tx => {
-    (await tx.scan().keys().toArray()) as string[];
-    (await tx.scan({}).keys().toArray()) as string[];
+    (await tx.scan().keys().toArray());
+    (await tx.scan({}).keys().toArray());
 
     let indexKeys: string[] = await tx.scan({}).keys().toArray();
     indexKeys = await tx.scan({prefix: 'a'}).keys().toArray();

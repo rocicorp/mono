@@ -115,7 +115,7 @@ export async function localMutations(
 ): Promise<Commit<LocalMetaDD31>[]> {
   const commits = await commitChain(fromCommitHash, dagRead);
   // Filter does not deal with type narrowing.
-  return commits.filter(c => commitIsLocal(c)) as Commit<LocalMetaDD31>[];
+  return commits.filter(c => commitIsLocal(c));
 }
 
 export async function localMutationsDD31(
@@ -124,7 +124,7 @@ export async function localMutationsDD31(
 ): Promise<Commit<LocalMetaDD31>[]> {
   const commits = await commitChain(fromCommitHash, dagRead);
   // Filter does not deal with type narrowing.
-  return commits.filter(c => commitIsLocalDD31(c)) as Commit<LocalMetaDD31>[];
+  return commits.filter(c => commitIsLocalDD31(c));
 }
 
 export async function localMutationsGreaterThan(
@@ -142,7 +142,7 @@ export async function localMutationsGreaterThan(
         if (meta.mutationID <= mutationIDLowerLimit) {
           remainingMutationIDLimits.delete(meta.clientID);
         } else {
-          commits.push(commit as Commit<LocalMetaDD31>);
+          commits.push(commit);
         }
       }
     }

@@ -81,7 +81,7 @@ export function createChunk<V>(
   return new Chunk(hash, data, refs);
 }
 
-export type CreateChunk = <V>(data: V, refs: Refs) => Chunk<V>;
+export type CreateChunk = <V>(this: undefined, data: V, refs: Refs) => Chunk<V>;
 
 export type ChunkHasher = () => Hash;
 

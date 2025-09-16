@@ -117,7 +117,7 @@ export async function beginPullV1(
     puller,
     pullReq,
     requestID,
-  )) as PullerResultV1;
+  ));
 
   // If Puller did not get a pull response we still want to return the HTTP
   // request info.

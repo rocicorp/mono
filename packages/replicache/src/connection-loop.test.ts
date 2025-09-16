@@ -697,6 +697,7 @@ test('Send now', async () => {
 test('Send promise', async () => {
   let nextInvokeSendResult: boolean | Error = true;
   loop = new ConnectionLoop(new LogContext(), {
+    // eslint-disable-next-line @typescript-eslint/require-await, require-await
     async invokeSend() {
       if (nextInvokeSendResult instanceof Error) {
         throw nextInvokeSendResult;
