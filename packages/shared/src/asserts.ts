@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-base-to-string, @typescript-eslint/restrict-template-expressions */
 export function assert(
   b: unknown,
   msg: string | (() => string) = 'Assertion failed',

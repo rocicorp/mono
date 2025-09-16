@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/unbound-method, @typescript-eslint/no-unsafe-argument */
 import {describe, test} from 'vitest';
 import {createVitests} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';

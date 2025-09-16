@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import {getSizeOfValue} from '../../replicache/src/size-of-value.ts';
 
 export type RandomDataType = 'string' | 'object' | 'arraybuffer' | 'blob';

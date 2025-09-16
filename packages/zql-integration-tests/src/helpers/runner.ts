@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-base-to-string */
 import {bench, run, summary} from 'mitata';
 import fs from 'node:fs/promises';
 import os from 'node:os';

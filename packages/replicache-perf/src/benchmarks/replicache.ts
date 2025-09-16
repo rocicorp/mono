@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import {resolver} from '@rocicorp/resolver';
 import {ReplicacheImpl} from '../../../replicache/src/impl.ts';
 import type {IndexDefinitions} from '../../../replicache/src/index-defs.ts';
