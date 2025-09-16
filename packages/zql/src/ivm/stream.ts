@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/unbound-method, @typescript-eslint/no-unused-expressions, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/restrict-template-expressions, @typescript-eslint/prefer-promise-reject-errors, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-empty-object-type, @typescript-eslint/no-base-to-string */
 /**
  * streams are lazy forward-only iterables.
  * Once a stream reaches the end it can't be restarted.
