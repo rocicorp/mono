@@ -254,10 +254,14 @@ export interface ZeroAdvancedOptions<
   MD extends CustomMutatorDefs | undefined = undefined,
 > extends ZeroOptions<S, MD> {}
 
+type UpdateNeededReasonBase = {
+  message?: string;
+};
+
 export type UpdateNeededReason =
-  | {type: UpdateNeededReasonType.NewClientGroup}
-  | {type: UpdateNeededReasonType.VersionNotSupported}
-  | {type: UpdateNeededReasonType.SchemaVersionNotSupported};
+  | ({type: UpdateNeededReasonType.NewClientGroup} & UpdateNeededReasonBase)
+  | ({type: UpdateNeededReasonType.VersionNotSupported} & UpdateNeededReasonBase)
+  | ({type: UpdateNeededReasonType.SchemaVersionNotSupported} & UpdateNeededReasonBase);
 
 export const updateNeededReasonTypeSchema: v.Type<UpdateNeededReason['type']> =
   v.literalUnion(
