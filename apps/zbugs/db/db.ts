@@ -5,8 +5,8 @@ import {config} from '@dotenvx/dotenvx';
 config();
 
 const dbUrl = must(
-  process.env.DRIZZLE_DATABASE_URL,
-  'DRIZZLE_DATABASE_URL is required',
+  process.env.ZERO_UPSTREAM_DB,
+  'ZERO_UPSTREAM_DB is required',
 );
 
 export const db = drizzle(dbUrl);
