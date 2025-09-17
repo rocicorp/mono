@@ -19,7 +19,7 @@
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.3.0",
-    "vitest": "^3.2.4"
+    "vitest": "3.2.4"
   },
   "prettier": "@rocicorp/prettier-config",
   "eslintConfig": {
