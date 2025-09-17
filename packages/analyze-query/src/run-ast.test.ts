@@ -1,5 +1,6 @@
 import {beforeEach, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {hydrate} from '../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {BuilderDelegate} from '../../zql/src/builder/builder.ts';
 import {Debug} from '../../zql/src/builder/debug-delegate.ts';
@@ -16,9 +17,6 @@ vi.mock('../../zero-cache/src/services/view-syncer/pipeline-driver.ts', () => ({
 vi.mock('../../zql/src/builder/builder.ts', () => ({
   buildPipeline: vi.fn(() => ({})),
 }));
-
-// Import the mocked functions to use in tests
-import {hydrate} from '../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
 
 // Create a minimal host that mimics the BuilderDelegate interface
 function createMockHost(withDebug = false): BuilderDelegate {
