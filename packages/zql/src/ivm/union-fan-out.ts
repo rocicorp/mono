@@ -40,10 +40,10 @@ export class UnionFanOut implements Operator {
 
   destroy(): void {
     if (this.#destroyCount < this.#outputs.length) {
-      if (this.#destroyCount === 0) {
+      ++this.#destroyCount;
+      if (this.#destroyCount === this.#outputs.length) {
         this.#input.destroy();
       }
-      ++this.#destroyCount;
     } else {
       throw new Error('FanOut already destroyed once for each output');
     }
