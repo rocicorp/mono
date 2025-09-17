@@ -1,5 +1,6 @@
 import {beforeEach, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {hydrate} from '../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {BuilderDelegate} from '../../zql/src/builder/builder.ts';
 import {Debug} from '../../zql/src/builder/debug-delegate.ts';
@@ -220,4 +221,151 @@ test('runAst basic structure and functionality', async () => {
       "warnings": [],
     }
   `);
+});
+
+test('runAst counts only unique synced rows, skips duplicates', async () => {
+  // Mock hydrate to return both unique and duplicate rows
+  vi.mocked(hydrate).mockImplementation(function* () {
+    // First unique row from users table
+    yield {
+      type: 'add',
+      table: 'users',
+      queryHash: 'test-hash',
+      rowKey: {id: 1},
+      row: {id: 1, name: 'Alice'},
+    };
+
+    // Second unique row from users table
+    yield {
+      type: 'add',
+      table: 'users',
+      queryHash: 'test-hash',
+      rowKey: {id: 2},
+      row: {id: 2, name: 'Bob'},
+    };
+
+    // Duplicate of first row (same table + row content)
+    yield {
+      type: 'add',
+      table: 'users',
+      queryHash: 'test-hash',
+      rowKey: {id: 1},
+      row: {id: 1, name: 'Alice'},
+    };
+
+    // Unique row from different table
+    yield {
+      type: 'add',
+      table: 'posts',
+      queryHash: 'test-hash',
+      rowKey: {id: 1},
+      row: {id: 1, title: 'Post 1'},
+    };
+
+    // Duplicate of the posts row
+    yield {
+      type: 'add',
+      table: 'posts',
+      queryHash: 'test-hash',
+      rowKey: {id: 1},
+      row: {id: 1, title: 'Post 1'},
+    };
+
+    // Another unique row from users (different content)
+    yield {
+      type: 'add',
+      table: 'users',
+      queryHash: 'test-hash',
+      rowKey: {id: 3},
+      row: {id: 3, name: 'Charlie'},
+    };
+  });
+
+  const lc = createSilentLogContext();
+  const ast: AST = {
+    table: 'users',
+  };
+  const isTransformed = true;
+  const db = new Database(lc, ':memory:');
+  const host = createMockHost(false);
+
+  const options: RunAstOptions = {
+    db,
+    host,
+    tableSpecs: new Map(),
+    syncedRows: true, // Enable to verify syncedRows also deduplicates
+  };
+
+  const result = await runAst(lc, ast, isTransformed, options);
+
+  // Should count only 4 unique rows: 3 from users table, 1 from posts table
+  // Duplicates should be skipped
+  expect(result.syncedRowCount).toBe(4);
+
+  // Verify syncedRows also contains deduplicated data
+  expect(result.syncedRows).toEqual({
+    users: [
+      {id: 1, name: 'Alice'},
+      {id: 2, name: 'Bob'},
+      {id: 3, name: 'Charlie'},
+    ],
+    posts: [{id: 1, title: 'Post 1'}],
+  });
+});
+
+test('runAst handles case where all synced rows are duplicates', async () => {
+  // Mock hydrate to return only duplicate rows
+  vi.mocked(hydrate).mockImplementation(function* () {
+    const sameRow = {id: 1, name: 'Alice'};
+
+    // Same row yielded multiple times
+    yield {
+      type: 'add',
+      table: 'users',
+      queryHash: 'test-hash',
+      rowKey: {id: 1},
+      row: sameRow,
+    };
+
+    yield {
+      type: 'add',
+      table: 'users',
+      queryHash: 'test-hash',
+      rowKey: {id: 1},
+      row: sameRow,
+    };
+
+    yield {
+      type: 'add',
+      table: 'users',
+      queryHash: 'test-hash',
+      rowKey: {id: 1},
+      row: sameRow,
+    };
+  });
+
+  const lc = createSilentLogContext();
+  const ast: AST = {
+    table: 'users',
+  };
+  const isTransformed = true;
+  const db = new Database(lc, ':memory:');
+  const host = createMockHost(false);
+
+  const options: RunAstOptions = {
+    db,
+    host,
+    tableSpecs: new Map(),
+    syncedRows: true,
+  };
+
+  const result = await runAst(lc, ast, isTransformed, options);
+
+  // Should count only 1 unique row despite 3 identical rows being yielded
+  expect(result.syncedRowCount).toBe(1);
+
+  // Verify syncedRows contains only the unique row
+  expect(result.syncedRows).toEqual({
+    users: [{id: 1, name: 'Alice'}],
+  });
 });
