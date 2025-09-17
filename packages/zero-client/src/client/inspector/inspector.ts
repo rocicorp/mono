@@ -436,6 +436,15 @@ class Query implements QueryInterface {
   readonly serverZQL: string | null;
   readonly #serverAST: AST | null;
 
+  readonly hydrateClient: number | null;
+  readonly hydrateServer: number | null;
+  readonly hydrateTotal: number | null;
+
+  readonly updateClientP50: number | null;
+  readonly updateClientP95: number | null;
+  readonly updateServerP50: number | null;
+  readonly updateServerP95: number | null;
+
   constructor(
     row: InspectQueryRow,
     delegate: InspectorDelegate,
@@ -466,7 +475,31 @@ class Query implements QueryInterface {
     const clientMetrics = delegate.getQueryMetrics(queryID);
     const serverMetrics = row.metrics;
 
-    this.metrics = mergeMetrics(clientMetrics, serverMetrics);
+    const merged = mergeMetrics(clientMetrics, serverMetrics);
+    this.metrics = merged;
+
+    const percentile = (
+      name: keyof typeof merged,
+      percentile: number,
+    ): number | null => {
+      if (!merged?.[name]) {
+        return null;
+      }
+      const n = merged[name].quantile(percentile);
+      return Number.isNaN(n) ? null : n;
+    };
+
+    // Extract hydration metrics (median values) - handle NaN by defaulting to 0
+    this.hydrateClient = percentile('query-materialization-client', 0.5);
+    this.hydrateServer = percentile('query-materialization-server', 0.5);
+    this.hydrateTotal = percentile('query-materialization-end-to-end', 0.5);
+
+    // Extract update metrics (P50 and P95) - handle NaN by defaulting to 0
+    this.updateClientP50 = percentile('query-update-client', 0.5);
+    this.updateClientP95 = percentile('query-update-client', 0.95);
+
+    this.updateServerP50 = percentile('query-update-server', 0.5);
+    this.updateServerP95 = percentile('query-update-server', 0.95);
   }
 
   async analyze(options?: AnalyzeQueryOptions): Promise<AnalyzeQueryResult> {
