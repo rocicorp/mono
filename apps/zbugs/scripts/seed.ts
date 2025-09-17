@@ -7,7 +7,7 @@ import '../../../packages/shared/src/dotenv.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const CSV_FILE_PATTERN = /^\d+_(.*)\.csv$/;
+const CSV_FILE_PATTERN = /^\d+_(?<tableName>.*)\.csv$/;
 
 async function seed() {
   const dataDir =
@@ -26,7 +26,7 @@ async function seed() {
       .sort();
 
     if (files.length === 0) {
-      console.log('No *.csv files found to seed.');
+      console.log(`No ${CSV_FILE_PATTERN} files found to seed.`);
       process.exit(0);
     }
 
@@ -36,11 +36,11 @@ async function seed() {
       for (const file of files) {
         const filePath = join(dataDir, file);
 
-        const match = /^\d+_(.*)\.csv$/.exec(file);
-        if (!match) {
+        const match = CSV_FILE_PATTERN.exec(file);
+        if (!match?.groups) {
           continue;
         }
-        const tableName = match[1];
+        const tableName = match.groups.tableName;
 
         if (!checkedIfAlreadySeeded) {
           const result = await sql`select 1 from ${sql(tableName)} limit 1`;
