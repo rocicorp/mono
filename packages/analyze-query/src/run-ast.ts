@@ -47,7 +47,7 @@ export async function runAst(
     start: 0,
     end: 0,
     afterPermissions: undefined,
-    vendedRowCounts: undefined,
+    vendedRowCounts: {},
     vendedRows: undefined,
   };
 
@@ -107,9 +107,12 @@ export async function runAst(
   }
   result.start = start;
   result.end = end;
+
+  // Always include the count of synced and vended rows.
   result.syncedRowCount = syncedRowCount;
+  result.vendedRowCounts = host.debug?.getVendedRowCounts() ?? {};
+
   if (options.vendedRows) {
-    result.vendedRowCounts = host.debug?.getVendedRowCounts();
     result.vendedRows = host.debug?.getVendedRows();
   }
   return result;
