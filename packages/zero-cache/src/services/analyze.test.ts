@@ -18,7 +18,9 @@ vi.mock('../../../analyze-query/src/explain-queries.ts', () => ({
 // Mock Database
 vi.mock('../../../zqlite/src/db.ts', () => ({
   // eslint-disable-next-line @typescript-eslint/naming-convention
-  Database: vi.fn().mockImplementation(() => ({})),
+  Database: class {
+    [Symbol.dispose]() {}
+  },
 }));
 
 // Mock computeZqlSpecs
