@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 import type {Element, Parent} from 'hast';
 import React, {memo} from 'react';
 import MarkdownBase from 'react-markdown';
@@ -130,7 +131,6 @@ export const Markdown = memo(({children}: {children: string}) => (
           const containsVideoContainer = React.Children.toArray(children).some(
             child =>
               React.isValidElement(child) &&
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
               child.props?.className?.includes('video-container'),
           );
 
@@ -161,7 +161,6 @@ export const Markdown = memo(({children}: {children: string}) => (
               !seenCheckbox &&
               React.isValidElement(node) &&
               node.type === 'input' &&
-              // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
               node.props.type === 'checkbox'
             ) {
               seenCheckbox = true;

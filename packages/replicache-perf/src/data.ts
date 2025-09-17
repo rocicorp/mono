@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-return */
 import {getSizeOfValue} from '../../replicache/src/size-of-value.ts';
 
 export type RandomDataType = 'string' | 'object' | 'arraybuffer' | 'blob';
@@ -171,5 +170,6 @@ export async function getTmcwData(): Promise<TmcwData> {
   const response = await fetch(
     new URL('../resources/tmcw.json', import.meta.url),
   );
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
   return response.json();
 }

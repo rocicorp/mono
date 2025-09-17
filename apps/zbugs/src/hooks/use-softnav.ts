@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {useEffect} from 'react';
 import {navigate} from 'wouter/use-browser-location';
 import {isPrimaryMouseButton} from '../is-primary-mouse-button.ts';
@@ -31,6 +30,7 @@ export function useSoftNav() {
       const elm = getElm(e);
       if (elm && isPrimaryMouseButton(e)) {
         const state = elm.dataset.zbugsHistoryState;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         navigate(elm.href, {state: state ? JSON.parse(state) : undefined});
         if (elm.dataset.zbugsEventName) {
           umami.track(elm.dataset.zbugsEventName);
@@ -52,6 +52,7 @@ export function useSoftNav() {
       const elm = getElm(e);
       if (elm && (e.key === 'Enter' || e.key === ' ')) {
         const state = elm.dataset.zbugsHistoryState;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         navigate(elm.href, {state: state ? JSON.parse(state) : undefined});
         e.preventDefault();
       }

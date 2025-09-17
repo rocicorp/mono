@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/restrict-template-expressions */
 import {type Benchmark, runBenchmark} from './benchmark.ts';
 import {benchmarks as compareBenchmarks} from './benchmarks/compare-utf8.ts';
 import {benchmarks as hashBenchmarks} from './benchmarks/hash.ts';
@@ -64,6 +63,7 @@ export async function runAll(groups: string[], runs: string[]): Promise<void> {
         out.textContent += formatAsReplicache(result) + '\n';
       }
     } catch (e) {
+      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
       out.textContent += `${b.name} had an error: ${e}` + '\n';
     }
   }

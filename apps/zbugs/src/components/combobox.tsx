@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/restrict-template-expressions */
 import classNames from 'classnames';
 import {
   type KeyboardEvent,
@@ -173,11 +172,11 @@ function Combobox<T>({
             aria-controls="options-listbox"
             aria-activedescendant={
               isOpen
+                // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
                 ? `option-${filteredOptions[selectedIndex]?.value}`
                 : undefined
             }
-          />
-        ) : (
+          />) : (
           <button
             ref={inputRef as RefObject<HTMLButtonElement>}
             className={styles.input}
@@ -186,6 +185,7 @@ function Combobox<T>({
             aria-controls="options-listbox"
             aria-activedescendant={
               isOpen
+                // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
                 ? `option-${filteredOptions[selectedIndex]?.value}`
                 : undefined
             }
@@ -225,6 +225,7 @@ function Combobox<T>({
                 onMouseEnter={() => setSelectedIndex(index)}
                 onMouseLeave={() => setSelectedIndex(-1)}
                 key={index}
+                // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
                 id={`option-${item.value}`}
                 role="option"
                 aria-selected={value === item.value}

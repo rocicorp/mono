@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/await-thenable */
 import type {Zero} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {type Schema} from '../../shared/schema.ts';
@@ -18,6 +17,7 @@ export async function setUserPref(
   value: string,
   mutate = z.mutate,
 ): Promise<void> {
+  // eslint-disable-next-line @typescript-eslint/await-thenable
   await mutate.userPref.set({key, value});
 }
 
