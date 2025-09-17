@@ -22,10 +22,10 @@ export type ServerMetrics = {
 type ClientGroupID = string;
 
 /**
- * Set of authenticated client IDs. We keep this outside of the class to share this state
- * across all instances of the InspectorDelegate.
+ * Set of authenticated client group IDs. We keep this outside of the class to
+ * share this state across all instances of the InspectorDelegate.
  */
-const authenticatedClientIDs = new Set<ClientGroupID>();
+const authenticatedClientGroupIDs = new Set<ClientGroupID>();
 
 export class InspectorDelegate implements MetricsDelegate {
   readonly #globalMetrics: ServerMetrics = newMetrics();
@@ -98,15 +98,17 @@ export class InspectorDelegate implements MetricsDelegate {
    * per "worker".
    */
   isAuthenticated(clientGroupID: ClientGroupID): boolean {
-    return isDevelopmentMode() || authenticatedClientIDs.has(clientGroupID);
+    return (
+      isDevelopmentMode() || authenticatedClientGroupIDs.has(clientGroupID)
+    );
   }
 
   setAuthenticated(clientGroupID: ClientGroupID): void {
-    authenticatedClientIDs.add(clientGroupID);
+    authenticatedClientGroupIDs.add(clientGroupID);
   }
 
   clearAuthenticated(clientGroupID: ClientGroupID) {
-    authenticatedClientIDs.delete(clientGroupID);
+    authenticatedClientGroupIDs.delete(clientGroupID);
   }
 }
 
