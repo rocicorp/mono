@@ -82,14 +82,14 @@ export async function runAst(
   const seenByTable: Set<string> = new Set();
   for (const rowChange of hydrate(pipeline, hashOfAST(ast), tableSpecs)) {
     assert(rowChange.type === 'add');
+    let rows: Row[] = rowsByTable[rowChange.table];
+    const s = rowChange.table + '.' + JSON.stringify(rowChange.row);
+    if (seenByTable.has(s)) {
+      continue; // skip duplicates
+    }
     syncedRowCount++;
+    seenByTable.add(s);
     if (options.syncedRows) {
-      let rows: Row[] = rowsByTable[rowChange.table];
-      const s = rowChange.table + '.' + JSON.stringify(rowChange.row);
-      if (seenByTable.has(s)) {
-        continue; // skip duplicates
-      }
-      seenByTable.add(s);
       if (!rows) {
         rows = [];
         rowsByTable[rowChange.table] = rows;
