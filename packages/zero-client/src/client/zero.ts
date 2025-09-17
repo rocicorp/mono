@@ -240,10 +240,7 @@ function convertOnUpdateNeededReason(
   return {type: reason.type};
 }
 
-function updateNeededReloadReasonMessage(
-  reason: UpdateNeededReason,
-  serverErrMsg?: string | undefined,
-) {
+function updateNeededReloadReasonMessage(reason: UpdateNeededReason) {
   const {type} = reason;
   let reasonMsg = '';
   switch (type) {
@@ -261,8 +258,8 @@ function updateNeededReloadReasonMessage(
     default:
       unreachable(type);
   }
-  if (serverErrMsg) {
-    reasonMsg += ' ' + serverErrMsg;
+  if (reason.message) {
+    reasonMsg += ' ' + reason.message;
   }
   return reasonMsg;
 }
@@ -343,10 +340,7 @@ export class Zero<
 
   readonly #onlineManager: OnlineManager;
 
-  readonly #onUpdateNeeded: (
-    reason: UpdateNeededReason,
-    serverErrorMsg?: string,
-  ) => void;
+  readonly #onUpdateNeeded: (reason: UpdateNeededReason) => void;
   readonly #onClientStateNotFound: (reason?: string) => void;
   // Last cookie used to initiate a connection
   #connectCookie: NullableVersion = null;
@@ -657,10 +651,7 @@ export class Zero<
         ]),
     );
 
-    const onUpdateNeededCallback = (
-      reason: UpdateNeededReason,
-      serverErrorMsg?: string | undefined,
-    ) => {
+    const onUpdateNeededCallback = (reason: UpdateNeededReason) => {
       if (onUpdateNeeded) {
         onUpdateNeeded(reason);
       } else {
@@ -668,7 +659,7 @@ export class Zero<
           this.#lc,
           this.#reload,
           reason.type,
-          updateNeededReloadReasonMessage(reason, serverErrorMsg),
+          updateNeededReloadReasonMessage(reason),
         );
       }
     };
@@ -1137,6 +1128,7 @@ export class Zero<
 
     lc.info?.(`${kind}: ${message}}`);
     const error = new ServerError(downMessage[1]);
+    lc.error?.(`${error.kind}:\n\n${error.errorBody.message}`, error);
 
     this.#rejectMessageError?.reject(error);
     lc.debug?.('Rejecting connect resolver due to error', error);
@@ -1144,10 +1136,13 @@ export class Zero<
     this.#disconnect(lc, {server: kind});
 
     if (kind === ErrorKind.VersionNotSupported) {
-      this.#onUpdateNeeded?.({type: kind}, message);
+      this.#onUpdateNeeded({type: kind, message});
     } else if (kind === ErrorKind.SchemaVersionNotSupported) {
       await this.#rep.disableClientGroup();
-      this.#onUpdateNeeded?.({type: 'SchemaVersionNotSupported'}, message);
+      this.#onUpdateNeeded({
+        type: 'SchemaVersionNotSupported',
+        message,
+      });
     } else if (kind === ErrorKind.ClientNotFound) {
       await this.#rep.disableClientGroup();
       this.#onClientStateNotFound?.(onClientStateNotFoundServerReason(message));
