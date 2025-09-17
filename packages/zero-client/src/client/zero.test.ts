@@ -3918,13 +3918,13 @@ test('onError includes server error reason', async () => {
   await z.triggerConnected();
   expect(z.connectionState).toBe(ConnectionState.Connected);
 
-  const server_message = 'table missing on remote';
-  await z.triggerError(ErrorKind.VersionNotSupported, server_message);
+  const serverMessage = 'table missing on remote';
+  await z.triggerError(ErrorKind.VersionNotSupported, serverMessage);
 
   expect(onErrorSpy).toBeCalledTimes(1);
   const [errorMessage, errorObject] = onErrorSpy.mock.calls[0];
   expect(errorMessage).toContain('VersionNotSupported');
-  expect(errorMessage).toContain(server_message);
+  expect(errorMessage).toContain(serverMessage);
   expect(errorObject).toBeInstanceOf(ServerError);
 });
 
