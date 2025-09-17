@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
 import type {Element, Parent} from 'hast';
 import React, {memo} from 'react';
 import MarkdownBase from 'react-markdown';

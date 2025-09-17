@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/await-thenable */
 import type {Zero} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {type Schema} from '../../shared/schema.ts';

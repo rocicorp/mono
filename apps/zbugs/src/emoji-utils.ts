@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/restrict-plus-operands */
 import type {Row} from '@rocicorp/zero';
 import {assert} from '../../../packages/shared/src/asserts.js';
 import type {Schema} from '../shared/schema.ts';

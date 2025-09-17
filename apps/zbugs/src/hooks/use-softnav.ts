@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import {useEffect} from 'react';
 import {navigate} from 'wouter/use-browser-location';
 import {isPrimaryMouseButton} from '../is-primary-mouse-button.ts';

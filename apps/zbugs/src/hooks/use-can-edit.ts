@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import {useQuery} from '@rocicorp/zero/react';
 import {useLogin} from './use-login.tsx';
 import {queries} from '../../shared/queries.ts';

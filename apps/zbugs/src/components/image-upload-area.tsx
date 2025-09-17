@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-return */
 import classNames from 'classnames';
 import type {ReactNode} from 'react';
 import {useCallback, useState} from 'react';
