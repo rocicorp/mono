@@ -260,8 +260,12 @@ type UpdateNeededReasonBase = {
 
 export type UpdateNeededReason =
   | ({type: UpdateNeededReasonType.NewClientGroup} & UpdateNeededReasonBase)
-  | ({type: UpdateNeededReasonType.VersionNotSupported} & UpdateNeededReasonBase)
-  | ({type: UpdateNeededReasonType.SchemaVersionNotSupported} & UpdateNeededReasonBase);
+  | ({
+      type: UpdateNeededReasonType.VersionNotSupported;
+    } & UpdateNeededReasonBase)
+  | ({
+      type: UpdateNeededReasonType.SchemaVersionNotSupported;
+    } & UpdateNeededReasonBase);
 
 export const updateNeededReasonTypeSchema: v.Type<UpdateNeededReason['type']> =
   v.literalUnion(
