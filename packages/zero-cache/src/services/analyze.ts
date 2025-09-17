@@ -56,7 +56,7 @@ export async function analyzeQuery(
   ast: AST,
   options: AnalyzeQueryOptions = {},
 ): Promise<AnalyzeQueryResult> {
-  const db = new Database(lc, config.replica.file);
+  using db = new Database(lc, config.replica.file);
   const fullTables = new Map<string, LiteTableSpec>();
   const tableSpecs = new Map<string, LiteAndZqlSpec>();
   const tables = new Map<string, TableSource>();

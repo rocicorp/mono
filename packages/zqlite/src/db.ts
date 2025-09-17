@@ -160,6 +160,10 @@ export class Database {
   get inTransaction() {
     return this.#db.inTransaction;
   }
+
+  [Symbol.dispose](): void {
+    this.close();
+  }
 }
 
 export class Statement {
