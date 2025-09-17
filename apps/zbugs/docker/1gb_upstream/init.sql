@@ -30,27 +30,27 @@ COPY "issue"
 FROM
     '/data/issues_6.csv' WITH CSV HEADER;
 
-COPY "issueLabel"
+COPY "issueLabel" ("labelID","issueID")
 FROM
     '/data/issue_labels.csv' WITH CSV HEADER;
 
-COPY "issueLabel"
+COPY "issueLabel" ("labelID","issueID")
 FROM
     '/data/issue_labels_2.csv' WITH CSV HEADER;
 
-COPY "issueLabel"
+COPY "issueLabel" ("labelID","issueID")
 FROM
     '/data/issue_labels_3.csv' WITH CSV HEADER;
 
-COPY "issueLabel"
+COPY "issueLabel" ("labelID","issueID")
 FROM
     '/data/issue_labels_4.csv' WITH CSV HEADER;
 
-COPY "issueLabel"
+COPY "issueLabel" ("labelID","issueID")
 FROM
     '/data/issue_labels_5.csv' WITH CSV HEADER;
 
-COPY "issueLabel"
+COPY "issueLabel" ("labelID","issueID")
 FROM
     '/data/issue_labels_6.csv' WITH CSV HEADER;
 
@@ -77,3 +77,12 @@ FROM
 COPY "comment"
 FROM
     '/data/comments_6.csv' WITH CSV HEADER;
+
+UPDATE "issueLabel"
+SET
+    "created" = issue."created",
+    "modified" = issue."modified"
+FROM
+    issue
+WHERE
+    "issueLabel"."issueID" = issue.id;
