@@ -55,5 +55,14 @@ export interface Query {
   readonly serverZQL: string | null;
   readonly metrics: Metrics | null;
 
+  readonly hydrateClient: number | null;
+  readonly hydrateServer: number | null;
+  readonly hydrateTotal: number | null;
+
+  readonly updateClientP50: number | null;
+  readonly updateClientP95: number | null;
+  readonly updateServerP50: number | null;
+  readonly updateServerP95: number | null;
+
   analyze(options?: AnalyzeQueryOptions): Promise<AnalyzeQueryResult>;
 }
