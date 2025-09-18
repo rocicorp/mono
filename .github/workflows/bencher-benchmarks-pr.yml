@@ -80,49 +80,24 @@ jobs:
     name: Perf PR
     # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-
-    permissions:
-      pull-requests: write
-    runs-on: self-hosted
-    env:
+    uses: ./.github/workflows/reusable-benchmark.yml
+    strategy:
+      matrix:
+        package:
+          - name: 'zero-client'
+            directory: 'packages/zero-client'
+            ci_id: 'perf'
+          - name: 'replicache'
+            directory: 'packages/replicache'
+            ci_id: 'replicache-perf'
+    with:
+      package_name: ${{ matrix.package.name }}
+      working_directory: ${{ matrix.package.directory }}
+      ci_id: ${{ matrix.package.ci_id }}
+      is_pr: true
+      base_ref: ${{ github.event.pull_request.base.ref }}
+      head_ref: ${{ github.event.pull_request.head.ref }}
+      base_sha: ${{ github.event.pull_request.base.sha }}
+    secrets:
+      BENCHER_API_TOKEN: ${{ secrets.BENCHER_API_TOKEN }}
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: rocicorp
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22.x
-          cache: 'npm'
-      - uses: bencherdev/bencher@main
-
-      - run: npm ci
-
-      - name: Install Playwright
-        run: npx playwright install --with-deps
-
-      - name: Run benchmarks
-        working-directory: packages/zero-client
-        run: npm run bench -- --browser.name=chromium --outputJson output.json
-
-      - name: Upload PR benchmarks results to bencher.dev
-        working-directory: packages/zero-client
-        run: |
-          cat output.json |\
-          npx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
-          bencher run \
-          --project zero \
-          --testbed self-hosted \
-          --token '${{ secrets.BENCHER_API_TOKEN }}' \
-          --adapter json \
-          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
-          --ci-id perf \
-          --branch "$GITHUB_HEAD_REF" \
-          --start-point "$GITHUB_BASE_REF" \
-          --start-point-hash '${{ github.event.pull_request.base.sha }}' \
-          --start-point-clone-thresholds \
-          --start-point-reset \
-          --threshold-measure throughput \
-          --threshold-test t_test \
-          --threshold-lower-boundary 0.95 \
-          --threshold-max-sample-size 10 \
-          --err

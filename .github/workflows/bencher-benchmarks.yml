@@ -55,43 +55,19 @@ jobs:
 
   perf:
     name: Perf
-    permissions:
-      checks: write
-    runs-on: self-hosted
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22.x
-          cache: 'npm'
-      - uses: bencherdev/bencher@main
-
-      - run: npm ci
-
-      - name: Install Playwright
-        run: npx playwright install --with-deps
-
-      - name: Run benchmarks
-        working-directory: packages/zero-client
-        run: npm run bench -- --browser.name=chromium --outputJson output.json
-
-      - name: Upload benchmarks results to bencher.dev
-        working-directory: packages/zero-client
-        run: |
-          cat output.json |\
-          npx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
-          bencher run \
-          --project zero \
-          --testbed self-hosted \
-          --token '${{ secrets.BENCHER_API_TOKEN }}' \
-          --adapter json \
-          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
-          --start-point main \
-          --threshold-measure throughput \
-          --threshold-test t_test \
-          --threshold-lower-boundary 0.95 \
-          --threshold-max-sample-size 10 \
-          --err
+    uses: ./.github/workflows/reusable-benchmark.yml
+    strategy:
+      matrix:
+        package:
+          - name: 'zero-client'
+            directory: 'packages/zero-client'
+          - name: 'replicache'
+            directory: 'packages/replicache'
+    with:
+      package_name: ${{ matrix.package.name }}
+      working_directory: ${{ matrix.package.directory }}
+    secrets:
+      BENCHER_API_TOKEN: ${{ secrets.BENCHER_API_TOKEN }}
 
   zql_benchmarks:
     name: ZQL Benchmarks
