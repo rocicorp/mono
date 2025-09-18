@@ -149,6 +149,7 @@ beforeAll(async () => {
 
   const [itemLiteRows] = [
     mapResultToClientNames(
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
       sqlite.prepare('SELECT * FROM "item"').all<Row>(),
       schema,
       'item',
@@ -182,6 +183,7 @@ describe('collation behavior', () => {
   describe('node-postgres', () => {
     t(
       async (query: string, args: unknown[]) =>
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
         (await nodePostgres.query(query, args as JSONValue[])).rows,
     );
   });

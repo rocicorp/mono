@@ -36,7 +36,9 @@ const z = {
   ),
 };
 
+// eslint-disable-next-line @typescript-eslint/no-implied-eval
 const f = new Function('z', `return z.query.${QUERY_STRING};`);
+// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
 const query: AnyStaticQuery = f(z);
 
 test('manual zql string', async () => {

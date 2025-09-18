@@ -460,7 +460,11 @@ describe(
               createQuery: q => {
                 const {randomRow, randomColumn} = rrc();
                 return q.employee.where(({or, cmp}) =>
-                  or(cmp(randomColumn, '=', randomRow[randomColumn] as any)),
+                  // eslint-disable-next-line @typescript-eslint/unbound-method
+                  or(
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+                    cmp(randomColumn, '=', randomRow[randomColumn] as any)
+                  ),
                 );
               },
             };
@@ -487,6 +491,7 @@ describe(
               createQuery: q => {
                 const {rowsAndColumns, operators} = rrc();
                 return q.artist.where(({or, cmp}) =>
+                  // eslint-disable-next-line @typescript-eslint/unbound-method
                   or(
                     ...rowsAndColumns.map(({randomRow, randomColumn}, i) =>
                       cmp(
@@ -510,8 +515,11 @@ describe(
               createQuery: q => {
                 const {randomRow, randomColumn} = rrc();
                 return q.album.where(({or, cmp}) =>
+                  // eslint-disable-next-line @typescript-eslint/unbound-method
                   or(
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
                     cmp(randomColumn, '=', randomRow[randomColumn] as any),
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
                     cmp(randomColumn, '!=', randomRow[randomColumn] as any),
                   ),
                 );
@@ -528,6 +536,7 @@ describe(
               createQuery: q => {
                 const {randomRow} = rrc();
                 return q.invoice.where(({or, cmp, exists}) =>
+                  // eslint-disable-next-line @typescript-eslint/unbound-method
                   or(
                     cmp('customerId', '=', randomRow.customerId),
                     exists('lines'),
