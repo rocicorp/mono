@@ -1,19 +1,19 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { TDigest, type ReadonlyTDigest } from '../../../../shared/src/tdigest.ts';
-import type { AST } from '../../../../zero-protocol/src/ast.ts';
+import {beforeEach, describe, expect, test, vi} from 'vitest';
+import {TDigest, type ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
+import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {
   type InspectDownMessage,
   type InspectMetricsDown,
   type InspectQueriesDown,
 } from '../../../../zero-protocol/src/inspect-down.ts';
-import type { Schema } from '../../../../zero-schema/src/builder/schema-builder.ts';
-import { schema } from '../../../../zql/src/query/test/test-schemas.ts';
-import { nanoid } from '../../util/nanoid.ts';
-import type { CustomMutatorDefs } from '../custom.ts';
-import { MockSocket, TestZero, zeroForTest } from '../test-utils.ts';
-import type { Inspector } from './inspector.ts';
-import type { Metrics } from './lazy-inspector.ts';
-import type { Query } from './query.ts';
+import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import {schema} from '../../../../zql/src/query/test/test-schemas.ts';
+import {nanoid} from '../../util/nanoid.ts';
+import type {CustomMutatorDefs} from '../custom.ts';
+import {MockSocket, TestZero, zeroForTest} from '../test-utils.ts';
+import type {Inspector} from './inspector.ts';
+import type {Metrics} from './lazy-inspector.ts';
+import type {Query} from './query.ts';
 
 const emptyMetrics = {
   'query-materialization-client': new TDigest(),
