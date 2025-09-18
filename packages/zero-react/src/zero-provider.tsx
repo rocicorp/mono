@@ -65,10 +65,10 @@ export function ZeroProvider<
       void z.close();
       setZero(undefined);
     };
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   }, [init, ...Object.values(props)]);
 
   return (
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     zero && <ZeroContext.Provider value={zero}>{children}</ZeroContext.Provider>
   );
 }

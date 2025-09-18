@@ -186,6 +186,7 @@ function getSnapshot<TReturn>(
   data: HumanReadable<TReturn>,
   resultType: ResultType,
   refetchFn: () => void,
+  // eslint-disable-next-line @typescript-eslint/no-duplicate-type-constituents
   error?: ErroredQuery | undefined,
 ): QueryResult<TReturn> {
   if (singular && data === undefined) {

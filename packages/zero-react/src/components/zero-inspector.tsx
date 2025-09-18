@@ -14,7 +14,7 @@ export function ZeroInspector<
   return show ? (
     <Suspense fallback={<div>Loading Inspector...</div>}>
       <Inspector
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-assignment
         zero={zero as any}
         onClose={() => setShow(false)}
       />
