@@ -114,14 +114,14 @@ test('building a schema', async () => {
     ),
   }));
 
-  const schema = createSchema({
+  const _schema = createSchema({
     tables: [user, issue, issueLabel, label],
     relationships: [userRelationships, issueRelationships, labelRelationships],
   });
 
-  const q = mockQuery as unknown as Query<typeof schema, 'user'>;
-  const iq = mockQuery as unknown as Query<typeof schema, 'issue'>;
-  const r = await q
+  const q = mockQuery as unknown as Query<typeof _schema, 'user'>;
+  const iq = mockQuery as unknown as Query<typeof _schema, 'issue'>;
+  const _r = await q
     .related('recruiter', q => q.related('recruiter', q => q.one()).one())
     .one()
     .run();
@@ -269,7 +269,7 @@ test('too many relationships', () => {
   const y = makeTable('y');
   const z = makeTable('z');
 
-  const schema = createSchema({
+  const _schema = createSchema({
     tables: [
       a,
       b,
