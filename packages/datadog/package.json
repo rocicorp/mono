@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.7.0",
+    "@rocicorp/eslint-config": "^0.8.0",
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.4.0",
     "@rocicorp/prettier-config": "^0.3.0",
@@ -20,10 +20,7 @@
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
-  },
-  "eslintConfig": {
-    "extends": "../../eslint-config.json"
+    "lint": "eslint src/"
   },
   "prettier": "@rocicorp/prettier-config"
 }
