@@ -182,6 +182,7 @@ export function benchmarkRefresh(opts: {
             range(opts.numKeysPersisted),
             opts.numKeysPerMutation,
           ).map(i => [`key${i}`, jsonObjectTestData(valSize)]);
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
           await rep.mutate.putMap(Object.fromEntries(entries));
         }
       }
@@ -194,7 +195,8 @@ export function benchmarkRefresh(opts: {
       const initialScanResolver = resolver<void>();
       const cancel = repA.subscribe(
         async tx => {
-          for await (const _ of tx.scan({prefix: 'key'})) {
+          // eslint-disable-next-line @typescript-eslint/naming-convention
+          for await (const _key of tx.scan({prefix: 'key'})) {
             return true;
           }
           return false;
@@ -245,7 +247,7 @@ export function benchmarkRebase(opts: {
         pullInterval: null,
         pushDelay: 9999,
         mutators: {putMap},
-        // eslint-disable-next-line require-await
+        // eslint-disable-next-line @typescript-eslint/require-await
         puller: async () => ({
           response: {
             cookie: 1,
@@ -356,7 +358,7 @@ async function setupPersistedData(
       name: replicacheName,
       indexes,
       pullInterval: null,
-      // eslint-disable-next-line require-await
+      // eslint-disable-next-line @typescript-eslint/require-await
       puller: async () => ({
         response: {
           cookie: 1,

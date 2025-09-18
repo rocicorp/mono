@@ -271,9 +271,11 @@ async function runInBrowser(
 
   let benchmarks: BenchmarkMeta[] = await page.evaluate('benchmarks');
   if (options.groups !== undefined) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     benchmarks = benchmarks.filter(({group}) => options.groups.includes(group));
   }
   if (options.run !== undefined) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
     benchmarks = benchmarks.filter(({name}) => options.run.test(name));
   }
 
@@ -308,14 +310,17 @@ async function runInBrowser(
     options,
   );
   for (const benchmark of benchmarks) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const data = await page.evaluate(
       ({name, group}) =>
         // @ts-expect-error This function is run in a different global
-        // eslint-disable-next-line no-undef
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-call
         runBenchmarkByNameAndGroup(name, group),
       benchmark,
     );
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     if (data[0] === 'error') {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       process.stderr.write(data[1] + '\n');
       process.exit(1);
     }
