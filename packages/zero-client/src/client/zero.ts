@@ -128,7 +128,7 @@ import {
   appendPath,
   toWSString,
 } from './http-string.ts';
-import type {Inspector} from './inspector/types.ts';
+import {Inspector} from './inspector/inspector.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {type LogOptions, createLogOptions} from './log-options.ts';
 import {
@@ -304,7 +304,6 @@ export class Zero<
   readonly #lc: ZeroLogContext;
   readonly #logOptions: LogOptions;
   readonly #enableAnalytics: boolean;
-  readonly #schema: S;
   readonly #clientSchema: ClientSchema;
 
   readonly #pokeHandler: PokeHandler;
@@ -383,6 +382,7 @@ export class Zero<
   // We use an accessor pair to allow the subclass to override the setter.
   #connectionState: ConnectionState = ConnectionState.Disconnected;
   readonly #activeClientsManager: Promise<ActiveClientsManager>;
+  #inspector: Inspector | undefined;
 
   #setConnectionState(state: ConnectionState) {
     if (state === this.#connectionState) {
@@ -554,7 +554,6 @@ export class Zero<
 
     this.storageKey = storageKey ?? '';
 
-    this.#schema = schema;
     const {clientSchema, hash} = clientSchemaFrom(schema);
     this.#clientSchema = clientSchema;
 
@@ -2006,27 +2005,24 @@ export class Zero<
   }
 
   /**
-   * `inspect` returns an object that can be used to inspect the state of the
+   * `inspector` is an object that can be used to inspect the state of the
    * queries a Zero instance uses. It is intended for debugging purposes.
    */
-  async inspect(): Promise<Inspector> {
+  get inspector(): Inspector {
     // We use esbuild dropLabels to strip this code when we build the code for the bundle size dashboard.
     // https://esbuild.github.io/api/#ignore-annotations
     // /packages/zero/tool/build.ts
 
     // eslint-disable-next-line no-unused-labels
     BUNDLE_SIZE: {
-      const m = await import('./inspector/inspector.ts');
-      // Wait for the web socket to be available
-      return m.newInspector(
+      return (this.#inspector ??= new Inspector(
         this.#rep,
         this.#queryManager,
-        this.#schema,
         async () => {
           await this.#connectResolver.promise;
           return this.#socket!;
         },
-      );
+      ));
     }
   }
 

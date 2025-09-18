@@ -135,12 +135,10 @@ export type {
   MakeCustomMutatorInterfaces,
   MutatorResult as PromiseWithServerResult,
 } from './client/custom.ts';
-export type {
-  Inspector,
-  Client as InspectorClient,
-  ClientGroup as InspectorClientGroup,
-  Query as InspectorQuery,
-} from './client/inspector/types.ts';
+export type {ClientGroup as InspectorClientGroup} from './client/inspector/client-group.ts';
+export type {Client as InspectorClient} from './client/inspector/client.ts';
+export type {Inspector} from './client/inspector/inspector.ts';
+export type {Query as InspectorQuery} from './client/inspector/query.ts';
 export type {OnError, OnErrorParameters} from './client/on-error.ts';
 export type {UpdateNeededReason, ZeroOptions} from './client/options.ts';
 export {UpdateNeededReasonType} from './client/update-needed-reason-type.ts';
