@@ -1,0 +1,18 @@
+import eslintConfig from '@rocicorp/eslint-config';
+
+export default [
+  ...eslintConfig,
+  {
+    ignores: [
+      'node_modules/',
+      'coverage/',
+      'out/',
+      'tool/',
+      'bin/',
+      '*_generated.ts',
+      'src/*/generated/',
+      'web-test-runner.config.js',
+      'perf/index.js',
+    ],
+  },
+];

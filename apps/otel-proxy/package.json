@@ -1,6 +1,7 @@
 {
   "name": "otel-proxy",
   "version": "1.0.0",
+  "type": "module",
   "description": "OTEL metrics proxy for Grafana",
   "main": "api/index.ts",
   "scripts": {
@@ -21,7 +22,7 @@
     "@rocicorp/prettier-config": "^0.3.0",
     "@types/node": "^20.8.4",
     "@vitest/coverage-v8": "3.2.4",
-    "eslint": "^8.15.0",
+    "eslint": "^9.35.0",
     "prettier": "^3.5.3",
     "typescript": "~5.8.2",
     "vitest": "3.2.4"

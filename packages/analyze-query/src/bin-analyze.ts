@@ -253,7 +253,7 @@ let result: AnalyzeQueryResult;
 
 if (config.ast) {
   // the user likely has a transformed AST since the wire and storage formats are the transformed AST
-  result = await runAst(lc, JSON.parse(config.ast), true, {
+  result = await runAst(lc, JSON.parse(config.ast) as AST, true, {
     applyPermissions: config.applyPermissions,
     authData: config.authData,
     clientToServerMapper,
@@ -282,7 +282,9 @@ function runQuery(queryString: string): Promise<AnalyzeQueryResult> {
     ),
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-implied-eval
   const f = new Function('z', `return z.query.${queryString};`);
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
   const q: Query<Schema, string, PullRow<string, Schema>> = f(z);
 
   const ast = completedAST(q);
