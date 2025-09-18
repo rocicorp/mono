@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1757668540743,
+  "lastUpdate": 1758162562740,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -53473,6 +53473,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 31869,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a318f10910d4cdf37b57de193bc5e954f1511b31",
+          "message": "chore(replicache): add size-of-value perf test (#4909)\n\n* chore(replicache): add size-of-value perf test\n\nAnd refactor benchmark workflows to use reusable workflows\n\n* do not pass github token\n\n* Needs merge_group as well",
+          "timestamp": "2025-09-18T02:20:07Z",
+          "tree_id": "fcd10ba660ef2cb3107dc7904ddc119b80464de3",
+          "url": "https://github.com/rocicorp/mono/commit/a318f10910d4cdf37b57de193bc5e954f1511b31"
+        },
+        "date": 1758162550398,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302332,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54479,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111465,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31900,
             "unit": "bytes"
           }
         ]
