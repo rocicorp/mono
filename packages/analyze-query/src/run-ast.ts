@@ -55,6 +55,7 @@ export async function runAst(
     ast = mapAST(ast, must(clientToServerMapper));
   }
   if (options.applyPermissions) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const authData = options.authData ? JSON.parse(options.authData) : {};
     if (!options.authData) {
       result.warnings.push(
@@ -66,6 +67,7 @@ export async function runAst(
       'clientGroupIDForAnalyze',
       ast,
       must(permissions),
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       authData,
       false,
     ).transformedAst;

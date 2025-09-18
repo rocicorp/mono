@@ -58,6 +58,7 @@ function run() {
           write: (data, _encoding, callback) => {
             try {
               const message = v.parse(
+                // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
                 JSON.parse(data.toString()),
                 downstreamSchema,
               );

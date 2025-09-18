@@ -3,6 +3,22 @@ import rocicorpConfig from '@rocicorp/eslint-config';
 export default [
   ...rocicorpConfig,
   {
+    ignores: [
+      'lib/',
+      'env.d.ts',
+      'vite.config.ts',
+      'coverage/',
+      'out/',
+      'tool/',
+      'bin/',
+      '*_generated.ts',
+      'src/*/generated/',
+      'web-test-runner.config.js',
+      'perf/index.js',
+      'apps/zbugs/public/um.js',
+    ],
+  },
+  {
     rules: {
       'no-restricted-syntax': [
         'error',

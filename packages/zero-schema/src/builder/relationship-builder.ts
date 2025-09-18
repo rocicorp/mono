@@ -99,6 +99,7 @@ export function relationships<
     };
   }) => TRelationships,
 ): {name: TSource['name']; relationships: TRelationships} {
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   const relationships = cb({many, one} as any);
 
   return {
@@ -111,7 +112,9 @@ function many(
   ...args: readonly ConnectArg<any, any, TableSchema>[]
 ): ManyConnection<any, any, any>[] {
   return args.map(arg => ({
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     sourceField: arg.sourceField,
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     destField: arg.destField,
     destSchema: arg.destSchema.schema.name,
     cardinality: 'many',
@@ -122,7 +125,9 @@ function one(
   ...args: readonly ConnectArg<any, any, TableSchema>[]
 ): OneConnection<any, any, any>[] {
   return args.map(arg => ({
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     sourceField: arg.sourceField,
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     destField: arg.destField,
     destSchema: arg.destSchema.schema.name,
     cardinality: 'one',

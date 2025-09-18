@@ -1,6 +1,7 @@
 {
   "name": "otel-proxy",
   "version": "1.0.0",
+  "type": "module",
   "description": "OTEL metrics proxy for Grafana",
   "main": "api/index.ts",
   "scripts": {
@@ -8,7 +9,7 @@
     "deploy": "vercel deploy",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint .",
+    "lint": "eslint api/",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "check-types": "tsc --noEmit"

@@ -82,6 +82,7 @@ export class NameMapper {
     this.#tables = tables;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-duplicate-type-constituents
   #getTable(src: string, ctx?: JSONValue | undefined): DestNames {
     const table = this.#tables.get(src);
     if (!table) {
