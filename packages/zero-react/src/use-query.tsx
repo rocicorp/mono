@@ -76,7 +76,8 @@ const reactUse = (React as unknown as {use?: (p: Promise<unknown>) => void})
 const suspend: (p: Promise<unknown>) => void = reactUse
   ? reactUse
   : p => {
-      throw new Error(String(p));
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
+      throw p;
     };
 
 export function useQuery<
