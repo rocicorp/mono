@@ -36,77 +36,69 @@ export function createHTMLPasswordPrompt(
   }
 
   return new Promise<string | null>(resolve => {
-    // Create dialog element
+    const allRevertStyle = 'all:revert;';
     const dialog = document.createElement('dialog');
-    dialog.style.cssText =
-      'all: revert; padding: 1em; border: 1px solid; border-radius: 4px;';
+    dialog.style.cssText = `${allRevertStyle}padding: 1em; border: 1px solid; border-radius: 4px;`;
 
-    // Create form
+    // Prevent keydown from escaping the dialog which can be interfered by other
+    // listeners (e.g. global hotkeys)
+    dialog.addEventListener('keydown', e => {
+      e.stopPropagation();
+    });
+
+    dialog.oncancel = () => {
+      dialog.remove();
+      resolve(null);
+    };
+
     const form = document.createElement('form');
-    form.style.cssText = 'all: revert;';
+    form.method = 'dialog';
+    form.style.cssText = allRevertStyle;
 
-    // Create message paragraph
     const messagePara = document.createElement('p');
-    messagePara.style.cssText = 'all: revert;';
-    messagePara.textContent = message;
+    messagePara.style.cssText = allRevertStyle;
+    messagePara.append(message);
 
-    // Create password input
     const passwordInput = document.createElement('input');
     passwordInput.type = 'password';
     passwordInput.placeholder = 'Admin password';
     passwordInput.autocomplete = 'current-password';
-    passwordInput.style.cssText =
-      'all: revert; display: block; margin: 0.5em 0;';
+    passwordInput.autofocus = true;
+    passwordInput.style.cssText = `${allRevertStyle}display: block; margin: 0.5em 0;`;
 
-    // Create button container
     const buttonDiv = document.createElement('div');
-    buttonDiv.style.cssText = 'all: revert;';
+    buttonDiv.style.cssText = allRevertStyle;
 
-    // Create Cancel button
     const cancelBtn = document.createElement('button');
-    cancelBtn.type = 'button';
-    cancelBtn.textContent = 'Cancel';
-    cancelBtn.style.cssText = 'all: revert; margin-right: 0.5em;';
+    cancelBtn.type = 'reset';
+    cancelBtn.append('Cancel');
+    cancelBtn.style.cssText = `${allRevertStyle}margin-right: 0.5em;`;
 
-    // Create OK button
     const okBtn = document.createElement('button');
     okBtn.type = 'submit';
-    okBtn.textContent = 'OK';
-    okBtn.style.cssText = 'all: revert;';
+    okBtn.value = 'ok';
+    okBtn.append('OK');
+    okBtn.style.cssText = allRevertStyle;
 
-    // Assemble the DOM structure
-    buttonDiv.appendChild(cancelBtn);
-    buttonDiv.appendChild(okBtn);
-    form.appendChild(messagePara);
-    form.appendChild(passwordInput);
-    form.appendChild(buttonDiv);
-    dialog.appendChild(form);
+    buttonDiv.append(cancelBtn, okBtn);
+    form.append(messagePara, passwordInput, buttonDiv);
+    dialog.append(form);
 
-    // Handle form submission (OK button)
-    form.onsubmit = e => {
-      e.preventDefault();
-      const password = passwordInput.value;
-      document.body.removeChild(dialog);
-      resolve(password || null);
+    form.onreset = () => {
+      dialog.close();
     };
 
-    // Handle Cancel button click
-    cancelBtn.onclick = () => {
-      document.body.removeChild(dialog);
-      resolve(null);
+    dialog.onclose = () => {
+      // debugger;
+      if (dialog.returnValue === 'ok') {
+        resolve(passwordInput.value || null);
+      } else {
+        resolve(null);
+      }
+      dialog.remove();
     };
 
-    // Handle ESC key to cancel
-    dialog.oncancel = () => {
-      document.body.removeChild(dialog);
-      resolve(null);
-    };
-
-    // Add dialog to document and show it
-    document.body.appendChild(dialog);
+    document.body.append(dialog);
     dialog.showModal();
-
-    // Focus the password input
-    passwordInput.focus();
   });
 }
