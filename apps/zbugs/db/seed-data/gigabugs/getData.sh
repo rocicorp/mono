@@ -29,11 +29,9 @@ FILES=(
     "issue_007.csv"
 )
 
-mkdir -p data/1gb
-
 for file in "${FILES[@]}"; do
     echo "Downloading $file..."
-    curl -L -o "data/1gb/$file" "$BASE_URL/$file"
+    curl -L -o "$file" "$BASE_URL/$file"
 done
 
 echo "All files downloaded successfully!"

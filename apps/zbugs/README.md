@@ -37,6 +37,7 @@ cp .env.example .env
 ```bash
 # In apps/zbugs
 npm run db-up
+# In apps/zbugs in another tab
 npm run db-migrate
 npm run db-seed
 ```
@@ -70,4 +71,17 @@ rm /tmp/zbugs-sync-replica.db*
 ```bash
 # In apps/zbugs/docker
 docker compose down -v
+```
+
+### To run with 1gb test dataset
+
+```bash
+# In apps/zbugs/db/seed-data/gigabugs
+./getData.sh
+
+# In apps/zbugs
+npm run db-up
+# In apps/zbugs in another tab
+npm run db-migrate
+ZERO_SEED_DATA_DIR=./db/seed-data/gigabugs/ npm run db-seed
 ```
