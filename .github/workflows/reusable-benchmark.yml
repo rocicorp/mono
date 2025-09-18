@@ -35,8 +35,6 @@ on:
     secrets:
       BENCHER_API_TOKEN:
         required: true
-      GITHUB_TOKEN:
-        required: true
       TURBO_TOKEN:
         required: false
 
@@ -78,7 +76,7 @@ jobs:
           --testbed self-hosted \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
-          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+          --github-actions '${{ github.token }}' \
           --start-point main \
           --threshold-measure throughput \
           --threshold-test t_test \
@@ -97,7 +95,7 @@ jobs:
           --testbed self-hosted \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
-          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+          --github-actions '${{ github.token }}' \
           --ci-id ${{ inputs.ci_id }} \
           --branch "${{ inputs.head_ref }}" \
           --start-point "${{ inputs.base_ref }}" \

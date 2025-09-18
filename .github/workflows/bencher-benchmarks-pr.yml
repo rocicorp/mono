@@ -100,5 +100,4 @@ jobs:
       base_sha: ${{ github.event.pull_request.base.sha }}
     secrets:
       BENCHER_API_TOKEN: ${{ secrets.BENCHER_API_TOKEN }}
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
