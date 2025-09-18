@@ -1,0 +1,109 @@
+name: Reusable Benchmark Workflow
+
+on:
+  workflow_call:
+    inputs:
+      package_name:
+        required: true
+        type: string
+        description: 'Package name (e.g., zero-client, replicache)'
+      working_directory:
+        required: true
+        type: string
+        description: 'Working directory (e.g., packages/zero-client)'
+      ci_id:
+        required: false
+        type: string
+        description: 'CI ID for PR runs'
+      is_pr:
+        required: false
+        type: boolean
+        default: false
+        description: 'Whether this is a PR run'
+      base_ref:
+        required: false
+        type: string
+        description: 'Base ref for PR runs'
+      head_ref:
+        required: false
+        type: string
+        description: 'Head ref for PR runs'
+      base_sha:
+        required: false
+        type: string
+        description: 'Base SHA for PR runs'
+    secrets:
+      BENCHER_API_TOKEN:
+        required: true
+      TURBO_TOKEN:
+        required: false
+
+jobs:
+  benchmark:
+    name: ${{ inputs.package_name }} Benchmarks
+    permissions:
+      checks: write
+      pull-requests: write
+    runs-on: self-hosted
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: rocicorp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+      - uses: bencherdev/bencher@main
+
+      - run: npm ci
+
+      - name: Install Playwright
+        run: npx playwright install --with-deps
+
+      - name: Run benchmarks
+        working-directory: ${{ inputs.working_directory }}
+        run: npm run bench -- --browser.name=chromium --outputJson output.json
+
+      - name: Upload benchmarks results to bencher.dev (main)
+        if: ${{ !inputs.is_pr }}
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          cat output.json |\
+          npx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
+          bencher run \
+          --project zero \
+          --testbed self-hosted \
+          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --adapter json \
+          --github-actions '${{ github.token }}' \
+          --start-point main \
+          --threshold-measure throughput \
+          --threshold-test t_test \
+          --threshold-lower-boundary 0.95 \
+          --threshold-max-sample-size 10 \
+          --err
+
+      - name: Upload PR benchmarks results to bencher.dev
+        if: ${{ inputs.is_pr }}
+        working-directory: ${{ inputs.working_directory }}
+        run: |
+          cat output.json |\
+          npx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
+          bencher run \
+          --project zero \
+          --testbed self-hosted \
+          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --adapter json \
+          --github-actions '${{ github.token }}' \
+          --ci-id ${{ inputs.ci_id }} \
+          --branch "${{ inputs.head_ref }}" \
+          --start-point "${{ inputs.base_ref }}" \
+          --start-point-hash '${{ inputs.base_sha }}' \
+          --start-point-clone-thresholds \
+          --start-point-reset \
+          --threshold-measure throughput \
+          --threshold-test t_test \
+          --threshold-lower-boundary 0.95 \
+          --threshold-max-sample-size 10 \
+          --err
