@@ -71,13 +71,12 @@ export type UseSuspenseQueryOptions = UseQueryOptions & {
   suspendUntil?: 'complete' | 'partial';
 };
 
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
 const reactUse = (React as unknown as {use?: (p: Promise<unknown>) => void})
   .use;
 const suspend: (p: Promise<unknown>) => void = reactUse
   ? reactUse
   : p => {
-      throw p;
+      throw new Error(String(p));
     };
 
 export function useQuery<
@@ -452,6 +451,7 @@ class ViewWrapper<
   #onData = (
     snap: Immutable<HumanReadable<TReturn>>,
     resultType: ResultType,
+    // eslint-disable-next-line @typescript-eslint/no-duplicate-type-constituents
     error?: ErroredQuery | undefined,
   ) => {
     const data =

@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-/* eslint-disable no-console */
 
 import {resolver} from '@rocicorp/resolver';
 import {watch} from 'chokidar';
@@ -148,8 +147,11 @@ async function main() {
     lc.info?.(`Detected ${path} change.`);
     await deployPermissions();
   };
+  // eslint-disable-next-line @typescript-eslint/no-misused-promises
   watcher.on('add', onFileChange);
+  // eslint-disable-next-line @typescript-eslint/no-misused-promises
   watcher.on('change', onFileChange);
+  // eslint-disable-next-line @typescript-eslint/no-misused-promises
   watcher.on('unlink', onFileChange);
 }
 

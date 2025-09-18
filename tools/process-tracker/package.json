@@ -21,6 +21,5 @@
     "@types/pidusage": "^2.0.5",
     "shared": "0.0.0"
   },
-
   "prettier": "@rocicorp/prettier-config"
 }
