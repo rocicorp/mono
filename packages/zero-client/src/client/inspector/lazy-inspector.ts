@@ -283,7 +283,7 @@ export function clientRows(
   tableName: string,
 ): Promise<Row[]> {
   return withDagRead(delegate, async dagRead => {
-    const prefix = ENTITIES_KEY_PREFIX + tableName;
+    const prefix = ENTITIES_KEY_PREFIX + tableName + '/';
     const tree = await getBTree(dagRead, clientID);
     const rows: Row[] = [];
     for await (const [key, value] of tree.scan(prefix)) {
