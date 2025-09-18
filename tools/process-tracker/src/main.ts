@@ -82,7 +82,7 @@ async function run() {
           .join('\t') + '\n',
       );
     }
-    timer = setTimeout(trackAndDisplay, display.intervalSeconds * 1000);
+    timer = setTimeout(() => void trackAndDisplay(), display.intervalSeconds * 1000);
   }
   void trackAndDisplay();
 
