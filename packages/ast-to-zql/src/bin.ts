@@ -67,13 +67,17 @@ async function main(): Promise<void> {
       process.exit(1);
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     let ast = JSON.parse(input);
     if (schema) {
       const mapper = serverToClient(schema.tables);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       ast = mapAST(ast, mapper);
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     const zql = astToZQL(ast);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const code = `query.${ast.table}${zql}`;
 
     console.log(await formatOutput(code));

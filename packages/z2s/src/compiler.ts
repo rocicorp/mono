@@ -68,6 +68,7 @@ export function compile(
   serverSchema: ServerSchema,
   zqlSchema: Schema,
   ast: AST,
+  // eslint-disable-next-line @typescript-eslint/no-duplicate-type-constituents
   format?: Format | undefined,
 ): SQLQuery {
   const spec: Spec = {
@@ -87,6 +88,7 @@ function select(
   spec: Spec,
   ast: AST,
   format: Format | undefined,
+  // eslint-disable-next-line @typescript-eslint/no-duplicate-type-constituents
   correlate?: ((childTable: Table) => SQLQuery) | undefined,
 ): SQLQuery {
   const table = makeTable(spec, ast.table);
@@ -107,6 +109,7 @@ function select(
   }
 
   let appliedWhere = false;
+  // eslint-disable-next-line @typescript-eslint/no-redundant-type-constituents
   function maybeWhere(test: unknown | undefined) {
     if (!test) {
       return sql``;
@@ -141,6 +144,7 @@ export function limit(
   return sql`LIMIT ${sqlConvertSingularLiteralArg(limit)}`;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-duplicate-type-constituents
 function makeTable(spec: Spec, zql: string, alias?: string | undefined): Table {
   alias = alias ?? zql + '_' + spec.aliasCount++;
   return {
@@ -511,6 +515,7 @@ function literalValueComparison(
         return sqlConvertSingularLiteralArg(valuePos.value);
       }
       throw new Error(
+        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
         `Literal of unexpected type. ${valuePos.value} of type ${typeof valuePos.value}`,
       );
     }
@@ -638,6 +643,7 @@ function getServerColumn(spec: ServerSpec, table: Table, zqlColumn: string) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractZqlResult(pgResult: Array<any>): JSONValue {
   const bigIntJson: BigIntJSONValue = parseBigIntJson(
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
     pgResult[0][ZQL_RESULT_KEY],
   );
   assertJSONValue(bigIntJson);
@@ -655,6 +661,7 @@ function findPathToBigInt(v: BigIntJSONValue): string | undefined {
   const typeOfV = typeof v;
   switch (typeOfV) {
     case 'bigint':
+      // eslint-disable-next-line @typescript-eslint/no-base-to-string, @typescript-eslint/restrict-template-expressions
       return ` = ${v}`;
     case 'object': {
       if (v === null) {
@@ -662,6 +669,7 @@ function findPathToBigInt(v: BigIntJSONValue): string | undefined {
       }
       if (Array.isArray(v)) {
         for (let i = 0; i < v.length; i++) {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
           const path = findPathToBigInt(v[i]);
           if (path) {
             return `[${i}]${path}`;
