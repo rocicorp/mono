@@ -8,6 +8,11 @@ import {
   type Operator,
   type Output,
 } from './operator.ts';
+import {
+  makeAddEmptyRelationships,
+  mergeRelationships,
+  pushAccumulatedChanges,
+} from './push-accumulated.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Stream} from './stream.ts';
 
@@ -26,7 +31,9 @@ export class UnionFanIn implements Operator {
       tableName: fanOutSchema.tableName,
       columns: fanOutSchema.columns,
       primaryKey: fanOutSchema.primaryKey,
-      relationships: {},
+      relationships: {
+        ...fanOutSchema.relationships,
+      },
       isHidden: fanOutSchema.isHidden,
       system: fanOutSchema.system,
       compareRows: fanOutSchema.compareRows,
@@ -110,7 +117,7 @@ export class UnionFanIn implements Operator {
     this.#fanOutPushStarted = true;
   }
 
-  fanOutDonePushing(_fanOutChangeType: Change['type']) {
+  fanOutDonePushing(fanOutChangeType: Change['type']) {
     this.#fanOutPushStarted = false;
     if (this.#inputs.length === 0) {
       return;
@@ -122,8 +129,13 @@ export class UnionFanIn implements Operator {
       return;
     }
 
-    // collapse down to a single change per type
-    // is this same as `fan-in.ts`?
+    pushAccumulatedChanges(
+      this.#accumulatedPushes,
+      this.#output,
+      fanOutChangeType,
+      mergeRelationships,
+      makeAddEmptyRelationships(this.#schema),
+    );
   }
 
   setOutput(output: Output): void {
