@@ -35,6 +35,7 @@ import {nanoid} from '../../util/nanoid.ts';
 import {ENTITIES_KEY_PREFIX} from '../keys.ts';
 import type {MutatorDefs} from '../replicache-types.ts';
 import {Client} from './client.ts';
+import {createHTMLPasswordPrompt} from './html-dialog-prompt.ts';
 import {type Lazy} from './inspector.ts';
 import {Query} from './query.ts';
 
@@ -57,7 +58,7 @@ export async function rpc<T extends InspectDownBody>(
     return await rpcNoAuthTry(socket, arg, downSchema);
   } catch (e) {
     if (e instanceof UnauthenticatedError) {
-      const password = prompt('Enter password:');
+      const password = await createHTMLPasswordPrompt('Enter password:');
       if (password) {
         // Do authenticate rpc
         const authRes = await rpcNoAuthTry(
