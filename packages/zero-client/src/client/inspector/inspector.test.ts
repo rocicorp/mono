@@ -296,7 +296,7 @@ test('clientGroup queries', async () => {
     },
   ] satisfies InspectDownMessage);
   expect(await p).toEqual([
-    {
+    expect.objectContaining({
       name: null,
       args: null,
       clientID: z.clientID,
@@ -310,7 +310,15 @@ test('clientGroup queries', async () => {
       serverZQL:
         "issues.where(({cmp, or}) => or(cmp('id', '1'), cmp('id', '!=', '2')))",
       metrics: emptyMetrics,
-    },
+      hydrateClient: null,
+      hydrateServer: null,
+      hydrateTotal: null,
+      updateClientP50: null,
+      updateClientP95: null,
+      updateServerP50: null,
+      updateServerP95: null,
+      analyze: expect.any(Function),
+    }),
   ]);
 });
 
@@ -1242,5 +1250,241 @@ describe('authenticate', () => {
     await expect(p).rejects.toThrowError(`Authentication failed`);
 
     await z.close();
+  });
+
+  describe('Query metrics properties', () => {
+    test('hydration and update metrics are extracted from server metrics', async () => {
+      const z = zeroForTest({schema});
+      await z.triggerConnected();
+
+      // Create TDigest instances with test data for server metrics
+      const serverHydrationDigest = new TDigest();
+      serverHydrationDigest.add(50, 1); // 50ms
+      serverHydrationDigest.add(75, 1); // 75ms
+      serverHydrationDigest.add(100, 1); // 100ms
+
+      const serverUpdateDigest = new TDigest();
+      serverUpdateDigest.add(5, 1); // 5ms
+      serverUpdateDigest.add(10, 1); // 10ms
+      serverUpdateDigest.add(15, 1); // 15ms
+      serverUpdateDigest.add(20, 1); // 20ms
+      serverUpdateDigest.add(25, 1); // 25ms
+      serverUpdateDigest.add(30, 1); // 30ms
+      serverUpdateDigest.add(35, 1); // 35ms
+      serverUpdateDigest.add(40, 1); // 40ms
+      serverUpdateDigest.add(45, 1); // 45ms
+      serverUpdateDigest.add(50, 1); // 50ms
+
+      vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+      const inspector = await z.inspect();
+      const p = inspector.client.queries();
+      await Promise.resolve();
+
+      // Mock server response with metrics
+      await z.triggerMessage([
+        'inspect',
+        {
+          op: 'queries',
+          id: '000000000000000000000',
+          value: [
+            {
+              clientID: z.clientID,
+              queryID: 'test-query-1',
+              ast: {table: 'issues'},
+              name: null,
+              args: null,
+              deleted: false,
+              got: true,
+              inactivatedAt: null,
+              rowCount: 10,
+              ttl: 60_000,
+              metrics: {
+                'query-materialization-server': serverHydrationDigest.toJSON(),
+                'query-update-server': serverUpdateDigest.toJSON(),
+              },
+            },
+          ],
+        },
+      ] satisfies InspectDownMessage);
+
+      const queries = await p;
+      expect(queries).toHaveLength(1);
+
+      const query = queries[0];
+
+      // Test hydration metrics (P50/median) - client metrics will default to null since no client metrics are provided
+      expect(query.hydrateClient).toBeNull(); // null since no client metrics
+      expect(query.hydrateServer).toBe(75); // P50 of [50, 75, 100]
+      expect(query.hydrateTotal).toBeNull(); // null since no client metrics
+
+      // Test update metrics
+      expect(query.updateClientP50).toBeNull(); // null since no client metrics
+      expect(query.updateClientP95).toBeNull(); // null since no client metrics
+      expect(query.updateServerP50).toBe(27.5); // P50 of [5,10,15,20,25,30,35,40,45,50]
+      expect(query.updateServerP95).toBe(50); // P95 of [5,10,15,20,25,30,35,40,45,50] - TDigest returns 50
+
+      await z.close();
+    });
+
+    test('metrics properties default to null when no metrics available', async () => {
+      const z = zeroForTest({schema});
+      await z.triggerConnected();
+
+      vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+      const inspector = await z.inspect();
+      const p = inspector.client.queries();
+      await Promise.resolve();
+
+      // Mock server response with null metrics
+      await z.triggerMessage([
+        'inspect',
+        {
+          op: 'queries',
+          id: '000000000000000000000',
+          value: [
+            {
+              clientID: z.clientID,
+              queryID: 'test-query-no-metrics',
+              ast: {table: 'issues'},
+              name: null,
+              args: null,
+              deleted: false,
+              got: true,
+              inactivatedAt: null,
+              rowCount: 0,
+              ttl: 60_000,
+              metrics: null,
+            },
+          ],
+        },
+      ] satisfies InspectDownMessage);
+
+      const queries = await p;
+      expect(queries).toHaveLength(1);
+
+      const query = queries[0];
+
+      // All properties should default to null when no metrics available
+      expect(query.hydrateClient).toBeNull();
+      expect(query.hydrateServer).toBeNull();
+      expect(query.hydrateTotal).toBeNull();
+      expect(query.updateClientP50).toBeNull();
+      expect(query.updateClientP95).toBeNull();
+      expect(query.updateServerP50).toBeNull();
+      expect(query.updateServerP95).toBeNull();
+
+      await z.close();
+    });
+
+    test('metrics properties handle empty TDigest correctly', async () => {
+      const z = zeroForTest({schema});
+      await z.triggerConnected();
+
+      vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+      const inspector = await z.inspect();
+      const p = inspector.client.queries();
+      await Promise.resolve();
+
+      // Mock server response with empty metrics (empty TDigest)
+      const emptyDigest = new TDigest();
+      await z.triggerMessage([
+        'inspect',
+        {
+          op: 'queries',
+          id: '000000000000000000000',
+          value: [
+            {
+              clientID: z.clientID,
+              queryID: 'test-query-empty-metrics',
+              ast: {table: 'issues'},
+              name: null,
+              args: null,
+              deleted: false,
+              got: true,
+              inactivatedAt: null,
+              rowCount: 0,
+              ttl: 60_000,
+              metrics: {
+                'query-materialization-server': emptyDigest.toJSON(),
+                'query-update-server': emptyDigest.toJSON(),
+              },
+            },
+          ],
+        },
+      ] satisfies InspectDownMessage);
+
+      const queries = await p;
+      expect(queries).toHaveLength(1);
+
+      const query = queries[0];
+
+      // Empty TDigest quantile returns NaN, but our implementation should default to null
+      expect(query.hydrateClient).toBeNull();
+      expect(query.hydrateServer).toBeNull();
+      expect(query.hydrateTotal).toBeNull();
+      expect(query.updateClientP50).toBeNull();
+      expect(query.updateClientP95).toBeNull();
+      expect(query.updateServerP50).toBeNull();
+      expect(query.updateServerP95).toBeNull();
+
+      await z.close();
+    });
+
+    test('metrics properties handle single data point correctly', async () => {
+      const z = zeroForTest({schema});
+      await z.triggerConnected();
+
+      // Create TDigest instances with single data points
+      const singlePointDigest = new TDigest();
+      singlePointDigest.add(42, 1); // Single value: 42ms
+
+      vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+      const inspector = await z.inspect();
+      const p = inspector.client.queries();
+      await Promise.resolve();
+
+      // Mock server response with single-point metrics
+      await z.triggerMessage([
+        'inspect',
+        {
+          op: 'queries',
+          id: '000000000000000000000',
+          value: [
+            {
+              clientID: z.clientID,
+              queryID: 'test-query-single-point',
+              ast: {table: 'issues'},
+              name: null,
+              args: null,
+              deleted: false,
+              got: true,
+              inactivatedAt: null,
+              rowCount: 1,
+              ttl: 60_000,
+              metrics: {
+                'query-materialization-server': singlePointDigest.toJSON(),
+                'query-update-server': singlePointDigest.toJSON(),
+              },
+            },
+          ],
+        },
+      ] satisfies InspectDownMessage);
+
+      const queries = await p;
+      expect(queries).toHaveLength(1);
+
+      const query = queries[0];
+
+      // Single data point should return that value for all percentiles (server-side)
+      expect(query.hydrateClient).toBeNull(); // null since no client metrics
+      expect(query.hydrateServer).toBe(42);
+      expect(query.hydrateTotal).toBeNull(); // null since no client metrics
+      expect(query.updateClientP50).toBeNull(); // null since no client metrics
+      expect(query.updateClientP95).toBeNull(); // null since no client metrics
+      expect(query.updateServerP50).toBe(42);
+      expect(query.updateServerP95).toBe(42);
+
+      await z.close();
+    });
   });
 });
