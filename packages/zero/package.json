@@ -90,6 +90,7 @@
     "zqlite": "0.0.0",
     "zero-events": "0.0.0",
     "zero-solid": "0.0.0",
+    "zero-bun": "0.0.0",
     "zero-pg": "0.0.0",
     "zero-react": "0.0.0",
     "zero-server": "0.0.0",
@@ -140,6 +141,10 @@
     "./react-native": {
       "types": "./out/zero-react-native/src/mod.d.ts",
       "default": "./out/react-native.js"
+    },
+    "./bun": {
+      "types": "./out/zero-bun/src/mod.d.ts",
+      "default": "./out/bun.js"
     }
   },
   "bin": {
@@ -163,3 +168,4 @@
   },
   "prettier": "@rocicorp/prettier-config"
 }
+

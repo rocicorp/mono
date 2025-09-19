@@ -47,6 +47,7 @@
     "compare-utf8": "^0.1.1",
     "esbuild": "^0.25.0",
     "expo-sqlite": "^15.2.14",
+    "@types/bun": "latest",
     "fetch-mock": "^9.11.0",
     "playwright": "^1.53.2",
     "shared": "0.0.0",
