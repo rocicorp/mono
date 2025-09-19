@@ -1032,18 +1032,11 @@ textarea.autoResize {
     position: relative;
     font-size: var(--typo-label-size);
     color: var(--color-text-primary);
-    padding: 0.75rem 0.75rem 0.75rem 4rem;
-    border: 1px solid var(--color-text-dimmed-label);
+    padding: 0.75rem 0.75rem 0.75rem 3rem;
     border-radius: 0.5rem;
 
-    .aside-cta {
-      color: var(--color-background);
-      position: absolute;
-      right: 0.9rem;
-      top: 0.9rem;
-      padding: 0.5rem 1rem;
-      background: var(--color-text-primary);
-      border-radius: var(--ui-button-radius);
+    a {
+      color: var(--color-primary-cta);
     }
   }
 
@@ -1051,7 +1044,7 @@ textarea.autoResize {
     content: '👨🏻‍💻';
     position: absolute;
     font-size: 2rem;
-    left: 1rem;
+    left: 0;
     top: 0.5rem;
   }
 }
