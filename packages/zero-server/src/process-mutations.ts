@@ -41,8 +41,7 @@ export interface Database<T> {
 export type ExtractTransactionType<D> = D extends Database<infer T> ? T : never;
 export type Params = v.Infer<typeof pushParamsSchema>;
 
-export type TransactFn = <D extends Database<ExtractTransactionType<D>>>(
-  dbProvider: D,
+export type TransactFn<D extends Database<ExtractTransactionType<D>>> = (
   cb: TransactFnCallback<D>,
 ) => Promise<MutationResponse>;
 
@@ -53,11 +52,6 @@ export type TransactFnCallback<D extends Database<ExtractTransactionType<D>>> =
     mutatorArgs: ReadonlyJSONValue,
   ) => Promise<void>;
 
-export type Parsed = {
-  transact: TransactFn;
-  mutations: CustomMutation[];
-};
-
 /**
  * Call `cb` for each mutation in the request.
  * The callback is called sequentially for each mutation.
@@ -65,28 +59,37 @@ export type Parsed = {
  * If a mutation has already been processed, it will be skipped and the processing will continue.
  * If a mutation receives an application error, it will be skipped, the error will be returned to the client, and processing will continue.
  */
-export function handleMutationRequest(
+export function handleMutationRequest<
+  D extends Database<ExtractTransactionType<D>>,
+>(
   cb: (
-    transact: TransactFn,
+    transact: TransactFn<D>,
     mutation: CustomMutation,
   ) => Promise<MutationResponse>,
+  dbProvider: D,
   queryString: URLSearchParams | Record<string, string>,
   body: ReadonlyJSONValue,
   logLevel?: LogLevel | undefined,
 ): Promise<PushResponse>;
-export function handleMutationRequest(
+export function handleMutationRequest<
+  D extends Database<ExtractTransactionType<D>>,
+>(
   cb: (
-    transact: TransactFn,
+    transact: TransactFn<D>,
     mutation: CustomMutation,
   ) => Promise<MutationResponse>,
+  dbProvider: D,
   request: Request,
   logLevel?: LogLevel | undefined,
 ): Promise<PushResponse>;
-export async function handleMutationRequest(
+export async function handleMutationRequest<
+  D extends Database<ExtractTransactionType<D>>,
+>(
   cb: (
-    transact: TransactFn,
+    transact: TransactFn<D>,
     mutation: CustomMutation,
   ) => Promise<MutationResponse>,
+  dbProvider: D,
   queryOrQueryString: Request | URLSearchParams | Record<string, string>,
   body?: ReadonlyJSONValue | LogLevel,
   logLevel?: LogLevel | undefined,
@@ -126,8 +129,13 @@ export async function handleMutationRequest(
   for (const m of req.mutations) {
     assert(m.type === 'custom', 'Expected custom mutation');
 
+    if (m.name === '__zero_ackMutations') {
+      // special processing here for the ack mutation mutation.
+      // this is a protocol message and does not have an mid . . .
+    }
+
     const res = await cb(
-      (dbProvider, innerCb) => transactor.transact(dbProvider, m, innerCb),
+      innerCb => transactor.transact(dbProvider, m, innerCb),
       m,
     );
     responses.push(res);
