@@ -245,6 +245,11 @@ function buildPipelineInternal(
   }
 
   for (const csq of csqsFromCondition) {
+    if (csq.flip) {
+      // We cannot apply flipped subqueries at this level
+      // They will be handled in the context of the filter
+      continue;
+    }
     end = applyCorrelatedSubQuery(csq, delegate, queryID, end, name, true);
   }
 
@@ -279,23 +284,11 @@ function applyWhere(
   delegate: BuilderDelegate,
   name: string,
 ): Input {
-  const nonUnionPath = () =>
-    buildFilterPipeline(input, delegate, filterInput =>
+  if (!conditionIncludesFlippedSubqueryAtAnyLevel(condition)) {
+    return buildFilterPipeline(input, delegate, filterInput =>
       applyFilter(filterInput, condition, delegate, name),
     );
-
-  if (!conditionIncludesOrAtAnyLevel(condition)) {
-    return nonUnionPath();
   }
-
-  if (!conditionIncludesFlippedSubqueryAtAnyLevel(condition)) {
-    return nonUnionPath();
-  }
-
-  assert(
-    condition.type === 'and' || condition.type === 'or',
-    'simple and correlated subquery conditions cannot contain or as they are not complex expressions',
-  );
 
   return applyFilterWithFlips(input, condition, delegate, name);
 }
@@ -307,6 +300,7 @@ function applyFilterWithFlips(
   name: string,
 ): Input {
   let end = input;
+  assert(condition.type !== 'simple', 'Simple conditions cannot have flips');
 
   switch (condition.type) {
     case 'and': {
@@ -327,7 +321,7 @@ function applyFilterWithFlips(
           ),
         );
       }
-      assert(withFlipped.length > 0, 'Impossible to have no flipped here');
+      assert(withFlipped.length > 0, 'Impossible to have no flips here');
       for (const cond of withFlipped) {
         end = applyFilterWithFlips(end, cond, delegate, name);
       }
@@ -351,7 +345,7 @@ function applyFilterWithFlips(
           ),
         );
       }
-      assert(withFlipped.length > 0, 'Impossible to have no flipped here');
+      assert(withFlipped.length > 0, 'Impossible to have no flips here');
 
       const ufo = new UnionFanOut(end);
       delegate.addEdge(end, ufo);
@@ -360,7 +354,6 @@ function applyFilterWithFlips(
         applyFilterWithFlips(end, cond, delegate, name),
       );
       const ufi = new UnionFanIn(ufo, branches);
-      ufo.setFanIn(ufi);
       for (const branch of branches) {
         delegate.addEdge(branch, ufi);
       }
@@ -371,9 +364,6 @@ function applyFilterWithFlips(
     case 'correlatedSubquery': {
       // FLIP JOIN!
       break;
-    }
-    case 'simple': {
-      throw new Error('Impossible to have simple condition with flip');
     }
   }
 
@@ -681,16 +671,6 @@ function uniquifyCorrelatedSubqueryConditionAliases(ast: AST): AST {
     where: uniquify(where),
   };
   return result;
-}
-
-export function conditionIncludesOrAtAnyLevel(cond: Condition): boolean {
-  if (cond.type === 'or') {
-    return true;
-  }
-  if (cond.type === 'and') {
-    return cond.conditions.some(c => conditionIncludesOrAtAnyLevel(c));
-  }
-  return false;
 }
 
 export function conditionIncludesFlippedSubqueryAtAnyLevel(
