@@ -11,6 +11,7 @@ import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   AvailableRelationships,
   DestTableName,
+  ExistsOptions,
   GetFilterType,
   NoCompoundTypeSelector,
   PullTableSchema,
@@ -50,13 +51,15 @@ export class ExpressionBuilder<
 > {
   readonly #exists: (
     relationship: string,
-    cb?: (query: Query<TSchema, TTable>) => Query<TSchema, any>,
+    cb?: ((query: Query<TSchema, TTable>) => Query<TSchema, any>) | undefined,
+    options?: ExistsOptions | undefined,
   ) => Condition;
 
   constructor(
     exists: (
       relationship: string,
-      cb?: (query: Query<TSchema, TTable>) => Query<TSchema, any>,
+      cb?: ((query: Query<TSchema, TTable>) => Query<TSchema, any>) | undefined,
+      options?: ExistsOptions | undefined,
     ) => Condition,
   ) {
     this.#exists = exists;
@@ -116,10 +119,13 @@ export class ExpressionBuilder<
 
   exists = <TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
-    cb?: (
-      query: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
-    ) => Query<TSchema, any>,
-  ): Condition => this.#exists(relationship, cb);
+    cb?:
+      | ((
+          query: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
+        ) => Query<TSchema, any>)
+      | undefined,
+    options?: ExistsOptions | undefined,
+  ): Condition => this.#exists(relationship, cb, options);
 }
 
 export function and(...conditions: (Condition | undefined)[]): Condition {

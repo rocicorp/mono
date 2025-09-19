@@ -42,6 +42,7 @@ import type {CustomQueryID} from './named.ts';
 import type {GotCallback, QueryDelegate} from './query-delegate.ts';
 import {
   delegateSymbol,
+  type ExistsOptions,
   type GetFilterType,
   type HumanReadable,
   type MaterializeOptions,
@@ -240,9 +241,14 @@ export abstract class AbstractQuery<
 
   whereExists = (
     relationship: string,
-    cb?: (q: AnyQuery) => AnyQuery,
-  ): Query<TSchema, TTable, TReturn> =>
-    this.where(({exists}) => exists(relationship, cb));
+    cbOrOptions?: ((q: AnyQuery) => AnyQuery) | ExistsOptions | undefined,
+    options?: ExistsOptions | undefined,
+  ): Query<TSchema, TTable, TReturn> => {
+    const cb = typeof cbOrOptions === 'function' ? cbOrOptions : undefined;
+    const opts = typeof cbOrOptions === 'function' ? options : cbOrOptions;
+    const flipped = opts?.flip ?? false;
+    return this.where(({exists}) => exists(relationship, cb, {flip: flipped}));
+  };
 
   related = (
     relationship: string,
@@ -528,8 +534,11 @@ export abstract class AbstractQuery<
 
   protected _exists = (
     relationship: string,
-    cb: (query: AnyQuery) => AnyQuery = q => q,
+    cb: ((query: AnyQuery) => AnyQuery) | undefined,
+    options?: ExistsOptions | undefined,
   ): Condition => {
+    cb = cb ?? (q => q);
+    const flip = options?.flip ?? false;
     const related = this.#schema.relationships[this.#tableName][relationship];
     assert(related, 'Invalid relationship');
 
@@ -564,6 +573,7 @@ export abstract class AbstractQuery<
             this.#schema.tables[destSchema],
             sq._ast,
           ),
+          flip,
         },
         op: 'EXISTS',
       };
@@ -600,6 +610,7 @@ export abstract class AbstractQuery<
             parentField: firstRelation.sourceField,
             childField: firstRelation.destField,
           },
+          flip,
           subquery: {
             table: junctionSchema,
             alias: `${SUBQ_PREFIX}${relationship}`,
@@ -620,6 +631,7 @@ export abstract class AbstractQuery<
                   this.#schema.tables[destSchema],
                   (queryToDest as QueryImpl<any, any>)._ast,
                 ),
+                flip,
               },
               op: 'EXISTS',
             },
