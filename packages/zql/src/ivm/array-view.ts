@@ -115,6 +115,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   push(change: Change): void {
     this.#dirty = true;
+    console.log('view got change', change);
     applyChange(this.#root, change, this.#schema, '', this.#format);
   }
 

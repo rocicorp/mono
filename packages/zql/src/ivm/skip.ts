@@ -62,6 +62,7 @@ export class Skip implements Operator {
       if (!this.#shouldBePresent(node.row)) {
         return;
       }
+      console.log('skip yielding', node);
       yield node;
     }
   }
@@ -88,7 +89,9 @@ export class Skip implements Operator {
 
     change satisfies AddChange | RemoveChange | ChildChange;
 
-    if (shouldBePresent(change.node.row)) {
+    const should = shouldBePresent(change.node.row);
+    console.log('skip', change, should);
+    if (should) {
       this.#output.push(change);
     }
   }

@@ -199,19 +199,31 @@ export class Join implements Input {
   }
 
   #pushChild(change: Change): void {
+    console.log('pushChild', this.#relationshipName, change);
     const pushChildChange = (childRow: Row, change: Change) => {
+      console.log('pushChildChange', this.#relationshipName, childRow, change);
       this.#inprogressChildChange = {
         change,
         position: undefined,
       };
       try {
-        const parentNodes = this.#parent.fetch({
+        const parentFetch = {
           constraint: Object.fromEntries(
             this.#parentKey.map((key, i) => [key, childRow[this.#childKey[i]]]),
           ),
-        });
+        };
+        const parentNodes = this.#parent.fetch(parentFetch);
 
+        let parents = 0;
         for (const parentNode of parentNodes) {
+          parents++;
+          console.log(
+            'pushChildChange',
+            this.#relationshipName,
+            parentNode,
+            childRow,
+            change,
+          );
           this.#inprogressChildChange.position = parentNode.row;
           const childChange: ChildChange = {
             type: 'child',
@@ -227,6 +239,15 @@ export class Join implements Input {
           };
           this.#output.push(childChange);
         }
+        console.log(
+          'pushChildChange',
+          this.#relationshipName,
+          childRow,
+          change,
+          parentFetch,
+          'parentCount',
+          parents,
+        );
       } finally {
         this.#inprogressChildChange = undefined;
       }

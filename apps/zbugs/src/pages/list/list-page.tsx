@@ -32,7 +32,7 @@ import type {IssueRow} from '../../../shared/schema.ts';
 
 let firstRowRendered = false;
 const ITEM_SIZE = 56;
-const MIN_PAGE_SIZE = 100;
+const MIN_PAGE_SIZE = 50;
 
 type Anchor = {
   startRow: IssueRow | undefined;
@@ -308,7 +308,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
           title={issue.title}
           listContext={listContext}
         >
-          {issue.title}
+          {index}--{issueArrayIndex}--{issue.id}--{issue.title}
         </IssueLink>
         <div className="issue-taglist">
           {issue.labels.map(label => (
@@ -387,6 +387,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       anchor.direction === 'backward'
         ? anchor.index - lastItem.index
         : anchor.index + issues.length - lastItem.index;
+    console.log(hasNext, issues.length, pageSize, issues);
     if (hasNext && distanceFromEnd <= nearPageEdgeThreshold) {
       const issueArrayIndex = toBoundIssueArrayIndex(
         firstItem.index - nearPageEdgeThreshold * 2,

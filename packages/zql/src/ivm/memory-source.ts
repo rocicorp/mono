@@ -248,10 +248,11 @@ export class MemorySource implements Source {
   }
 
   *#fetch(req: FetchRequest, from: Connection): Stream<Node> {
+    console.log('fetch', req);
     const callingConnectionIndex = this.#connections.indexOf(from);
     assert(callingConnectionIndex !== -1, 'Output not found');
     const conn = this.#connections[callingConnectionIndex];
-    const {sort: requestedSort} = conn;
+    const {sort: requestedSort, compareRows} = conn;
 
     const pkConstraint = primaryKeyConstraintFromFilters(
       conn.filters?.condition,
@@ -280,10 +281,12 @@ export class MemorySource implements Source {
       indexSort.push(...requestedSort);
     }
 
+    console.log('fetch', {requestedSort, indexSort});
+
     const index = this.#getOrCreateIndex(indexSort, from);
-    const {data, comparator: compare} = index;
+    const {data} = index;
     const comparator = (r1: Row, r2: Row) =>
-      compare(r1, r2) * (req.reverse ? -1 : 1);
+      compareRows(r1, r2) * (req.reverse ? -1 : 1);
 
     const startAt = req.start?.row;
 
@@ -316,6 +319,8 @@ export class MemorySource implements Source {
       scanStart = startAt;
     }
 
+    console.log('fetch scanStart', scanStart);
+
     const rowsIterable = generateRows(data, scanStart, req.reverse);
     const withOverlay = generateWithOverlay(
       startAt,
@@ -338,9 +343,12 @@ export class MemorySource implements Source {
       req.constraint,
     );
 
-    yield* conn.filters
+    for (const row of conn.filters
       ? generateWithFilter(withConstraint, conn.filters.predicate)
-      : withConstraint;
+      : withConstraint) {
+      console.log('fetch', req, 'yielding', row);
+      yield row;
+    }
   }
 
   #cleanup(req: FetchRequest, connection: Connection): Stream<Node> {
@@ -348,6 +356,7 @@ export class MemorySource implements Source {
   }
 
   push(change: SourceChange | SourceChangeSet): void {
+    console.log('pushing change', change);
     for (const _ of this.genPush(change)) {
       // Nothing to do.
     }
@@ -545,6 +554,7 @@ export function* generateWithStart(
   }
   let started = false;
   for (const node of nodes) {
+    console.log('generateWithStart', node, start, compare(node.row, start.row));
     if (!started) {
       if (start.basis === 'at') {
         if (compare(node.row, start.row) >= 0) {
@@ -557,6 +567,7 @@ export function* generateWithStart(
       }
     }
     if (started) {
+      console.log('generateWithStart yielding', node);
       yield node;
     }
   }
@@ -597,7 +608,11 @@ export function* generateWithOverlay(
     compare,
     filterPredicate,
   );
-  yield* generateWithOverlayInner(rows, overlays, compare);
+  const rs = generateWithOverlayInner(rows, overlays, compare);
+  for (const row of rs) {
+    console.log('generateWithOverlay', row);
+    yield row;
+  }
 }
 
 function computeOverlays(
@@ -773,9 +788,13 @@ function* generateRows(
   scanStart: RowBound | undefined,
   reverse: boolean | undefined,
 ) {
-  yield* data[reverse ? 'valuesFromReversed' : 'valuesFrom'](
+  const rows = data[reverse ? 'valuesFromReversed' : 'valuesFrom'](
     scanStart as Row | undefined,
   );
+  for (const row of rows) {
+    console.log('generateRows', row);
+    yield row;
+  }
 }
 
 export function stringify(change: SourceChange) {
