@@ -1,6 +1,5 @@
 import type {ClientGroup} from './client-group.ts';
 import {Client} from './client.ts';
-import {createHTMLPasswordPrompt} from './html-dialog-prompt.ts';
 import type {
   ExtendedInspectorDelegate,
   InspectorDelegate,
@@ -55,6 +54,3 @@ export class Inspector {
     return (await this.#delegate.lazy).serverVersion(this.#delegate);
   }
 }
-
-// @ts-expect-error hack
-globalThis.createHTMLPasswordPrompt = createHTMLPasswordPrompt;
