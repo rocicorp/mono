@@ -256,109 +256,110 @@ test('add renamed fields', () => {
   queryManager.flushBatch();
   expect(send).toBeCalledTimes(1);
   expect(send.mock.calls[0][0]).toMatchInlineSnapshot(`
-          [
-            "changeDesiredQueries",
-            {
-              "desiredQueriesPatch": [
+    [
+      "changeDesiredQueries",
+      {
+        "desiredQueriesPatch": [
+          {
+            "args": undefined,
+            "ast": {
+              "alias": undefined,
+              "limit": undefined,
+              "orderBy": [
+                [
+                  "owner_id",
+                  "desc",
+                ],
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "related": [
                 {
-                  "args": undefined,
-                  "ast": {
+                  "correlation": {
+                    "childField": [
+                      "id",
+                    ],
+                    "parentField": [
+                      "owner_id",
+                    ],
+                  },
+                  "flip": undefined,
+                  "hidden": undefined,
+                  "subquery": {
                     "alias": undefined,
                     "limit": undefined,
-                    "orderBy": [
-                      [
-                        "owner_id",
-                        "desc",
-                      ],
-                      [
-                        "id",
-                        "asc",
-                      ],
-                    ],
-                    "related": [
-                      {
-                        "correlation": {
-                          "childField": [
-                            "id",
-                          ],
-                          "parentField": [
-                            "owner_id",
-                          ],
-                        },
-                        "hidden": undefined,
-                        "subquery": {
-                          "alias": undefined,
-                          "limit": undefined,
-                          "orderBy": undefined,
-                          "related": undefined,
-                          "schema": undefined,
-                          "start": undefined,
-                          "table": "users",
-                          "where": undefined,
-                        },
-                        "system": undefined,
-                      },
-                    ],
+                    "orderBy": undefined,
+                    "related": undefined,
                     "schema": undefined,
-                    "start": {
-                      "exclusive": false,
-                      "row": {
-                        "id": "123",
-                        "owner_id": "foobar",
-                      },
-                    },
-                    "table": "issues",
-                    "where": {
-                      "conditions": [
-                        {
-                          "left": {
-                            "name": "owner_id",
-                            "type": "column",
-                          },
-                          "op": "IS NOT",
-                          "right": {
-                            "type": "literal",
-                            "value": "null",
-                          },
-                          "type": "simple",
-                        },
-                        {
-                          "op": "EXISTS",
-                          "related": {
-                            "correlation": {
-                              "childField": [
-                                "issue_id",
-                              ],
-                              "parentField": [
-                                "id",
-                              ],
-                            },
-                            "subquery": {
-                              "alias": undefined,
-                              "limit": undefined,
-                              "orderBy": undefined,
-                              "related": undefined,
-                              "schema": undefined,
-                              "start": undefined,
-                              "table": "comments",
-                              "where": undefined,
-                            },
-                          },
-                          "type": "correlatedSubquery",
-                        },
-                      ],
-                      "type": "and",
-                    },
+                    "start": undefined,
+                    "table": "users",
+                    "where": undefined,
                   },
-                  "hash": "2courpv3kf7et",
-                  "name": undefined,
-                  "op": "put",
-                  "ttl": 600000,
+                  "system": undefined,
                 },
               ],
+              "schema": undefined,
+              "start": {
+                "exclusive": false,
+                "row": {
+                  "id": "123",
+                  "owner_id": "foobar",
+                },
+              },
+              "table": "issues",
+              "where": {
+                "conditions": [
+                  {
+                    "left": {
+                      "name": "owner_id",
+                      "type": "column",
+                    },
+                    "op": "IS NOT",
+                    "right": {
+                      "type": "literal",
+                      "value": "null",
+                    },
+                    "type": "simple",
+                  },
+                  {
+                    "op": "EXISTS",
+                    "related": {
+                      "correlation": {
+                        "childField": [
+                          "issue_id",
+                        ],
+                        "parentField": [
+                          "id",
+                        ],
+                      },
+                      "subquery": {
+                        "alias": undefined,
+                        "limit": undefined,
+                        "orderBy": undefined,
+                        "related": undefined,
+                        "schema": undefined,
+                        "start": undefined,
+                        "table": "comments",
+                        "where": undefined,
+                      },
+                    },
+                    "type": "correlatedSubquery",
+                  },
+                ],
+                "type": "and",
+              },
             },
-          ]
-        `);
+            "hash": "2courpv3kf7et",
+            "name": undefined,
+            "op": "put",
+            "ttl": 600000,
+          },
+        ],
+      },
+    ]
+  `);
 });
 
 test('remove, recent queries max size 0', () => {
