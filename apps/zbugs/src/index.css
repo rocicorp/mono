@@ -1091,6 +1091,28 @@ textarea.autoResize {
   opacity: 1;
 }
 
+.comment-bottom-bar {
+  justify-content: space-between;
+
+  .aside {
+    display: none;
+    position: relative;
+    font-size: var(--typo-label-size);
+    color: var(--color-text-primary);
+    padding: 0;
+    border-radius: 0.5rem;
+    text-align: right;
+
+    a {
+      color: var(--color-primary-cta);
+    }
+  }
+}
+
+.comment-composer:focus-within .aside {
+  display: block;
+}
+
 /************/
 /* Markdown */
 /************/
