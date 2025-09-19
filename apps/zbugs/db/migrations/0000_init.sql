@@ -93,3 +93,22 @@ CREATE INDEX "issue_open_modified_idx" ON "issue" USING btree ("open","modified"
 CREATE INDEX "issuelabel_issueid_idx" ON "issueLabel" USING btree ("issueID");--> statement-breakpoint
 CREATE UNIQUE INDEX "user_githubid_idx" ON "user" USING btree ("githubID");--> statement-breakpoint
 CREATE UNIQUE INDEX "user_login_idx" ON "user" USING btree ("login");
+----> publication
+CREATE PUBLICATION zero_zbugs
+  FOR TABLE
+    issue,
+    "viewState",
+    comment,
+    label,
+    "issueLabel",
+    emoji,
+    "userPref",
+    "issueNotifications",
+    "user" (
+      id,
+      login,
+      name,
+      avatar,
+      role,
+      "githubID"
+    );
