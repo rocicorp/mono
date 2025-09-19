@@ -1,29 +1,24 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
-import type {Row, Value} from '../../../zero-protocol/src/data.ts';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
-import type {Change, ChildChange} from './change.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Change} from './change.ts';
 import {compareValues, valuesEqual, type Node} from './data.ts';
 import {
   throwOutput,
   type FetchRequest,
   type Input,
   type Output,
-  type Storage,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import {take, type Stream} from './stream.ts';
+import {first, type Stream} from './stream.ts';
 
 type Args = {
   parent: Input;
   child: Input;
-  storage: Storage;
   // The order of the keys does not have to match but the length must match.
   // The nth key in parentKey corresponds to the nth key in childKey.
   parentKey: CompoundKey;
   childKey: CompoundKey;
-
-  // TODO: Change parentKey & childKey to a correlation
 
   relationshipName: string;
   hidden: boolean;
@@ -48,7 +43,6 @@ type ParentChangeOverlay = {
 export class FlippedJoin implements Input {
   readonly #parent: Input;
   readonly #child: Input;
-  readonly #storage: Storage;
   readonly #parentKey: CompoundKey;
   readonly #childKey: CompoundKey;
   readonly #relationshipName: string;
@@ -61,7 +55,6 @@ export class FlippedJoin implements Input {
   constructor({
     parent,
     child,
-    storage,
     parentKey,
     childKey,
     relationshipName,
@@ -74,7 +67,6 @@ export class FlippedJoin implements Input {
     );
     this.#parent = parent;
     this.#child = child;
-    this.#storage = storage;
     this.#parentKey = parentKey;
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
@@ -114,20 +106,25 @@ export class FlippedJoin implements Input {
   }
 
   *fetch(req: FetchRequest): Stream<Node> {
+    // TODO: optimized version for cardinality one child relationships
     const parentNodes = [...this.#parent.fetch({})];
     const childIterators = [];
     let threw = false;
     try {
       for (const parentNode of parentNodes) {
-        // TODO merge in req constraints
+        // TODO can there be conflicts between req.constraint
+        // and the constraint for the child fetch?
         const stream = this.#child.fetch({
           ...req,
-          constraint: Object.fromEntries(
-            this.#childKey.map((key, i) => [
-              key,
-              parentNode.row[this.#parentKey[i]],
-            ]),
-          ),
+          constraint: {
+            ...req.constraint,
+            ...Object.fromEntries(
+              this.#childKey.map((key, i) => [
+                key,
+                parentNode.row[this.#parentKey[i]],
+              ]),
+            ),
+          },
         });
         const iterator = stream[Symbol.iterator]();
         childIterators.push(iterator);
@@ -219,15 +216,7 @@ export class FlippedJoin implements Input {
     }
   }
 
-  *cleanup(_req: FetchRequest): Stream<Node> {
-    // for (const parentNode of this.#parent.cleanup(req)) {
-    //   yield this.#processParentNode(
-    //     parentNode.row,
-    //     parentNode.relationships,
-    //     'cleanup',
-    //   );
-    // }
-  }
+  *cleanup(_req: FetchRequest): Stream<Node> {}
 
   #pushParent(change: Change): void {
     const pushParentChange = (exists?: boolean) => {
@@ -327,18 +316,79 @@ export class FlippedJoin implements Input {
   }
 
   #pushChild(change: Change): void {
-    // TODO factor into helper
-    const parentNodeStream = () =>
+    const parentNodeStream = (node: Node) => () =>
       this.#parent.fetch({
         constraint: Object.fromEntries(
-          this.#parentKey.map((key, i) => [
-            key,
-            change.node.row[this.#childKey[i]],
-          ]),
+          this.#parentKey.map((key, i) => [key, node.row[this.#childKey[i]]]),
         ),
       });
+    // TODO for edit we need to check oldNode
+    if (first(parentNodeStream(change.node)()) === undefined) {
+      return;
+    }
+
+    const flip = (node: Node) => ({
+      ...node,
+      relationships: {
+        ...node.relationships,
+        [this.#relationshipName]: parentNodeStream(node),
+      },
+    });
+
+    switch (change.type) {
+      case 'add':
+      case 'remove':
+      case 'child': {
+        if (first(parentNodeStream(change.node)()) === undefined) {
+          return;
+        }
+        this.#output.push({
+          ...change,
+          node: flip(change.node),
+        });
+        break;
+      }
+      case 'edit': {
+        const oldHasParent =
+          first(parentNodeStream(change.oldNode)()) !== undefined;
+        const hasParent = first(parentNodeStream(change.node)()) !== undefined;
+        // Assert the edit could not change the relationship.
+        assert(
+          rowEqualsForCompoundKey(
+            change.oldNode.row,
+            change.node.row,
+            this.#childKey,
+          ),
+          `Child edit must not change relationship.`,
+        );
+        if (oldHasParent && hasParent) {
+          this.#output.push({
+            type: 'edit',
+            oldNode: flip(change.oldNode),
+            node: flip(change.node),
+          });
+          break;
+        }
+        if (oldHasParent) {
+          this.#output.push({
+            type: 'remove',
+            node: flip(change.node),
+          });
+        }
+        if (hasParent) {
+          this.#output.push({
+            type: 'add',
+            node: flip(change.node),
+          });
+        }
+        break;
+      }
+      default:
+        unreachable(change);
+    }
   }
 
+  // TODO share with join
   *#overlayChange(stream: Stream<Node>, overlay: Change): Stream<Node> {
     let applied = false;
     let editOldApplied = false;
@@ -436,88 +486,6 @@ export class FlippedJoin implements Input {
     assert(applied);
   }
 
-  #processParentNode(
-    parentNodeRow: Row,
-    parentNodeRelations: Record<string, () => Stream<Node>>,
-    mode: ProcessParentMode,
-  ): Node {
-    let method: ProcessParentMode = mode;
-    let storageUpdated = false;
-    const childStream = () => {
-      if (!storageUpdated) {
-        if (mode === 'cleanup') {
-          this.#storage.del(
-            makeStorageKey(
-              this.#parentKey,
-              this.#parent.getSchema().primaryKey,
-              parentNodeRow,
-            ),
-          );
-          const empty =
-            [
-              ...take(
-                this.#storage.scan({
-                  prefix: makeStorageKeyPrefix(parentNodeRow, this.#parentKey),
-                }),
-                1,
-              ),
-            ].length === 0;
-          method = empty ? 'cleanup' : 'fetch';
-        }
-
-        storageUpdated = true;
-        // Defer the work to update storage until the child stream
-        // is actually accessed
-        if (mode === 'fetch') {
-          this.#storage.set(
-            makeStorageKey(
-              this.#parentKey,
-              this.#parent.getSchema().primaryKey,
-              parentNodeRow,
-            ),
-            true,
-          );
-        }
-      }
-
-      const stream = this.#child[method]({
-        constraint: Object.fromEntries(
-          this.#childKey.map((key, i) => [
-            key,
-            parentNodeRow[this.#parentKey[i]],
-          ]),
-        ),
-      });
-
-      if (
-        this.#inprogressChildChange &&
-        this.#isJoinMatch(
-          parentNodeRow,
-          this.#inprogressChildChange.change.node.row,
-        ) &&
-        this.#inprogressChildChange.position &&
-        this.#schema.compareRows(
-          parentNodeRow,
-          this.#inprogressChildChange.position,
-        ) > 0
-      ) {
-        return this.#overlayParentChange(
-          stream,
-          this.#inprogressChildChange.change,
-        );
-      }
-      return stream;
-    };
-
-    return {
-      row: parentNodeRow,
-      relationships: {
-        ...parentNodeRelations,
-        [this.#relationshipName]: childStream,
-      },
-    };
-  }
-
   #isJoinMatch(parent: Row, child: Row) {
     for (let i = 0; i < this.#parentKey.length; i++) {
       if (!valuesEqual(parent[this.#parentKey[i]], child[this.#childKey[i]])) {
@@ -526,35 +494,6 @@ export class FlippedJoin implements Input {
     }
     return true;
   }
-}
-
-type ProcessParentMode = 'fetch' | 'cleanup';
-
-/** Exported for testing. */
-export function makeStorageKeyForValues(values: readonly Value[]): string {
-  const json = JSON.stringify(['pKeySet', ...values]);
-  return json.substring(1, json.length - 1) + ',';
-}
-
-/** Exported for testing. */
-export function makeStorageKeyPrefix(row: Row, key: CompoundKey): string {
-  return makeStorageKeyForValues(key.map(k => row[k]));
-}
-
-/** Exported for testing.
- * This storage key tracks the primary keys seen for each unique
- * value joined on. This is used to know when to cleanup a child's state.
- */
-export function makeStorageKey(
-  key: CompoundKey,
-  primaryKey: PrimaryKey,
-  row: Row,
-): string {
-  const values: Value[] = key.map(k => row[k]);
-  for (const key of primaryKey) {
-    values.push(row[key]);
-  }
-  return makeStorageKeyForValues(values);
 }
 
 function rowEqualsForCompoundKey(a: Row, b: Row, key: CompoundKey): boolean {
