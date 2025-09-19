@@ -6,6 +6,11 @@ import {UnionFanOut} from './union-fan-out.ts';
 import {createSource} from './test/source-factory.ts';
 
 const lc = createSilentLogContext();
+const mockFanIn = {
+  fanOutStartedPushing() {},
+  fanOutDonePushing() {},
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+} as any;
 
 test('push broadcasts change to all outputs', () => {
   const s = createSource(
@@ -18,6 +23,7 @@ test('push broadcasts change to all outputs', () => {
   const connector = s.connect([['a', 'asc']]);
 
   const fanOut = new UnionFanOut(connector);
+  fanOut.setFanIn(mockFanIn);
   const catch1 = new Catch(fanOut);
   const catch2 = new Catch(fanOut);
   const catch3 = new Catch(fanOut);
@@ -73,6 +79,7 @@ test('setOutput adds new output to list', () => {
   const connector = s.connect([['a', 'asc']]);
 
   const fanOut = new UnionFanOut(connector);
+  fanOut.setFanIn(mockFanIn);
   const catch1 = new Catch(fanOut);
 
   s.push({type: 'add', row: {a: 1}});
