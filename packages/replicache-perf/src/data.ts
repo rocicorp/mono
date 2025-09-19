@@ -48,5 +48,6 @@ export async function getTmcwData(): Promise<TmcwData> {
   const response = await fetch(
     new URL('../resources/tmcw.json', import.meta.url),
   );
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
   return response.json();
 }

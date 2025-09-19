@@ -325,26 +325,33 @@ async function runInBrowser(
       process.exit(1);
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     if (data[0] === 'result') {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
       const result = data[1];
 
       if (options.format === 'json') {
         jsonEntries.push(result);
       } else if (options.format === 'bmf') {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
         bmf = {...bmf, ...toBencherMetricFormat(result)};
       }
 
       switch (options.format) {
         case 'json':
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
           jsonEntries.push(...createGithubActionBenchmarkJSONEntries(result));
           break;
         case 'bmf':
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
           bmf = {...bmf, ...toBencherMetricFormat(result)};
           break;
         case 'replicache':
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
           logLine(formatAsReplicache(result), options);
           break;
         case 'benchmarkJS':
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
           logLine(formatAsBenchmarkJS(result), options);
           break;
       }

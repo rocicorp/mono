@@ -63,6 +63,7 @@ export async function runAll(groups: string[], runs: string[]): Promise<void> {
         out.textContent += formatAsReplicache(result) + '\n';
       }
     } catch (e) {
+      // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
       out.textContent += `${b.name} had an error: ${e}` + '\n';
     }
   }
