@@ -247,23 +247,26 @@ export function benchmarkRebase(opts: {
         pullInterval: null,
         pushDelay: 9999,
         mutators: {putMap},
-        puller: () => ({
-          response: {
-            cookie: 1,
-            lastMutationIDChanges: {},
-            patch: [
-              {
-                op: 'put',
-                key: 'pull-done',
-                value: true,
-              },
-            ],
-          },
-          httpRequestInfo: {
-            httpStatusCode: 200,
-            errorMessage: '',
-          },
-        }),
+        puller: async () => {
+          await Promise.resolve(); // Make it properly async as requested
+          return {
+            response: {
+              cookie: 1,
+              lastMutationIDChanges: {},
+              patch: [
+                {
+                  op: 'put',
+                  key: 'pull-done',
+                  value: true,
+                },
+              ],
+            },
+            httpRequestInfo: {
+              httpStatusCode: 200,
+              errorMessage: '',
+            },
+          };
+        },
       }));
 
       // Create a bunch of keys.

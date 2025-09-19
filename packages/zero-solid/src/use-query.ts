@@ -132,7 +132,7 @@ export function useQuery<
 }
 
 function normalize<T>(
-  options?: T | Accessor<T | undefined> | undefined,
+  options?: T | Accessor<T>,
 ): T | undefined {
   return typeof options === 'function' ? (options as Accessor<T>)() : options;
 }

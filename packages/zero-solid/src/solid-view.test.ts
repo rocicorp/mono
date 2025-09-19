@@ -2484,11 +2484,11 @@ test('queryComplete promise', async () => {
   expect(resultDetails()).toEqual({type: 'unknown'});
 
   queryCompleteResolver.resolve(true);
-  await 1;
+  await Promise.resolve();
   expect(resultDetails()).toEqual({type: 'complete'});
 });
 
-const schema = createSchema({
+const _schema = createSchema({
   tables: [
     table('test')
       .columns({

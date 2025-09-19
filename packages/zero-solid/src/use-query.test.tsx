@@ -69,9 +69,8 @@ function newMockZero(
     query: Q,
     factoryOrOptions?:
       | ViewFactory<Schema, QueryTable<Q>, QueryReturn<Q>, T>
-      | MaterializeOptions
-      | undefined,
-    maybeOptions?: MaterializeOptions | undefined,
+      | MaterializeOptions,
+    maybeOptions?: MaterializeOptions,
   ) {
     return materialize(query, queryDelegate, factoryOrOptions, maybeOptions);
   }
@@ -91,7 +90,6 @@ function useQueryWithZeroProvider<
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
 ) {
   const isZeroSignal = typeof zeroOrZeroSignal === 'function';
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   const MockZeroProvider = (props: {children: JSX.Element}) => (
     <ZeroProvider zero={isZeroSignal ? zeroOrZeroSignal() : zeroOrZeroSignal}>
       {props.children}
@@ -119,7 +117,7 @@ test('useQuery', async () => {
   expect(resultType()).toEqual({type: 'unknown'});
 
   must(queryDelegate.gotCallbacks[0])(true);
-  await 1;
+  await Promise.resolve();
 
   ms.push({row: {a: 3, b: 'c'}, type: 'add'});
   queryDelegate.commit();
@@ -252,7 +250,7 @@ test('useQuery query deps change', async () => {
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(rowLog).toEqual([]);
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
@@ -266,7 +264,7 @@ test('useQuery query deps change', async () => {
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(rowLog).toEqual([]);
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
@@ -312,14 +310,14 @@ test('useQuery query deps change, reconcile minimizes reactive updates', async (
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(row0Log).toEqual([]);
   expect(row1Log).toEqual([]);
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
   resetLogs();
 
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  // eslint-disable-next-line @typescript-eslint/unbound-method
   setQuery(tableQuery.where(({or, cmp}) => or(cmp('a', 1), cmp('a', 10))));
   expect(row0Log).toEqual([]);
   expect(row1Log).toEqual([]);
@@ -327,14 +325,14 @@ test('useQuery query deps change, reconcile minimizes reactive updates', async (
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(row0Log).toEqual([]);
   expect(row1Log).toEqual([]);
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
   resetLogs();
 
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  // eslint-disable-next-line @typescript-eslint/unbound-method
   setQuery(tableQuery.where(({or, cmp}) => or(cmp('a', 1), cmp('a', 2))));
   expect(row0Log).toEqual([]);
   expect(row1Log).toEqual([
@@ -344,7 +342,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates', async (
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(row0Log).toEqual([]);
   expect(row1Log).toEqual([]);
@@ -468,7 +466,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(row0IDLog).toEqual([]);
   expect(row1IDLog).toEqual([]);
@@ -480,6 +478,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   // eslint-disable-next-line @typescript-eslint/no-floating-promises
   setQuery(
     issueQuery
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i10')))
       .related('comments'),
   );
@@ -515,7 +514,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(row0IDLog).toEqual([]);
   expect(row1IDLog).toEqual([]);
@@ -524,9 +523,9 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
   resetLogs();
 
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
   setQuery(
     issueQuery
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i2')))
       .related('comments'),
   );
@@ -567,16 +566,16 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(row0IDLog).toEqual([]);
   expect(row1IDLog).toEqual([]);
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
   resetLogs();
 
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
   setQuery(
     issueQuery
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i2')))
       .related('comments', q => q.where('id', 'c1')),
   );
@@ -611,7 +610,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(row0IDLog).toEqual([]);
   expect(row1IDLog).toEqual([]);
@@ -619,9 +618,9 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
 
   resetLogs();
 
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
   setQuery(
     issueQuery
+      // eslint-disable-next-line @typescript-eslint/unbound-method
       .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i2')))
       .related('comments', q => q.where('id', 'c2')),
   );
@@ -656,7 +655,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(row0IDLog).toEqual([]);
   expect(row1IDLog).toEqual([]);
@@ -783,6 +782,7 @@ test('useQuery view disposed when zero instance changes, new view created', () =
 
   expect(mockZero0MaterializeSpy).toHaveBeenCalledTimes(1);
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const view = mockZero0MaterializeSpy.mock.results[0].value;
   const destroySpy = vi.spyOn(view, 'destroy');
 
