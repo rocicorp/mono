@@ -363,7 +363,32 @@ function applyFilterWithFlips(
       break;
     }
     case 'correlatedSubquery': {
-      // FLIP JOIN!
+      const sq = condition.related;
+      const parent = buildPipelineInternal(
+        sq.subquery,
+        delegate,
+        '',
+        `${name}.${sq.subquery.alias}`,
+        sq.correlation.childField,
+      );
+      const flippedJoin = new FlippedJoin({
+        parent,
+        child: end,
+        childKey: sq.correlation.parentField,
+        parentKey: sq.correlation.childField,
+        relationshipName: must(
+          sq.subquery.alias,
+          'Subquery must have an alias',
+        ),
+        hidden: sq.hidden ?? false,
+        system: sq.system ?? 'client',
+      });
+      delegate.addEdge(end, flippedJoin);
+      delegate.addEdge(parent, flippedJoin);
+      end = delegate.decorateInput(
+        flippedJoin,
+        `${name}:flipped-join(${sq.subquery.alias})`,
+      );
       break;
     }
   }
