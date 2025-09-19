@@ -1,13 +1,21 @@
 import {expect, test} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {AST, Disjunction} from '../../../zero-protocol/src/ast.ts';
+import type {
+  AST,
+  Condition,
+  Conjunction,
+  CorrelatedSubqueryCondition,
+  Disjunction,
+} from '../../../zero-protocol/src/ast.ts';
 import {Catch} from '../ivm/catch.ts';
 import {createSource} from '../ivm/test/source-factory.ts';
 import {
   bindStaticParameters,
   buildPipeline,
+  conditionIncludesFlippedSubqueryAtAnyLevel,
   groupSubqueryConditions,
+  partitionBranches,
 } from './builder.ts';
 import {TestBuilderDelegate} from './test-builder-delegate.ts';
 
@@ -2363,6 +2371,207 @@ test('always true literal comparison - everything goes through', () => {
       },
     ]
   `);
+});
+
+test('conditionIncludesFlippedSubqueryAtAnyLevel', () => {
+  const simpleCondition: Condition = {
+    type: 'simple',
+    left: {type: 'column', name: 'id'},
+    op: '=',
+    right: {type: 'literal', value: 1},
+  };
+  expect(conditionIncludesFlippedSubqueryAtAnyLevel(simpleCondition)).toBe(
+    false,
+  );
+
+  const nonFlippedCsq: CorrelatedSubqueryCondition = {
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    related: {
+      system: 'client',
+      correlation: {parentField: ['id'], childField: ['userID']},
+      flip: false,
+      subquery: {
+        table: 'test',
+        alias: 'test',
+      },
+    },
+  };
+  expect(conditionIncludesFlippedSubqueryAtAnyLevel(nonFlippedCsq)).toBe(false);
+
+  const flippedCsq: CorrelatedSubqueryCondition = {
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    related: {
+      system: 'client',
+      correlation: {parentField: ['id'], childField: ['userID']},
+      flip: true,
+      subquery: {
+        table: 'test',
+        alias: 'test',
+      },
+    },
+  };
+  expect(conditionIncludesFlippedSubqueryAtAnyLevel(flippedCsq)).toBe(true);
+
+  const andWithFlipped: Conjunction = {
+    type: 'and',
+    conditions: [simpleCondition, flippedCsq],
+  };
+  expect(conditionIncludesFlippedSubqueryAtAnyLevel(andWithFlipped)).toBe(true);
+
+  const orWithFlipped: Disjunction = {
+    type: 'or',
+    conditions: [simpleCondition, flippedCsq],
+  };
+  expect(conditionIncludesFlippedSubqueryAtAnyLevel(orWithFlipped)).toBe(true);
+
+  const deeplyNestedFlipped: Conjunction = {
+    type: 'and',
+    conditions: [
+      {
+        type: 'or',
+        conditions: [
+          {
+            type: 'and',
+            conditions: [flippedCsq],
+          },
+        ],
+      },
+    ],
+  };
+  expect(conditionIncludesFlippedSubqueryAtAnyLevel(deeplyNestedFlipped)).toBe(
+    true,
+  );
+
+  const csqWithoutFlip: CorrelatedSubqueryCondition = {
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    related: {
+      system: 'client',
+      correlation: {parentField: ['id'], childField: ['userID']},
+      // no flip property
+      subquery: {
+        table: 'test',
+        alias: 'test',
+      },
+    },
+  };
+  expect(conditionIncludesFlippedSubqueryAtAnyLevel(csqWithoutFlip)).toBe(
+    false,
+  );
+});
+
+test('partitionBranches', () => {
+  const conditions: Condition[] = [
+    {
+      type: 'simple',
+      left: {type: 'column', name: 'id'},
+      op: '=',
+      right: {type: 'literal', value: 1},
+    },
+    {
+      type: 'or',
+      conditions: [
+        {
+          type: 'simple',
+          left: {type: 'column', name: 'name'},
+          op: '=',
+          right: {type: 'literal', value: 'foo'},
+        },
+      ],
+    },
+    {
+      type: 'and',
+      conditions: [
+        {
+          type: 'simple',
+          left: {type: 'column', name: 'age'},
+          op: '>',
+          right: {type: 'literal', value: 18},
+        },
+      ],
+    },
+  ];
+
+  // Partition by type === 'simple'
+  const [simpleMatched, simpleNotMatched] = partitionBranches(
+    conditions,
+    c => c.type === 'simple',
+  );
+  expect(simpleMatched).toHaveLength(1);
+  expect(simpleNotMatched).toHaveLength(2);
+  expect(simpleMatched[0]).toBe(conditions[0]);
+
+  // Partition by type === 'or'
+  const [orMatched, orNotMatched] = partitionBranches(
+    conditions,
+    c => c.type === 'or',
+  );
+  expect(orMatched).toHaveLength(1);
+  expect(orNotMatched).toHaveLength(2);
+  expect(orMatched[0]).toBe(conditions[1]);
+
+  // Empty array
+  const [emptyMatched, emptyNotMatched] = partitionBranches(
+    [],
+    c => c.type === 'simple',
+  );
+  expect(emptyMatched).toHaveLength(0);
+  expect(emptyNotMatched).toHaveLength(0);
+
+  // All match
+  const [allMatched, noneMatched] = partitionBranches(conditions, () => true);
+  expect(allMatched).toHaveLength(3);
+  expect(noneMatched).toHaveLength(0);
+
+  // None match
+  const [noneMatched2, allNotMatched] = partitionBranches(
+    conditions,
+    () => false,
+  );
+  expect(noneMatched2).toHaveLength(0);
+  expect(allNotMatched).toHaveLength(3);
+
+  // Test with flipped subqueries
+  const flippedConditions: Condition[] = [
+    {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      related: {
+        system: 'client',
+        correlation: {parentField: ['id'], childField: ['userID']},
+        flip: true,
+        subquery: {table: 'test1', alias: 'test1'},
+      },
+    },
+    {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      related: {
+        system: 'client',
+        correlation: {parentField: ['id'], childField: ['userID']},
+        flip: false,
+        subquery: {table: 'test2', alias: 'test2'},
+      },
+    },
+    {
+      type: 'simple',
+      left: {type: 'column', name: 'id'},
+      op: '=',
+      right: {type: 'literal', value: 1},
+    },
+  ];
+
+  const [flipped, notFlipped] = partitionBranches(
+    flippedConditions,
+    conditionIncludesFlippedSubqueryAtAnyLevel,
+  );
+  expect(flipped).toHaveLength(1);
+  expect(notFlipped).toHaveLength(2);
+  expect(flipped[0]).toBe(flippedConditions[0]);
+  expect(notFlipped[0]).toBe(flippedConditions[1]);
+  expect(notFlipped[1]).toBe(flippedConditions[2]);
 });
 
 test('groupSubqueryConditions', () => {
