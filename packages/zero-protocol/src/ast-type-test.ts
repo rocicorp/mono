@@ -25,9 +25,9 @@ import type {
 
 type MakeAllFieldsRequired<T> = {
   [K in keyof T]-?: MakeAllFieldsRequired<T[K]>;
-});
+};
 
-void(((
+void ((
   t: Omit<CorrelatedSubquery, 'subquery'>,
   inferredT: v.Infer<typeof correlatedSubquerySchemaOmitSubquery>,
   tR: MakeAllFieldsRequired<Omit<CorrelatedSubquery, 'subquery'>>,
@@ -46,7 +46,7 @@ void(((
   >;
 });
 
-void((
+void ((
   t: AST,
   inferredT: v.Infer<typeof astSchema>,
   tR: MakeAllFieldsRequired<AST>,
@@ -59,7 +59,7 @@ void((
   tR satisfies MakeAllFieldsRequired<v.Infer<typeof astSchema>>;
 });
 
-void((
+void ((
   t: Condition,
   inferredT: v.Infer<typeof conditionSchema>,
   tR: MakeAllFieldsRequired<Condition>,
@@ -72,7 +72,7 @@ void((
   tR satisfies MakeAllFieldsRequired<v.Infer<typeof conditionSchema>>;
 });
 
-void((
+void ((
   t: CorrelatedSubquery,
   inferredT: v.Infer<typeof correlatedSubquerySchema>,
   tR: MakeAllFieldsRequired<CorrelatedSubquery>,
@@ -85,7 +85,7 @@ void((
   tR satisfies MakeAllFieldsRequired<v.Infer<typeof correlatedSubquerySchema>>;
 });
 
-void((
+void ((
   t: CorrelatedSubqueryCondition,
   inferredT: v.Infer<typeof correlatedSubqueryConditionSchema>,
   tR: MakeAllFieldsRequired<CorrelatedSubqueryCondition>,
@@ -102,7 +102,7 @@ void((
   >;
 });
 
-void((
+void ((
   t: CorrelatedSubqueryConditionOperator,
   inferredT: v.Infer<typeof correlatedSubqueryConditionOperatorSchema>,
   tR: MakeAllFieldsRequired<CorrelatedSubqueryConditionOperator>,
@@ -119,7 +119,7 @@ void((
   >;
 });
 
-void((
+void ((
   t: EqualityOps,
   inferredT: v.Infer<typeof equalityOpsSchema>,
   tR: MakeAllFieldsRequired<EqualityOps>,
@@ -132,7 +132,7 @@ void((
   tR satisfies MakeAllFieldsRequired<v.Infer<typeof equalityOpsSchema>>;
 });
 
-void((
+void ((
   t: LikeOps,
   inferredT: v.Infer<typeof likeOpsSchema>,
   tR: MakeAllFieldsRequired<LikeOps>,
@@ -145,7 +145,7 @@ void((
   tR satisfies MakeAllFieldsRequired<v.Infer<typeof likeOpsSchema>>;
 });
 
-void((
+void ((
   t: OrderOps,
   inferredT: v.Infer<typeof orderOpsSchema>,
   tR: MakeAllFieldsRequired<OrderOps>,
@@ -158,7 +158,7 @@ void((
   tR satisfies MakeAllFieldsRequired<v.Infer<typeof orderOpsSchema>>;
 });
 
-void((
+void ((
   t: Ordering,
   inferredT: v.Infer<typeof orderingSchema>,
   tR: MakeAllFieldsRequired<Ordering>,
@@ -171,7 +171,7 @@ void((
   tR satisfies MakeAllFieldsRequired<v.Infer<typeof orderingSchema>>;
 });
 
-void((
+void ((
   t: SimpleOperator,
   inferredT: v.Infer<typeof simpleOperatorSchema>,
   tR: MakeAllFieldsRequired<SimpleOperator>,
