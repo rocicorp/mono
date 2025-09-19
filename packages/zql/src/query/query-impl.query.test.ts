@@ -646,7 +646,7 @@ describe('joins and filters', () => {
       .related('owner')
       .related('comments', q => q.related('author').related('revisions'))
       .where('id', '=', '0001');
-    const data = await query;
+    const data = await query.run();
     expect(data).toMatchInlineSnapshot(`
       [
         {
@@ -748,15 +748,13 @@ test('run', async () => {
     'issue 1',
   );
 
-  const singleFilterRows = await issueQuery1;
+  const singleFilterRows = await issueQuery1.run();
   queryDelegate.synchronouslyCallNextGotCallback = true;
-  const doubleFilterRows = await issueQuery1.where('closed', '=', false);
+  const doubleFilterRows = await issueQuery1.where('closed', '=', false).run();
   queryDelegate.synchronouslyCallNextGotCallback = true;
-  const doubleFilterWithNoResultsRows = await issueQuery1.where(
-    'closed',
-    '=',
-    true,
-  );
+  const doubleFilterWithNoResultsRows = await issueQuery1
+    .where('closed', '=', true)
+    .run();
   expect(singleFilterRows.map(r => r.id)).toEqual(['0001']);
   expect(doubleFilterRows.map(r => r.id)).toEqual(['0001']);
   expect(doubleFilterWithNoResultsRows).toEqual([]);
@@ -766,7 +764,7 @@ test('run', async () => {
     .related('labels')
     .related('owner')
     .related('comments');
-  const rows = await issueQuery2;
+  const rows = await issueQuery2.run();
   expect(rows).toMatchInlineSnapshot(`
     [
       {
@@ -862,7 +860,9 @@ describe('pk lookup optimization', () => {
 
   test('pk lookup', async () => {
     expect(
-      await newQuery(queryDelegate, schema, 'issue').where('id', '=', '0001'),
+      await newQuery(queryDelegate, schema, 'issue')
+        .where('id', '=', '0001')
+        .run(),
     ).toMatchInlineSnapshot(`
       [
         {
@@ -877,7 +877,9 @@ describe('pk lookup optimization', () => {
       ]
     `);
     expect(
-      await newQuery(queryDelegate, schema, 'user').where('id', '=', '0001'),
+      await newQuery(queryDelegate, schema, 'user')
+        .where('id', '=', '0001')
+        .run(),
     ).toMatchInlineSnapshot(`
       [
         {
@@ -897,7 +899,8 @@ describe('pk lookup optimization', () => {
     expect(
       await newQuery(queryDelegate, schema, 'issue')
         .where('id', '=', '0001')
-        .orderBy('id', 'desc'),
+        .orderBy('id', 'desc')
+        .run(),
     ).toMatchInlineSnapshot(`
       [
         {
@@ -915,7 +918,8 @@ describe('pk lookup optimization', () => {
     expect(
       await newQuery(queryDelegate, schema, 'user')
         .where('id', '=', '0001')
-        .orderBy('name', 'desc'),
+        .orderBy('name', 'desc')
+        .run(),
     ).toMatchInlineSnapshot(`
       [
         {
@@ -935,7 +939,8 @@ describe('pk lookup optimization', () => {
     expect(
       await newQuery(queryDelegate, schema, 'issue')
         .where('id', '=', '0001')
-        .related('comments', q => q.where('id', '=', '0001')),
+        .related('comments', q => q.where('id', '=', '0001'))
+        .run(),
     ).toMatchInlineSnapshot(`
       [
         {
@@ -965,7 +970,8 @@ describe('pk lookup optimization', () => {
     expect(
       await newQuery(queryDelegate, schema, 'issue')
         .where('id', '=', '0001')
-        .whereExists('comments', q => q.where('id', '=', '0001')),
+        .whereExists('comments', q => q.where('id', '=', '0001'))
+        .run(),
     ).toMatchInlineSnapshot(`
       [
         {
@@ -985,7 +991,8 @@ describe('pk lookup optimization', () => {
     expect(
       await newQuery(queryDelegate, schema, 'issue')
         .where('id', '=', '0001')
-        .related('labels', q => q.where('id', '=', '0001')),
+        .related('labels', q => q.where('id', '=', '0001'))
+        .run(),
     ).toMatchInlineSnapshot(`
       [
         {
@@ -1012,7 +1019,8 @@ describe('pk lookup optimization', () => {
     expect(
       await newQuery(queryDelegate, schema, 'issue')
         .where('id', '=', '0001')
-        .whereExists('labels', q => q.where('id', '=', '0001')),
+        .whereExists('labels', q => q.where('id', '=', '0001'))
+        .run(),
     ).toMatchInlineSnapshot(`
       [
         {
@@ -1030,12 +1038,14 @@ describe('pk lookup optimization', () => {
 
   test('pk constraints in or branches', async () => {
     expect(
-      await newQuery(queryDelegate, schema, 'issue').where(({or, exists}) =>
-        or(
-          exists('comments', q => q.where('id', '=', '0001')),
-          exists('labels', q => q.where('id', '=', '0001')),
-        ),
-      ),
+      await newQuery(queryDelegate, schema, 'issue')
+        .where(({or, exists}) =>
+          or(
+            exists('comments', q => q.where('id', '=', '0001')),
+            exists('labels', q => q.where('id', '=', '0001')),
+          ),
+        )
+        .run(),
     ).toMatchInlineSnapshot(`
       [
         {
@@ -1055,7 +1065,8 @@ describe('pk lookup optimization', () => {
     expect(
       await newQuery(queryDelegate, schema, 'issue')
         .whereExists('comments', q => q.where('id', '=', '0001'))
-        .whereExists('labels', q => q.where('id', '=', '0001')),
+        .whereExists('labels', q => q.where('id', '=', '0001'))
+        .run(),
     ).toMatchInlineSnapshot(`
       [
         {
@@ -1166,7 +1177,7 @@ test('json columns are returned as JS objects', async () => {
   const queryDelegate = new QueryDelegateImpl({callGot: true});
   addData(queryDelegate);
 
-  const rows = await newQuery(queryDelegate, schema, 'user');
+  const rows = await newQuery(queryDelegate, schema, 'user').run();
   expect(rows).toMatchInlineSnapshot(`
     [
       {
@@ -1200,9 +1211,11 @@ test('complex expression', async () => {
   const queryDelegate = new QueryDelegateImpl({callGot: true});
   addData(queryDelegate);
 
-  let rows = await newQuery(queryDelegate, schema, 'issue').where(({or, cmp}) =>
-    or(cmp('title', '=', 'issue 1'), cmp('title', '=', 'issue 2')),
-  );
+  let rows = await newQuery(queryDelegate, schema, 'issue')
+    .where(({or, cmp}) =>
+      or(cmp('title', '=', 'issue 1'), cmp('title', '=', 'issue 2')),
+    )
+    .run();
   expect(rows).toMatchInlineSnapshot(`
     [
       {
@@ -1226,13 +1239,14 @@ test('complex expression', async () => {
     ]
   `);
 
-  rows = await newQuery(queryDelegate, schema, 'issue').where(
-    ({and, cmp, or}) =>
+  rows = await newQuery(queryDelegate, schema, 'issue')
+    .where(({and, cmp, or}) =>
       and(
         cmp('ownerId', '=', '0001'),
         or(cmp('title', '=', 'issue 1'), cmp('title', '=', 'issue 2')),
       ),
-  );
+    )
+    .run();
 
   expect(rows).toMatchInlineSnapshot(`
     [
@@ -1253,11 +1267,9 @@ test('null compare', async () => {
   const queryDelegate = new QueryDelegateImpl({callGot: true});
   addData(queryDelegate);
 
-  let rows = await newQuery(queryDelegate, schema, 'issue').where(
-    'ownerId',
-    'IS',
-    null,
-  );
+  let rows = await newQuery(queryDelegate, schema, 'issue')
+    .where('ownerId', 'IS', null)
+    .run();
   expect(rows).toMatchInlineSnapshot(`
     [
       {
@@ -1272,11 +1284,9 @@ test('null compare', async () => {
     ]
   `);
 
-  rows = await newQuery(queryDelegate, schema, 'issue').where(
-    'ownerId',
-    'IS NOT',
-    null,
-  );
+  rows = await newQuery(queryDelegate, schema, 'issue')
+    .where('ownerId', 'IS NOT', null)
+    .run();
 
   expect(rows).toMatchInlineSnapshot(`
     [
@@ -1306,14 +1316,14 @@ test('literal filter', async () => {
   const queryDelegate = new QueryDelegateImpl({callGot: true});
   addData(queryDelegate);
 
-  let rows = await newQuery(queryDelegate, schema, 'issue').where(({cmpLit}) =>
-    cmpLit(true, '=', false),
-  );
+  let rows = await newQuery(queryDelegate, schema, 'issue')
+    .where(({cmpLit}) => cmpLit(true, '=', false))
+    .run();
   expect(rows).toEqual([]);
 
-  rows = await newQuery(queryDelegate, schema, 'issue').where(({cmpLit}) =>
-    cmpLit(true, '=', true),
-  );
+  rows = await newQuery(queryDelegate, schema, 'issue')
+    .where(({cmpLit}) => cmpLit(true, '=', true))
+    .run();
 
   expect(rows).toMatchInlineSnapshot(`
     [
@@ -1423,7 +1433,7 @@ test('join with compound keys', async () => {
     });
   }
 
-  const rows = await newQuery(queryDelegate, schema, 'a').related('b');
+  const rows = await newQuery(queryDelegate, schema, 'a').related('b').run();
 
   expect(rows).toMatchInlineSnapshot(`
     [

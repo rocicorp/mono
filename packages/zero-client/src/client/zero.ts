@@ -1,5 +1,6 @@
 import {type LogLevel, type LogSink} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
+import {type DeletedClients} from '../../../replicache/src/deleted-clients.ts';
 import {
   ReplicacheImpl,
   type ReplicacheImplOptions,
@@ -25,11 +26,12 @@ import {
   mustGetBrowserGlobal,
 } from '../../../shared/src/browser-env.ts';
 import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
-import {h64} from '../../../shared/src/hash.ts';
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
+import {h64} from '../../../shared/src/hash.ts';
 import {must} from '../../../shared/src/must.ts';
 import {navigator} from '../../../shared/src/navigator.ts';
+import {emptyFunction} from '../../../shared/src/sentinels.ts';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import {Subscribable} from '../../../shared/src/subscribable.ts';
 import * as valita from '../../../shared/src/valita.ts';
@@ -75,6 +77,7 @@ import {
   type NameMapper,
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
+import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
 import {
   type ClientMetricMap,
@@ -83,12 +86,11 @@ import {
 } from '../../../zql/src/query/metrics-delegate.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {
+  type AnyQuery,
   materialize,
   newQuery,
-  type AnyQuery,
 } from '../../../zql/src/query/query-impl.ts';
 import {
-  delegateSymbol,
   type HumanReadable,
   type MaterializeOptions,
   type PreloadOptions,
@@ -96,7 +98,9 @@ import {
   type QueryReturn,
   type QueryTable,
   type RunOptions,
+  delegateSymbol,
 } from '../../../zql/src/query/query.ts';
+import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
 import {ActiveClientsManager} from './active-clients-manager.ts';
@@ -124,7 +128,7 @@ import {
   appendPath,
   toWSString,
 } from './http-string.ts';
-import type {Inspector} from './inspector/types.ts';
+import {Inspector} from './inspector/inspector.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {type LogOptions, createLogOptions} from './log-options.ts';
 import {
@@ -157,9 +161,6 @@ import {version} from './version.ts';
 import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
-import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
-import type {TypedView} from '../../../zql/src/query/typed-view.ts';
-import {emptyFunction} from '../../../shared/src/sentinels.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -239,10 +240,7 @@ function convertOnUpdateNeededReason(
   return {type: reason.type};
 }
 
-function updateNeededReloadReasonMessage(
-  reason: UpdateNeededReason,
-  serverErrMsg?: string | undefined,
-) {
+function updateNeededReloadReasonMessage(reason: UpdateNeededReason) {
   const {type} = reason;
   let reasonMsg = '';
   switch (type) {
@@ -260,8 +258,8 @@ function updateNeededReloadReasonMessage(
     default:
       unreachable(type);
   }
-  if (serverErrMsg) {
-    reasonMsg += ' ' + serverErrMsg;
+  if (reason.message) {
+    reasonMsg += ' ' + reason.message;
   }
   return reasonMsg;
 }
@@ -306,7 +304,6 @@ export class Zero<
   readonly #lc: ZeroLogContext;
   readonly #logOptions: LogOptions;
   readonly #enableAnalytics: boolean;
-  readonly #schema: S;
   readonly #clientSchema: ClientSchema;
 
   readonly #pokeHandler: PokeHandler;
@@ -342,10 +339,7 @@ export class Zero<
 
   readonly #onlineManager: OnlineManager;
 
-  readonly #onUpdateNeeded: (
-    reason: UpdateNeededReason,
-    serverErrorMsg?: string,
-  ) => void;
+  readonly #onUpdateNeeded: (reason: UpdateNeededReason) => void;
   readonly #onClientStateNotFound: (reason?: string) => void;
   // Last cookie used to initiate a connection
   #connectCookie: NullableVersion = null;
@@ -388,6 +382,7 @@ export class Zero<
   // We use an accessor pair to allow the subclass to override the setter.
   #connectionState: ConnectionState = ConnectionState.Disconnected;
   readonly #activeClientsManager: Promise<ActiveClientsManager>;
+  #inspector: Inspector | undefined;
 
   #setConnectionState(state: ConnectionState) {
     if (state === this.#connectionState) {
@@ -559,7 +554,6 @@ export class Zero<
 
     this.storageKey = storageKey ?? '';
 
-    this.#schema = schema;
     const {clientSchema, hash} = clientSchemaFrom(schema);
     this.#clientSchema = clientSchema;
 
@@ -622,8 +616,8 @@ export class Zero<
       enableClientGroupForking: false,
       enableMutationRecovery: false,
       enablePullAndPushInOpen: false, // Zero calls push in its connection management code
-      onClientsDeleted: (clientIDs, clientGroupIDs) =>
-        this.#deleteClientsManager.onClientsDeleted(clientIDs, clientGroupIDs),
+      onClientsDeleted: deletedClients =>
+        this.#deleteClientsManager.onClientsDeleted(deletedClients),
       zero: new ZeroRep(
         this.#zeroContext,
         this.#ivmMain,
@@ -650,14 +644,13 @@ export class Zero<
       rep.clientGroupID,
       this.clientID,
       this.#closeAbortController.signal,
-      (clientID: string) =>
-        this.#deleteClientsManager.onClientsDeleted([clientID], []),
+      (clientID: ClientID, clientGroupID: ClientGroupID) =>
+        this.#deleteClientsManager.onClientsDeleted([
+          {clientGroupID, clientID},
+        ]),
     );
 
-    const onUpdateNeededCallback = (
-      reason: UpdateNeededReason,
-      serverErrorMsg?: string | undefined,
-    ) => {
+    const onUpdateNeededCallback = (reason: UpdateNeededReason) => {
       if (onUpdateNeeded) {
         onUpdateNeeded(reason);
       } else {
@@ -665,7 +658,7 @@ export class Zero<
           this.#lc,
           this.#reload,
           reason.type,
-          updateNeededReloadReasonMessage(reason, serverErrorMsg),
+          updateNeededReloadReasonMessage(reason),
         );
       }
     };
@@ -733,6 +726,7 @@ export class Zero<
       msg => this.#send(msg),
       rep.perdag,
       this.#lc,
+      this.#rep.clientGroupID,
     );
 
     this.query = this.#registerQueries(schema);
@@ -1133,6 +1127,7 @@ export class Zero<
 
     lc.info?.(`${kind}: ${message}}`);
     const error = new ServerError(downMessage[1]);
+    lc.error?.(`${error.kind}:\n\n${error.errorBody.message}`, error);
 
     this.#rejectMessageError?.reject(error);
     lc.debug?.('Rejecting connect resolver due to error', error);
@@ -1140,10 +1135,13 @@ export class Zero<
     this.#disconnect(lc, {server: kind});
 
     if (kind === ErrorKind.VersionNotSupported) {
-      this.#onUpdateNeeded?.({type: kind}, message);
+      this.#onUpdateNeeded({type: kind, message});
     } else if (kind === ErrorKind.SchemaVersionNotSupported) {
       await this.#rep.disableClientGroup();
-      this.#onUpdateNeeded?.({type: 'SchemaVersionNotSupported'}, message);
+      this.#onUpdateNeeded({
+        type: 'SchemaVersionNotSupported',
+        message,
+      });
     } else if (kind === ErrorKind.ClientNotFound) {
       await this.#rep.disableClientGroup();
       this.#onClientStateNotFound?.(onClientStateNotFoundServerReason(message));
@@ -2007,27 +2005,24 @@ export class Zero<
   }
 
   /**
-   * `inspect` returns an object that can be used to inspect the state of the
+   * `inspector` is an object that can be used to inspect the state of the
    * queries a Zero instance uses. It is intended for debugging purposes.
    */
-  async inspect(): Promise<Inspector> {
+  get inspector(): Inspector {
     // We use esbuild dropLabels to strip this code when we build the code for the bundle size dashboard.
     // https://esbuild.github.io/api/#ignore-annotations
     // /packages/zero/tool/build.ts
 
     // eslint-disable-next-line no-unused-labels
     BUNDLE_SIZE: {
-      const m = await import('./inspector/inspector.ts');
-      // Wait for the web socket to be available
-      return m.newInspector(
+      return (this.#inspector ??= new Inspector(
         this.#rep,
         this.#queryManager,
-        this.#schema,
         async () => {
           await this.#connectResolver.promise;
           return this.#socket!;
         },
-      );
+      ));
     }
   }
 
@@ -2121,8 +2116,9 @@ export async function createSocket(
   // for a `protocol`.
   const WS = mustGetBrowserGlobal('WebSocket');
   const queriesPatchP = rep.query(tx => queryManager.getQueriesPatch(tx));
+  const deletedClientsArray = await deleteClientsManager.getDeletedClients();
   let deletedClients: DeleteClientsBody | undefined =
-    await deleteClientsManager.getDeletedClients();
+    convertDeletedClientsToBody(deletedClientsArray, clientGroupID);
   let queriesPatch: Map<string, UpQueriesPatchOp> | undefined =
     await queriesPatchP;
   const {activeClients} = activeClientsManager;
@@ -2190,6 +2186,25 @@ function skipEmptyDeletedClients(
   data.clientIDs = skipEmptyArray(clientIDs);
   data.clientGroupIDs = skipEmptyArray(clientGroupIDs);
   return data;
+}
+
+function convertDeletedClientsToBody(
+  deletedClients: DeletedClients,
+  clientGroupID: ClientGroupID,
+): DeleteClientsBody | undefined {
+  if (deletedClients.length === 0) {
+    return undefined;
+  }
+
+  const clientIDs = deletedClients
+    .filter(pair => pair.clientID && pair.clientGroupID === clientGroupID)
+    .map(pair => pair.clientID);
+  if (clientIDs.length === 0) {
+    return undefined;
+  }
+
+  // We no longer send clientGroupIDs
+  return {clientIDs};
 }
 
 /**

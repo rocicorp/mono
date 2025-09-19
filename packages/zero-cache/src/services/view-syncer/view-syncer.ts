@@ -35,7 +35,12 @@ import {
   transformAndHashQuery,
   type TransformedAndHashed,
 } from '../../auth/read-authorizer.ts';
-import {getServerVersion, type ZeroConfig} from '../../config/zero-config.ts';
+import type {NormalizedZeroConfig} from '../../config/normalize.ts';
+import {
+  getServerVersion,
+  isAdminPasswordValid,
+  type ZeroConfig,
+} from '../../config/zero-config.ts';
 import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import {
   getOrCreateCounter,
@@ -49,6 +54,7 @@ import {rowIDString, type RowKey} from '../../types/row-key.ts';
 import type {ShardID} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
+import {analyzeQuery} from '../analyze.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.ts';
 import type {ActivityBasedService} from '../service.ts';
@@ -151,8 +157,6 @@ export const TTL_CLOCK_INTERVAL = 60_000;
  */
 export const TTL_TIMER_HYSTERESIS = 50; // ms
 
-type PartialZeroConfig = Pick<ZeroConfig, 'getQueries' | 'serverVersion'>;
-
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
   readonly #shard: ShardID;
@@ -246,10 +250,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   readonly #inspectorDelegate: InspectorDelegate;
 
-  readonly #config: Pick<ZeroConfig, 'serverVersion'>;
+  readonly #config: NormalizedZeroConfig;
 
   constructor(
-    config: PartialZeroConfig,
+    config: NormalizedZeroConfig,
     lc: LogContext,
     shard: ShardID,
     taskID: string,
@@ -1823,6 +1827,23 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   ): Promise<void> => {
     const client = must(this.#clients.get(clientID));
 
+    // Check if the client is already authenticated. We only authenticate the clientGroup
+    // once per "worker".
+    if (
+      body.op !== 'authenticate' &&
+      !this.#inspectorDelegate.isAuthenticated(this.id)
+    ) {
+      lc.info?.(
+        'Client not authenticated to access the inspector protocol. Sending authentication challenge',
+      );
+      client.sendInspectResponse(lc, {
+        op: 'authenticated',
+        id: body.id,
+        value: false,
+      });
+      return;
+    }
+
     switch (body.op) {
       case 'queries': {
         const queryRows = await this.#cvrStore.inspectQueries(
@@ -1865,6 +1886,35 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           value: getServerVersion(this.#config),
         });
         break;
+
+      case 'authenticate': {
+        const password = body.value;
+        const ok = isAdminPasswordValid(lc, this.#config, password);
+        if (ok) {
+          this.#inspectorDelegate.setAuthenticated(this.id);
+        } else {
+          this.#inspectorDelegate.clearAuthenticated(this.id);
+        }
+
+        client.sendInspectResponse(lc, {
+          op: 'authenticated',
+          id: body.id,
+          value: ok,
+        });
+
+        break;
+      }
+
+      case 'analyze-query': {
+        const ast = body.value;
+        const result = await analyzeQuery(lc, this.#config, ast, body.options);
+        client.sendInspectResponse(lc, {
+          op: 'analyze-query',
+          id: body.id,
+          value: result,
+        });
+        break;
+      }
 
       default:
         unreachable(body);

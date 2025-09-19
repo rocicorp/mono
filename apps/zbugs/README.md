@@ -13,7 +13,7 @@ We deploy this continuously (on trunk) to aws and is our dogfood of Zero.
 
 ### 1. Install dependencies
 
-First, install and build dependencies the `mono` repository root:
+Install and build dependencies the `mono` repository root:
 
 ```bash
 # In repository root
@@ -21,21 +21,7 @@ npm install
 npm run build
 ```
 
-Then, install dependencies in the `zbugs` directory:
-
-```bash
-# In apps/zbugs
-npm install
-```
-
-### 2. Run the "upstream" Postgres database
-
-```bash
-cd docker
-docker compose up
-```
-
-### 3. Run the zero-cache server
+### 2. Create env file
 
 > In a a new terminal window
 
@@ -46,14 +32,24 @@ Create a `.env` file in the `zbugs` directory based on the example:
 cp .env.example .env
 ```
 
-Then start the server:
+### 3. Run the "upstream" Postgres database
+
+```bash
+# In apps/zbugs
+npm run db-up
+# In apps/zbugs in another tab
+npm run db-migrate
+npm run db-seed
+```
+
+### 4. Run the zero-cache server
 
 ```bash
 # In apps/zbugs
 npm run zero-cache-dev
 ```
 
-### 4. Run the web app
+### 5. Run the web app
 
 > In yet another another terminal window
 
@@ -73,61 +69,19 @@ rm /tmp/zbugs-sync-replica.db*
 ### To clear the upstream postgres database
 
 ```bash
+# In apps/zbugs/docker
 docker compose down -v
 ```
 
----
-
-## To Run 1.5GB Rocinante Data
+### To run with 1gb test dataset
 
 ```bash
-cd docker
-docker compose down -v
+# In apps/zbugs/db/seed-data/gigabugs
+./getData.sh
+
+# In apps/zbugs
+npm run db-up
+# In apps/zbugs in another tab
+npm run db-migrate
+ZERO_SEED_DATA_DIR=./db/seed-data/gigabugs/ npm run db-seed
 ```
-
-Pull large data set from s3
-
-```bash
-./get-data.sh
-```
-
-Start docker 1gb compose file
-
-```bash
-docker compose -f ./docker-compose-1gb.yml up
-```
-
-Modify the front end so that it doesn't load all of the data
-
-```
-diff --git a/apps/zbugs/src/pages/list/list-page.tsx b/apps/zbugs/src/pages/list/list-page.tsx
-index 33cf7ef0b..c6955f753 100644
---- a/apps/zbugs/src/pages/list/list-page.tsx
-+++ b/apps/zbugs/src/pages/list/list-page.tsx
-@@ -93,6 +93,8 @@ export function ListPage({onReady}: {onReady: () => void}) {
-     q = q.whereExists('labels', q => q.where('name', label));
-   }
-
-+  q = q.limit(200);
-+
-   const [issues, issuesResult] = useQuery(q);
-   if (issues.length > 0 || issuesResult.type === 'complete') {
-     onReady();
-diff --git a/apps/zbugs/src/zero-setup.ts b/apps/zbugs/src/zero-setup.ts
-index 020330c40..8d0223a6a 100644
---- a/apps/zbugs/src/zero-setup.ts
-+++ b/apps/zbugs/src/zero-setup.ts
-@@ -60,7 +60,9 @@ export function preload(z: Zero<Schema>) {
-
-   const baseIssueQuery = z.query.issue
-     .related('labels')
--    .related('viewState', q => q.where('userID', z.userID));
-+    .related('viewState', q => q.where('userID', z.userID))
-+    .orderBy('modified', 'desc')
-+    .limit(200);
-
-   const {cleanup, complete} = baseIssueQuery.preload();
-   complete.then(() => {
-```
-
-Start zero and the frontend like normal

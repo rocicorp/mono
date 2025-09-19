@@ -1,9 +1,11 @@
 import type {LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {nanoid} from '../util/nanoid.ts';
 // import {type VitestUtils} from 'vitest';
 import type {Store} from '../../../replicache/src/dag/store.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
@@ -67,6 +69,10 @@ export class MockSocket extends EventTarget {
     super();
     this.url = url;
     this.protocol = protocol;
+  }
+
+  get jsonMessages(): JSONValue[] {
+    return this.messages.map(message => JSON.parse(message));
   }
 
   send(message: string) {
@@ -375,4 +381,20 @@ export function storageMock(storage: Record<string, string>): Storage {
       return keys[i] || null;
     },
   };
+}
+
+// postMessage uses a message queue. By adding another message to the queue,
+// we can ensure that the first message is processed before the second one.
+export function waitForPostMessage() {
+  return new Promise<void>(resolve => {
+    const name = nanoid();
+    const c1 = new BroadcastChannel(name);
+    const c2 = new BroadcastChannel(name);
+    c2.postMessage('');
+    c1.onmessage = () => {
+      c1.close();
+      c2.close();
+      resolve();
+    };
+  });
 }

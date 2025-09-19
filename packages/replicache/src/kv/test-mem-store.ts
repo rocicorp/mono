@@ -4,6 +4,7 @@ import {stringCompare} from '../../../shared/src/string-compare.ts';
 import type {FrozenJSONValue} from '../frozen-json.ts';
 import {ReadImpl} from './read-impl.ts';
 import type {Read, Store, Write} from './store.ts';
+import {throwIfStoreClosed} from './throw-if-closed.ts';
 import {WriteImpl} from './write-impl.ts';
 
 export class TestMemStore implements Store {
@@ -12,11 +13,13 @@ export class TestMemStore implements Store {
   #closed = false;
 
   async read(): Promise<Read> {
+    throwIfStoreClosed(this);
     const release = await this.#rwLock.read();
     return new ReadImpl(this.#map, release);
   }
 
   async write(): Promise<Write> {
+    throwIfStoreClosed(this);
     const release = await this.#rwLock.write();
     return new WriteImpl(this.#map, release);
   }

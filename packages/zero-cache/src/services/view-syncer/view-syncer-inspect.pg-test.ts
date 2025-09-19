@@ -5,6 +5,7 @@ import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import type {InspectDownMessage} from '../../../../zero-protocol/src/inspect-down.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
@@ -18,7 +19,9 @@ import {
   messages,
   nextPoke,
   permissionsAll,
+  serviceID,
   setup,
+  TEST_ADMIN_PASSWORD,
 } from './view-syncer-test-util.ts';
 import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
 
@@ -51,6 +54,8 @@ describe('view-syncer/service', () => {
     httpCookie: undefined,
   };
 
+  let delegate: InspectorDelegate;
+
   beforeEach<PgTest>(async ({testDBs}) => {
     ({
       replicaDbFile,
@@ -61,7 +66,10 @@ describe('view-syncer/service', () => {
       viewSyncerDone,
       replicator,
       connectWithQueueAndSource,
+      inspectorDelegate: delegate,
     } = await setup(testDBs, 'view_syncer_inspect_test', permissionsAll));
+
+    delegate.setAuthenticated(serviceID);
 
     return async () => {
       vi.useRealTimers();
@@ -69,6 +77,8 @@ describe('view-syncer/service', () => {
       await viewSyncerDone;
       await testDBs.drop(cvrDB, upstreamDb);
       replicaDbFile.delete();
+
+      delegate.clearAuthenticated(serviceID);
     };
   });
 
@@ -197,6 +207,83 @@ describe('view-syncer/service', () => {
         id: 'test-version-inspect',
         op: 'version',
         value: expect.stringMatching(/^\d+\.\d+\.\d+$/),
+      },
+    ]);
+  });
+
+  test('not authenticated', async () => {
+    delegate.clearAuthenticated('9876');
+
+    const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
+
+    // Wait for initial hydration to complete
+    await nextPoke(client);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+
+    await expectNoPokes(client);
+
+    const inspectId = 'test-version-inspect';
+
+    // Call inspect and wait for the response to come through the client queue
+    await vs.inspect(SYNC_CONTEXT, ['inspect', {op: 'version', id: inspectId}]);
+
+    const msg = await client.dequeue();
+
+    expect(msg).toEqual([
+      'inspect',
+      {
+        id: 'test-version-inspect',
+        op: 'authenticated',
+        value: false,
+      },
+    ]);
+  });
+
+  test('authenticate', async () => {
+    delegate.clearAuthenticated(serviceID);
+
+    const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
+
+    // Wait for initial hydration to complete
+    await nextPoke(client);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+
+    await expectNoPokes(client);
+
+    const inspectId = 'test-version-inspect';
+
+    // Call inspect and wait for the response to come through the client queue
+    await vs.inspect(SYNC_CONTEXT, [
+      'inspect',
+      {op: 'authenticate', id: inspectId, value: 'wrong'},
+    ]);
+
+    let msg = await client.dequeue();
+
+    expect(msg).toEqual([
+      'inspect',
+      {
+        id: 'test-version-inspect',
+        op: 'authenticated',
+        value: false,
+      },
+    ]);
+
+    await vs.inspect(SYNC_CONTEXT, [
+      'inspect',
+      {op: 'authenticate', id: inspectId, value: TEST_ADMIN_PASSWORD},
+    ]);
+
+    msg = await client.dequeue();
+
+    expect(msg).toEqual([
+      'inspect',
+      {
+        id: 'test-version-inspect',
+        op: 'authenticated',
+        value: true,
       },
     ]);
   });

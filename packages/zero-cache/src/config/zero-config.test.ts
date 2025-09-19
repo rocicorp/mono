@@ -311,6 +311,8 @@ test('zero-cache --help', () => {
                                                                    A password used to administer zero-cache server, for example to access the                        
                                                                    /statz endpoint.                                                                                  
                                                                                                                                                                      
+                                                                   A password is optional in development mode but required in production mode.                       
+                                                                                                                                                                     
      --litestream-executable string                                optional                                                                                          
        ZERO_LITESTREAM_EXECUTABLE env                                                                                                                                
                                                                    Path to the litestream executable.                                                                

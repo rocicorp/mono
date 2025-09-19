@@ -17,31 +17,41 @@ let send: Mock<(msg: DeleteClientsMessage) => void>;
 let dagStore: Store;
 const lc = createSilentLogContext();
 let manager: DeleteClientsManager;
+const clientGroupID = 'cg1';
 
 beforeEach(() => {
   send = vi.fn<(msg: DeleteClientsMessage) => void>();
   dagStore = new TestStore();
-  manager = new DeleteClientsManager(send, dagStore, lc);
+  manager = new DeleteClientsManager(
+    send,
+    dagStore,
+    lc,
+    Promise.resolve(clientGroupID),
+  );
   return async () => {
     await dagStore.close();
   };
 });
 
-test('onClientsDeleted', () => {
-  manager.onClientsDeleted(['a', 'b'], []);
-  expect(send).toBeCalledWith([
-    'deleteClients',
-    {clientIDs: ['a', 'b'], clientGroupIDs: []},
+test('onClientsDeleted', async () => {
+  await manager.onClientsDeleted([
+    {clientGroupID, clientID: 'a'},
+    {clientGroupID, clientID: 'b'},
   ]);
+  expect(send).toBeCalledWith(['deleteClients', {clientIDs: ['a', 'b']}]);
 });
 
 test('clientsDeletedOnServer', async () => {
+  const cg = clientGroupID;
   await withWrite(dagStore, dagWrite =>
-    setDeletedClients(dagWrite, ['c', 'd', 'e'], []),
+    setDeletedClients(dagWrite, [
+      {clientGroupID: cg, clientID: 'c'},
+      {clientGroupID: cg, clientID: 'd'},
+      {clientGroupID: cg, clientID: 'e'},
+    ]),
   );
   await manager.clientsDeletedOnServer({clientIDs: ['c', 'd']});
-  expect(await withRead(dagStore, getDeletedClients)).toEqual({
-    clientIDs: ['e'],
-    clientGroupIDs: [],
-  });
+  expect(await withRead(dagStore, getDeletedClients)).toEqual([
+    {clientGroupID: cg, clientID: 'e'},
+  ]);
 });

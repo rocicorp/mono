@@ -21,6 +21,7 @@ import {
   toChunkIndexDefinition,
 } from '../db/commit.ts';
 import {createIndexBTree} from '../db/write.ts';
+import type {DeletedClients} from '../deleted-clients.ts';
 import * as FormatVersion from '../format-version-enum.ts';
 import {type FrozenJSONValue, deepFreeze} from '../frozen-json.ts';
 import {type Hash, hashSchema} from '../hash.ts';
@@ -532,6 +533,5 @@ export async function setClients(
  * Callback function for when Replicache has deleted one or more clients.
  */
 export type OnClientsDeleted = (
-  clientIDs: readonly ClientID[],
-  clientGroupIDs: readonly ClientGroupID[],
-) => void;
+  deletedClients: DeletedClients,
+) => Promise<void>;

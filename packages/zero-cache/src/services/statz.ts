@@ -1,14 +1,15 @@
+import type {LogContext} from '@rocicorp/logger';
 import auth from 'basic-auth';
 import type {FastifyReply, FastifyRequest} from 'fastify';
 import fs from 'fs';
 import os from 'os';
 import type {Writable} from 'stream';
+import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {NormalizedZeroConfig as ZeroConfig} from '../config/normalize.ts';
-import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
+import {isAdminPasswordValid} from '../config/zero-config.ts';
 import {pgClient} from '../types/pg.ts';
 import {getShardID, upstreamSchema} from '../types/shards.ts';
-import type {LogContext} from '@rocicorp/logger';
 
 async function upstreamStats(
   lc: LogContext,
@@ -306,8 +307,7 @@ export async function handleStatzRequest(
   res: FastifyReply,
 ) {
   const credentials = auth(req);
-  const expectedPassword = config.adminPassword;
-  if (!expectedPassword || credentials?.pass !== expectedPassword) {
+  if (!isAdminPasswordValid(lc, config, credentials?.pass)) {
     void res
       .code(401)
       .header('WWW-Authenticate', 'Basic realm="Statz Protected Area"')

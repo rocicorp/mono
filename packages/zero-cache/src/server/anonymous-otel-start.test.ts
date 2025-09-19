@@ -10,7 +10,9 @@ import {
   recordConnectionAttempted,
   recordConnectionSuccess,
   recordMutation,
+  recordQuery,
   recordRowsSynced,
+  setActiveUsersGetter,
   shutdownAnonymousTelemetry,
   startAnonymousTelemetry,
 } from './anonymous-otel-start.js';
@@ -261,6 +263,27 @@ describe('Anonymous Telemetry Integration Tests', () => {
       );
 
       expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
+        'zero.crud_queries_processed',
+        {
+          description: 'Total number of CRUD queries processed',
+        },
+      );
+
+      expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
+        'zero.custom_queries_processed',
+        {
+          description: 'Total number of custom queries processed',
+        },
+      );
+
+      expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
+        'zero.queries_processed',
+        {
+          description: 'Total number of queries processed',
+        },
+      );
+
+      expect(mockMeter.createObservableCounter).toHaveBeenCalledWith(
         'zero.rows_synced',
         {
           description: 'Total number of rows synced',
@@ -288,13 +311,20 @@ describe('Anonymous Telemetry Integration Tests', () => {
         },
       );
 
+      expect(mockMeter.createObservableGauge).toHaveBeenCalledWith(
+        'zero.active_users_last_day',
+        {
+          description: 'Count of CVR instances active in the last 24h',
+        },
+      );
+
       // Note: Histogram metrics are not currently implemented in the anonymous telemetry
     });
 
     test('should register callbacks for observable metrics', () => {
       // Each observable should have a callback registered
-      expect(mockObservableGauge.addCallback).toHaveBeenCalledTimes(2); // 2 gauges (uptime, active_client_groups)
-      expect(mockObservableCounter.addCallback).toHaveBeenCalledTimes(7); // 7 counters (uptime_counter, crud_mutations, custom_mutations, total_mutations, rows_synced, connections_success, connections_attempted)
+      expect(mockObservableGauge.addCallback).toHaveBeenCalledTimes(3); // 3 gauges (uptime, active_client_groups, active_users)
+      expect(mockObservableCounter.addCallback).toHaveBeenCalledTimes(10); // 10 counters (uptime_counter, crud_mutations, custom_mutations, total_mutations, crud_queries, custom_queries, total_queries, rows_synced, connections_success, connections_attempted)
     });
   });
 
@@ -303,6 +333,8 @@ describe('Anonymous Telemetry Integration Tests', () => {
       // Test basic metric recording without histogram functions
       expect(() => recordMutation('crud')).not.toThrow();
       expect(() => recordMutation('custom')).not.toThrow();
+      expect(() => recordQuery('crud')).not.toThrow();
+      expect(() => recordQuery('custom')).not.toThrow();
       expect(() => recordRowsSynced(42)).not.toThrow();
       expect(() => recordConnectionSuccess()).not.toThrow();
       expect(() => recordConnectionAttempted()).not.toThrow();
@@ -317,6 +349,17 @@ describe('Anonymous Telemetry Integration Tests', () => {
       // Mutations should be accumulated internally
       // The actual value will be observed when the callback is triggered
       expect(() => recordMutation('custom')).not.toThrow();
+    });
+
+    test('should accumulate query counts', () => {
+      // Record multiple queries
+      recordQuery('crud');
+      recordQuery('custom');
+      recordQuery('crud');
+
+      // Queries should be accumulated internally
+      // The actual value will be observed when the callback is triggered
+      expect(() => recordQuery('custom')).not.toThrow();
     });
 
     test('should accumulate rows synced counts', () => {
@@ -356,6 +399,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
       // Test that platform detection works without throwing
       expect(() => {
         recordMutation('crud');
+        recordQuery('crud');
         recordRowsSynced(10);
       }).not.toThrow();
     });
@@ -366,6 +410,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
       // Test that telemetry operations work properly
       expect(() => {
         recordMutation('crud');
+        recordQuery('custom');
         recordRowsSynced(50);
       }).not.toThrow();
     });
@@ -478,6 +523,8 @@ describe('Anonymous Telemetry Integration Tests', () => {
       // Add some test data
       recordMutation('crud');
       recordMutation('crud');
+      recordQuery('crud');
+      recordQuery('custom');
       recordRowsSynced(100);
 
       // Get the callbacks that were registered
@@ -531,6 +578,28 @@ describe('Anonymous Telemetry Integration Tests', () => {
   });
 
   describe('Integration Tests for Telemetry Calls', () => {
+    test('should observe active users via getter', () => {
+      // Set the active users getter
+      setActiveUsersGetter(() => 7);
+
+      // Find the callback associated with the active users gauge
+      const dauCallback = mockObservableGauge.addCallback.mock.calls
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .find((call: any) =>
+          call[0].toString().includes('activeUsersGetter'),
+        )?.[0];
+
+      if (dauCallback) {
+        const mockResult = {observe: vi.fn()};
+        dauCallback(mockResult);
+        expect(mockResult.observe).toHaveBeenCalledWith(
+          7,
+          expect.objectContaining({
+            'zero.telemetry.type': 'anonymous',
+          }),
+        );
+      }
+    });
     test('should record rows synced with correct count', () => {
       const rowCount1 = 42;
       const rowCount2 = 15;
@@ -582,6 +651,8 @@ describe('Anonymous Telemetry Integration Tests', () => {
       // Record some mutations and rows
       recordMutation('crud');
       recordMutation('crud');
+      recordQuery('crud');
+      recordQuery('custom');
       recordRowsSynced(50);
       recordRowsSynced(25);
 
@@ -624,6 +695,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
         // Record additional activity
         recordMutation('crud');
+        recordQuery('custom');
         recordRowsSynced(10);
 
         // Reset mocks for second observation

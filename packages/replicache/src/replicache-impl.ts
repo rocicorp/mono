@@ -6,6 +6,7 @@ import {assert} from '../../shared/src/asserts.ts';
 import {getBrowserGlobal} from '../../shared/src/browser-env.ts';
 import {getDocumentVisibilityWatcher} from '../../shared/src/document-visible.ts';
 import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {promiseVoid} from '../../shared/src/resolved-promises.ts';
 import type {MaybePromise} from '../../shared/src/types.ts';
 import {PullDelegate, PushDelegate} from './connection-loop-delegates.ts';
 import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.ts';
@@ -436,7 +437,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       enableScheduledRefresh = true,
       enablePullAndPushInOpen = true,
       enableClientGroupForking = true,
-      onClientsDeleted = () => {},
+      onClientsDeleted = () => promiseVoid,
     } = implOptions;
     this.#zero = implOptions.zero;
     this.#auth = auth ?? '';
@@ -617,13 +618,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
       this.#lc,
       signal,
     );
-    initClientGroupGC(
-      this.perdag,
-      enableMutationRecovery,
-      onClientsDeleted,
-      this.#lc,
-      signal,
-    );
+    initClientGroupGC(this.perdag, enableMutationRecovery, this.#lc, signal);
     initNewClientChannel(
       this.name,
       this.idbName,

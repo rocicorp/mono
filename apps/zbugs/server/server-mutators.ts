@@ -135,7 +135,8 @@ export function createServerMutators(
 
         const comment = await tx.query.comment
           .where('id', args.subjectID)
-          .one();
+          .one()
+          .run();
         assert(comment);
         assert(tx.location === 'server');
         await notify(
@@ -179,7 +180,7 @@ export function createServerMutators(
       async edit(tx: MutatorTx, {id, body}: {id: string; body: string}) {
         await mutators.comment.edit(tx, {id, body});
 
-        const comment = await tx.query.comment.where('id', id).one();
+        const comment = await tx.query.comment.where('id', id).one().run();
         assert(comment);
 
         assert(tx.location === 'server');

@@ -8,6 +8,7 @@ import {
   type MetricMap,
   type MetricsDelegate,
 } from '../../../zql/src/query/metrics-delegate.ts';
+import {isDevelopmentMode} from '../config/normalize.ts';
 
 /**
  * Server-side metrics collected for queries during materialization and update.
@@ -17,6 +18,14 @@ export type ServerMetrics = {
   'query-materialization-server': TDigest;
   'query-update-server': TDigest;
 };
+
+type ClientGroupID = string;
+
+/**
+ * Set of authenticated client group IDs. We keep this outside of the class to
+ * share this state across all instances of the InspectorDelegate.
+ */
+const authenticatedClientGroupIDs = new Set<ClientGroupID>();
 
 export class InspectorDelegate implements MetricsDelegate {
   readonly #globalMetrics: ServerMetrics = newMetrics();
@@ -82,6 +91,24 @@ export class InspectorDelegate implements MetricsDelegate {
     }
     this.#queryIDToTransformationHash.set(queryID, transformationHash);
     this.#transformationASTs.set(transformationHash, ast);
+  }
+
+  /**
+   * Check if the client is authenticated. We only require authentication once
+   * per "worker".
+   */
+  isAuthenticated(clientGroupID: ClientGroupID): boolean {
+    return (
+      isDevelopmentMode() || authenticatedClientGroupIDs.has(clientGroupID)
+    );
+  }
+
+  setAuthenticated(clientGroupID: ClientGroupID): void {
+    authenticatedClientGroupIDs.add(clientGroupID);
+  }
+
+  clearAuthenticated(clientGroupID: ClientGroupID) {
+    authenticatedClientGroupIDs.delete(clientGroupID);
   }
 }
 

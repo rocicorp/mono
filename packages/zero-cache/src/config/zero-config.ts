@@ -2,6 +2,7 @@
  * These types represent the _compiled_ config whereas `define-config` types represent the _source_ config.
  */
 
+import type {LogContext} from '@rocicorp/logger';
 import {logOptions} from '../../../otel/src/log-options.ts';
 import {
   parseOptions,
@@ -16,7 +17,11 @@ import {
   ALLOWED_APP_ID_CHARACTERS,
   INVALID_APP_ID_MESSAGE,
 } from '../types/shards.ts';
-import {assertNormalized, type NormalizedZeroConfig} from './normalize.ts';
+import {
+  assertNormalized,
+  isDevelopmentMode,
+  type NormalizedZeroConfig,
+} from './normalize.ts';
 export type {LogConfig} from '../../../otel/src/log-options.ts';
 
 export const appOptions = {
@@ -457,6 +462,8 @@ export const zeroOptions = {
     desc: [
       `A password used to administer zero-cache server, for example to access the`,
       `/statz endpoint.`,
+      '',
+      'A password is optional in development mode but {bold required in production} mode.',
     ],
   },
 
@@ -697,4 +704,51 @@ export function getServerVersion(
   config: Pick<ZeroConfig, 'serverVersion'> | undefined,
 ): string {
   return config?.serverVersion ?? packageJson.version;
+}
+
+export function isAdminPasswordValid(
+  lc: LogContext,
+  config: Pick<NormalizedZeroConfig, 'adminPassword'>,
+  password: string | undefined,
+) {
+  // If development mode, password is optional
+  // We use process.env.NODE_ENV === 'development' as a sign that we're in
+  // development mode, rather than a custom env var like ZERO_DEVELOPMENT_MODE,
+  // because NODE_ENV is more standard and is already used by many tools.
+  // Note that if NODE_ENV is not set, we assume production mode.
+
+  if (!password && !config.adminPassword && isDevelopmentMode()) {
+    warnOnce(
+      lc,
+      'No admin password set; allowing access in development mode only',
+    );
+    return true;
+  }
+
+  if (!config.adminPassword) {
+    lc.warn?.('No admin password set; denying access');
+    return false;
+  }
+
+  if (password !== config.adminPassword) {
+    lc.warn?.('Invalid admin password');
+    return false;
+  }
+
+  lc.debug?.('Admin password accepted');
+  return true;
+}
+
+let hasWarned = false;
+
+function warnOnce(lc: LogContext, msg: string) {
+  if (!hasWarned) {
+    lc.warn?.(msg);
+    hasWarned = true;
+  }
+}
+
+// For testing purposes - reset the warning state
+export function resetWarnOnceState() {
+  hasWarned = false;
 }

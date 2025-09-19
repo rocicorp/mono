@@ -1,4 +1,5 @@
 import * as v from '../../shared/src/valita.ts';
+import {astSchema} from './ast.ts';
 
 const inspectUpBase = v.object({
   id: v.string(),
@@ -11,23 +12,50 @@ const inspectQueriesUpBodySchema = inspectUpBase.extend({
 
 export type InspectQueriesUpBody = v.Infer<typeof inspectQueriesUpBodySchema>;
 
-const inspectBasicUpSchema = inspectUpBase.extend({
-  op: v.literalUnion('metrics', 'version'),
+const inspectMetricsUpSchema = inspectUpBase.extend({
+  op: v.literal('metrics'),
 });
 
-export type InspectMetricsUpBody = {
-  op: 'metrics';
-  id: string;
-};
+export type InspectMetricsUpBody = v.Infer<typeof inspectMetricsUpSchema>;
 
-export type InspectVersionUpBody = {
-  op: 'version';
-  id: string;
-};
+const inspectVersionUpSchema = inspectUpBase.extend({
+  op: v.literal('version'),
+});
+
+export type InspectVersionUpBody = v.Infer<typeof inspectVersionUpSchema>;
+
+export const inspectAuthenticateUpSchema = inspectUpBase.extend({
+  op: v.literal('authenticate'),
+  value: v.string(),
+});
+
+export type InspectAuthenticateUpBody = v.Infer<
+  typeof inspectAuthenticateUpSchema
+>;
+
+const analyzeQueryOptionsSchema = v.object({
+  vendedRows: v.boolean().optional(),
+  syncedRows: v.boolean().optional(),
+});
+
+export type AnalyzeQueryOptions = v.Infer<typeof analyzeQueryOptionsSchema>;
+
+export const inspectAnalyzeQueryUpSchema = inspectUpBase.extend({
+  op: v.literal('analyze-query'),
+  value: astSchema,
+  options: analyzeQueryOptionsSchema.optional(),
+});
+
+export type InspectAnalyzeQueryUpBody = v.Infer<
+  typeof inspectAnalyzeQueryUpSchema
+>;
 
 const inspectUpBodySchema = v.union(
   inspectQueriesUpBodySchema,
-  inspectBasicUpSchema,
+  inspectMetricsUpSchema,
+  inspectVersionUpSchema,
+  inspectAuthenticateUpSchema,
+  inspectAnalyzeQueryUpSchema,
 );
 
 export const inspectUpMessageSchema = v.tuple([
