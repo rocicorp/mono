@@ -253,6 +253,8 @@ export type CorrelatedSubquery = {
   // When `hidden` is set to true, this hop will not be included in the output view
   // but its children will be.
   readonly hidden?: boolean | undefined;
+  // swap join order. Only relevant for inner joins. Defaults to false.
+  readonly flip?: boolean | undefined;
 };
 
 export type ValuePosition = LiteralReference | Parameter | ColumnReference;
@@ -356,6 +358,7 @@ function transformAST(ast: AST, transform: ASTTransform): Required<AST> {
                 hidden: r.hidden,
                 subquery: transformAST(r.subquery, transform),
                 system: r.system,
+                flip: r.flip,
               }) satisfies Required<CorrelatedSubquery>,
           ),
         )

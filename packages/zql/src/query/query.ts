@@ -38,6 +38,8 @@ export type QueryReturn<Q> = Q extends Query<any, any, infer R> ? R : never;
 export type QueryTable<Q> = Q extends Query<any, infer T, any> ? T : never;
 export const delegateSymbol = Symbol('delegate');
 
+export type ExistsOptions = {flip: boolean};
+
 export type GetFilterType<
   TSchema extends TableSchema,
   TColumn extends keyof TSchema['columns'],
@@ -317,12 +319,14 @@ export interface Query<
 
   whereExists(
     relationship: AvailableRelationships<TTable, TSchema>,
+    options?: ExistsOptions | undefined,
   ): Query<TSchema, TTable, TReturn>;
   whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb: (
       q: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
     ) => Query<TSchema, string>,
+    options?: ExistsOptions | undefined,
   ): Query<TSchema, TTable, TReturn>;
 
   /**
