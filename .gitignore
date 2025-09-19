@@ -90,3 +90,5 @@ Chinook_PostgreSql.sql
 WARP.md
 *.db-shm
 *.db-wal
+
+1gb
