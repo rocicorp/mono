@@ -76,5 +76,6 @@ export function decodeSecProtocols(secProtocol: string): {
 } {
   const binString = atob(decodeURIComponent(secProtocol));
   const bytes = Uint8Array.from(binString, c => c.charCodeAt(0));
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
   return JSON.parse(new TextDecoder().decode(bytes));
 }

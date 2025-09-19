@@ -360,7 +360,8 @@ async function setupPersistedData(
       name: replicacheName,
       indexes,
       pullInterval: null,
-      puller: () => ({
+      // eslint-disable-next-line @typescript-eslint/require-await
+      puller: async () => ({
         response: {
           cookie: 1,
           lastMutationIDChanges: {},

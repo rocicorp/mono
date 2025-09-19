@@ -2488,17 +2488,6 @@ test('queryComplete promise', async () => {
   expect(resultDetails()).toEqual({type: 'complete'});
 });
 
-const _schema = createSchema({
-  tables: [
-    table('test')
-      .columns({
-        a: number(),
-        b: string(),
-      })
-      .primaryKey('a'),
-  ],
-});
-
 type TestReturn = {
   a: number;
   b: string;

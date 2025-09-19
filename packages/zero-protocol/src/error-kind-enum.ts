@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/naming-convention */
+
 
 // Note: Metric names depend on these values,
 // so if you add or change on here a corresponding dashboard

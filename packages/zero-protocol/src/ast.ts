@@ -331,6 +331,7 @@ interface ASTTransform {
 
 function transformAST(ast: AST, transform: ASTTransform): Required<AST> {
   // Name mapping functions (e.g. to server names)
+  // eslint-disable-next-line @typescript-eslint/unbound-method
   const {tableName, columnName} = transform;
   const colName = (c: string) => columnName(ast.table, c);
   const key = (table: string, k: CompoundKey) => {
@@ -384,6 +385,7 @@ function transformWhere(
   transform: ASTTransform,
 ): Condition {
   // Name mapping functions (e.g. to server names)
+  // eslint-disable-next-line @typescript-eslint/unbound-method
   const {columnName} = transform;
   const condValue = (c: ConditionValue) =>
     c.type !== 'column' ? c : {...c, name: columnName(table, c.name)};
