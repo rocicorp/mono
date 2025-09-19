@@ -247,8 +247,7 @@ export function benchmarkRebase(opts: {
         pullInterval: null,
         pushDelay: 9999,
         mutators: {putMap},
-        // eslint-disable-next-line @typescript-eslint/require-await
-        puller: async () => ({
+        puller: () => ({
           response: {
             cookie: 1,
             lastMutationIDChanges: {},
@@ -358,8 +357,7 @@ async function setupPersistedData(
       name: replicacheName,
       indexes,
       pullInterval: null,
-      // eslint-disable-next-line @typescript-eslint/require-await
-      puller: async () => ({
+      puller: () => ({
         response: {
           cookie: 1,
           lastMutationIDChanges: {},

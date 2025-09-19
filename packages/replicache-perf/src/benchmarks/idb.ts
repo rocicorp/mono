@@ -267,7 +267,6 @@ function benchmarkIDBReadGetWithInlineKeys(opts: {
         iec: true,
       })
     }`,
-    )}`,
     group: opts.group,
     byteSize: opts.valSize * opts.numKeys,
     async setup() {
