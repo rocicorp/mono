@@ -132,6 +132,7 @@ test('stable generation', () => {
                   "councilman",
                 ],
               },
+              "flip": false,
               "subquery": {
                 "alias": "zsubq_cleaner",
                 "limit": 77,
@@ -155,6 +156,7 @@ test('stable generation', () => {
                             "amendment",
                           ],
                         },
+                        "flip": false,
                         "subquery": {
                           "alias": "zsubq_cleaner",
                           "limit": 73,
@@ -180,6 +182,7 @@ test('stable generation', () => {
                                   "amendment",
                                 ],
                               },
+                              "flip": false,
                               "subquery": {
                                 "alias": "zsubq_cleaner",
                                 "limit": 47,
@@ -203,6 +206,7 @@ test('stable generation', () => {
                                             "amendment",
                                           ],
                                         },
+                                        "flip": false,
                                         "subquery": {
                                           "alias": "zsubq_cleaner",
                                           "limit": 60,
@@ -226,6 +230,7 @@ test('stable generation', () => {
                                                       "amendment",
                                                     ],
                                                   },
+                                                  "flip": false,
                                                   "subquery": {
                                                     "alias": "zsubq_cleaner",
                                                     "limit": 188,

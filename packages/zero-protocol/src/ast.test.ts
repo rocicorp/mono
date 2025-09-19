@@ -206,6 +206,7 @@ test('related subqueries are sorted', () => {
             "a",
           ],
         },
+        "flip": undefined,
         "hidden": undefined,
         "subquery": {
           "alias": "alias1",
@@ -228,6 +229,7 @@ test('related subqueries are sorted', () => {
             "a",
           ],
         },
+        "flip": undefined,
         "hidden": undefined,
         "subquery": {
           "alias": "alias2",
@@ -370,6 +372,7 @@ test('makeServerAST', () => {
               "issue_id",
             ],
           },
+          "flip": undefined,
           "hidden": undefined,
           "subquery": {
             "alias": "alias2",
@@ -392,6 +395,7 @@ test('makeServerAST', () => {
               "owner_id",
             ],
           },
+          "flip": undefined,
           "hidden": undefined,
           "subquery": {
             "alias": "alias1",
@@ -497,6 +501,7 @@ test('makeServerAST', () => {
               "id",
             ],
           },
+          "flip": undefined,
           "hidden": undefined,
           "subquery": {
             "alias": "alias2",
@@ -519,6 +524,7 @@ test('makeServerAST', () => {
               "ownerId",
             ],
           },
+          "flip": undefined,
           "hidden": undefined,
           "subquery": {
             "alias": "alias1",
@@ -606,6 +612,6 @@ test('protocol version', () => {
   // If this test fails because the AST schema has changed such that
   // old code will not understand the new schema, bump the
   // PROTOCOL_VERSION and update the expected values.
-  expect(hash).toEqual('1c228prd1v53r');
-  expect(PROTOCOL_VERSION).toBe(32);
+  expect(hash).toEqual('3s8g7w9qpaqkx');
+  expect(PROTOCOL_VERSION).toBe(33);
 });
