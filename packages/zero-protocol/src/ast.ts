@@ -164,6 +164,7 @@ export const correlatedSubquerySchemaOmitSubquery = v.readonlyObject({
   correlation: correlationSchema,
   hidden: v.boolean().optional(),
   system: v.literalUnion('permissions', 'client', 'test').optional(),
+  flip: v.boolean().optional(),
 });
 
 export const correlatedSubquerySchema: v.Type<CorrelatedSubquery> =
@@ -253,6 +254,7 @@ export type CorrelatedSubquery = {
   // When `hidden` is set to true, this hop will not be included in the output view
   // but its children will be.
   readonly hidden?: boolean | undefined;
+  readonly flip?: boolean | undefined;
 };
 
 export type ValuePosition = LiteralReference | Parameter | ColumnReference;
@@ -356,6 +358,7 @@ function transformAST(ast: AST, transform: ASTTransform): Required<AST> {
                 hidden: r.hidden,
                 subquery: transformAST(r.subquery, transform),
                 system: r.system,
+                flip: r.flip,
               }) satisfies Required<CorrelatedSubquery>,
           ),
         )
