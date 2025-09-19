@@ -34,6 +34,7 @@ describe('building the AST', () => {
                 "id",
               ],
             },
+            "flip": false,
             "subquery": {
               "alias": "zsubq_labels",
               "orderBy": [
@@ -58,6 +59,7 @@ describe('building the AST', () => {
                       "labelId",
                     ],
                   },
+                  "flip": false,
                   "subquery": {
                     "alias": "zsubq_zhidden_labels",
                     "orderBy": [
@@ -1501,6 +1503,7 @@ describe('exists', () => {
                   "ownerId",
                 ],
               },
+              "flip": false,
               "subquery": {
                 "alias": "zsubq_owner",
                 "orderBy": [
@@ -1533,6 +1536,7 @@ describe('exists', () => {
                 "ownerId",
               ],
             },
+            "flip": false,
             "subquery": {
               "alias": "zsubq_owner",
               "orderBy": [
@@ -1569,6 +1573,7 @@ describe('exists', () => {
                   "ownerId",
                 ],
               },
+              "flip": false,
               "subquery": {
                 "alias": "zsubq_owner",
                 "orderBy": [
@@ -1618,6 +1623,7 @@ describe('exists', () => {
                 "ownerId",
               ],
             },
+            "flip": false,
             "subquery": {
               "alias": "zsubq_owner",
               "orderBy": [
@@ -1682,6 +1688,7 @@ describe('exists', () => {
                 "id",
               ],
             },
+            "flip": false,
             "subquery": {
               "alias": "zsubq_labels",
               "orderBy": [
@@ -1706,6 +1713,7 @@ describe('exists', () => {
                       "labelId",
                     ],
                   },
+                  "flip": false,
                   "subquery": {
                     "alias": "zsubq_zhidden_labels",
                     "orderBy": [
@@ -1754,6 +1762,7 @@ describe('exists', () => {
                     "ownerId",
                   ],
                 },
+                "flip": false,
                 "subquery": {
                   "alias": "zsubq_owner",
                   "orderBy": [
@@ -1779,6 +1788,7 @@ describe('exists', () => {
                     "id",
                   ],
                 },
+                "flip": false,
                 "subquery": {
                   "alias": "zsubq_comments",
                   "orderBy": [
@@ -1818,6 +1828,7 @@ describe('exists', () => {
                   "id",
                 ],
               },
+              "flip": false,
               "subquery": {
                 "alias": "zsubq_comments",
                 "orderBy": [
@@ -1868,6 +1879,7 @@ describe('exists', () => {
                 "id",
               ],
             },
+            "flip": false,
             "subquery": {
               "alias": "zsubq_labels",
               "orderBy": [
@@ -1892,6 +1904,7 @@ describe('exists', () => {
                       "labelId",
                     ],
                   },
+                  "flip": false,
                   "subquery": {
                     "alias": "zsubq_zhidden_labels",
                     "orderBy": [
@@ -1953,6 +1966,7 @@ describe('exists', () => {
                     "ownerId",
                   ],
                 },
+                "flip": false,
                 "subquery": {
                   "alias": "zsubq_owner",
                   "orderBy": [
@@ -1978,6 +1992,7 @@ describe('exists', () => {
                     "id",
                   ],
                 },
+                "flip": false,
                 "subquery": {
                   "alias": "zsubq_comments",
                   "orderBy": [
@@ -2003,6 +2018,7 @@ describe('exists', () => {
                     "id",
                   ],
                 },
+                "flip": false,
                 "subquery": {
                   "alias": "zsubq_labels",
                   "orderBy": [
@@ -2027,6 +2043,7 @@ describe('exists', () => {
                           "labelId",
                         ],
                       },
+                      "flip": false,
                       "subquery": {
                         "alias": "zsubq_zhidden_labels",
                         "orderBy": [
@@ -2051,6 +2068,202 @@ describe('exists', () => {
         },
       }
     `);
+  });
+
+  test('exists with flip option - field relationship', () => {
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
+
+    // Using whereExists with flip option
+    expect(ast(issueQuery.whereExists('owner', {flip: true})))
+      .toMatchInlineSnapshot(`
+        {
+          "table": "issue",
+          "where": {
+            "op": "EXISTS",
+            "related": {
+              "correlation": {
+                "childField": [
+                  "id",
+                ],
+                "parentField": [
+                  "ownerId",
+                ],
+              },
+              "flip": true,
+              "subquery": {
+                "alias": "zsubq_owner",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
+                "table": "user",
+              },
+              "system": "client",
+            },
+            "type": "correlatedSubquery",
+          },
+        }
+      `);
+
+    // Using exists in expression builder with flip option
+    expect(
+      ast(
+        issueQuery.where(({exists}) =>
+          exists('owner', undefined, {flip: true}),
+        ),
+      ),
+    ).toMatchInlineSnapshot(`
+        {
+          "table": "issue",
+          "where": {
+            "op": "EXISTS",
+            "related": {
+              "correlation": {
+                "childField": [
+                  "id",
+                ],
+                "parentField": [
+                  "ownerId",
+                ],
+              },
+              "flip": true,
+              "subquery": {
+                "alias": "zsubq_owner",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
+                "table": "user",
+              },
+              "system": "client",
+            },
+            "type": "correlatedSubquery",
+          },
+        }
+      `);
+  });
+
+  test('exists with flip option - junction relationship', () => {
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
+
+    expect(ast(issueQuery.whereExists('labels', {flip: true})))
+      .toMatchInlineSnapshot(`
+        {
+          "table": "issue",
+          "where": {
+            "op": "EXISTS",
+            "related": {
+              "correlation": {
+                "childField": [
+                  "issueId",
+                ],
+                "parentField": [
+                  "id",
+                ],
+              },
+              "flip": true,
+              "subquery": {
+                "alias": "zsubq_labels",
+                "orderBy": [
+                  [
+                    "issueId",
+                    "asc",
+                  ],
+                  [
+                    "labelId",
+                    "asc",
+                  ],
+                ],
+                "table": "issueLabel",
+                "where": {
+                  "op": "EXISTS",
+                  "related": {
+                    "correlation": {
+                      "childField": [
+                        "id",
+                      ],
+                      "parentField": [
+                        "labelId",
+                      ],
+                    },
+                    "flip": true,
+                    "subquery": {
+                      "alias": "zsubq_zhidden_labels",
+                      "orderBy": [
+                        [
+                          "id",
+                          "asc",
+                        ],
+                      ],
+                      "table": "label",
+                    },
+                    "system": "client",
+                  },
+                  "type": "correlatedSubquery",
+                },
+              },
+              "system": "client",
+            },
+            "type": "correlatedSubquery",
+          },
+        }
+      `);
+  });
+
+  test('exists with flip option and callback', () => {
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
+
+    expect(
+      ast(
+        issueQuery.whereExists('owner', q => q.where('id', '1'), {flip: true}),
+      ),
+    ).toMatchInlineSnapshot(`
+        {
+          "table": "issue",
+          "where": {
+            "op": "EXISTS",
+            "related": {
+              "correlation": {
+                "childField": [
+                  "id",
+                ],
+                "parentField": [
+                  "ownerId",
+                ],
+              },
+              "flip": true,
+              "subquery": {
+                "alias": "zsubq_owner",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
+                "table": "user",
+                "where": {
+                  "left": {
+                    "name": "id",
+                    "type": "column",
+                  },
+                  "op": "=",
+                  "right": {
+                    "type": "literal",
+                    "value": "1",
+                  },
+                  "type": "simple",
+                },
+              },
+              "system": "client",
+            },
+            "type": "correlatedSubquery",
+          },
+        }
+      `);
   });
 
   test('many exists on the same relationship', () => {
@@ -2080,6 +2293,7 @@ describe('exists', () => {
                     "ownerId",
                   ],
                 },
+                "flip": false,
                 "subquery": {
                   "alias": "zsubq_owner",
                   "orderBy": [
@@ -2117,6 +2331,7 @@ describe('exists', () => {
                     "ownerId",
                   ],
                 },
+                "flip": false,
                 "subquery": {
                   "alias": "zsubq_owner",
                   "orderBy": [

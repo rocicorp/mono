@@ -164,6 +164,7 @@ export const correlatedSubquerySchemaOmitSubquery = v.readonlyObject({
   correlation: correlationSchema,
   hidden: v.boolean().optional(),
   system: v.literalUnion('permissions', 'client', 'test').optional(),
+  flip: v.boolean().optional(),
 });
 
 export const correlatedSubquerySchema: v.Type<CorrelatedSubquery> =
