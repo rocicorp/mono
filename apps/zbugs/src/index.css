@@ -1027,6 +1027,26 @@ textarea.autoResize {
   background-color: var(--color-modal-background);
   backdrop-filter: var(--filter-backdrop-blur);
   padding: 1rem;
+
+  .aside {
+    position: relative;
+    font-size: var(--typo-label-size);
+    color: var(--color-text-primary);
+    padding: 0.75rem 0.75rem 0.75rem 3rem;
+    border-radius: 0.5rem;
+
+    a {
+      color: var(--color-primary-cta);
+    }
+  }
+
+  .aside::before {
+    content: '👨🏻‍💻';
+    position: absolute;
+    font-size: 2rem;
+    left: 0;
+    top: 0.5rem;
+  }
 }
 
 .modal-container .issue-detail-label {
@@ -1069,6 +1089,28 @@ textarea.autoResize {
 
 .edit-comment-cancel:hover {
   opacity: 1;
+}
+
+.comment-bottom-bar {
+  justify-content: space-between;
+
+  .aside {
+    display: none;
+    position: relative;
+    font-size: var(--typo-label-size);
+    color: var(--color-text-primary);
+    padding: 0;
+    border-radius: 0.5rem;
+    text-align: right;
+
+    a {
+      color: var(--color-primary-cta);
+    }
+  }
+}
+
+.comment-composer:focus-within .aside {
+  display: block;
 }
 
 /************/
