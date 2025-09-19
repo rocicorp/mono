@@ -6,6 +6,7 @@ import type {Node} from './data.ts';
 import {
   throwOutput,
   type FetchRequest,
+  type Input,
   type Operator,
   type Output,
 } from './operator.ts';
@@ -19,13 +20,13 @@ import type {Stream} from './stream.ts';
 import type {UnionFanOut} from './union-fan-out.ts';
 
 export class UnionFanIn implements Operator {
-  readonly #inputs: readonly Operator[];
+  readonly #inputs: readonly Input[];
   readonly #schema: SourceSchema;
   #fanOutPushStarted: boolean = false;
   #output: Output = throwOutput;
   #accumulatedPushes: Change[] = [];
 
-  constructor(fanOut: UnionFanOut, inputs: Operator[]) {
+  constructor(fanOut: UnionFanOut, inputs: Input[]) {
     this.#inputs = inputs;
     const fanOutSchema = fanOut.getSchema();
     fanOut.setFanIn(this);
