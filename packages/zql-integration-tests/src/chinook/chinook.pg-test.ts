@@ -463,7 +463,7 @@ describe(
                   // eslint-disable-next-line @typescript-eslint/unbound-method
                   or(
                     // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-                    cmp(randomColumn, '=', randomRow[randomColumn] as any)
+                    cmp(randomColumn, '=', randomRow[randomColumn] as any),
                   ),
                 );
               },

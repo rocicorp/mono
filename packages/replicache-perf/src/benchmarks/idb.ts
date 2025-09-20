@@ -19,8 +19,8 @@ function benchmarkIDBReadGetAll(opts: {
       xbytes(opts.valSize, {
         fixed: 0,
         iec: true,
-      },
-    )}`,
+      })
+    }`,
     group: opts.group,
     byteSize: opts.valSize * opts.numKeys,
     async setup() {
@@ -72,9 +72,7 @@ function benchmarkIDBReadGetAllGetAllKeys(opts: {
   const dbName = 'db1';
   const storeName = 'store1';
   return {
-    name: `idb read tx getAll & getAllKeys (${opts.dataType}) ${
-      opts.numKeys
-    }x${
+    name: `idb read tx getAll & getAllKeys (${opts.dataType}) ${opts.numKeys}x${
       // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       xbytes(opts.valSize, {
         fixed: 0,
@@ -319,9 +317,7 @@ function benchmarkIDBReadGetAllWithInlineKey(opts: {
   const dbName = 'db2';
   const storeName = 'store2';
   return {
-    name: `idb read inline tx getAll (${opts.dataType}) ${
-      opts.numKeys
-    }x${
+    name: `idb read inline tx getAll (${opts.dataType}) ${opts.numKeys}x${
       // eslint-disable-next-line @typescript-eslint/no-unsafe-call
       xbytes(opts.valSize, {
         fixed: 0,

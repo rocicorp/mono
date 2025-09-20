@@ -6,7 +6,7 @@ import type {Schema, Zero} from '../../zero/src/zero.ts';
 
 vi.mock('../../zero/src/zero.ts', async importOriginal => ({
   ...(await importOriginal<typeof import('../../zero/src/zero.ts')>()),
-  
+
   // eslint-disable-next-line @typescript-eslint/naming-convention
   Zero: class {
     closed = false;
@@ -31,7 +31,7 @@ class FakeZero {
 
 test('if zero options change ZeroProvider closes previous instance if it created it', () => {
   const [server, setServer] = createSignal('foo');
-  
+
   const MockZeroProvider = (props: {children: JSX.Element}) => (
     <ZeroProvider
       server={server()}
@@ -60,7 +60,7 @@ test('if zero options change ZeroProvider closes previous instance if it created
 test('if Zero instance changes, ZeroProvider does not close Zero instance it did not create', () => {
   const fakeZero0 = new FakeZero() as unknown as Zero<Schema>;
   const [zero, setZero] = createSignal<Zero<Schema, undefined>>(fakeZero0);
-  
+
   const MockZeroProvider = (props: {children: JSX.Element}) => (
     <ZeroProvider zero={zero()}>{props.children}</ZeroProvider>
   );
@@ -86,7 +86,7 @@ test('if Zero instance changes, ZeroProvider does not close Zero instance it did
 
 test('ZeroProvider does not recreate zero if just children change', () => {
   const [wrapInDiv, setWrapInDiv] = createSignal(false);
-  
+
   const MockZeroProvider = (props: {children: JSX.Element}) => (
     <ZeroProvider
       server={'foo'}
@@ -118,7 +118,7 @@ test('if zero options change but are === to prev, instance ZeroProvider does not
     tables: {},
     relationships: {},
   });
-  
+
   const MockZeroProvider = (props: {children: JSX.Element}) => (
     <ZeroProvider server={server()} userID={'u'} schema={schema()}>
       {props.children}

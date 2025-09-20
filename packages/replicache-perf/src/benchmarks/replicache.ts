@@ -369,10 +369,10 @@ async function setupPersistedData(
             patch,
           },
           httpRequestInfo: {
-          httpStatusCode: 200,
-          errorMessage: '',
-        },
-      };
+            httpStatusCode: 200,
+            errorMessage: '',
+          },
+        };
       },
     }));
 

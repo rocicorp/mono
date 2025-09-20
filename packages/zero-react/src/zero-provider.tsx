@@ -65,7 +65,7 @@ export function ZeroProvider<
       void z.close();
       setZero(undefined);
     };
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   }, [init, ...Object.values(props)]);
 
   return (

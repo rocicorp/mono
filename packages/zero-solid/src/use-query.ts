@@ -131,8 +131,6 @@ export function useQuery<
   return [() => state[0][''] as HumanReadable<TReturn>, () => state[1]];
 }
 
-function normalize<T>(
-  options?: T | Accessor<T>,
-): T | undefined {
+function normalize<T>(options?: T | Accessor<T>): T | undefined {
   return typeof options === 'function' ? (options as Accessor<T>)() : options;
 }
