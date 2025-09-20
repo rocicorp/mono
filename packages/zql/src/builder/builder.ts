@@ -31,6 +31,8 @@ import type {Input, InputBase, Storage} from '../ivm/operator.ts';
 import {Skip} from '../ivm/skip.ts';
 import type {Source, SourceInput} from '../ivm/source.ts';
 import {Take} from '../ivm/take.ts';
+import {UnionFanIn} from '../ivm/union-fan-in.ts';
+import {UnionFanOut} from '../ivm/union-fan-out.ts';
 import type {DebugDelegate} from './debug-delegate.ts';
 import {createPredicate, type NoSubqueryCondition} from './filter.ts';
 
@@ -242,6 +244,11 @@ function buildPipelineInternal(
   }
 
   for (const csq of csqsFromCondition) {
+    if (csq.flip) {
+      // We cannot apply flipped subqueries at this level
+      // They will be handled in the context of the filter
+      continue;
+    }
     end = applyCorrelatedSubQuery(csq, delegate, queryID, end, name, true);
   }
 
@@ -276,9 +283,90 @@ function applyWhere(
   delegate: BuilderDelegate,
   name: string,
 ): Input {
-  return buildFilterPipeline(input, delegate, filterInput =>
-    applyFilter(filterInput, condition, delegate, name),
-  );
+  if (!conditionIncludesFlippedSubqueryAtAnyLevel(condition)) {
+    return buildFilterPipeline(input, delegate, filterInput =>
+      applyFilter(filterInput, condition, delegate, name),
+    );
+  }
+
+  return applyFilterWithFlips(input, condition, delegate, name);
+}
+
+function applyFilterWithFlips(
+  input: Input,
+  condition: Condition,
+  delegate: BuilderDelegate,
+  name: string,
+): Input {
+  let end = input;
+  assert(condition.type !== 'simple', 'Simple conditions cannot have flips');
+
+  switch (condition.type) {
+    case 'and': {
+      const [withFlipped, withoutFlipped] = partitionBranches(
+        condition.conditions,
+        conditionIncludesFlippedSubqueryAtAnyLevel,
+      );
+      if (withoutFlipped.length > 0) {
+        end = buildFilterPipeline(input, delegate, filterInput =>
+          applyAnd(
+            filterInput,
+            {
+              type: 'and',
+              conditions: withoutFlipped,
+            },
+            delegate,
+            name,
+          ),
+        );
+      }
+      assert(withFlipped.length > 0, 'Impossible to have no flips here');
+      for (const cond of withFlipped) {
+        end = applyFilterWithFlips(end, cond, delegate, name);
+      }
+      break;
+    }
+    case 'or': {
+      const [withFlipped, withoutFlipped] = partitionBranches(
+        condition.conditions,
+        conditionIncludesFlippedSubqueryAtAnyLevel,
+      );
+      if (withoutFlipped.length > 0) {
+        end = buildFilterPipeline(input, delegate, filterInput =>
+          applyOr(
+            filterInput,
+            {
+              type: 'or',
+              conditions: withoutFlipped,
+            },
+            delegate,
+            name,
+          ),
+        );
+      }
+      assert(withFlipped.length > 0, 'Impossible to have no flips here');
+
+      const ufo = new UnionFanOut(end);
+      delegate.addEdge(end, ufo);
+      end = delegate.decorateInput(ufo, `${name}:ufo`);
+      const branches = withFlipped.map(cond =>
+        applyFilterWithFlips(end, cond, delegate, name),
+      );
+      const ufi = new UnionFanIn(ufo, branches);
+      for (const branch of branches) {
+        delegate.addEdge(branch, ufi);
+      }
+      end = delegate.decorateInput(ufi, `${name}:ufi`);
+
+      break;
+    }
+    case 'correlatedSubquery': {
+      // FLIP JOIN!
+      break;
+    }
+  }
+
+  return end;
 }
 
 function applyFilter(
@@ -572,4 +660,34 @@ function uniquifyCorrelatedSubqueryConditionAliases(ast: AST): AST {
     where: uniquify(where),
   };
   return result;
+}
+
+export function conditionIncludesFlippedSubqueryAtAnyLevel(
+  cond: Condition,
+): boolean {
+  if (cond.type === 'correlatedSubquery') {
+    return cond.related.flip === true;
+  }
+  if (cond.type === 'and' || cond.type === 'or') {
+    return cond.conditions.some(c =>
+      conditionIncludesFlippedSubqueryAtAnyLevel(c),
+    );
+  }
+  return false;
+}
+
+export function partitionBranches(
+  conditions: readonly Condition[],
+  predicate: (c: Condition) => boolean,
+) {
+  const matched: Condition[] = [];
+  const notMatched: Condition[] = [];
+  for (const c of conditions) {
+    if (predicate(c)) {
+      matched.push(c);
+    } else {
+      notMatched.push(c);
+    }
+  }
+  return [matched, notMatched] as const;
 }
