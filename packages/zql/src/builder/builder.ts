@@ -354,7 +354,6 @@ function applyFilterWithFlips(
         applyFilterWithFlips(end, cond, delegate, name),
       );
       const ufi = new UnionFanIn(ufo, branches);
-      ufo.setFanIn(ufi);
       for (const branch of branches) {
         delegate.addEdge(branch, ufi);
       }

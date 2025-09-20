@@ -15,14 +15,18 @@ const {queries} = await bootstrap({
 // Demonstration of how to compare two different query styles
 summary(() => {
   bench('tracks with artist name : flipped', async () => {
-    await queries.sqlite.artist
-      .where('name', 'AC/DC')
-      .related('albums', a => a.related('tracks'));
+    await queries.sqlite.track.whereExists(
+      'album',
+      a => a.where('title', 'Facelift'),
+      {flip: true},
+    );
   });
 
   bench('tracks with artist name : not flipped', async () => {
-    await queries.sqlite.track.whereExists('album', a =>
-      a.whereExists('artist', ar => ar.where('name', 'AC/DC')),
+    await queries.sqlite.track.whereExists(
+      'album',
+      a => a.where('title', 'Facelift'),
+      {flip: false},
     );
   });
 });
