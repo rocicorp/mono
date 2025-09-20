@@ -84,8 +84,7 @@ class BunSQLiteDatabase implements SQLiteDatabase {
       (this.#db as {destroy?: () => void})?.destroy &&
       process.env.NODE_ENV === 'test'
     ) {
-      // @ts-expect-error - workaround for mocking in tests, bun:sqlite doesn't have destroy() method
-      (this.#db as {destroy(): void}).destroy();
+      (this.#db as unknown as {destroy(): void}).destroy();
     }
 
     if (existsSync(this.#filename)) {
