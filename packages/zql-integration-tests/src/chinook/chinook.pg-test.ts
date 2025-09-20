@@ -32,8 +32,8 @@ describe(
         {
           suiteName: 'compiler_chinook',
           pgContent,
-          only: 'compare primary key',
           zqlSchema: schema,
+          only: 'flip an exists join',
           setRawData: r => {
             data = r;
           },
@@ -585,6 +585,22 @@ describe(
           //     (memoryQueries[table] as AnyQuery).where(({or}) => or()),
           //   );
           // });
+          {
+            name: 'flip an exists join',
+            createQuery: q =>
+              q.track.whereExists('album', q => q.where('title', 'Facelift'), {
+                flip: true,
+              }),
+            // manualVerification: [],
+          },
+          {
+            name: 'flip an exists join',
+            createQuery: q =>
+              q.track.whereExists('album', q => q.where('title', 'Facelift'), {
+                flip: true,
+              }),
+            // manualVerification: [],
+          },
         ],
       ),
     )('$name', async ({fn}) => {
