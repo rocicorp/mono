@@ -15,7 +15,7 @@ import {
   type ZeroOptions,
 } from '../../zero/src/zero.ts';
 
-// eslint-disable-next-line @typescript-eslint/naming-convention, @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const ZeroContext = createContext<Accessor<Zero<any, any>> | undefined>(
   undefined,
 );

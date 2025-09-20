@@ -45,9 +45,11 @@ const rows =
 const queryAst = transformAndHashQuery(
   lc,
   '',
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   rows[0].clientAST,
   permissions,
   {},
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   rows[0].internal,
 ).transformedAst;
 

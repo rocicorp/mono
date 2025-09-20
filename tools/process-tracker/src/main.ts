@@ -82,6 +82,7 @@ async function run() {
           .join('\t') + '\n',
       );
     }
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
     timer = setTimeout(trackAndDisplay, display.intervalSeconds * 1000);
   }
   void trackAndDisplay();

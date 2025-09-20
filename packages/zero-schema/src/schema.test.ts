@@ -14,6 +14,7 @@ test('Key name does not matter', () => {
     primaryKey: ['id'];
   }>({} as never);
   // @ts-expect-error - no foo table
+  // eslint-disable-next-line @typescript-eslint/no-unused-expressions
   schema.tables.foo;
 });
 

@@ -27,6 +27,7 @@ export async function fillPgAndSync(
           ...acc,
           [mapper.columnName(table, c)]: row[c as keyof typeof row],
         }),
+        // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
         {} as Record<string, unknown>,
       ),
     );

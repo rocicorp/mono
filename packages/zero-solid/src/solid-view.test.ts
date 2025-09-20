@@ -4,7 +4,6 @@ import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {unreachable} from '../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {stringCompare} from '../../shared/src/string-compare.ts';
-import {createSchema, number, string, table} from '../../zero/src/zero.ts';
 import type {Change} from '../../zql/src/ivm/change.ts';
 import {Join} from '../../zql/src/ivm/join.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
@@ -2484,19 +2483,8 @@ test('queryComplete promise', async () => {
   expect(resultDetails()).toEqual({type: 'unknown'});
 
   queryCompleteResolver.resolve(true);
-  await 1;
+  await Promise.resolve();
   expect(resultDetails()).toEqual({type: 'complete'});
-});
-
-const schema = createSchema({
-  tables: [
-    table('test')
-      .columns({
-        a: number(),
-        b: string(),
-      })
-      .primaryKey('a'),
-  ],
 });
 
 type TestReturn = {

@@ -87,6 +87,7 @@ export class TableBuilder<TShape extends TableSchema> {
     const columnSchemas = Object.fromEntries(
       Object.entries(columns).map(([k, v]) => [k, v.schema]),
     ) as {[K in keyof TColumns]: TColumns[K]['schema']};
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-return
     return new TableBuilderWithColumns({
       ...this.#schema,
       columns: columnSchemas,

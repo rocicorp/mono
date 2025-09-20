@@ -25,7 +25,7 @@
     "start-zero-cache": "cd packages/zero-cache && npm run start"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.7.0",
+    "@rocicorp/eslint-config": "^0.8.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "@vitest/coverage-v8": "3.2.4",
     "@vitest/runner": "3.2.4",
@@ -35,8 +35,6 @@
     "turbo": "^2.4.4",
     "vitest": "3.2.4"
   },
-  "eslintConfig": {
-    "extends": "./eslint-config.json"
-  },
+
   "prettier": "@rocicorp/prettier-config"
 }

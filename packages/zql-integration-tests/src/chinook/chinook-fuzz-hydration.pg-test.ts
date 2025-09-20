@@ -1,5 +1,4 @@
 /* eslint-disable no-console */
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {bootstrap, runAndCompare} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';
@@ -47,6 +46,7 @@ if (REPRO_SEED) {
   });
 }
 
+// eslint-disable-next-line @typescript-eslint/no-duplicate-type-constituents
 function createCase(seed?: number | undefined) {
   seed = seed ?? Date.now() ^ (Math.random() * 0x100000000);
   const randomizer = generateMersenne53Randomizer(seed);
@@ -113,7 +113,7 @@ async function shrink(generations: AnyQuery[], seed: number) {
         undefined,
       );
       low = mid + 1;
-    } catch (e) {
+    } catch {
       lastFailure = mid;
       high = mid;
     }

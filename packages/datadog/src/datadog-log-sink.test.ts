@@ -8,8 +8,8 @@ import {
   MAX_LOG_ENTRIES_PER_FLUSH,
 } from './datadog-log-sink.ts';
 
-const originalFetch = globalThis.fetch;
-const fetch = vi.fn<typeof originalFetch>();
+const _originalFetch = globalThis.fetch;
+const fetch = vi.fn<typeof _originalFetch>();
 globalThis.fetch = fetch;
 
 beforeEach(() => {
@@ -80,6 +80,7 @@ test('does not flush more than max entries', async () => {
 
   const numLogEntriesInRequest = (n: number) => {
     const body = fetch.mock.calls[n][1]?.body;
+    // eslint-disable-next-line @typescript-eslint/no-base-to-string
     return String(body).split('\n').length;
   };
 
@@ -140,6 +141,7 @@ test('flushes MAX_LOG_ENTRIES_PER_FLUSH at a time until size is below FORCE_FLUS
 
   const numLogEntriesInRequest = (n: number) => {
     const body = fetch.mock.calls[n][1]?.body;
+    // eslint-disable-next-line @typescript-eslint/no-base-to-string
     return String(body).split('\n').length;
   };
 
@@ -442,14 +444,23 @@ test('Errors in multi arg messages are converted to JSON', async () => {
   if (!body) {
     throw new Error('Expect body to be defined and non-null');
   }
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-base-to-string
   const parsedBody = JSON.parse(body.toString());
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   expect(parsedBody.date).toEqual(1);
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   expect(parsedBody.status).toEqual('info');
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   expect(parsedBody.message.length).toEqual(3);
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   expect(parsedBody.message[0]).toEqual('Logging an error');
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   expect(parsedBody.message[1].name).toEqual('Error');
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   expect(parsedBody.message[1].message).toEqual('Test error msg');
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   expect(parsedBody.message[1].stack).toBeDefined();
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   expect(parsedBody.message[2]).toEqual('after');
 });
 
@@ -478,11 +489,17 @@ test('Errors in single arg messages are converted to JSON', async () => {
   if (!body) {
     throw new Error('Expect body to be defined and non-null');
   }
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-base-to-string
   const parsedBody = JSON.parse(body.toString());
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   expect(parsedBody.date).toEqual(1);
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   expect(parsedBody.status).toEqual('info');
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   expect(parsedBody.message.name).toEqual('Error');
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   expect(parsedBody.message.message).toEqual('Test error msg');
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
   expect(parsedBody.message.stack).toBeDefined();
 });
 
@@ -788,6 +805,7 @@ async function microtasksUntil(p: () => boolean) {
     if (p()) {
       return;
     }
+    // eslint-disable-next-line @typescript-eslint/await-thenable
     await 'microtask';
   }
 }

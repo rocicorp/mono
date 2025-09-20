@@ -134,12 +134,14 @@ function compilePermissions<TAuthDataShape, TSchema extends Schema>(
       row: compileRowConfig(
         nameMapper,
         tableName,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
         tableConfig.row,
         expressionBuilders[tableName],
       ),
       cell: compileCellConfig(
         nameMapper,
         tableName,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
         tableConfig.cell,
         expressionBuilders[tableName],
       ),

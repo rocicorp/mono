@@ -1112,7 +1112,7 @@ describe('useSuspenseQuery', () => {
 
       // Verify that refetch is not available when not in error state
       expect(capturedDetails?.type).toBe('complete');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
       expect((capturedDetails as any).refetch).toBeUndefined();
     });
   });

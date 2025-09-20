@@ -71,12 +71,12 @@ export type UseSuspenseQueryOptions = UseQueryOptions & {
   suspendUntil?: 'complete' | 'partial';
 };
 
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
 const reactUse = (React as unknown as {use?: (p: Promise<unknown>) => void})
   .use;
 const suspend: (p: Promise<unknown>) => void = reactUse
   ? reactUse
   : p => {
+      // eslint-disable-next-line @typescript-eslint/only-throw-error
       throw p;
     };
 
@@ -186,6 +186,7 @@ function getSnapshot<TReturn>(
   data: HumanReadable<TReturn>,
   resultType: ResultType,
   refetchFn: () => void,
+  // eslint-disable-next-line @typescript-eslint/no-duplicate-type-constituents
   error?: ErroredQuery | undefined,
 ): QueryResult<TReturn> {
   if (singular && data === undefined) {
@@ -452,6 +453,7 @@ class ViewWrapper<
   #onData = (
     snap: Immutable<HumanReadable<TReturn>>,
     resultType: ResultType,
+    // eslint-disable-next-line @typescript-eslint/no-duplicate-type-constituents
     error?: ErroredQuery | undefined,
   ) => {
     const data =

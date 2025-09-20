@@ -145,11 +145,13 @@ beforeAll(async () => {
 
   const [issueLiteRows, commentLiteRows] = [
     mapResultToClientNames(
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
       sqlite.prepare('SELECT * FROM "issue"').all<Row>(),
       schema,
       'issue',
     ) as Schema['tables']['issue'][],
     mapResultToClientNames(
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
       sqlite.prepare('SELECT * FROM "comment"').all<Row>(),
       schema,
       'comment',

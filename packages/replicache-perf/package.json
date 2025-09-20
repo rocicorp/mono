@@ -6,13 +6,13 @@
     "check-format": "prettier --check .",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "lint": "eslint src/",
     "build": "tsx tool/build.ts",
     "perf": "npm run build && tsx src/runner.ts"
   },
   "type": "module",
   "dependencies": {
-    "@rocicorp/eslint-config": "^0.7.0",
+    "@rocicorp/eslint-config": "^0.8.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "@types/command-line-args": "^5.2.3",
     "@types/command-line-usage": "^5.0.2",
@@ -29,9 +29,6 @@
     "typescript": "~5.8.2",
     "vite": "6.2.1",
     "xbytes": "^1.7.0"
-  },
-  "eslintConfig": {
-    "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config"
 }

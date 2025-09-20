@@ -11,7 +11,7 @@ type MakeAllFieldsRequired<T> = {
   [K in keyof T]-?: MakeAllFieldsRequired<T[K]>;
 };
 
-(
+void ((
   t: SchemaValue,
   inferredT: v.Infer<typeof schemaValueSchema>,
   tR: MakeAllFieldsRequired<SchemaValue>,
@@ -22,9 +22,9 @@ type MakeAllFieldsRequired<T> = {
 
   inferredTR satisfies MakeAllFieldsRequired<SchemaValue>;
   tR satisfies MakeAllFieldsRequired<v.Infer<typeof schemaValueSchema>>;
-};
+});
 
-(
+void ((
   t: Schema,
   inferredT: v.Infer<typeof schemaSchema>,
   tR: MakeAllFieldsRequired<Schema>,
@@ -35,11 +35,11 @@ type MakeAllFieldsRequired<T> = {
 
   inferredTR satisfies MakeAllFieldsRequired<Schema>;
   tR satisfies MakeAllFieldsRequired<v.Infer<typeof schemaSchema>>;
-};
+});
 
 // v.Infer<typeof relationshipSchema> should be assignable to Relationship but not vice versa because
 // relationshipSchema does not allow type Lazy<T> = T | (() => T); only Lazy<T> = T
-(
+void ((
   //t: Relationship,
   inferredT: v.Infer<typeof relationshipSchema>,
   //tR: MakeAllFieldsRequired<Relationship>,
@@ -49,4 +49,4 @@ type MakeAllFieldsRequired<T> = {
   inferredT satisfies Relationship;
   inferredTR satisfies MakeAllFieldsRequired<Relationship>;
   //tR satisfies MakeAllFieldsRequired<v.Infer<typeof relationshipSchema>>;
-};
+});

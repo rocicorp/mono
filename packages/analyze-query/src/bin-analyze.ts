@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import chalk from 'chalk';
 import fs from 'node:fs';
 import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
@@ -253,6 +252,7 @@ let result: AnalyzeQueryResult;
 
 if (config.ast) {
   // the user likely has a transformed AST since the wire and storage formats are the transformed AST
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   result = await runAst(lc, JSON.parse(config.ast), true, {
     applyPermissions: config.applyPermissions,
     authData: config.authData,
@@ -282,7 +282,9 @@ function runQuery(queryString: string): Promise<AnalyzeQueryResult> {
     ),
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-implied-eval
   const f = new Function('z', `return z.query.${queryString};`);
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
   const q: Query<Schema, string, PullRow<string, Schema>> = f(z);
 
   const ast = completedAST(q);

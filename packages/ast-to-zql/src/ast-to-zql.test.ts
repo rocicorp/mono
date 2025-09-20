@@ -653,12 +653,14 @@ test('round trip', () => {
     const code = astToZQL(ast(q));
     codes.push(code);
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-implied-eval, @typescript-eslint/no-unsafe-call
     const q2 = new Function(
       'staticQuery',
       'schema',
       'tableName',
       `return staticQuery(schema, tableName)${code}`,
     )(staticQuery, schema, ast(q).table);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     expect(ast(q2)).toEqual(ast(q));
   }
 

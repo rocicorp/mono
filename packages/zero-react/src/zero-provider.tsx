@@ -10,8 +10,7 @@ import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
-const ZeroContext = createContext<unknown | undefined>(undefined);
+const ZeroContext = createContext<unknown>(undefined);
 
 export function useZero<
   S extends Schema,
@@ -66,6 +65,7 @@ export function ZeroProvider<
       void z.close();
       setZero(undefined);
     };
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   }, [init, ...Object.values(props)]);
 
   return (

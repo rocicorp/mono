@@ -14,13 +14,13 @@ function benchmarkIDBReadGetAll(opts: {
   const dbName = 'db1';
   const storeName = 'store1';
   return {
-    name: `idb read tx getAll (${opts.dataType}) ${opts.numKeys}x${xbytes(
-      opts.valSize,
-      {
+    name: `idb read tx getAll (${opts.dataType}) ${opts.numKeys}x${
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      xbytes(opts.valSize, {
         fixed: 0,
         iec: true,
-      },
-    )}`,
+      })
+    }`,
     group: opts.group,
     byteSize: opts.valSize * opts.numKeys,
     async setup() {
@@ -72,12 +72,13 @@ function benchmarkIDBReadGetAllGetAllKeys(opts: {
   const dbName = 'db1';
   const storeName = 'store1';
   return {
-    name: `idb read tx getAll & getAllKeys (${opts.dataType}) ${
-      opts.numKeys
-    }x${xbytes(opts.valSize, {
-      fixed: 0,
-      iec: true,
-    })}`,
+    name: `idb read tx getAll & getAllKeys (${opts.dataType}) ${opts.numKeys}x${
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      xbytes(opts.valSize, {
+        fixed: 0,
+        iec: true,
+      })
+    }`,
     group: opts.group,
     byteSize: opts.valSize * opts.numKeys,
     async setup() {
@@ -131,13 +132,13 @@ function benchmarkIDBReadGet(opts: {
   const dbName = 'db1';
   const storeName = 'store1';
   return {
-    name: `idb read tx get (${opts.dataType}) ${opts.numKeys}x${xbytes(
-      opts.valSize,
-      {
+    name: `idb read tx get (${opts.dataType}) ${opts.numKeys}x${
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      xbytes(opts.valSize, {
         fixed: 0,
         iec: true,
-      },
-    )}`,
+      })
+    }`,
     group: opts.group,
     byteSize: opts.valSize * opts.numKeys,
     async setup() {
@@ -214,13 +215,13 @@ function benchmarkIDBWrite(opts: {
   run(bench: Bencher): Promise<void>;
 } {
   return {
-    name: `idb write tx (${opts.dataType}) ${opts.numKeys}x${xbytes(
-      opts.valSize,
-      {
+    name: `idb write tx (${opts.dataType}) ${opts.numKeys}x${
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      xbytes(opts.valSize, {
         fixed: 0,
         iec: true,
-      },
-    )}`,
+      })
+    }`,
     group: opts.group,
     byteSize: opts.valSize * opts.numKeys,
 
@@ -257,13 +258,13 @@ function benchmarkIDBReadGetWithInlineKeys(opts: {
   const dbName = 'db2';
   const storeName = 'store2';
   return {
-    name: `idb read inline tx get (${opts.dataType}) ${opts.numKeys}x${xbytes(
-      opts.valSize,
-      {
+    name: `idb read inline tx get (${opts.dataType}) ${opts.numKeys}x${
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      xbytes(opts.valSize, {
         fixed: 0,
         iec: true,
-      },
-    )}`,
+      })
+    }`,
     group: opts.group,
     byteSize: opts.valSize * opts.numKeys,
     async setup() {
@@ -316,12 +317,13 @@ function benchmarkIDBReadGetAllWithInlineKey(opts: {
   const dbName = 'db2';
   const storeName = 'store2';
   return {
-    name: `idb read inline tx getAll (${opts.dataType}) ${
-      opts.numKeys
-    }x${xbytes(opts.valSize, {
-      fixed: 0,
-      iec: true,
-    })}`,
+    name: `idb read inline tx getAll (${opts.dataType}) ${opts.numKeys}x${
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      xbytes(opts.valSize, {
+        fixed: 0,
+        iec: true,
+      })
+    }`,
     group: opts.group,
     byteSize: opts.valSize * opts.numKeys,
     async setup() {
@@ -380,13 +382,13 @@ function benchmarkIDBWriteWithInlineKey(opts: {
   const dbName = 'db2';
   const storeName = 'store2';
   return {
-    name: `idb write inline tx (${opts.dataType}) ${opts.numKeys}x${xbytes(
-      opts.valSize,
-      {
+    name: `idb write inline tx (${opts.dataType}) ${opts.numKeys}x${
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
+      xbytes(opts.valSize, {
         fixed: 0,
         iec: true,
-      },
-    )}`,
+      })
+    }`,
     group: opts.group,
     byteSize: opts.valSize * opts.numKeys,
 
