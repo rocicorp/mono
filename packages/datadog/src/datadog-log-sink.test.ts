@@ -65,12 +65,12 @@ test('does not flush more than max entries', async () => {
     interval: 10,
   });
 
-  let fetchCount = 0;
+  let _fetchCount = 0;
   const fetchLatches = [resolver<void>(), resolver<void>(), resolver<void>()];
   const {promise: canFinishFetch, resolve: finishFetch} = resolver<Response>();
 
   fetch.mockImplementation(() => {
-    fetchLatches[fetchCount++].resolve();
+    fetchLatches[__fetchCount++].resolve();
     return canFinishFetch;
   });
   // Trigger the first force flush.
@@ -112,7 +112,7 @@ test('flushes MAX_LOG_ENTRIES_PER_FLUSH at a time until size is below FORCE_FLUS
     interval: 10,
   });
 
-  let fetchCount = 0;
+  let _fetchCount = 0;
   const fetchLatches = [
     resolver<void>(),
     resolver<void>(),
@@ -129,7 +129,7 @@ test('flushes MAX_LOG_ENTRIES_PER_FLUSH at a time until size is below FORCE_FLUS
   ];
 
   fetch.mockImplementation(() => {
-    const i = fetchCount++;
+    const i = _fetchCount2++;
     fetchLatches[i].resolve();
     return fetchResponseResolvers[i].promise;
   });

@@ -6,7 +6,7 @@
     "check-format": "prettier --check .",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "lint": "oxlint src/",
     "build": "tsx tool/build.ts",
     "perf": "npm run build && tsx src/runner.ts"
   },

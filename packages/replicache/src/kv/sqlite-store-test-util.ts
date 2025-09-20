@@ -43,7 +43,7 @@ function createCleanupFunction(
       async storeName => {
         try {
           await storeProvider.drop(storeName);
-        } catch (error) {
+        } catch (_error) {
           // Ignore cleanup errors
         }
       },

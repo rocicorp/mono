@@ -20,7 +20,7 @@
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+    "lint": "oxlint src/"
   },
   "eslintConfig": {
     "extends": "../../eslint-config.json"
