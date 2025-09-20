@@ -31,6 +31,7 @@ test('permission rules create query ASTs', async () => {
     () => {
       const allowIfAdmin = (
         authData: AuthData,
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         {cmpLit}: ExpressionBuilder<ZeroSchema, string>,
       ) => cmpLit(authData.role, '=', 'admin');
 
@@ -130,6 +131,7 @@ test('nested parameters', async () => {
     () => {
       const allowIfAdmin = (
         authData: AuthData,
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         {or, cmpLit}: ExpressionBuilder<ZeroSchema, string>,
       ) =>
         or(
@@ -139,6 +141,7 @@ test('nested parameters', async () => {
 
       const allowIfSelf = (
         authData: AuthData,
+        // eslint-disable-next-line @typescript-eslint/unbound-method
         {cmp}: ExpressionBuilder<typeof schema, 'user'>,
       ) => cmp('id', authData.attributes.id);
 

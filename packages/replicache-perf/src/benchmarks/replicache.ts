@@ -360,18 +360,20 @@ async function setupPersistedData(
       name: replicacheName,
       indexes,
       pullInterval: null,
-      // eslint-disable-next-line @typescript-eslint/require-await
-      puller: async () => ({
-        response: {
-          cookie: 1,
-          lastMutationIDChanges: {},
-          patch,
-        },
-        httpRequestInfo: {
+      puller: async () => {
+        await Promise.resolve();
+        return {
+          response: {
+            cookie: 1,
+            lastMutationIDChanges: {},
+            patch,
+          },
+          httpRequestInfo: {
           httpStatusCode: 200,
           errorMessage: '',
         },
-      }),
+      };
+      },
     }));
 
     const initialPullResolver = resolver<void>();

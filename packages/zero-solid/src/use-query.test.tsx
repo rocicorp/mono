@@ -475,7 +475,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
   resetLogs();
 
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
+  // Removed unused eslint-disable directive
   setQuery(
     issueQuery
       // eslint-disable-next-line @typescript-eslint/unbound-method
@@ -719,6 +719,7 @@ test('useQuery ttl dep changed', () => {
   expect(materializeSpy).toHaveBeenCalledTimes(1);
   expect(materializeSpy.mock.calls[0][0]).toBe(query);
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const view = materializeSpy.mock.results[0].value;
   const destroySpy = vi.spyOn(view, 'destroy');
   const updateTTLSpy = vi.spyOn(view, 'updateTTL');
@@ -752,6 +753,7 @@ test('useQuery view disposed when owner cleaned up', () => {
   expect(materializeSpy).toHaveBeenCalledTimes(1);
   expect(materializeSpy.mock.calls[0][0]).toBe(query);
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const view = materializeSpy.mock.results[0].value;
   const destroySpy = vi.spyOn(view, 'destroy');
 
@@ -828,6 +830,7 @@ test('useQuery view disposed when query changes and new view is created', () => 
   expect(materializeSpy).toHaveBeenCalledTimes(1);
   expect(materializeSpy.mock.calls[0][0]).toBe(queries[0]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const view0 = materializeSpy.mock.results[0].value;
   const destroy0Spy = vi.spyOn(view0, 'destroy');
 
@@ -841,6 +844,7 @@ test('useQuery view disposed when query changes and new view is created', () => 
   expect(materializeSpy.mock.calls[0][0]).toBe(queries[0]);
   expect(materializeSpy.mock.calls[1][0]).toBe(queries[1]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const view1 = materializeSpy.mock.results[1].value;
   const destroy1Spy = vi.spyOn(view1, 'destroy');
 
@@ -856,6 +860,7 @@ test('useQuery view disposed when query changes and new view is created', () => 
   expect(materializeSpy.mock.calls[1][0]).toBe(queries[1]);
   expect(materializeSpy.mock.calls[2][0]).toBe(queries[2]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const view2 = materializeSpy.mock.results[2].value;
   const destroy2Spy = vi.spyOn(view2, 'destroy');
 
@@ -890,6 +895,7 @@ test('useQuery when ZeroProvider is used, view is reused if query instance chang
   expect(materializeSpy).toHaveBeenCalledTimes(1);
   expect(materializeSpy.mock.calls[0][0]).toBe(queries[0]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const view0 = materializeSpy.mock.results[0].value;
   const destroy0Spy = vi.spyOn(view0, 'destroy');
 
