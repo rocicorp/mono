@@ -15,7 +15,7 @@
     "clean": "cd docker && docker volume rm docker_zbugs_pgdata_sync && docker volume rm docker_zbugs_pgdata_upstream && rm -rf /tmp/zbugs-sync-replica.db*",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "lint": "oxlint --react-plugin src/",
     "preview": "vite preview",
     "zero": "tsx ../../packages/zero-cache/src/server/runner/main.ts",
     "zero-cache-dev": "tsx ../../packages/zero/src/zero-cache-dev.ts --schema-path=./shared/schema.ts",

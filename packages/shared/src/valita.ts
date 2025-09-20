@@ -148,7 +148,7 @@ function getDeepestUnionParseError(
   try {
     const str = JSON.stringify(value);
     return `Invalid union value: ${str}`;
-  } catch (e) {
+  } catch (_e) {
     // fallback if the value could not be stringified
     return `Invalid union value`;
   }

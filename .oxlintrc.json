@@ -1,0 +1,195 @@
+{
+  "plugins": [
+    "unicorn",
+    "typescript",
+    "oxc"
+  ],
+  "categories": {},
+  "rules": {
+    // Core correctness rules from eslint (keeping as "error" to match original config)
+    "for-direction": "error",
+    "no-async-promise-executor": "error",
+    "no-caller": "error",
+    "no-class-assign": "error",
+    "no-compare-neg-zero": "error",
+    "no-cond-assign": "error",
+    "no-const-assign": "error",
+    "no-constant-binary-expression": "error",
+    "no-constant-condition": "error",
+    "no-control-regex": "error",
+    "no-debugger": "error",
+    "no-delete-var": "error",
+    "no-dupe-class-members": "error",
+    "no-dupe-else-if": "error",
+    "no-dupe-keys": "error",
+    "no-duplicate-case": "error",
+    "no-empty-character-class": "error",
+    "no-empty-pattern": "error",
+    "no-empty-static-block": "error",
+    "no-eval": "off",
+    "no-ex-assign": "error",
+    "no-extra-boolean-cast": "error",
+    "no-func-assign": "error",
+    "no-global-assign": "error",
+    "no-import-assign": "error",
+    "no-invalid-regexp": "error",
+    "no-irregular-whitespace": "error",
+    "no-loss-of-precision": "error",
+    "no-new-native-nonconstructor": "error",
+    "no-nonoctal-decimal-escape": "error",
+    "no-obj-calls": "error",
+    "no-self-assign": "error",
+    "no-setter-return": "error",
+    "no-shadow-restricted-names": "error",
+    "no-sparse-arrays": "error",
+    "no-this-before-super": "error",
+    "no-unassigned-vars": "error",
+    "no-unsafe-finally": "error",
+    "no-unsafe-negation": "error",
+    "no-unsafe-optional-chaining": "off",
+    "no-unused-labels": "error",
+    "no-unused-private-class-members": "off",
+    "no-useless-backreference": "error",
+    "no-useless-catch": "error",
+    "no-useless-escape": "error",
+    "no-useless-rename": "off",
+    "no-with": "error",
+    "require-yield": "error",
+    "use-isnan": "error",
+    "valid-typeof": "error",
+
+    // Rules from @rocicorp/eslint-config that oxlint supports
+    "no-console": "error",
+    "no-var": "error",
+    "eqeqeq": "error",
+    "no-else-return": "error",
+    "require-await": "off",
+    
+    // Handle unused variables consistently (relaxed for migration)
+    "no-unused-vars": "off",
+    
+    // TypeScript rules that were in @rocicorp/eslint-config
+    "typescript/no-floating-promises": "error",
+    "typescript/no-unused-vars": "off",
+
+    // Rules that enforce no-restricted-imports (available in oxlint)
+    "no-restricted-imports": ["error", {
+      "patterns": [
+        {
+          "group": [
+            "datadog/*",
+            "otel/*", 
+            "replicache/*",
+            "replicache-perf/*",
+            "shared/*",
+            "zero/*",
+            "zero-cache/*",
+            "zero-client/*",
+            "zero-protocol/*",
+            "zero-react/*",
+            "zero-react-native/*",
+            "zero-schema/*",
+            "zero-solid/*",
+            "zero-vue/*",
+            "zql/*",
+            "zqlite/*",
+            "zqlite-zql-test/*"
+          ],
+          "message": "Use relative imports instead"
+        },
+        {
+          "group": ["**/mod.ts"],
+          "message": "Don't import from barrel files. Import from the specific module instead."
+        },
+        {
+          "group": ["**/*.test.ts", "**/*.test.tsx"],
+          "message": "Do not import from test files."
+        },
+        {
+          "group": ["sinon"],
+          "message": "Use vi instead of sinon"
+        }
+      ],
+      "paths": [
+        {"name": "datadog", "message": "Use relative imports instead"},
+        {"name": "otel", "message": "Use relative imports instead"},
+        {"name": "replicache", "message": "Use relative imports instead"},
+        {"name": "replicache-perf", "message": "Use relative imports instead"},
+        {"name": "shared", "message": "Use relative imports instead"},
+        {"name": "zero", "message": "Use relative imports instead"},
+        {"name": "zero-cache", "message": "Use relative imports instead"},
+        {"name": "zero-client", "message": "Use relative imports instead"},
+        {"name": "zero-protocol", "message": "Use relative imports instead"},
+        {"name": "zero-react", "message": "Use relative imports instead"},
+        {"name": "zero-react-native", "message": "Use relative imports instead"},
+        {"name": "zero-schema", "message": "Use relative imports instead"},
+        {"name": "zero-solid", "message": "Use relative imports instead"},
+        {"name": "zero-vue", "message": "Use relative imports instead"},
+        {"name": "zql", "message": "Use relative imports instead"},
+        {"name": "zqlite", "message": "Use relative imports instead"},
+        {"name": "zqlite-zql-test", "message": "Use relative imports instead"}
+      ]
+    }],
+
+    // OXC unique rules
+    "oxc/bad-array-method-on-arguments": "error",
+    "oxc/bad-char-at-comparison": "error",
+    "oxc/bad-comparison-sequence": "error",
+    "oxc/bad-min-max-func": "error",
+    "oxc/bad-object-literal-comparison": "error",
+    "oxc/bad-replace-all-arg": "error",
+    "oxc/const-comparisons": "error",
+    "oxc/double-comparisons": "error",
+    "oxc/erasing-op": "error",
+    "oxc/missing-throw": "error",
+    "oxc/number-arg-out-of-range": "error",
+    "oxc/only-used-in-recursion": "error",
+    "oxc/uninvoked-array-callback": "error",
+
+    // Additional TypeScript rules
+    "typescript/await-thenable": "error",
+    "typescript/no-array-delete": "error",
+    "typescript/no-base-to-string": "error",
+    "typescript/no-duplicate-enum-values": "error",
+    "typescript/no-duplicate-type-constituents": "error",
+    "typescript/no-extra-non-null-assertion": "error",
+    "typescript/no-for-in-array": "error",
+    "typescript/no-implied-eval": "error",
+    "typescript/no-meaningless-void-operator": "error",
+    "typescript/no-misused-new": "error",
+    "typescript/no-misused-spread": "error",
+    "typescript/no-non-null-asserted-optional-chain": "error",
+    "typescript/no-redundant-type-constituents": "error",
+    "typescript/no-this-alias": "error",
+    "typescript/no-unnecessary-parameter-property-assignment": "error",
+    "typescript/no-unsafe-declaration-merging": "error",
+    "typescript/no-unsafe-unary-minus": "error",
+    "typescript/no-useless-empty-export": "error",
+    "typescript/no-wrapper-object-types": "error",
+    "typescript/prefer-as-const": "error",
+    "typescript/require-array-sort-compare": "error",
+    "typescript/restrict-template-expressions": "error",
+    "typescript/triple-slash-reference": "error",
+    "typescript/unbound-method": "error",
+
+    // Unicorn rules - disabled to match current ESLint behavior temporarily
+    "unicorn/no-await-in-promise-methods": "off",
+    "unicorn/no-empty-file": "off", 
+    "unicorn/no-invalid-fetch-options": "off",
+    "unicorn/no-invalid-remove-event-listener": "off",
+    "unicorn/no-new-array": "off",
+    "unicorn/no-single-promise-in-promise-methods": "off",
+    "unicorn/no-thenable": "off",
+    "unicorn/no-unnecessary-await": "off",
+    "unicorn/no-useless-fallback-in-spread": "off",
+    "unicorn/no-useless-length-check": "off",
+    "unicorn/no-useless-spread": "off",
+    "unicorn/prefer-set-size": "off",
+    "unicorn/prefer-string-starts-ends-with": "off"
+  },
+  "env": {
+    "builtin": true
+  },
+  "globals": {},
+  "ignorePatterns": []
+}

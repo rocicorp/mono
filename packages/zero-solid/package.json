@@ -11,7 +11,7 @@
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+    "lint": "oxlint src/"
   },
   "peerDependencies": {
     "solid-js": "^1.9.4"

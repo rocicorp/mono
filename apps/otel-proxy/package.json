@@ -8,7 +8,7 @@
     "deploy": "vercel deploy",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "eslint .",
+    "lint": "oxlint .",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "check-types": "tsc --noEmit"

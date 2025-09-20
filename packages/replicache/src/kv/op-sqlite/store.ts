@@ -92,7 +92,7 @@ class OpSQLiteDatabase implements SQLiteDatabase {
       const tempDb = open({name: this.#filename});
       tempDb.delete();
       tempDb.close();
-    } catch (error) {
+    } catch (_error) {
       // Database might not exist, which is fine
     }
   }

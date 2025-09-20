@@ -660,7 +660,7 @@ describe('refresh', () => {
       });
     }
 
-    let timestampCounter = 0;
+    let _timestampCounter = 0;
 
     function makeLocalMutation({
       store,
@@ -672,7 +672,7 @@ describe('refresh', () => {
       originalHash = null,
       indexes = [],
       valueHash,
-      timestamp = timestampCounter++,
+      timestamp = _timestampCounter++,
       entries = [],
     }: {
       store: Store;
