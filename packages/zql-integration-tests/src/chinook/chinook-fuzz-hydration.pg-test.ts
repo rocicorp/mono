@@ -113,7 +113,7 @@ async function shrink(generations: AnyQuery[], seed: number) {
         undefined,
       );
       low = mid + 1;
-    } catch (_e) {
+    } catch {
       lastFailure = mid;
       high = mid;
     }

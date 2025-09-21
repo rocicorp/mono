@@ -514,8 +514,9 @@ export function assertOrderingIncludesPK(
   ordering: Ordering,
   pk: PrimaryKey,
 ): void {
-  const orderingFields = new Set(ordering.map(([field]) => field));
-  const missingFields = pk.filter(pkField => !orderingFields.has(pkField));
+  // eslint-disable-next-line unicorn/prefer-set-has -- Array is more appropriate here for small collections
+  const orderingFields = ordering.map(([field]) => field);
+  const missingFields = pk.filter(pkField => !orderingFields.includes(pkField));
 
   if (missingFields.length > 0) {
     throw new Error(
