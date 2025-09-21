@@ -765,7 +765,7 @@ async function populate(
   tx: WriteTransaction,
   {
     numKeys,
-    randomValues: randomValues,
+    randomValues,
   }: {numKeys: number; randomValues: TestDataObject[]},
 ) {
   for (let i = 0; i < numKeys; i++) {
@@ -787,7 +787,7 @@ function makeRepWithPopulate<MD extends PopulateMutatorDefs>(
 ) {
   return makeRep({
     ...options,
-    mutators: {...(options.mutators ?? {}), populate},
+    mutators: {...options.mutators, populate},
   });
 }
 

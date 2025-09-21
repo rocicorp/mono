@@ -70,7 +70,7 @@ test('does not flush more than max entries', async () => {
   const {promise: canFinishFetch, resolve: finishFetch} = resolver<Response>();
 
   fetch.mockImplementation(() => {
-    fetchLatches[__fetchCount++].resolve();
+    fetchLatches[_fetchCount++].resolve();
     return canFinishFetch;
   });
   // Trigger the first force flush.
@@ -129,7 +129,7 @@ test('flushes MAX_LOG_ENTRIES_PER_FLUSH at a time until size is below FORCE_FLUS
   ];
 
   fetch.mockImplementation(() => {
-    const i = _fetchCount2++;
+    const i = _fetchCount++;
     fetchLatches[i].resolve();
     return fetchResponseResolvers[i].promise;
   });
@@ -788,6 +788,7 @@ async function microtasksUntil(p: () => boolean) {
     if (p()) {
       return;
     }
+    // eslint-disable-next-line unicorn/no-unnecessary-await -- intentional for test timing
     await 'microtask';
   }
 }

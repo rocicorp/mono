@@ -63,7 +63,7 @@ export async function runAll(groups: string[], runs: string[]): Promise<void> {
         out.textContent += formatAsReplicache(result) + '\n';
       }
     } catch (e) {
-      out.textContent += `${b.name} had an error: ${e}` + '\n';
+      out.textContent += `${b.name} had an error: ${e}\n`;
     }
   }
   out.textContent += 'Done!\n';

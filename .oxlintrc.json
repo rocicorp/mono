@@ -26,7 +26,7 @@
     "no-empty-character-class": "error",
     "no-empty-pattern": "error",
     "no-empty-static-block": "error",
-    "no-eval": "off",
+    "no-eval": "off", // Disabled - legitimate use in test files
     "no-ex-assign": "error",
     "no-extra-boolean-cast": "error",
     "no-func-assign": "error",
@@ -46,13 +46,13 @@
     "no-unassigned-vars": "error",
     "no-unsafe-finally": "error",
     "no-unsafe-negation": "error",
-    "no-unsafe-optional-chaining": "off",
+    "no-unsafe-optional-chaining": "off", // Disabled - many legitimate patterns in codebase
     "no-unused-labels": "error",
-    "no-unused-private-class-members": "off",
+    "no-unused-private-class-members": "off", // Disabled - false positives in oxlint
     "no-useless-backreference": "error",
     "no-useless-catch": "error",
     "no-useless-escape": "error",
-    "no-useless-rename": "off",
+    "no-useless-rename": "off", // Disabled - many legitimate patterns in codebase
     "no-with": "error",
     "require-yield": "error",
     "use-isnan": "error",
@@ -63,9 +63,9 @@
     "no-var": "error",
     "eqeqeq": "error",
     "no-else-return": "error",
-    "require-await": "off",
+    "require-await": "off", // Disabled for migration compatibility
     
-    // Handle unused variables consistently (relaxed for migration)
+    // Handle unused variables consistently (disabled due to migration complexity)
     "no-unused-vars": "off",
     
     // TypeScript rules that were in @rocicorp/eslint-config
@@ -172,20 +172,42 @@
     "typescript/triple-slash-reference": "error",
     "typescript/unbound-method": "error",
 
-    // Unicorn rules - disabled to match current ESLint behavior temporarily
-    "unicorn/no-await-in-promise-methods": "off",
-    "unicorn/no-empty-file": "off", 
-    "unicorn/no-invalid-fetch-options": "off",
-    "unicorn/no-invalid-remove-event-listener": "off",
-    "unicorn/no-new-array": "off",
-    "unicorn/no-single-promise-in-promise-methods": "off",
-    "unicorn/no-thenable": "off",
-    "unicorn/no-unnecessary-await": "off",
-    "unicorn/no-useless-fallback-in-spread": "off",
-    "unicorn/no-useless-length-check": "off",
-    "unicorn/no-useless-spread": "off",
-    "unicorn/prefer-set-size": "off",
-    "unicorn/prefer-string-starts-ends-with": "off"
+    // Unicorn rules - selectively enabled to avoid breaking existing patterns
+    "unicorn/no-await-in-promise-methods": "off", // Disabled - many legitimate uses
+    "unicorn/no-empty-file": "error", 
+    "unicorn/no-invalid-fetch-options": "error",
+    "unicorn/no-invalid-remove-event-listener": "error",
+    "unicorn/no-new-array": "off", // Disabled - many legitimate patterns in codebase
+    "unicorn/no-single-promise-in-promise-methods": "off", // Disabled - many legitimate uses
+    "unicorn/no-thenable": "off", // Disabled - legitimate patterns in replicache
+    "unicorn/no-unnecessary-await": "off", // Disabled - legitimate use in tests for timing
+    "unicorn/no-useless-fallback-in-spread": "off", // Disabled - many legitimate uses
+    "unicorn/no-useless-length-check": "off", // Disabled - legitimate uses
+    "unicorn/no-useless-spread": "off", // Disabled - legitimate uses
+    "unicorn/prefer-set-size": "error",
+    "unicorn/prefer-string-starts-ends-with": "error",
+
+    // Additional style rules - mostly disabled to preserve existing codebase patterns
+    "curly": "off",
+    "default-case-last": "off", 
+    "default-param-last": "off",
+    "new-cap": "off",
+    "no-continue": "off",
+    "no-extra-bind": "off",
+    "no-unneeded-ternary": "off",
+    "no-useless-concat": "off",
+    "no-useless-constructor": "off",
+    "no-unexpected-multiline": "error", // Keep this one for safety
+
+    // Additional TypeScript style rules
+    "typescript/no-unsafe-enum-comparison": "error",
+    "typescript/no-mixed-enums": "error",
+    "typescript/prefer-enum-initializers": "error",
+
+    // Additional unicorn rules that are available but not default
+    "unicorn/prefer-array-find": "error",
+    "unicorn/prefer-array-flat-map": "error",
+    "unicorn/prefer-set-has": "error"
   },
   "env": {
     "builtin": true
