@@ -36,8 +36,7 @@ async function run() {
 
   const file = output.file ? await open(output.file, 'w') : undefined;
   await file?.write(
-    ['time', ...names.flatMap(n => [`${n} CPU`, `${n} MEM`])].join('\t') +
-      '\n',
+    ['time', ...names.flatMap(n => [`${n} CPU`, `${n} MEM`])].join('\t') + '\n',
   );
   if (file) {
     lc.info?.(
@@ -74,7 +73,10 @@ async function run() {
       void file?.write(
         [
           new Date().toISOString(),
-          ...pids.flatMap(pid => [stats[pid]?.cpu ?? 0, stats[pid]?.memory ?? 0]),
+          ...pids.flatMap(pid => [
+            stats[pid]?.cpu ?? 0,
+            stats[pid]?.memory ?? 0,
+          ]),
         ]
           .map(n => String(n))
           .join('\t') + '\n',

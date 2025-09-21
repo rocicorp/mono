@@ -26,7 +26,7 @@
     "no-empty-character-class": "error",
     "no-empty-pattern": "error",
     "no-empty-static-block": "error",
-    "no-eval": "off", // Disabled - legitimate use in test files
+    "no-eval": "error",
     "no-ex-assign": "error",
     "no-extra-boolean-cast": "error",
     "no-func-assign": "error",
@@ -48,7 +48,7 @@
     "no-unsafe-negation": "error",
     "no-unsafe-optional-chaining": "off", // Disabled - many legitimate patterns in codebase
     "no-unused-labels": "error",
-    "no-unused-private-class-members": "off", // Disabled - false positives in oxlint
+    "no-unused-private-class-members": "error",
     "no-useless-backreference": "error",
     "no-useless-catch": "error",
     "no-useless-escape": "error",
@@ -63,14 +63,22 @@
     "no-var": "error",
     "eqeqeq": "error",
     "no-else-return": "error",
-    "require-await": "off", // Disabled for migration compatibility
+    "require-await": "error",
     
-    // Handle unused variables consistently (disabled due to migration complexity)
-    "no-unused-vars": "off",
+    // Handle unused variables consistently
+    "no-unused-vars": ["error", {
+      "argsIgnorePattern": "^_",
+      "varsIgnorePattern": "^_",
+      "caughtErrorsIgnorePattern": "^_"
+    }],
     
     // TypeScript rules that were in @rocicorp/eslint-config
     "typescript/no-floating-promises": "error",
-    "typescript/no-unused-vars": "off",
+    "typescript/no-unused-vars": ["error", {
+      "argsIgnorePattern": "^_",
+      "varsIgnorePattern": "^_",
+      "caughtErrorsIgnorePattern": "^_"
+    }],
 
     // Rules that enforce no-restricted-imports (available in oxlint)
     "no-restricted-imports": ["error", {

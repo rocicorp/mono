@@ -132,7 +132,9 @@ export class TableSource implements Source {
             Object.keys(this.#columns).map(c => sql.ident(c)),
             ', ',
           )}) VALUES (${sql.__dangerous__rawValue(
-            Array.from({length: Object.keys(this.#columns).length}).fill('?').join(','),
+            Array.from({length: Object.keys(this.#columns).length})
+              .fill('?')
+              .join(','),
           )})`,
         ),
       ),

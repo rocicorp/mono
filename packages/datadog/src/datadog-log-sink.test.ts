@@ -65,12 +65,13 @@ test('does not flush more than max entries', async () => {
     interval: 10,
   });
 
-  let _fetchCount = 0;
+  // eslint-disable-next-line no-unused-vars -- Used in closure below
+  let fetchCount = 0;
   const fetchLatches = [resolver<void>(), resolver<void>(), resolver<void>()];
   const {promise: canFinishFetch, resolve: finishFetch} = resolver<Response>();
 
   fetch.mockImplementation(() => {
-    fetchLatches[_fetchCount++].resolve();
+    fetchLatches[fetchCount++].resolve();
     return canFinishFetch;
   });
   // Trigger the first force flush.
@@ -112,7 +113,8 @@ test('flushes MAX_LOG_ENTRIES_PER_FLUSH at a time until size is below FORCE_FLUS
     interval: 10,
   });
 
-  let _fetchCount = 0;
+  // eslint-disable-next-line no-unused-vars -- Used in closure below
+  let fetchCount = 0;
   const fetchLatches = [
     resolver<void>(),
     resolver<void>(),
@@ -129,7 +131,7 @@ test('flushes MAX_LOG_ENTRIES_PER_FLUSH at a time until size is below FORCE_FLUS
   ];
 
   fetch.mockImplementation(() => {
-    const i = _fetchCount++;
+    const i = fetchCount++;
     fetchLatches[i].resolve();
     return fetchResponseResolvers[i].promise;
   });

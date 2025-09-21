@@ -660,7 +660,8 @@ describe('refresh', () => {
       });
     }
 
-    let _timestampCounter = 0;
+    // eslint-disable-next-line no-unused-vars -- Used in function parameter default
+    let timestampCounter = 0;
 
     function makeLocalMutation({
       store,
@@ -672,7 +673,7 @@ describe('refresh', () => {
       originalHash = null,
       indexes = [],
       valueHash,
-      timestamp = _timestampCounter++,
+      timestamp = timestampCounter++,
       entries = [],
     }: {
       store: Store;

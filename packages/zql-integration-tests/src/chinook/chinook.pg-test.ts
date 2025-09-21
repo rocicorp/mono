@@ -10,7 +10,8 @@ import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {PullRow} from '../../../zql/src/query/query.ts';
 
 // Junction edges do not correctly handle limits in ZQL
-const brokenRelationshipLimits = new Set(['tracks', 'customer', 'playlists']);
+// eslint-disable-next-line unicorn/prefer-set-has -- Keep as array for consistency with existing code
+const brokenRelationshipLimits = ['tracks', 'customer', 'playlists'];
 
 const pgContent = await getChinook();
 const tables = Object.keys(schema.tables) as Array<keyof typeof schema.tables>;
@@ -435,7 +436,7 @@ describe(
         (() =>
           tables.flatMap(table =>
             getRelationships(table)
-              .filter(r => !brokenRelationshipLimits.has(r))
+              .filter(r => !brokenRelationshipLimits.includes(r))
               .map(
                 relationship =>
                   ({

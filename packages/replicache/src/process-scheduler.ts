@@ -12,7 +12,9 @@ export class ProcessScheduler {
   readonly #requestIdle: typeof defaultRequestIdle;
   #scheduledResolver: Resolver<void> | undefined = undefined;
   #runResolver: Resolver<void> | undefined = undefined;
+  // eslint-disable-next-line no-unused-private-class-members -- False positive, this is used in #run
   #runPromise = Promise.resolve();
+  // eslint-disable-next-line no-unused-private-class-members -- False positive, this is used in #run
   #throttlePromise = Promise.resolve();
 
   /**
