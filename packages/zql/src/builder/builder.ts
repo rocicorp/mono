@@ -109,12 +109,8 @@ export function buildPipeline(
   delegate: BuilderDelegate,
   queryID: string,
 ): Input {
-  return buildPipelineInternal(
-    delegate.mapAst ? delegate.mapAst(ast) : ast,
-    delegate,
-    queryID,
-    '',
-  );
+  ast = delegate.mapAst ? delegate.mapAst(ast) : ast;
+  return buildPipelineInternal(ast, delegate, queryID, '');
 }
 
 export function bindStaticParameters(
@@ -369,6 +365,11 @@ function applyFilterWithFlips(
     }
     case 'correlatedSubquery': {
       // FLIP JOIN!
+      const sq = condition.related;
+      if (sq.flip) {
+        // un-flipped queries have already been applied
+        break;
+      }
       break;
     }
   }
