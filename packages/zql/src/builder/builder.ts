@@ -362,7 +362,32 @@ function applyFilterWithFlips(
       break;
     }
     case 'correlatedSubquery': {
-      // FLIP JOIN!
+      const sq = condition.related;
+      const parent = buildPipelineInternal(
+        sq.subquery,
+        delegate,
+        '',
+        `${name}.${sq.subquery.alias}`,
+        sq.correlation.childField,
+      );
+      const flippedJoin = new FlippedJoin({
+        parent,
+        child: end,
+        childKey: sq.correlation.parentField,
+        parentKey: sq.correlation.childField,
+        relationshipName: must(
+          sq.subquery.alias,
+          'Subquery must have an alias',
+        ),
+        hidden: sq.hidden ?? false,
+        system: sq.system ?? 'client',
+      });
+      delegate.addEdge(end, flippedJoin);
+      delegate.addEdge(parent, flippedJoin);
+      end = delegate.decorateInput(
+        flippedJoin,
+        `${name}:flipped-join(${sq.subquery.alias})`,
+      );
       break;
     }
   }
@@ -520,26 +545,20 @@ function applyCorrelatedSubQuery(
     sq.correlation.childField,
   );
   const joinName = `${name}:${sq.flip ? 'flipped-join' : 'join'}(${sq.subquery.alias})`;
-  const join = sq.flip
-    ? new FlippedJoin({
-        parent: child,
-        child: end,
-        parentKey: sq.correlation.childField,
-        childKey: sq.correlation.parentField,
-        relationshipName: sq.subquery.alias,
-        hidden: sq.hidden ?? false,
-        system: sq.system ?? 'client',
-      })
-    : new Join({
-        parent: end,
-        child,
-        storage: delegate.createStorage(joinName),
-        parentKey: sq.correlation.parentField,
-        childKey: sq.correlation.childField,
-        relationshipName: sq.subquery.alias,
-        hidden: sq.hidden ?? false,
-        system: sq.system ?? 'client',
-      });
+  assert(
+    sq.flip === false || sq.flip === undefined,
+    'Flip joins are supposed to be handled in `applyFilterWithFlips`',
+  );
+  const join = new Join({
+    parent: end,
+    child,
+    storage: delegate.createStorage(joinName),
+    parentKey: sq.correlation.parentField,
+    childKey: sq.correlation.childField,
+    relationshipName: sq.subquery.alias,
+    hidden: sq.hidden ?? false,
+    system: sq.system ?? 'client',
+  });
   delegate.addEdge(end, join);
   delegate.addEdge(child, join);
   return delegate.decorateInput(join, joinName);
