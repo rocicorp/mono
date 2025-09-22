@@ -294,7 +294,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
         className={classNames(
           'row',
           issue.modified > (issue.viewState?.viewed ?? 0) &&
-            login.loginState != undefined
+            login.loginState !== undefined
             ? 'unread'
             : null,
         )}
@@ -347,6 +347,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       anchor.index !== 0 &&
       firstItem.index <= getNearPageEdgeThreshold(pageSize)
     ) {
+      // eslint-disable-next-line no-console -- Debug logging in demo app
       console.log('anchoring to top');
       setAnchor(TOP_ANCHOR);
       return;
@@ -376,6 +377,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
         direction: 'backward',
         startRow: issues[issueArrayIndex],
       } as const;
+      // eslint-disable-next-line no-console -- Debug logging in demo app
       console.log('page up', a);
       setAnchor(a);
       return;
@@ -399,6 +401,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
         direction: 'forward',
         startRow: issues[issueArrayIndex],
       } as const;
+      // eslint-disable-next-line no-console -- Debug logging in demo app
       console.log('page down', a);
       setAnchor(a);
     }

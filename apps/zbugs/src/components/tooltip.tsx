@@ -35,7 +35,7 @@ const TooltipContext = createContext<ContextType>(null);
 
 const useTooltipContext = () => {
   const context = useContext(TooltipContext);
-  if (context == null) {
+  if (context === null) {
     throw new Error('Tooltip components must be wrapped in <Tooltip />');
   }
   return context;
@@ -79,10 +79,10 @@ function useTooltip({
   const hover = useHover(context, {
     move: false,
     delay,
-    enabled: controlledOpen == null,
+    enabled: controlledOpen === null,
   });
   const focus = useFocus(context, {
-    enabled: controlledOpen == null,
+    enabled: controlledOpen === null,
   });
   const dismiss = useDismiss(context);
   const role = useRole(context, {
