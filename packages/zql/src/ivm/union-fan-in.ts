@@ -76,6 +76,8 @@ export class UnionFanIn implements Operator {
         );
         schema.relationships[relName] = relSchema;
       }
+
+      input.setOutput(this);
     }
 
     this.#schema = schema;
