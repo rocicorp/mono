@@ -332,27 +332,33 @@ function applyFilterWithFlips(
         condition.conditions,
         conditionIncludesFlippedSubqueryAtAnyLevel,
       );
-      if (withoutFlipped.length > 0) {
-        end = buildFilterPipeline(input, delegate, filterInput =>
-          applyOr(
-            filterInput,
-            {
-              type: 'or',
-              conditions: withoutFlipped,
-            },
-            delegate,
-            name,
-          ),
-        );
-      }
       assert(withFlipped.length > 0, 'Impossible to have no flips here');
 
       const ufo = new UnionFanOut(end);
       delegate.addEdge(end, ufo);
       end = delegate.decorateInput(ufo, `${name}:ufo`);
-      const branches = withFlipped.map(cond =>
-        applyFilterWithFlips(end, cond, delegate, name),
-      );
+
+      const branches: Input[] = [];
+      if (withoutFlipped.length > 0) {
+        branches.push(
+          buildFilterPipeline(end, delegate, filterInput =>
+            applyOr(
+              filterInput,
+              {
+                type: 'or',
+                conditions: withoutFlipped,
+              },
+              delegate,
+              name,
+            ),
+          ),
+        );
+      }
+
+      for (const cond of withFlipped) {
+        branches.push(applyFilterWithFlips(end, cond, delegate, name));
+      }
+
       const ufi = new UnionFanIn(ufo, branches);
       for (const branch of branches) {
         delegate.addEdge(branch, ufi);
