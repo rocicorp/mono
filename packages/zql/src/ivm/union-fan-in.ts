@@ -65,16 +65,22 @@ export class UnionFanIn implements Operator {
       );
       assert(schema.sort === inputSchema.sort, `Sort mismatch in union fan-in`);
 
+      const relationshipsFromBranches: Set<string> = new Set();
       for (const [relName, relSchema] of Object.entries(
         inputSchema.relationships,
       )) {
-        // This is not possible because only `exists` joins will be input to `union-fan-in`.
-        // and `exists` joins all get unique names.
+        if (relName in fanOutSchema.relationships) {
+          continue;
+        }
+
+        // All branches will have unique relationship names except for relationships
+        // that come in from `fanOut`.
         assert(
-          schema.relationships[relName] === undefined,
+          !relationshipsFromBranches.has(relName),
           `Relationship ${relName} exists in multiple upstream inputs to union fan-in`,
         );
         schema.relationships[relName] = relSchema;
+        relationshipsFromBranches.add(relName);
       }
 
       input.setOutput(this);
@@ -113,6 +119,8 @@ export class UnionFanIn implements Operator {
       // if fan out has not started pushing but we receive a push, then it
       // must be from an input to flip join. This input is the child of the output
       // of flip join.
+      // TODO: this is wrong. We can get removes or adds from internal
+      // branches due to the flip join no longer having a match.
       assert(
         change.type === 'child',
         'Only child changes allowed to come from internal nodes in union structures',
