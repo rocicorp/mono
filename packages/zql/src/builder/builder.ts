@@ -365,7 +365,7 @@ function applyFilterWithFlips(
     }
     case 'correlatedSubquery': {
       const sq = condition.related;
-      if (sq.flip) {
+      if (!sq.flip) {
         // un-flipped queries have already been applied
         break;
       }
