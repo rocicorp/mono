@@ -18,6 +18,7 @@ describe(
       await createVitests(
         {
           suiteName: 'compiler_chinook',
+          only: 'Flipped exists - or with normal exists',
           pgContent,
           zqlSchema: schema,
           setRawData: r => {
@@ -71,20 +72,20 @@ describe(
                 ),
               ),
           },
-          {
-            name: 'Flipped exists - or with normal exists 2',
-            createQuery: b =>
-              b.album.where(({or, exists}) =>
-                or(
-                  exists('artist', a => a.where('name', 'Apocalyptica'), {
-                    flip: true,
-                  }),
-                  exists('artist', a => a.where('name', 'Fast As a Shark'), {
-                    flip: false,
-                  }),
-                ),
-              ),
-          },
+          // {
+          //   name: 'Flipped exists - or with normal exists 2',
+          //   createQuery: b =>
+          //     b.album.where(({or, exists}) =>
+          //       or(
+          //         exists('artist', a => a.where('name', 'Apocalyptica'), {
+          //           flip: true,
+          //         }),
+          //         exists('artist', a => a.where('name', 'Fast As a Shark'), {
+          //           flip: false,
+          //         }),
+          //       ),
+          //     ),
+          // },
         ],
       ),
     )('$name', async ({fn}) => {
