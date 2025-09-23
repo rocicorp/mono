@@ -32,13 +32,12 @@ type Args = {
 };
 
 /**
- * An *inner* join which fetches nodes from child input first and then fetches
- * their related nodes from the parent input.  Output nodes are the
- * nodes from parent input (in parent input order), which have at least
- * one related child.  These output nodes have a new relationship added to them,
+ * An *inner* join which fetches nodes from its child input first and then
+ * fetches their related nodes from its parent input.  Output nodes are the
+ * nodes from parent input (in parent input order), which have at least one
+ * related child.  These output nodes have a new relationship added to them,
  * which has the name `relationshipName`. The value of the relationship is a
- * stream of child nodes which are the relates nodes from the child input
- * (in child input order).
+ * stream of related nodes from the child input (in child input order).
  */
 export class FlippedJoin implements Input {
   readonly #parent: Input;
