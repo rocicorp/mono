@@ -46,7 +46,7 @@ jobs:
           aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
       - name: Install dependencies
         run: |
-          bun run build-ci
+          npm run build-ci
       - name: Create package tarball
         run: |
           cd packages/zero
