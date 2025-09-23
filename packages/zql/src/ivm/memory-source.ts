@@ -251,7 +251,9 @@ export class MemorySource implements Source {
     const callingConnectionIndex = this.#connections.indexOf(from);
     assert(callingConnectionIndex !== -1, 'Output not found');
     const conn = this.#connections[callingConnectionIndex];
-    const {sort: requestedSort} = conn;
+    const {sort: requestedSort, compareRows} = conn;
+    const connectionComparator = (r1: Row, r2: Row) =>
+      compareRows(r1, r2) * (req.reverse ? -1 : 1);
 
     const pkConstraint = primaryKeyConstraintFromFilters(
       conn.filters?.condition,
@@ -332,7 +334,7 @@ export class MemorySource implements Source {
     );
 
     const withConstraint = generateWithConstraint(
-      generateWithStart(withOverlay, req.start, comparator),
+      generateWithStart(withOverlay, req.start, connectionComparator),
       // we use `req.constraint` and not `fetchOrPkConstraint` here because we need to
       // AND the constraint with what could have been the primary key constraint
       req.constraint,

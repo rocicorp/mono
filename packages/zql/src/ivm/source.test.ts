@@ -339,6 +339,67 @@ suite('fetch-with-constraint-and-start', () => {
     });
   }
 
+  test('c1', () => {
+    expect(
+      t({
+        startData: [
+          {a: 1, b: '1000'},
+          {a: 2, b: '3000'},
+          {a: 3, b: '2000'},
+          {a: 5, b: '1000'},
+          {a: 6, b: '4000'},
+          {a: 7, b: '0000'},
+        ],
+        start: {
+          row: {a: 3, b: '2000'},
+          basis: 'at',
+        },
+        constraint: {b: '1000'},
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 5,
+            "b": "1000",
+          },
+        },
+      ]
+    `);
+  });
+
+  test('c1 reverse', () => {
+    expect(
+      t({
+        startData: [
+          {a: 1, b: '1000'},
+          {a: 2, b: '3000'},
+          {a: 3, b: '2000'},
+          {a: 5, b: '1000'},
+          {a: 6, b: '4000'},
+          {a: 7, b: '0000'},
+        ],
+        start: {
+          row: {a: 3, b: '2000'},
+          basis: 'at',
+        },
+        constraint: {b: '1000'},
+        reverse: true,
+      }),
+    ).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 1,
+            "b": "1000",
+          },
+        },
+      ]
+    `);
+  });
+
   test('c2', () => {
     expect(
       t({
