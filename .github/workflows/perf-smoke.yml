@@ -19,13 +19,15 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
-          cache: 'npm'
-      - run: npm ci
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install --frozen-lockfile
       - name: Install Playwright
-        run: npx playwright install --with-deps
+        run: bunx playwright install --with-deps
       - name: Run benchmark
         shell: bash
         working-directory: packages/replicache-perf
         run: |
-          npm run build
-          npx tsx src/runner.ts --format=json --run='populate 1024x1000 \(clean, indexes: 0\)'
+          bun run build
+          bunx tsx src/runner.ts --format=json --run='populate 1024x1000 \(clean, indexes: 0\)'

@@ -21,33 +21,35 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
-          cache: 'npm'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
       - uses: bencherdev/bencher@main
 
-      - name: Cache node_modules
+      - name: Cache bun modules
         id: cache
         uses: actions/cache@v3
         with:
           path: |
             node_modules
-            node_modules/.vite-temp
-          key: npm-${{ hashFiles('package-lock.json') }}
+            ~/.bun/install/cache
+          key: bun-${{ hashFiles('bun.lockb') }}
           restore-keys: |
-            npm-
+            bun-
 
-      - run: npm ci
+      - run: bun install --frozen-lockfile
 
-      - run: npm run build
+      - run: bun run build
 
-      - name: Build npm zero package
+      - name: Build bun zero package
         working-directory: packages/zero
         run: |
-          npm pack --pack-destination ./out
+          bun pack --pack-destination ./out
           mv ./out/*.tgz ./out/zero-package.tgz
 
       - name: Build zero client single file package
         working-directory: packages/zero
-        run: npx tsx tool/build.ts --bundle-sizes --minify
+        run: bunx tsx tool/build.ts --bundle-sizes --minify
 
       - name: Compress
         working-directory: packages/zero

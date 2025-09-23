@@ -53,24 +53,26 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
-          cache: 'npm'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
       - uses: bencherdev/bencher@main
 
-      - run: npm ci
+      - run: bun install --frozen-lockfile
 
       - name: Install Playwright
-        run: npx playwright install --with-deps
+        run: bunx playwright install --with-deps
 
       - name: Run benchmarks
         working-directory: ${{ inputs.working_directory }}
-        run: npm run bench -- --browser.name=chromium --outputJson output.json
+        run: bun run bench -- --browser.name=chromium --outputJson output.json
 
       - name: Upload benchmarks results to bencher.dev (main)
         if: ${{ !inputs.is_pr }}
         working-directory: ${{ inputs.working_directory }}
         run: |
           cat output.json |\
-          npx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
+          bunx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
           bencher run \
           --project zero \
           --testbed self-hosted \
@@ -89,7 +91,7 @@ jobs:
         working-directory: ${{ inputs.working_directory }}
         run: |
           cat output.json |\
-          npx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
+          bunx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
           bencher run \
           --project zero \
           --testbed self-hosted \

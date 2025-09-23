@@ -146,7 +146,7 @@ try {
   }
 
   //installs turbo and other build dependencies
-  execute('npm install');
+  execute('bun install');
   const ZERO_PACKAGE_JSON_PATH = basePath('packages', 'zero', 'package.json');
   const currentPackageData = getPackageData(ZERO_PACKAGE_JSON_PATH);
   const nextCanaryVersion = bumpCanaryVersion(currentPackageData.version);
@@ -171,10 +171,10 @@ try {
     }
   });
 
-  execute('npm install');
-  execute('npm run build');
-  execute('npm run format');
-  execute('npx syncpack fix-mismatches');
+  execute('bun install');
+  execute('bun run build');
+  execute('bun run format');
+  execute('bunx syncpack fix-mismatches');
 
   execute('git status');
   execute(`git commit -am "Bump version to ${nextCanaryVersion}"`);

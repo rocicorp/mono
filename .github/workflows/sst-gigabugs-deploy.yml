@@ -19,7 +19,9 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'npm'
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
@@ -46,11 +48,11 @@ jobs:
           aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
       - name: Install dependencies
         run: |
-          npm run build-ci
+          bun run build-ci
       - name: Create package tarball
         run: |
           cd packages/zero
-          npm pack
+          bun pack
           cp rocicorp-zero-*.tgz ./pkgs/
       - name: Get Git SHA
         id: git-sha
@@ -58,7 +60,7 @@ jobs:
       - name: Create package tarball
         run: |
           cd packages/zero
-          npm pack
+          bun pack
           ZERO_TARBALL="$(ls rocicorp-zero-*.tgz | xargs -- basename -s .tgz)+${{ env.SHA }}.tgz"
           mv rocicorp-zero-*.tgz ./pkgs/$ZERO_TARBALL
           echo "ZERO_VERSION=$ZERO_TARBALL" >> $GITHUB_ENV
@@ -84,8 +86,8 @@ jobs:
           DATADOG_API_KEY: ${{ secrets.GIGABUGS_DATADOG_API_KEY }}
         run: |
           cd prod/sst
-          npm install
-          npx sst deploy --stage gigabugs-ebs
+          bun install
+          bunx sst deploy --stage gigabugs-ebs
       - name: Deploy SST app non ebs
         env:
           ZERO_APP_ID: 'gigabugs1'
@@ -102,5 +104,5 @@ jobs:
           DATADOG_API_KEY: ${{ secrets.GIGABUGS_DATADOG_API_KEY }}
         run: |
           cd prod/sst
-          npm install
-          npx sst deploy --stage gigabugs
+          bun install
+          bunx sst deploy --stage gigabugs
