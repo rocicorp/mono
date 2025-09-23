@@ -233,7 +233,7 @@ export class FlippedJoin implements Input {
       for (const iter of parentIterators) {
         try {
           iter.throw?.(e);
-        } catch (cleanupError) {
+        } catch (_cleanupError) {
           // error in the iter.throw cleanup,
           // catch so other iterators are cleaned up
         }
@@ -244,7 +244,7 @@ export class FlippedJoin implements Input {
         for (const iter of parentIterators) {
           try {
             iter.return?.();
-          } catch (cleanupError) {
+          } catch (_cleanupError) {
             // error in the iter.return cleanup,
             // catch so other iterators are cleaned up
           }
