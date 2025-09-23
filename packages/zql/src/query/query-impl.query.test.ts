@@ -1579,6 +1579,46 @@ test('where exists', () => {
   expect(materialized.data).toEqual([]);
 });
 
+test.only("flipped exists, or'ed", async () => {
+  const queryDelegate = new QueryDelegateImpl();
+  const commentSource = must(queryDelegate.getSource('comment'));
+  const issueSource = must(queryDelegate.getSource('issue'));
+
+  issueSource.push({
+    type: 'add',
+    row: {
+      id: '0001',
+      title: 'issue 1',
+      description: 'description 1',
+      closed: false,
+      ownerId: '0001',
+      createdAt: 10,
+    },
+  });
+
+  const q = newQuery(queryDelegate, schema, 'issue').where(({or, exists}) =>
+    or(
+      exists('comments', q => q.where('text', 'bug'), {flip: true}),
+      exists('comments', q => q.where('text', 'bug'), {flip: true}),
+    ),
+  );
+
+  const view = q.materialize();
+  console.log(view.data);
+
+  commentSource.push({
+    type: 'add',
+    row: {
+      id: 'c1',
+      issueId: '0001',
+      authorId: 'a1',
+      text: 'bug',
+      createdAt: 1,
+    },
+  });
+  console.log(view.data);
+});
+
 test('duplicative where exists', () => {
   const queryDelegate = new QueryDelegateImpl();
   const issueSource = must(queryDelegate.getSource('issue'));

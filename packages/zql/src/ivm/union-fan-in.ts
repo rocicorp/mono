@@ -121,10 +121,17 @@ export class UnionFanIn implements Operator {
       // of flip join.
       // TODO: this is wrong. We can get removes or adds from internal
       // branches due to the flip join no longer having a match.
-      assert(
-        change.type === 'child',
-        'Only child changes allowed to come from internal nodes in union structures',
-      );
+
+      /*
+      What can happen?
+      - we can get a remove twice. `track.(whereExists('album', title = 'foo') or whereExists('album', published = 'bar'))`
+         if both of those have overlap then the change of `album` can remove the same `track` twice.
+      */
+
+      // assert(
+      //   change.type === 'child',
+      //   'Only child changes allowed to come from internal nodes in union structures',
+      // );
       this.#output.push(change);
     } else {
       this.#accumulatedPushes.push(change);
