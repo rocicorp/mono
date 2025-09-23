@@ -7,9 +7,14 @@ import {
   mergeEmpty,
 } from './push-accumulated.js';
 import type {Change} from './change.js';
-import type {Output} from './operator.js';
+import type {InputBase, Output} from './operator.js';
 import type {SourceSchema} from './schema.js';
 import {identity} from '../../../shared/src/sentinels.ts';
+
+const mockPusher: InputBase = {
+  getSchema: () => mockSchema as any,
+  destroy: () => {},
+};
 
 const mockChildChange: Change = {
   type: 'child',
@@ -62,6 +67,7 @@ describe('pushAccumulatedChanges', () => {
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
+        mockPusher,
         'add',
         mergeRelationships,
         identity,
@@ -86,6 +92,7 @@ describe('pushAccumulatedChanges', () => {
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
+        mockPusher,
         'add',
         mergeRelationships,
         identity,
@@ -104,6 +111,7 @@ describe('pushAccumulatedChanges', () => {
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
+        mockPusher,
         'add',
         mergeRelationships,
         identity,
@@ -125,6 +133,7 @@ describe('pushAccumulatedChanges', () => {
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
+        mockPusher,
         'remove',
         mergeRelationships,
         identity,
@@ -149,6 +158,7 @@ describe('pushAccumulatedChanges', () => {
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
+        mockPusher,
         'remove',
         mergeRelationships,
         identity,
@@ -175,6 +185,7 @@ describe('pushAccumulatedChanges', () => {
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
+        mockPusher,
         'edit',
         mergeRelationships,
         identity,
@@ -195,6 +206,7 @@ describe('pushAccumulatedChanges', () => {
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
+        mockPusher,
         'edit',
         mergeRelationships,
         identity,
@@ -215,6 +227,7 @@ describe('pushAccumulatedChanges', () => {
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
+        mockPusher,
         'edit',
         mergeRelationships,
         identity,
@@ -239,6 +252,7 @@ describe('pushAccumulatedChanges', () => {
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
+        mockPusher,
         'edit',
         mergeRelationships,
         identity,
@@ -273,6 +287,7 @@ describe('pushAccumulatedChanges', () => {
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
+        mockPusher,
         'edit',
         mergeRelationships,
         identity,
@@ -297,6 +312,7 @@ describe('pushAccumulatedChanges', () => {
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
+        mockPusher,
         'child',
         mergeRelationships,
         identity,
@@ -317,6 +333,7 @@ describe('pushAccumulatedChanges', () => {
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
+        mockPusher,
         'child',
         mergeRelationships,
         identity,
@@ -337,6 +354,7 @@ describe('pushAccumulatedChanges', () => {
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
+        mockPusher,
         'child',
         mergeRelationships,
         identity,
@@ -358,6 +376,7 @@ describe('pushAccumulatedChanges', () => {
       pushAccumulatedChanges(
         accumulatedPushes,
         output,
+        mockPusher,
         'child',
         mergeRelationships,
         identity,
@@ -384,6 +403,7 @@ describe('pushAccumulatedChanges', () => {
         pushAccumulatedChanges(
           accumulatedPushes,
           output,
+          mockPusher,
           'child',
           mergeRelationships,
           identity,

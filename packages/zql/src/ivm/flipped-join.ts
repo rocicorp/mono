@@ -328,7 +328,7 @@ export class FlippedJoin implements Input {
                 relationshipName: this.#relationshipName,
                 change,
               },
-            });
+            }, this);
           } else {
             this.#output.push({
               ...change,
@@ -339,7 +339,7 @@ export class FlippedJoin implements Input {
                   [this.#relationshipName]: () => [change.node],
                 },
               },
-            });
+            }, this);
           }
         }
       } finally {
@@ -396,7 +396,7 @@ export class FlippedJoin implements Input {
         this.#output.push({
           ...change,
           node: flip(change.node),
-        });
+        }, this);
         break;
       }
       case 'edit': {
@@ -416,20 +416,20 @@ export class FlippedJoin implements Input {
             type: 'edit',
             oldNode: flip(change.oldNode),
             node: flip(change.node),
-          });
+          }, this);
           break;
         }
         if (oldHasChild) {
           this.#output.push({
             type: 'remove',
             node: flip(change.node),
-          });
+          }, this);
         }
         if (hasChild) {
           this.#output.push({
             type: 'add',
             node: flip(change.node),
-          });
+          }, this);
         }
         break;
       }

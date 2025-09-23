@@ -7,6 +7,7 @@ import {
   throwOutput,
   type FetchRequest,
   type Input,
+  type InputBase,
   type Operator,
   type Output,
 } from './operator.ts';
@@ -114,9 +115,9 @@ export class UnionFanIn implements Operator {
     return this.#schema;
   }
 
-  push(change: Change): void {
+  push(change: Change, pusher: InputBase): void {
     if (!this.#fanOutPushStarted) {
-      this.#pushInternalChange(change);
+      this.#pushInternalChange(change, pusher);
     } else {
       this.#accumulatedPushes.push(change);
     }
@@ -143,17 +144,17 @@ export class UnionFanIn implements Operator {
    * 4. Edits will always come through as child changes as flip join will flip them into children.
    *    An edit that would result in a remove or add will have been split into an add/remove pair rather than being an edit.
    */
-  #pushInternalChange(change: Change): void {
+  #pushInternalChange(change: Change, pusher: InputBase): void {
     if (change.type === 'child') {
-      this.#output.push(change);
+      this.#output.push(change, this);
       return;
     }
 
     assert(change.type === 'add' || change.type === 'remove');
 
-    const fetchResult = this.fetch({
-      constraint: change.node.row,
-    });
+    // const fetchResult = this.fetch({
+    //   constraint: change.node.row,
+    // });
   }
 
   fanOutStartedPushing() {
@@ -177,6 +178,7 @@ export class UnionFanIn implements Operator {
     pushAccumulatedChanges(
       this.#accumulatedPushes,
       this.#output,
+      this,
       fanOutChangeType,
       mergeRelationships,
       makeAddEmptyRelationships(this.#schema),

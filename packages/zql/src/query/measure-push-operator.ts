@@ -56,7 +56,7 @@ export class MeasurePushOperator implements Operator {
 
   push(change: Change): void {
     const startTime = performance.now();
-    this.#output.push(change);
+    this.#output.push(change, this);
     this.#metricsDelegate.addMetric(
       this.#metricName,
       performance.now() - startTime,
