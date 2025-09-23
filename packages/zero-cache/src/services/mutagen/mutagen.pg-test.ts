@@ -709,7 +709,7 @@ describe('processMutation', {timeout: 15000}, () => {
     // Start a concurrent mutation that bumps the lmid from 2 => 3.
     const done = db.begin(Mode.SERIALIZABLE, async tx => {
       // Simulate holding a lock on the row.
-      tx`SELECT * FROM ${db(
+      void tx`SELECT * FROM ${db(
         `${APP_ID}_${SHARD_NUM}`,
       )}.clients WHERE "clientGroupID" = 'abc' AND "clientID" = '123'`;
 

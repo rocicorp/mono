@@ -8,7 +8,7 @@
     "check-types": "tsc",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "oxlint src/"
+    "lint": "oxlint --type-aware src/"
   },
   "dependencies": {
     "@rocicorp/logger": "^5.4.0",

@@ -10,7 +10,7 @@
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "build:bin": "tsc -p tsconfig.bin.json",
-    "lint": "oxlint src/",
+    "lint": "oxlint --type-aware src/",
     "test": "vitest run --silent=false --disable-console-intercept",
     "test:watch": "vitest watch",
     "bench": "vitest bench --disable-console-intercept --run",

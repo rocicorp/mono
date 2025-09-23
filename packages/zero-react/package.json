@@ -11,7 +11,7 @@
     "test:watch": "vitest watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "oxlint src/"
+    "lint": "oxlint --type-aware src/"
   },
   "peerDependencies": {
     "react": "^18.3.1"
