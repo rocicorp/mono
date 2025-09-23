@@ -108,6 +108,14 @@ export class FlippedJoin implements Input {
 
   *fetch(req: FetchRequest): Stream<Node> {
     const childNodes = [...this.#child.fetch({})];
+    // FlippedJoin's split-push change overlay logic is largely
+    // the same as Join's, which the exception of remove.  For remove,
+    // the change is undone here, and then re-applied to parents with order
+    // less than or equal to change.position below.  This is necessary
+    // because if the removed node was the last related child, the
+    // related parents with position greater than change.position
+    // (which should not yet have the node removed), would not even
+    // be fetched here, and would be absent from the output all together.
     if (this.#inprogressChildChange?.change.type === 'remove') {
       const removedNode = this.#inprogressChildChange.change.node;
       const compare = this.#child.getSchema().compareRows;
