@@ -10,7 +10,7 @@
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "oxlint src/"
+    "lint": "oxlint --type-aware src/"
   },
   "dependencies": {
     "@badrap/valita": "0.3.11",

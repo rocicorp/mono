@@ -1,4 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
+import {createEffect} from 'solid-js';
+import {createStore} from 'solid-js/store';
 import {expect, test, vi} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {unreachable} from '../../shared/src/asserts.ts';
@@ -14,11 +16,9 @@ import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
 import {Take} from '../../zql/src/ivm/take.ts';
 import {createSource} from '../../zql/src/ivm/test/source-factory.ts';
 import {idSymbol, refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
+import type {EntryList} from '../../zql/src/ivm/view.ts';
 import type {Query} from '../../zql/src/query/query.ts';
 import {SolidView, createSolidViewFactory, type State} from './solid-view.ts';
-import {createStore} from 'solid-js/store';
-import type {EntryList} from '../../zql/src/ivm/view.ts';
-import {createEffect} from 'solid-js';
 
 const lc = createSilentLogContext();
 
@@ -2484,7 +2484,7 @@ test('queryComplete promise', async () => {
   expect(resultDetails()).toEqual({type: 'unknown'});
 
   queryCompleteResolver.resolve(true);
-  await 1;
+  await Promise.resolve();
   expect(resultDetails()).toEqual({type: 'complete'});
 });
 

@@ -26,7 +26,7 @@ export async function createPerdag(args: {
   schemaVersion: string;
   formatVersion: FormatVersion;
 }): Promise<Store> {
-  const {replicacheName, schemaVersion, formatVersion: formatVersion} = args;
+  const {replicacheName, schemaVersion, formatVersion} = args;
   const idbName = makeIDBNameForTesting(
     replicacheName,
     schemaVersion,

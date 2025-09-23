@@ -60,7 +60,7 @@ export class IncrementalSyncer {
     const {watermark: initialWatermark} = getSubscriptionState(this.#replica);
 
     // Notify any waiting subscribers that the replica is ready to be read.
-    this.#notifier.notifySubscribers();
+    void this.#notifier.notifySubscribers();
 
     // Only the backup replicator publishes replication status events.
     const statusPublisher = this.#publishReplicationStatus
@@ -115,7 +115,7 @@ export class IncrementalSyncer {
                 statusPublisher?.publish(lc, 'Replicating', 'Schema updated');
               }
               if (result?.watermark) {
-                this.#notifier.notifySubscribers({state: 'version-ready'});
+                void this.#notifier.notifySubscribers({state: 'version-ready'});
               }
               break;
             }

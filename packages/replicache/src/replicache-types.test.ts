@@ -115,7 +115,6 @@ test.skip('Test register param [type checking only]', () => {
     },
   });
 
-  /* eslint-disable prefer-destructuring */
   const mut: () => Promise<void> = rep.mutate.mut;
   use(mut);
 
@@ -130,7 +129,6 @@ test.skip('Test register param [type checking only]', () => {
   // This is fine according to the rules of JS/TS
   const mut4: (x: number) => Promise<void> = rep.mutate.mut4;
   use(mut4);
-  /* eslint-enable prefer-destructuring */
 
   new Replicache({
     name: 'test-types',
@@ -277,17 +275,17 @@ test.skip('mut [type checking only]', async () => {
     },
   });
 
-  rep.mutate.a() as Promise<number>;
-  rep.mutate.b(4) as Promise<string>;
+  void (rep.mutate.a() as Promise<number>);
+  void (rep.mutate.b(4) as Promise<string>);
 
-  rep.mutate.c() as Promise<void>;
-  rep.mutate.d(2) as Promise<void>;
+  void (rep.mutate.c() as Promise<void>);
+  void (rep.mutate.d(2) as Promise<void>);
 
-  rep.mutate.e() as Promise<number>;
-  rep.mutate.f(4) as Promise<string>;
+  void (rep.mutate.e() as Promise<number>);
+  void (rep.mutate.f(4) as Promise<string>);
 
-  rep.mutate.g() as Promise<void>;
-  rep.mutate.h(2) as Promise<void>;
+  void (rep.mutate.g() as Promise<void>);
+  void (rep.mutate.h(2) as Promise<void>);
 
   // @ts-expect-error Expected 1 arguments, but got 0.ts(2554)
   await rep.mutate.b();

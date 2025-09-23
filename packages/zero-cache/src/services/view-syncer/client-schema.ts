@@ -82,7 +82,7 @@ export function checkClientSchema(
       }
     }
     const columns = intersection(clientColumns, syncedColumns);
-    for (const column of [...columns]) {
+    for (const column of columns) {
       const clientType = clientSpec.columns[column].type;
       const serverType = serverSpec.zqlSpec[column].type;
       if (clientSpec.columns[column].type !== serverSpec.zqlSpec[column].type) {
