@@ -27,7 +27,7 @@ const harness = await bootstrap({
   pgContent,
 });
 
-test.each(Array.from({length: 0}, () => createCase()))(
+test.each(Array.from({length: 1000}, () => createCase()))(
   'fuzz-hydration $seed',
   runCase,
 );
@@ -122,7 +122,5 @@ async function shrink(generations: AnyQuery[], seed: number) {
     throw new Error('no failure found');
   }
   const query = generations[lastFailure];
-  const ret = formatOutput(ast(query).table + astToZQL(ast(query)));
-  console.log('Shrunk to', ret);
-  return ret;
+  return formatOutput(ast(query).table + astToZQL(ast(query)));
 }
