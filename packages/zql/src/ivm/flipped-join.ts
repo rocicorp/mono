@@ -32,8 +32,13 @@ type Args = {
 };
 
 /**
- * An inner join which flips fetch order, fetching child node's first
- * and then fetching their related children.
+ * An *inner* join which fetches nodes from child input first and then fetches
+ * their related nodes from the parent input.  Output nodes are the
+ * nodes from parent input (in parent input order), which have at least
+ * one related child.  These output nodes have a new relationship added to them,
+ * which has the name `relationshipName`. The value of the relationship is a
+ * stream of child nodes which are the relates nodes from the child input
+ * (in child input order).
  */
 export class FlippedJoin implements Input {
   readonly #parent: Input;
@@ -359,10 +364,6 @@ export class FlippedJoin implements Input {
           this.#childKey.map((key, i) => [key, node.row[this.#parentKey[i]]]),
         ),
       });
-    // TODO for edit we need to check oldNode
-    if (first(childNodeStream(change.node)()) === undefined) {
-      return;
-    }
 
     const flip = (node: Node) => ({
       ...node,
