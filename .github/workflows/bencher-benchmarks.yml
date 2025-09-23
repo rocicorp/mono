@@ -20,13 +20,13 @@ jobs:
           bun-version: latest
       - uses: bencherdev/bencher@main
 
-      - run: bun install --frozen-lockfile
+      - run: bun install
       - run: bun run build
 
       - name: Build npm zero package
         working-directory: packages/zero
         run: |
-          bun pack --pack-destination ./out
+          npm pack --pack-destination ./out
           mv ./out/*.tgz ./out/zero-package.tgz
 
       - name: Build zero client single file package
@@ -86,7 +86,7 @@ jobs:
           bun-version: latest
       - uses: bencherdev/bencher@main
 
-      - run: bun install --frozen-lockfile
+      - run: bun install
 
       - name: Run ZQL benchmarks
         working-directory: packages/zql-benchmarks

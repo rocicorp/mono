@@ -21,7 +21,7 @@ jobs:
           bun-version: latest
       # Clear out potential user data dirs left over from previous failures.
       - run: rm -rf /tmp/replicache-playwright-*
-      - run: bun install --frozen-lockfile
+      - run: bun install
       - name: Install Playwright
         run: bunx playwright install --with-deps
 

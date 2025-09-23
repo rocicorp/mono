@@ -52,7 +52,7 @@ jobs:
       - name: Create package tarball
         run: |
           cd packages/zero
-          bun pack
+          npm pack
           cp rocicorp-zero-*.tgz ./pkgs/
       - name: Get Git SHA
         id: git-sha
@@ -60,7 +60,7 @@ jobs:
       - name: Create package tarball
         run: |
           cd packages/zero
-          bun pack
+          npm pack
           ZERO_TARBALL="$(ls rocicorp-zero-*.tgz | xargs -- basename -s .tgz)+${{ env.SHA }}.tgz"
           mv rocicorp-zero-*.tgz ./pkgs/$ZERO_TARBALL
           echo "ZERO_VERSION=$ZERO_TARBALL" >> $GITHUB_ENV
