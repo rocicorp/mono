@@ -26,7 +26,7 @@ jobs:
           bun-version: latest
       - uses: bencherdev/bencher@main
 
-      - run: bun install
+      - run: bun install --frozen-lockfile
 
       - run: bun run build
 

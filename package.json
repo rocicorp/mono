@@ -21,7 +21,7 @@
     "check-format": "turbo run check-format",
     "check-types": "turbo run check-types",
     "check-types:watch": "turbo watch check-types",
-    "build-ci": "bun install && turbo run build",
+    "build-ci": "bun install --frozen-lockfile && turbo run build",
     "start-zero-cache": "cd packages/zero-cache && bun run start"
   },
   "devDependencies": {

@@ -86,7 +86,7 @@ jobs:
           DATADOG_API_KEY: ${{ secrets.GIGABUGS_DATADOG_API_KEY }}
         run: |
           cd prod/sst
-          bun install
+          bun install --frozen-lockfile
           bunx sst deploy --stage gigabugs-ebs
       - name: Deploy SST app non ebs
         env:
@@ -104,5 +104,5 @@ jobs:
           DATADOG_API_KEY: ${{ secrets.GIGABUGS_DATADOG_API_KEY }}
         run: |
           cd prod/sst
-          bun install
+          bun install --frozen-lockfile
           bunx sst deploy --stage gigabugs

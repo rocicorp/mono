@@ -26,7 +26,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install
+      - run: bun install --frozen-lockfile
       - run: bun run check-format
 
   lint:
@@ -43,7 +43,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install
+      - run: bun install --frozen-lockfile
       - run: bun run lint
 
   check-types:
@@ -60,7 +60,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install
+      - run: bun install --frozen-lockfile
       - run: bun run check-types
 
   test:
@@ -80,7 +80,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install
+      - run: bun install --frozen-lockfile
       - name: Install Playwright
         run: bunx playwright install chromium firefox webkit --with-deps
       - name: Run tests
@@ -103,7 +103,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install
+      - run: bun install --frozen-lockfile
       - name: Run tests
         run: |
           TEST_PG_MODE=pg-17 bun run test

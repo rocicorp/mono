@@ -18,7 +18,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install
+      - run: bun install --frozen-lockfile
       - run: bun run --workspace=replicache build-bundle-sizes
       - run: brotli packages/replicache/out/*
 

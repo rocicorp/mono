@@ -85,5 +85,5 @@ jobs:
           OTEL_RESOURCE_ATTRIBUTES: ${{ vars.PROD_OTEL_RESOURCE_ATTRIBUTES }}
         run: |
           cd prod/sst
-          bun install
+          bun install --frozen-lockfile
           bunx sst deploy --stage production
