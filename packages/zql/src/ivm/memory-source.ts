@@ -284,7 +284,7 @@ export class MemorySource implements Source {
 
     const index = this.#getOrCreateIndex(indexSort, from);
     const {data, comparator: compare} = index;
-    const comparator = (r1: Row, r2: Row) =>
+    const indexComparator = (r1: Row, r2: Row) =>
       compare(r1, r2) * (req.reverse ? -1 : 1);
 
     const startAt = req.start?.row;
@@ -329,7 +329,7 @@ export class MemorySource implements Source {
       this.#overlay,
       this.#splitEditOverlay,
       callingConnectionIndex,
-      comparator,
+      indexComparator,
       conn.filters?.predicate,
     );
 
