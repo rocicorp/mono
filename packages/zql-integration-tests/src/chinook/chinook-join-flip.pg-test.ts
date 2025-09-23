@@ -85,6 +85,139 @@ describe(
                 ),
               ),
           },
+          {
+            name: 'Flipped exists - or with other conditions',
+            createQuery: b =>
+              b.album.where(({or, cmp, exists}) =>
+                or(
+                  exists('artist', a => a.where('name', 'Apocalyptica'), {
+                    flip: true,
+                  }),
+                  cmp('title', 'Black Sabbath'),
+                  cmp('title', 'Chemical Wedding'),
+                  cmp('title', 'Bongo Fury'),
+                ),
+              ),
+
+            manualVerification: -[
+              {
+                artistId: 7,
+                id: 9,
+                title: 'Plays Metallica By Four Cellos',
+              },
+              {
+                artistId: 12,
+                id: 16,
+                title: 'Black Sabbath',
+              },
+              {
+                artistId: 14,
+                id: 19,
+                title: 'Chemical Wedding',
+              },
+              {
+                artistId: 23,
+                id: 31,
+                title: 'Bongo Fury',
+              },
+            ],
+          },
+          {
+            name: 'Flipped exists - in deeply nested logic',
+            createQuery: b =>
+              b.album.where(({or, and, exists}) =>
+                or(
+                  and(
+                    exists('artist', a => a.where('name', 'Apocalyptica'), {
+                      flip: true,
+                    }),
+                    exists('tracks', t => t.where('name', 'Enter Sandman'), {
+                      flip: true,
+                    }),
+                  ),
+                  and(
+                    exists('artist', a => a.where('name', 'Audioslave'), {
+                      flip: true,
+                    }),
+                    exists(
+                      'tracks',
+                      t => t.where('name', 'The Last Remaining Light'),
+                      {flip: true},
+                    ),
+                  ),
+                ),
+              ),
+            manualVerification: [
+              {
+                artistId: 7,
+                id: 9,
+                title: 'Plays Metallica By Four Cellos',
+              },
+              {
+                artistId: 8,
+                id: 10,
+                title: 'Audioslave',
+              },
+            ],
+          },
+          {
+            name: 'Flipped exists over junction edges',
+            createQuery: b =>
+              b.playlist.whereExists(
+                'tracks',
+                t => t.where('name', 'Enter Sandman'),
+                {flip: true},
+              ),
+            manualVerification: [
+              {
+                id: 1,
+                name: 'Music',
+              },
+              {
+                id: 5,
+                name: '90’s Music',
+              },
+              {
+                id: 8,
+                name: 'Music',
+              },
+              {
+                id: 17,
+                name: 'Heavy Metal Classic',
+              },
+            ],
+          },
+          {
+            name: 'Flipped exists over junction edges w/ limit',
+            createQuery: b =>
+              b.playlist
+                .whereExists('tracks', t => t.where('name', 'Enter Sandman'), {
+                  flip: true,
+                })
+                .limit(1),
+            manualVerification: [
+              {
+                id: 1,
+                name: 'Music',
+              },
+            ],
+          },
+          {
+            name: 'Flipped exists over junction edges w/ limit and alt sort',
+            createQuery: b =>
+              b.playlist
+                .whereExists('tracks', t => t.where('name', 'Enter Sandman'), {
+                  flip: true,
+                })
+                .limit(1)
+                .orderBy('name', 'asc'),
+            manualVerification: [
+              {
+                id: 5,
+                name: '90’s Music',
+              },
+            ],
+          },
         ],
       ),
     )('$name', async ({fn}) => {
