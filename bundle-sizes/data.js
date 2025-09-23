@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1758587981376,
+  "lastUpdate": 1758653433114,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -53551,6 +53551,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.mjs.br (Brotli compressed)",
             "value": 54510,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111465,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31900,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d8a6f4d59ef5cfee7f654f041ee181e7cda62c76",
+          "message": "chore: Follow up oxlint fixes (#4927)\n\nThe --type-aware linting was not enabled by default.",
+          "timestamp": "2025-09-23T18:39:54Z",
+          "tree_id": "01bff47edb0f356d8c401f8efe3a62f5866a0edf",
+          "url": "https://github.com/rocicorp/mono/commit/d8a6f4d59ef5cfee7f654f041ee181e7cda62c76"
+        },
+        "date": 1758653421420,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302593,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54554,
             "unit": "bytes"
           },
           {
