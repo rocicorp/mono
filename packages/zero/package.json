@@ -21,7 +21,7 @@
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "lint": "oxlint src/",
     "prepack": "cp ../zero-cache/src/services/litestream/config.yml ./out/zero-cache/src/services/litestream/",
     "docs": "node --experimental-strip-types --no-warnings tool/generate-docs.ts",
     "docs:server": "node --watch --experimental-strip-types --no-warnings tool/generate-docs.ts --server"

@@ -1343,9 +1343,9 @@ export class Zero<
       lc,
       this.#options.mutateURL,
       this.#options.getQueriesURL,
-      this.#options.maxHeaderLength,
       additionalConnectParams,
       await this.#activeClientsManager,
+      this.#options.maxHeaderLength,
     );
 
     if (this.closed) {
@@ -2073,9 +2073,9 @@ export async function createSocket(
   lc: ZeroLogContext,
   userPushURL: string | undefined,
   userQueryURL: string | undefined,
-  maxHeaderLength = 1024 * 8,
   additionalConnectParams: Record<string, string> | undefined,
   activeClientsManager: Pick<ActiveClientsManager, 'activeClients'>,
+  maxHeaderLength = 1024 * 8,
 ): Promise<
   [
     WebSocket,

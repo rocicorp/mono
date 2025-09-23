@@ -10,8 +10,6 @@ vi.mock('../../zero/src/zero.ts', async importOriginal => ({
   Zero: class {
     closed = false;
 
-    constructor() {}
-
     close() {
       this.closed = true;
     }
@@ -20,8 +18,6 @@ vi.mock('../../zero/src/zero.ts', async importOriginal => ({
 
 class FakeZero {
   closed = false;
-
-  constructor() {}
 
   close() {
     this.closed = true;

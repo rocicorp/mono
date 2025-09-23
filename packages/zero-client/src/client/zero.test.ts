@@ -503,9 +503,9 @@ describe('createSocket', () => {
         new ZeroLogContext('error', undefined, new TestLogSink()),
         undefined,
         undefined,
-        1048 * 8,
         additionalConnectParams,
         {activeClients},
+        1048 * 8,
       );
       expect(`${mockSocket.url}`).equal(expectedURL);
       expect(mockSocket.protocol).equal(
@@ -542,9 +542,9 @@ describe('createSocket', () => {
         new ZeroLogContext('error', undefined, new TestLogSink()),
         undefined,
         undefined,
-        0, // do not put any extra information into headers
         additionalConnectParams,
         {activeClients},
+        0, // do not put any extra information into headers
       );
       expect(`${mockSocket.url}`).equal(expectedURL);
       expect(mockSocket2.protocol).equal(encodeSecProtocols(undefined, auth));

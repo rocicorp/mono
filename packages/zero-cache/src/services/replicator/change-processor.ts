@@ -428,7 +428,7 @@ class TransactionProcessor {
     this.#db.run(
       `
       INSERT OR REPLACE INTO ${id(table)} (${columns.join(',')})
-        VALUES (${new Array(columns.length).fill('?').join(',')})
+        VALUES (${Array.from({length: columns.length}).fill('?').join(',')})
       `,
       Object.values(row),
     );

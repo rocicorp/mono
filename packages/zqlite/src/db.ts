@@ -320,8 +320,4 @@ function logIfSlow(
  * wraps the TypeError thrown by the better-sqlite3 package with something
  * more specific.
  */
-export class DatabaseInitError extends Error {
-  constructor(msg: string, options?: ErrorOptions) {
-    super(msg, options);
-  }
-}
+export class DatabaseInitError extends Error {}

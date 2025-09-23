@@ -465,6 +465,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return true;
   }
 
+  // eslint-disable-next-line no-unused-private-class-members -- False positive, used in #scheduleShutdown
   #shutdownTimer: NodeJS.Timeout | null = null;
 
   #scheduleShutdown(delayMs = 0) {

@@ -52,7 +52,7 @@ export const Comment = memo(
         className={classNames({
           [style.commentItem]: true,
           [style.authorComment]:
-            comment.creatorID == login.loginState?.decoded.sub,
+            comment.creatorID === login.loginState?.decoded.sub,
           [style.permalinked]: isPermalinked,
         })}
       >

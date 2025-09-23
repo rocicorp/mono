@@ -790,10 +790,10 @@ type FakePullerArgs = {
 };
 
 function makeFakePuller(options: FakePullerArgs): Puller {
+  // eslint-disable-next-line require-await -- Function needs to be async for interface compatibility
   return async (
     pullReq: PullRequestV1,
     requestID: string,
-    // eslint-disable-next-line require-await
   ): Promise<PullerResultV1> => {
     expect(options.expPullReq).to.deep.equal(pullReq);
     expect(options.expRequestID).to.equal(requestID);

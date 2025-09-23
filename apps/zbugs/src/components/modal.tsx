@@ -75,7 +75,7 @@ export function Modal({
         close();
       }
     },
-    [close],
+    [close, ref],
   );
 
   useKeypress('Escape', close, 'keydown', true);

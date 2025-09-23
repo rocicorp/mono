@@ -34,7 +34,7 @@ export function initDB(
     for (const [name, rows] of Object.entries(tables ?? {})) {
       const columns = Object.keys(rows[0]);
       const cols = columns.map(c => id(c)).join(',');
-      const vals = new Array(columns.length).fill('?').join(',');
+      const vals = Array.from({length: columns.length}).fill('?').join(',');
       const insertStmt = db.prepare(
         `INSERT INTO ${id(name)} (${cols}) VALUES (${vals})`,
       );

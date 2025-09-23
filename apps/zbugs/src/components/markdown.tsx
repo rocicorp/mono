@@ -54,6 +54,7 @@ const rehypeImageToVideo: Plugin = () => {
           }
 
           if (!width || !height) {
+            // eslint-disable-next-line no-console -- Debug logging in demo app
             console.warn('Missing width or height in node:', properties);
           }
 
