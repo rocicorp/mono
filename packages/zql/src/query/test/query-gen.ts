@@ -73,16 +73,18 @@ function augmentQuery(
     return query;
   }
   generations.push(query);
-  return addLimit(
-    addOrderBy(
-      addWhere(
-        addExists(
-          // If we are in exists, adding `related` makes no sense.
-          inExists ? query : addRelated(query),
-        ),
-      ),
-    ),
-  );
+
+  if (inExists) {
+    // If we are in exists, adding:
+    // - related
+    // - limit
+    // - order by
+    // makes no sense.
+    // TODO: fuzzer does not fuzz start!
+    return addWhere(addExists(query));
+  }
+
+  return addLimit(addOrderBy(addWhere(addExists(addRelated(query)))));
 
   function addLimit(query: AnyQuery) {
     if (rng() < 0.2) {
