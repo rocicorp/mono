@@ -17,7 +17,7 @@ import {
   pushAccumulatedChanges,
 } from './push-accumulated.ts';
 import type {SourceSchema} from './schema.ts';
-import type {Stream} from './stream.ts';
+import {first, type Stream} from './stream.ts';
 import type {UnionFanOut} from './union-fan-out.ts';
 
 export class UnionFanIn implements Operator {
@@ -152,9 +152,27 @@ export class UnionFanIn implements Operator {
 
     assert(change.type === 'add' || change.type === 'remove');
 
-    // const fetchResult = this.fetch({
-    //   constraint: change.node.row,
-    // });
+    let hadMatch = false;
+    for (const input of this.#inputs) {
+      if (input === pusher) {
+        hadMatch = true;
+        continue;
+      }
+
+      const fetchResult = input.fetch({
+        constraint: change.node.row,
+      });
+
+      if (first(fetchResult) !== undefined) {
+        // Another branch has the row, so the add/remove is not needed.
+        return;
+      }
+    }
+
+    assert(hadMatch, 'Pusher was not one of the inputs to union-fan-in!');
+
+    // No other branches have the row, so we can push the change.
+    this.#output.push(change, this);
   }
 
   fanOutStartedPushing() {
