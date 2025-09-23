@@ -19,9 +19,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
+          cache: 'npm'
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
@@ -48,7 +46,7 @@ jobs:
           aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
       - name: Install dependencies
         run: |
-          bun run build-ci
+          npm run build-ci
       - name: Get Git SHA
         id: git-sha
         run: echo "SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
@@ -85,5 +83,5 @@ jobs:
           OTEL_RESOURCE_ATTRIBUTES: ${{ vars.PROD_OTEL_RESOURCE_ATTRIBUTES }}
         run: |
           cd prod/sst
-          bun install --frozen-lockfile
-          bunx sst deploy --stage production
+          npm install
+          npx sst deploy --stage production

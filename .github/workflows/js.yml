@@ -26,7 +26,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install --frozen-lockfile
+      - run: bun install
       - run: bun run check-format
 
   lint:
@@ -43,7 +43,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install --frozen-lockfile
+      - run: bun install
       - run: bun run lint
 
   check-types:
@@ -60,7 +60,7 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
-      - run: bun install --frozen-lockfile
+      - run: bun install
       - run: bun run check-types
 
   test:
@@ -77,14 +77,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
+          cache: 'npm'
+      - run: npm ci
       - name: Install Playwright
-        run: bunx playwright install chromium firefox webkit --with-deps
+        run: npx playwright install chromium firefox webkit --with-deps
       - name: Run tests
-        run: TEST_PG_MODE=nopg bun run test
+        run: TEST_PG_MODE=nopg npm run test
 
   test-pg:
     name: Test PG
@@ -100,12 +98,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install --frozen-lockfile
+          cache: 'npm'
+      - run: npm ci
       - name: Run tests
         run: |
-          TEST_PG_MODE=pg-17 bun run test
-          TEST_PG_MODE=pg-16 bun run test
-          TEST_PG_MODE=pg-15 bun run test
+          TEST_PG_MODE=pg-17 npm run test
+          TEST_PG_MODE=pg-16 npm run test
+          TEST_PG_MODE=pg-15 npm run test

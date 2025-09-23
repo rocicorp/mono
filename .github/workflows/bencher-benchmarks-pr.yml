@@ -21,14 +21,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
+          cache: 'npm'
       - uses: bencherdev/bencher@main
 
-      - run: bun install --frozen-lockfile
+      - run: npm ci
 
-      - run: bun run build
+      - run: npm run build
 
       - name: Build npm zero package
         working-directory: packages/zero
@@ -38,7 +36,7 @@ jobs:
 
       - name: Build zero client single file package
         working-directory: packages/zero
-        run: bunx tsx tool/build.ts --bundle-sizes --minify
+        run: npx tsx tool/build.ts --bundle-sizes --minify
 
       - name: Compress
         working-directory: packages/zero

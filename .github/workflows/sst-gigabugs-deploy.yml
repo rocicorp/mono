@@ -19,9 +19,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
+          cache: 'npm'
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
@@ -86,8 +84,8 @@ jobs:
           DATADOG_API_KEY: ${{ secrets.GIGABUGS_DATADOG_API_KEY }}
         run: |
           cd prod/sst
-          bun install --frozen-lockfile
-          bunx sst deploy --stage gigabugs-ebs
+          npm install
+          npx sst deploy --stage gigabugs-ebs
       - name: Deploy SST app non ebs
         env:
           ZERO_APP_ID: 'gigabugs1'
@@ -104,5 +102,5 @@ jobs:
           DATADOG_API_KEY: ${{ secrets.GIGABUGS_DATADOG_API_KEY }}
         run: |
           cd prod/sst
-          bun install --frozen-lockfile
-          bunx sst deploy --stage gigabugs
+          npm install
+          npx sst deploy --stage gigabugs

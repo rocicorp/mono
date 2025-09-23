@@ -16,25 +16,23 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
+          cache: 'npm'
       # Clear out potential user data dirs left over from previous failures.
       - run: rm -rf /tmp/replicache-playwright-*
-      - run: bun install --frozen-lockfile
+      - run: npm ci
       - name: Install Playwright
-        run: bunx playwright install --with-deps
+        run: npx playwright install --with-deps
 
-      - run: bun run build
+      - run: npm run build
         working-directory: packages/replicache-perf
 
       # Run benchmark and stores the output to a file
       - name: Run benchmark
         working-directory: packages/replicache-perf
         run: |
-          bun run build
-          bunx tsx src/runner.ts --format=json | tee perf-temp-output.json
-          bunx tsx tool/split-perf.ts perf-temp-output.json perf-v2-output.json perf-v2-p95-output.json
+          npm run build
+          npx tsx src/runner.ts --format=json | tee perf-temp-output.json
+          npx tsx tool/split-perf.ts perf-temp-output.json perf-v2-output.json perf-v2-p95-output.json
         shell: bash
 
       # Run `github-action-benchmark` action
