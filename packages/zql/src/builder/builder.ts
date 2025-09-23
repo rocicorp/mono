@@ -26,6 +26,7 @@ import {
   type FilterInput,
 } from '../ivm/filter-operators.ts';
 import {Filter} from '../ivm/filter.ts';
+import {FlippedJoin} from '../ivm/flipped-join.ts';
 import {Join} from '../ivm/join.ts';
 import type {Input, InputBase, Storage} from '../ivm/operator.ts';
 import {Skip} from '../ivm/skip.ts';
@@ -430,17 +431,27 @@ function applyCorrelatedSubQuery(
     `${name}.${sq.subquery.alias}`,
     sq.correlation.childField,
   );
-  const joinName = `${name}:join(${sq.subquery.alias})`;
-  const join = new Join({
-    parent: end,
-    child,
-    storage: delegate.createStorage(joinName),
-    parentKey: sq.correlation.parentField,
-    childKey: sq.correlation.childField,
-    relationshipName: sq.subquery.alias,
-    hidden: sq.hidden ?? false,
-    system: sq.system ?? 'client',
-  });
+  const joinName = `${name}:${sq.flip ? 'flipped-join' : 'join'}(${sq.subquery.alias})`;
+  const join = sq.flip
+    ? new FlippedJoin({
+        parent: end,
+        child,
+        parentKey: sq.correlation.parentField,
+        childKey: sq.correlation.childField,
+        relationshipName: sq.subquery.alias,
+        hidden: sq.hidden ?? false,
+        system: sq.system ?? 'client',
+      })
+    : new Join({
+        parent: end,
+        child,
+        storage: delegate.createStorage(joinName),
+        parentKey: sq.correlation.parentField,
+        childKey: sq.correlation.childField,
+        relationshipName: sq.subquery.alias,
+        hidden: sq.hidden ?? false,
+        system: sq.system ?? 'client',
+      });
   delegate.addEdge(end, join);
   delegate.addEdge(child, join);
   return delegate.decorateInput(join, joinName);
