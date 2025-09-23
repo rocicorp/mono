@@ -145,7 +145,7 @@ export class Join implements Input {
             change.node.relationships,
             'fetch',
           ),
-        });
+        }, this);
         break;
       case 'remove':
         this.#output.push({
@@ -155,7 +155,7 @@ export class Join implements Input {
             change.node.relationships,
             'cleanup',
           ),
-        });
+        }, this);
         break;
       case 'child':
         this.#output.push({
@@ -166,7 +166,7 @@ export class Join implements Input {
             'fetch',
           ),
           child: change.child,
-        });
+        }, this);
         break;
       case 'edit': {
         // Assert the edit could not change the relationship.
@@ -190,7 +190,7 @@ export class Join implements Input {
             change.node.relationships,
             'fetch',
           ),
-        });
+        }, this);
         break;
       }
       default:
@@ -225,7 +225,7 @@ export class Join implements Input {
               change,
             },
           };
-          this.#output.push(childChange);
+          this.#output.push(childChange, this);
         }
       } finally {
         this.#inprogressChildChange = undefined;

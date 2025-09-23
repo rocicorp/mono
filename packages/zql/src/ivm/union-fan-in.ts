@@ -114,7 +114,7 @@ export class UnionFanIn implements Operator {
         change.type === 'child',
         'Only child changes allowed to come from internal nodes in union structures',
       );
-      this.#output.push(change);
+      this.#output.push(change, this);
     } else {
       this.#accumulatedPushes.push(change);
     }
@@ -141,6 +141,7 @@ export class UnionFanIn implements Operator {
     pushAccumulatedChanges(
       this.#accumulatedPushes,
       this.#output,
+      this,
       fanOutChangeType,
       mergeRelationships,
       makeAddEmptyRelationships(this.#schema),

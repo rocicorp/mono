@@ -464,7 +464,10 @@ export function* genPush(
       unreachable(change);
   }
 
-  for (const [outputIndex, {output, splitEditKeys, filters}] of connections) {
+  for (const [
+    outputIndex,
+    {output, input, splitEditKeys, filters},
+  ] of connections) {
     if (output) {
       let splitEdit = false;
       if (change.type === 'edit' && splitEditKeys) {
@@ -491,7 +494,7 @@ export function* genPush(
             relationships: {},
           },
         };
-        filterPush(outputRemove, output, filters?.predicate);
+        filterPush(outputRemove, output, input, filters?.predicate);
         yield;
         setSplitEditOverlay(undefined);
         setOverlay({outputIndex, change});
@@ -502,7 +505,7 @@ export function* genPush(
             relationships: {},
           },
         };
-        filterPush(outputAdd, output, filters?.predicate);
+        filterPush(outputAdd, output, input, filters?.predicate);
         yield;
       } else {
         setOverlay({outputIndex, change});
@@ -526,7 +529,7 @@ export function* genPush(
                   relationships: {},
                 },
               };
-        filterPush(outputChange, output, filters?.predicate);
+        filterPush(outputChange, output, input, filters?.predicate);
         yield;
       }
     }

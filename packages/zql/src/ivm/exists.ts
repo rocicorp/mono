@@ -165,12 +165,12 @@ export class Exists implements FilterOperator {
                         [this.#relationshipName]: () => [],
                       },
                     },
-                  });
+                  }, this);
                 } else {
                   this.#output.push({
                     type: 'add',
                     node: change.node,
-                  });
+                  }, this);
                 }
               } else {
                 this.#pushWithFilter(change, size);
@@ -191,7 +191,7 @@ export class Exists implements FilterOperator {
                   this.#output.push({
                     type: 'add',
                     node: change.node,
-                  });
+                  }, this);
                 } else {
                   // Since the remove child change currently being processed is
                   // not pushed to output, the removed child needs to be added to
@@ -207,7 +207,7 @@ export class Exists implements FilterOperator {
                         ],
                       },
                     },
-                  });
+                  }, this);
                 }
               } else {
                 this.#pushWithFilter(change, size);
@@ -243,7 +243,7 @@ export class Exists implements FilterOperator {
    */
   #pushWithFilter(change: Change, size?: number): void {
     if (this.#filter(change.node, size)) {
-      this.#output.push(change);
+      this.#output.push(change, this);
     }
   }
 
