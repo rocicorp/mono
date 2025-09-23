@@ -369,7 +369,7 @@ function applyFilterWithFlips(
         // un-flipped queries have already been applied
         break;
       }
-      const parent = buildPipelineInternal(
+      const child = buildPipelineInternal(
         sq.subquery,
         delegate,
         '',
@@ -377,10 +377,10 @@ function applyFilterWithFlips(
         sq.correlation.childField,
       );
       const flippedJoin = new FlippedJoin({
-        parent,
-        child: end,
-        childKey: sq.correlation.parentField,
-        parentKey: sq.correlation.childField,
+        parent: end,
+        child,
+        parentKey: sq.correlation.parentField,
+        childKey: sq.correlation.childField,
         relationshipName: must(
           sq.subquery.alias,
           'Subquery must have an alias',
@@ -389,7 +389,7 @@ function applyFilterWithFlips(
         system: sq.system ?? 'client',
       });
       delegate.addEdge(end, flippedJoin);
-      delegate.addEdge(parent, flippedJoin);
+      delegate.addEdge(child, flippedJoin);
       end = delegate.decorateInput(
         flippedJoin,
         `${name}:flipped-join(${sq.subquery.alias})`,

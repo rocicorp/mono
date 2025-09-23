@@ -50,7 +50,7 @@ export class UnionFanIn implements Operator {
       const inputSchema = input.getSchema();
       assert(
         schema.tableName === inputSchema.tableName,
-        `Table name mismatch in union fan-in`,
+        `Table name mismatch in union fan-in: ${schema.tableName} !== ${inputSchema.tableName}`,
       );
       assert(
         schema.primaryKey === inputSchema.primaryKey,
@@ -58,7 +58,7 @@ export class UnionFanIn implements Operator {
       );
       assert(
         schema.system === inputSchema.system,
-        `System mismatch in union fan-in`,
+        `System mismatch in union fan-in: ${schema.system} !== ${inputSchema.system}`,
       );
       assert(
         schema.compareRows === inputSchema.compareRows,
