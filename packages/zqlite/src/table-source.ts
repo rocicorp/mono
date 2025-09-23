@@ -132,7 +132,9 @@ export class TableSource implements Source {
             Object.keys(this.#columns).map(c => sql.ident(c)),
             ', ',
           )}) VALUES (${sql.__dangerous__rawValue(
-            new Array(Object.keys(this.#columns).length).fill('?').join(','),
+            Array.from({length: Object.keys(this.#columns).length})
+              .fill('?')
+              .join(','),
           )})`,
         ),
       ),
@@ -826,11 +828,7 @@ function fromSQLiteType(valueType: ValueType, v: Value, column: string): Value {
   }
 }
 
-export class UnsupportedValueError extends Error {
-  constructor(msg: string) {
-    super(msg);
-  }
-}
+export class UnsupportedValueError extends Error {}
 
 function canUseUpdate(
   oldRow: Row,

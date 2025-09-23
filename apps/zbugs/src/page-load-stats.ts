@@ -24,6 +24,7 @@ export function recordPageLoad(page: string) {
   pageLoadRecorded = true;
   const loadLatencyMs = performance.now();
   const bucket = assignLatencyToBucket(loadLatencyMs);
+  // eslint-disable-next-line no-console -- Performance logging in demo app
   console.log(
     `Page load time for ${page}: ${loadLatencyMs}ms, Bucket: ${bucket}`,
   );

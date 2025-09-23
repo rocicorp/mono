@@ -22,7 +22,7 @@
     "check-format": "prettier --check .",
     "check-types": "tsc && tsc --project tool/tsconfig.json",
     "check-types:watch": "tsc --watch",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "lint": "oxlint src/",
     "build": "rm -rf out && tsc -p tsconfig.build.json && npx tsx tool/build.ts",
     "build-bundle-sizes": "rm -rf out && npx tsx tool/build.ts --bundle-sizes",
     "prepack": "npm run lint && npm run test && npm run build && mv README.md README-org.md && mv README-external.md README.md",

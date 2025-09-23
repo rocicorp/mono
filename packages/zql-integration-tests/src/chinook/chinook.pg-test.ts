@@ -10,6 +10,7 @@ import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {PullRow} from '../../../zql/src/query/query.ts';
 
 // Junction edges do not correctly handle limits in ZQL
+// eslint-disable-next-line unicorn/prefer-set-has -- Keep as array for consistency with existing code
 const brokenRelationshipLimits = ['tracks', 'customer', 'playlists'];
 
 const pgContent = await getChinook();

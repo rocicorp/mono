@@ -447,7 +447,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
       callbacks.forEach((callback: CallbackFunction) => {
         try {
           callback(mockResult);
-        } catch (e) {
+        } catch {
           // Some callbacks might fail due to mocking, that's ok
         }
       });

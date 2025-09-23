@@ -1708,6 +1708,7 @@ test('result type unknown then complete', async () => {
 
   // updating of resultType is promised based, so check in a new
   // microtask
+  // eslint-disable-next-line unicorn/no-unnecessary-await -- intentional for test timing
   await 1;
 
   expect(rows).toEqual([]);
