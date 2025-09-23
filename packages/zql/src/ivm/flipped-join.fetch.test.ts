@@ -1931,10 +1931,10 @@ function fetchTest(t: FetchTest): FetchTestResults {
     const child =
       i === t.joins.length - 1 ? sources[i + 1].snitch : flippedJoins[i + 1];
     flippedJoins[i] = new FlippedJoin({
-      parent: child,
-      child: parent,
-      parentKey: info.childKey,
-      childKey: info.parentKey,
+      parent,
+      child,
+      parentKey: info.parentKey,
+      childKey: info.childKey,
       relationshipName: info.relationshipName,
       hidden: false,
       system: 'client',

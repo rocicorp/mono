@@ -2040,37 +2040,43 @@ suite('push many:one', () => {
           },
         ],
         [
-          ":join(owner)",
+          ".owner:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "id": "u1",
+            },
+          },
+        ],
+        [
+          ":flipped-join(owner)",
           "push",
           {
-            "child": {
-              "row": {
-                "id": "u1",
-              },
-              "type": "add",
-            },
             "row": {
               "id": "i1",
               "ownerID": "u1",
             },
-            "type": "child",
+            "type": "add",
           },
         ],
         [
-          ":join(owner)",
+          ".owner:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "id": "u1",
+            },
+          },
+        ],
+        [
+          ":flipped-join(owner)",
           "push",
           {
-            "child": {
-              "row": {
-                "id": "u1",
-              },
-              "type": "add",
-            },
             "row": {
               "id": "i2",
               "ownerID": "u1",
             },
-            "type": "child",
+            "type": "add",
           },
         ],
       ]
@@ -4539,34 +4545,8 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":join(creator)",
-          "push",
-          {
-            "row": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "remove",
-          },
-        ],
-        [
-          ":join(assignee)",
-          "push",
-          {
-            "row": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "remove",
-          },
-        ],
-        [
           ".creator:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": "u1",
@@ -4574,8 +4554,30 @@ describe('edit assignee', () => {
           },
         ],
         [
+          ".creator:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          ":flipped-join(creator)",
+          "push",
+          {
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "remove",
+          },
+        ],
+        [
           ".assignee:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": undefined,
@@ -4596,7 +4598,25 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":join(creator)",
+          ".creator:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          ".creator:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          ":flipped-join(creator)",
           "push",
           {
             "row": {
@@ -4609,7 +4629,25 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":join(assignee)",
+          ".assignee:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          ".assignee:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          ":flipped-join(assignee)",
           "push",
           {
             "row": {
@@ -4647,29 +4685,6 @@ describe('edit assignee', () => {
         {
           "node": {
             "relationships": {
-              "assignee": [],
-              "creator": [
-                {
-                  "relationships": {},
-                  "row": {
-                    "name": "user 1",
-                    "userID": "u1",
-                  },
-                },
-              ],
-            },
-            "row": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-          },
-          "type": "remove",
-        },
-        {
-          "node": {
-            "relationships": {
               "assignee": [
                 {
                   "relationships": {},
@@ -4701,18 +4716,7 @@ describe('edit assignee', () => {
       ]
     `);
 
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(assignee)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
-        },
-        ":join(creator)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
   });
 
   test('from none to many', () => {
@@ -4752,6 +4756,7 @@ describe('edit assignee', () => {
               ['id', 'asc'],
             ],
           },
+          flip: true,
         },
         {
           system: 'client',
@@ -4767,6 +4772,7 @@ describe('edit assignee', () => {
               ['id', 'asc'],
             ],
           },
+          flip: true,
         },
       ],
     };
@@ -4877,34 +4883,8 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":join(creator)",
-          "push",
-          {
-            "row": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "remove",
-          },
-        ],
-        [
-          ":join(assignee)",
-          "push",
-          {
-            "row": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "remove",
-          },
-        ],
-        [
           ".creator:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": "u1",
@@ -4912,8 +4892,30 @@ describe('edit assignee', () => {
           },
         ],
         [
+          ".creator:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          ":flipped-join(creator)",
+          "push",
+          {
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "remove",
+          },
+        ],
+        [
           ".assignee:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": undefined,
@@ -4934,7 +4936,25 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":join(creator)",
+          ".creator:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          ".creator:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          ":flipped-join(creator)",
           "push",
           {
             "row": {
@@ -4947,7 +4967,25 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":join(assignee)",
+          ".assignee:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          ".assignee:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          ":flipped-join(assignee)",
           "push",
           {
             "row": {
@@ -4982,38 +5020,6 @@ describe('edit assignee', () => {
 
     expect(pushes).toMatchInlineSnapshot(`
       [
-        {
-          "node": {
-            "relationships": {
-              "assignee": [],
-              "creator": [
-                {
-                  "relationships": {},
-                  "row": {
-                    "id": 1,
-                    "name": "user 1",
-                    "userID": "u1",
-                  },
-                },
-                {
-                  "relationships": {},
-                  "row": {
-                    "id": 1.5,
-                    "name": "user 1.5",
-                    "userID": "u1",
-                  },
-                },
-              ],
-            },
-            "row": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-          },
-          "type": "remove",
-        },
         {
           "node": {
             "relationships": {
@@ -5066,18 +5072,7 @@ describe('edit assignee', () => {
       ]
     `);
 
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(assignee)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
-        },
-        ":join(creator)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
   });
 
   test('from one to none', () => {
@@ -5116,21 +5111,6 @@ describe('edit assignee', () => {
 
     expect(data).toMatchInlineSnapshot(`
       [
-        {
-          "assignee": [],
-          "assigneeID": undefined,
-          "creator": [
-            {
-              "name": "user 1",
-              "userID": "u1",
-              Symbol(rc): 1,
-            },
-          ],
-          "creatorID": "u1",
-          "issueID": "i1",
-          "text": "first issue",
-          Symbol(rc): 1,
-        },
         {
           "assignee": [
             {
@@ -5171,7 +5151,25 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":join(creator)",
+          ".creator:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          ".creator:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          ":flipped-join(creator)",
           "push",
           {
             "row": {
@@ -5184,7 +5182,25 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":join(assignee)",
+          ".assignee:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          ".assignee:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          ":flipped-join(assignee)",
           "push",
           {
             "row": {
@@ -5198,7 +5214,7 @@ describe('edit assignee', () => {
         ],
         [
           ".creator:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": "u1",
@@ -5207,7 +5223,7 @@ describe('edit assignee', () => {
         ],
         [
           ".assignee:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": "u1",
@@ -5228,29 +5244,12 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":join(creator)",
-          "push",
+          ".creator:source(user)",
+          "fetch",
           {
-            "row": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
+            "constraint": {
+              "userID": "u1",
             },
-            "type": "add",
-          },
-        ],
-        [
-          ":join(assignee)",
-          "push",
-          {
-            "row": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "add",
           },
         ],
         [
@@ -5260,6 +5259,19 @@ describe('edit assignee', () => {
             "constraint": {
               "userID": "u1",
             },
+          },
+        ],
+        [
+          ":flipped-join(creator)",
+          "push",
+          {
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "add",
           },
         ],
         [
@@ -5307,44 +5319,10 @@ describe('edit assignee', () => {
           },
           "type": "remove",
         },
-        {
-          "node": {
-            "relationships": {
-              "assignee": [],
-              "creator": [
-                {
-                  "relationships": {},
-                  "row": {
-                    "name": "user 1",
-                    "userID": "u1",
-                  },
-                },
-              ],
-            },
-            "row": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-          },
-          "type": "add",
-        },
       ]
     `);
 
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(assignee)": {
-          ""pKeySet","u2","i2",": true,
-          ""pKeySet",null,"i1",": true,
-        },
-        ":join(creator)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
   });
 
   test('from many to none', () => {
@@ -5385,6 +5363,7 @@ describe('edit assignee', () => {
               ['id', 'asc'],
             ],
           },
+          flip: true,
         },
         {
           system: 'client',
@@ -5400,6 +5379,7 @@ describe('edit assignee', () => {
               ['id', 'asc'],
             ],
           },
+          flip: true,
         },
       ],
     };
@@ -5433,28 +5413,6 @@ describe('edit assignee', () => {
 
     expect(data).toMatchInlineSnapshot(`
       [
-        {
-          "assignee": [],
-          "assigneeID": undefined,
-          "creator": [
-            {
-              "id": 1,
-              "name": "user 1",
-              "userID": "u1",
-              Symbol(rc): 1,
-            },
-            {
-              "id": 1.5,
-              "name": "user 1.5",
-              "userID": "u1",
-              Symbol(rc): 1,
-            },
-          ],
-          "creatorID": "u1",
-          "issueID": "i1",
-          "text": "first issue",
-          Symbol(rc): 1,
-        },
         {
           "assignee": [
             {
@@ -5497,7 +5455,25 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":join(creator)",
+          ".creator:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          ".creator:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          ":flipped-join(creator)",
           "push",
           {
             "row": {
@@ -5510,7 +5486,25 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":join(assignee)",
+          ".assignee:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          ".assignee:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "userID": "u1",
+            },
+          },
+        ],
+        [
+          ":flipped-join(assignee)",
           "push",
           {
             "row": {
@@ -5524,7 +5518,7 @@ describe('edit assignee', () => {
         ],
         [
           ".creator:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": "u1",
@@ -5533,7 +5527,7 @@ describe('edit assignee', () => {
         ],
         [
           ".assignee:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": "u1",
@@ -5554,29 +5548,12 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":join(creator)",
-          "push",
+          ".creator:source(user)",
+          "fetch",
           {
-            "row": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
+            "constraint": {
+              "userID": "u1",
             },
-            "type": "add",
-          },
-        ],
-        [
-          ":join(assignee)",
-          "push",
-          {
-            "row": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-            "type": "add",
           },
         ],
         [
@@ -5586,6 +5563,19 @@ describe('edit assignee', () => {
             "constraint": {
               "userID": "u1",
             },
+          },
+        ],
+        [
+          ":flipped-join(creator)",
+          "push",
+          {
+            "row": {
+              "assigneeID": undefined,
+              "creatorID": "u1",
+              "issueID": "i1",
+              "text": "first issue",
+            },
+            "type": "add",
           },
         ],
         [
@@ -5651,53 +5641,10 @@ describe('edit assignee', () => {
           },
           "type": "remove",
         },
-        {
-          "node": {
-            "relationships": {
-              "assignee": [],
-              "creator": [
-                {
-                  "relationships": {},
-                  "row": {
-                    "id": 1,
-                    "name": "user 1",
-                    "userID": "u1",
-                  },
-                },
-                {
-                  "relationships": {},
-                  "row": {
-                    "id": 1.5,
-                    "name": "user 1.5",
-                    "userID": "u1",
-                  },
-                },
-              ],
-            },
-            "row": {
-              "assigneeID": undefined,
-              "creatorID": "u1",
-              "issueID": "i1",
-              "text": "first issue",
-            },
-          },
-          "type": "add",
-        },
       ]
     `);
 
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(assignee)": {
-          ""pKeySet","u2","i2",": true,
-          ""pKeySet",null,"i1",": true,
-        },
-        ":join(creator)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
   });
 });
 
@@ -5746,6 +5693,7 @@ describe('joins with compound join keys', () => {
           alias: 'ab',
           orderBy: [['id', 'asc']],
         },
+        flip: true,
       },
     ],
   } as const;
@@ -5853,19 +5801,6 @@ describe('joins with compound join keys', () => {
           },
         ],
         [
-          ":join(ab)",
-          "push",
-          {
-            "row": {
-              "a1": 7,
-              "a2": 8,
-              "a3": 9,
-              "id": 2,
-            },
-            "type": "add",
-          },
-        ],
-        [
           ".ab:source(b)",
           "fetch",
           {
@@ -5899,25 +5834,26 @@ describe('joins with compound join keys', () => {
           },
         ],
         [
-          ":join(ab)",
+          ".ab:source(b)",
+          "fetch",
+          {
+            "constraint": {
+              "b1": 8,
+              "b2": 7,
+            },
+          },
+        ],
+        [
+          ":flipped-join(ab)",
           "push",
           {
-            "child": {
-              "row": {
-                "b1": 8,
-                "b2": 7,
-                "b3": 9,
-                "id": 2,
-              },
-              "type": "add",
-            },
             "row": {
               "a1": 7,
               "a2": 8,
               "a3": 9,
               "id": 2,
             },
-            "type": "child",
+            "type": "add",
           },
         ],
       ]
@@ -5928,7 +5864,17 @@ describe('joins with compound join keys', () => {
         {
           "node": {
             "relationships": {
-              "ab": [],
+              "ab": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "b1": 8,
+                    "b2": 7,
+                    "b3": 9,
+                    "id": 2,
+                  },
+                },
+              ],
             },
             "row": {
               "a1": 7,
@@ -5939,42 +5885,10 @@ describe('joins with compound join keys', () => {
           },
           "type": "add",
         },
-        {
-          "child": {
-            "change": {
-              "node": {
-                "relationships": {},
-                "row": {
-                  "b1": 8,
-                  "b2": 7,
-                  "b3": 9,
-                  "id": 2,
-                },
-              },
-              "type": "add",
-            },
-            "relationshipName": "ab",
-          },
-          "row": {
-            "a1": 7,
-            "a2": 8,
-            "a3": 9,
-            "id": 2,
-          },
-          "type": "child",
-        },
       ]
     `);
 
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(ab)": {
-          ""pKeySet",1,2,0,": true,
-          ""pKeySet",4,5,1,": true,
-          ""pKeySet",7,8,2,": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
   });
 
   test('edit child with moving it', () => {
@@ -6054,7 +5968,37 @@ describe('joins with compound join keys', () => {
           },
         ],
         [
-          ":join(ab)",
+          ".ab:source(b)",
+          "fetch",
+          {
+            "constraint": {
+              "b1": 2,
+              "b2": 1,
+            },
+          },
+        ],
+        [
+          ".ab:source(b)",
+          "fetch",
+          {
+            "constraint": {
+              "b1": 2,
+              "b2": 1,
+            },
+          },
+        ],
+        [
+          ".ab:source(b)",
+          "fetch",
+          {
+            "constraint": {
+              "b1": 2,
+              "b2": 1,
+            },
+          },
+        ],
+        [
+          ":flipped-join(ab)",
           "push",
           {
             "oldRow": {
@@ -6095,14 +6039,7 @@ describe('joins with compound join keys', () => {
       ]
     `);
 
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(ab)": {
-          ""pKeySet",1,2,0,": true,
-          ""pKeySet",4,5,1,": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
   });
 });
 
@@ -6136,6 +6073,7 @@ suite('test overlay on many:one pushes', () => {
           alias: 'owner',
           orderBy: [['id', 'asc']],
         },
+        flip: true,
       },
     ],
   } as const;
@@ -6194,39 +6132,43 @@ suite('test overlay on many:one pushes', () => {
           },
         ],
         [
-          ":join(owner)",
+          ".owner:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "id": "u1",
+            },
+          },
+        ],
+        [
+          ":flipped-join(owner)",
           "push",
           {
-            "child": {
-              "row": {
-                "id": "u1",
-                "name": "Aaron",
-              },
-              "type": "add",
-            },
             "row": {
               "id": "i1",
               "ownerID": "u1",
             },
-            "type": "child",
+            "type": "add",
           },
         ],
         [
-          ":join(owner)",
+          ".owner:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "id": "u1",
+            },
+          },
+        ],
+        [
+          ":flipped-join(owner)",
           "push",
           {
-            "child": {
-              "row": {
-                "id": "u1",
-                "name": "Aaron",
-              },
-              "type": "add",
-            },
             "row": {
               "id": "i2",
               "ownerID": "u1",
             },
-            "type": "child",
+            "type": "add",
           },
         ],
       ]
@@ -6275,38 +6217,29 @@ suite('test overlay on many:one pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(owner)": {
-          ""pKeySet","u0","i0",": true,
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
-          ""pKeySet","u2","i3",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {
           "change": {
-            "child": {
-              "change": {
-                "node": {
-                  "relationships": {},
-                  "row": {
-                    "id": "u1",
-                    "name": "Aaron",
+            "node": {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                    },
                   },
-                },
-                "type": "add",
+                ],
               },
-              "relationshipName": "owner",
+              "row": {
+                "id": "i1",
+                "ownerID": "u1",
+              },
             },
-            "row": {
-              "id": "i1",
-              "ownerID": "u1",
-            },
-            "type": "child",
+            "type": "add",
           },
           "fetch": [
             {
@@ -6345,15 +6278,6 @@ suite('test overlay on many:one pushes', () => {
             },
             {
               "relationships": {
-                "owner": [],
-              },
-              "row": {
-                "id": "i2",
-                "ownerID": "u1",
-              },
-            },
-            {
-              "relationships": {
                 "owner": [
                   {
                     "relationships": {},
@@ -6373,24 +6297,24 @@ suite('test overlay on many:one pushes', () => {
         },
         {
           "change": {
-            "child": {
-              "change": {
-                "node": {
-                  "relationships": {},
-                  "row": {
-                    "id": "u1",
-                    "name": "Aaron",
+            "node": {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                    },
                   },
-                },
-                "type": "add",
+                ],
               },
-              "relationshipName": "owner",
+              "row": {
+                "id": "i2",
+                "ownerID": "u1",
+              },
             },
-            "row": {
-              "id": "i2",
-              "ownerID": "u1",
-            },
-            "type": "child",
+            "type": "add",
           },
           "fetch": [
             {
@@ -6512,39 +6436,43 @@ suite('test overlay on many:one pushes', () => {
           },
         ],
         [
-          ":join(owner)",
+          ".owner:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "id": "u1",
+            },
+          },
+        ],
+        [
+          ":flipped-join(owner)",
           "push",
           {
-            "child": {
-              "row": {
-                "id": "u1",
-                "name": "Aaron",
-              },
-              "type": "remove",
-            },
             "row": {
               "id": "i1",
               "ownerID": "u1",
             },
-            "type": "child",
+            "type": "remove",
           },
         ],
         [
-          ":join(owner)",
+          ".owner:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "id": "u1",
+            },
+          },
+        ],
+        [
+          ":flipped-join(owner)",
           "push",
           {
-            "child": {
-              "row": {
-                "id": "u1",
-                "name": "Aaron",
-              },
-              "type": "remove",
-            },
             "row": {
               "id": "i2",
               "ownerID": "u1",
             },
-            "type": "child",
+            "type": "remove",
           },
         ],
       ]
@@ -6562,18 +6490,6 @@ suite('test overlay on many:one pushes', () => {
           Symbol(rc): 1,
         },
         {
-          "id": "i1",
-          "owner": undefined,
-          "ownerID": "u1",
-          Symbol(rc): 1,
-        },
-        {
-          "id": "i2",
-          "owner": undefined,
-          "ownerID": "u1",
-          Symbol(rc): 1,
-        },
-        {
           "id": "i3",
           "owner": {
             "id": "u2",
@@ -6585,38 +6501,52 @@ suite('test overlay on many:one pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(owner)": {
-          ""pKeySet","u0","i0",": true,
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
-          ""pKeySet","u2","i3",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    // TODO: there is a bug here, the following
+    // should be in the first fetch... we need to include
+    /**
+     *      
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i2",
+                "ownerID": "u1",
+              },
+            },
+
+     */
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {
           "change": {
-            "child": {
-              "change": {
-                "node": {
-                  "relationships": {},
-                  "row": {
-                    "id": "u1",
-                    "name": "Aaron",
+            "node": {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                    },
                   },
-                },
-                "type": "remove",
+                ],
               },
-              "relationshipName": "owner",
+              "row": {
+                "id": "i1",
+                "ownerID": "u1",
+              },
             },
-            "row": {
-              "id": "i1",
-              "ownerID": "u1",
-            },
-            "type": "child",
+            "type": "remove",
           },
           "fetch": [
             {
@@ -6634,15 +6564,6 @@ suite('test overlay on many:one pushes', () => {
               "row": {
                 "id": "i0",
                 "ownerID": "u0",
-              },
-            },
-            {
-              "relationships": {
-                "owner": [],
-              },
-              "row": {
-                "id": "i1",
-                "ownerID": "u1",
               },
             },
             {
@@ -6683,24 +6604,24 @@ suite('test overlay on many:one pushes', () => {
         },
         {
           "change": {
-            "child": {
-              "change": {
-                "node": {
-                  "relationships": {},
-                  "row": {
-                    "id": "u1",
-                    "name": "Aaron",
+            "node": {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {},
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                    },
                   },
-                },
-                "type": "remove",
+                ],
               },
-              "relationshipName": "owner",
+              "row": {
+                "id": "i2",
+                "ownerID": "u1",
+              },
             },
-            "row": {
-              "id": "i2",
-              "ownerID": "u1",
-            },
-            "type": "child",
+            "type": "remove",
           },
           "fetch": [
             {
@@ -6718,24 +6639,6 @@ suite('test overlay on many:one pushes', () => {
               "row": {
                 "id": "i0",
                 "ownerID": "u0",
-              },
-            },
-            {
-              "relationships": {
-                "owner": [],
-              },
-              "row": {
-                "id": "i1",
-                "ownerID": "u1",
-              },
-            },
-            {
-              "relationships": {
-                "owner": [],
-              },
-              "row": {
-                "id": "i2",
-                "ownerID": "u1",
               },
             },
             {
@@ -6819,7 +6722,7 @@ suite('test overlay on many:one pushes', () => {
           },
         ],
         [
-          ":join(owner)",
+          ":flipped-join(owner)",
           "push",
           {
             "child": {
@@ -6841,7 +6744,7 @@ suite('test overlay on many:one pushes', () => {
           },
         ],
         [
-          ":join(owner)",
+          ":flipped-join(owner)",
           "push",
           {
             "child": {
@@ -6908,16 +6811,7 @@ suite('test overlay on many:one pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(owner)": {
-          ""pKeySet","u0","i0",": true,
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
-          ""pKeySet","u2","i3",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {
@@ -7156,9 +7050,11 @@ suite('test overlay on many:one pushes', () => {
                   alias: 'state',
                   orderBy: [['id', 'asc']],
                 },
+                flip: true,
               },
             ],
           },
+          flip: true,
         },
       ],
     } as const;
@@ -7238,7 +7134,7 @@ suite('test overlay on many:one pushes', () => {
           },
         ],
         [
-          ".owner:join(state)",
+          ".owner:flipped-join(state)",
           "push",
           {
             "child": {
@@ -7270,7 +7166,7 @@ suite('test overlay on many:one pushes', () => {
           },
         ],
         [
-          ":join(owner)",
+          ":flipped-join(owner)",
           "push",
           {
             "child": {
@@ -7300,7 +7196,7 @@ suite('test overlay on many:one pushes', () => {
           },
         ],
         [
-          ".owner:join(state)",
+          ".owner:flipped-join(state)",
           "push",
           {
             "child": {
@@ -7332,7 +7228,7 @@ suite('test overlay on many:one pushes', () => {
           },
         ],
         [
-          ":join(owner)",
+          ":flipped-join(owner)",
           "push",
           {
             "child": {
@@ -7362,7 +7258,7 @@ suite('test overlay on many:one pushes', () => {
           },
         ],
         [
-          ":join(owner)",
+          ":flipped-join(owner)",
           "push",
           {
             "child": {
@@ -7461,21 +7357,7 @@ suite('test overlay on many:one pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".owner:join(state)": {
-          ""pKeySet","s0","u0",": true,
-          ""pKeySet","s0","u1",": true,
-          ""pKeySet","s1","u2",": true,
-        },
-        ":join(owner)": {
-          ""pKeySet","u0","i0",": true,
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
-          ""pKeySet","u2","i3",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {
@@ -7961,6 +7843,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
             ['id', 'asc'],
           ],
         },
+        flip: true,
       },
     ],
   } as const;
@@ -8022,7 +7905,16 @@ suite('test overlay on many:many (no junction) pushes', () => {
           },
         ],
         [
-          ":join(ownerByName)",
+          ".ownerByName:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "name": "Aaron",
+            },
+          },
+        ],
+        [
+          ":flipped-join(ownerByName)",
           "push",
           {
             "child": {
@@ -8041,7 +7933,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
           },
         ],
         [
-          ":join(ownerByName)",
+          ":flipped-join(ownerByName)",
           "push",
           {
             "child": {
@@ -8141,16 +8033,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(ownerByName)": {
-          ""pKeySet","Aaron","i1",": true,
-          ""pKeySet","Aaron","i2",": true,
-          ""pKeySet","Arv","i3",": true,
-          ""pKeySet","Fritz","i0",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {
@@ -8457,7 +8340,16 @@ suite('test overlay on many:many (no junction) pushes', () => {
           },
         ],
         [
-          ":join(ownerByName)",
+          ".ownerByName:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "name": "Aaron",
+            },
+          },
+        ],
+        [
+          ":flipped-join(ownerByName)",
           "push",
           {
             "child": {
@@ -8476,7 +8368,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
           },
         ],
         [
-          ":join(ownerByName)",
+          ":flipped-join(ownerByName)",
           "push",
           {
             "child": {
@@ -8564,16 +8456,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(ownerByName)": {
-          ""pKeySet","Aaron","i1",": true,
-          ""pKeySet","Aaron","i2",": true,
-          ""pKeySet","Arv","i3",": true,
-          ""pKeySet","Fritz","i0",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {
@@ -8657,17 +8540,17 @@ suite('test overlay on many:many (no junction) pushes', () => {
                   {
                     "relationships": {},
                     "row": {
-                      "id": "u2",
+                      "id": "u3",
                       "name": "Aaron",
-                      "num": 2,
+                      "num": 3,
                     },
                   },
                   {
                     "relationships": {},
                     "row": {
-                      "id": "u3",
+                      "id": "u2",
                       "name": "Aaron",
-                      "num": 3,
+                      "num": 2,
                     },
                   },
                 ],
@@ -8876,7 +8759,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
           },
         ],
         [
-          ":join(ownerByName)",
+          ":flipped-join(ownerByName)",
           "push",
           {
             "child": {
@@ -8900,7 +8783,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
           },
         ],
         [
-          ":join(ownerByName)",
+          ":flipped-join(ownerByName)",
           "push",
           {
             "child": {
@@ -9005,16 +8888,8 @@ suite('test overlay on many:many (no junction) pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(ownerByName)": {
-          ""pKeySet","Aaron","i1",": true,
-          ""pKeySet","Aaron","i2",": true,
-          ""pKeySet","Arv","i3",": true,
-          ""pKeySet","Fritz","i0",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    // TODO double check this test result
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {
@@ -9119,14 +8994,6 @@ suite('test overlay on many:many (no junction) pushes', () => {
                       "id": "u3",
                       "name": "Aaron",
                       "num": 3,
-                    },
-                  },
-                  {
-                    "relationships": {},
-                    "row": {
-                      "id": "u2",
-                      "name": "Aaron",
-                      "num": 2,
                     },
                   },
                 ],
@@ -9337,9 +9204,11 @@ suite('test overlay on many:many (no junction) pushes', () => {
                   alias: 'state',
                   orderBy: [['id', 'asc']],
                 },
+                flip: true,
               },
             ],
           },
+          flip: true,
         },
       ],
     } as const;
@@ -9421,7 +9290,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
           },
         ],
         [
-          ".ownerByName:join(state)",
+          ".ownerByName:flipped-join(state)",
           "push",
           {
             "child": {
@@ -9453,7 +9322,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
           },
         ],
         [
-          ":join(ownerByName)",
+          ":flipped-join(ownerByName)",
           "push",
           {
             "child": {
@@ -9483,7 +9352,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
           },
         ],
         [
-          ":join(ownerByName)",
+          ":flipped-join(ownerByName)",
           "push",
           {
             "child": {
@@ -9513,7 +9382,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
           },
         ],
         [
-          ".ownerByName:join(state)",
+          ".ownerByName:flipped-join(state)",
           "push",
           {
             "child": {
@@ -9545,7 +9414,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
           },
         ],
         [
-          ":join(ownerByName)",
+          ":flipped-join(ownerByName)",
           "push",
           {
             "child": {
@@ -9575,7 +9444,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
           },
         ],
         [
-          ":join(ownerByName)",
+          ":flipped-join(ownerByName)",
           "push",
           {
             "child": {
@@ -9726,23 +9595,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".ownerByName:join(state)": {
-          ""pKeySet","s0","u2",": true,
-          ""pKeySet","s0","u3",": true,
-          ""pKeySet","s1","u0",": true,
-          ""pKeySet","s1","u1",": true,
-          ""pKeySet","s1","u4",": true,
-        },
-        ":join(ownerByName)": {
-          ""pKeySet","Aaron","i1",": true,
-          ""pKeySet","Aaron","i2",": true,
-          ""pKeySet","Arv","i3",": true,
-          ""pKeySet","Fritz","i0",": true,
-        },
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot(`{}`);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {

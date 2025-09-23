@@ -434,10 +434,10 @@ function applyCorrelatedSubQuery(
   const joinName = `${name}:${sq.flip ? 'flipped-join' : 'join'}(${sq.subquery.alias})`;
   const join = sq.flip
     ? new FlippedJoin({
-        parent: child,
-        child: end,
-        parentKey: sq.correlation.childField,
-        childKey: sq.correlation.parentField,
+        parent: end,
+        child,
+        parentKey: sq.correlation.parentField,
+        childKey: sq.correlation.childField,
         relationshipName: sq.subquery.alias,
         hidden: sq.hidden ?? false,
         system: sq.system ?? 'client',
