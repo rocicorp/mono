@@ -106,6 +106,10 @@ export class FlippedJoin implements Input {
     return this.#schema;
   }
 
+  // TODO: When parentKey is the parent's primary key (or more
+  // generally when the parent cardinality is expected to be small) a different
+  // algorithm should be used:  For each child node, fetch all parent nodes
+  // eagerly and then sort using quicksort.
   *fetch(req: FetchRequest): Stream<Node> {
     const childNodes = [...this.#child.fetch({})];
     // FlippedJoin's split-push change overlay logic is largely
@@ -128,6 +132,8 @@ export class FlippedJoin implements Input {
     let threw = false;
     try {
       for (const childNode of childNodes) {
+        // TODO: consider adding the ability to pass a set of
+        // ids to fetch, and have them applied to sqlite using IN.
         // TODO: Can there be a conflict between req constraint and
         // the join constraint?
         const stream = this.#parent.fetch({
