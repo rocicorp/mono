@@ -116,26 +116,44 @@ export class UnionFanIn implements Operator {
 
   push(change: Change): void {
     if (!this.#fanOutPushStarted) {
-      // if fan out has not started pushing but we receive a push, then it
-      // must be from an input to flip join. This input is the child of the output
-      // of flip join.
-      // TODO: this is wrong. We can get removes or adds from internal
-      // branches due to the flip join no longer having a match.
-
-      /*
-      What can happen?
-      - we can get a remove twice. `track.(whereExists('album', title = 'foo') or whereExists('album', published = 'bar'))`
-         if both of those have overlap then the change of `album` can remove the same `track` twice.
-      */
-
-      // assert(
-      //   change.type === 'child',
-      //   'Only child changes allowed to come from internal nodes in union structures',
-      // );
-      this.#output.push(change);
+      this.#pushInternalChange(change);
     } else {
       this.#accumulatedPushes.push(change);
     }
+  }
+
+  /**
+   * An internal change means that a change was received inside the fan-out/fan-in sub-graph.
+   *
+   * These changes always come from children of a flip-join as no other push generating operators
+   * currently exist between union-fan-in and union-fan-out. All other pushes
+   * enter into union-fan-out before reaching union-fan-in.
+   *
+   * - normal joins for `exists` come before `union-fan-out`
+   * - joins for `related` come after `union-fan-out`
+   * - take comes after `union-fan-out`
+   *
+   * The algorithm for deciding whether or not to forward a push that came from inside the ufo/ufi sub-graph:
+   * 1. If the change is a `child` change we can forward it. This is because all child branches in the ufo/ufi sub-graph are unique.
+   * 2. If the change is `add` we can forward it iff no `fetches` for the row return any results.
+   *    If another branch has it, the add was already emitted in the past.
+   * 3. If the change is `remove` we can forward it iff no `fetches` for the row return any results.
+   *    If no other branches have the change, the remove can be sent as the value is no longer present.
+   *    If other branches have it, the last branch the processes the remove will send the remove.
+   * 4. Edits will always come through as child changes as flip join will flip them into children.
+   *    An edit that would result in a remove or add will have been split into an add/remove pair rather than being an edit.
+   */
+  #pushInternalChange(change: Change): void {
+    if (change.type === 'child') {
+      this.#output.push(change);
+      return;
+    }
+
+    assert(change.type === 'add' || change.type === 'remove');
+
+    const fetchResult = this.fetch({
+      constraint: change.node.row,
+    });
   }
 
   fanOutStartedPushing() {
