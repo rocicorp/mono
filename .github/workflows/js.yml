@@ -57,11 +57,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-      - run: bun install
-      - run: bun run check-types
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run check-types
 
   test:
     name: Test
