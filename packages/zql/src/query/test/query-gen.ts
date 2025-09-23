@@ -271,18 +271,21 @@ function augmentQuery(
       } else {
         const subGenerations: Generation[] = [];
         const origQuery = query;
-        query = query.whereExists(relationshipName, q =>
-          augmentQuery(
-            schema,
-            data,
-            rng,
-            faker,
-            q,
-            serverSchema,
-            subGenerations,
-            depth + 1,
-            true,
-          ),
+        query = query.whereExists(
+          relationshipName,
+          q =>
+            augmentQuery(
+              schema,
+              data,
+              rng,
+              faker,
+              q,
+              serverSchema,
+              subGenerations,
+              depth + 1,
+              true,
+            ),
+          rng() < 0.5 ? {flip: true} : undefined,
         );
         for (const q of subGenerations) {
           generations.push(origQuery.whereExists(relationshipName, _ => q));

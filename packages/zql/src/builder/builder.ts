@@ -607,6 +607,9 @@ function gatherCorrelatedSubqueryQueriesFromCondition(
   const gather = (condition: Condition) => {
     if (condition.type === 'correlatedSubquery') {
       assert(condition.op === 'EXISTS' || condition.op === 'NOT EXISTS');
+      if (condition.related.flip && condition.op === 'NOT EXISTS') {
+        throw new Error('Cannot have NOT EXISTS with flip');
+      }
       csqs.push({
         ...condition.related,
         subquery: {
