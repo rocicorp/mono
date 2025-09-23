@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1758162562740,
+  "lastUpdate": 1758587981376,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -53507,6 +53507,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.mjs.br (Brotli compressed)",
             "value": 54479,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111465,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31900,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "198982749+Copilot@users.noreply.github.com",
+            "name": "Copilot",
+            "username": "Copilot"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "143ccaa42e4e107974eda6cdf16d3ab582805d1f",
+          "message": "Migrate from ESLint to oxlint for faster type-aware linting with optimized configuration (#4922)\n\n* Initial plan\n\n* Initial analysis for eslint to oxlint migration\n\nCo-authored-by: arv <45845+arv@users.noreply.github.com>\n\n* Complete ESLint to oxlint migration with all packages passing\n\nCo-authored-by: arv <45845+arv@users.noreply.github.com>\n\n* Re-enable oxlint rules and fix code quality issues - 27/28 packages passing\n\nCo-authored-by: arv <45845+arv@users.noreply.github.com>\n\n* Address code review feedback: enable stricter rules, fix zbugs config, clean up test variables\n\nCo-authored-by: arv <45845+arv@users.noreply.github.com>\n\n* Fix remaining lint errors: modernize catch blocks, fix inline disables, revert inappropriate Set conversion\n\nCo-authored-by: arv <45845+arv@users.noreply.github.com>\n\n* Fix all remaining lint errors in zbugs: add inline disables for console statements, fix equality operators, and React hooks dependencies\n\nCo-authored-by: arv <45845+arv@users.noreply.github.com>\n\n* Addressing PR comments\n\nCo-authored-by: arv <45845+arv@users.noreply.github.com>\n\n* Fix type safety issue in routes.ts: handle undefined shortID parameter correctly\n\nCo-authored-by: arv <45845+arv@users.noreply.github.com>\n\n* Simplify oxlint config by leveraging defaults and remove migration documentation\n\nCo-authored-by: arv <45845+arv@users.noreply.github.com>\n\n---------\n\nCo-authored-by: copilot-swe-agent[bot] <198982749+Copilot@users.noreply.github.com>\nCo-authored-by: arv <45845+arv@users.noreply.github.com>\nCo-authored-by: Erik Arvidsson <arv@roci.dev>",
+          "timestamp": "2025-09-23T00:29:04Z",
+          "tree_id": "70ce70fccbde1c7e43732e66a96acfaa3c987654",
+          "url": "https://github.com/rocicorp/mono/commit/143ccaa42e4e107974eda6cdf16d3ab582805d1f"
+        },
+        "date": 1758587969590,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302533,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54510,
             "unit": "bytes"
           },
           {
