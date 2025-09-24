@@ -484,7 +484,7 @@ export class TableSource implements Source {
     if (constraint) {
       for (const [key, value] of Object.entries(constraint)) {
         constraints.push(
-          sql`${sql.ident(key)} IS ${toSQLiteType(
+          sql`${sql.ident(key)} = ${toSQLiteType(
             value,
             this.#columns[key].type,
           )}`,
