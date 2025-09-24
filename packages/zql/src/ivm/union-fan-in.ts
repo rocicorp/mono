@@ -47,6 +47,7 @@ export class UnionFanIn implements Operator {
     };
 
     // now go through inputs and merge relationships
+    const relationshipsFromBranches: Set<string> = new Set();
     for (const input of inputs) {
       const inputSchema = input.getSchema();
       assert(
@@ -67,7 +68,6 @@ export class UnionFanIn implements Operator {
       );
       assert(schema.sort === inputSchema.sort, `Sort mismatch in union fan-in`);
 
-      const relationshipsFromBranches: Set<string> = new Set();
       for (const [relName, relSchema] of Object.entries(
         inputSchema.relationships,
       )) {

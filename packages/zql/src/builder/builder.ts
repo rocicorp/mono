@@ -550,22 +550,40 @@ function applyCorrelatedSubQuery(
     `${name}.${sq.subquery.alias}`,
     sq.correlation.childField,
   );
-  assert(
-    sq.flip === false || sq.flip === undefined,
-    'Flip joins are supposed to be handled in `applyFilterWithFlips`',
-  );
-  const joinName = `${name}:join(${sq.subquery.alias})`;
 
-  const join = new Join({
-    parent: end,
-    child,
-    storage: delegate.createStorage(joinName),
-    parentKey: sq.correlation.parentField,
-    childKey: sq.correlation.childField,
-    relationshipName: sq.subquery.alias,
-    hidden: sq.hidden ?? false,
-    system: sq.system ?? 'client',
-  });
+  // TODO: we should not have flips in `related` either... but `flipped-join.push.test.ts` is doing this.
+  if (fromCondition) {
+    assert(
+      sq.flip === false || sq.flip === undefined,
+      'Flip joins in conditions are supposed to be handled in `applyFilterWithFlips`',
+    );
+  }
+
+  const joinName = sq.flip
+    ? `${name}:flipped-join(${sq.subquery.alias})`
+    : `${name}:join(${sq.subquery.alias})`;
+
+  // TODO: this should not happen. We need to update `flipped-join.push.test.ts` to no flip `related` calls.
+  const join = sq.flip
+    ? new FlippedJoin({
+        parent: end,
+        child,
+        parentKey: sq.correlation.parentField,
+        childKey: sq.correlation.childField,
+        relationshipName: sq.subquery.alias,
+        hidden: sq.hidden ?? false,
+        system: sq.system ?? 'client',
+      })
+    : new Join({
+        parent: end,
+        child,
+        storage: delegate.createStorage(joinName),
+        parentKey: sq.correlation.parentField,
+        childKey: sq.correlation.childField,
+        relationshipName: sq.subquery.alias,
+        hidden: sq.hidden ?? false,
+        system: sq.system ?? 'client',
+      });
   delegate.addEdge(end, join);
   delegate.addEdge(child, join);
   return delegate.decorateInput(join, joinName);
