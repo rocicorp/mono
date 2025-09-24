@@ -370,6 +370,7 @@ export class MemorySource implements Source {
     const {data} = primaryIndex;
     const exists = (row: Row) => data.has(row);
     const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
+    const writeChange = (c: SourceChange) => this.#writeChange(c);
     if (change.type === 'set') {
       const existing = data.get(change.row);
       if (existing !== undefined) {
@@ -385,57 +386,16 @@ export class MemorySource implements Source {
         };
       }
     }
-
-    let shouldSplitEdit = false;
-    if (change.type === 'edit') {
-      for (const {splitEditKeys} of this.#connections) {
-        if (splitEditKeys) {
-          for (const key of splitEditKeys) {
-            if (!valuesEqual(change.row[key], change.oldRow[key])) {
-              shouldSplitEdit = true;
-              break;
-            }
-          }
-        }
-      }
-    }
-
-    if (change.type === 'edit' && shouldSplitEdit) {
-      yield* this.#genPushInner(
-        {
-          type: 'remove',
-          row: change.oldRow,
-        },
-        exists,
-        setOverlay,
-      );
-      yield* this.#genPushInner(
-        {
-          type: 'add',
-          row: change.row,
-        },
-        exists,
-        setOverlay,
-      );
-    } else {
-      yield* this.#genPushInner(change, exists, setOverlay);
-    }
-  }
-
-  *#genPushInner(
-    change: SourceChangeAdd | SourceChangeRemove | SourceChangeEdit,
-    exists: (row: Row) => boolean,
-    setOverlay: (o: Overlay | undefined) => Overlay | undefined,
-  ) {
-    for (const x of genPush(
+    yield* genPushAndWriteWithSplitEdit(
+      this.#connections,
       change,
       exists,
-      this.#connections.entries(),
       setOverlay,
-    )) {
-      yield x;
-    }
+      writeChange,
+    );
+  }
 
+  #writeChange(change: SourceChange) {
     for (const {data} of this.#indexes.values()) {
       switch (change.type) {
         case 'add': {
@@ -488,10 +448,76 @@ function* generateWithFilter(it: Stream<Node>, filter: (row: Row) => boolean) {
   }
 }
 
-export function* genPush(
+export function* genPushAndWriteWithSplitEdit(
+  connections: readonly Connection[],
   change: SourceChange,
   exists: (row: Row) => boolean,
-  connections: Iterable<[number, Connection]>,
+  setOverlay: (o: Overlay | undefined) => Overlay | undefined,
+  writeChange: (c: SourceChange) => void,
+) {
+  let shouldSplitEdit = false;
+  if (change.type === 'edit') {
+    for (const {splitEditKeys} of connections) {
+      if (splitEditKeys) {
+        for (const key of splitEditKeys) {
+          if (!valuesEqual(change.row[key], change.oldRow[key])) {
+            shouldSplitEdit = true;
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  if (change.type === 'edit' && shouldSplitEdit) {
+    yield* genPushAndWrite(
+      connections,
+      {
+        type: 'remove',
+        row: change.oldRow,
+      },
+      exists,
+      setOverlay,
+      writeChange,
+    );
+    yield* genPushAndWrite(
+      connections,
+      {
+        type: 'add',
+        row: change.row,
+      },
+      exists,
+      setOverlay,
+      writeChange,
+    );
+  } else {
+    yield* genPushAndWrite(
+      connections,
+      change,
+      exists,
+      setOverlay,
+      writeChange,
+    );
+  }
+}
+
+function* genPushAndWrite(
+  connections: readonly Connection[],
+  change: SourceChangeAdd | SourceChangeRemove | SourceChangeEdit,
+  exists: (row: Row) => boolean,
+  setOverlay: (o: Overlay | undefined) => Overlay | undefined,
+  writeChange: (c: SourceChange) => void,
+) {
+  for (const x of genPush(connections, change, exists, setOverlay)) {
+    yield x;
+  }
+  writeChange(change);
+}
+
+function* genPush(
+  connections: readonly Connection[],
+  change: SourceChange,
+  exists: (row: Row) => boolean,
   setOverlay: (o: Overlay | undefined) => void,
 ) {
   switch (change.type) {
@@ -511,7 +537,7 @@ export function* genPush(
       unreachable(change);
   }
 
-  for (const [outputIndex, {output, filters}] of connections) {
+  for (const [outputIndex, {output, filters}] of connections.entries()) {
     if (output) {
       setOverlay({outputIndex, change});
       const outputChange: Change =
