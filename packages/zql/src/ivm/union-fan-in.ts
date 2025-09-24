@@ -2,6 +2,7 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {mergeIterables} from '../../../shared/src/iterables.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {Change} from './change.ts';
+import type {Constraint} from './constraint.ts';
 import type {Node} from './data.ts';
 import {
   throwOutput,
@@ -159,8 +160,12 @@ export class UnionFanIn implements Operator {
         continue;
       }
 
+      const constraint: Writable<Constraint> = {};
+      for (const key of this.#schema.primaryKey) {
+        constraint[key] = change.node.row[key];
+      }
       const fetchResult = input.fetch({
-        constraint: change.node.row,
+        constraint,
       });
 
       if (first(fetchResult) !== undefined) {

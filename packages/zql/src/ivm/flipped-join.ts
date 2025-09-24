@@ -146,7 +146,7 @@ export class FlippedJoin implements Input {
         };
         if (
           req.constraint &&
-          !constraintMatchesRow(req.constraint, constraintFromChild)
+          !constraintMatchesRow(constraintFromChild, req.constraint)
         ) {
           parentIterators.push(emptyArray[Symbol.iterator]());
         } else {

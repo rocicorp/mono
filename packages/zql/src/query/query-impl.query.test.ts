@@ -1685,7 +1685,20 @@ test('broken flipped exists', async () => {
     .whereExists('comments', q => q.whereExists('issue', {flip: true}))
     .run();
 
-  console.log(data);
+  // only issue 1 is returned since issue 2 has no comments
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "createdAt": 10,
+        "description": "description 1",
+        "id": "0001",
+        "ownerId": "0001",
+        "title": "issue 1",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 });
 
 test('duplicative where exists', () => {
