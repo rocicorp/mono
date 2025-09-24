@@ -1584,7 +1584,7 @@ test('where exists', () => {
 // 2. internal add/remove
 // 3. internal edits on split edit keys
 // 4. external edits
-test.only("flipped exists, or'ed", async () => {
+test("flipped exists, or'ed", async () => {
   const queryDelegate = new QueryDelegateImpl();
   const commentSource = must(queryDelegate.getSource('comment'));
   const issueSource = must(queryDelegate.getSource('issue'));
@@ -1638,6 +1638,54 @@ test.only("flipped exists, or'ed", async () => {
       },
     ]
   `);
+});
+
+test.only('broken flipped exists', async () => {
+  const queryDelegate = new QueryDelegateImpl();
+  const commentSource = must(queryDelegate.getSource('comment'));
+  const issueSource = must(queryDelegate.getSource('issue'));
+
+  // issue 1 will have comments
+  issueSource.push({
+    type: 'add',
+    row: {
+      id: '0001',
+      title: 'issue 1',
+      description: 'description 1',
+      closed: false,
+      ownerId: '0001',
+      createdAt: 10,
+    },
+  });
+  // issue 2 will have no comments
+  issueSource.push({
+    type: 'add',
+    row: {
+      id: '0002',
+      title: 'issue 2',
+      description: 'description 2',
+      closed: false,
+      ownerId: '0001',
+      createdAt: 10,
+    },
+  });
+
+  commentSource.push({
+    type: 'add',
+    row: {
+      id: 'c1',
+      issueId: '0001',
+      authorId: 'a1',
+      text: 'not a bug',
+      createdAt: 1,
+    },
+  });
+
+  const data = await newQuery(queryDelegate, schema, 'issue')
+    .whereExists('comments', q => q.whereExists('issue', {flip: true}))
+    .run();
+
+  console.log(data);
 });
 
 test('duplicative where exists', () => {

@@ -237,7 +237,6 @@ export class FlippedJoin implements Input {
 
         // yield node if after the overlay it still has relationship nodes
         if (overlaidRelatedChildNodes.length > 0) {
-          console.log('rel name', this.#relationshipName, minParentNode.row);
           yield {
             ...minParentNode,
             relationships: {
