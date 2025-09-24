@@ -40,7 +40,7 @@ export function constraintMatchesPrimaryKey(
   constraintKeys.sort(stringCompare);
 
   for (let i = 0; i < constraintKeys.length; i++) {
-    if (constraintKeys[i][0] !== primary[i]) {
+    if (constraintKeys[i] !== primary[i]) {
       return false;
     }
   }
