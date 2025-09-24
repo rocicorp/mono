@@ -1,9 +1,10 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {binarySearch} from '../../../shared/src/binary-search.ts';
 import {emptyArray} from '../../../shared/src/sentinels.ts';
+import type {Writable} from '../../../shared/src/writable.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
 import type {Change} from './change.ts';
-import {constraintMatchesRow} from './constraint.ts';
+import {constraintsAreCompatible, type Constraint} from './constraint.ts';
 import type {Node} from './data.ts';
 import {
   generateWithOverlay,
@@ -136,23 +137,23 @@ export class FlippedJoin implements Input {
       for (const childNode of childNodes) {
         // TODO: consider adding the ability to pass a set of
         // ids to fetch, and have them applied to sqlite using IN.
-        const constraintFromChild = {
-          ...Object.fromEntries(
-            this.#parentKey.map((key, i) => [
-              key,
-              childNode.row[this.#childKey[i]],
-            ]),
-          ),
-        };
+        const constraintFromChild: Writable<Constraint> = {};
+        for (let i = 0; i < this.#parentKey.length; i++) {
+          constraintFromChild[this.#parentKey[i]] =
+            childNode.row[this.#childKey[i]];
+        }
         if (
           req.constraint &&
-          !constraintMatchesRow(constraintFromChild, req.constraint)
+          !constraintsAreCompatible(constraintFromChild, req.constraint)
         ) {
           parentIterators.push(emptyArray[Symbol.iterator]());
         } else {
           const stream = this.#parent.fetch({
             ...req,
-            constraint: constraintFromChild,
+            constraint: {
+              ...req.constraint,
+              ...constraintFromChild,
+            },
           });
           const iterator = stream[Symbol.iterator]();
           parentIterators.push(iterator);

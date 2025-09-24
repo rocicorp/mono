@@ -118,6 +118,22 @@ describe(
             ],
           },
           {
+            name: 'Flipped exists - anded again (1-1 and 1-many)',
+            createQuery: b =>
+              b.album.where(({and, exists}) =>
+                and(
+                  exists('artist', a => a.where('name', 'Audioslave'), {
+                    flip: true,
+                  }),
+                  exists(
+                    'tracks',
+                    t => t.where('name', 'The Last Remaining Light'),
+                    {flip: true},
+                  ),
+                ),
+              ),
+          },
+          {
             name: 'Flipped exists - deeply nested logic',
             createQuery: b =>
               b.album.where(({or, and, exists}) =>

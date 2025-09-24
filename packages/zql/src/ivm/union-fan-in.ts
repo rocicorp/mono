@@ -146,7 +146,6 @@ export class UnionFanIn implements Operator {
    *    An edit that would result in a remove or add will have been split into an add/remove pair rather than being an edit.
    */
   #pushInternalChange(change: Change, pusher: InputBase): void {
-    console.log('CHANGE', change);
     if (change.type === 'child') {
       this.#output.push(change, this);
       return;
