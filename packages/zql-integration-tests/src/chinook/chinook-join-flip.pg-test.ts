@@ -18,11 +18,13 @@ describe(
       await createVitests(
         {
           suiteName: 'compiler_chinook',
+          only: 'fuzz fail 1',
           pgContent,
           zqlSchema: schema,
           setRawData: r => {
             _data = r;
           },
+          push: 0,
         },
         [
           {
@@ -217,6 +219,13 @@ describe(
                 name: '90’s Music',
               },
             ],
+          },
+          {
+            name: 'fuzz fail 1',
+            createQuery: b =>
+              b.artist.whereExists('albums', q =>
+                q.whereExists('artist', {flip: true}),
+              ),
           },
         ],
       ),

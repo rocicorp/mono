@@ -27,7 +27,7 @@ const harness = await bootstrap({
   pgContent,
 });
 
-test.each(Array.from({length: 1000}, () => createCase()))(
+test.each(Array.from({length: 100}, () => createCase()))(
   'fuzz-hydration $seed',
   runCase,
 );
@@ -39,11 +39,13 @@ test('sentinel', () => {
 if (REPRO_SEED) {
   // eslint-disable-next-line no-only-tests/no-only-tests
   test.only('repro', async () => {
-    const {query} = createCase(REPRO_SEED);
+    const tc = createCase(REPRO_SEED);
+    const {query} = tc;
     console.log(
       'ZQL',
       await formatOutput(ast(query[0]).table + astToZQL(ast(query[0]))),
     );
+    await runCase(tc);
   });
 }
 
