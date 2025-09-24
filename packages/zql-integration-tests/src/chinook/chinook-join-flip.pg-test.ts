@@ -223,9 +223,11 @@ describe(
           {
             name: 'fuzz fail 1',
             createQuery: b =>
-              b.artist.whereExists('albums', q =>
-                q.whereExists('artist', {flip: true}),
-              ),
+              b.artist
+                .whereExists('albums', q =>
+                  q.whereExists('artist', {flip: true}),
+                )
+                .limit(25),
           },
         ],
       ),
