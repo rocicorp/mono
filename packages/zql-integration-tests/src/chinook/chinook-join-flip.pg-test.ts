@@ -15,7 +15,7 @@ describe(
     test.each(
       await createVitests(
         {
-          suiteName: 'compiler_chinook',
+          suiteName: 'chinook_join_flip',
           pgContent,
           zqlSchema: schema,
         },
