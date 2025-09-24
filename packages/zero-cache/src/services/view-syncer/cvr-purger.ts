@@ -50,6 +50,11 @@ export class CVRPurger implements Service {
       );
       // Do nothing and just wait to be stopped.
       await this.#state.stopped();
+    } else {
+      this.#lc.info?.(
+        `running cvr-purger with`,
+        await this.#db`SHOW statement_timeout`,
+      );
     }
 
     while (this.#state.shouldRun()) {
