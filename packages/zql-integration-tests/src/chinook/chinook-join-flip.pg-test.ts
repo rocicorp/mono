@@ -18,7 +18,6 @@ describe(
           suiteName: 'compiler_chinook',
           pgContent,
           zqlSchema: schema,
-          push: 0,
         },
         [
           {
