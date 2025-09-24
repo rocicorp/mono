@@ -362,7 +362,7 @@ suite('fetch-with-constraint-and-start', () => {
           "relationships": {},
           "row": {
             "a": 5,
-            "b": "3000",
+            "b": "1000",
           },
         },
       ]

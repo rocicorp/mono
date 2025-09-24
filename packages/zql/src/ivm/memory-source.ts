@@ -329,6 +329,15 @@ export class MemorySource implements Source {
       this.#overlay,
       this.#splitEditOverlay,
       callingConnectionIndex,
+      // Use indexComparator, generateWithOverlayInner has a subtle dependency
+      // on this.  Since generateWithConstraint is done after
+      // generateWithOverlay, the generator consumed by generateWithOverlayInner
+      // does not end when the constraint stops matching and so the final
+      // check to yield an add overlay if not yet yielded is not reached.
+      // However, using the indexComparator the add overlay will be less than
+      // the first row that does not match the constraint, and so any
+      // not yet yielded add overlay will be yielded when the first row
+      // not matching the constraint is reached.
       indexComparator,
       conn.filters?.predicate,
     );
