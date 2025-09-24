@@ -1640,7 +1640,7 @@ test("flipped exists, or'ed", async () => {
   `);
 });
 
-test.only('broken flipped exists', async () => {
+test('broken flipped exists', async () => {
   const queryDelegate = new QueryDelegateImpl();
   const commentSource = must(queryDelegate.getSource('comment'));
   const issueSource = must(queryDelegate.getSource('issue'));

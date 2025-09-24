@@ -1,7 +1,9 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {binarySearch} from '../../../shared/src/binary-search.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
 import type {Change} from './change.ts';
+import {constraintMatchesRow} from './constraint.ts';
 import type {Node} from './data.ts';
 import {
   generateWithOverlay,
@@ -134,22 +136,27 @@ export class FlippedJoin implements Input {
       for (const childNode of childNodes) {
         // TODO: consider adding the ability to pass a set of
         // ids to fetch, and have them applied to sqlite using IN.
-        // TODO: Can there be a conflict between req constraint and
-        // the join constraint?
-        const stream = this.#parent.fetch({
-          ...req,
-          constraint: {
-            ...req.constraint,
-            ...Object.fromEntries(
-              this.#parentKey.map((key, i) => [
-                key,
-                childNode.row[this.#childKey[i]],
-              ]),
-            ),
-          },
-        });
-        const iterator = stream[Symbol.iterator]();
-        parentIterators.push(iterator);
+        const constraintFromChild = {
+          ...Object.fromEntries(
+            this.#parentKey.map((key, i) => [
+              key,
+              childNode.row[this.#childKey[i]],
+            ]),
+          ),
+        };
+        if (
+          req.constraint &&
+          !constraintMatchesRow(req.constraint, constraintFromChild)
+        ) {
+          parentIterators.push(emptyArray[Symbol.iterator]());
+        } else {
+          const stream = this.#parent.fetch({
+            ...req,
+            constraint: constraintFromChild,
+          });
+          const iterator = stream[Symbol.iterator]();
+          parentIterators.push(iterator);
+        }
       }
       const nextParentNodes: (Node | null)[] = [];
       for (let i = 0; i < parentIterators.length; i++) {
