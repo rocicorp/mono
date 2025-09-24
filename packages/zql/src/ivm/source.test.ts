@@ -342,6 +342,10 @@ suite('fetch-with-constraint-and-start', () => {
   test('c1', () => {
     expect(
       t({
+        columns: {
+          a: {type: 'number'},
+          b: {type: 'string'},
+        },
         startData: [
           {a: 1, b: '1000'},
           {a: 2, b: '3000'},
@@ -372,6 +376,10 @@ suite('fetch-with-constraint-and-start', () => {
   test('c1 reverse', () => {
     expect(
       t({
+        columns: {
+          a: {type: 'number'},
+          b: {type: 'string'},
+        },
         startData: [
           {a: 1, b: '1000'},
           {a: 2, b: '3000'},
