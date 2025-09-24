@@ -129,14 +129,20 @@ export function pushAccumulatedChanges(
         types.length === 1 && types[0] === 'remove',
         'Fan-in:remove expected all removes',
       );
-      output.push(addEmptyRelationships(must(candidatesToPush.get('remove'))), pusher);
+      output.push(
+        addEmptyRelationships(must(candidatesToPush.get('remove'))),
+        pusher,
+      );
       return;
     case 'add':
       assert(
         types.length === 1 && types[0] === 'add',
         'Fan-in:add expected all adds',
       );
-      output.push(addEmptyRelationships(must(candidatesToPush.get('add'))), pusher);
+      output.push(
+        addEmptyRelationships(must(candidatesToPush.get('add'))),
+        pusher,
+      );
       return;
     case 'edit': {
       assert(
@@ -191,7 +197,10 @@ export function pushAccumulatedChanges(
         return;
       }
 
-      output.push(addEmptyRelationships(must(addChange ?? removeChange)), pusher);
+      output.push(
+        addEmptyRelationships(must(addChange ?? removeChange)),
+        pusher,
+      );
       return;
     }
     case 'child': {
@@ -224,7 +233,10 @@ export function pushAccumulatedChanges(
         'Fan-in:child expected either add or remove, not both',
       );
 
-      output.push(addEmptyRelationships(must(addChange ?? removeChange)), pusher);
+      output.push(
+        addEmptyRelationships(must(addChange ?? removeChange)),
+        pusher,
+      );
       return;
     }
     default:

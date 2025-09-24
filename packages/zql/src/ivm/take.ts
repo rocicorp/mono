@@ -374,10 +374,13 @@ export class Take implements Operator {
           newBound.node.row,
           maxBound,
         );
-        this.#output.push({
-          type: 'add',
-          node: newBound.node,
-        }, this);
+        this.#output.push(
+          {
+            type: 'add',
+            node: newBound.node,
+          },
+          this,
+        );
         return;
       }
       this.#setTakeState(
@@ -499,15 +502,21 @@ export class Take implements Operator {
         maxBound,
       );
       this.#withRowHiddenFromFetch(newBoundNode.row, () => {
-        this.#output.push({
-          type: 'remove',
-          node: change.oldNode,
-        }, this);
+        this.#output.push(
+          {
+            type: 'remove',
+            node: change.oldNode,
+          },
+          this,
+        );
       });
-      this.#output.push({
-        type: 'add',
-        node: newBoundNode,
-      }, this);
+      this.#output.push(
+        {
+          type: 'add',
+          node: newBoundNode,
+        },
+        this,
+      );
       return;
     }
 
@@ -542,15 +551,21 @@ export class Take implements Operator {
         maxBound,
       );
       this.#withRowHiddenFromFetch(change.node.row, () => {
-        this.#output.push({
-          type: 'remove',
-          node: oldBoundNode,
-        }, this);
+        this.#output.push(
+          {
+            type: 'remove',
+            node: oldBoundNode,
+          },
+          this,
+        );
       });
-      this.#output.push({
-        type: 'add',
-        node: change.node,
-      }, this);
+      this.#output.push(
+        {
+          type: 'add',
+          node: change.node,
+        },
+        this,
+      );
 
       return;
     }
@@ -588,20 +603,26 @@ export class Take implements Operator {
         return;
       }
 
-      this.#output.push({
-        type: 'remove',
-        node: change.oldNode,
-      }, this);
+      this.#output.push(
+        {
+          type: 'remove',
+          node: change.oldNode,
+        },
+        this,
+      );
       this.#setTakeState(
         takeStateKey,
         takeState.size,
         afterBoundNode.row,
         maxBound,
       );
-      this.#output.push({
-        type: 'add',
-        node: afterBoundNode,
-      }, this);
+      this.#output.push(
+        {
+          type: 'add',
+          node: afterBoundNode,
+        },
+        this,
+      );
       return;
     }
 

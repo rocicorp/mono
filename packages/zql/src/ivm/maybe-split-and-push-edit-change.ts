@@ -19,14 +19,20 @@ export function maybeSplitAndPushEditChange(
   if (oldWasPresent && newIsPresent) {
     output.push(change, pusher);
   } else if (oldWasPresent && !newIsPresent) {
-    output.push({
-      type: 'remove',
-      node: change.oldNode,
-    }, pusher);
+    output.push(
+      {
+        type: 'remove',
+        node: change.oldNode,
+      },
+      pusher,
+    );
   } else if (!oldWasPresent && newIsPresent) {
-    output.push({
-      type: 'add',
-      node: change.node,
-    }, pusher);
+    output.push(
+      {
+        type: 'add',
+        node: change.node,
+      },
+      pusher,
+    );
   }
 }
