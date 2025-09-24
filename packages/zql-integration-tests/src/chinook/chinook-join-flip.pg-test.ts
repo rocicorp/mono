@@ -119,7 +119,7 @@ describe(
             ],
           },
           {
-            name: 'Flipped exists - in deeply nested logic',
+            name: 'Flipped exists - deeply nested logic',
             createQuery: b =>
               b.album.where(({or, and, exists}) =>
                 or(
@@ -222,6 +222,55 @@ describe(
                   q.whereExists('artist', {flip: true}),
                 )
                 .limit(25),
+          },
+          {
+            name: 'Flipped exists - anded, with non-flipped',
+            createQuery: b =>
+              b.album
+                .whereExists('artist', a => a.where('name', 'Apocalyptica'), {
+                  flip: true,
+                })
+                .whereExists('tracks', t => t.where('name', 'Sea Of Sorrow'), {
+                  flip: false,
+                }),
+          },
+          {
+            name: 'Flipped exists - in deeply nested logic combined with non-flipped',
+            createQuery: b =>
+              b.album.where(({or, and, exists}) =>
+                or(
+                  and(
+                    exists('artist', a => a.where('name', 'Apocalyptica'), {
+                      flip: true,
+                    }),
+                    exists('tracks', t => t.where('name', 'Enter Sandman'), {
+                      flip: false,
+                    }),
+                  ),
+                  and(
+                    exists('artist', a => a.where('name', 'Audioslave'), {
+                      flip: true,
+                    }),
+                    exists(
+                      'tracks',
+                      t => t.where('name', 'The Last Remaining Light'),
+                      {flip: false},
+                    ),
+                  ),
+                ),
+              ),
+            manualVerification: [
+              {
+                artistId: 7,
+                id: 9,
+                title: 'Plays Metallica By Four Cellos',
+              },
+              {
+                artistId: 8,
+                id: 10,
+                title: 'Audioslave',
+              },
+            ],
           },
         ],
       ),

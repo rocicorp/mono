@@ -1579,12 +1579,8 @@ test('where exists', () => {
   expect(materialized.data).toEqual([]);
 });
 
-// TODO: test the various push conditions
-// 1. internal edits
-// 2. internal add/remove
-// 3. internal edits on split edit keys
-// 4. external edits
-test("flipped exists, or'ed", async () => {
+// More comprehensive tests of flipped exists are in `chinook-join-flip.pg-test`
+test("flipped exists, or'ed", () => {
   const queryDelegate = new QueryDelegateImpl();
   const commentSource = must(queryDelegate.getSource('comment'));
   const issueSource = must(queryDelegate.getSource('issue'));
@@ -1651,17 +1647,43 @@ test("flipped exists, or'ed", async () => {
     row: {
       id: 'c1',
       issueId: '0001',
-      authorId: 'a1',
-      text: 'not a bug',
+      authorId: 'a2',
+      text: 'bug',
       createdAt: 1,
     },
   });
 
-  // TODO: incorrect. Should be the same result as above
-  expect(view.data).toMatchInlineSnapshot(`[]`);
+  expect(view.data).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "createdAt": 10,
+        "description": "description 1",
+        "id": "0001",
+        "ownerId": "0001",
+        "title": "issue 1",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 
   commentSource.push({
     type: 'remove',
+    row: {
+      id: 'c1',
+      issueId: '0001',
+      authorId: 'a1',
+      text: 'bug',
+      createdAt: 1,
+    },
+  });
+
+  // should have retracted once, without error
+  expect(view.data).toMatchInlineSnapshot(`[]`);
+
+  // will not match the filter
+  commentSource.push({
+    type: 'add',
     row: {
       id: 'c1',
       issueId: '0001',
@@ -1671,8 +1693,28 @@ test("flipped exists, or'ed", async () => {
     },
   });
 
-  // should have retracted once, without error
   expect(view.data).toMatchInlineSnapshot(`[]`);
+
+  commentSource.push({
+    type: 'edit',
+    oldRow: {
+      id: 'c1',
+      issueId: '0001',
+      authorId: 'a1',
+      text: 'not a bug',
+      createdAt: 1,
+    },
+    row: {
+      id: 'c1',
+      issueId: '0001',
+      authorId: 'a2',
+      text: 'bug',
+      createdAt: 1,
+    },
+  });
+
+  expect(view.data.length).toBe(1);
+  expect(view.data[0]?.id).toBe('0001');
 });
 
 test('broken flipped exists', async () => {
