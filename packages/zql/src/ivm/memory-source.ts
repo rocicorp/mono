@@ -15,7 +15,7 @@ import {
   transformFilters,
   type NoSubqueryCondition,
 } from '../builder/filter.ts';
-import type {AddChange, Change, RemoveChange} from './change.ts';
+import type {Change} from './change.ts';
 import {
   constraintMatchesPrimaryKey,
   constraintMatchesRow,
