@@ -1638,6 +1638,41 @@ test("flipped exists, or'ed", async () => {
       },
     ]
   `);
+
+  commentSource.push({
+    type: 'edit',
+    oldRow: {
+      id: 'c1',
+      issueId: '0001',
+      authorId: 'a1',
+      text: 'bug',
+      createdAt: 1,
+    },
+    row: {
+      id: 'c1',
+      issueId: '0001',
+      authorId: 'a1',
+      text: 'not a bug',
+      createdAt: 1,
+    },
+  });
+
+  // TODO: incorrect. Should be the same result as above
+  expect(view.data).toMatchInlineSnapshot(`[]`);
+
+  commentSource.push({
+    type: 'remove',
+    row: {
+      id: 'c1',
+      issueId: '0001',
+      authorId: 'a1',
+      text: 'not a bug',
+      createdAt: 1,
+    },
+  });
+
+  // should have retracted once, without error
+  expect(view.data).toMatchInlineSnapshot(`[]`);
 });
 
 test('broken flipped exists', async () => {
