@@ -16,7 +16,6 @@ describe(
       await createVitests(
         {
           suiteName: 'compiler_chinook',
-          only: 'fuzz fail 1',
           pgContent,
           zqlSchema: schema,
           push: 0,
@@ -216,7 +215,7 @@ describe(
             ],
           },
           {
-            name: 'fuzz fail 1',
+            name: 'case where the fetch constraint will not match the parent constraint',
             createQuery: b =>
               b.artist
                 .whereExists('albums', q =>
