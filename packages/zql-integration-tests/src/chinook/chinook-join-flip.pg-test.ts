@@ -3,10 +3,8 @@ import {describe, test} from 'vitest';
 import {createVitests} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
 
 const pgContent = await getChinook();
-let _data: ReadonlyMap<string, readonly Row[]> | undefined;
 
 describe(
   'Chinook PG Tests',
@@ -21,9 +19,6 @@ describe(
           only: 'fuzz fail 1',
           pgContent,
           zqlSchema: schema,
-          setRawData: r => {
-            _data = r;
-          },
           push: 0,
         },
         [
@@ -101,7 +96,7 @@ describe(
                 ),
               ),
 
-            manualVerification: -[
+            manualVerification: [
               {
                 artistId: 7,
                 id: 9,
