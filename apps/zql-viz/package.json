@@ -18,7 +18,7 @@
     "react-resizable-panels": "^3.0.4"
   },
   "devDependencies": {
-    "@tantaman/api-extractor": "^7.52.11",
+    "@tantaman/api-extractor": "^7.52.13",
     "@types/react": "^18.3.18",
     "@types/react-dom": "18.3.5",
     "@vitejs/plugin-react": "^4.3.4",

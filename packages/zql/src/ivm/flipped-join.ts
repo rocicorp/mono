@@ -237,6 +237,7 @@ export class FlippedJoin implements Input {
 
         // yield node if after the overlay it still has relationship nodes
         if (overlaidRelatedChildNodes.length > 0) {
+          console.log('rel name', this.#relationshipName, minParentNode.row);
           yield {
             ...minParentNode,
             relationships: {
@@ -315,31 +316,37 @@ export class FlippedJoin implements Input {
             }
           }
           if (exists) {
-            this.#output.push({
-              type: 'child',
-              node: {
-                ...parentNode,
-                relationships: {
-                  ...parentNode.relationships,
-                  [this.#relationshipName]: childNodeStream,
+            this.#output.push(
+              {
+                type: 'child',
+                node: {
+                  ...parentNode,
+                  relationships: {
+                    ...parentNode.relationships,
+                    [this.#relationshipName]: childNodeStream,
+                  },
+                },
+                child: {
+                  relationshipName: this.#relationshipName,
+                  change,
                 },
               },
-              child: {
-                relationshipName: this.#relationshipName,
-                change,
-              },
-            }, this);
+              this,
+            );
           } else {
-            this.#output.push({
-              ...change,
-              node: {
-                ...parentNode,
-                relationships: {
-                  ...parentNode.relationships,
-                  [this.#relationshipName]: () => [change.node],
+            this.#output.push(
+              {
+                ...change,
+                node: {
+                  ...parentNode,
+                  relationships: {
+                    ...parentNode.relationships,
+                    [this.#relationshipName]: () => [change.node],
+                  },
                 },
               },
-            }, this);
+              this,
+            );
           }
         }
       } finally {
@@ -393,10 +400,13 @@ export class FlippedJoin implements Input {
         if (first(childNodeStream(change.node)()) === undefined) {
           return;
         }
-        this.#output.push({
-          ...change,
-          node: flip(change.node),
-        }, this);
+        this.#output.push(
+          {
+            ...change,
+            node: flip(change.node),
+          },
+          this,
+        );
         break;
       }
       case 'edit': {
@@ -412,24 +422,33 @@ export class FlippedJoin implements Input {
           `Parent edit must not change relationship.`,
         );
         if (oldHasChild && hasChild) {
-          this.#output.push({
-            type: 'edit',
-            oldNode: flip(change.oldNode),
-            node: flip(change.node),
-          }, this);
+          this.#output.push(
+            {
+              type: 'edit',
+              oldNode: flip(change.oldNode),
+              node: flip(change.node),
+            },
+            this,
+          );
           break;
         }
         if (oldHasChild) {
-          this.#output.push({
-            type: 'remove',
-            node: flip(change.node),
-          }, this);
+          this.#output.push(
+            {
+              type: 'remove',
+              node: flip(change.node),
+            },
+            this,
+          );
         }
         if (hasChild) {
-          this.#output.push({
-            type: 'add',
-            node: flip(change.node),
-          }, this);
+          this.#output.push(
+            {
+              type: 'add',
+              node: flip(change.node),
+            },
+            this,
+          );
         }
         break;
       }

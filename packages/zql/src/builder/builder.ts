@@ -246,6 +246,7 @@ function buildPipelineInternal(
       // They will be handled in the context of the filter
       continue;
     }
+    console.log('Apply CSQ', csq.subquery.alias);
     end = applyCorrelatedSubQuery(csq, delegate, queryID, end, name, true);
   }
 
@@ -376,6 +377,7 @@ function applyFilterWithFlips(
         `${name}.${sq.subquery.alias}`,
         sq.correlation.childField,
       );
+      console.log('CREATING FLIPPED JOIN', name, sq.subquery.alias);
       const flippedJoin = new FlippedJoin({
         parent: end,
         child,
@@ -555,6 +557,8 @@ function applyCorrelatedSubQuery(
     'Flip joins are supposed to be handled in `applyFilterWithFlips`',
   );
   const joinName = `${name}:join(${sq.subquery.alias})`;
+
+  console.log('CREATING NORMAL JOIN', joinName);
 
   const join = new Join({
     parent: end,

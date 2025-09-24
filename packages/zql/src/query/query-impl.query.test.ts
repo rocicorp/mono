@@ -1579,6 +1579,11 @@ test('where exists', () => {
   expect(materialized.data).toEqual([]);
 });
 
+// TODO: test the various push conditions
+// 1. internal edits
+// 2. internal add/remove
+// 3. internal edits on split edit keys
+// 4. external edits
 test.only("flipped exists, or'ed", async () => {
   const queryDelegate = new QueryDelegateImpl();
   const commentSource = must(queryDelegate.getSource('comment'));
@@ -1604,7 +1609,6 @@ test.only("flipped exists, or'ed", async () => {
   );
 
   const view = q.materialize();
-  console.log(view.data);
 
   commentSource.push({
     type: 'add',
@@ -1616,7 +1620,24 @@ test.only("flipped exists, or'ed", async () => {
       createdAt: 1,
     },
   });
-  console.log(view.data);
+
+  // Symbol(rc) should be ONE
+  // as only a single add should have been made
+  // it through the `push` call above.
+  // I.e., both branches add the node but `union-fan-in` distincts them
+  expect(view.data).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "createdAt": 10,
+        "description": "description 1",
+        "id": "0001",
+        "ownerId": "0001",
+        "title": "issue 1",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
 });
 
 test('duplicative where exists', () => {

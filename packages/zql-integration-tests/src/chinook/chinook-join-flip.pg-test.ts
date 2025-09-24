@@ -236,3 +236,16 @@ describe(
     });
   },
 );
+
+/*
+- child.fetch: this is the pre-flip child.
+This is `artist` in this case.
+
+OK.
+
+We get the artists -- all artists.
+
+Then for each artist we get the parents.
+
+We should fail to get some parents...
+*/
