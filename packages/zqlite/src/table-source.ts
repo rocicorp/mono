@@ -82,7 +82,6 @@ export class TableSource implements Source {
   readonly #lc: LogContext;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
-  #splitEditOverlay?: Overlay | undefined;
 
   constructor(
     logContext: LogContext,
@@ -292,7 +291,6 @@ export class TableSource implements Source {
           ),
           req.constraint,
           this.#overlay,
-          this.#splitEditOverlay,
           callingConnectionIndex,
           comparator,
           connection.filters?.predicate,
@@ -347,8 +345,6 @@ export class TableSource implements Source {
         ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
       )?.exists === 1;
     const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
-    const setSplitEditOverlay = (o: Overlay | undefined) =>
-      (this.#splitEditOverlay = o);
 
     if (change.type === 'set') {
       const existing = this.#stmts.getExisting.get<Row | undefined>(
@@ -373,7 +369,6 @@ export class TableSource implements Source {
       exists,
       this.#connections.entries(),
       setOverlay,
-      setSplitEditOverlay,
     )) {
       yield x;
     }

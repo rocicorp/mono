@@ -1938,6 +1938,136 @@ test('not exists self join', () => {
         },
         "type": "remove",
       },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_recruiter": [],
+          },
+          "row": {
+            "id": 2,
+            "name": "erik",
+            "recruiterID": 1,
+          },
+        },
+        "type": "add",
+      },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_recruiter": [],
+          },
+          "row": {
+            "id": 3,
+            "name": "greg",
+            "recruiterID": 1,
+          },
+        },
+        "type": "add",
+      },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_recruiter": [],
+          },
+          "row": {
+            "id": 4,
+            "name": "matt",
+            "recruiterID": 1,
+          },
+        },
+        "type": "add",
+      },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_recruiter": [],
+          },
+          "row": {
+            "id": 7,
+            "name": "alex",
+            "recruiterID": 1,
+          },
+        },
+        "type": "add",
+      },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_recruiter": [],
+          },
+          "row": {
+            "id": 1,
+            "name": "aaron",
+            "recruiterID": 1,
+          },
+        },
+        "type": "add",
+      },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_recruiter": [],
+          },
+          "row": {
+            "id": 1,
+            "name": "aaron",
+            "recruiterID": 1,
+          },
+        },
+        "type": "remove",
+      },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_recruiter": [],
+          },
+          "row": {
+            "id": 2,
+            "name": "erik",
+            "recruiterID": 1,
+          },
+        },
+        "type": "remove",
+      },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_recruiter": [],
+          },
+          "row": {
+            "id": 3,
+            "name": "greg",
+            "recruiterID": 1,
+          },
+        },
+        "type": "remove",
+      },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_recruiter": [],
+          },
+          "row": {
+            "id": 4,
+            "name": "matt",
+            "recruiterID": 1,
+          },
+        },
+        "type": "remove",
+      },
+      {
+        "node": {
+          "relationships": {
+            "zsubq_recruiter": [],
+          },
+          "row": {
+            "id": 7,
+            "name": "alex",
+            "recruiterID": 1,
+          },
+        },
+        "type": "remove",
+      },
     ]
   `);
 });

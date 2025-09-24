@@ -779,11 +779,11 @@ test('overlay-source-isolation with split edit', () => {
     row: {a: 2, b: 'foo2', c: 1},
   });
 
-  // 1 push for o1, 2 pushes for o2 (because it splits the edit) and
-  // 1 push for o3
-  expect(o1.fetches.length).toEqual(4);
-  expect(o2.fetches.length).toEqual(4);
-  expect(o3.fetches.length).toEqual(4);
+  // o2 needs edit split, edit is split for all connections,
+  // so 2 pushes each
+  expect(o1.fetches.length).toEqual(6);
+  expect(o2.fetches.length).toEqual(6);
+  expect(o3.fetches.length).toEqual(6);
 
   expect(o1.fetches).toMatchInlineSnapshot(`
     [
@@ -791,11 +791,23 @@ test('overlay-source-isolation with split edit', () => {
         {
           "relationships": {},
           "row": {
-            "a": 2,
-            "b": "foo2",
+            "a": 3,
+            "b": "bar",
             "c": 1,
           },
         },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+      [
         {
           "relationships": {},
           "row": {
@@ -896,6 +908,26 @@ test('overlay-source-isolation with split edit', () => {
         {
           "relationships": {},
           "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
             "a": 2,
             "b": "foo2",
             "c": 1,
@@ -973,11 +1005,23 @@ test('overlay-source-isolation with split edit', () => {
         {
           "relationships": {},
           "row": {
-            "a": 2,
-            "b": "foo",
+            "a": 3,
+            "b": "bar",
             "c": 1,
           },
         },
+      ],
+      [
+        {
+          "relationships": {},
+          "row": {
+            "a": 3,
+            "b": "bar",
+            "c": 1,
+          },
+        },
+      ],
+      [
         {
           "relationships": {},
           "row": {
@@ -1016,10 +1060,11 @@ test('overlay-source-isolation with split edit', () => {
     row: {a: 3, b: 'bar', c: 2},
   });
 
-  // 1 push for o1, 2 pushes for o2 and o3 (because they split edit)
-  expect(o1.fetches.length).toEqual(5);
-  expect(o2.fetches.length).toEqual(5);
-  expect(o3.fetches.length).toEqual(5);
+  // o2 and o3 need edit split, edit is split for all connections,
+  // so 2 pushes each
+  expect(o1.fetches.length).toEqual(6);
+  expect(o2.fetches.length).toEqual(6);
+  expect(o3.fetches.length).toEqual(6);
 
   expect(o1.fetches).toMatchInlineSnapshot(`
     [
@@ -1032,14 +1077,6 @@ test('overlay-source-isolation with split edit', () => {
             "c": 1,
           },
         },
-        {
-          "relationships": {},
-          "row": {
-            "a": 3,
-            "b": "bar",
-            "c": 2,
-          },
-        },
       ],
       [
         {
@@ -1050,12 +1087,14 @@ test('overlay-source-isolation with split edit', () => {
             "c": 1,
           },
         },
+      ],
+      [
         {
           "relationships": {},
           "row": {
-            "a": 3,
-            "b": "bar",
-            "c": 2,
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
           },
         },
       ],
@@ -1154,12 +1193,14 @@ test('overlay-source-isolation with split edit', () => {
             "c": 1,
           },
         },
+      ],
+      [
         {
           "relationships": {},
           "row": {
-            "a": 3,
-            "b": "bar",
-            "c": 2,
+            "a": 2,
+            "b": "foo2",
+            "c": 1,
           },
         },
       ],
@@ -1248,11 +1289,13 @@ test('overlay-source-isolation with split edit', () => {
             "c": 1,
           },
         },
+      ],
+      [
         {
           "relationships": {},
           "row": {
-            "a": 3,
-            "b": "bar",
+            "a": 2,
+            "b": "foo2",
             "c": 1,
           },
         },

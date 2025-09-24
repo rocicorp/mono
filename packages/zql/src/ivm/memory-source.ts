@@ -40,6 +40,9 @@ import type {SourceSchema} from './schema.ts';
 import type {
   Source,
   SourceChange,
+  SourceChangeAdd,
+  SourceChangeEdit,
+  SourceChangeRemove,
   SourceChangeSet,
   SourceInput,
 } from './source.ts';
@@ -94,7 +97,6 @@ export class MemorySource implements Source {
   readonly #connections: Connection[] = [];
 
   #overlay: Overlay | undefined;
-  #splitEditOverlay: Overlay | undefined;
 
   constructor(
     tableName: string,
@@ -327,7 +329,6 @@ export class MemorySource implements Source {
       // rather than as the fetch constraint.
       req.constraint,
       this.#overlay,
-      this.#splitEditOverlay,
       callingConnectionIndex,
       // Use indexComparator, generateWithOverlayInner has a subtle dependency
       // on this.  Since generateWithConstraint is done after
@@ -369,9 +370,6 @@ export class MemorySource implements Source {
     const {data} = primaryIndex;
     const exists = (row: Row) => data.has(row);
     const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
-    const setSplitEditOverlay = (o: Overlay | undefined) =>
-      (this.#splitEditOverlay = o);
-
     if (change.type === 'set') {
       const existing = data.get(change.row);
       if (existing !== undefined) {
@@ -388,12 +386,52 @@ export class MemorySource implements Source {
       }
     }
 
+    let shouldSplitEdit = false;
+    if (change.type === 'edit') {
+      for (const {splitEditKeys} of this.#connections) {
+        if (splitEditKeys) {
+          for (const key of splitEditKeys) {
+            if (!valuesEqual(change.row[key], change.oldRow[key])) {
+              shouldSplitEdit = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if (change.type === 'edit' && shouldSplitEdit) {
+      yield* this.#genPushInner(
+        {
+          type: 'remove',
+          row: change.oldRow,
+        },
+        exists,
+        setOverlay,
+      );
+      yield* this.#genPushInner(
+        {
+          type: 'add',
+          row: change.row,
+        },
+        exists,
+        setOverlay,
+      );
+    } else {
+      yield* this.#genPushInner(change, exists, setOverlay);
+    }
+  }
+
+  *#genPushInner(
+    change: SourceChangeAdd | SourceChangeRemove | SourceChangeEdit,
+    exists: (row: Row) => boolean,
+    setOverlay: (o: Overlay | undefined) => Overlay | undefined,
+  ) {
     for (const x of genPush(
       change,
       exists,
       this.#connections.entries(),
       setOverlay,
-      setSplitEditOverlay,
     )) {
       yield x;
     }
@@ -415,7 +453,6 @@ export class MemorySource implements Source {
         case 'edit': {
           // TODO: We could see if the PK (form the index tree's perspective)
           // changed and if not we could use set.
-
           // We cannot just do `set` with the new value since the `oldRow` might
           // not map to the same entry as the new `row` in the index btree.
           const removed = data.delete(change.oldRow);
@@ -456,7 +493,6 @@ export function* genPush(
   exists: (row: Row) => boolean,
   connections: Iterable<[number, Connection]>,
   setOverlay: (o: Overlay | undefined) => void,
-  setSplitEditOverlay: (o: Overlay | undefined) => void,
 ) {
   switch (change.type) {
     case 'add':
@@ -475,73 +511,34 @@ export function* genPush(
       unreachable(change);
   }
 
-  for (const [outputIndex, {output, splitEditKeys, filters}] of connections) {
+  for (const [outputIndex, {output, filters}] of connections) {
     if (output) {
-      let splitEdit = false;
-      if (change.type === 'edit' && splitEditKeys) {
-        for (const key of splitEditKeys) {
-          if (!valuesEqual(change.row[key], change.oldRow[key])) {
-            splitEdit = true;
-            break;
-          }
-        }
-      }
-      if (splitEdit) {
-        assert(change.type === 'edit');
-        setSplitEditOverlay({
-          outputIndex,
-          change: {
-            type: 'remove',
-            row: change.oldRow,
-          },
-        });
-        const outputRemove: RemoveChange = {
-          type: 'remove',
-          node: {
-            row: change.oldRow,
-            relationships: {},
-          },
-        };
-        filterPush(outputRemove, output, filters?.predicate);
-        yield;
-        setSplitEditOverlay(undefined);
-        setOverlay({outputIndex, change});
-        const outputAdd: AddChange = {
-          type: 'add',
-          node: {
-            row: change.row,
-            relationships: {},
-          },
-        };
-        filterPush(outputAdd, output, filters?.predicate);
-        yield;
-      } else {
-        setOverlay({outputIndex, change});
-        const outputChange: Change =
-          change.type === 'edit'
-            ? {
-                type: change.type,
-                oldNode: {
-                  row: change.oldRow,
-                  relationships: {},
-                },
-                node: {
-                  row: change.row,
-                  relationships: {},
-                },
-              }
-            : {
-                type: change.type,
-                node: {
-                  row: change.row,
-                  relationships: {},
-                },
-              };
-        filterPush(outputChange, output, filters?.predicate);
-        yield;
-      }
+      setOverlay({outputIndex, change});
+      const outputChange: Change =
+        change.type === 'edit'
+          ? {
+              type: change.type,
+              oldNode: {
+                row: change.oldRow,
+                relationships: {},
+              },
+              node: {
+                row: change.row,
+                relationships: {},
+              },
+            }
+          : {
+              type: change.type,
+              node: {
+                row: change.row,
+                relationships: {},
+              },
+            };
+      filterPush(outputChange, output, filters?.predicate);
+      yield;
     }
   }
+
   setOverlay(undefined);
 }
 
@@ -590,15 +587,12 @@ export function* generateWithOverlay(
   rows: Iterable<Row>,
   constraint: Constraint | undefined,
   overlay: Overlay | undefined,
-  splitEditOverlay: Overlay | undefined,
   connectionIndex: number,
   compare: Comparator,
   filterPredicate?: (row: Row) => boolean | undefined,
 ) {
   let overlayToApply: Overlay | undefined = undefined;
-  if (splitEditOverlay && splitEditOverlay.outputIndex === connectionIndex) {
-    overlayToApply = splitEditOverlay;
-  } else if (overlay && connectionIndex <= overlay.outputIndex) {
+  if (overlay && connectionIndex <= overlay.outputIndex) {
     overlayToApply = overlay;
   }
   const overlays = computeOverlays(
