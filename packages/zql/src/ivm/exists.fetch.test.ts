@@ -70,22 +70,7 @@ suite('EXISTS', () => {
     const {messages, storage, hydrate} = fetchTest(oneParentWithChildTest);
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "0",
-            "cleanup",
-            {},
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-        ],
+        "cleanup": [],
         "fetch": [
           [
             "0",
@@ -163,22 +148,7 @@ suite('EXISTS', () => {
     );
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "1",
-            "cleanup",
-            {},
-          ],
-          [
-            "0",
-            "cleanup",
-            {
-              "constraint": {
-                "id": "i1",
-              },
-            },
-          ],
-        ],
+        "cleanup": [],
         "fetch": [
           [
             "1",
@@ -253,22 +223,7 @@ suite('EXISTS', () => {
     const {messages, storage, hydrate} = fetchTest(oneParentNoChildTest);
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "0",
-            "cleanup",
-            {},
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-        ],
+        "cleanup": [],
         "fetch": [
           [
             "0",
@@ -306,13 +261,7 @@ suite('EXISTS', () => {
     const {messages, storage, hydrate} = fetchTest(oneParentNoChildTest, true);
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "1",
-            "cleanup",
-            {},
-          ],
-        ],
+        "cleanup": [],
         "fetch": [
           [
             "1",
@@ -339,40 +288,7 @@ suite('EXISTS', () => {
     );
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "0",
-            "cleanup",
-            {},
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i2",
-              },
-            },
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i3",
-              },
-            },
-          ],
-        ],
+        "cleanup": [],
         "fetch": [
           [
             "0",
@@ -505,31 +421,7 @@ suite('EXISTS', () => {
 
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "1",
-            "cleanup",
-            {},
-          ],
-          [
-            "0",
-            "cleanup",
-            {
-              "constraint": {
-                "id": "i1",
-              },
-            },
-          ],
-          [
-            "0",
-            "cleanup",
-            {
-              "constraint": {
-                "id": "i3",
-              },
-            },
-          ],
-        ],
+        "cleanup": [],
         "fetch": [
           [
             "1",
@@ -648,40 +540,7 @@ suite('EXISTS', () => {
     const {messages, storage, hydrate} = fetchTest(threeParentsNoChildrenTest);
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "0",
-            "cleanup",
-            {},
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i2",
-              },
-            },
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i3",
-              },
-            },
-          ],
-        ],
+        "cleanup": [],
         "fetch": [
           [
             "0",
@@ -743,13 +602,7 @@ suite('EXISTS', () => {
 
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "1",
-            "cleanup",
-            {},
-          ],
-        ],
+        "cleanup": [],
         "fetch": [
           [
             "1",
@@ -779,22 +632,7 @@ suite('NOT EXISTS', () => {
     });
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "0",
-            "cleanup",
-            {},
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-        ],
+        "cleanup": [],
         "fetch": [
           [
             "0",
@@ -839,22 +677,7 @@ suite('NOT EXISTS', () => {
 
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "1",
-            "cleanup",
-            {},
-          ],
-          [
-            "0",
-            "cleanup",
-            {
-              "constraint": {
-                "id": "i1",
-              },
-            },
-          ],
-        ],
+        "cleanup": [],
         "fetch": [
           [
             "1",
@@ -895,22 +718,7 @@ suite('NOT EXISTS', () => {
     });
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "0",
-            "cleanup",
-            {},
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-        ],
+        "cleanup": [],
         "fetch": [
           [
             "0",
@@ -984,13 +792,7 @@ suite('NOT EXISTS', () => {
 
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "1",
-            "cleanup",
-            {},
-          ],
-        ],
+        "cleanup": [],
         "fetch": [
           [
             "1",
@@ -1018,40 +820,7 @@ suite('NOT EXISTS', () => {
     });
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "0",
-            "cleanup",
-            {},
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i3",
-              },
-            },
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i2",
-              },
-            },
-          ],
-        ],
+        "cleanup": [],
         "fetch": [
           [
             "0",
@@ -1144,31 +913,7 @@ suite('NOT EXISTS', () => {
     );
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "1",
-            "cleanup",
-            {},
-          ],
-          [
-            "0",
-            "cleanup",
-            {
-              "constraint": {
-                "id": "i1",
-              },
-            },
-          ],
-          [
-            "0",
-            "cleanup",
-            {
-              "constraint": {
-                "id": "i3",
-              },
-            },
-          ],
-        ],
+        "cleanup": [],
         "fetch": [
           [
             "1",
@@ -1219,40 +964,7 @@ suite('NOT EXISTS', () => {
     });
     expect(messages).toMatchInlineSnapshot(`
       {
-        "cleanup": [
-          [
-            "0",
-            "cleanup",
-            {},
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i2",
-              },
-            },
-          ],
-          [
-            "1",
-            "cleanup",
-            {
-              "constraint": {
-                "issueID": "i3",
-              },
-            },
-          ],
-        ],
+        "cleanup": [],
         "fetch": [
           [
             "0",
@@ -1399,13 +1111,7 @@ test('three parents, no children - reversed', () => {
 
   expect(messages).toMatchInlineSnapshot(`
     {
-      "cleanup": [
-        [
-          "1",
-          "cleanup",
-          {},
-        ],
-      ],
+      "cleanup": [],
       "fetch": [
         [
           "1",
@@ -1460,7 +1166,6 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
     new Join({
       parent: sources[0].snitch,
       child: sources[1].snitch,
-      storage: new MemoryStorage(),
       ...(reverse
         ? {
             parentKey: t.join.childKey,
@@ -1494,7 +1199,6 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
   for (const [method, fetchType] of [
     ['fetch', 'initialFetch'],
     ['fetch', 'fetch'],
-    ['cleanup', 'cleanup'],
   ] as const) {
     log.length = 0;
 
@@ -1511,11 +1215,6 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
       case 'fetch': {
         expect(r).toEqual(result.hydrate);
         expect(existsStorage.cloneData()).toEqual(result.storage);
-        break;
-      }
-      case 'cleanup': {
-        expect(r).toEqual(result.hydrate);
-        expect(existsStorage.cloneData()).toEqual({});
         break;
       }
       default:

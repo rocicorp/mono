@@ -51,7 +51,7 @@ suite('push one:many', () => {
   } as const;
 
   test('fetch one parent, remove parent', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [{id: 'i1'}],
@@ -86,7 +86,7 @@ suite('push one:many', () => {
         ],
         [
           ".comments:source(comment)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -96,11 +96,6 @@ suite('push one:many', () => {
       ]
     `);
     expect(data).toMatchInlineSnapshot(`[]`);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {},
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -119,7 +114,7 @@ suite('push one:many', () => {
   });
 
   test('fetch one child, remove child', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [],
@@ -155,21 +150,17 @@ suite('push one:many', () => {
       ]
     `);
     expect(data).toMatchInlineSnapshot(`[]`);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {},
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`[]`);
   });
 
   test('fetch one child, add parent', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [],
         comment: [{id: 'c1', issueID: 'i1'}],
       },
+
       ast,
       format,
       pushes: [['issue', {type: 'add', row: {id: 'i1'}}]],
@@ -223,13 +214,6 @@ suite('push one:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
-        },
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -256,7 +240,7 @@ suite('push one:many', () => {
   });
 
   test('fetch two children, add parent', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [],
@@ -323,13 +307,6 @@ suite('push one:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
-        },
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -363,7 +340,7 @@ suite('push one:many', () => {
   });
 
   test('fetch one child, add wrong parent', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [],
@@ -416,13 +393,6 @@ suite('push one:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {
-          ""pKeySet","i2","i2",": true,
-        },
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -441,7 +411,7 @@ suite('push one:many', () => {
   });
 
   test('fetch one parent, add child', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [{id: 'i1'}],
@@ -508,13 +478,6 @@ suite('push one:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
-        },
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -541,7 +504,7 @@ suite('push one:many', () => {
   });
 
   test('fetch one parent, add wrong child', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [{id: 'i1'}],
@@ -585,18 +548,11 @@ suite('push one:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
-        },
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`[]`);
   });
 
   test('fetch one parent, one child, remove parent', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [{id: 'i1'}],
@@ -631,7 +587,7 @@ suite('push one:many', () => {
         ],
         [
           ".comments:source(comment)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -641,11 +597,6 @@ suite('push one:many', () => {
       ]
     `);
     expect(data).toMatchInlineSnapshot(`[]`);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {},
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -672,7 +623,7 @@ suite('push one:many', () => {
   });
 
   test('fetch one parent, two children, remove parent', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [{id: 'i1'}],
@@ -710,7 +661,7 @@ suite('push one:many', () => {
         ],
         [
           ".comments:source(comment)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -720,11 +671,6 @@ suite('push one:many', () => {
       ]
     `);
     expect(data).toMatchInlineSnapshot(`[]`);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {},
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -758,7 +704,7 @@ suite('push one:many', () => {
   });
 
   test('no fetch, add parent, add child, add child, remove child, remove parent', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [],
@@ -939,7 +885,7 @@ suite('push one:many', () => {
         ],
         [
           ".comments:source(comment)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -949,11 +895,6 @@ suite('push one:many', () => {
       ]
     `);
     expect(data).toMatchInlineSnapshot(`[]`);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(comments)": {},
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -1067,7 +1008,7 @@ suite('push one:many', () => {
     } as const;
 
     test('edit issue text', () => {
-      const {log, data, actualStorage, pushes} = runPushTest({
+      const {log, data, pushes} = runPushTest({
         sources,
         sourceContents: {
           issue: [{id: 'i1', text: 'issue 1'}],
@@ -1147,13 +1088,6 @@ suite('push one:many', () => {
           },
         ]
       `);
-      expect(actualStorage).toMatchInlineSnapshot(`
-        {
-          ":join(comments)": {
-            ""pKeySet","i1","i1",": true,
-          },
-        }
-      `);
       expect(pushes).toMatchInlineSnapshot(`
         [
           {
@@ -1172,7 +1106,7 @@ suite('push one:many', () => {
     });
 
     test('edit comment text', () => {
-      const {log, data, actualStorage, pushes} = runPushTest({
+      const {log, data, pushes} = runPushTest({
         sources,
         sourceContents: {
           issue: [{id: 'i1', text: 'issue 1'}],
@@ -1272,13 +1206,6 @@ suite('push one:many', () => {
           },
         ]
       `);
-      expect(actualStorage).toMatchInlineSnapshot(`
-        {
-          ":join(comments)": {
-            ""pKeySet","i1","i1",": true,
-          },
-        }
-      `);
       expect(pushes).toMatchInlineSnapshot(`
         [
           {
@@ -1309,7 +1236,7 @@ suite('push one:many', () => {
     });
 
     test('edit issueID of comment', () => {
-      const {log, data, actualStorage, pushes} = runPushTest({
+      const {log, data, pushes} = runPushTest({
         sources,
         sourceContents: {
           issue: [
@@ -1449,14 +1376,6 @@ suite('push one:many', () => {
           },
         ]
       `);
-      expect(actualStorage).toMatchInlineSnapshot(`
-        {
-          ":join(comments)": {
-            ""pKeySet","i1","i1",": true,
-            ""pKeySet","i2","i2",": true,
-          },
-        }
-      `);
       expect(pushes).toMatchInlineSnapshot(`
         [
           {
@@ -1506,7 +1425,7 @@ suite('push one:many', () => {
     });
 
     test('edit id of issue', () => {
-      const {log, data, actualStorage, pushes} = runPushTest({
+      const {log, data, pushes} = runPushTest({
         sources,
         sourceContents: {
           issue: [
@@ -1559,7 +1478,7 @@ suite('push one:many', () => {
           ],
           [
             ".comments:source(comment)",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i1",
@@ -1628,14 +1547,6 @@ suite('push one:many', () => {
             Symbol(rc): 1,
           },
         ]
-      `);
-      expect(actualStorage).toMatchInlineSnapshot(`
-        {
-          ":join(comments)": {
-            ""pKeySet","i2","i2",": true,
-            ""pKeySet","i3","i3",": true,
-          },
-        }
       `);
       expect(pushes).toMatchInlineSnapshot(`
         [
@@ -1731,7 +1642,7 @@ suite('push many:one', () => {
   } as const;
 
   test('fetch one child, add parent', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [],
@@ -1790,13 +1701,6 @@ suite('push many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(owner)": {
-          ""pKeySet","u1","i1",": true,
-        },
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -1823,7 +1727,7 @@ suite('push many:one', () => {
   });
 
   test('fetch one child, add wrong parent', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [],
@@ -1879,13 +1783,6 @@ suite('push many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(owner)": {
-          ""pKeySet","u2","i1",": true,
-        },
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -1905,7 +1802,7 @@ suite('push many:one', () => {
   });
 
   test('fetch one parent, add child', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [{id: 'i1', ownerID: 'u1'}],
@@ -1969,13 +1866,6 @@ suite('push many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(owner)": {
-          ""pKeySet","u1","i1",": true,
-        },
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -2002,7 +1892,7 @@ suite('push many:one', () => {
   });
 
   test('fetch two parents, add one child', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [
@@ -2095,14 +1985,6 @@ suite('push many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(owner)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
-        },
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -2166,7 +2048,7 @@ suite('push many:one', () => {
       },
     } as const;
     test('edit child to make it match to parents', () => {
-      const {log, data, actualStorage, pushes} = runPushTest({
+      const {log, data, pushes} = runPushTest({
         sources,
         sourceContents: {
           issue: [
@@ -2297,14 +2179,6 @@ suite('push many:one', () => {
           },
         ]
       `);
-      expect(actualStorage).toMatchInlineSnapshot(`
-        {
-          ":join(owner)": {
-            ""pKeySet","u1","i1",": true,
-            ""pKeySet","u1","i2",": true,
-          },
-        }
-      `);
       expect(pushes).toMatchInlineSnapshot(`
         [
           {
@@ -2354,7 +2228,7 @@ suite('push many:one', () => {
     });
 
     test('edit child to make it match to parents, 1:many:many', () => {
-      const {log, data, actualStorage, pushes} = runPushTest({
+      const {log, data, pushes} = runPushTest({
         sources: {
           user: {
             columns: {
@@ -2501,7 +2375,7 @@ suite('push many:one', () => {
           ],
           [
             ".issues.comments:source(comment)",
-            "cleanup",
+            "fetch",
             {
               "constraint": {
                 "issueID": "i2",
@@ -2614,18 +2488,6 @@ suite('push many:one', () => {
           },
         ]
       `);
-      expect(actualStorage).toMatchInlineSnapshot(`
-        {
-          ".issues:join(comments)": {
-            ""pKeySet","i1","i1",": true,
-            ""pKeySet","i2","i2",": true,
-          },
-          ":join(issues)": {
-            ""pKeySet","u1","u1",": true,
-            ""pKeySet","u2","u2",": true,
-          },
-        }
-      `);
 
       expect(pushes).toMatchInlineSnapshot(`
         [
@@ -2696,7 +2558,7 @@ suite('push many:one', () => {
     });
 
     test('edit non matching child', () => {
-      const {log, data, actualStorage, pushes} = runPushTest({
+      const {log, data, pushes} = runPushTest({
         sources,
         sourceContents: {
           issue: [
@@ -2765,19 +2627,11 @@ suite('push many:one', () => {
           },
         ]
       `);
-      expect(actualStorage).toMatchInlineSnapshot(`
-        {
-          ":join(owner)": {
-            ""pKeySet","u1","i1",": true,
-            ""pKeySet","u1","i2",": true,
-          },
-        }
-      `);
       expect(pushes).toMatchInlineSnapshot(`[]`);
     });
 
     test('edit matching child', () => {
-      const {log, data, actualStorage, pushes} = runPushTest({
+      const {log, data, pushes} = runPushTest({
         sources,
         sourceContents: {
           issue: [
@@ -2900,14 +2754,6 @@ suite('push many:one', () => {
           },
         ]
       `);
-      expect(actualStorage).toMatchInlineSnapshot(`
-        {
-          ":join(owner)": {
-            ""pKeySet","u1","i1",": true,
-            ""pKeySet","u1","i2",": true,
-          },
-        }
-      `);
       expect(pushes).toMatchInlineSnapshot(`
         [
           {
@@ -3027,7 +2873,7 @@ suite('push one:many:many', () => {
   } as const;
 
   test('fetch one parent, one child, add grandchild', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [{id: 'i1'}],
@@ -3136,16 +2982,6 @@ suite('push one:many:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".comments:join(revisions)": {
-          ""pKeySet","c1","c1",": true,
-        },
-        ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
-        },
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3182,7 +3018,7 @@ suite('push one:many:many', () => {
   });
 
   test('fetch one parent, one grandchild, add child', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [{id: 'i1'}],
@@ -3277,16 +3113,6 @@ suite('push one:many:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".comments:join(revisions)": {
-          ""pKeySet","c1","c1",": true,
-        },
-        ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
-        },
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3323,7 +3149,7 @@ suite('push one:many:many', () => {
   });
 
   test('fetch one child, one grandchild, add parent', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [],
@@ -3408,16 +3234,6 @@ suite('push one:many:many', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".comments:join(revisions)": {
-          ""pKeySet","c1","c1",": true,
-        },
-        ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
-        },
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3454,7 +3270,7 @@ suite('push one:many:many', () => {
   });
 
   test('fetch one parent, one child, one grandchild, remove parent', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [{id: 'i1'}],
@@ -3490,7 +3306,7 @@ suite('push one:many:many', () => {
         ],
         [
           ".comments:join(revisions)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -3499,7 +3315,7 @@ suite('push one:many:many', () => {
         ],
         [
           ".comments:source(comment)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "issueID": "i1",
@@ -3508,7 +3324,7 @@ suite('push one:many:many', () => {
         ],
         [
           ".comments.revisions:source(revision)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "commentID": "c1",
@@ -3518,12 +3334,6 @@ suite('push one:many:many', () => {
       ]
     `);
     expect(data).toMatchInlineSnapshot(`[]`);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".comments:join(revisions)": {},
-        ":join(comments)": {},
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3632,7 +3442,7 @@ suite('push one:many:one', () => {
   } as const;
 
   test('fetch one parent, one child, add grandchild', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [{id: 'i1'}],
@@ -3735,16 +3545,6 @@ suite('push one:many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".issueLabels:join(labels)": {
-          ""pKeySet","l1","i1","l1",": true,
-        },
-        ":join(issueLabels)": {
-          ""pKeySet","i1","i1",": true,
-        },
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3780,7 +3580,7 @@ suite('push one:many:one', () => {
   });
 
   test('fetch one parent, one grandchild, add child', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [{id: 'i1'}],
@@ -3874,16 +3674,6 @@ suite('push one:many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".issueLabels:join(labels)": {
-          ""pKeySet","l1","i1","l1",": true,
-        },
-        ":join(issueLabels)": {
-          ""pKeySet","i1","i1",": true,
-        },
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -3919,7 +3709,7 @@ suite('push one:many:one', () => {
   });
 
   test('fetch two parents, two children, add one grandchild', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: {
         issue: [{id: 'i1'}, {id: 'i2'}],
@@ -4089,18 +3879,6 @@ suite('push one:many:one', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".issueLabels:join(labels)": {
-          ""pKeySet","l1","i1","l1",": true,
-          ""pKeySet","l1","i2","l1",": true,
-        },
-        ":join(issueLabels)": {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
-        },
-      }
-    `);
     expect(pushes).toMatchInlineSnapshot(`
       [
         {
@@ -4248,7 +4026,7 @@ describe('edit assignee', () => {
   };
 
   test('from none to one', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents,
       ast,
@@ -4365,7 +4143,7 @@ describe('edit assignee', () => {
         ],
         [
           ".creator:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": "u1",
@@ -4374,7 +4152,7 @@ describe('edit assignee', () => {
         ],
         [
           ".assignee:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": undefined,
@@ -4499,19 +4277,6 @@ describe('edit assignee', () => {
         },
       ]
     `);
-
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(assignee)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
-        },
-        ":join(creator)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
-        },
-      }
-    `);
   });
 
   test('from none to many', () => {
@@ -4570,7 +4335,7 @@ describe('edit assignee', () => {
       ],
     };
 
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources: localSources,
       sourceContents: localSourceContents,
       ast: localAst,
@@ -4703,7 +4468,7 @@ describe('edit assignee', () => {
         ],
         [
           ".creator:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": "u1",
@@ -4712,7 +4477,7 @@ describe('edit assignee', () => {
         ],
         [
           ".assignee:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": undefined,
@@ -4864,19 +4629,6 @@ describe('edit assignee', () => {
         },
       ]
     `);
-
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(assignee)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
-        },
-        ":join(creator)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
-        },
-      }
-    `);
   });
 
   test('from one to none', () => {
@@ -4886,7 +4638,7 @@ describe('edit assignee', () => {
       ...rest,
     } as const;
 
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents: localSourceContents,
       ast,
@@ -4997,7 +4749,7 @@ describe('edit assignee', () => {
         ],
         [
           ".creator:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": "u1",
@@ -5006,7 +4758,7 @@ describe('edit assignee', () => {
         ],
         [
           ".assignee:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": "u1",
@@ -5131,19 +4883,6 @@ describe('edit assignee', () => {
         },
       ]
     `);
-
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(assignee)": {
-          ""pKeySet","u2","i2",": true,
-          ""pKeySet",null,"i1",": true,
-        },
-        ":join(creator)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
-        },
-      }
-    `);
   });
 
   test('from many to none', () => {
@@ -5203,7 +4942,7 @@ describe('edit assignee', () => {
       ],
     };
 
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources: localSources,
       sourceContents: localSourceContents,
       ast: localAst,
@@ -5323,7 +5062,7 @@ describe('edit assignee', () => {
         ],
         [
           ".creator:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": "u1",
@@ -5332,7 +5071,7 @@ describe('edit assignee', () => {
         ],
         [
           ".assignee:source(user)",
-          "cleanup",
+          "fetch",
           {
             "constraint": {
               "userID": "u1",
@@ -5484,19 +5223,6 @@ describe('edit assignee', () => {
         },
       ]
     `);
-
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(assignee)": {
-          ""pKeySet","u2","i2",": true,
-          ""pKeySet",null,"i1",": true,
-        },
-        ":join(creator)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
-        },
-      }
-    `);
   });
 });
 
@@ -5560,7 +5286,7 @@ describe('joins with compound join keys', () => {
   };
 
   test('add parent and child', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents,
       ast,
@@ -5764,20 +5490,10 @@ describe('joins with compound join keys', () => {
         },
       ]
     `);
-
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(ab)": {
-          ""pKeySet",1,2,0,": true,
-          ""pKeySet",4,5,1,": true,
-          ""pKeySet",7,8,2,": true,
-        },
-      }
-    `);
   });
 
   test('edit child with moving it', () => {
-    const {log, data, actualStorage, pushes} = runPushTest({
+    const {log, data, pushes} = runPushTest({
       sources,
       sourceContents,
       ast,
@@ -5893,15 +5609,6 @@ describe('joins with compound join keys', () => {
         },
       ]
     `);
-
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(ab)": {
-          ""pKeySet",1,2,0,": true,
-          ""pKeySet",4,5,1,": true,
-        },
-      }
-    `);
   });
 });
 
@@ -5950,7 +5657,7 @@ suite('test overlay on many:one pushes', () => {
   } as const;
 
   test('add child', () => {
-    const {log, data, actualStorage, pushesWithFetch} = runPushTest({
+    const {log, data, pushesWithFetch} = runPushTest({
       sources,
       sourceContents: {
         issue: [
@@ -6073,16 +5780,6 @@ suite('test overlay on many:one pushes', () => {
           Symbol(rc): 1,
         },
       ]
-    `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(owner)": {
-          ""pKeySet","u0","i0",": true,
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
-          ""pKeySet","u2","i3",": true,
-        },
-      }
     `);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
@@ -6267,7 +5964,7 @@ suite('test overlay on many:one pushes', () => {
   });
 
   test('remove child', () => {
-    const {log, data, actualStorage, pushesWithFetch} = runPushTest({
+    const {log, data, pushesWithFetch} = runPushTest({
       sources,
       sourceContents: {
         issue: [
@@ -6383,16 +6080,6 @@ suite('test overlay on many:one pushes', () => {
           Symbol(rc): 1,
         },
       ]
-    `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(owner)": {
-          ""pKeySet","u0","i0",": true,
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
-          ""pKeySet","u2","i3",": true,
-        },
-      }
     `);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
@@ -6561,7 +6248,7 @@ suite('test overlay on many:one pushes', () => {
   });
 
   test('edit child', () => {
-    const {log, data, actualStorage, pushesWithFetch} = runPushTest({
+    const {log, data, pushesWithFetch} = runPushTest({
       sources,
       sourceContents: {
         issue: [
@@ -6706,16 +6393,6 @@ suite('test overlay on many:one pushes', () => {
           Symbol(rc): 1,
         },
       ]
-    `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(owner)": {
-          ""pKeySet","u0","i0",": true,
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
-          ""pKeySet","u2","i3",": true,
-        },
-      }
     `);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
@@ -6976,7 +6653,7 @@ suite('test overlay on many:one pushes', () => {
         },
       },
     } as const;
-    const {log, data, actualStorage, pushesWithFetch} = runPushTest({
+    const {log, data, pushesWithFetch} = runPushTest({
       sources,
       sourceContents: {
         issue: [
@@ -7259,21 +6936,6 @@ suite('test overlay on many:one pushes', () => {
           Symbol(rc): 1,
         },
       ]
-    `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".owner:join(state)": {
-          ""pKeySet","s0","u0",": true,
-          ""pKeySet","s0","u1",": true,
-          ""pKeySet","s1","u2",": true,
-        },
-        ":join(owner)": {
-          ""pKeySet","u0","i0",": true,
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
-          ""pKeySet","u2","i3",": true,
-        },
-      }
     `);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
@@ -7775,7 +7437,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
   } as const;
 
   test('add child', () => {
-    const {log, data, actualStorage, pushesWithFetch} = runPushTest({
+    const {log, data, pushesWithFetch} = runPushTest({
       sources,
       sourceContents: {
         issue: [
@@ -7939,16 +7601,6 @@ suite('test overlay on many:many (no junction) pushes', () => {
           Symbol(rc): 1,
         },
       ]
-    `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(ownerByName)": {
-          ""pKeySet","Aaron","i1",": true,
-          ""pKeySet","Aaron","i2",": true,
-          ""pKeySet","Arv","i3",": true,
-          ""pKeySet","Fritz","i0",": true,
-        },
-      }
     `);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
@@ -8207,7 +7859,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
   });
 
   test('remove child', () => {
-    const {log, data, actualStorage, pushesWithFetch} = runPushTest({
+    const {log, data, pushesWithFetch} = runPushTest({
       sources,
       sourceContents: {
         issue: [
@@ -8362,16 +8014,6 @@ suite('test overlay on many:many (no junction) pushes', () => {
           Symbol(rc): 1,
         },
       ]
-    `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(ownerByName)": {
-          ""pKeySet","Aaron","i1",": true,
-          ""pKeySet","Aaron","i2",": true,
-          ""pKeySet","Arv","i3",": true,
-          ""pKeySet","Fritz","i0",": true,
-        },
-      }
     `);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
@@ -8614,7 +8256,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
   });
 
   test('edit child', () => {
-    const {log, data, actualStorage, pushesWithFetch} = runPushTest({
+    const {log, data, pushesWithFetch} = runPushTest({
       sources,
       sourceContents: {
         issue: [
@@ -8803,16 +8445,6 @@ suite('test overlay on many:many (no junction) pushes', () => {
           Symbol(rc): 1,
         },
       ]
-    `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ":join(ownerByName)": {
-          ""pKeySet","Aaron","i1",": true,
-          ""pKeySet","Aaron","i2",": true,
-          ""pKeySet","Arv","i3",": true,
-          ""pKeySet","Fritz","i0",": true,
-        },
-      }
     `);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
@@ -9149,7 +8781,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
         },
       },
     } as const;
-    const {log, data, actualStorage, pushesWithFetch} = runPushTest({
+    const {log, data, pushesWithFetch} = runPushTest({
       sources,
       sourceContents: {
         issue: [
@@ -9516,23 +9148,6 @@ suite('test overlay on many:many (no junction) pushes', () => {
           Symbol(rc): 1,
         },
       ]
-    `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".ownerByName:join(state)": {
-          ""pKeySet","s0","u2",": true,
-          ""pKeySet","s0","u3",": true,
-          ""pKeySet","s1","u0",": true,
-          ""pKeySet","s1","u1",": true,
-          ""pKeySet","s1","u4",": true,
-        },
-        ":join(ownerByName)": {
-          ""pKeySet","Aaron","i1",": true,
-          ""pKeySet","Aaron","i2",": true,
-          ""pKeySet","Arv","i3",": true,
-          ""pKeySet","Fritz","i0",": true,
-        },
-      }
     `);
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
