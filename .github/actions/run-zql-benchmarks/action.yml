@@ -22,7 +22,3 @@ runs:
         echo "---"
         # Now try to convert it
         cat bench_output.txt | npx tsx ../shared/src/tool/mitata-json-to-bmf.ts > output.json || (echo "Converter failed" && exit 1)
-        echo "Converted output:"
-        cat output.json
-        # Set output for other steps to use
-        echo "result=$(cat output.json | jq -c .)" >> $GITHUB_OUTPUT
