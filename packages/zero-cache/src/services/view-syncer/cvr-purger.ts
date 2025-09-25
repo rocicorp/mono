@@ -50,6 +50,11 @@ export class CVRPurger implements Service {
       );
       // Do nothing and just wait to be stopped.
       await this.#state.stopped();
+    } else {
+      this.#lc.info?.(
+        `running cvr-purger with`,
+        await this.#db`SHOW statement_timeout`,
+      );
     }
 
     while (this.#state.shouldRun()) {
@@ -106,11 +111,24 @@ export class CVRPurger implements Service {
       ).flat();
 
       if (ids.length > 0) {
-        // Rows only need to be deleted from the "instances" and "rowsVersion" tables.
-        // Deletes will cascade through the other tables via foreign key references.
-        for (const table of ['instances', 'rowsVersion']) {
-          await sql`
-            DELETE FROM ${sql(this.#schema)}.${sql(table)} WHERE "clientGroupID" IN ${sql(ids)}`;
+        // Explicitly delete rows from cvr tables from "bottom" up. Even
+        // though all tables eventually reference a ("top") ancestor row in the
+        // "instances" or "rowsVersion" tables, relying on foreign key
+        // cascading deletes can be suboptimal when the foreign key is not a
+        // prefix of the primary key (e.g. the "desires" foreign key reference
+        // to the "queries" table is not a prefix of the "desires" primary
+        // key).
+        for (const table of [
+          'desires',
+          'queries',
+          'clients',
+          'instances',
+          'rows',
+          'rowsVersion',
+        ]) {
+          void sql`
+            DELETE FROM ${sql(this.#schema)}.${sql(table)} 
+              WHERE "clientGroupID" IN ${sql(ids)}`.execute();
         }
       }
 

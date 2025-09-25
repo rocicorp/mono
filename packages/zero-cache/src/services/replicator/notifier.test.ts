@@ -21,11 +21,11 @@ describe('replicator/notifier', () => {
   }
 
   test('notify immediately with last notification received', async () => {
-    notifier.notifySubscribers();
+    void notifier.notifySubscribers();
     const sub = notifier.subscribe();
     await expectSingleMessage(sub, {state: 'version-ready'});
 
-    notifier.notifySubscribers({state: 'version-ready', testSeqNum: 123});
+    void notifier.notifySubscribers({state: 'version-ready', testSeqNum: 123});
     await expectSingleMessage(sub, {state: 'version-ready', testSeqNum: 123});
 
     const sub2 = notifier.subscribe();
@@ -44,7 +44,7 @@ describe('replicator/notifier', () => {
     await expectSingleMessage(sub1, {state: 'version-ready', testSeqNum: 234});
     expect(await results1[0]).toEqual('consumed');
 
-    notifier.notifySubscribers({state: 'version-ready', testSeqNum: 345});
+    void notifier.notifySubscribers({state: 'version-ready', testSeqNum: 345});
     expect(await results1[1]).toEqual('coalesced');
 
     const results2 = notifier.notifySubscribers({

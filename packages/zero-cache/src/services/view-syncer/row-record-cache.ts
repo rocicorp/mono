@@ -230,7 +230,7 @@ export class RowRecordCache {
           // #pendingRowsVersion is consistent with the #pending rows.
           const rows = this.#pending.size;
           const rowsVersion = must(this.#pendingRowsVersion);
-          this.executeRowUpdates(tx, rowsVersion, this.#pending, 'force');
+          void this.executeRowUpdates(tx, rowsVersion, this.#pending, 'force');
           this.#pending.clear();
           return {rows, rowsVersion};
         });
