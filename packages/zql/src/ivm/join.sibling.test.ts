@@ -793,7 +793,6 @@ function pushSiblingTest(t: PushTestSibling): PushTestSiblingResults {
     const join = new Join({
       parent,
       child,
-      storage,
       ...info,
       hidden: false,
       system: 'client',

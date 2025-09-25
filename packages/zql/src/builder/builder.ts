@@ -577,7 +577,6 @@ function applyCorrelatedSubQuery(
     : new Join({
         parent: end,
         child,
-        storage: delegate.createStorage(joinName),
         parentKey: sq.correlation.parentField,
         childKey: sq.correlation.childField,
         relationshipName: sq.subquery.alias,
