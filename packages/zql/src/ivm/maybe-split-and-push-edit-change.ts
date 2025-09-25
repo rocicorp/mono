@@ -1,6 +1,6 @@
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {EditChange} from './change.ts';
-import type {Output} from './operator.ts';
+import type {InputBase, Output} from './operator.ts';
 
 /**
  * This takes an {@linkcode EditChange} and a predicate that determines if a row
@@ -11,21 +11,28 @@ export function maybeSplitAndPushEditChange(
   change: EditChange,
   predicate: (row: Row) => boolean,
   output: Output,
+  pusher: InputBase,
 ) {
   const oldWasPresent = predicate(change.oldNode.row);
   const newIsPresent = predicate(change.node.row);
 
   if (oldWasPresent && newIsPresent) {
-    output.push(change);
+    output.push(change, pusher);
   } else if (oldWasPresent && !newIsPresent) {
-    output.push({
-      type: 'remove',
-      node: change.oldNode,
-    });
+    output.push(
+      {
+        type: 'remove',
+        node: change.oldNode,
+      },
+      pusher,
+    );
   } else if (!oldWasPresent && newIsPresent) {
-    output.push({
-      type: 'add',
-      node: change.node,
-    });
+    output.push(
+      {
+        type: 'add',
+        node: change.node,
+      },
+      pusher,
+    );
   }
 }

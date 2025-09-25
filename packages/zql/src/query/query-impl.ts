@@ -352,7 +352,7 @@ export abstract class AbstractQuery<
           },
           this.customQueryID,
           relationship,
-        ),
+        ) as unknown as QueryImpl<Schema, string>,
       ) as unknown as QueryImpl<Schema, string>;
 
       assert(isCompoundKey(firstRelation.sourceField), 'Invalid relationship');

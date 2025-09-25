@@ -3,7 +3,7 @@ import {must} from '../../../shared/src/must.ts';
 import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Change} from './change.ts';
 import type {Node} from './data.ts';
-import type {Output} from './operator.ts';
+import type {InputBase, Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Stream} from './stream.ts';
 
@@ -79,6 +79,7 @@ import type {Stream} from './stream.ts';
 export function pushAccumulatedChanges(
   accumulatedPushes: Change[],
   output: Output,
+  pusher: InputBase,
   fanOutChangeType: Change['type'],
   mergeRelationships: (existing: Change, incoming: Change) => Change,
   addEmptyRelationships: (change: Change) => Change,
@@ -128,14 +129,20 @@ export function pushAccumulatedChanges(
         types.length === 1 && types[0] === 'remove',
         'Fan-in:remove expected all removes',
       );
-      output.push(addEmptyRelationships(must(candidatesToPush.get('remove'))));
+      output.push(
+        addEmptyRelationships(must(candidatesToPush.get('remove'))),
+        pusher,
+      );
       return;
     case 'add':
       assert(
         types.length === 1 && types[0] === 'add',
         'Fan-in:add expected all adds',
       );
-      output.push(addEmptyRelationships(must(candidatesToPush.get('add'))));
+      output.push(
+        addEmptyRelationships(must(candidatesToPush.get('add'))),
+        pusher,
+      );
       return;
     case 'edit': {
       assert(
@@ -157,7 +164,7 @@ export function pushAccumulatedChanges(
         if (removeChange) {
           editChange = mergeRelationships(editChange, removeChange);
         }
-        output.push(addEmptyRelationships(editChange));
+        output.push(addEmptyRelationships(editChange), pusher);
         return;
       }
 
@@ -185,11 +192,15 @@ export function pushAccumulatedChanges(
             node: addChange.node,
             oldNode: removeChange.node,
           } as const),
+          pusher,
         );
         return;
       }
 
-      output.push(addEmptyRelationships(must(addChange ?? removeChange)));
+      output.push(
+        addEmptyRelationships(must(addChange ?? removeChange)),
+        pusher,
+      );
       return;
     }
     case 'child': {
@@ -210,7 +221,7 @@ export function pushAccumulatedChanges(
       // If any branch preserved the original child change, that takes precedence over all other changes.
       const childChange = candidatesToPush.get('child');
       if (childChange) {
-        output.push(childChange);
+        output.push(childChange, pusher);
         return;
       }
 
@@ -222,7 +233,10 @@ export function pushAccumulatedChanges(
         'Fan-in:child expected either add or remove, not both',
       );
 
-      output.push(addEmptyRelationships(must(addChange ?? removeChange)));
+      output.push(
+        addEmptyRelationships(must(addChange ?? removeChange)),
+        pusher,
+      );
       return;
     }
     default:

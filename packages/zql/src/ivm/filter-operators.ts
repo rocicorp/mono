@@ -72,7 +72,7 @@ export class FilterStart implements FilterInput, Output {
   }
 
   push(change: Change) {
-    this.#output.push(change);
+    this.#output.push(change, this);
   }
 
   *fetch(req: FetchRequest): Stream<Node> {
@@ -135,7 +135,7 @@ export class FilterEnd implements Input, FilterOutput {
   }
 
   push(change: Change) {
-    this.#output.push(change);
+    this.#output.push(change, this);
   }
 }
 

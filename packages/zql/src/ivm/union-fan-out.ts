@@ -26,7 +26,7 @@ export class UnionFanOut implements Operator {
   push(change: Change): void {
     must(this.#unionFanIn).fanOutStartedPushing();
     for (const output of this.#outputs) {
-      output.push(change);
+      output.push(change, this);
     }
     must(this.#unionFanIn).fanOutDonePushing(change.type);
   }

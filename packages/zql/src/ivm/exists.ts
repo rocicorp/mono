@@ -156,21 +156,27 @@ export class Exists implements FilterOperator {
                   // pushed to output, the added child needs to be excluded from
                   // the remove being pushed to output (since the child has
                   // never been added to the output).
-                  this.#output.push({
-                    type: 'remove',
-                    node: {
-                      row: change.node.row,
-                      relationships: {
-                        ...change.node.relationships,
-                        [this.#relationshipName]: () => [],
+                  this.#output.push(
+                    {
+                      type: 'remove',
+                      node: {
+                        row: change.node.row,
+                        relationships: {
+                          ...change.node.relationships,
+                          [this.#relationshipName]: () => [],
+                        },
                       },
                     },
-                  });
+                    this,
+                  );
                 } else {
-                  this.#output.push({
-                    type: 'add',
-                    node: change.node,
-                  });
+                  this.#output.push(
+                    {
+                      type: 'add',
+                      node: change.node,
+                    },
+                    this,
+                  );
                 }
               } else {
                 this.#pushWithFilter(change, size);
@@ -188,26 +194,32 @@ export class Exists implements FilterOperator {
               }
               if (size === 0) {
                 if (this.#not) {
-                  this.#output.push({
-                    type: 'add',
-                    node: change.node,
-                  });
+                  this.#output.push(
+                    {
+                      type: 'add',
+                      node: change.node,
+                    },
+                    this,
+                  );
                 } else {
                   // Since the remove child change currently being processed is
                   // not pushed to output, the removed child needs to be added to
                   // the remove being pushed to output.
-                  this.#output.push({
-                    type: 'remove',
-                    node: {
-                      row: change.node.row,
-                      relationships: {
-                        ...change.node.relationships,
-                        [this.#relationshipName]: () => [
-                          change.child.change.node,
-                        ],
+                  this.#output.push(
+                    {
+                      type: 'remove',
+                      node: {
+                        row: change.node.row,
+                        relationships: {
+                          ...change.node.relationships,
+                          [this.#relationshipName]: () => [
+                            change.child.change.node,
+                          ],
+                        },
                       },
                     },
-                  });
+                    this,
+                  );
                 }
               } else {
                 this.#pushWithFilter(change, size);
@@ -243,7 +255,7 @@ export class Exists implements FilterOperator {
    */
   #pushWithFilter(change: Change, size?: number): void {
     if (this.#filter(change.node, size)) {
-      this.#output.push(change);
+      this.#output.push(change, this);
     }
   }
 

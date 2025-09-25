@@ -72,7 +72,7 @@ export interface Output {
    * - Only add rows which do not already exist (by deep equality).
    * - Only remove rows which do exist (by deep equality).
    */
-  push(change: Change): void;
+  push(change: Change, pusher: InputBase): void;
 }
 
 /**

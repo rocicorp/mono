@@ -84,7 +84,7 @@ export class Snitch implements Operator {
 
   push(change: Change) {
     this.#log([this.#name, 'push', toChangeRecord(change)]);
-    this.#output?.push(change);
+    this.#output?.push(change, this);
   }
 }
 
@@ -162,7 +162,7 @@ export class FilterSnitch implements FilterOperator {
 
   push(change: Change) {
     this.#log([this.#name, 'push', toChangeRecord(change)]);
-    this.#output?.push(change);
+    this.#output?.push(change, this);
   }
 }
 

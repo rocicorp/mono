@@ -537,7 +537,7 @@ function* genPush(
       unreachable(change);
   }
 
-  for (const [outputIndex, {output, filters}] of connections.entries()) {
+  for (const [outputIndex, {output, filters, input}] of connections.entries()) {
     if (output) {
       setOverlay({outputIndex, change});
       const outputChange: Change =
@@ -560,7 +560,7 @@ function* genPush(
                 relationships: {},
               },
             };
-      filterPush(outputChange, output, filters?.predicate);
+      filterPush(outputChange, output, input, filters?.predicate);
       yield;
     }
   }

@@ -260,7 +260,7 @@ export class Take implements Operator {
             : takeState.bound,
           maxBound,
         );
-        this.#output.push(change);
+        this.#output.push(change, this);
         return;
       }
       // size === limit
@@ -314,9 +314,9 @@ export class Take implements Operator {
         maxBound,
       );
       this.#withRowHiddenFromFetch(change.node.row, () => {
-        this.#output.push(removeChange);
+        this.#output.push(removeChange, this);
       });
-      this.#output.push(change);
+      this.#output.push(change, this);
     } else if (change.type === 'remove') {
       if (takeState.bound === undefined) {
         // change is after bound
@@ -367,17 +367,20 @@ export class Take implements Operator {
       }
 
       if (newBound?.push) {
-        this.#output.push(change);
+        this.#output.push(change, this);
         this.#setTakeState(
           takeStateKey,
           takeState.size,
           newBound.node.row,
           maxBound,
         );
-        this.#output.push({
-          type: 'add',
-          node: newBound.node,
-        });
+        this.#output.push(
+          {
+            type: 'add',
+            node: newBound.node,
+          },
+          this,
+        );
         return;
       }
       this.#setTakeState(
@@ -386,7 +389,7 @@ export class Take implements Operator {
         newBound?.node.row,
         maxBound,
       );
-      this.#output.push(change);
+      this.#output.push(change, this);
     } else if (change.type === 'child') {
       // A 'child' change should be pushed to output if its row
       // is <= bound.
@@ -394,7 +397,7 @@ export class Take implements Operator {
         takeState.bound &&
         compareRows(change.node.row, takeState.bound) <= 0
       ) {
-        this.#output.push(change);
+        this.#output.push(change, this);
       }
     }
   }
@@ -424,7 +427,7 @@ export class Take implements Operator {
         change.node.row,
         maxBound,
       );
-      this.#output.push(change);
+      this.#output.push(change, this);
     };
 
     // The bounds row was changed.
@@ -432,7 +435,7 @@ export class Take implements Operator {
       // The new row is the new bound.
       if (newCmp === 0) {
         // no need to update the state since we are keeping the bounds
-        this.#output.push(change);
+        this.#output.push(change, this);
         return;
       }
 
@@ -465,7 +468,7 @@ export class Take implements Operator {
           beforeBoundNode.row,
           maxBound,
         );
-        this.#output.push(change);
+        this.#output.push(change, this);
         return;
       }
 
@@ -499,15 +502,21 @@ export class Take implements Operator {
         maxBound,
       );
       this.#withRowHiddenFromFetch(newBoundNode.row, () => {
-        this.#output.push({
-          type: 'remove',
-          node: change.oldNode,
-        });
+        this.#output.push(
+          {
+            type: 'remove',
+            node: change.oldNode,
+          },
+          this,
+        );
       });
-      this.#output.push({
-        type: 'add',
-        node: newBoundNode,
-      });
+      this.#output.push(
+        {
+          type: 'add',
+          node: newBoundNode,
+        },
+        this,
+      );
       return;
     }
 
@@ -542,15 +551,21 @@ export class Take implements Operator {
         maxBound,
       );
       this.#withRowHiddenFromFetch(change.node.row, () => {
-        this.#output.push({
-          type: 'remove',
-          node: oldBoundNode,
-        });
+        this.#output.push(
+          {
+            type: 'remove',
+            node: oldBoundNode,
+          },
+          this,
+        );
       });
-      this.#output.push({
-        type: 'add',
-        node: change.node,
-      });
+      this.#output.push(
+        {
+          type: 'add',
+          node: change.node,
+        },
+        this,
+      );
 
       return;
     }
@@ -560,7 +575,7 @@ export class Take implements Operator {
 
       // Both old and new inside of bounds
       if (newCmp < 0) {
-        this.#output.push(change);
+        this.#output.push(change, this);
         return;
       }
 
@@ -588,20 +603,26 @@ export class Take implements Operator {
         return;
       }
 
-      this.#output.push({
-        type: 'remove',
-        node: change.oldNode,
-      });
+      this.#output.push(
+        {
+          type: 'remove',
+          node: change.oldNode,
+        },
+        this,
+      );
       this.#setTakeState(
         takeStateKey,
         takeState.size,
         afterBoundNode.row,
         maxBound,
       );
-      this.#output.push({
-        type: 'add',
-        node: afterBoundNode,
-      });
+      this.#output.push(
+        {
+          type: 'add',
+          node: afterBoundNode,
+        },
+        this,
+      );
       return;
     }
 
