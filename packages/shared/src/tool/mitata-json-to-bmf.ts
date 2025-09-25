@@ -1,9 +1,10 @@
+/* eslint-disable no-console */
 // Convert mitata JSON output (without samples) to Bencher Metric Format (BMF)
 
 // BMF - Bencher Metric Format
 type BMFMetric = {
   [key: string]: {
-    latency: {
+    throughput: {
       value: number;
       // eslint-disable-next-line @typescript-eslint/naming-convention
       lower_value?: number;
@@ -56,13 +57,16 @@ function convertMitataJsonToBMF(mitataOutput: MitataJsonOutput): BMFMetric {
     }
 
     if (stats) {
+      // Convert from nanoseconds to operations per second
+      // throughput = 1e9 / latency_in_nanoseconds
+      // Note: min latency → max throughput, max latency → min throughput
       bmf[name] = {
-        latency: {
-          value: stats.avg,
+        throughput: {
+          value: 1e9 / stats.avg,
           // eslint-disable-next-line @typescript-eslint/naming-convention
-          lower_value: stats.min,
+          lower_value: 1e9 / stats.max, // max latency = min throughput
           // eslint-disable-next-line @typescript-eslint/naming-convention
-          upper_value: stats.max,
+          upper_value: 1e9 / stats.min, // min latency = max throughput
         },
       };
     }
@@ -80,6 +84,15 @@ async function main() {
     }
     const content = Buffer.concat(chunks).toString('utf-8');
 
+    // Debug: Log the raw input received
+    if (process.env.DEBUG_MITATA_CONVERTER) {
+      console.error(`[DEBUG] Raw input (${content.length} bytes):`);
+      console.error(content.substring(0, 500));
+      if (content.length > 500) {
+        console.error('... (truncated)');
+      }
+    }
+
     // Split content by lines and find JSON objects
     // Mitata outputs complete JSON objects, so we can split by lines and look for objects
     const lines = content.split('\n');
@@ -93,10 +106,17 @@ async function main() {
           if (parsed.benchmarks) {
             allBenchmarks.push(...parsed.benchmarks);
           }
-        } catch {
-          // Skip invalid JSON lines
+        } catch (e) {
+          // Log parse errors when debugging
+          if (process.env.DEBUG_MITATA_CONVERTER) {
+            console.error(`[DEBUG] Failed to parse line ${i}: ${e}`);
+          }
         }
       }
+    }
+
+    if (process.env.DEBUG_MITATA_CONVERTER) {
+      console.error(`[DEBUG] Found ${allBenchmarks.length} benchmarks`);
     }
 
     if (allBenchmarks.length === 0) {
