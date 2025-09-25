@@ -1,5 +1,5 @@
+import {type Row, type Transaction} from '@rocicorp/zero';
 import {schema, type Schema} from '../shared/schema.ts';
-import {type Transaction, type Row} from '@rocicorp/zero';
 
 export async function sendEmail({
   tx,
@@ -29,6 +29,7 @@ export async function sendEmail({
   const idempotencyKey = `${tx.clientID}:${tx.mutationID}:${email}`;
 
   if (!apiKey || !transactionalId) {
+    // eslint-disable-next-line no-console
     console.log(
       'Missing LOOPS_EMAIL_API_KEY or LOOPS_TRANSACTIONAL_ID Skipping Email',
     );

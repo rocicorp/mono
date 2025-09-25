@@ -10,6 +10,7 @@ export async function postToDiscord({
   const content = `**${title}**\n${message}\n<${link}>`;
   const url = process.env.DISCORD_WEBHOOK_URL;
   if (!url) {
+    // eslint-disable-next-line no-console
     console.log('No discord URL, skipping posting message', content);
     return;
   }
@@ -24,6 +25,7 @@ export async function postToDiscord({
     });
 
     if (Math.floor(response.status / 100) !== 2) {
+      // eslint-disable-next-line no-console
       console.error(
         'Failed to post to Discord:',
         response,
@@ -31,6 +33,7 @@ export async function postToDiscord({
       );
     }
   } catch (e) {
+    // eslint-disable-next-line no-console
     console.error('Failed to post to Discord:', e);
   }
 }
