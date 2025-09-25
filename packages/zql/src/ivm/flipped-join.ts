@@ -114,6 +114,7 @@ export class FlippedJoin implements Input {
   // algorithm should be used:  For each child node, fetch all parent nodes
   // eagerly and then sort using quicksort.
   *fetch(req: FetchRequest): Stream<Node> {
+    console.log('FETCH REQUEST', req);
     const childNodes = [...this.#child.fetch({})];
     // FlippedJoin's split-push change overlay logic is largely
     // the same as Join's with the exception of remove.  For remove,

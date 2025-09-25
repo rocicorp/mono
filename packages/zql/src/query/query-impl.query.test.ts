@@ -1717,6 +1717,51 @@ test("flipped exists, or'ed", () => {
   expect(view.data[0]?.id).toBe('0001');
 });
 
+test.only('what is actually fetched?', async () => {
+  const queryDelegate = new QueryDelegateImpl();
+  const issueSource = must(queryDelegate.getSource('issue'));
+  const commentSource = must(queryDelegate.getSource('comment'));
+  const userSource = must(queryDelegate.getSource('user'));
+
+  userSource.push({
+    type: 'add',
+    row: {
+      id: '0001',
+      name: 'Alice',
+      metadata: {login: 'alicegh', registrar: 'github'},
+    },
+  });
+  commentSource.push({
+    type: 'add',
+    row: {
+      id: 'c1',
+      issueId: '0001',
+      authorId: '0001',
+      text: 'not a bug',
+      createdAt: 1,
+    },
+  });
+
+  issueSource.push({
+    type: 'add',
+    row: {
+      id: '0001',
+      title: 'issue 1',
+      description: 'description 1',
+      closed: false,
+      ownerId: '0001',
+      createdAt: 10,
+    },
+  });
+
+  const data = await newQuery(queryDelegate, schema, 'issue')
+    .whereExists('comments', {flip: true})
+    .whereExists('owner', {flip: true})
+    .run();
+
+  expect(data).toEqual([]);
+});
+
 test('broken flipped exists', async () => {
   const queryDelegate = new QueryDelegateImpl();
   const commentSource = must(queryDelegate.getSource('comment'));

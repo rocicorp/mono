@@ -250,6 +250,7 @@ export class MemorySource implements Source {
   }
 
   *#fetch(req: FetchRequest, from: Connection): Stream<Node> {
+    console.log('TABLE SOURCE FETCH', {req, table: this.#tableName});
     const callingConnectionIndex = this.#connections.indexOf(from);
     assert(callingConnectionIndex !== -1, 'Output not found');
     const conn = this.#connections[callingConnectionIndex];
