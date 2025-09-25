@@ -112,16 +112,8 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       [
-        {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
-          ""pKeySet","i3","i3",": true,
-        },
-        {
-          ""pKeySet","o1","i1",": true,
-          ""pKeySet","o2","i2",": true,
-          ""pKeySet","o2","i3",": true,
-        },
+        {},
+        {},
       ]
     `);
     expect(output).toMatchInlineSnapshot(`
@@ -203,14 +195,8 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       [
-        {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
-        },
-        {
-          ""pKeySet","o1","i1",": true,
-          ""pKeySet","o2","i2",": true,
-        },
+        {},
+        {},
       ]
     `);
     expect(output).toMatchInlineSnapshot(`
@@ -292,14 +278,8 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       [
-        {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
-        },
-        {
-          ""pKeySet","o1","i1",": true,
-          ""pKeySet","o2","i2",": true,
-        },
+        {},
+        {},
       ]
     `);
     expect(output).toMatchInlineSnapshot(`
@@ -381,14 +361,8 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       [
-        {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
-        },
-        {
-          ""pKeySet","o1","i1",": true,
-          ""pKeySet","o2","i2",": true,
-        },
+        {},
+        {},
       ]
     `);
     expect(output).toMatchInlineSnapshot(`
@@ -470,14 +444,8 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     `);
     expect(storage).toMatchInlineSnapshot(`
       [
-        {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
-        },
-        {
-          ""pKeySet","o1","i1",": true,
-          ""pKeySet","o2","i2",": true,
-        },
+        {},
+        {},
       ]
     `);
     expect(output).toMatchInlineSnapshot(`
@@ -579,14 +547,8 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
       `);
       expect(storage).toMatchInlineSnapshot(`
         [
-          {
-            ""pKeySet","i1","i1",": true,
-            ""pKeySet","i2","i2",": true,
-          },
-          {
-            ""pKeySet","o1","i1",": true,
-            ""pKeySet","o2","i2",": true,
-          },
+          {},
+          {},
         ]
       `);
       expect(output).toMatchInlineSnapshot(`
@@ -664,14 +626,8 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
       `);
       expect(storage).toMatchInlineSnapshot(`
         [
-          {
-            ""pKeySet","i1","i1",": true,
-            ""pKeySet","i2","i2",": true,
-          },
-          {
-            ""pKeySet","o1","i1",": true,
-            ""pKeySet","o2","i2",": true,
-          },
+          {},
+          {},
         ]
       `);
       expect(output).toMatchInlineSnapshot(`
@@ -758,14 +714,8 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
       `);
       expect(storage).toMatchInlineSnapshot(`
         [
-          {
-            ""pKeySet","i1","i1",": true,
-            ""pKeySet","i2","i2",": true,
-          },
-          {
-            ""pKeySet","o1","i1",": true,
-            ""pKeySet","o2","i2",": true,
-          },
+          {},
+          {},
         ]
       `);
       expect(output).toMatchInlineSnapshot(`
