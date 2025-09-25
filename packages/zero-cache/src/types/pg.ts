@@ -307,9 +307,22 @@ export function pgClient(
   // so that users can override this if desired.
   options.connection = {
     ...options.connection,
-    ['statement_timeout']: process.env['PGSTATEMENT_TIMEOUT']
-      ? parseInt(process.env['PGSTATEMENT_TIMEOUT'])
-      : 0,
+    // The connection options are passed as-is to postgres in the
+    // StartupMessage:
+    // https://github.com/porsager/postgres/blob/32feb259a3c9abffab761bd1758b3168d9e0cebc/deno/src/connection.js#L986
+    //
+    // so the type defined in
+    // https://github.com/porsager/postgres/blob/32feb259a3c9abffab761bd1758b3168d9e0cebc/types/index.d.ts#L335
+    //
+    // is more restrictive than it needs to be; Postgres will accept
+    // strings like "5min" or "0s".
+    //
+    // In particular, setting the value to the number 0 will result in
+    // the setting potentially being overridden by a user-level
+    // statement_timeout. Setting it to "0s", on the other hand, will override
+    // user and db level settings as desired.
+    ['statement_timeout']: (process.env['PGSTATEMENT_TIMEOUT'] ??
+      '0s') as unknown as number,
   };
   return postgres(connectionURI, {
     ...postgresTypeConfig(jsonAsString),

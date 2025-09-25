@@ -763,10 +763,7 @@ type ReplicacheWithPopulate = ReplicachePerfTest<PopulateMutatorDefs>;
 
 async function populate(
   tx: WriteTransaction,
-  {
-    numKeys,
-    randomValues: randomValues,
-  }: {numKeys: number; randomValues: TestDataObject[]},
+  {numKeys, randomValues}: {numKeys: number; randomValues: TestDataObject[]},
 ) {
   for (let i = 0; i < numKeys; i++) {
     await tx.set(`key${i}`, randomValues[i]);
@@ -787,7 +784,7 @@ function makeRepWithPopulate<MD extends PopulateMutatorDefs>(
 ) {
   return makeRep({
     ...options,
-    mutators: {...(options.mutators ?? {}), populate},
+    mutators: {...options.mutators, populate},
   });
 }
 

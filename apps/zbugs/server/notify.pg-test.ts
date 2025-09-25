@@ -1,20 +1,15 @@
-import {describe, it, expect, beforeEach} from 'vitest';
-import {type Schema} from '../shared/schema.ts';
-import {gatherRecipients} from './notify.ts';
 import type {ServerTransaction} from '@rocicorp/zero';
 import type postgres from 'postgres';
-import {
-  testDBs,
-  getConnectionURI,
-} from '../../../packages/zero-cache/src/test/db.ts';
+import {beforeEach, describe, expect, it} from 'vitest';
+import {testDBs} from '../../../packages/zero-cache/src/test/db.ts';
+import {type Schema} from '../shared/schema.ts';
+import {gatherRecipients} from './notify.ts';
 
 describe('notify', () => {
   let db: postgres.Sql;
-  let dbURI: string;
 
   beforeEach(async () => {
     db = await testDBs.create('notify_test');
-    dbURI = getConnectionURI(db);
 
     // Set up test tables
     await db.unsafe(`

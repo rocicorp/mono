@@ -1,5 +1,4 @@
 import {defineConfig, devices} from '@playwright/test';
-import {time} from 'console';
 
 /**
  * Read environment variables from file.

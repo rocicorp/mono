@@ -3,12 +3,15 @@ import {getSignedUrl} from '@aws-sdk/s3-request-presigner';
 import {nanoid} from 'nanoid';
 
 if (!process.env.AWS_REGION) {
+  // eslint-disable-next-line no-console -- Configuration warning in demo app
   console.warn('AWS_REGION is not set');
 }
 if (!process.env.AWS_ACCESS_KEY_ID) {
+  // eslint-disable-next-line no-console -- Configuration warning in demo app
   console.warn('AWS_ACCESS_KEY_ID is not set');
 }
 if (!process.env.AWS_SECRET_ACCESS_KEY) {
+  // eslint-disable-next-line no-console -- Configuration warning in demo app
   console.warn('AWS_SECRET_ACCESS_KEY is not set');
 }
 

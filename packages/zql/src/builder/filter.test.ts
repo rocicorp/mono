@@ -111,6 +111,7 @@ test('basics', () => {
         };
         const predicate = createPredicate(condition);
         const jsOp = {'=': '===', '!=': '!=='}[op] ?? op;
+        // eslint-disable-next-line no-eval -- legitimate use for dynamic test comparison
         expect(predicate({foo: a})).toBe(eval(`a ${jsOp} b`));
       },
     ),

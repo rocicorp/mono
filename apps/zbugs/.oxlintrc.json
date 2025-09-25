@@ -1,0 +1,9 @@
+{
+  "extends": ["../../.oxlintrc.json"],
+  "plugins": ["react"],
+  "env": {
+    "builtin": true,
+    "browser": true
+  },
+  "ignorePatterns": ["dist", "node_modules"]
+}

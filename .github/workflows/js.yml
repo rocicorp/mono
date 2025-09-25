@@ -23,9 +23,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run check-format
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - run: bun run check-format
 
   lint:
     name: Lint
@@ -38,9 +40,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run lint
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - run: bun run lint
 
   check-types:
     name: Check Types
@@ -54,7 +58,6 @@ jobs:
         with:
           node-version: 22.x
           cache: 'npm'
-
       - run: npm ci
       - run: npm run check-types
 
@@ -73,7 +76,6 @@ jobs:
         with:
           node-version: 22.x
           cache: 'npm'
-
       - run: npm ci
       - name: Install Playwright
         run: npx playwright install chromium firefox webkit --with-deps
@@ -95,7 +97,6 @@ jobs:
         with:
           node-version: 22.x
           cache: 'npm'
-
       - run: npm ci
       - name: Run tests
         run: |

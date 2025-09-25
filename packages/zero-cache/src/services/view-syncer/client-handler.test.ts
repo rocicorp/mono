@@ -725,7 +725,7 @@ describe('view-syncer/client-handler', () => {
       let result;
       try {
         result = ensureSafeJSON(input);
-      } catch (e) {
+      } catch {
         // expected === undefined
       }
       expect(result).toEqual(expected);

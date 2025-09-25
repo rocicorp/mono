@@ -210,7 +210,6 @@ export interface ReplicacheImplOptions {
   zero?: ZeroOption | undefined;
 }
 
-// eslint-disable-next-line @typescript-eslint/ban-types
 export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   /** The URL to use when doing a pull request. */
   pullURL: string;
@@ -1318,8 +1317,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
     if ((delta === 1 && counter === 1) || counter === 0) {
       const syncing = counter > 0;
       // Run in a new microtask.
-      // eslint-disable-next-line @typescript-eslint/no-floating-promises
-      Promise.resolve().then(() => this.onSync?.(syncing));
+      void Promise.resolve().then(() => this.onSync?.(syncing));
     }
   }
 
@@ -1472,6 +1470,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         return {
           client: result,
           server: trackingData.serverPromise,
+          // eslint-disable-next-line no-thenable
           then: (onFulfilled, onRejected) => {
             this.#lc.warn?.(
               'Awaiting the mutator result directly is being deprecated.' +

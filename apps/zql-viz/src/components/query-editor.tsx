@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type {FC} from 'react';
-import {useRef} from 'react';
 import Editor, {type Monaco} from '@monaco-editor/react';
 import {Play} from 'lucide-react';
 import type {editor} from 'monaco-editor';
+import type {FC} from 'react';
+import {useRef} from 'react';
 import zeroClientTypes from '../../bundled-types/zero-client.d.ts?raw';
 
 interface QueryEditorProps {
@@ -20,7 +20,7 @@ export const QueryEditor: FC<QueryEditorProps> = ({
   const monacoRef = useRef<any>(null);
   const editorRef = useRef<any>(null);
 
-  const handleEditorDidMount = async (
+  const handleEditorDidMount = (
     editor: editor.IStandaloneCodeEditor,
     monaco: Monaco,
   ) => {

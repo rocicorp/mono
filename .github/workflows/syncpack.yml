@@ -21,6 +21,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
-          cache: 'npm'
-      - run: npm ci
-      - run: npx syncpack list-mismatches
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: bun install
+      - run: bunx syncpack list-mismatches

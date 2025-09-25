@@ -73,7 +73,7 @@ test('loadtest', async ({page, browser, context}) => {
     if (await onboardingButton.isVisible()) {
       await onboardingButton.click();
     }
-  } catch (error) {
+  } catch {
     console.log('No onboarding modal present, continuing...');
   }
 

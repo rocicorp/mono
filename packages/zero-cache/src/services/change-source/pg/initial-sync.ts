@@ -397,7 +397,10 @@ async function copy(
   const insertColumnList = insertColumns.map(c => id(c)).join(',');
 
   // (?,?,?,?,?)
-  const valuesSql = `(${new Array(insertColumns.length).fill('?').join(',')})`;
+  const valuesSql =
+    insertColumns.length > 0
+      ? `(${'?,'.repeat(insertColumns.length - 1)}?)`
+      : '()';
   const insertSql = /*sql*/ `
     INSERT INTO "${tableName}" (${insertColumnList}) VALUES ${valuesSql}`;
   const insertStmt = to.prepare(insertSql);

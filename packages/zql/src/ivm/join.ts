@@ -3,7 +3,13 @@ import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {Change, ChildChange} from './change.ts';
-import {compareValues, valuesEqual, type Node} from './data.ts';
+import type {Node} from './data.ts';
+import {
+  generateWithOverlay,
+  isJoinMatch,
+  rowEqualsForCompoundKey,
+  type JoinChangeOverlay,
+} from './join-utils.ts';
 import {
   throwOutput,
   type FetchRequest,
@@ -30,11 +36,6 @@ type Args = {
   system: System;
 };
 
-type ChildChangeOverlay = {
-  change: Change;
-  position: Row | undefined;
-};
-
 /**
  * The Join operator joins the output from two upstream inputs. Zero's join
  * is a little different from SQL's join in that we output hierarchical data,
@@ -56,7 +57,7 @@ export class Join implements Input {
 
   #output: Output = throwOutput;
 
-  #inprogressChildChange: ChildChangeOverlay | undefined;
+  #inprogressChildChange: JoinChangeOverlay | undefined;
 
   constructor({
     parent,
@@ -257,106 +258,6 @@ export class Join implements Input {
     }
   }
 
-  *#generateChildStreamWithOverlay(
-    stream: Stream<Node>,
-    overlay: Change,
-  ): Stream<Node> {
-    let applied = false;
-    let editOldApplied = false;
-    let editNewApplied = false;
-    for (const child of stream) {
-      let yieldChild = true;
-      if (!applied) {
-        switch (overlay.type) {
-          case 'add': {
-            if (
-              this.#child
-                .getSchema()
-                .compareRows(overlay.node.row, child.row) === 0
-            ) {
-              applied = true;
-              yieldChild = false;
-            }
-            break;
-          }
-          case 'remove': {
-            if (
-              this.#child.getSchema().compareRows(overlay.node.row, child.row) <
-              0
-            ) {
-              applied = true;
-              yield overlay.node;
-            }
-            break;
-          }
-          case 'edit': {
-            if (
-              this.#child
-                .getSchema()
-                .compareRows(overlay.oldNode.row, child.row) < 0
-            ) {
-              editOldApplied = true;
-              if (editNewApplied) {
-                applied = true;
-              }
-              yield overlay.oldNode;
-            }
-            if (
-              this.#child
-                .getSchema()
-                .compareRows(overlay.node.row, child.row) === 0
-            ) {
-              editNewApplied = true;
-              if (editOldApplied) {
-                applied = true;
-              }
-              yieldChild = false;
-            }
-            break;
-          }
-          case 'child': {
-            if (
-              this.#child
-                .getSchema()
-                .compareRows(overlay.node.row, child.row) === 0
-            ) {
-              applied = true;
-              yield {
-                row: child.row,
-                relationships: {
-                  ...child.relationships,
-                  [overlay.child.relationshipName]: () =>
-                    this.#generateChildStreamWithOverlay(
-                      child.relationships[overlay.child.relationshipName](),
-                      overlay.child.change,
-                    ),
-                },
-              };
-              yieldChild = false;
-            }
-            break;
-          }
-        }
-      }
-      if (yieldChild) {
-        yield child;
-      }
-    }
-    if (!applied) {
-      if (overlay.type === 'remove') {
-        applied = true;
-        yield overlay.node;
-      } else if (overlay.type === 'edit') {
-        assert(editNewApplied);
-        editOldApplied = true;
-        applied = true;
-        yield overlay.oldNode;
-      }
-    }
-
-    assert(applied);
-  }
-
   #processParentNode(
     parentNodeRow: Row,
     parentNodeRelations: Record<string, () => Stream<Node>>,
@@ -412,9 +313,11 @@ export class Join implements Input {
 
       if (
         this.#inprogressChildChange &&
-        this.#isJoinMatch(
+        isJoinMatch(
           parentNodeRow,
+          this.#parentKey,
           this.#inprogressChildChange.change.node.row,
+          this.#childKey,
         ) &&
         this.#inprogressChildChange.position &&
         this.#schema.compareRows(
@@ -422,9 +325,10 @@ export class Join implements Input {
           this.#inprogressChildChange.position,
         ) > 0
       ) {
-        return this.#generateChildStreamWithOverlay(
+        return generateWithOverlay(
           stream,
           this.#inprogressChildChange.change,
+          this.#child.getSchema(),
         );
       }
       return stream;
@@ -437,15 +341,6 @@ export class Join implements Input {
         [this.#relationshipName]: childStream,
       },
     };
-  }
-
-  #isJoinMatch(parent: Row, child: Row) {
-    for (let i = 0; i < this.#parentKey.length; i++) {
-      if (!valuesEqual(parent[this.#parentKey[i]], child[this.#childKey[i]])) {
-        return false;
-      }
-    }
-    return true;
   }
 }
 
@@ -476,13 +371,4 @@ export function makeStorageKey(
     values.push(row[key]);
   }
   return makeStorageKeyForValues(values);
-}
-
-function rowEqualsForCompoundKey(a: Row, b: Row, key: CompoundKey): boolean {
-  for (let i = 0; i < key.length; i++) {
-    if (compareValues(a[key[i]], b[key[i]]) !== 0) {
-      return false;
-    }
-  }
-  return true;
 }

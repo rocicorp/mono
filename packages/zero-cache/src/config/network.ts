@@ -23,8 +23,7 @@ export function getPreferredIp(
   };
 
   const sorted = Object.entries(interfaces)
-    .map(([name, infos]) => (infos ?? []).map(info => ({...info, name})))
-    .flat()
+    .flatMap(([name, infos]) => (infos ?? []).map(info => ({...info, name})))
     .sort((a, b) => {
       const ap =
         (isIPv6(a.address) && isPrivate(a.address)) || isReserved(a.address);
