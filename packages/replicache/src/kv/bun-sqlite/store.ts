@@ -1,8 +1,7 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-ignore - Bun modules are available at runtime in Bun environments
 import {Database, type Statement} from 'bun:sqlite';
-// @ts-ignore - fs module is available at runtime in Bun environments
-import {unlinkSync, existsSync} from 'fs';
+import {unlinkSync, existsSync} from 'node:fs';
 import type {
   PreparedStatement,
   SQLiteDatabase,
@@ -29,36 +28,15 @@ class BunSQLitePreparedStatement implements PreparedStatement {
     this.#statement = statement;
   }
 
-  // eslint-disable-next-line require-await -- Required by PreparedStatement interface
+  // eslint-disable-next-line require-await
   async firstValue(params: string[]): Promise<string | undefined> {
-    return Promise.resolve().then(() => {
-      const row = this.#statement.get(params);
-
-      if (row === null || row === undefined) {
-        return undefined;
-      }
-
-      // Handle different row structures based on the query
-      // For has() queries: SELECT 1 FROM entry WHERE key = ? LIMIT 1
-      // Returns: {1: 1} when key exists
-      if (typeof row === 'object' && row !== null && '1' in row) {
-        return '1';
-      }
-
-      // For get() queries: SELECT value FROM entry WHERE key = ?
-      // Returns: {value: "json_string"} when key exists
-      if (typeof row === 'object' && row !== null && 'value' in row) {
-        return (row as {value: string}).value;
-      }
-
-      return undefined;
-    });
+    const rows = this.#statement.values(params) as string[][];
+    return rows[0]?.[0];
   }
 
+  // eslint-disable-next-line require-await
   async exec(params: string[]): Promise<void> {
-    await Promise.resolve().then(() => {
-      this.#statement.run(params);
-    });
+    this.#statement.run(params);
   }
 }
 
@@ -82,6 +60,7 @@ class BunSQLiteDatabase implements SQLiteDatabase {
   destroy(): void {
     if (
       (this.#db as {destroy?: () => void})?.destroy &&
+      // bun:sqlite doesn't have native "destroy" - this is to support our mock tests
       process.env.NODE_ENV === 'test'
     ) {
       (this.#db as unknown as {destroy(): void}).destroy();

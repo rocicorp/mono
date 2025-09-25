@@ -46,23 +46,23 @@ vi.mock('bun:sqlite', () => ({
             );
 
           return {
-            get: (params: unknown[] = []) => {
+            values: (params: string[] = []) => {
               if (isHasQuery) {
                 // For has() queries: SELECT 1 FROM entry WHERE key = ? LIMIT 1
                 const result = stmt.all(...params);
-                // Return {1: 1} if key exists, null if not
-                return result.length > 0 ? {1: 1} : null;
+                // Return array of arrays format: [[1]] if key exists, [] if not
+                return result.length > 0 ? [[1]] : [];
               } else if (isGetQuery) {
                 // For get() queries: SELECT value FROM entry WHERE key = ?
                 const result = stmt.all(...params);
-                // Return {value: "json_string"} if key exists, null if not
+                // Return array of arrays format: [["json_string"]] if key exists, [] if not
                 return result.length > 0
-                  ? {value: (result[0] as {value: string}).value}
-                  : null;
+                  ? [[(result[0] as {value: string}).value]]
+                  : [];
               }
               // For other queries, just run them
               stmt.run(...params);
-              return null;
+              return [];
             },
             run: (params: unknown[] = []) => {
               if (isHasQuery || isGetQuery) {
