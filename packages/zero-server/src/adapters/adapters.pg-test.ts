@@ -90,7 +90,7 @@ describe('node-postgres', () => {
 
     const zql = zeroNodePg(schema, nodePgClient);
 
-    const result = await zql.transaction(
+    const tx = await zql.transaction(
       async tx => {
         const result = await tx.query.user.where('id', '=', newUser.id);
         return result;
@@ -102,6 +102,8 @@ describe('node-postgres', () => {
         mutationID: 0,
       },
     );
+
+    const result = await tx.run();
 
     expect(result[0]?.name).toEqual(newUser.name);
     expect(result[0]?.id).toEqual(newUser.id);
@@ -164,7 +166,7 @@ describe('postgres-js', () => {
 
     const zql = zeroPostgresJS(schema, postgresJsClient);
 
-    const result = await zql.transaction(
+    const tx = await zql.transaction(
       async tx => {
         const result = await tx.query.user.where('id', '=', newUser.id);
         return result;
@@ -176,6 +178,8 @@ describe('postgres-js', () => {
         mutationID: 0,
       },
     );
+
+    const result = await tx.run();
 
     expect(result[0]?.name).toEqual(newUser.name);
     expect(result[0]?.id).toEqual(newUser.id);
@@ -276,7 +280,7 @@ describe('drizzle-node-postgres', () => {
 
     const zql = zeroDrizzleNodePg(schema, drizzleNodePgClient);
 
-    const result = await zql.transaction(
+    const tx = await zql.transaction(
       async tx => {
         const result = await tx.query.user.where('id', '=', newUser.id);
         return result;
@@ -288,6 +292,8 @@ describe('drizzle-node-postgres', () => {
         mutationID: 0,
       },
     );
+
+    const result = await tx.run();
 
     expect(result[0]?.name).toEqual(newUser.name);
     expect(result[0]?.id).toEqual(newUser.id);
@@ -361,7 +367,7 @@ describe('drizzle-postgres-js', () => {
 
     const zql = zeroDrizzlePostgresJS(schema, drizzlePostgresJsClient);
 
-    const result = await zql.transaction(
+    const tx = await zql.transaction(
       async tx => {
         const result = await tx.query.user.where('id', '=', newUser.id);
         return result;
@@ -373,6 +379,8 @@ describe('drizzle-postgres-js', () => {
         mutationID: 0,
       },
     );
+
+    const result = await tx.run();
 
     expect(result[0]?.name).toEqual(newUser.name);
     expect(result[0]?.id).toEqual(newUser.id);
