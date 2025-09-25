@@ -3,6 +3,8 @@
     // Disable unsafe optional chaining - many legitimate patterns in codebase
     "no-unsafe-optional-chaining": "off",
 
+    "no-console": "error",
+
     // Handle unused variables consistently with ESLint config
     "no-unused-vars": [
       "error",
