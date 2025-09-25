@@ -27,7 +27,7 @@ import {makeComparator, type Node} from '../../zql/src/ivm/data.ts';
 import {
   generateWithOverlay,
   generateWithStart,
-  genPush,
+  genPushAndWriteWithSplitEdit,
   type Connection,
   type Overlay,
 } from '../../zql/src/ivm/memory-source.ts';
@@ -82,7 +82,6 @@ export class TableSource implements Source {
   readonly #lc: LogContext;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
-  #splitEditOverlay?: Overlay | undefined;
 
   constructor(
     logContext: LogContext,
@@ -292,7 +291,6 @@ export class TableSource implements Source {
           ),
           req.constraint,
           this.#overlay,
-          this.#splitEditOverlay,
           callingConnectionIndex,
           comparator,
           connection.filters?.predicate,
@@ -347,8 +345,7 @@ export class TableSource implements Source {
         ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
       )?.exists === 1;
     const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
-    const setSplitEditOverlay = (o: Overlay | undefined) =>
-      (this.#splitEditOverlay = o);
+    const writeChange = (c: SourceChange) => this.#writeChange(c);
 
     if (change.type === 'set') {
       const existing = this.#stmts.getExisting.get<Row | undefined>(
@@ -368,16 +365,16 @@ export class TableSource implements Source {
       }
     }
 
-    for (const x of genPush(
+    yield* genPushAndWriteWithSplitEdit(
+      this.#connections,
       change,
       exists,
-      this.#connections.entries(),
       setOverlay,
-      setSplitEditOverlay,
-    )) {
-      yield x;
-    }
+      writeChange,
+    );
+  }
 
+  #writeChange(change: SourceChange) {
     switch (change.type) {
       case 'add':
         this.#stmts.insert.run(
