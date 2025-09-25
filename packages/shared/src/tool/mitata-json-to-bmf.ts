@@ -4,7 +4,7 @@
 // BMF - Bencher Metric Format
 type BMFMetric = {
   [key: string]: {
-    latency: {
+    throughput: {
       value: number;
       // eslint-disable-next-line @typescript-eslint/naming-convention
       lower_value?: number;
@@ -57,13 +57,16 @@ function convertMitataJsonToBMF(mitataOutput: MitataJsonOutput): BMFMetric {
     }
 
     if (stats) {
+      // Convert from nanoseconds to operations per second
+      // throughput = 1e9 / latency_in_nanoseconds
+      // Note: min latency → max throughput, max latency → min throughput
       bmf[name] = {
-        latency: {
-          value: stats.avg,
+        throughput: {
+          value: 1e9 / stats.avg,
           // eslint-disable-next-line @typescript-eslint/naming-convention
-          lower_value: stats.min,
+          lower_value: 1e9 / stats.max, // max latency = min throughput
           // eslint-disable-next-line @typescript-eslint/naming-convention
-          upper_value: stats.max,
+          upper_value: 1e9 / stats.min, // min latency = max throughput
         },
       };
     }

@@ -98,8 +98,8 @@ jobs:
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           --start-point main \
-          --threshold-measure latency \
+          --threshold-measure throughput \
           --threshold-test t_test \
-          --threshold-upper-boundary 1.1 \
+          --threshold-lower-boundary 0.95 \
           --threshold-max-sample-size 10 \
           --err
