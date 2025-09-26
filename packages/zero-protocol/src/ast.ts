@@ -359,7 +359,6 @@ function transformAST(ast: AST, transform: ASTTransform): Required<AST> {
                 hidden: r.hidden,
                 subquery: transformAST(r.subquery, transform),
                 system: r.system,
-                flip: r.flip,
               }) satisfies Required<CorrelatedSubquery>,
           ),
         )
