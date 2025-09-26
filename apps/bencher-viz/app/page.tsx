@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Sparklines, SparklinesLine, SparklinesSpots, SparklinesReferenceLine } from 'react-sparklines';
 
 interface SparklineData {
@@ -29,29 +29,45 @@ interface ApiResponse {
   };
 }
 
-export default function Home() {
+function HomeContent() {
   const router = useRouter();
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const searchParams = useSearchParams();
+
+  // Initialize state from URL parameters
+  const [search, setSearch] = useState(searchParams.get('search') || '');
+  const [debouncedSearch, setDebouncedSearch] = useState(searchParams.get('search') || '');
   const [sparklines, setSparklines] = useState<SparklineData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const [timeRange, setTimeRange] = useState(7); // days
+  const [timeRange, setTimeRange] = useState(parseInt(searchParams.get('days') || '7', 10));
   const [hoveredMetric, setHoveredMetric] = useState<SparklineData | null>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 
-  // Debounce search input
+  // Update URL when parameters change
+  const updateURL = useCallback((newSearch: string, newTimeRange: number) => {
+    const params = new URLSearchParams();
+    if (newSearch) {
+      params.set('search', newSearch);
+    }
+    params.set('days', newTimeRange.toString());
+
+    const newURL = params.toString() ? `?${params.toString()}` : '/';
+    router.push(newURL, { scroll: false });
+  }, [router]);
+
+  // Debounce search input and update URL
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search);
       setPage(1);
+      updateURL(search, timeRange);
       // Don't clear sparklines here - let the fetch handle it
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, timeRange, updateURL]);
 
   // Fetch data
   const fetchMetrics = useCallback(async (pageNum: number, searchTerm: string, append: boolean = false) => {
@@ -185,7 +201,11 @@ export default function Home() {
             {[7, 14, 30, 90].map(days => (
               <button
                 key={days}
-                onClick={() => setTimeRange(days)}
+                onClick={() => {
+                  setTimeRange(days);
+                  setPage(1);
+                  setSparklines([]);
+                }}
                 className={`px-3 py-1 text-sm rounded transition-colors ${
                   timeRange === days
                     ? 'bg-blue-500 text-white'
@@ -399,5 +419,17 @@ export default function Home() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-gray-500">Loading...</div>
+      </div>
+    }>
+      <HomeContent />
+    </Suspense>
   );
 }
