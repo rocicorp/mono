@@ -49,12 +49,13 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await postgresJsClient.end();
-
-  await nodePgClient.end();
-
+  // Ensure all node-postgres clients are closed before dropping the DB
   await nodePgPoolClient.release();
+  await nodePgClient.end();
   await nodePgPool.end();
+
+  // Drop the per-test database to avoid global teardown force-terminating connections
+  await testDBs.drop(postgresJsClient);
 });
 
 type UserStatus = 'active' | 'inactive';
