@@ -132,7 +132,6 @@ test('stable generation', () => {
                   "councilman",
                 ],
               },
-              "flip": false,
               "subquery": {
                 "alias": "zsubq_cleaner",
                 "orderBy": [
@@ -145,6 +144,7 @@ test('stable generation', () => {
                 "where": {
                   "conditions": [
                     {
+                      "flip": false,
                       "op": "EXISTS",
                       "related": {
                         "correlation": {
@@ -155,7 +155,6 @@ test('stable generation', () => {
                             "amendment",
                           ],
                         },
-                        "flip": false,
                         "subquery": {
                           "alias": "zsubq_cleaner",
                           "orderBy": [

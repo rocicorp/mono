@@ -35,8 +35,11 @@ suite('push one:many', () => {
   const ast: AST = {
     table: 'issue',
     orderBy: [['id', 'asc']],
-    related: [
-      {
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      flip: true,
+      related: {
         system: 'client',
         correlation: {parentField: ['id'], childField: ['issueID']},
         subquery: {
@@ -44,9 +47,8 @@ suite('push one:many', () => {
           alias: 'comments',
           orderBy: [['id', 'asc']],
         },
-        flip: true,
       },
-    ],
+    },
   } as const;
 
   const format: Format = {
@@ -1058,15 +1060,6 @@ suite('push one:many', () => {
             },
           ],
           [
-            ".comments:source(comment)",
-            "fetch",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-          [
             ":flipped-join(comments)",
             "push",
             {
@@ -1668,8 +1661,11 @@ suite('push many:one', () => {
   const ast: AST = {
     table: 'issue',
     orderBy: [['id', 'asc']],
-    related: [
-      {
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      flip: true,
+      related: {
         system: 'client',
         correlation: {parentField: ['ownerID'], childField: ['id']},
         subquery: {
@@ -1677,9 +1673,8 @@ suite('push many:one', () => {
           alias: 'owner',
           orderBy: [['id', 'asc']],
         },
-        flip: true,
       },
-    ],
+    },
   } as const;
 
   const format: Format = {
@@ -2313,16 +2308,22 @@ suite('push many:one', () => {
         ast: {
           table: 'user',
           orderBy: [['id', 'asc']],
-          related: [
-            {
+          where: {
+            type: 'correlatedSubquery',
+            op: 'EXISTS',
+            flip: true,
+            related: {
               system: 'client',
               correlation: {parentField: ['id'], childField: ['ownerID']},
               subquery: {
                 table: 'issue',
                 alias: 'issues',
                 orderBy: [['id', 'asc']],
-                related: [
-                  {
+                where: {
+                  type: 'correlatedSubquery',
+                  op: 'EXISTS',
+                  flip: true,
+                  related: {
                     system: 'client',
                     correlation: {parentField: ['id'], childField: ['issueID']},
                     subquery: {
@@ -2330,13 +2331,11 @@ suite('push many:one', () => {
                       alias: 'comments',
                       orderBy: [['id', 'asc']],
                     },
-                    flip: true,
                   },
-                ],
+                },
               },
-              flip: true,
             },
-          ],
+          },
         },
         format: {
           singular: false,
@@ -2936,16 +2935,22 @@ suite('push one:many:many', () => {
   const ast: AST = {
     table: 'issue',
     orderBy: [['id', 'asc']],
-    related: [
-      {
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      flip: true,
+      related: {
         system: 'client',
         correlation: {parentField: ['id'], childField: ['issueID']},
         subquery: {
           table: 'comment',
           alias: 'comments',
           orderBy: [['id', 'asc']],
-          related: [
-            {
+          where: {
+            type: 'correlatedSubquery',
+            op: 'EXISTS',
+            flip: true,
+            related: {
               system: 'client',
               correlation: {parentField: ['id'], childField: ['commentID']},
               subquery: {
@@ -2953,13 +2958,11 @@ suite('push one:many:many', () => {
                 alias: 'revisions',
                 orderBy: [['id', 'asc']],
               },
-              flip: true,
             },
-          ],
+          },
         },
-        flip: true,
       },
-    ],
+    },
   };
 
   const format: Format = {
@@ -3585,8 +3588,11 @@ suite('push one:many:one', () => {
   const ast: AST = {
     table: 'issue',
     orderBy: [['id', 'asc']],
-    related: [
-      {
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      flip: true,
+      related: {
         system: 'client',
         correlation: {parentField: ['id'], childField: ['issueID']},
         subquery: {
@@ -3596,8 +3602,11 @@ suite('push one:many:one', () => {
             ['issueID', 'asc'],
             ['labelID', 'asc'],
           ],
-          related: [
-            {
+          where: {
+            type: 'correlatedSubquery',
+            op: 'EXISTS',
+            flip: true,
+            related: {
               system: 'client',
               correlation: {
                 parentField: ['labelID'],
@@ -3608,13 +3617,11 @@ suite('push one:many:one', () => {
                 alias: 'labels',
                 orderBy: [['id', 'asc']],
               },
-              flip: true,
             },
-          ],
+          },
         },
-        flip: true,
       },
-    ],
+    },
   };
 
   const format: Format = {
@@ -4248,41 +4255,52 @@ describe('edit assignee', () => {
   const ast: AST = {
     table: 'issue',
     orderBy: [['issueID', 'asc']],
-    related: [
-      {
-        system: 'client',
-        correlation: {parentField: ['creatorID'], childField: ['userID']},
-        subquery: {
-          table: 'user',
-          alias: 'creator',
-          orderBy: [['userID', 'asc']],
+    where: {
+      type: 'and',
+      conditions: [
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          flip: true,
+          related: {
+            system: 'client',
+            correlation: {parentField: ['creatorID'], childField: ['userID']},
+            subquery: {
+              table: 'user',
+              alias: 'creator',
+              orderBy: [['userID', 'asc']],
+            },
+          },
         },
-        flip: true,
-      },
-      {
-        system: 'client',
-        correlation: {
-          parentField: ['assigneeID'],
-          childField: ['userID'],
+        {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          flip: true,
+          related: {
+            system: 'client',
+            correlation: {
+              parentField: ['assigneeID'],
+              childField: ['userID'],
+            },
+            subquery: {
+              table: 'user',
+              alias: 'assignee',
+              orderBy: [['userID', 'asc']],
+            },
+          },
         },
-        subquery: {
-          table: 'user',
-          alias: 'assignee',
-          orderBy: [['userID', 'asc']],
-        },
-        flip: true,
-      },
-    ],
+      ],
+    },
   };
 
   const format: Format = {
     singular: false,
     relationships: {
-      creator: {
+      creator_0: {
         singular: false,
         relationships: {},
       },
-      assignee: {
+      assignee_1: {
         singular: false,
         relationships: {},
       },
@@ -4320,15 +4338,8 @@ describe('edit assignee', () => {
     expect(data).toMatchInlineSnapshot(`
       [
         {
-          "assignee": [
-            {
-              "name": "user 1",
-              "userID": "u1",
-              Symbol(rc): 1,
-            },
-          ],
           "assigneeID": "u1",
-          "creator": [
+          "assignee_1": [
             {
               "name": "user 1",
               "userID": "u1",
@@ -4336,20 +4347,20 @@ describe('edit assignee', () => {
             },
           ],
           "creatorID": "u1",
+          "creator_0": [
+            {
+              "name": "user 1",
+              "userID": "u1",
+              Symbol(rc): 1,
+            },
+          ],
           "issueID": "i1",
           "text": "first issue",
           Symbol(rc): 1,
         },
         {
-          "assignee": [
-            {
-              "name": "user 2",
-              "userID": "u2",
-              Symbol(rc): 1,
-            },
-          ],
           "assigneeID": "u2",
-          "creator": [
+          "assignee_1": [
             {
               "name": "user 2",
               "userID": "u2",
@@ -4357,6 +4368,13 @@ describe('edit assignee', () => {
             },
           ],
           "creatorID": "u2",
+          "creator_0": [
+            {
+              "name": "user 2",
+              "userID": "u2",
+              Symbol(rc): 1,
+            },
+          ],
           "issueID": "i2",
           "text": "second issue",
           Symbol(rc): 1,
@@ -4380,7 +4398,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".creator:source(user)",
+          ".creator_0:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4389,7 +4407,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":flipped-join(creator)",
+          ":flipped-join(creator_0)",
           "push",
           {
             "row": {
@@ -4402,7 +4420,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".assignee:source(user)",
+          ".assignee_1:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4424,7 +4442,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".creator:source(user)",
+          ".creator_0:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4433,7 +4451,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":flipped-join(creator)",
+          ":flipped-join(creator_0)",
           "push",
           {
             "row": {
@@ -4446,7 +4464,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".assignee:source(user)",
+          ".assignee_1:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4455,7 +4473,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":flipped-join(assignee)",
+          ":flipped-join(assignee_1)",
           "push",
           {
             "row": {
@@ -4468,7 +4486,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".creator:source(user)",
+          ".creator_0:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4477,7 +4495,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".assignee:source(user)",
+          ".assignee_1:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4493,7 +4511,7 @@ describe('edit assignee', () => {
         {
           "node": {
             "relationships": {
-              "assignee": [
+              "assignee_1": [
                 {
                   "relationships": {},
                   "row": {
@@ -4502,7 +4520,7 @@ describe('edit assignee', () => {
                   },
                 },
               ],
-              "creator": [
+              "creator_0": [
                 {
                   "relationships": {},
                   "row": {
@@ -4552,37 +4570,48 @@ describe('edit assignee', () => {
     const localAst: AST = {
       table: 'issue',
       orderBy: [['issueID', 'asc']],
-      related: [
-        {
-          system: 'client',
-          correlation: {parentField: ['creatorID'], childField: ['userID']},
-          subquery: {
-            table: 'user',
-            alias: 'creator',
-            orderBy: [
-              ['userID', 'asc'],
-              ['id', 'asc'],
-            ],
+      where: {
+        type: 'and',
+        conditions: [
+          {
+            type: 'correlatedSubquery',
+            op: 'EXISTS',
+            flip: true,
+            related: {
+              system: 'client',
+              correlation: {parentField: ['creatorID'], childField: ['userID']},
+              subquery: {
+                table: 'user',
+                alias: 'creator',
+                orderBy: [
+                  ['userID', 'asc'],
+                  ['id', 'asc'],
+                ],
+              },
+            },
           },
-          flip: true,
-        },
-        {
-          system: 'client',
-          correlation: {
-            parentField: ['assigneeID'],
-            childField: ['userID'],
+          {
+            type: 'correlatedSubquery',
+            op: 'EXISTS',
+            flip: true,
+            related: {
+              system: 'client',
+              correlation: {
+                parentField: ['assigneeID'],
+                childField: ['userID'],
+              },
+              subquery: {
+                table: 'user',
+                alias: 'assignee',
+                orderBy: [
+                  ['userID', 'asc'],
+                  ['id', 'asc'],
+                ],
+              },
+            },
           },
-          subquery: {
-            table: 'user',
-            alias: 'assignee',
-            orderBy: [
-              ['userID', 'asc'],
-              ['id', 'asc'],
-            ],
-          },
-          flip: true,
-        },
-      ],
+        ],
+      },
     };
 
     const {log, data, actualStorage, pushes} = runPushTest({
@@ -4615,22 +4644,8 @@ describe('edit assignee', () => {
     expect(data).toMatchInlineSnapshot(`
       [
         {
-          "assignee": [
-            {
-              "id": 1,
-              "name": "user 1",
-              "userID": "u1",
-              Symbol(rc): 1,
-            },
-            {
-              "id": 1.5,
-              "name": "user 1.5",
-              "userID": "u1",
-              Symbol(rc): 1,
-            },
-          ],
           "assigneeID": "u1",
-          "creator": [
+          "assignee_1": [
             {
               "id": 1,
               "name": "user 1",
@@ -4645,21 +4660,27 @@ describe('edit assignee', () => {
             },
           ],
           "creatorID": "u1",
+          "creator_0": [
+            {
+              "id": 1,
+              "name": "user 1",
+              "userID": "u1",
+              Symbol(rc): 1,
+            },
+            {
+              "id": 1.5,
+              "name": "user 1.5",
+              "userID": "u1",
+              Symbol(rc): 1,
+            },
+          ],
           "issueID": "i1",
           "text": "first issue",
           Symbol(rc): 1,
         },
         {
-          "assignee": [
-            {
-              "id": 2,
-              "name": "user 2",
-              "userID": "u2",
-              Symbol(rc): 1,
-            },
-          ],
           "assigneeID": "u2",
-          "creator": [
+          "assignee_1": [
             {
               "id": 2,
               "name": "user 2",
@@ -4668,6 +4689,14 @@ describe('edit assignee', () => {
             },
           ],
           "creatorID": "u2",
+          "creator_0": [
+            {
+              "id": 2,
+              "name": "user 2",
+              "userID": "u2",
+              Symbol(rc): 1,
+            },
+          ],
           "issueID": "i2",
           "text": "second issue",
           Symbol(rc): 1,
@@ -4691,7 +4720,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".creator:source(user)",
+          ".creator_0:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4700,7 +4729,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":flipped-join(creator)",
+          ":flipped-join(creator_0)",
           "push",
           {
             "row": {
@@ -4713,7 +4742,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".assignee:source(user)",
+          ".assignee_1:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4735,7 +4764,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".creator:source(user)",
+          ".creator_0:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4744,7 +4773,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":flipped-join(creator)",
+          ":flipped-join(creator_0)",
           "push",
           {
             "row": {
@@ -4757,7 +4786,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".assignee:source(user)",
+          ".assignee_1:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4766,7 +4795,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":flipped-join(assignee)",
+          ":flipped-join(assignee_1)",
           "push",
           {
             "row": {
@@ -4779,7 +4808,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".creator:source(user)",
+          ".creator_0:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4788,7 +4817,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".assignee:source(user)",
+          ".assignee_1:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4804,7 +4833,7 @@ describe('edit assignee', () => {
         {
           "node": {
             "relationships": {
-              "assignee": [
+              "assignee_1": [
                 {
                   "relationships": {},
                   "row": {
@@ -4822,7 +4851,7 @@ describe('edit assignee', () => {
                   },
                 },
               ],
-              "creator": [
+              "creator_0": [
                 {
                   "relationships": {},
                   "row": {
@@ -4893,15 +4922,8 @@ describe('edit assignee', () => {
     expect(data).toMatchInlineSnapshot(`
       [
         {
-          "assignee": [
-            {
-              "name": "user 2",
-              "userID": "u2",
-              Symbol(rc): 1,
-            },
-          ],
           "assigneeID": "u2",
-          "creator": [
+          "assignee_1": [
             {
               "name": "user 2",
               "userID": "u2",
@@ -4909,6 +4931,13 @@ describe('edit assignee', () => {
             },
           ],
           "creatorID": "u2",
+          "creator_0": [
+            {
+              "name": "user 2",
+              "userID": "u2",
+              Symbol(rc): 1,
+            },
+          ],
           "issueID": "i2",
           "text": "second issue",
           Symbol(rc): 1,
@@ -4932,7 +4961,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".creator:source(user)",
+          ".creator_0:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4941,7 +4970,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":flipped-join(creator)",
+          ":flipped-join(creator_0)",
           "push",
           {
             "row": {
@@ -4954,7 +4983,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".assignee:source(user)",
+          ".assignee_1:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4963,7 +4992,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":flipped-join(assignee)",
+          ":flipped-join(assignee_1)",
           "push",
           {
             "row": {
@@ -4976,7 +5005,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".creator:source(user)",
+          ".creator_0:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4985,7 +5014,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".assignee:source(user)",
+          ".assignee_1:source(user)",
           "fetch",
           {
             "constraint": {
@@ -5007,7 +5036,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".creator:source(user)",
+          ".creator_0:source(user)",
           "fetch",
           {
             "constraint": {
@@ -5016,7 +5045,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":flipped-join(creator)",
+          ":flipped-join(creator_0)",
           "push",
           {
             "row": {
@@ -5029,7 +5058,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".assignee:source(user)",
+          ".assignee_1:source(user)",
           "fetch",
           {
             "constraint": {
@@ -5045,7 +5074,7 @@ describe('edit assignee', () => {
         {
           "node": {
             "relationships": {
-              "assignee": [
+              "assignee_1": [
                 {
                   "relationships": {},
                   "row": {
@@ -5054,7 +5083,7 @@ describe('edit assignee', () => {
                   },
                 },
               ],
-              "creator": [
+              "creator_0": [
                 {
                   "relationships": {},
                   "row": {
@@ -5105,37 +5134,48 @@ describe('edit assignee', () => {
     const localAst: AST = {
       table: 'issue',
       orderBy: [['issueID', 'asc']],
-      related: [
-        {
-          system: 'client',
-          correlation: {parentField: ['creatorID'], childField: ['userID']},
-          subquery: {
-            table: 'user',
-            alias: 'creator',
-            orderBy: [
-              ['userID', 'asc'],
-              ['id', 'asc'],
-            ],
+      where: {
+        type: 'and',
+        conditions: [
+          {
+            type: 'correlatedSubquery',
+            op: 'EXISTS',
+            flip: true,
+            related: {
+              system: 'client',
+              correlation: {parentField: ['creatorID'], childField: ['userID']},
+              subquery: {
+                table: 'user',
+                alias: 'creator',
+                orderBy: [
+                  ['userID', 'asc'],
+                  ['id', 'asc'],
+                ],
+              },
+            },
           },
-          flip: true,
-        },
-        {
-          system: 'client',
-          correlation: {
-            parentField: ['assigneeID'],
-            childField: ['userID'],
+          {
+            type: 'correlatedSubquery',
+            op: 'EXISTS',
+            flip: true,
+            related: {
+              system: 'client',
+              correlation: {
+                parentField: ['assigneeID'],
+                childField: ['userID'],
+              },
+              subquery: {
+                table: 'user',
+                alias: 'assignee',
+                orderBy: [
+                  ['userID', 'asc'],
+                  ['id', 'asc'],
+                ],
+              },
+            },
           },
-          subquery: {
-            table: 'user',
-            alias: 'assignee',
-            orderBy: [
-              ['userID', 'asc'],
-              ['id', 'asc'],
-            ],
-          },
-          flip: true,
-        },
-      ],
+        ],
+      },
     };
 
     const {log, data, actualStorage, pushes} = runPushTest({
@@ -5168,16 +5208,8 @@ describe('edit assignee', () => {
     expect(data).toMatchInlineSnapshot(`
       [
         {
-          "assignee": [
-            {
-              "id": 2,
-              "name": "user 2",
-              "userID": "u2",
-              Symbol(rc): 1,
-            },
-          ],
           "assigneeID": "u2",
-          "creator": [
+          "assignee_1": [
             {
               "id": 2,
               "name": "user 2",
@@ -5186,6 +5218,14 @@ describe('edit assignee', () => {
             },
           ],
           "creatorID": "u2",
+          "creator_0": [
+            {
+              "id": 2,
+              "name": "user 2",
+              "userID": "u2",
+              Symbol(rc): 1,
+            },
+          ],
           "issueID": "i2",
           "text": "second issue",
           Symbol(rc): 1,
@@ -5209,7 +5249,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".creator:source(user)",
+          ".creator_0:source(user)",
           "fetch",
           {
             "constraint": {
@@ -5218,7 +5258,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":flipped-join(creator)",
+          ":flipped-join(creator_0)",
           "push",
           {
             "row": {
@@ -5231,7 +5271,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".assignee:source(user)",
+          ".assignee_1:source(user)",
           "fetch",
           {
             "constraint": {
@@ -5240,7 +5280,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":flipped-join(assignee)",
+          ":flipped-join(assignee_1)",
           "push",
           {
             "row": {
@@ -5253,7 +5293,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".creator:source(user)",
+          ".creator_0:source(user)",
           "fetch",
           {
             "constraint": {
@@ -5262,7 +5302,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".assignee:source(user)",
+          ".assignee_1:source(user)",
           "fetch",
           {
             "constraint": {
@@ -5284,7 +5324,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".creator:source(user)",
+          ".creator_0:source(user)",
           "fetch",
           {
             "constraint": {
@@ -5293,7 +5333,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":flipped-join(creator)",
+          ":flipped-join(creator_0)",
           "push",
           {
             "row": {
@@ -5306,7 +5346,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".assignee:source(user)",
+          ".assignee_1:source(user)",
           "fetch",
           {
             "constraint": {
@@ -5322,7 +5362,7 @@ describe('edit assignee', () => {
         {
           "node": {
             "relationships": {
-              "assignee": [
+              "assignee_1": [
                 {
                   "relationships": {},
                   "row": {
@@ -5340,7 +5380,7 @@ describe('edit assignee', () => {
                   },
                 },
               ],
-              "creator": [
+              "creator_0": [
                 {
                   "relationships": {},
                   "row": {
@@ -5411,8 +5451,11 @@ describe('joins with compound join keys', () => {
   const ast: AST = {
     table: 'a',
     orderBy: [['id', 'asc']],
-    related: [
-      {
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      flip: true,
+      related: {
         system: 'client',
         correlation: {parentField: ['a1', 'a2'], childField: ['b2', 'b1']},
         subquery: {
@@ -5420,9 +5463,8 @@ describe('joins with compound join keys', () => {
           alias: 'ab',
           orderBy: [['id', 'asc']],
         },
-        flip: true,
       },
-    ],
+    },
   } as const;
 
   const format: Format = {
@@ -5705,16 +5747,6 @@ describe('joins with compound join keys', () => {
           },
         ],
         [
-          ".ab:source(b)",
-          "fetch",
-          {
-            "constraint": {
-              "b1": 2,
-              "b2": 1,
-            },
-          },
-        ],
-        [
           ":flipped-join(ab)",
           "push",
           {
@@ -5781,8 +5813,11 @@ suite('test overlay on many:one pushes', () => {
   const ast: AST = {
     table: 'issue',
     orderBy: [['id', 'asc']],
-    related: [
-      {
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      flip: true,
+      related: {
         system: 'client',
         correlation: {parentField: ['ownerID'], childField: ['id']},
         subquery: {
@@ -5790,9 +5825,8 @@ suite('test overlay on many:one pushes', () => {
           alias: 'owner',
           orderBy: [['id', 'asc']],
         },
-        flip: true,
       },
-    ],
+    },
   } as const;
 
   const format: Format = {
@@ -6750,16 +6784,22 @@ suite('test overlay on many:one pushes', () => {
     const ast: AST = {
       table: 'issue',
       orderBy: [['id', 'asc']],
-      related: [
-        {
+      where: {
+        type: 'correlatedSubquery',
+        op: 'EXISTS',
+        flip: true,
+        related: {
           system: 'client',
           correlation: {parentField: ['ownerID'], childField: ['id']},
           subquery: {
             table: 'user',
             alias: 'owner',
             orderBy: [['id', 'asc']],
-            related: [
-              {
+            where: {
+              type: 'correlatedSubquery',
+              op: 'EXISTS',
+              flip: true,
+              related: {
                 system: 'client',
                 correlation: {parentField: ['stateID'], childField: ['id']},
                 subquery: {
@@ -6767,13 +6807,11 @@ suite('test overlay on many:one pushes', () => {
                   alias: 'state',
                   orderBy: [['id', 'asc']],
                 },
-                flip: true,
               },
-            ],
+            },
           },
-          flip: true,
         },
-      ],
+      },
     } as const;
 
     const format: Format = {
@@ -7548,8 +7586,11 @@ suite('test overlay on many:many (no junction) pushes', () => {
   const ast: AST = {
     table: 'issue',
     orderBy: [['id', 'asc']],
-    related: [
-      {
+    where: {
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      flip: true,
+      related: {
         system: 'client',
         correlation: {parentField: ['ownerName'], childField: ['name']},
         subquery: {
@@ -7560,9 +7601,8 @@ suite('test overlay on many:many (no junction) pushes', () => {
             ['id', 'asc'],
           ],
         },
-        flip: true,
       },
-    ],
+    },
   } as const;
 
   const format: Format = {
@@ -8257,17 +8297,17 @@ suite('test overlay on many:many (no junction) pushes', () => {
                   {
                     "relationships": {},
                     "row": {
-                      "id": "u3",
+                      "id": "u2",
                       "name": "Aaron",
-                      "num": 3,
+                      "num": 2,
                     },
                   },
                   {
                     "relationships": {},
                     "row": {
-                      "id": "u2",
+                      "id": "u3",
                       "name": "Aaron",
-                      "num": 2,
+                      "num": 3,
                     },
                   },
                 ],
@@ -8904,16 +8944,22 @@ suite('test overlay on many:many (no junction) pushes', () => {
     const ast: AST = {
       table: 'issue',
       orderBy: [['id', 'asc']],
-      related: [
-        {
+      where: {
+        type: 'correlatedSubquery',
+        op: 'EXISTS',
+        flip: true,
+        related: {
           system: 'client',
           correlation: {parentField: ['ownerName'], childField: ['name']},
           subquery: {
             table: 'user',
             alias: 'ownerByName',
             orderBy: [['id', 'asc']],
-            related: [
-              {
+            where: {
+              type: 'correlatedSubquery',
+              op: 'EXISTS',
+              flip: true,
+              related: {
                 system: 'client',
                 correlation: {parentField: ['stateID'], childField: ['id']},
                 subquery: {
@@ -8921,13 +8967,11 @@ suite('test overlay on many:many (no junction) pushes', () => {
                   alias: 'state',
                   orderBy: [['id', 'asc']],
                 },
-                flip: true,
               },
-            ],
+            },
           },
-          flip: true,
         },
-      ],
+      },
     } as const;
 
     const format: Format = {

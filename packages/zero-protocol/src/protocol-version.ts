@@ -39,7 +39,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 31 adds admin password authentication to inspector RPC calls (0.24)
 // -- version 32 adds analyze-query to the inspector RPC calls (0.24)
 // -- version 33 adds `flip` to CorrelatedSubquery (0.25)
-export const PROTOCOL_VERSION = 33;
+// -- version 34 moves `flip` from CorrelatedSubquery to CorrelatedSubqueryCondition (0.25)
+export const PROTOCOL_VERSION = 34;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version

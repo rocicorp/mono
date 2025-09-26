@@ -795,44 +795,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
             1,
           ],
           [
-            "1",
-            "fetch",
-            {
-              "constraint": {
-                "issueId": "i1",
-              },
-            },
-          ],
-          [
-            "1",
-            "fetchCount",
-            {
-              "constraint": {
-                "issueId": "i1",
-              },
-            },
-            1,
-          ],
-          [
-            "2",
-            "fetch",
-            {
-              "constraint": {
-                "id": "o1",
-              },
-            },
-          ],
-          [
-            "2",
-            "fetchCount",
-            {
-              "constraint": {
-                "id": "o1",
-              },
-            },
-            1,
-          ],
-          [
             "2",
             "fetch",
             {

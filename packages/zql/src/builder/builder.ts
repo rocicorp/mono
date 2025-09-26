@@ -190,6 +190,9 @@ function isParameter(value: ValuePosition): value is Parameter {
   return value.type === 'static';
 }
 
+const EXISTS_LIMIT = 3;
+const PERMISSIONS_EXISTS_LIMIT = 1;
+
 function buildPipelineInternal(
   ast: AST,
   delegate: BuilderDelegate,
@@ -203,16 +206,14 @@ function buildPipelineInternal(
   }
   ast = uniquifyCorrelatedSubqueryConditionAliases(ast);
 
-  const csqsFromCondition = gatherCorrelatedSubqueryQueriesFromCondition(
-    ast.where,
-  );
+  const csqConditions = gatherCorrelatedSubqueryQueryConditions(ast.where);
   const splitEditKeys: Set<string> = partitionKey
     ? new Set(partitionKey)
     : new Set();
   const aliases = new Set<string>();
-  for (const csq of csqsFromCondition) {
-    aliases.add(csq.subquery.alias || '');
-    for (const key of csq.correlation.parentField) {
+  for (const csq of csqConditions) {
+    aliases.add(csq.related.subquery.alias || '');
+    for (const key of csq.related.correlation.parentField) {
       splitEditKeys.add(key);
     }
   }
@@ -240,13 +241,27 @@ function buildPipelineInternal(
     end = delegate.decorateInput(skip, `${name}:skip)`);
   }
 
-  for (const csq of csqsFromCondition) {
-    if (csq.flip) {
-      // We cannot apply flipped subqueries at this level
-      // They will be handled in the context of the filter
-      continue;
+  for (const csqCondition of csqConditions) {
+    // flipped EXISTS are handled in applyWhere
+    if (!csqCondition.flip) {
+      end = applyCorrelatedSubQuery(
+        {
+          ...csqCondition.related,
+          subquery: {
+            ...csqCondition.related.subquery,
+            limit:
+              csqCondition.related.system === 'permissions'
+                ? PERMISSIONS_EXISTS_LIMIT
+                : EXISTS_LIMIT,
+          },
+        },
+        delegate,
+        queryID,
+        end,
+        name,
+        true,
+      );
     }
-    end = applyCorrelatedSubQuery(csq, delegate, queryID, end, name, true);
   }
 
   if (ast.where && (!fullyAppliedFilters || delegate.applyFiltersAnyway)) {
@@ -365,10 +380,6 @@ function applyFilterWithFlips(
     }
     case 'correlatedSubquery': {
       const sq = condition.related;
-      if (!sq.flip) {
-        // un-flipped queries have already been applied
-        break;
-      }
       const child = buildPipelineInternal(
         sq.subquery,
         delegate,
@@ -551,39 +562,17 @@ function applyCorrelatedSubQuery(
     sq.correlation.childField,
   );
 
-  // TODO: we should not have flips in `related` either... but `flipped-join.push.test.ts` is doing this.
-  if (fromCondition) {
-    assert(
-      sq.flip === false || sq.flip === undefined,
-      'Flip joins in conditions are supposed to be handled in `applyFilterWithFlips`',
-    );
-  }
-
-  const joinName = sq.flip
-    ? `${name}:flipped-join(${sq.subquery.alias})`
-    : `${name}:join(${sq.subquery.alias})`;
-
-  // TODO: this should not happen. We need to update `flipped-join.push.test.ts` to no flip `related` calls.
-  const join = sq.flip
-    ? new FlippedJoin({
-        parent: end,
-        child,
-        parentKey: sq.correlation.parentField,
-        childKey: sq.correlation.childField,
-        relationshipName: sq.subquery.alias,
-        hidden: sq.hidden ?? false,
-        system: sq.system ?? 'client',
-      })
-    : new Join({
-        parent: end,
-        child,
-        storage: delegate.createStorage(joinName),
-        parentKey: sq.correlation.parentField,
-        childKey: sq.correlation.childField,
-        relationshipName: sq.subquery.alias,
-        hidden: sq.hidden ?? false,
-        system: sq.system ?? 'client',
-      });
+  const joinName = `${name}:join(${sq.subquery.alias})`;
+  const join = new Join({
+    parent: end,
+    child,
+    storage: delegate.createStorage(joinName),
+    parentKey: sq.correlation.parentField,
+    childKey: sq.correlation.childField,
+    relationshipName: sq.subquery.alias,
+    hidden: sq.hidden ?? false,
+    system: sq.system ?? 'client',
+  });
   delegate.addEdge(end, join);
   delegate.addEdge(child, join);
   return delegate.decorateInput(join, joinName);
@@ -618,26 +607,13 @@ function applyCorrelatedSubqueryCondition(
   return delegate.decorateFilterInput(exists, existsName);
 }
 
-function gatherCorrelatedSubqueryQueriesFromCondition(
+function gatherCorrelatedSubqueryQueryConditions(
   condition: Condition | undefined,
 ) {
-  const csqs: CorrelatedSubquery[] = [];
+  const csqs: CorrelatedSubqueryCondition[] = [];
   const gather = (condition: Condition) => {
     if (condition.type === 'correlatedSubquery') {
-      assert(condition.op === 'EXISTS' || condition.op === 'NOT EXISTS');
-      if (condition.related.flip && condition.op === 'NOT EXISTS') {
-        throw new Error('Cannot have NOT EXISTS with flip');
-      }
-      csqs.push({
-        ...condition.related,
-        subquery: {
-          ...condition.related.subquery,
-          limit:
-            condition.related.system === 'permissions'
-              ? PERMISSIONS_EXISTS_LIMIT
-              : EXISTS_LIMIT,
-        },
-      });
+      csqs.push(condition);
       return;
     }
     if (condition.type === 'and' || condition.type === 'or') {
@@ -652,9 +628,6 @@ function gatherCorrelatedSubqueryQueriesFromCondition(
   }
   return csqs;
 }
-
-const EXISTS_LIMIT = 3;
-const PERMISSIONS_EXISTS_LIMIT = 1;
 
 export function assertOrderingIncludesPK(
   ordering: Ordering,
@@ -725,7 +698,7 @@ export function conditionIncludesFlippedSubqueryAtAnyLevel(
   cond: Condition,
 ): boolean {
   if (cond.type === 'correlatedSubquery') {
-    return cond.related.flip === true;
+    return !!cond.flip;
   }
   if (cond.type === 'and' || cond.type === 'or') {
     return cond.conditions.some(c =>
