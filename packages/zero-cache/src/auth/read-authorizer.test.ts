@@ -881,7 +881,6 @@ describe('unreadable tables', () => {
         "where": {
           "conditions": [
             {
-              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -905,7 +904,6 @@ describe('unreadable tables', () => {
                   "where": {
                     "conditions": [
                       {
-                       "flip": false,
                         "op": "EXISTS",
                         "related": {
                           "correlation": {
