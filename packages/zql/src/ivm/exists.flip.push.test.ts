@@ -110,7 +110,6 @@ suite('EXISTS 1 to many', () => {
       type: 'correlatedSubquery',
       related: {
         system: 'client',
-        flip: true,
         correlation: {parentField: ['issueID'], childField: ['id']},
         subquery: {
           table: 'issue',
@@ -119,6 +118,7 @@ suite('EXISTS 1 to many', () => {
         },
       },
       op: 'EXISTS',
+      flip: true,
     },
     limit: 2,
   } as const;
@@ -617,7 +617,6 @@ suite('EXISTS', () => {
       type: 'correlatedSubquery',
       related: {
         system: 'client',
-        flip: true,
         correlation: {parentField: ['id'], childField: ['issueID']},
         subquery: {
           table: 'comment',
@@ -626,6 +625,7 @@ suite('EXISTS', () => {
         },
       },
       op: 'EXISTS',
+      flip: true,
     },
   } as const;
   test('parent add that has no children is not pushed', () => {

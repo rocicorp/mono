@@ -2390,7 +2390,6 @@ test('conditionIncludesFlippedSubqueryAtAnyLevel', () => {
     related: {
       system: 'client',
       correlation: {parentField: ['id'], childField: ['userID']},
-      flip: false,
       subquery: {
         table: 'test',
         alias: 'test',
@@ -2405,12 +2404,12 @@ test('conditionIncludesFlippedSubqueryAtAnyLevel', () => {
     related: {
       system: 'client',
       correlation: {parentField: ['id'], childField: ['userID']},
-      flip: true,
       subquery: {
         table: 'test',
         alias: 'test',
       },
     },
+    flip: true,
   };
   expect(conditionIncludesFlippedSubqueryAtAnyLevel(flippedCsq)).toBe(true);
 
@@ -2442,23 +2441,6 @@ test('conditionIncludesFlippedSubqueryAtAnyLevel', () => {
   };
   expect(conditionIncludesFlippedSubqueryAtAnyLevel(deeplyNestedFlipped)).toBe(
     true,
-  );
-
-  const csqWithoutFlip: CorrelatedSubqueryCondition = {
-    type: 'correlatedSubquery',
-    op: 'EXISTS',
-    related: {
-      system: 'client',
-      correlation: {parentField: ['id'], childField: ['userID']},
-      // no flip property
-      subquery: {
-        table: 'test',
-        alias: 'test',
-      },
-    },
-  };
-  expect(conditionIncludesFlippedSubqueryAtAnyLevel(csqWithoutFlip)).toBe(
-    false,
   );
 });
 
@@ -2541,9 +2523,9 @@ test('partitionBranches', () => {
       related: {
         system: 'client',
         correlation: {parentField: ['id'], childField: ['userID']},
-        flip: true,
         subquery: {table: 'test1', alias: 'test1'},
       },
+      flip: true,
     },
     {
       type: 'correlatedSubquery',
@@ -2551,9 +2533,9 @@ test('partitionBranches', () => {
       related: {
         system: 'client',
         correlation: {parentField: ['id'], childField: ['userID']},
-        flip: false,
         subquery: {table: 'test2', alias: 'test2'},
       },
+      flip: false,
     },
     {
       type: 'simple',

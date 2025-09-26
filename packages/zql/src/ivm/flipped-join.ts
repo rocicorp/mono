@@ -24,7 +24,6 @@ import {first, type Stream} from './stream.ts';
 type Args = {
   parent: Input;
   child: Input;
-  // The order of the keys does not have to match but the length must match.
   // The nth key in childKey corresponds to the nth key in parentKey.
   parentKey: CompoundKey;
   childKey: CompoundKey;
@@ -127,7 +126,7 @@ export class FlippedJoin implements Input {
       const removedNode = this.#inprogressChildChange.change.node;
       const compare = this.#child.getSchema().compareRows;
       const insertPos = binarySearch(childNodes.length, i =>
-        compare(childNodes[i].row, removedNode.row),
+        compare(removedNode.row, childNodes[i].row),
       );
       childNodes.splice(insertPos, 0, removedNode);
     }
@@ -212,27 +211,22 @@ export class FlippedJoin implements Input {
             this.#parentKey,
           )
         ) {
-          if (this.#inprogressChildChange.change.type === 'remove') {
-            if (
-              this.#parent
-                .getSchema()
-                .compareRows(
-                  minParentNode.row,
-                  this.#inprogressChildChange.position,
-                ) <= 0
-            ) {
-              overlaidRelatedChildNodes = relatedChildNodes.filter(
-                n => n !== this.#inprogressChildChange?.change.node,
-              );
-            }
-          } else if (
+          const hasInprogressChildChangeBeenPushedForMinParentNode =
             this.#parent
               .getSchema()
               .compareRows(
                 minParentNode.row,
                 this.#inprogressChildChange.position,
-              ) > 0
-          ) {
+              ) <= 0;
+          if (this.#inprogressChildChange.change.type === 'remove') {
+            if (hasInprogressChildChangeBeenPushedForMinParentNode) {
+              // Remove form relatedChildNodes since the removed child
+              // was inserted into childNodes above.
+              overlaidRelatedChildNodes = relatedChildNodes.filter(
+                n => n !== this.#inprogressChildChange?.change.node,
+              );
+            }
+          } else if (!hasInprogressChildChangeBeenPushedForMinParentNode) {
             overlaidRelatedChildNodes = [
               ...generateWithOverlay(
                 relatedChildNodes,
@@ -400,13 +394,15 @@ export class FlippedJoin implements Input {
       },
     });
 
+    // If no related child don't push as this is an inner join.
+    if (first(childNodeStream(change.node)()) === undefined) {
+      return;
+    }
+
     switch (change.type) {
       case 'add':
       case 'remove':
       case 'child': {
-        if (first(childNodeStream(change.node)()) === undefined) {
-          return;
-        }
         this.#output.push(
           {
             ...change,
@@ -417,9 +413,6 @@ export class FlippedJoin implements Input {
         break;
       }
       case 'edit': {
-        const oldHasChild =
-          first(childNodeStream(change.oldNode)()) !== undefined;
-        const hasChild = first(childNodeStream(change.node)()) !== undefined;
         assert(
           rowEqualsForCompoundKey(
             change.oldNode.row,
@@ -428,35 +421,14 @@ export class FlippedJoin implements Input {
           ),
           `Parent edit must not change relationship.`,
         );
-        if (oldHasChild && hasChild) {
-          this.#output.push(
-            {
-              type: 'edit',
-              oldNode: flip(change.oldNode),
-              node: flip(change.node),
-            },
-            this,
-          );
-          break;
-        }
-        if (oldHasChild) {
-          this.#output.push(
-            {
-              type: 'remove',
-              node: flip(change.node),
-            },
-            this,
-          );
-        }
-        if (hasChild) {
-          this.#output.push(
-            {
-              type: 'add',
-              node: flip(change.node),
-            },
-            this,
-          );
-        }
+        this.#output.push(
+          {
+            type: 'edit',
+            oldNode: flip(change.oldNode),
+            node: flip(change.node),
+          },
+          this,
+        );
         break;
       }
       default:
