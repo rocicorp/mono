@@ -1,6 +1,5 @@
 import sqlite3 from '@rocicorp/zero-sqlite3';
 import fs from 'node:fs';
-import path from 'node:path';
 import {expect, test, vi} from 'vitest';
 import {withRead, withWrite} from '../../with-transactions.ts';
 import {
@@ -10,19 +9,15 @@ import {
 import {clearAllNamedStoresForTesting} from '../sqlite-store.ts';
 import {bunSQLiteStoreProvider, type BunSQLiteStoreOptions} from './store.ts';
 
-//Mock the bun:sqlite module with Node SQLite implementation
+// Mock the bun:sqlite module with Node SQLite implementation
 vi.mock('bun:sqlite', () => ({
   Database: {
     open: (name: string) => {
-      // Add bun_ prefix to match the actual store implementation
-      const prefixedName = `bun_${name}`;
-      const filename = path.resolve(__dirname, `${prefixedName}.db`);
-
       // Register the store name for cleanup (not the filename)
       registerCreatedFile(name);
 
       // Create a new database connection - SQLite handles file locking and concurrency
-      const db = sqlite3(filename);
+      const db = sqlite3(name);
 
       // Create the entry table if it doesn't exist (simulating setupDatabase used by expo/op-sqlite)
       db.exec(`
@@ -84,8 +79,8 @@ vi.mock('bun:sqlite', () => ({
         destroy: () => {
           // Close the database and delete the file
           db.close();
-          if (fs.existsSync(filename)) {
-            fs.unlinkSync(filename);
+          if (fs.existsSync(name)) {
+            fs.unlinkSync(name);
           }
         },
       };
