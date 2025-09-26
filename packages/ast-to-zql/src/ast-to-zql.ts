@@ -161,9 +161,8 @@ function transformExistsCondition(
     nextSubquery.orderBy ||
     nextSubquery.limit;
 
-  const flipped = condition.related.flip ? ', {flip: true}' : '';
-
   if (op === 'EXISTS') {
+    const flipped = condition.flip ? ', {flip: true}' : '';
     if (!hasSubQueryProps) {
       if (prefix === '.where') {
         return `.whereExists('${relationship}'${flipped})`;

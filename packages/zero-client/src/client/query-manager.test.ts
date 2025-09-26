@@ -285,7 +285,6 @@ test('add renamed fields', () => {
                       "owner_id",
                     ],
                   },
-                  "flip": undefined,
                   "hidden": undefined,
                   "subquery": {
                     "alias": undefined,

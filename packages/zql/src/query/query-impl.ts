@@ -573,9 +573,9 @@ export abstract class AbstractQuery<
             this.#schema.tables[destSchema],
             sq._ast,
           ),
-          flip,
         },
         op: 'EXISTS',
+        flip,
       };
     }
 
@@ -610,7 +610,6 @@ export abstract class AbstractQuery<
             parentField: firstRelation.sourceField,
             childField: firstRelation.destField,
           },
-          flip,
           subquery: {
             table: junctionSchema,
             alias: `${SUBQ_PREFIX}${relationship}`,
@@ -631,13 +630,14 @@ export abstract class AbstractQuery<
                   this.#schema.tables[destSchema],
                   (queryToDest as QueryImpl<any, any>)._ast,
                 ),
-                flip,
               },
               op: 'EXISTS',
+              flip,
             },
           },
         },
         op: 'EXISTS',
+        flip,
       };
     }
 

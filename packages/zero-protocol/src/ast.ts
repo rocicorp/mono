@@ -119,6 +119,7 @@ export const correlatedSubqueryConditionSchema: v.Type<CorrelatedSubqueryConditi
     type: v.literal('correlatedSubquery'),
     related: v.lazy(() => correlatedSubquerySchema),
     op: correlatedSubqueryConditionOperatorSchema,
+    flip: v.boolean().optional(),
   });
 
 export const conditionSchema: v.Type<Condition> = v.union(
@@ -164,7 +165,6 @@ export const correlatedSubquerySchemaOmitSubquery = v.readonlyObject({
   correlation: correlationSchema,
   hidden: v.boolean().optional(),
   system: v.literalUnion('permissions', 'client', 'test').optional(),
-  flip: v.boolean().optional(),
 });
 
 export const correlatedSubquerySchema: v.Type<CorrelatedSubquery> =
@@ -254,8 +254,6 @@ export type CorrelatedSubquery = {
   // When `hidden` is set to true, this hop will not be included in the output view
   // but its children will be.
   readonly hidden?: boolean | undefined;
-  // swap join order. Only relevant for inner joins. Defaults to false.
-  readonly flip?: boolean | undefined;
 };
 
 export type ValuePosition = LiteralReference | Parameter | ColumnReference;
@@ -319,6 +317,7 @@ export type CorrelatedSubqueryCondition = {
   type: 'correlatedSubquery';
   related: CorrelatedSubquery;
   op: CorrelatedSubqueryConditionOperator;
+  flip?: boolean | undefined;
 };
 
 export type CorrelatedSubqueryConditionOperator = 'EXISTS' | 'NOT EXISTS';
@@ -359,7 +358,6 @@ function transformAST(ast: AST, transform: ASTTransform): Required<AST> {
                 hidden: r.hidden,
                 subquery: transformAST(r.subquery, transform),
                 system: r.system,
-                flip: r.flip,
               }) satisfies Required<CorrelatedSubquery>,
           ),
         )
