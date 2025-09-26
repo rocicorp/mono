@@ -24,13 +24,9 @@ type Args = {
   parent: Input;
   child: Input;
   storage: Storage;
-  // The order of the keys does not have to match but the length must match.
   // The nth key in parentKey corresponds to the nth key in childKey.
   parentKey: CompoundKey;
   childKey: CompoundKey;
-
-  // TODO: Change parentKey & childKey to a correlation
-
   relationshipName: string;
   hidden: boolean;
   system: System;
