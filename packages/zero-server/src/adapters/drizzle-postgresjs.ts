@@ -1,17 +1,21 @@
+import type {ExtractTablesWithRelations} from 'drizzle-orm';
 import type {PgTransaction} from 'drizzle-orm/pg-core';
 import type {
   PostgresJsDatabase,
   PostgresJsQueryResultHKT,
 } from 'drizzle-orm/postgres-js';
-import type {ExtractTablesWithRelations} from 'drizzle-orm/relations';
 import type postgres from 'postgres';
-import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   DBConnection,
   DBTransaction,
 } from '../../../zql/src/mutate/custom.ts';
 import {ZQLDatabase} from '../zql-database.ts';
+import type {DrizzleBaseTransaction} from './drizzle.ts';
+import {
+  PostgresJsTransactionInternal,
+  type PostgresJsTransaction,
+} from './postgresjs.ts';
 
 /**
  * Helper type for the wrapped transaction used by drizzle-orm/postgres-js.
@@ -20,30 +24,15 @@ import {ZQLDatabase} from '../zql-database.ts';
  */
 export type PostgresJsDrizzleTransaction<
   TDbOrSchema extends
-    | (PostgresJsDatabase<Record<string, unknown>> & {
-        $client: postgres.Sql;
-      })
+    | (PostgresJsDatabase<Record<string, unknown>> & {$client: postgres.Sql})
     | Record<string, unknown>,
-  TSchema extends Record<
-    string,
-    unknown
-  > = TDbOrSchema extends PostgresJsDatabase<infer TSchema>
-    ? TSchema
-    : TDbOrSchema,
-> = PgTransaction<
-  PostgresJsQueryResultHKT,
-  TSchema,
-  ExtractTablesWithRelations<TSchema>
->;
+> = DrizzleBaseTransaction<PostgresJsQueryResultHKT, postgres.Sql, TDbOrSchema>;
 
 export class PostgresJsDrizzleConnection<
   TDrizzle extends PostgresJsDatabase<Record<string, unknown>> & {
     $client: postgres.Sql;
   },
-  TSchema extends TDrizzle extends PostgresJsDatabase<infer TSchema>
-    ? TSchema
-    : never,
-  TTransaction extends PostgresJsDrizzleTransaction<TDrizzle, TSchema>,
+  TTransaction extends PostgresJsDrizzleTransaction<TDrizzle>,
 > implements DBConnection<TTransaction>
 {
   readonly #drizzle: TDrizzle;
@@ -52,23 +41,14 @@ export class PostgresJsDrizzleConnection<
     this.#drizzle = drizzle;
   }
 
-  query(sql: string, params: unknown[]): Promise<Row[]> {
-    return this.#drizzle.$client.unsafe(
-      sql,
-      params as postgres.ParameterOrJSON<never>[],
-    );
-  }
-
   transaction<T>(
     fn: (tx: DBTransaction<TTransaction>) => Promise<T>,
   ): Promise<T> {
     return this.#drizzle.transaction(drizzleTx =>
       fn(
-        new PostgresJsDrizzleInternalTransaction<
-          TDrizzle,
-          TSchema,
-          TTransaction
-        >(drizzleTx as TTransaction),
+        new PostgresJsDrizzleInternalTransaction(
+          drizzleTx,
+        ) as unknown as DBTransaction<TTransaction>,
       ),
     );
   }
@@ -89,19 +69,24 @@ class PostgresJsDrizzleInternalTransaction<
 > implements DBTransaction<TTransaction>
 {
   readonly wrappedTransaction: TTransaction;
+  readonly #internalTransaction: PostgresJsTransactionInternal<
+    Record<string, unknown>
+  >;
 
   constructor(drizzleTx: TTransaction) {
     this.wrappedTransaction = drizzleTx;
-  }
-
-  query(sql: string, params: unknown[]): Promise<Row[]> {
-    const session = this.wrappedTransaction._.session as unknown as {
+    const session = drizzleTx._.session as unknown as {
       client: TDrizzle['$client'];
     };
-    return session.client.unsafe(
-      sql,
-      params as postgres.ParameterOrJSON<never>[],
+    this.#internalTransaction = new PostgresJsTransactionInternal(
+      session.client as unknown as PostgresJsTransaction<
+        Record<string, unknown>
+      >,
     );
+  }
+
+  query(sql: string, params: unknown[]) {
+    return this.#internalTransaction.query(sql, params);
   }
 }
 

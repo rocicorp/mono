@@ -19,7 +19,7 @@ export type PostgresJsTransaction<
 > = postgres.TransactionSql<T>;
 
 export class PostgresJSConnection<T extends Record<string, unknown>>
-  implements DBConnection<postgres.TransactionSql<T>>
+  implements DBConnection<PostgresJsTransaction<T>>
 {
   readonly #pg: postgres.Sql<T>;
   constructor(pg: postgres.Sql<T>) {
@@ -27,7 +27,7 @@ export class PostgresJSConnection<T extends Record<string, unknown>>
   }
 
   transaction<TRet>(
-    fn: (tx: DBTransaction<postgres.TransactionSql<T>>) => Promise<TRet>,
+    fn: (tx: DBTransaction<PostgresJsTransaction<T>>) => Promise<TRet>,
   ): Promise<TRet> {
     return this.#pg.begin(pgTx =>
       fn(new PostgresJsTransactionInternal(pgTx)),
@@ -35,11 +35,11 @@ export class PostgresJSConnection<T extends Record<string, unknown>>
   }
 }
 
-class PostgresJsTransactionInternal<T extends Record<string, unknown>>
-  implements DBTransaction<postgres.TransactionSql<T>>
+export class PostgresJsTransactionInternal<T extends Record<string, unknown>>
+  implements DBTransaction<PostgresJsTransaction<T>>
 {
-  readonly wrappedTransaction: postgres.TransactionSql<T>;
-  constructor(pgTx: postgres.TransactionSql<T>) {
+  readonly wrappedTransaction: PostgresJsTransaction<T>;
+  constructor(pgTx: PostgresJsTransaction<T>) {
     this.wrappedTransaction = pgTx;
   }
 

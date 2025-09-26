@@ -1,17 +1,17 @@
+import type {ExtractTablesWithRelations} from 'drizzle-orm';
 import type {
-  NodePgClient,
   NodePgDatabase,
   NodePgQueryResultHKT,
 } from 'drizzle-orm/node-postgres';
 import type {PgTransaction} from 'drizzle-orm/pg-core';
-import type {ExtractTablesWithRelations} from 'drizzle-orm/relations';
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   DBConnection,
   DBTransaction,
 } from '../../../zql/src/mutate/custom.ts';
 import {ZQLDatabase} from '../zql-database.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {DrizzleBaseTransaction} from './drizzle.ts';
+import {NodePgTransactionInternal, type NodePgTransaction} from './pg.ts';
 
 /**
  * Helper type for the wrapped transaction used by drizzle-orm/node-postgres.
@@ -20,27 +20,19 @@ import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
  */
 export type NodePgDrizzleTransaction<
   TDbOrSchema extends
-    | (NodePgDatabase<Record<string, unknown>> & {$client: NodePgClient})
+    | (NodePgDatabase<Record<string, unknown>> & {$client: NodePgTransaction})
     | Record<string, unknown>,
-  TSchema extends Record<string, unknown> = TDbOrSchema extends NodePgDatabase<
-    infer TSchema
-  >
-    ? TSchema
-    : TDbOrSchema,
-> = PgTransaction<
+> = DrizzleBaseTransaction<
   NodePgQueryResultHKT,
-  TSchema,
-  ExtractTablesWithRelations<TSchema>
+  NodePgTransaction,
+  TDbOrSchema
 >;
 
 export class NodePgDrizzleConnection<
   TDrizzle extends NodePgDatabase<Record<string, unknown>> & {
-    $client: NodePgClient;
+    $client: NodePgTransaction;
   },
-  TSchema extends TDrizzle extends NodePgDatabase<infer TSchema>
-    ? TSchema
-    : never,
-  TTransaction extends NodePgDrizzleTransaction<TDrizzle, TSchema>,
+  TTransaction extends NodePgDrizzleTransaction<TDrizzle>,
 > implements DBConnection<TTransaction>
 {
   readonly #drizzle: TDrizzle;
@@ -49,18 +41,14 @@ export class NodePgDrizzleConnection<
     this.#drizzle = drizzle;
   }
 
-  query(sql: string, params: unknown[]): Promise<Row[]> {
-    return this.#drizzle.$client.query(sql, params).then(({rows}) => rows);
-  }
-
   transaction<T>(
     fn: (tx: DBTransaction<TTransaction>) => Promise<T>,
   ): Promise<T> {
     return this.#drizzle.transaction(drizzleTx =>
       fn(
-        new NodePgDrizzleInternalTransaction<TDrizzle, TSchema, TTransaction>(
-          drizzleTx as TTransaction,
-        ),
+        new NodePgDrizzleInternalTransaction(
+          drizzleTx,
+        ) as unknown as DBTransaction<TTransaction>,
       ),
     );
   }
@@ -68,7 +56,7 @@ export class NodePgDrizzleConnection<
 
 class NodePgDrizzleInternalTransaction<
   TDrizzle extends NodePgDatabase<Record<string, unknown>> & {
-    $client: NodePgClient;
+    $client: NodePgTransaction;
   },
   TSchema extends TDrizzle extends NodePgDatabase<infer TSchema>
     ? TSchema
@@ -81,16 +69,18 @@ class NodePgDrizzleInternalTransaction<
 > implements DBTransaction<TTransaction>
 {
   readonly wrappedTransaction: TTransaction;
+  readonly #internalTransaction: NodePgTransactionInternal;
 
   constructor(drizzleTx: TTransaction) {
     this.wrappedTransaction = drizzleTx;
-  }
-
-  query(sql: string, params: unknown[]): Promise<Row[]> {
-    const session = this.wrappedTransaction._.session as unknown as {
+    const session = drizzleTx._.session as unknown as {
       client: TDrizzle['$client'];
     };
-    return session.client.query(sql, params).then(({rows}) => rows);
+    this.#internalTransaction = new NodePgTransactionInternal(session.client);
+  }
+
+  query(sql: string, params: unknown[]) {
+    return this.#internalTransaction.query(sql, params);
   }
 }
 
@@ -133,7 +123,7 @@ class NodePgDrizzleInternalTransaction<
 export function zeroDrizzleNodePg<
   S extends Schema,
   TDrizzle extends NodePgDatabase<Record<string, unknown>> & {
-    $client: NodePgClient;
+    $client: NodePgTransaction;
   },
 >(schema: S, client: TDrizzle) {
   return new ZQLDatabase(new NodePgDrizzleConnection(client), schema);
@@ -145,7 +135,7 @@ export function zeroDrizzleNodePg<
 export function zeroNodePg<
   S extends Schema,
   TDrizzle extends NodePgDatabase<Record<string, unknown>> & {
-    $client: NodePgClient;
+    $client: NodePgTransaction;
   },
 >(schema: S, client: TDrizzle) {
   return new ZQLDatabase(new NodePgDrizzleConnection(client), schema);

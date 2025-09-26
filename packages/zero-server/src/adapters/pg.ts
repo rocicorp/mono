@@ -4,7 +4,7 @@ import type {
   DBTransaction,
   Row,
 } from '../../../zql/src/mutate/custom.ts';
-import {Pool, type PoolClient} from 'pg';
+import {Client, Pool, type PoolClient} from 'pg';
 import {ZQLDatabase} from '../zql-database.ts';
 
 /**
@@ -12,18 +12,19 @@ import {ZQLDatabase} from '../zql-database.ts';
  *
  * @remarks Use with `ServerTransaction` as `ServerTransaction<Schema, NodePgTransaction>`.
  */
-export type NodePgTransaction = PoolClient;
+export type NodePgTransaction = Pool | PoolClient | Client;
 
-export class NodePgConnection implements DBConnection<PoolClient> {
-  readonly #pool: Pool;
-  constructor(pool: Pool) {
+export class NodePgConnection implements DBConnection<NodePgTransaction> {
+  readonly #pool: NodePgTransaction;
+  constructor(pool: NodePgTransaction) {
     this.#pool = pool;
   }
 
   async transaction<TRet>(
-    fn: (tx: DBTransaction<PoolClient>) => Promise<TRet>,
+    fn: (tx: DBTransaction<NodePgTransaction>) => Promise<TRet>,
   ): Promise<TRet> {
-    const client = await this.#pool.connect();
+    const client =
+      this.#pool instanceof Pool ? await this.#pool.connect() : this.#pool;
     try {
       await client.query('BEGIN');
       const result = await fn(new NodePgTransactionInternal(client));
@@ -37,14 +38,18 @@ export class NodePgConnection implements DBConnection<PoolClient> {
       }
       throw error;
     } finally {
-      client.release();
+      if (this.#pool instanceof Pool && 'release' in client) {
+        client.release();
+      }
     }
   }
 }
 
-class NodePgTransactionInternal implements DBTransaction<PoolClient> {
-  readonly wrappedTransaction: PoolClient;
-  constructor(client: PoolClient) {
+export class NodePgTransactionInternal
+  implements DBTransaction<NodePgTransaction>
+{
+  readonly wrappedTransaction: NodePgTransaction;
+  constructor(client: NodePgTransaction) {
     this.wrappedTransaction = client;
   }
 
@@ -85,7 +90,10 @@ class NodePgTransactionInternal implements DBTransaction<PoolClient> {
  * }
  * ```
  */
-export function zeroNodePg<S extends Schema>(schema: S, pg: Pool | string) {
+export function zeroNodePg<S extends Schema>(
+  schema: S,
+  pg: NodePgTransaction | string,
+) {
   if (typeof pg === 'string') {
     pg = new Pool({connectionString: pg});
   }

@@ -2,7 +2,7 @@ import {eq} from 'drizzle-orm';
 import {drizzle as drizzleNodePg} from 'drizzle-orm/node-postgres';
 import {pgTable, text} from 'drizzle-orm/pg-core';
 import {drizzle as drizzlePostgresJs} from 'drizzle-orm/postgres-js';
-import {Pool} from 'pg';
+import {Client, Pool, type PoolClient} from 'pg';
 import {afterEach, beforeEach, describe, expectTypeOf, test} from 'vitest';
 import {getConnectionURI, testDBs} from '../../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
@@ -10,26 +10,35 @@ import {nanoid} from '../../../zero-client/src/util/nanoid.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {
-  NodePgDrizzleConnection,
   zeroDrizzleNodePg,
   type NodePgDrizzleTransaction,
 } from './drizzle-pg.ts';
 import {
-  PostgresJsDrizzleConnection,
   zeroDrizzlePostgresJS,
   type PostgresJsDrizzleTransaction,
 } from './drizzle-postgresjs.ts';
-import {NodePgConnection, zeroNodePg} from './pg.ts';
-import {PostgresJSConnection, zeroPostgresJS} from './postgresjs.ts';
+import {zeroNodePg} from './pg.ts';
+import {zeroPostgresJS} from './postgresjs.ts';
 
 let postgresJsClient: PostgresDB;
-let nodePgClient: Pool;
+
+// test all the ways to get a client in pg
+let nodePgPool: Pool;
+let nodePgPoolClient: PoolClient;
+let nodePgClient: Client;
 
 beforeEach(async () => {
   postgresJsClient = await testDBs.create('adapters-pg-test');
-  nodePgClient = new Pool({
+  nodePgPool = new Pool({
     connectionString: getConnectionURI(postgresJsClient),
   });
+  nodePgPoolClient = await nodePgPool.connect();
+  nodePgClient = new Client({
+    connectionString: getConnectionURI(postgresJsClient),
+  });
+
+  await nodePgClient.connect();
+
   await postgresJsClient.unsafe(`
     CREATE TABLE IF NOT EXISTS "user" (
       id TEXT PRIMARY KEY,
@@ -41,7 +50,11 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await postgresJsClient.end();
+
   await nodePgClient.end();
+
+  await nodePgPoolClient.release();
+  await nodePgPool.end();
 });
 
 type UserStatus = 'active' | 'inactive';
@@ -77,87 +90,58 @@ const getRandomUser = () => {
   } as const;
 };
 
+const mockTransactionInput = {
+  upstreamSchema: '',
+  clientGroupID: '',
+  clientID: '',
+  mutationID: 0,
+} as const;
+
 describe('node-postgres', () => {
-  test('zql', async ({expect}) => {
-    const newUser = getRandomUser();
+  test('querying', async ({expect}) => {
+    const clients = [nodePgClient, nodePgPoolClient, nodePgPool];
 
-    await nodePgClient.query(
-      `
-      INSERT INTO "user" (id, name, status) VALUES ($1, $2, $3)
-    `,
-      [newUser.id, newUser.name, newUser.status],
-    );
+    for (const client of clients) {
+      const newUser = getRandomUser();
 
-    const zql = zeroNodePg(schema, nodePgClient);
+      await client.query(
+        `
+        INSERT INTO "user" (id, name, status) VALUES ($1, $2, $3)
+      `,
+        [newUser.id, newUser.name, newUser.status],
+      );
 
-    const tx = await zql.transaction(
-      async tx => {
+      const zql = zeroNodePg(schema, client);
+
+      const zqlQuery = await zql.transaction(async tx => {
         const result = await tx.query.user.where('id', '=', newUser.id);
+
         return result;
-      },
-      {
-        upstreamSchema: '',
-        clientGroupID: '',
-        clientID: '',
-        mutationID: 0,
-      },
-    );
+      }, mockTransactionInput);
 
-    const result = await tx.run();
+      const resultZQL = await zqlQuery.run();
 
-    expect(result[0]?.name).toEqual(newUser.name);
-    expect(result[0]?.id).toEqual(newUser.id);
-  });
+      const resultClientQuery = await zql.transaction(async tx => {
+        const result = await tx.dbTransaction.query(
+          'SELECT * FROM "user" WHERE id = $1',
+          [newUser.id],
+        );
+        return result;
+      }, mockTransactionInput);
 
-  test('can query from the database in a transaction', async ({expect}) => {
-    const newUser = getRandomUser();
+      expect(resultZQL[0]?.name).toEqual(newUser.name);
+      expect(resultZQL[0]?.id).toEqual(newUser.id);
 
-    await nodePgClient.query(
-      `
-      INSERT INTO "user" (id, name, status) VALUES ($1, $2, $3)
-    `,
-      [newUser.id, newUser.name, newUser.status],
-    );
-
-    const nodePgConnection = new NodePgConnection(nodePgClient);
-    const result = await nodePgConnection.transaction(async tx => {
-      const result = await tx.query('SELECT * FROM "user" WHERE id = $1', [
-        newUser.id,
-      ]);
-      return result;
-    });
-
-    for await (const row of result) {
-      expect(row.name).toBe(newUser.name);
-      expect(row.id).toBe(newUser.id);
+      for await (const row of resultClientQuery) {
+        expect(row.name).toBe(newUser.name);
+        expect(row.id).toBe(newUser.id);
+      }
     }
-  });
-
-  test('can use the underlying wrappedTransaction', async ({expect}) => {
-    const newUser = getRandomUser();
-
-    await nodePgClient.query(
-      `
-      INSERT INTO "user" (id, name, status) VALUES ($1, $2, $3)
-    `,
-      [newUser.id, newUser.name, newUser.status],
-    );
-
-    const nodePgConnection = new NodePgConnection(nodePgClient);
-    const result = await nodePgConnection.transaction(tx =>
-      tx.wrappedTransaction.query('SELECT * FROM "user" WHERE id = $1', [
-        newUser.id,
-      ]),
-    );
-
-    expect(result.rows).toHaveLength(1);
-    expect(result.rows[0]?.name).toBe(newUser.name);
-    expect(result.rows[0]?.id).toBe(newUser.id);
   });
 });
 
 describe('postgres-js', () => {
-  test('zql', async ({expect}) => {
+  test('querying', async ({expect}) => {
     const newUser = getRandomUser();
 
     await postgresJsClient`
@@ -166,87 +150,84 @@ describe('postgres-js', () => {
 
     const zql = zeroPostgresJS(schema, postgresJsClient);
 
-    const tx = await zql.transaction(
-      async tx => {
-        const result = await tx.query.user.where('id', '=', newUser.id);
-        return result;
-      },
-      {
-        upstreamSchema: '',
-        clientGroupID: '',
-        clientID: '',
-        mutationID: 0,
-      },
-    );
-
-    const result = await tx.run();
-
-    expect(result[0]?.name).toEqual(newUser.name);
-    expect(result[0]?.id).toEqual(newUser.id);
-  });
-
-  test('can query from the database in a transaction', async ({expect}) => {
-    const newUser = getRandomUser();
-
-    await postgresJsClient`
-      INSERT INTO "user" (id, name, status) VALUES (${newUser.id}, ${newUser.name}, ${newUser.status})
-    `;
-
-    const postgresJsConnection = new PostgresJSConnection(postgresJsClient);
-    const result = await postgresJsConnection.transaction(async tx => {
-      const result = await tx.query('SELECT * FROM "user" WHERE id = $1', [
-        newUser.id,
-      ]);
+    const zqlQuery = await zql.transaction(async tx => {
+      const result = await tx.query.user.where('id', '=', newUser.id);
       return result;
-    });
+    }, mockTransactionInput);
 
-    for await (const row of result) {
+    const resultZQL = await zqlQuery.run();
+
+    const resultClientQuery = await zql.transaction(async tx => {
+      const result = await tx.dbTransaction.query(
+        'SELECT * FROM "user" WHERE id = $1',
+        [newUser.id],
+      );
+      return result;
+    }, mockTransactionInput);
+
+    expect(resultZQL[0]?.name).toEqual(newUser.name);
+    expect(resultZQL[0]?.id).toEqual(newUser.id);
+
+    for await (const row of resultClientQuery) {
       expect(row.name).toBe(newUser.name);
       expect(row.id).toBe(newUser.id);
     }
   });
-
-  test('can use the underlying wrappedTransaction', async ({expect}) => {
-    const newUser = getRandomUser();
-
-    await postgresJsClient`
-      INSERT INTO "user" (id, name, status) VALUES (${newUser.id}, ${newUser.name}, ${newUser.status})
-    `;
-
-    const postgresJsConnection = new PostgresJSConnection(postgresJsClient);
-    const result = await postgresJsConnection.transaction(tx =>
-      tx.wrappedTransaction.unsafe('SELECT * FROM "user" WHERE id = $1', [
-        newUser.id,
-      ]),
-    );
-
-    expect(result).toHaveLength(1);
-    expect(result[0]?.name).toBe(newUser.name);
-    expect(result[0]?.id).toBe(newUser.id);
-  });
 });
 
 describe('drizzle-node-postgres', () => {
-  let drizzleNodePgClient: ReturnType<
-    typeof drizzleNodePg<typeof drizzleSchema>
+  let pool: ReturnType<typeof drizzleNodePg<typeof drizzleSchema, Pool>>;
+  let client: ReturnType<typeof drizzleNodePg<typeof drizzleSchema, Client>>;
+  let poolClient: ReturnType<
+    typeof drizzleNodePg<typeof drizzleSchema, PoolClient>
   >;
 
   beforeEach(() => {
-    drizzleNodePgClient = drizzleNodePg(nodePgClient, {
+    pool = drizzleNodePg(nodePgPool, {
+      schema: drizzleSchema,
+    });
+    client = drizzleNodePg(nodePgClient, {
+      schema: drizzleSchema,
+    });
+    poolClient = drizzleNodePg(nodePgPoolClient, {
       schema: drizzleSchema,
     });
   });
 
   test('types - implicit schema generic', () => {
-    const s = null as unknown as NodePgDrizzleTransaction<
-      typeof drizzleNodePgClient
+    const poolTx = null as unknown as NodePgDrizzleTransaction<typeof pool>;
+    const clientTx = null as unknown as NodePgDrizzleTransaction<typeof client>;
+    const poolClientTx = null as unknown as NodePgDrizzleTransaction<
+      typeof poolClient
     >;
 
-    const user = null as unknown as Awaited<
-      ReturnType<typeof s.query.user.findFirst>
+    const poolTxUser = null as unknown as Awaited<
+      ReturnType<typeof poolTx.query.user.findFirst>
+    >;
+    const clientTxUser = null as unknown as Awaited<
+      ReturnType<typeof clientTx.query.user.findFirst>
+    >;
+    const poolClientTxUser = null as unknown as Awaited<
+      ReturnType<typeof poolClientTx.query.user.findFirst>
     >;
 
-    expectTypeOf(user).toEqualTypeOf<
+    expectTypeOf(poolTxUser).toEqualTypeOf<
+      | {
+          id: `user_${string}`;
+          name: string | null;
+          status: UserStatus;
+        }
+      | undefined
+    >();
+    expectTypeOf(clientTxUser).toEqualTypeOf<
+      | {
+          id: `user_${string}`;
+          name: string | null;
+          status: UserStatus;
+        }
+      | undefined
+    >();
+    expectTypeOf(poolClientTxUser).toEqualTypeOf<
       | {
           id: `user_${string}`;
           name: string | null;
@@ -273,89 +254,58 @@ describe('drizzle-node-postgres', () => {
     >();
   });
 
-  test('zql', async ({expect}) => {
-    const newUser = getRandomUser();
+  test('querying', async ({expect}) => {
+    // loop through all the possible ways to create a client
+    const clients = [pool, client, poolClient];
 
-    await drizzleNodePgClient.insert(drizzleSchema.user).values(newUser);
+    for (const client of clients) {
+      const newUser = getRandomUser();
 
-    const zql = zeroDrizzleNodePg(schema, drizzleNodePgClient);
+      await client.insert(drizzleSchema.user).values(newUser);
 
-    const tx = await zql.transaction(
-      async tx => {
+      const zql = zeroDrizzleNodePg(schema, client);
+
+      const zqlQuery = await zql.transaction(async tx => {
         const result = await tx.query.user.where('id', '=', newUser.id);
         return result;
-      },
-      {
-        upstreamSchema: '',
-        clientGroupID: '',
-        clientID: '',
-        mutationID: 0,
-      },
-    );
+      }, mockTransactionInput);
+      const resultZQL = await zqlQuery.run();
 
-    const result = await tx.run();
+      const resultClientQuery = await zql.transaction(async tx => {
+        const result = await tx.dbTransaction.query(
+          'SELECT * FROM "user" WHERE id = $1',
+          [newUser.id],
+        );
+        return result;
+      }, mockTransactionInput);
 
-    expect(result[0]?.name).toEqual(newUser.name);
-    expect(result[0]?.id).toEqual(newUser.id);
-  });
+      const resultDrizzleQuery = await zql.transaction(async tx => {
+        const result =
+          await tx.dbTransaction.wrappedTransaction.query.user.findFirst({
+            where: eq(drizzleSchema.user.id, newUser.id),
+          });
+        return result;
+      }, mockTransactionInput);
 
-  test('can query from the database', async ({expect}) => {
-    const newUser = getRandomUser();
+      expect(resultZQL[0]?.name).toEqual(newUser.name);
+      expect(resultZQL[0]?.id).toEqual(newUser.id);
 
-    await drizzleNodePgClient.insert(drizzleSchema.user).values(newUser);
+      for await (const row of resultClientQuery) {
+        expect(row.name).toBe(newUser.name);
+        expect(row.id).toBe(newUser.id);
+      }
 
-    const drizzleConnection = new NodePgDrizzleConnection(drizzleNodePgClient);
-    const result = await drizzleConnection.query(
-      'SELECT * FROM "user" WHERE id = $1',
-      [newUser.id],
-    );
-    expect(result[0]?.name).toBe(newUser.name);
-    expect(result[0]?.id).toBe(newUser.id);
-  });
-
-  test('can query from the database in a transaction', async ({expect}) => {
-    const newUser = getRandomUser();
-
-    await drizzleNodePgClient.insert(drizzleSchema.user).values(newUser);
-
-    const drizzleConnection = new NodePgDrizzleConnection(drizzleNodePgClient);
-    const result = await drizzleConnection.transaction(async tx => {
-      const result = await tx.query('SELECT * FROM "user" WHERE id = $1', [
-        newUser.id,
-      ]);
-      return result;
-    });
-
-    for await (const row of result) {
-      expect(row.name).toBe(newUser.name);
-      expect(row.id).toBe(newUser.id);
+      expect(resultDrizzleQuery?.name).toEqual(newUser.name);
+      expect(resultDrizzleQuery?.id).toEqual(newUser.id);
     }
-  });
-
-  test('can use the underlying wrappedTransaction', async ({expect}) => {
-    const newUser = getRandomUser();
-
-    await drizzleNodePgClient.insert(drizzleSchema.user).values(newUser);
-
-    const drizzleConnection = new NodePgDrizzleConnection(drizzleNodePgClient);
-    const result = await drizzleConnection.transaction(tx =>
-      tx.wrappedTransaction.query.user.findFirst({
-        where: eq(drizzleSchema.user.id, newUser.id),
-      }),
-    );
-
-    expect(result?.name).toBe(newUser.name);
-    expect(result?.id).toBe(newUser.id);
   });
 });
 
 describe('drizzle-postgres-js', () => {
-  let drizzlePostgresJsClient: ReturnType<
-    typeof drizzlePostgresJs<typeof drizzleSchema>
-  >;
+  let client: ReturnType<typeof drizzlePostgresJs<typeof drizzleSchema>>;
 
   beforeEach(() => {
-    drizzlePostgresJsClient = drizzlePostgresJs(postgresJsClient, {
+    client = drizzlePostgresJs(postgresJsClient, {
       schema: drizzleSchema,
     });
   });
@@ -363,22 +313,14 @@ describe('drizzle-postgres-js', () => {
   test('zql', async ({expect}) => {
     const newUser = getRandomUser();
 
-    await drizzlePostgresJsClient.insert(drizzleSchema.user).values(newUser);
+    await client.insert(drizzleSchema.user).values(newUser);
 
-    const zql = zeroDrizzlePostgresJS(schema, drizzlePostgresJsClient);
+    const zql = zeroDrizzlePostgresJS(schema, client);
 
-    const tx = await zql.transaction(
-      async tx => {
-        const result = await tx.query.user.where('id', '=', newUser.id);
-        return result;
-      },
-      {
-        upstreamSchema: '',
-        clientGroupID: '',
-        clientID: '',
-        mutationID: 0,
-      },
-    );
+    const tx = await zql.transaction(async tx => {
+      const result = await tx.query.user.where('id', '=', newUser.id);
+      return result;
+    }, mockTransactionInput);
 
     const result = await tx.run();
 
@@ -387,9 +329,7 @@ describe('drizzle-postgres-js', () => {
   });
 
   test('types - implicit schema generic', () => {
-    const s = null as unknown as PostgresJsDrizzleTransaction<
-      typeof drizzlePostgresJsClient
-    >;
+    const s = null as unknown as PostgresJsDrizzleTransaction<typeof client>;
 
     const user = null as unknown as Awaited<
       ReturnType<typeof s.query.user.findFirst>
@@ -424,58 +364,44 @@ describe('drizzle-postgres-js', () => {
     >();
   });
 
-  test('can query from the database', async ({expect}) => {
+  test('querying', async ({expect}) => {
     const newUser = getRandomUser();
 
-    await drizzlePostgresJsClient.insert(drizzleSchema.user).values(newUser);
+    await client.insert(drizzleSchema.user).values(newUser);
 
-    const drizzleConnection = new PostgresJsDrizzleConnection(
-      drizzlePostgresJsClient,
-    );
-    const result = await drizzleConnection.query(
-      'SELECT * FROM "user" WHERE id = $1',
-      [newUser.id],
-    );
-    expect(result[0]?.name).toBe(newUser.name);
-    expect(result[0]?.id).toBe(newUser.id);
-  });
+    const zql = zeroDrizzlePostgresJS(schema, client);
 
-  test('can query from the database in a transaction', async ({expect}) => {
-    const newUser = getRandomUser();
-
-    await drizzlePostgresJsClient.insert(drizzleSchema.user).values(newUser);
-
-    const drizzleConnection = new PostgresJsDrizzleConnection(
-      drizzlePostgresJsClient,
-    );
-    const result = await drizzleConnection.transaction(async tx => {
-      const result = await tx.query('SELECT * FROM "user" WHERE id = $1', [
-        newUser.id,
-      ]);
+    const zqlQuery = await zql.transaction(async tx => {
+      const result = await tx.query.user.where('id', '=', newUser.id);
       return result;
-    });
+    }, mockTransactionInput);
+    const resultZQL = await zqlQuery.run();
 
-    for await (const row of result) {
+    const resultClientQuery = await zql.transaction(async tx => {
+      const result = await tx.dbTransaction.query(
+        'SELECT * FROM "user" WHERE id = $1',
+        [newUser.id],
+      );
+      return result;
+    }, mockTransactionInput);
+
+    const resultDrizzleQuery = await zql.transaction(async tx => {
+      const result =
+        await tx.dbTransaction.wrappedTransaction.query.user.findFirst({
+          where: eq(drizzleSchema.user.id, newUser.id),
+        });
+      return result;
+    }, mockTransactionInput);
+
+    expect(resultZQL[0]?.name).toEqual(newUser.name);
+    expect(resultZQL[0]?.id).toEqual(newUser.id);
+
+    for await (const row of resultClientQuery) {
       expect(row.name).toBe(newUser.name);
       expect(row.id).toBe(newUser.id);
     }
-  });
 
-  test('can use the underlying wrappedTransaction', async ({expect}) => {
-    const newUser = getRandomUser();
-
-    await drizzlePostgresJsClient.insert(drizzleSchema.user).values(newUser);
-
-    const drizzleConnection = new PostgresJsDrizzleConnection(
-      drizzlePostgresJsClient,
-    );
-    const result = await drizzleConnection.transaction(tx =>
-      tx.wrappedTransaction.query.user.findFirst({
-        where: eq(drizzleSchema.user.id, newUser.id),
-      }),
-    );
-
-    expect(result?.name).toBe(newUser.name);
-    expect(result?.id).toBe(newUser.id);
+    expect(resultDrizzleQuery?.name).toEqual(newUser.name);
+    expect(resultDrizzleQuery?.id).toEqual(newUser.id);
   });
 });
