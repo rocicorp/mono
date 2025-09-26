@@ -5,6 +5,7 @@ import {
   syncedQuery,
   syncedQueryWithContext,
   withValidation,
+  type QueryFnReturn,
 } from './named.ts';
 import {schema} from './test/test-schemas.ts';
 const builder = createBuilder(schema);
@@ -19,6 +20,17 @@ test('syncedQuery', () => {
   expect(def.queryName).toEqual('myQuery');
   expect(def.parse).toBeDefined();
   expect(def.takesContext).toEqual(false);
+
+  expectTypeOf<QueryFnReturn<typeof def>>().toEqualTypeOf<
+    {
+      readonly id: string;
+      readonly title: string;
+      readonly description: string;
+      readonly closed: boolean;
+      readonly ownerId: string | null;
+      readonly createdAt: number;
+    }[]
+  >();
 
   const q = def('123');
   expectTypeOf<ReturnType<typeof q.run>>().toEqualTypeOf<
@@ -63,6 +75,17 @@ test('syncedQuery', () => {
   expect(() => wv('ignored', 123)).toThrow(
     'invalid_type at .0 (expected string)',
   );
+
+  expectTypeOf<QueryFnReturn<typeof wv>>().toEqualTypeOf<
+    {
+      readonly id: string;
+      readonly title: string;
+      readonly description: string;
+      readonly closed: boolean;
+      readonly ownerId: string | null;
+      readonly createdAt: number;
+    }[]
+  >();
 
   const vq = wv('ignored', '123');
   expectTypeOf<ReturnType<typeof vq.run>>().toEqualTypeOf<
@@ -112,6 +135,17 @@ test('syncedQueryWithContext', () => {
   expect(def.queryName).toEqual('myQuery');
   expect(def.parse).toBeDefined();
   expect(def.takesContext).toEqual(true);
+
+  expectTypeOf<QueryFnReturn<typeof def>>().toEqualTypeOf<
+    {
+      readonly id: string;
+      readonly title: string;
+      readonly description: string;
+      readonly closed: boolean;
+      readonly ownerId: string | null;
+      readonly createdAt: number;
+    }[]
+  >();
 
   const q = def('user1', '123');
   expectTypeOf<ReturnType<typeof q.run>>().toEqualTypeOf<
@@ -173,6 +207,17 @@ test('syncedQueryWithContext', () => {
   expect(() => wv('ignored', 123)).toThrow(
     'invalid_type at .0 (expected string)',
   );
+
+  expectTypeOf<QueryFnReturn<typeof wv>>().toEqualTypeOf<
+    {
+      readonly id: string;
+      readonly title: string;
+      readonly description: string;
+      readonly closed: boolean;
+      readonly ownerId: string | null;
+      readonly createdAt: number;
+    }[]
+  >();
 
   const vq = wv('user1', '123');
   expectTypeOf<ReturnType<typeof vq.run>>().toEqualTypeOf<
