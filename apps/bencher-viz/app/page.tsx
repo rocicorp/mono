@@ -38,7 +38,7 @@ export default function Home() {
     const timer = setTimeout(() => {
       setDebouncedSearch(search);
       setPage(1);
-      setSparklines([]);
+      // Don't clear sparklines here - let the fetch handle it
     }, 300);
 
     return () => clearTimeout(timer);

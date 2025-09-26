@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import cache from '@/lib/cache';
 
 interface BenchmarkItem {
   uuid: string;
@@ -60,42 +61,57 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Step 1: Search for benchmarks matching the search string
-    const benchmarksUrl = new URL(
-      `/v0/projects/${BENCHER_PROJECT}/benchmarks`,
-      BENCHER_API_URL
-    );
+    // Create cache key for benchmarks list
+    const benchmarksCacheKey = `benchmarks:${BENCHER_PROJECT}:${search || 'all'}`;
 
-    if (search) {
-      benchmarksUrl.searchParams.append('search', search);
-    }
-    benchmarksUrl.searchParams.append('per_page', '255'); // Get max benchmarks for pagination
-    benchmarksUrl.searchParams.append('sort', 'name');
-    benchmarksUrl.searchParams.append('direction', 'asc');
+    // Check cache for benchmarks
+    let benchmarks: BenchmarkItem[] | null = cache.get(benchmarksCacheKey);
 
-    const benchmarksResponse = await fetch(benchmarksUrl.toString(), { headers });
-
-    if (!benchmarksResponse.ok) {
-      const errorText = await benchmarksResponse.text();
-      return NextResponse.json(
-        { error: `Failed to fetch benchmarks: ${errorText}` },
-        { status: benchmarksResponse.status }
+    if (!benchmarks) {
+      // Step 1: Search for benchmarks matching the search string
+      const benchmarksUrl = new URL(
+        `/v0/projects/${BENCHER_PROJECT}/benchmarks`,
+        BENCHER_API_URL
       );
+
+      if (search) {
+        benchmarksUrl.searchParams.append('search', search);
+      }
+      benchmarksUrl.searchParams.append('per_page', '255'); // Get max benchmarks for pagination
+      benchmarksUrl.searchParams.append('sort', 'name');
+      benchmarksUrl.searchParams.append('direction', 'asc');
+
+      const benchmarksResponse = await fetch(benchmarksUrl.toString(), { headers });
+
+      if (!benchmarksResponse.ok) {
+        const errorText = await benchmarksResponse.text();
+        return NextResponse.json(
+          { error: `Failed to fetch benchmarks: ${errorText}` },
+          { status: benchmarksResponse.status }
+        );
+      }
+
+      const benchmarksData = await benchmarksResponse.json();
+      // The API returns an array directly, not wrapped in a data field
+      benchmarks = Array.isArray(benchmarksData)
+        ? benchmarksData
+        : benchmarksData.data || [];
+
+      // Cache the benchmarks list
+      cache.set(benchmarksCacheKey, benchmarks);
+
+      // Debug logging
+      console.log('Benchmarks API Response (fresh):', {
+        url: benchmarksUrl.toString(),
+        status: benchmarksResponse.status,
+        totalBenchmarks: benchmarks.length,
+        firstFew: benchmarks.slice(0, 3).map(b => b.name),
+      });
+    } else {
+      console.log('Benchmarks API Response (cached):', {
+        totalBenchmarks: benchmarks.length,
+      });
     }
-
-    const benchmarksData = await benchmarksResponse.json();
-    // The API returns an array directly, not wrapped in a data field
-    const benchmarks: BenchmarkItem[] = Array.isArray(benchmarksData)
-      ? benchmarksData
-      : benchmarksData.data || [];
-
-    // Debug logging
-    console.log('Benchmarks API Response:', {
-      url: benchmarksUrl.toString(),
-      status: benchmarksResponse.status,
-      totalBenchmarks: benchmarks.length,
-      firstFew: benchmarks.slice(0, 3).map(b => b.name),
-    });
 
     // Apply pagination to benchmarks
     const startIndex = (page - 1) * perPage;
@@ -146,6 +162,16 @@ export async function GET(request: NextRequest) {
 
     // Batch requests for better performance
     const perfPromises = paginatedBenchmarks.map(async (benchmark) => {
+      // Create cache key for performance data
+      const perfCacheKey = `perf:${benchmark.uuid}:${BENCHER_BRANCH}:${BENCHER_TESTBED}:${BENCHER_MEASURE}:week`;
+
+      // Check cache first
+      const cachedPerfData = cache.get(perfCacheKey);
+      if (cachedPerfData) {
+        console.log(`Using cached perf data for ${benchmark.name}`);
+        return cachedPerfData;
+      }
+
       const perfUrl = new URL(
         `/v0/projects/${BENCHER_PROJECT}/perf`,
         BENCHER_API_URL
@@ -180,6 +206,9 @@ export async function GET(request: NextRequest) {
             value: point.metric.value,
           })).sort((a: any, b: any) => a.timestamp - b.timestamp),
         };
+
+        // Cache the sparkline data
+        cache.set(perfCacheKey, sparklineData);
 
         return sparklineData;
       } catch (error) {

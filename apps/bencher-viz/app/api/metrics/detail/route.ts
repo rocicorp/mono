@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import cache from '@/lib/cache';
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -40,6 +41,16 @@ export async function GET(request: NextRequest) {
     const endTime = Date.now();
     const startTime = endTime - (days * 24 * 60 * 60 * 1000);
 
+    // Create cache key for detail data
+    const detailCacheKey = `detail:${benchmarkId}:${BENCHER_BRANCH}:${BENCHER_TESTBED}:${BENCHER_MEASURE}:${days}d`;
+
+    // Check cache first
+    const cachedData = cache.get(detailCacheKey);
+    if (cachedData) {
+      console.log(`Using cached detail data for benchmark ${benchmarkId} (${days} days)`);
+      return NextResponse.json(cachedData);
+    }
+
     // Fetch performance data with full details
     const perfUrl = new URL(
       `/v0/projects/${BENCHER_PROJECT}/perf`,
@@ -75,8 +86,8 @@ export async function GET(request: NextRequest) {
 
     const result = perfData.results[0];
 
-    // Return the full detailed data
-    return NextResponse.json({
+    // Prepare the response data
+    const responseData = {
       benchmark: result.benchmark,
       branch: result.branch,
       testbed: result.testbed,
@@ -88,7 +99,14 @@ export async function GET(request: NextRequest) {
         end: new Date(endTime).toISOString(),
         days
       }
-    });
+    };
+
+    // Cache the response data
+    cache.set(detailCacheKey, responseData);
+    console.log(`Cached detail data for benchmark ${benchmarkId} (${days} days)`);
+
+    // Return the full detailed data
+    return NextResponse.json(responseData);
   } catch (error) {
     console.error('Error in metrics detail endpoint:', error);
     return NextResponse.json(
