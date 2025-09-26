@@ -37,7 +37,8 @@ suite('push one:many', () => {
     orderBy: [['id', 'asc']],
     where: {
       type: 'correlatedSubquery',
-      op: 'FLIPPED EXISTS',
+      op: 'EXISTS',
+      flip: true,
       related: {
         system: 'client',
         correlation: {parentField: ['id'], childField: ['issueID']},
@@ -1671,7 +1672,8 @@ suite('push many:one', () => {
     orderBy: [['id', 'asc']],
     where: {
       type: 'correlatedSubquery',
-      op: 'FLIPPED EXISTS',
+      op: 'EXISTS',
+      flip: true,
       related: {
         system: 'client',
         correlation: {parentField: ['ownerID'], childField: ['id']},
@@ -2317,7 +2319,8 @@ suite('push many:one', () => {
           orderBy: [['id', 'asc']],
           where: {
             type: 'correlatedSubquery',
-            op: 'FLIPPED EXISTS',
+            op: 'EXISTS',
+            flip: true,
             related: {
               system: 'client',
               correlation: {parentField: ['id'], childField: ['ownerID']},
@@ -2327,7 +2330,8 @@ suite('push many:one', () => {
                 orderBy: [['id', 'asc']],
                 where: {
                   type: 'correlatedSubquery',
-                  op: 'FLIPPED EXISTS',
+                  op: 'EXISTS',
+                  flip: true,
                   related: {
                     system: 'client',
                     correlation: {parentField: ['id'], childField: ['issueID']},
@@ -2942,7 +2946,8 @@ suite('push one:many:many', () => {
     orderBy: [['id', 'asc']],
     where: {
       type: 'correlatedSubquery',
-      op: 'FLIPPED EXISTS',
+      op: 'EXISTS',
+      flip: true,
       related: {
         system: 'client',
         correlation: {parentField: ['id'], childField: ['issueID']},
@@ -2952,7 +2957,8 @@ suite('push one:many:many', () => {
           orderBy: [['id', 'asc']],
           where: {
             type: 'correlatedSubquery',
-            op: 'FLIPPED EXISTS',
+            op: 'EXISTS',
+            flip: true,
             related: {
               system: 'client',
               correlation: {parentField: ['id'], childField: ['commentID']},
@@ -3593,7 +3599,8 @@ suite('push one:many:one', () => {
     orderBy: [['id', 'asc']],
     where: {
       type: 'correlatedSubquery',
-      op: 'FLIPPED EXISTS',
+      op: 'EXISTS',
+      flip: true,
       related: {
         system: 'client',
         correlation: {parentField: ['id'], childField: ['issueID']},
@@ -3606,7 +3613,8 @@ suite('push one:many:one', () => {
           ],
           where: {
             type: 'correlatedSubquery',
-            op: 'FLIPPED EXISTS',
+            op: 'EXISTS',
+            flip: true,
             related: {
               system: 'client',
               correlation: {
@@ -4261,7 +4269,8 @@ describe('edit assignee', () => {
       conditions: [
         {
           type: 'correlatedSubquery',
-          op: 'FLIPPED EXISTS',
+          op: 'EXISTS',
+          flip: true,
           related: {
             system: 'client',
             correlation: {parentField: ['creatorID'], childField: ['userID']},
@@ -4274,7 +4283,8 @@ describe('edit assignee', () => {
         },
         {
           type: 'correlatedSubquery',
-          op: 'FLIPPED EXISTS',
+          op: 'EXISTS',
+          flip: true,
           related: {
             system: 'client',
             correlation: {
@@ -4574,7 +4584,8 @@ describe('edit assignee', () => {
         conditions: [
           {
             type: 'correlatedSubquery',
-            op: 'FLIPPED EXISTS',
+            op: 'EXISTS',
+            flip: true,
             related: {
               system: 'client',
               correlation: {parentField: ['creatorID'], childField: ['userID']},
@@ -4590,7 +4601,8 @@ describe('edit assignee', () => {
           },
           {
             type: 'correlatedSubquery',
-            op: 'FLIPPED EXISTS',
+            op: 'EXISTS',
+            flip: true,
             related: {
               system: 'client',
               correlation: {
@@ -5136,7 +5148,8 @@ describe('edit assignee', () => {
         conditions: [
           {
             type: 'correlatedSubquery',
-            op: 'FLIPPED EXISTS',
+            op: 'EXISTS',
+            flip: true,
             related: {
               system: 'client',
               correlation: {parentField: ['creatorID'], childField: ['userID']},
@@ -5152,7 +5165,8 @@ describe('edit assignee', () => {
           },
           {
             type: 'correlatedSubquery',
-            op: 'FLIPPED EXISTS',
+            op: 'EXISTS',
+            flip: true,
             related: {
               system: 'client',
               correlation: {
@@ -5448,7 +5462,8 @@ describe('joins with compound join keys', () => {
     orderBy: [['id', 'asc']],
     where: {
       type: 'correlatedSubquery',
-      op: 'FLIPPED EXISTS',
+      op: 'EXISTS',
+      flip: true,
       related: {
         system: 'client',
         correlation: {parentField: ['a1', 'a2'], childField: ['b2', 'b1']},
@@ -5819,7 +5834,8 @@ suite('test overlay on many:one pushes', () => {
     orderBy: [['id', 'asc']],
     where: {
       type: 'correlatedSubquery',
-      op: 'FLIPPED EXISTS',
+      op: 'EXISTS',
+      flip: true,
       related: {
         system: 'client',
         correlation: {parentField: ['ownerID'], childField: ['id']},
@@ -6789,7 +6805,8 @@ suite('test overlay on many:one pushes', () => {
       orderBy: [['id', 'asc']],
       where: {
         type: 'correlatedSubquery',
-        op: 'FLIPPED EXISTS',
+        op: 'EXISTS',
+        flip: true,
         related: {
           system: 'client',
           correlation: {parentField: ['ownerID'], childField: ['id']},
@@ -6799,7 +6816,8 @@ suite('test overlay on many:one pushes', () => {
             orderBy: [['id', 'asc']],
             where: {
               type: 'correlatedSubquery',
-              op: 'FLIPPED EXISTS',
+              op: 'EXISTS',
+              flip: true,
               related: {
                 system: 'client',
                 correlation: {parentField: ['stateID'], childField: ['id']},
@@ -7589,7 +7607,8 @@ suite('test overlay on many:many (no junction) pushes', () => {
     orderBy: [['id', 'asc']],
     where: {
       type: 'correlatedSubquery',
-      op: 'FLIPPED EXISTS',
+      op: 'EXISTS',
+      flip: true,
       related: {
         system: 'client',
         correlation: {parentField: ['ownerName'], childField: ['name']},
@@ -8946,7 +8965,8 @@ suite('test overlay on many:many (no junction) pushes', () => {
       orderBy: [['id', 'asc']],
       where: {
         type: 'correlatedSubquery',
-        op: 'FLIPPED EXISTS',
+        op: 'EXISTS',
+        flip: true,
         related: {
           system: 'client',
           correlation: {parentField: ['ownerName'], childField: ['name']},
@@ -8956,7 +8976,8 @@ suite('test overlay on many:many (no junction) pushes', () => {
             orderBy: [['id', 'asc']],
             where: {
               type: 'correlatedSubquery',
-              op: 'FLIPPED EXISTS',
+              op: 'EXISTS',
+              flip: true,
               related: {
                 system: 'client',
                 correlation: {parentField: ['stateID'], childField: ['id']},

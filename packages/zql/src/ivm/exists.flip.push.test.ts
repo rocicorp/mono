@@ -117,7 +117,8 @@ suite('EXISTS 1 to many', () => {
           orderBy: [['id', 'asc']],
         },
       },
-      op: 'FLIPPED EXISTS',
+      op: 'EXISTS',
+      flip: true,
     },
     limit: 2,
   } as const;
@@ -623,7 +624,8 @@ suite('EXISTS', () => {
           orderBy: [['id', 'asc']],
         },
       },
-      op: 'FLIPPED EXISTS',
+      op: 'EXISTS',
+      flip: true,
     },
   } as const;
   test('parent add that has no children is not pushed', () => {

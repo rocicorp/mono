@@ -2400,7 +2400,7 @@ test('conditionIncludesFlippedSubqueryAtAnyLevel', () => {
 
   const flippedCsq: CorrelatedSubqueryCondition = {
     type: 'correlatedSubquery',
-    op: 'FLIPPED EXISTS',
+    op: 'EXISTS',
     related: {
       system: 'client',
       correlation: {parentField: ['id'], childField: ['userID']},
@@ -2409,6 +2409,7 @@ test('conditionIncludesFlippedSubqueryAtAnyLevel', () => {
         alias: 'test',
       },
     },
+    flip: true,
   };
   expect(conditionIncludesFlippedSubqueryAtAnyLevel(flippedCsq)).toBe(true);
 
@@ -2518,12 +2519,13 @@ test('partitionBranches', () => {
   const flippedConditions: Condition[] = [
     {
       type: 'correlatedSubquery',
-      op: 'FLIPPED EXISTS',
+      op: 'EXISTS',
       related: {
         system: 'client',
         correlation: {parentField: ['id'], childField: ['userID']},
         subquery: {table: 'test1', alias: 'test1'},
       },
+      flip: true,
     },
     {
       type: 'correlatedSubquery',
@@ -2533,6 +2535,7 @@ test('partitionBranches', () => {
         correlation: {parentField: ['id'], childField: ['userID']},
         subquery: {table: 'test2', alias: 'test2'},
       },
+      flip: false,
     },
     {
       type: 'simple',

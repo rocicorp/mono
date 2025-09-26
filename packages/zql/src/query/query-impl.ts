@@ -574,7 +574,8 @@ export abstract class AbstractQuery<
             sq._ast,
           ),
         },
-        op: existsOp(flip),
+        op: 'EXISTS',
+        flip,
       };
     }
 
@@ -630,11 +631,13 @@ export abstract class AbstractQuery<
                   (queryToDest as QueryImpl<any, any>)._ast,
                 ),
               },
-              op: existsOp(flip),
+              op: 'EXISTS',
+              flip,
             },
           },
         },
-        op: existsOp(flip),
+        op: 'EXISTS',
+        flip,
       };
     }
 
@@ -693,10 +696,6 @@ export abstract class AbstractQuery<
 }
 
 const completedAstSymbol = Symbol();
-
-function existsOp(flip: boolean) {
-  return flip ? 'FLIPPED EXISTS' : 'EXISTS';
-}
 
 export function completedAST(q: Query<Schema, string, any>) {
   return (q as QueryImpl<Schema, string>)[completedAstSymbol];

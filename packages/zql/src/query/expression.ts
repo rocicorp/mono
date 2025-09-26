@@ -289,7 +289,6 @@ const negateSimpleOperatorMap = {
 const negateOperatorMap = {
   ...negateSimpleOperatorMap,
   ['EXISTS']: 'NOT EXISTS',
-  ['FLIPPED EXISTS']: 'NOT EXISTS',
   ['NOT EXISTS']: 'EXISTS',
 } as const;
 

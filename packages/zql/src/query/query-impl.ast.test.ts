@@ -24,6 +24,7 @@ describe('building the AST', () => {
       {
         "table": "issue",
         "where": {
+          "flip": false,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -48,6 +49,7 @@ describe('building the AST', () => {
               ],
               "table": "issueLabel",
               "where": {
+                "flip": false,
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
@@ -1491,6 +1493,7 @@ describe('exists', () => {
         {
           "table": "issue",
           "where": {
+            "flip": false,
             "op": "EXISTS",
             "related": {
               "correlation": {
@@ -1523,6 +1526,7 @@ describe('exists', () => {
       {
         "table": "issue",
         "where": {
+          "flip": false,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -1559,6 +1563,7 @@ describe('exists', () => {
         {
           "table": "issue",
           "where": {
+            "flip": false,
             "op": "EXISTS",
             "related": {
               "correlation": {
@@ -1608,6 +1613,7 @@ describe('exists', () => {
       {
         "table": "issue",
         "where": {
+          "flip": false,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -1672,6 +1678,7 @@ describe('exists', () => {
       {
         "table": "issue",
         "where": {
+          "flip": false,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -1696,6 +1703,7 @@ describe('exists', () => {
               ],
               "table": "issueLabel",
               "where": {
+                "flip": false,
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
@@ -1744,6 +1752,7 @@ describe('exists', () => {
         "where": {
           "conditions": [
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1769,6 +1778,7 @@ describe('exists', () => {
               "type": "correlatedSubquery",
             },
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1882,6 +1892,7 @@ describe('exists', () => {
               ],
               "table": "issueLabel",
               "where": {
+                "flip": false,
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
@@ -1943,6 +1954,7 @@ describe('exists', () => {
         "where": {
           "conditions": [
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1968,6 +1980,7 @@ describe('exists', () => {
               "type": "correlatedSubquery",
             },
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1993,6 +2006,7 @@ describe('exists', () => {
               "type": "correlatedSubquery",
             },
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -2017,6 +2031,7 @@ describe('exists', () => {
                   ],
                   "table": "issueLabel",
                   "where": {
+                    "flip": false,
                     "op": "EXISTS",
                     "related": {
                       "correlation": {
@@ -2062,7 +2077,8 @@ describe('exists', () => {
         {
           "table": "issue",
           "where": {
-            "op": "FLIPPED EXISTS",
+            "flip": true,
+            "op": "EXISTS",
             "related": {
               "correlation": {
                 "childField": [
@@ -2100,7 +2116,8 @@ describe('exists', () => {
       {
         "table": "issue",
         "where": {
-          "op": "FLIPPED EXISTS",
+          "flip": true,
+          "op": "EXISTS",
           "related": {
             "correlation": {
               "childField": [
@@ -2136,7 +2153,8 @@ describe('exists', () => {
         {
           "table": "issue",
           "where": {
-            "op": "FLIPPED EXISTS",
+            "flip": true,
+            "op": "EXISTS",
             "related": {
               "correlation": {
                 "childField": [
@@ -2160,7 +2178,8 @@ describe('exists', () => {
                 ],
                 "table": "issueLabel",
                 "where": {
-                  "op": "FLIPPED EXISTS",
+                  "flip": true,
+                  "op": "EXISTS",
                   "related": {
                     "correlation": {
                       "childField": [
@@ -2204,7 +2223,8 @@ describe('exists', () => {
       {
         "table": "issue",
         "where": {
-          "op": "FLIPPED EXISTS",
+          "flip": true,
+          "op": "EXISTS",
           "related": {
             "correlation": {
               "childField": [
@@ -2261,6 +2281,7 @@ describe('exists', () => {
         "where": {
           "conditions": [
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -2298,6 +2319,7 @@ describe('exists', () => {
               "type": "correlatedSubquery",
             },
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {

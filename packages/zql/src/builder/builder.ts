@@ -242,8 +242,8 @@ function buildPipelineInternal(
   }
 
   for (const csqCondition of csqConditions) {
-    // FLIPPED EXISTS are handled in applyWhere
-    if (csqCondition.op !== 'FLIPPED EXISTS') {
+    // flipped EXISTS are handled in applyWhere
+    if (!csqCondition.flip) {
       end = applyCorrelatedSubQuery(
         {
           ...csqCondition.related,
@@ -698,7 +698,7 @@ export function conditionIncludesFlippedSubqueryAtAnyLevel(
   cond: Condition,
 ): boolean {
   if (cond.type === 'correlatedSubquery') {
-    return cond.op === 'FLIPPED EXISTS';
+    return !!cond.flip;
   }
   if (cond.type === 'and' || cond.type === 'or') {
     return cond.conditions.some(c =>

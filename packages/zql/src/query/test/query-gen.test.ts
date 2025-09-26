@@ -144,6 +144,7 @@ test('stable generation', () => {
                 "where": {
                   "conditions": [
                     {
+                      "flip": false,
                       "op": "EXISTS",
                       "related": {
                         "correlation": {

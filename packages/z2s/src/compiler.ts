@@ -308,7 +308,6 @@ function exists(
 ): SQLQuery {
   switch (condition.op) {
     case 'EXISTS':
-    case 'FLIPPED EXISTS':
       return sql`EXISTS (${select(
         spec,
         condition.related.subquery,
