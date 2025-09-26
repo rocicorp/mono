@@ -65,6 +65,7 @@ async function getExternal(includePeerDeps: boolean): Promise<string[]> {
     'zero-server',
     'zero-schema',
     'zero-solid',
+    'zero-bun',
     'zql',
     'zql-to-sql',
     'zqlite',
@@ -75,7 +76,7 @@ async function getExternal(includePeerDeps: boolean): Promise<string[]> {
   return [...externalSet].sort();
 }
 
-const extraExternals = ['node:*', 'expo*', ...builtinModules];
+const extraExternals = ['node:*', 'expo*', 'bun*', ...builtinModules];
 
 await verifyDependencies(await getExternal(false));
 
@@ -112,6 +113,7 @@ async function buildZeroClient() {
         'react': basePath('src/react.ts'),
         'solid': basePath('src/solid.ts'),
         'react-native': basePath('src/react-native.ts'),
+        'bun': basePath('src/bun.ts'),
       };
   const result = await esbuild.build({
     ...sharedOptions(minify, metafile),

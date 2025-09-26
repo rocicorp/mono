@@ -20,7 +20,7 @@
     "bench:watch": "vitest bench --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "check-types": "tsc && tsc --project tool/tsconfig.json",
+    "check-types": "tsc && tsc --project tool/tsconfig.json && tsc --project tsconfig.bun.json",
     "check-types:watch": "tsc --watch",
     "lint": "oxlint --type-aware src/",
     "build": "rm -rf out && tsc -p tsconfig.build.json && npx tsx tool/build.ts",
@@ -47,6 +47,7 @@
     "compare-utf8": "^0.1.1",
     "esbuild": "^0.25.0",
     "expo-sqlite": "^15.2.14",
+    "@types/bun": "latest",
     "fetch-mock": "^9.11.0",
     "playwright": "^1.53.2",
     "shared": "0.0.0",
@@ -84,6 +85,10 @@
     "./impl": {
       "types": "./out/replicache/src/impl.d.ts",
       "default": "./out/impl.js"
+    },
+    "./bun-sqlite": {
+      "types": "./out/replicache/src/bun-sqlite.d.ts",
+      "default": "./out/bun-sqlite.js"
     },
     "./expo-sqlite": {
       "types": "./out/replicache/src/expo-sqlite.d.ts",
