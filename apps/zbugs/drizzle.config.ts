@@ -11,7 +11,7 @@ console.log(dbUrl);
 
 export default defineConfig({
   out: './db/migrations',
-  schema: './db/schema.ts',
+  schema: './db/drizzle-schema.ts',
   dialect: 'postgresql',
   strict: true,
   dbCredentials: {
