@@ -261,9 +261,11 @@ export function buildListQuery(args: ListQueryArgs) {
   q = q.where(({and, cmp, exists, or}) =>
     and(
       open != null ? cmp('open', open) : undefined,
-      creator ? exists('creator', q => q.where('login', creator)) : undefined,
+      creator
+        ? exists('creator', q => q.where('login', creator), {flip: true})
+        : undefined,
       assignee
-        ? exists('assignee', q => q.where('login', assignee))
+        ? exists('assignee', q => q.where('login', assignee), {flip: true})
         : undefined,
       textFilter
         ? or(
@@ -275,7 +277,7 @@ export function buildListQuery(args: ListQueryArgs) {
           )
         : undefined,
       ...(labels ?? []).map(label =>
-        exists('labels', q => q.where('name', label)),
+        exists('labels', q => q.where('name', label), {flip: true}),
       ),
     ),
   );
