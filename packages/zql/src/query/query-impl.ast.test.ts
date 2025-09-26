@@ -24,6 +24,7 @@ describe('building the AST', () => {
       {
         "table": "issue",
         "where": {
+          "flip": false,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -34,7 +35,6 @@ describe('building the AST', () => {
                 "id",
               ],
             },
-            "flip": false,
             "subquery": {
               "alias": "zsubq_labels",
               "orderBy": [
@@ -49,6 +49,7 @@ describe('building the AST', () => {
               ],
               "table": "issueLabel",
               "where": {
+                "flip": false,
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
@@ -59,7 +60,6 @@ describe('building the AST', () => {
                       "labelId",
                     ],
                   },
-                  "flip": false,
                   "subquery": {
                     "alias": "zsubq_zhidden_labels",
                     "orderBy": [
@@ -1493,6 +1493,7 @@ describe('exists', () => {
         {
           "table": "issue",
           "where": {
+            "flip": false,
             "op": "EXISTS",
             "related": {
               "correlation": {
@@ -1503,7 +1504,6 @@ describe('exists', () => {
                   "ownerId",
                 ],
               },
-              "flip": false,
               "subquery": {
                 "alias": "zsubq_owner",
                 "orderBy": [
@@ -1526,6 +1526,7 @@ describe('exists', () => {
       {
         "table": "issue",
         "where": {
+          "flip": false,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -1536,7 +1537,6 @@ describe('exists', () => {
                 "ownerId",
               ],
             },
-            "flip": false,
             "subquery": {
               "alias": "zsubq_owner",
               "orderBy": [
@@ -1563,6 +1563,7 @@ describe('exists', () => {
         {
           "table": "issue",
           "where": {
+            "flip": false,
             "op": "EXISTS",
             "related": {
               "correlation": {
@@ -1573,7 +1574,6 @@ describe('exists', () => {
                   "ownerId",
                 ],
               },
-              "flip": false,
               "subquery": {
                 "alias": "zsubq_owner",
                 "orderBy": [
@@ -1613,6 +1613,7 @@ describe('exists', () => {
       {
         "table": "issue",
         "where": {
+          "flip": false,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -1623,7 +1624,6 @@ describe('exists', () => {
                 "ownerId",
               ],
             },
-            "flip": false,
             "subquery": {
               "alias": "zsubq_owner",
               "orderBy": [
@@ -1678,6 +1678,7 @@ describe('exists', () => {
       {
         "table": "issue",
         "where": {
+          "flip": false,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -1688,7 +1689,6 @@ describe('exists', () => {
                 "id",
               ],
             },
-            "flip": false,
             "subquery": {
               "alias": "zsubq_labels",
               "orderBy": [
@@ -1703,6 +1703,7 @@ describe('exists', () => {
               ],
               "table": "issueLabel",
               "where": {
+                "flip": false,
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
@@ -1713,7 +1714,6 @@ describe('exists', () => {
                       "labelId",
                     ],
                   },
-                  "flip": false,
                   "subquery": {
                     "alias": "zsubq_zhidden_labels",
                     "orderBy": [
@@ -1752,6 +1752,7 @@ describe('exists', () => {
         "where": {
           "conditions": [
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1762,7 +1763,6 @@ describe('exists', () => {
                     "ownerId",
                   ],
                 },
-                "flip": false,
                 "subquery": {
                   "alias": "zsubq_owner",
                   "orderBy": [
@@ -1778,6 +1778,7 @@ describe('exists', () => {
               "type": "correlatedSubquery",
             },
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1788,7 +1789,6 @@ describe('exists', () => {
                     "id",
                   ],
                 },
-                "flip": false,
                 "subquery": {
                   "alias": "zsubq_comments",
                   "orderBy": [
@@ -1828,7 +1828,6 @@ describe('exists', () => {
                   "id",
                 ],
               },
-              "flip": false,
               "subquery": {
                 "alias": "zsubq_comments",
                 "orderBy": [
@@ -1879,7 +1878,6 @@ describe('exists', () => {
                 "id",
               ],
             },
-            "flip": false,
             "subquery": {
               "alias": "zsubq_labels",
               "orderBy": [
@@ -1894,6 +1892,7 @@ describe('exists', () => {
               ],
               "table": "issueLabel",
               "where": {
+                "flip": false,
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
@@ -1904,7 +1903,6 @@ describe('exists', () => {
                       "labelId",
                     ],
                   },
-                  "flip": false,
                   "subquery": {
                     "alias": "zsubq_zhidden_labels",
                     "orderBy": [
@@ -1956,6 +1954,7 @@ describe('exists', () => {
         "where": {
           "conditions": [
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1966,7 +1965,6 @@ describe('exists', () => {
                     "ownerId",
                   ],
                 },
-                "flip": false,
                 "subquery": {
                   "alias": "zsubq_owner",
                   "orderBy": [
@@ -1982,6 +1980,7 @@ describe('exists', () => {
               "type": "correlatedSubquery",
             },
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1992,7 +1991,6 @@ describe('exists', () => {
                     "id",
                   ],
                 },
-                "flip": false,
                 "subquery": {
                   "alias": "zsubq_comments",
                   "orderBy": [
@@ -2008,6 +2006,7 @@ describe('exists', () => {
               "type": "correlatedSubquery",
             },
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -2018,7 +2017,6 @@ describe('exists', () => {
                     "id",
                   ],
                 },
-                "flip": false,
                 "subquery": {
                   "alias": "zsubq_labels",
                   "orderBy": [
@@ -2033,6 +2031,7 @@ describe('exists', () => {
                   ],
                   "table": "issueLabel",
                   "where": {
+                    "flip": false,
                     "op": "EXISTS",
                     "related": {
                       "correlation": {
@@ -2043,7 +2042,6 @@ describe('exists', () => {
                           "labelId",
                         ],
                       },
-                      "flip": false,
                       "subquery": {
                         "alias": "zsubq_zhidden_labels",
                         "orderBy": [
@@ -2079,6 +2077,7 @@ describe('exists', () => {
         {
           "table": "issue",
           "where": {
+            "flip": true,
             "op": "EXISTS",
             "related": {
               "correlation": {
@@ -2089,7 +2088,6 @@ describe('exists', () => {
                   "ownerId",
                 ],
               },
-              "flip": true,
               "subquery": {
                 "alias": "zsubq_owner",
                 "orderBy": [
@@ -2115,36 +2113,36 @@ describe('exists', () => {
         ),
       ),
     ).toMatchInlineSnapshot(`
-        {
-          "table": "issue",
-          "where": {
-            "op": "EXISTS",
-            "related": {
-              "correlation": {
-                "childField": [
-                  "id",
-                ],
-                "parentField": [
-                  "ownerId",
-                ],
-              },
-              "flip": true,
-              "subquery": {
-                "alias": "zsubq_owner",
-                "orderBy": [
-                  [
-                    "id",
-                    "asc",
-                  ],
-                ],
-                "table": "user",
-              },
-              "system": "client",
+      {
+        "table": "issue",
+        "where": {
+          "flip": true,
+          "op": "EXISTS",
+          "related": {
+            "correlation": {
+              "childField": [
+                "id",
+              ],
+              "parentField": [
+                "ownerId",
+              ],
             },
-            "type": "correlatedSubquery",
+            "subquery": {
+              "alias": "zsubq_owner",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "table": "user",
+            },
+            "system": "client",
           },
-        }
-      `);
+          "type": "correlatedSubquery",
+        },
+      }
+    `);
   });
 
   test('exists with flip option - junction relationship', () => {
@@ -2155,6 +2153,7 @@ describe('exists', () => {
         {
           "table": "issue",
           "where": {
+            "flip": true,
             "op": "EXISTS",
             "related": {
               "correlation": {
@@ -2165,7 +2164,6 @@ describe('exists', () => {
                   "id",
                 ],
               },
-              "flip": true,
               "subquery": {
                 "alias": "zsubq_labels",
                 "orderBy": [
@@ -2180,6 +2178,7 @@ describe('exists', () => {
                 ],
                 "table": "issueLabel",
                 "where": {
+                  "flip": true,
                   "op": "EXISTS",
                   "related": {
                     "correlation": {
@@ -2190,7 +2189,6 @@ describe('exists', () => {
                         "labelId",
                       ],
                     },
-                    "flip": true,
                     "subquery": {
                       "alias": "zsubq_zhidden_labels",
                       "orderBy": [
@@ -2222,48 +2220,48 @@ describe('exists', () => {
         issueQuery.whereExists('owner', q => q.where('id', '1'), {flip: true}),
       ),
     ).toMatchInlineSnapshot(`
-        {
-          "table": "issue",
-          "where": {
-            "op": "EXISTS",
-            "related": {
-              "correlation": {
-                "childField": [
-                  "id",
-                ],
-                "parentField": [
-                  "ownerId",
-                ],
-              },
-              "flip": true,
-              "subquery": {
-                "alias": "zsubq_owner",
-                "orderBy": [
-                  [
-                    "id",
-                    "asc",
-                  ],
-                ],
-                "table": "user",
-                "where": {
-                  "left": {
-                    "name": "id",
-                    "type": "column",
-                  },
-                  "op": "=",
-                  "right": {
-                    "type": "literal",
-                    "value": "1",
-                  },
-                  "type": "simple",
-                },
-              },
-              "system": "client",
+      {
+        "table": "issue",
+        "where": {
+          "flip": true,
+          "op": "EXISTS",
+          "related": {
+            "correlation": {
+              "childField": [
+                "id",
+              ],
+              "parentField": [
+                "ownerId",
+              ],
             },
-            "type": "correlatedSubquery",
+            "subquery": {
+              "alias": "zsubq_owner",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "table": "user",
+              "where": {
+                "left": {
+                  "name": "id",
+                  "type": "column",
+                },
+                "op": "=",
+                "right": {
+                  "type": "literal",
+                  "value": "1",
+                },
+                "type": "simple",
+              },
+            },
+            "system": "client",
           },
-        }
-      `);
+          "type": "correlatedSubquery",
+        },
+      }
+    `);
   });
 
   test('many exists on the same relationship', () => {
@@ -2283,6 +2281,7 @@ describe('exists', () => {
         "where": {
           "conditions": [
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -2293,7 +2292,6 @@ describe('exists', () => {
                     "ownerId",
                   ],
                 },
-                "flip": false,
                 "subquery": {
                   "alias": "zsubq_owner",
                   "orderBy": [
@@ -2321,6 +2319,7 @@ describe('exists', () => {
               "type": "correlatedSubquery",
             },
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -2331,7 +2330,6 @@ describe('exists', () => {
                     "ownerId",
                   ],
                 },
-                "flip": false,
                 "subquery": {
                   "alias": "zsubq_owner",
                   "orderBy": [
