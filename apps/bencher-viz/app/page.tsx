@@ -10,8 +10,14 @@ interface SparklineData {
   hasAlert: boolean;
   alertInfo?: {
     limit: string;
-    boundary?: any;
-    metric?: any;
+    boundary?: {
+      baseline?: number;
+      lower_limit?: number | null;
+      upper_limit?: number | null;
+    };
+    metric?: {
+      value?: number;
+    };
   };
   data: Array<{
     timestamp: number;
@@ -126,15 +132,6 @@ function HomeContent() {
     }
   };
 
-  // Format benchmark name for display
-  const formatName = (name: string) => {
-    // Truncate long names and add ellipsis
-    const maxLength = 50;
-    if (name.length > maxLength) {
-      return name.substring(0, maxLength) + '...';
-    }
-    return name;
-  };
 
   // Calculate min and max for better sparkline scaling
   const getMinMax = (data: Array<{ value: number }>) => {

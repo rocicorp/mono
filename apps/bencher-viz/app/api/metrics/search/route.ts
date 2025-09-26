@@ -14,13 +14,6 @@ interface PerfDataPoint {
   start_time: string;
 }
 
-interface PerfResult {
-  benchmark: {
-    uuid: string;
-    name: string;
-  };
-  results: PerfDataPoint[];
-}
 
 interface SparklineData {
   benchmarkId: string;
@@ -28,8 +21,14 @@ interface SparklineData {
   hasAlert: boolean;
   alertInfo?: {
     limit: string;
-    boundary?: any;
-    metric?: any;
+    boundary?: {
+      baseline?: number;
+      lower_limit?: number | null;
+      upper_limit?: number | null;
+    };
+    metric?: {
+      value?: number;
+    };
   };
   data: Array<{
     timestamp: number;
@@ -73,7 +72,21 @@ export async function GET(request: NextRequest) {
     const alertDetailsCacheKey = `alertDetails:${BENCHER_PROJECT}:active`;
 
     let alertedBenchmarkIds: Set<string> | null = cache.get(alertsCacheKey);
-    let alertDetails: Map<string, any> | null = cache.get(alertDetailsCacheKey);
+    interface AlertDetail {
+      uuid: string;
+      limit: string;
+      boundary?: {
+        baseline?: number;
+        lower_limit?: number | null;
+        upper_limit?: number | null;
+      };
+      status: string;
+      modified: string;
+      metric?: {
+        value?: number;
+      };
+    }
+    let alertDetails: Map<string, AlertDetail> | null = cache.get(alertDetailsCacheKey);
 
     if (!alertedBenchmarkIds || !alertDetails) {
       const alertsUrl = new URL(
@@ -88,7 +101,7 @@ export async function GET(request: NextRequest) {
         if (alertsResponse.ok) {
           const alertsData = await alertsResponse.json();
           alertedBenchmarkIds = new Set<string>();
-          alertDetails = new Map<string, any>();
+          alertDetails = new Map<string, AlertDetail>();
 
           // Extract benchmark IDs and alert details
           if (Array.isArray(alertsData)) {
@@ -123,11 +136,11 @@ export async function GET(request: NextRequest) {
       } catch (error) {
         console.error('Error fetching alerts:', error);
         alertedBenchmarkIds = new Set<string>();
-        alertDetails = new Map<string, any>();
+        alertDetails = new Map<string, AlertDetail>();
       }
     } else {
       // If we have cached data, get the alert details too
-      alertDetails = cache.get(alertDetailsCacheKey) || new Map<string, any>();
+      alertDetails = cache.get(alertDetailsCacheKey) || new Map<string, AlertDetail>();
     }
 
     // Step 2: Fetch benchmarks list
@@ -291,7 +304,7 @@ export async function GET(request: NextRequest) {
           data: dataPoints.map((point: PerfDataPoint) => ({
             timestamp: new Date(point.start_time).getTime(),
             value: point.metric.value,
-          })).sort((a: any, b: any) => a.timestamp - b.timestamp),
+          })).sort((a, b) => a.timestamp - b.timestamp),
         };
 
         // Cache the sparkline data

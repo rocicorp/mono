@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Sparklines, SparklinesLine, SparklinesReferenceLine, SparklinesSpots } from 'react-sparklines';
 
@@ -76,13 +76,7 @@ export default function MetricDetailPage() {
   const [metricData, setMetricData] = useState<DetailedMetricData | null>(null);
   const [timeRange, setTimeRange] = useState(7); // days
 
-  useEffect(() => {
-    if (benchmarkId) {
-      fetchDetailedMetrics(benchmarkId);
-    }
-  }, [benchmarkId, timeRange]);
-
-  const fetchDetailedMetrics = async (id: string) => {
+  const fetchDetailedMetrics = useCallback(async (id: string) => {
     try {
       setLoading(true);
       setError(null);
@@ -100,7 +94,13 @@ export default function MetricDetailPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [timeRange]);
+
+  useEffect(() => {
+    if (benchmarkId) {
+      fetchDetailedMetrics(benchmarkId);
+    }
+  }, [benchmarkId, fetchDetailedMetrics]);
 
   const formatValue = (value: number) => {
     if (value >= 1000000) {
