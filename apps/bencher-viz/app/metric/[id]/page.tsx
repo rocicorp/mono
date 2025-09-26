@@ -98,7 +98,7 @@ export default function MetricDetailPage() {
 
   useEffect(() => {
     if (benchmarkId) {
-      fetchDetailedMetrics(benchmarkId);
+      void fetchDetailedMetrics(benchmarkId);
     }
   }, [benchmarkId, fetchDetailedMetrics]);
 

@@ -47,7 +47,6 @@ export async function GET(request: NextRequest) {
     // Check cache first
     const cachedData = cache.get(detailCacheKey);
     if (cachedData) {
-      console.log(`Using cached detail data for benchmark ${benchmarkId} (${days} days)`);
       return NextResponse.json(cachedData);
     }
 
@@ -103,12 +102,10 @@ export async function GET(request: NextRequest) {
 
     // Cache the response data
     cache.set(detailCacheKey, responseData);
-    console.log(`Cached detail data for benchmark ${benchmarkId} (${days} days)`);
 
     // Return the full detailed data
     return NextResponse.json(responseData);
-  } catch (error) {
-    console.error('Error in metrics detail endpoint:', error);
+  } catch (_error) {
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

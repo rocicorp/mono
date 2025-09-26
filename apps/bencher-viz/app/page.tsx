@@ -120,7 +120,7 @@ function HomeContent() {
   useEffect(() => {
     setPage(1);
     setSparklines([]);
-    fetchMetrics(1, debouncedSearch, false);
+    void fetchMetrics(1, debouncedSearch, false);
   }, [debouncedSearch, timeRange, fetchMetrics]);
 
   // Load more function
@@ -128,7 +128,7 @@ function HomeContent() {
     if (!loading && hasMore) {
       const nextPage = page + 1;
       setPage(nextPage);
-      fetchMetrics(nextPage, debouncedSearch, true);
+      void fetchMetrics(nextPage, debouncedSearch, true);
     }
   };
 

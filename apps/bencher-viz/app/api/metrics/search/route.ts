@@ -122,19 +122,13 @@ export async function GET(request: NextRequest) {
                 }
               }
             }
-            // Log an example alert to see structure
-            if (alertsData.length > 0) {
-              console.log('Example alert structure:', JSON.stringify(alertsData[0], null, 2));
-            }
           }
 
           // Cache both the IDs and details
           cache.set(alertsCacheKey, alertedBenchmarkIds);
           cache.set(alertDetailsCacheKey, alertDetails);
-          console.log(`Found ${alertedBenchmarkIds.size} benchmarks with active alerts`);
         }
-      } catch (error) {
-        console.error('Error fetching alerts:', error);
+      } catch (_error) {
         alertedBenchmarkIds = new Set<string>();
         alertDetails = new Map<string, AlertDetail>();
       }
@@ -181,18 +175,6 @@ export async function GET(request: NextRequest) {
 
       // Cache the benchmarks list
       cache.set(benchmarksCacheKey, benchmarks);
-
-      // Debug logging
-      console.log('Benchmarks API Response (fresh):', {
-        url: benchmarksUrl.toString(),
-        status: benchmarksResponse.status,
-        totalBenchmarks: benchmarks.length,
-        firstFew: benchmarks.slice(0, 3).map(b => b.name),
-      });
-    } else {
-      console.log('Benchmarks API Response (cached):', {
-        totalBenchmarks: benchmarks.length,
-      });
     }
 
     // Sort benchmarks to prioritize those with alerts
@@ -263,7 +245,6 @@ export async function GET(request: NextRequest) {
       // Check cache first
       const cachedPerfData = cache.get(perfCacheKey);
       if (cachedPerfData) {
-        console.log(`Using cached perf data for ${benchmark.name}`);
         return cachedPerfData;
       }
 
@@ -283,7 +264,6 @@ export async function GET(request: NextRequest) {
         const perfResponse = await fetch(perfUrl.toString(), { headers });
 
         if (!perfResponse.ok) {
-          console.error(`Failed to fetch perf data for ${benchmark.name}: ${perfResponse.status}`);
           return null;
         }
 
@@ -311,8 +291,7 @@ export async function GET(request: NextRequest) {
         cache.set(perfCacheKey, sparklineData);
 
         return sparklineData;
-      } catch (error) {
-        console.error(`Error fetching perf data for ${benchmark.name}:`, error);
+      } catch (_error) {
         return null;
       }
     });
@@ -342,8 +321,7 @@ export async function GET(request: NextRequest) {
         lookbackMs: days * 24 * 60 * 60 * 1000,
       },
     });
-  } catch (error) {
-    console.error('Error in metrics search endpoint:', error);
+  } catch (_error) {
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }
