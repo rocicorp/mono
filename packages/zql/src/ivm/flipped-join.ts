@@ -394,7 +394,8 @@ export class FlippedJoin implements Input {
       },
     });
 
-    if (!first(childNodeStream(change.node)())) {
+    // If no related child don't push as this is an inner join.
+    if (first(childNodeStream(change.node)()) === undefined) {
       return;
     }
 
