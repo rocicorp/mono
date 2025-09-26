@@ -25,6 +25,7 @@ interface PerfResult {
 interface SparklineData {
   benchmarkId: string;
   benchmarkName: string;
+  hasAlert: boolean;
   data: Array<{
     timestamp: number;
     value: number;
@@ -62,14 +63,51 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Create cache key for benchmarks list
+    // Step 1: Fetch active alerts to identify benchmarks with regressions
+    const alertsCacheKey = `alerts:${BENCHER_PROJECT}:active`;
+    let alertedBenchmarkIds: Set<string> | null = cache.get(alertsCacheKey);
+
+    if (!alertedBenchmarkIds) {
+      const alertsUrl = new URL(
+        `/v0/projects/${BENCHER_PROJECT}/alerts`,
+        BENCHER_API_URL
+      );
+      alertsUrl.searchParams.append('status', 'active');
+      alertsUrl.searchParams.append('per_page', '255');
+
+      try {
+        const alertsResponse = await fetch(alertsUrl.toString(), { headers });
+        if (alertsResponse.ok) {
+          const alertsData = await alertsResponse.json();
+          alertedBenchmarkIds = new Set<string>();
+
+          // Extract benchmark IDs from alerts
+          if (Array.isArray(alertsData)) {
+            for (const alert of alertsData) {
+              if (alert.benchmark?.uuid) {
+                alertedBenchmarkIds.add(alert.benchmark.uuid);
+              }
+            }
+          }
+
+          // Cache the alerted benchmark IDs
+          cache.set(alertsCacheKey, alertedBenchmarkIds);
+          console.log(`Found ${alertedBenchmarkIds.size} benchmarks with active alerts`);
+        }
+      } catch (error) {
+        console.error('Error fetching alerts:', error);
+        alertedBenchmarkIds = new Set<string>();
+      }
+    }
+
+    // Step 2: Fetch benchmarks list
     const benchmarksCacheKey = `benchmarks:${BENCHER_PROJECT}:${search || 'all'}`;
 
     // Check cache for benchmarks
     let benchmarks: BenchmarkItem[] | null = cache.get(benchmarksCacheKey);
 
     if (!benchmarks) {
-      // Step 1: Search for benchmarks matching the search string
+      // Fetch benchmarks matching the search string
       const benchmarksUrl = new URL(
         `/v0/projects/${BENCHER_PROJECT}/benchmarks`,
         BENCHER_API_URL
@@ -114,10 +152,23 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Apply pagination to benchmarks
+    // Sort benchmarks to prioritize those with alerts
+    const sortedBenchmarks = [...benchmarks].sort((a, b) => {
+      const aHasAlert = alertedBenchmarkIds?.has(a.uuid) || false;
+      const bHasAlert = alertedBenchmarkIds?.has(b.uuid) || false;
+
+      // Prioritize benchmarks with alerts
+      if (aHasAlert && !bHasAlert) return -1;
+      if (!aHasAlert && bHasAlert) return 1;
+
+      // Otherwise maintain original order (alphabetical)
+      return 0;
+    });
+
+    // Apply pagination to sorted benchmarks
     const startIndex = (page - 1) * perPage;
     const endIndex = startIndex + perPage;
-    const paginatedBenchmarks = benchmarks.slice(startIndex, endIndex);
+    const paginatedBenchmarks = sortedBenchmarks.slice(startIndex, endIndex);
 
     if (paginatedBenchmarks.length === 0) {
       return NextResponse.json({
@@ -202,6 +253,7 @@ export async function GET(request: NextRequest) {
         const sparklineData: SparklineData = {
           benchmarkId: benchmark.uuid,
           benchmarkName: benchmark.name,
+          hasAlert: alertedBenchmarkIds?.has(benchmark.uuid) || false,
           data: dataPoints.map((point: PerfDataPoint) => ({
             timestamp: new Date(point.start_time).getTime(),
             value: point.metric.value,

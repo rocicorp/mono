@@ -7,6 +7,7 @@ import { Sparklines, SparklinesLine, SparklinesSpots, SparklinesReferenceLine } 
 interface SparklineData {
   benchmarkId: string;
   benchmarkName: string;
+  hasAlert: boolean;
   data: Array<{
     timestamp: number;
     value: number;
@@ -222,7 +223,11 @@ export default function Home() {
                 return (
                   <div
                     key={sparkline.benchmarkId}
-                    className="bg-white rounded border border-gray-200 p-2 transition-all relative cursor-pointer hover:shadow-lg hover:z-10"
+                    className={`rounded border p-2 transition-all relative cursor-pointer hover:shadow-lg hover:z-10 ${
+                      sparkline.hasAlert
+                        ? 'bg-red-50 border-red-300'
+                        : 'bg-white border-gray-200'
+                    }`}
                     onClick={() => router.push(`/metric/${sparkline.benchmarkId}`)}
                     onMouseEnter={(e) => {
                       setHoveredMetric(sparkline.benchmarkName);
@@ -234,6 +239,15 @@ export default function Home() {
                     }}
                     onMouseLeave={() => setHoveredMetric(null)}
                   >
+                    {/* Alert Indicator */}
+                    {sparkline.hasAlert && (
+                      <div className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5">
+                        <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                    )}
+
                     {/* Metric Name */}
                     <h3
                       className="text-xs font-medium text-gray-800 mb-1 truncate leading-tight"
@@ -252,7 +266,7 @@ export default function Home() {
                           margin={1}
                         >
                           <SparklinesLine
-                            color={change >= 0 ? '#10B981' : '#EF4444'}
+                            color={sparkline.hasAlert ? '#DC2626' : (change >= 0 ? '#10B981' : '#EF4444')}
                             style={{ strokeWidth: 1, fill: "none" }}
                           />
                           <SparklinesReferenceLine
@@ -261,7 +275,7 @@ export default function Home() {
                           />
                           <SparklinesSpots
                             size={0}
-                            style={{ fill: change >= 0 ? '#10B981' : '#EF4444', opacity: 0 }}
+                            style={{ fill: sparkline.hasAlert ? '#DC2626' : (change >= 0 ? '#10B981' : '#EF4444'), opacity: 0 }}
                           />
                         </Sparklines>
                       ) : (
