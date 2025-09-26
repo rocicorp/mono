@@ -30,7 +30,7 @@ test('stable generation', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   expect((q as StaticQuery<any, any>).ast).toMatchInlineSnapshot(`
     {
-      "limit": 121,
+      "limit": 126,
       "orderBy": [
         [
           "schnitzel",
@@ -135,7 +135,6 @@ test('stable generation', () => {
               "flip": false,
               "subquery": {
                 "alias": "zsubq_cleaner",
-                "limit": 77,
                 "orderBy": [
                   [
                     "amendment",
@@ -159,12 +158,7 @@ test('stable generation', () => {
                         "flip": false,
                         "subquery": {
                           "alias": "zsubq_cleaner",
-                          "limit": 73,
                           "orderBy": [
-                            [
-                              "petticoat",
-                              "asc",
-                            ],
                             [
                               "amendment",
                               "asc",
@@ -172,131 +166,57 @@ test('stable generation', () => {
                           ],
                           "table": "cleaner",
                           "where": {
-                            "op": "NOT EXISTS",
-                            "related": {
-                              "correlation": {
-                                "childField": [
-                                  "amendment",
-                                ],
-                                "parentField": [
-                                  "amendment",
-                                ],
-                              },
-                              "flip": false,
-                              "subquery": {
-                                "alias": "zsubq_cleaner",
-                                "limit": 47,
-                                "orderBy": [
-                                  [
-                                    "amendment",
-                                    "asc",
-                                  ],
-                                ],
-                                "table": "cleaner",
-                                "where": {
-                                  "conditions": [
-                                    {
-                                      "op": "EXISTS",
-                                      "related": {
-                                        "correlation": {
-                                          "childField": [
-                                            "amendment",
-                                          ],
-                                          "parentField": [
-                                            "amendment",
-                                          ],
-                                        },
-                                        "flip": false,
-                                        "subquery": {
-                                          "alias": "zsubq_cleaner",
-                                          "limit": 60,
-                                          "orderBy": [
-                                            [
-                                              "amendment",
-                                              "asc",
-                                            ],
-                                          ],
-                                          "table": "cleaner",
-                                          "where": {
-                                            "conditions": [
-                                              {
-                                                "op": "NOT EXISTS",
-                                                "related": {
-                                                  "correlation": {
-                                                    "childField": [
-                                                      "amendment",
-                                                    ],
-                                                    "parentField": [
-                                                      "amendment",
-                                                    ],
-                                                  },
-                                                  "flip": false,
-                                                  "subquery": {
-                                                    "alias": "zsubq_cleaner",
-                                                    "limit": 188,
-                                                    "orderBy": [
-                                                      [
-                                                        "amendment",
-                                                        "asc",
-                                                      ],
-                                                    ],
-                                                    "table": "cleaner",
-                                                    "where": {
-                                                      "left": {
-                                                        "name": "amendment",
-                                                        "type": "column",
-                                                      },
-                                                      "op": "IS",
-                                                      "right": {
-                                                        "type": "literal",
-                                                        "value": true,
-                                                      },
-                                                      "type": "simple",
-                                                    },
-                                                  },
-                                                  "system": "permissions",
-                                                },
-                                                "type": "correlatedSubquery",
-                                              },
-                                              {
-                                                "left": {
-                                                  "name": "disk",
-                                                  "type": "column",
-                                                },
-                                                "op": "!=",
-                                                "right": {
-                                                  "type": "literal",
-                                                  "value": 0.9624472949421112,
-                                                },
-                                                "type": "simple",
-                                              },
-                                            ],
-                                            "type": "and",
-                                          },
-                                        },
-                                        "system": "permissions",
-                                      },
-                                      "type": "correlatedSubquery",
-                                    },
-                                    {
-                                      "left": {
-                                        "name": "amendment",
-                                        "type": "column",
-                                      },
-                                      "op": "IS",
-                                      "right": {
-                                        "type": "literal",
-                                        "value": true,
-                                      },
-                                      "type": "simple",
-                                    },
-                                  ],
-                                  "type": "and",
+                            "conditions": [
+                              {
+                                "left": {
+                                  "name": "disk",
+                                  "type": "column",
                                 },
+                                "op": "IS",
+                                "right": {
+                                  "type": "literal",
+                                  "value": 991259612588502,
+                                },
+                                "type": "simple",
                               },
-                              "system": "permissions",
-                            },
-                            "type": "correlatedSubquery",
+                              {
+                                "left": {
+                                  "name": "thorn",
+                                  "type": "column",
+                                },
+                                "op": "IS",
+                                "right": {
+                                  "type": "literal",
+                                  "value": "undique absconditus dolorem",
+                                },
+                                "type": "simple",
+                              },
+                              {
+                                "left": {
+                                  "name": "disk",
+                                  "type": "column",
+                                },
+                                "op": "<",
+                                "right": {
+                                  "type": "literal",
+                                  "value": 8492975582368892,
+                                },
+                                "type": "simple",
+                              },
+                              {
+                                "left": {
+                                  "name": "thorn",
+                                  "type": "column",
+                                },
+                                "op": "IS NOT",
+                                "right": {
+                                  "type": "literal",
+                                  "value": "convoco volup vivo",
+                                },
+                                "type": "simple",
+                              },
+                            ],
+                            "type": "and",
                           },
                         },
                         "system": "permissions",
@@ -305,37 +225,13 @@ test('stable generation', () => {
                     },
                     {
                       "left": {
-                        "name": "petticoat",
+                        "name": "disk",
                         "type": "column",
                       },
-                      "op": ">=",
+                      "op": ">",
                       "right": {
                         "type": "literal",
-                        "value": 0.32078006497173583,
-                      },
-                      "type": "simple",
-                    },
-                    {
-                      "left": {
-                        "name": "amendment",
-                        "type": "column",
-                      },
-                      "op": "=",
-                      "right": {
-                        "type": "literal",
-                        "value": false,
-                      },
-                      "type": "simple",
-                    },
-                    {
-                      "left": {
-                        "name": "amendment",
-                        "type": "column",
-                      },
-                      "op": "IS",
-                      "right": {
-                        "type": "literal",
-                        "value": false,
+                        "value": 5490467414740416,
                       },
                       "type": "simple",
                     },
@@ -355,19 +251,7 @@ test('stable generation', () => {
             "op": ">",
             "right": {
               "type": "literal",
-              "value": 0.2579416277151556,
-            },
-            "type": "simple",
-          },
-          {
-            "left": {
-              "name": "mozzarella",
-              "type": "column",
-            },
-            "op": "LIKE",
-            "right": {
-              "type": "literal",
-              "value": "carbo aliquid velit",
+              "value": 4408598537602987,
             },
             "type": "simple",
           },
@@ -376,22 +260,10 @@ test('stable generation', () => {
               "name": "archaeology",
               "type": "column",
             },
-            "op": "!=",
+            "op": "<",
             "right": {
               "type": "literal",
-              "value": 0.8971102599525771,
-            },
-            "type": "simple",
-          },
-          {
-            "left": {
-              "name": "archaeology",
-              "type": "column",
-            },
-            "op": "IS",
-            "right": {
-              "type": "literal",
-              "value": null,
+              "value": 6559189752506948,
             },
             "type": "simple",
           },

@@ -139,35 +139,44 @@ export class Join implements Input {
   #pushParent(change: Change): void {
     switch (change.type) {
       case 'add':
-        this.#output.push({
-          type: 'add',
-          node: this.#processParentNode(
-            change.node.row,
-            change.node.relationships,
-            'fetch',
-          ),
-        });
+        this.#output.push(
+          {
+            type: 'add',
+            node: this.#processParentNode(
+              change.node.row,
+              change.node.relationships,
+              'fetch',
+            ),
+          },
+          this,
+        );
         break;
       case 'remove':
-        this.#output.push({
-          type: 'remove',
-          node: this.#processParentNode(
-            change.node.row,
-            change.node.relationships,
-            'cleanup',
-          ),
-        });
+        this.#output.push(
+          {
+            type: 'remove',
+            node: this.#processParentNode(
+              change.node.row,
+              change.node.relationships,
+              'cleanup',
+            ),
+          },
+          this,
+        );
         break;
       case 'child':
-        this.#output.push({
-          type: 'child',
-          node: this.#processParentNode(
-            change.node.row,
-            change.node.relationships,
-            'fetch',
-          ),
-          child: change.child,
-        });
+        this.#output.push(
+          {
+            type: 'child',
+            node: this.#processParentNode(
+              change.node.row,
+              change.node.relationships,
+              'fetch',
+            ),
+            child: change.child,
+          },
+          this,
+        );
         break;
       case 'edit': {
         // Assert the edit could not change the relationship.
@@ -179,19 +188,22 @@ export class Join implements Input {
           ),
           `Parent edit must not change relationship.`,
         );
-        this.#output.push({
-          type: 'edit',
-          oldNode: this.#processParentNode(
-            change.oldNode.row,
-            change.oldNode.relationships,
-            'cleanup',
-          ),
-          node: this.#processParentNode(
-            change.node.row,
-            change.node.relationships,
-            'fetch',
-          ),
-        });
+        this.#output.push(
+          {
+            type: 'edit',
+            oldNode: this.#processParentNode(
+              change.oldNode.row,
+              change.oldNode.relationships,
+              'cleanup',
+            ),
+            node: this.#processParentNode(
+              change.node.row,
+              change.node.relationships,
+              'fetch',
+            ),
+          },
+          this,
+        );
         break;
       }
       default:
@@ -226,7 +238,7 @@ export class Join implements Input {
               change,
             },
           };
-          this.#output.push(childChange);
+          this.#output.push(childChange, this);
         }
       } finally {
         this.#inprogressChildChange = undefined;

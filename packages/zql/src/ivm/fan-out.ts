@@ -62,7 +62,7 @@ export class FanOut implements FilterOperator {
 
   push(change: Change) {
     for (const out of this.#outputs) {
-      out.push(change);
+      out.push(change, this);
     }
     must(
       this.#fanIn,

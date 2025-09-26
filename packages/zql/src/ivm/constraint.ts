@@ -25,6 +25,23 @@ export function constraintMatchesRow(
   return true;
 }
 
+/**
+ * Constraints are compatible if:
+ * 1. They do not have any keys in common
+ * 2. They have keys in common, but the values for those keys are equal
+ */
+export function constraintsAreCompatible(
+  left: Constraint,
+  right: Constraint,
+): boolean {
+  for (const key in left) {
+    if (key in right && !valuesEqual(left[key], right[key])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function constraintMatchesPrimaryKey(
   constraint: Constraint,
   primary: PrimaryKey,

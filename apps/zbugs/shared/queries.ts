@@ -4,14 +4,13 @@ import {
   syncedQuery,
   syncedQueryWithContext,
 } from '@rocicorp/zero';
-import {builder, type Schema} from './schema.ts';
-import {INITIAL_COMMENT_LIMIT} from './consts.ts';
+import * as z from 'zod/mini';
 import type {AuthData, Role} from './auth.ts';
-import z from 'zod';
+import {INITIAL_COMMENT_LIMIT} from './consts.ts';
+import {builder, type Schema} from './schema.ts';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyIssuePermissions<TQuery extends Query<Schema, 'issue', any>>(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   q: TQuery,
   role: Role | undefined,
 ): TQuery {
@@ -24,11 +23,11 @@ const idValidator = z.tuple([z.string()]);
 const keyValidator = idValidator;
 
 const listContextParams = z.object({
-  open: z.boolean().nullable(),
-  assignee: z.string().nullable(),
-  creator: z.string().nullable(),
-  labels: z.array(z.string()).nullable(),
-  textFilter: z.string().nullable(),
+  open: z.nullable(z.boolean()),
+  assignee: z.nullable(z.string()),
+  creator: z.nullable(z.string()),
+  labels: z.nullable(z.array(z.string())),
+  textFilter: z.nullable(z.string()),
   sortField: z.union([z.literal('modified'), z.literal('created')]),
   sortDirection: z.union([z.literal('asc'), z.literal('desc')]),
 });
@@ -87,8 +86,8 @@ export const queries = {
     'userPicker',
     z.tuple([
       z.boolean(),
-      z.string().nullable(),
-      z.enum(['crew', 'creators']).nullable(),
+      z.nullable(z.string()),
+      z.nullable(z.enum(['crew', 'creators'])),
     ]),
     (disabled, login, filter) => {
       let q = builder.user;
@@ -113,7 +112,7 @@ export const queries = {
     'issueDetail',
     z.tuple([
       z.union([z.literal('shortID'), z.literal('id')]),
-      z.string().or(z.number()),
+      z.union([z.string(), z.number()]),
       z.string(),
     ]),
     (auth: AuthData | undefined, idField, id, userID) =>
@@ -147,8 +146,8 @@ export const queries = {
     z.tuple([
       listContextParams,
       z.string(),
-      z.number().nullable(),
-      issueRowSort.nullable(),
+      z.nullable(z.number()),
+      z.nullable(issueRowSort),
       z.union([z.literal('forward'), z.literal('backward')]),
     ]),
     (auth: AuthData | undefined, listContext, userID, limit, start, dir) =>
@@ -165,8 +164,8 @@ export const queries = {
   prevNext: syncedQueryWithContext(
     'prevNext',
     z.tuple([
-      listContextParams.nullable(),
-      issueRowSort.nullable(),
+      z.nullable(listContextParams),
+      z.nullable(issueRowSort),
       z.union([z.literal('next'), z.literal('prev')]),
     ]),
     (auth: AuthData | undefined, listContext, issue, dir) =>

@@ -1579,6 +1579,205 @@ test('where exists', () => {
   expect(materialized.data).toEqual([]);
 });
 
+// More comprehensive tests of flipped exists are in `chinook-join-flip.pg-test`
+test("flipped exists, or'ed", () => {
+  const queryDelegate = new QueryDelegateImpl();
+  const commentSource = must(queryDelegate.getSource('comment'));
+  const issueSource = must(queryDelegate.getSource('issue'));
+
+  issueSource.push({
+    type: 'add',
+    row: {
+      id: '0001',
+      title: 'issue 1',
+      description: 'description 1',
+      closed: false,
+      ownerId: '0001',
+      createdAt: 10,
+    },
+  });
+
+  const q = newQuery(queryDelegate, schema, 'issue').where(({or, exists}) =>
+    or(
+      exists('comments', q => q.where('text', 'bug'), {flip: true}),
+      exists('comments', q => q.where('text', 'bug'), {flip: true}),
+    ),
+  );
+
+  const view = q.materialize();
+
+  commentSource.push({
+    type: 'add',
+    row: {
+      id: 'c1',
+      issueId: '0001',
+      authorId: 'a1',
+      text: 'bug',
+      createdAt: 1,
+    },
+  });
+
+  // Symbol(rc) should be ONE
+  // as only a single add should have been made
+  // it through the `push` call above.
+  // I.e., both branches add the node but `union-fan-in` distincts them
+  expect(view.data).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "createdAt": 10,
+        "description": "description 1",
+        "id": "0001",
+        "ownerId": "0001",
+        "title": "issue 1",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
+
+  commentSource.push({
+    type: 'edit',
+    oldRow: {
+      id: 'c1',
+      issueId: '0001',
+      authorId: 'a1',
+      text: 'bug',
+      createdAt: 1,
+    },
+    row: {
+      id: 'c1',
+      issueId: '0001',
+      authorId: 'a2',
+      text: 'bug',
+      createdAt: 1,
+    },
+  });
+
+  expect(view.data).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "createdAt": 10,
+        "description": "description 1",
+        "id": "0001",
+        "ownerId": "0001",
+        "title": "issue 1",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
+
+  commentSource.push({
+    type: 'remove',
+    row: {
+      id: 'c1',
+      issueId: '0001',
+      authorId: 'a1',
+      text: 'bug',
+      createdAt: 1,
+    },
+  });
+
+  // should have retracted once, without error
+  expect(view.data).toMatchInlineSnapshot(`[]`);
+
+  // will not match the filter
+  commentSource.push({
+    type: 'add',
+    row: {
+      id: 'c1',
+      issueId: '0001',
+      authorId: 'a1',
+      text: 'not a bug',
+      createdAt: 1,
+    },
+  });
+
+  expect(view.data).toMatchInlineSnapshot(`[]`);
+
+  commentSource.push({
+    type: 'edit',
+    oldRow: {
+      id: 'c1',
+      issueId: '0001',
+      authorId: 'a1',
+      text: 'not a bug',
+      createdAt: 1,
+    },
+    row: {
+      id: 'c1',
+      issueId: '0001',
+      authorId: 'a2',
+      text: 'bug',
+      createdAt: 1,
+    },
+  });
+
+  expect(view.data.length).toBe(1);
+  expect(view.data[0]?.id).toBe('0001');
+});
+
+test('broken flipped exists', async () => {
+  const queryDelegate = new QueryDelegateImpl();
+  const commentSource = must(queryDelegate.getSource('comment'));
+  const issueSource = must(queryDelegate.getSource('issue'));
+
+  // issue 1 will have comments
+  issueSource.push({
+    type: 'add',
+    row: {
+      id: '0001',
+      title: 'issue 1',
+      description: 'description 1',
+      closed: false,
+      ownerId: '0001',
+      createdAt: 10,
+    },
+  });
+  // issue 2 will have no comments
+  issueSource.push({
+    type: 'add',
+    row: {
+      id: '0002',
+      title: 'issue 2',
+      description: 'description 2',
+      closed: false,
+      ownerId: '0001',
+      createdAt: 10,
+    },
+  });
+
+  commentSource.push({
+    type: 'add',
+    row: {
+      id: 'c1',
+      issueId: '0001',
+      authorId: 'a1',
+      text: 'not a bug',
+      createdAt: 1,
+    },
+  });
+
+  const data = await newQuery(queryDelegate, schema, 'issue')
+    .whereExists('comments', q => q.whereExists('issue', {flip: true}))
+    .run();
+
+  // only issue 1 is returned since issue 2 has no comments
+  expect(data).toMatchInlineSnapshot(`
+    [
+      {
+        "closed": false,
+        "createdAt": 10,
+        "description": "description 1",
+        "id": "0001",
+        "ownerId": "0001",
+        "title": "issue 1",
+        Symbol(rc): 1,
+      },
+    ]
+  `);
+});
+
 test('duplicative where exists', () => {
   const queryDelegate = new QueryDelegateImpl();
   const issueSource = must(queryDelegate.getSource('issue'));

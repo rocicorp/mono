@@ -90,3 +90,48 @@ jobs:
     secrets:
       BENCHER_API_TOKEN: ${{ secrets.BENCHER_API_TOKEN }}
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  zql_benchmarks:
+    name: ZQL Benchmarks PR
+    # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+
+    permissions:
+      pull-requests: write
+    runs-on: self-hosted
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: rocicorp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: 'npm'
+      - uses: bencherdev/bencher@main
+
+      - run: npm ci
+
+      - name: Run ZQL benchmarks
+        uses: ./.github/actions/run-zql-benchmarks
+
+      - name: Upload PR benchmarks results to bencher.dev
+        working-directory: packages/zql-benchmarks
+        run: |
+          cat output.json |
+          bencher run \
+          --project zero \
+          --testbed self-hosted \
+          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --adapter json \
+          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+          --ci-id zql \
+          --branch "$GITHUB_HEAD_REF" \
+          --start-point "$GITHUB_BASE_REF" \
+          --start-point-hash '${{ github.event.pull_request.base.sha }}' \
+          --start-point-clone-thresholds \
+          --start-point-reset \
+          --threshold-measure throughput \
+          --threshold-test t_test \
+          --threshold-lower-boundary 0.95 \
+          --threshold-max-sample-size 10 \
+          --err

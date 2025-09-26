@@ -58,11 +58,14 @@ export function walBenchmark(opts: Options) {
     .get<{maxModified: number}>();
   const perturb = db.prepare(`UPDATE issue SET modified=? WHERE id = ?`);
 
+  // eslint-disable-next-line no-console
   console.log(`warmup`);
   bench(opts);
 
+  // eslint-disable-next-line no-console
   console.log(`\nmodifying ${opts.modify} rows per iteration`);
   for (let i = 0; i < runs; i++) {
+    // eslint-disable-next-line no-console
     console.log(
       `\n${mode}\tsize`,
       (
@@ -80,6 +83,7 @@ export function walBenchmark(opts: Options) {
     randomEntries(ids, modify).forEach(id => perturb.run(++maxModified, id));
     const end = performance.now();
 
+    // eslint-disable-next-line no-console
     console.log(`modify\ttook ${end - start}ms`);
 
     // "Advance" the readers but maintain a hold on the lock.

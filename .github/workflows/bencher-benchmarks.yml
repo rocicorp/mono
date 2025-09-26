@@ -85,8 +85,7 @@ jobs:
       - run: npm ci
 
       - name: Run ZQL benchmarks
-        working-directory: packages/zql-benchmarks
-        run: npm run bench:bmf > output.json
+        uses: ./.github/actions/run-zql-benchmarks
 
       - name: Upload benchmarks results to bencher.dev
         working-directory: packages/zql-benchmarks
@@ -99,8 +98,8 @@ jobs:
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
           --start-point main \
-          --threshold-measure latency \
+          --threshold-measure throughput \
           --threshold-test t_test \
-          --threshold-upper-boundary 1.1 \
+          --threshold-lower-boundary 0.95 \
           --threshold-max-sample-size 10 \
           --err

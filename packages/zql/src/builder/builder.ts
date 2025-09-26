@@ -32,6 +32,8 @@ import type {Input, InputBase, Storage} from '../ivm/operator.ts';
 import {Skip} from '../ivm/skip.ts';
 import type {Source, SourceInput} from '../ivm/source.ts';
 import {Take} from '../ivm/take.ts';
+import {UnionFanIn} from '../ivm/union-fan-in.ts';
+import {UnionFanOut} from '../ivm/union-fan-out.ts';
 import type {DebugDelegate} from './debug-delegate.ts';
 import {createPredicate, type NoSubqueryCondition} from './filter.ts';
 
@@ -107,12 +109,8 @@ export function buildPipeline(
   delegate: BuilderDelegate,
   queryID: string,
 ): Input {
-  return buildPipelineInternal(
-    delegate.mapAst ? delegate.mapAst(ast) : ast,
-    delegate,
-    queryID,
-    '',
-  );
+  ast = delegate.mapAst ? delegate.mapAst(ast) : ast;
+  return buildPipelineInternal(ast, delegate, queryID, '');
 }
 
 export function bindStaticParameters(
@@ -243,6 +241,11 @@ function buildPipelineInternal(
   }
 
   for (const csq of csqsFromCondition) {
+    if (csq.flip) {
+      // We cannot apply flipped subqueries at this level
+      // They will be handled in the context of the filter
+      continue;
+    }
     end = applyCorrelatedSubQuery(csq, delegate, queryID, end, name, true);
   }
 
@@ -277,9 +280,125 @@ function applyWhere(
   delegate: BuilderDelegate,
   name: string,
 ): Input {
-  return buildFilterPipeline(input, delegate, filterInput =>
-    applyFilter(filterInput, condition, delegate, name),
-  );
+  if (!conditionIncludesFlippedSubqueryAtAnyLevel(condition)) {
+    return buildFilterPipeline(input, delegate, filterInput =>
+      applyFilter(filterInput, condition, delegate, name),
+    );
+  }
+
+  return applyFilterWithFlips(input, condition, delegate, name);
+}
+
+function applyFilterWithFlips(
+  input: Input,
+  condition: Condition,
+  delegate: BuilderDelegate,
+  name: string,
+): Input {
+  let end = input;
+  assert(condition.type !== 'simple', 'Simple conditions cannot have flips');
+
+  switch (condition.type) {
+    case 'and': {
+      const [withFlipped, withoutFlipped] = partitionBranches(
+        condition.conditions,
+        conditionIncludesFlippedSubqueryAtAnyLevel,
+      );
+      if (withoutFlipped.length > 0) {
+        end = buildFilterPipeline(input, delegate, filterInput =>
+          applyAnd(
+            filterInput,
+            {
+              type: 'and',
+              conditions: withoutFlipped,
+            },
+            delegate,
+            name,
+          ),
+        );
+      }
+      assert(withFlipped.length > 0, 'Impossible to have no flips here');
+      for (const cond of withFlipped) {
+        end = applyFilterWithFlips(end, cond, delegate, name);
+      }
+      break;
+    }
+    case 'or': {
+      const [withFlipped, withoutFlipped] = partitionBranches(
+        condition.conditions,
+        conditionIncludesFlippedSubqueryAtAnyLevel,
+      );
+      assert(withFlipped.length > 0, 'Impossible to have no flips here');
+
+      const ufo = new UnionFanOut(end);
+      delegate.addEdge(end, ufo);
+      end = delegate.decorateInput(ufo, `${name}:ufo`);
+
+      const branches: Input[] = [];
+      if (withoutFlipped.length > 0) {
+        branches.push(
+          buildFilterPipeline(end, delegate, filterInput =>
+            applyOr(
+              filterInput,
+              {
+                type: 'or',
+                conditions: withoutFlipped,
+              },
+              delegate,
+              name,
+            ),
+          ),
+        );
+      }
+
+      for (const cond of withFlipped) {
+        branches.push(applyFilterWithFlips(end, cond, delegate, name));
+      }
+
+      const ufi = new UnionFanIn(ufo, branches);
+      for (const branch of branches) {
+        delegate.addEdge(branch, ufi);
+      }
+      end = delegate.decorateInput(ufi, `${name}:ufi`);
+
+      break;
+    }
+    case 'correlatedSubquery': {
+      const sq = condition.related;
+      if (!sq.flip) {
+        // un-flipped queries have already been applied
+        break;
+      }
+      const child = buildPipelineInternal(
+        sq.subquery,
+        delegate,
+        '',
+        `${name}.${sq.subquery.alias}`,
+        sq.correlation.childField,
+      );
+      const flippedJoin = new FlippedJoin({
+        parent: end,
+        child,
+        parentKey: sq.correlation.parentField,
+        childKey: sq.correlation.childField,
+        relationshipName: must(
+          sq.subquery.alias,
+          'Subquery must have an alias',
+        ),
+        hidden: sq.hidden ?? false,
+        system: sq.system ?? 'client',
+      });
+      delegate.addEdge(end, flippedJoin);
+      delegate.addEdge(child, flippedJoin);
+      end = delegate.decorateInput(
+        flippedJoin,
+        `${name}:flipped-join(${sq.subquery.alias})`,
+      );
+      break;
+    }
+  }
+
+  return end;
 }
 
 function applyFilter(
@@ -431,7 +550,20 @@ function applyCorrelatedSubQuery(
     `${name}.${sq.subquery.alias}`,
     sq.correlation.childField,
   );
-  const joinName = `${name}:${sq.flip ? 'flipped-join' : 'join'}(${sq.subquery.alias})`;
+
+  // TODO: we should not have flips in `related` either... but `flipped-join.push.test.ts` is doing this.
+  if (fromCondition) {
+    assert(
+      sq.flip === false || sq.flip === undefined,
+      'Flip joins in conditions are supposed to be handled in `applyFilterWithFlips`',
+    );
+  }
+
+  const joinName = sq.flip
+    ? `${name}:flipped-join(${sq.subquery.alias})`
+    : `${name}:join(${sq.subquery.alias})`;
+
+  // TODO: this should not happen. We need to update `flipped-join.push.test.ts` to no flip `related` calls.
   const join = sq.flip
     ? new FlippedJoin({
         parent: end,
@@ -493,6 +625,9 @@ function gatherCorrelatedSubqueryQueriesFromCondition(
   const gather = (condition: Condition) => {
     if (condition.type === 'correlatedSubquery') {
       assert(condition.op === 'EXISTS' || condition.op === 'NOT EXISTS');
+      if (condition.related.flip && condition.op === 'NOT EXISTS') {
+        throw new Error('Cannot have NOT EXISTS with flip');
+      }
       csqs.push({
         ...condition.related,
         subquery: {
@@ -584,4 +719,34 @@ function uniquifyCorrelatedSubqueryConditionAliases(ast: AST): AST {
     where: uniquify(where),
   };
   return result;
+}
+
+export function conditionIncludesFlippedSubqueryAtAnyLevel(
+  cond: Condition,
+): boolean {
+  if (cond.type === 'correlatedSubquery') {
+    return cond.related.flip === true;
+  }
+  if (cond.type === 'and' || cond.type === 'or') {
+    return cond.conditions.some(c =>
+      conditionIncludesFlippedSubqueryAtAnyLevel(c),
+    );
+  }
+  return false;
+}
+
+export function partitionBranches(
+  conditions: readonly Condition[],
+  predicate: (c: Condition) => boolean,
+) {
+  const matched: Condition[] = [];
+  const notMatched: Condition[] = [];
+  for (const c of conditions) {
+    if (predicate(c)) {
+      matched.push(c);
+    } else {
+      notMatched.push(c);
+    }
+  }
+  return [matched, notMatched] as const;
 }

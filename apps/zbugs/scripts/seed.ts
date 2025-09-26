@@ -1,8 +1,8 @@
-import {fileURLToPath} from 'url';
-import {dirname, join} from 'path';
 import * as fs from 'fs';
+import {dirname, join} from 'path';
 import postgres from 'postgres';
 import {pipeline} from 'stream/promises';
+import {fileURLToPath} from 'url';
 import '../../../packages/shared/src/dotenv.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -22,6 +22,7 @@ async function seed() {
     process.env.ZERO_SEED_DATA_DIR ??
     join(__dirname, '../db/seed-data/github/');
 
+  // eslint-disable-next-line no-console
   console.log(process.env.ZERO_UPSTREAM_DB);
 
   const sql = postgres(process.env.ZERO_UPSTREAM_DB as string);
@@ -34,6 +35,7 @@ async function seed() {
       .sort();
 
     if (files.length === 0) {
+      // eslint-disable-next-line no-console
       console.log(
         `No ${TABLE_CSV_FILE_REGEX} files found to seed in ${dataDir}.`,
       );
@@ -56,11 +58,13 @@ async function seed() {
           if (!checkedIfAlreadySeeded) {
             const result = await sql`select 1 from ${sql(tableName)} limit 1`;
             if (result.length === 1) {
+              // eslint-disable-next-line no-console
               console.log('Database already seeded.');
               return;
             }
             checkedIfAlreadySeeded = true;
           }
+          // eslint-disable-next-line no-console
           console.log(`Seeding table ${tableName} with rows from ${filePath}.`);
           const fileStream = fs.createReadStream(filePath, {
             encoding: 'utf8',
@@ -72,9 +76,11 @@ async function seed() {
       }
     });
 
+    // eslint-disable-next-line no-console
     console.log('✅ Seeding complete.');
     process.exit(0);
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error('❌ Seeding failed:', err);
     process.exit(1);
   }

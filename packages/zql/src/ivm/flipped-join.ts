@@ -1,7 +1,10 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {binarySearch} from '../../../shared/src/binary-search.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
+import type {Writable} from '../../../shared/src/writable.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
 import type {Change} from './change.ts';
+import {constraintsAreCompatible, type Constraint} from './constraint.ts';
 import type {Node} from './data.ts';
 import {
   generateWithOverlay,
@@ -134,22 +137,27 @@ export class FlippedJoin implements Input {
       for (const childNode of childNodes) {
         // TODO: consider adding the ability to pass a set of
         // ids to fetch, and have them applied to sqlite using IN.
-        // TODO: Can there be a conflict between req constraint and
-        // the join constraint?
-        const stream = this.#parent.fetch({
-          ...req,
-          constraint: {
-            ...req.constraint,
-            ...Object.fromEntries(
-              this.#parentKey.map((key, i) => [
-                key,
-                childNode.row[this.#childKey[i]],
-              ]),
-            ),
-          },
-        });
-        const iterator = stream[Symbol.iterator]();
-        parentIterators.push(iterator);
+        const constraintFromChild: Writable<Constraint> = {};
+        for (let i = 0; i < this.#parentKey.length; i++) {
+          constraintFromChild[this.#parentKey[i]] =
+            childNode.row[this.#childKey[i]];
+        }
+        if (
+          req.constraint &&
+          !constraintsAreCompatible(constraintFromChild, req.constraint)
+        ) {
+          parentIterators.push(emptyArray[Symbol.iterator]());
+        } else {
+          const stream = this.#parent.fetch({
+            ...req,
+            constraint: {
+              ...req.constraint,
+              ...constraintFromChild,
+            },
+          });
+          const iterator = stream[Symbol.iterator]();
+          parentIterators.push(iterator);
+        }
       }
       const nextParentNodes: (Node | null)[] = [];
       for (let i = 0; i < parentIterators.length; i++) {
@@ -315,31 +323,37 @@ export class FlippedJoin implements Input {
             }
           }
           if (exists) {
-            this.#output.push({
-              type: 'child',
-              node: {
-                ...parentNode,
-                relationships: {
-                  ...parentNode.relationships,
-                  [this.#relationshipName]: childNodeStream,
+            this.#output.push(
+              {
+                type: 'child',
+                node: {
+                  ...parentNode,
+                  relationships: {
+                    ...parentNode.relationships,
+                    [this.#relationshipName]: childNodeStream,
+                  },
+                },
+                child: {
+                  relationshipName: this.#relationshipName,
+                  change,
                 },
               },
-              child: {
-                relationshipName: this.#relationshipName,
-                change,
-              },
-            });
+              this,
+            );
           } else {
-            this.#output.push({
-              ...change,
-              node: {
-                ...parentNode,
-                relationships: {
-                  ...parentNode.relationships,
-                  [this.#relationshipName]: () => [change.node],
+            this.#output.push(
+              {
+                ...change,
+                node: {
+                  ...parentNode,
+                  relationships: {
+                    ...parentNode.relationships,
+                    [this.#relationshipName]: () => [change.node],
+                  },
                 },
               },
-            });
+              this,
+            );
           }
         }
       } finally {
@@ -393,10 +407,13 @@ export class FlippedJoin implements Input {
         if (first(childNodeStream(change.node)()) === undefined) {
           return;
         }
-        this.#output.push({
-          ...change,
-          node: flip(change.node),
-        });
+        this.#output.push(
+          {
+            ...change,
+            node: flip(change.node),
+          },
+          this,
+        );
         break;
       }
       case 'edit': {
@@ -412,24 +429,33 @@ export class FlippedJoin implements Input {
           `Parent edit must not change relationship.`,
         );
         if (oldHasChild && hasChild) {
-          this.#output.push({
-            type: 'edit',
-            oldNode: flip(change.oldNode),
-            node: flip(change.node),
-          });
+          this.#output.push(
+            {
+              type: 'edit',
+              oldNode: flip(change.oldNode),
+              node: flip(change.node),
+            },
+            this,
+          );
           break;
         }
         if (oldHasChild) {
-          this.#output.push({
-            type: 'remove',
-            node: flip(change.node),
-          });
+          this.#output.push(
+            {
+              type: 'remove',
+              node: flip(change.node),
+            },
+            this,
+          );
         }
         if (hasChild) {
-          this.#output.push({
-            type: 'add',
-            node: flip(change.node),
-          });
+          this.#output.push(
+            {
+              type: 'add',
+              node: flip(change.node),
+            },
+            this,
+          );
         }
         break;
       }
