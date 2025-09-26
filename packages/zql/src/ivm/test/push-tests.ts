@@ -109,7 +109,12 @@ export function runPushTest(t: PushTest) {
     data = v;
   });
 
-  expect(log).toEqual(log2);
+  try {
+    expect(log).toEqual(log2);
+  } catch (e) {
+    console.error(log, '\n\n', log2);
+    throw e;
+  }
   expect(actualStorage).toEqual(actualStorage2);
 
   view.flush();

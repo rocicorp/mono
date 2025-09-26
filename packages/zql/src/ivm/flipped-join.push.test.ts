@@ -4295,11 +4295,11 @@ describe('edit assignee', () => {
   const format: Format = {
     singular: false,
     relationships: {
-      creator: {
+      creator_0: {
         singular: false,
         relationships: {},
       },
-      assignee: {
+      assignee_1: {
         singular: false,
         relationships: {},
       },
@@ -4337,15 +4337,8 @@ describe('edit assignee', () => {
     expect(data).toMatchInlineSnapshot(`
       [
         {
-          "assignee": [
-            {
-              "name": "user 1",
-              "userID": "u1",
-              Symbol(rc): 1,
-            },
-          ],
           "assigneeID": "u1",
-          "creator": [
+          "assignee_1": [
             {
               "name": "user 1",
               "userID": "u1",
@@ -4353,20 +4346,20 @@ describe('edit assignee', () => {
             },
           ],
           "creatorID": "u1",
+          "creator_0": [
+            {
+              "name": "user 1",
+              "userID": "u1",
+              Symbol(rc): 1,
+            },
+          ],
           "issueID": "i1",
           "text": "first issue",
           Symbol(rc): 1,
         },
         {
-          "assignee": [
-            {
-              "name": "user 2",
-              "userID": "u2",
-              Symbol(rc): 1,
-            },
-          ],
           "assigneeID": "u2",
-          "creator": [
+          "assignee_1": [
             {
               "name": "user 2",
               "userID": "u2",
@@ -4374,6 +4367,13 @@ describe('edit assignee', () => {
             },
           ],
           "creatorID": "u2",
+          "creator_0": [
+            {
+              "name": "user 2",
+              "userID": "u2",
+              Symbol(rc): 1,
+            },
+          ],
           "issueID": "i2",
           "text": "second issue",
           Symbol(rc): 1,
@@ -4397,7 +4397,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".creator:source(user)",
+          ".creator_0:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4406,7 +4406,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":flipped-join(creator)",
+          ":flipped-join(creator_0)",
           "push",
           {
             "row": {
@@ -4419,7 +4419,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".assignee:source(user)",
+          ".assignee_1:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4441,7 +4441,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".creator:source(user)",
+          ".creator_0:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4450,7 +4450,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":flipped-join(creator)",
+          ":flipped-join(creator_0)",
           "push",
           {
             "row": {
@@ -4463,7 +4463,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".assignee:source(user)",
+          ".assignee_1:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4472,7 +4472,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":flipped-join(assignee)",
+          ":flipped-join(assignee_1)",
           "push",
           {
             "row": {
@@ -4485,7 +4485,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".creator:source(user)",
+          ".creator_0:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4494,7 +4494,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".assignee:source(user)",
+          ".assignee_1:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4510,7 +4510,7 @@ describe('edit assignee', () => {
         {
           "node": {
             "relationships": {
-              "assignee": [
+              "assignee_1": [
                 {
                   "relationships": {},
                   "row": {
@@ -4519,7 +4519,7 @@ describe('edit assignee', () => {
                   },
                 },
               ],
-              "creator": [
+              "creator_0": [
                 {
                   "relationships": {},
                   "row": {
@@ -4641,22 +4641,8 @@ describe('edit assignee', () => {
     expect(data).toMatchInlineSnapshot(`
       [
         {
-          "assignee": [
-            {
-              "id": 1,
-              "name": "user 1",
-              "userID": "u1",
-              Symbol(rc): 1,
-            },
-            {
-              "id": 1.5,
-              "name": "user 1.5",
-              "userID": "u1",
-              Symbol(rc): 1,
-            },
-          ],
           "assigneeID": "u1",
-          "creator": [
+          "assignee_1": [
             {
               "id": 1,
               "name": "user 1",
@@ -4671,21 +4657,27 @@ describe('edit assignee', () => {
             },
           ],
           "creatorID": "u1",
+          "creator_0": [
+            {
+              "id": 1,
+              "name": "user 1",
+              "userID": "u1",
+              Symbol(rc): 1,
+            },
+            {
+              "id": 1.5,
+              "name": "user 1.5",
+              "userID": "u1",
+              Symbol(rc): 1,
+            },
+          ],
           "issueID": "i1",
           "text": "first issue",
           Symbol(rc): 1,
         },
         {
-          "assignee": [
-            {
-              "id": 2,
-              "name": "user 2",
-              "userID": "u2",
-              Symbol(rc): 1,
-            },
-          ],
           "assigneeID": "u2",
-          "creator": [
+          "assignee_1": [
             {
               "id": 2,
               "name": "user 2",
@@ -4694,6 +4686,14 @@ describe('edit assignee', () => {
             },
           ],
           "creatorID": "u2",
+          "creator_0": [
+            {
+              "id": 2,
+              "name": "user 2",
+              "userID": "u2",
+              Symbol(rc): 1,
+            },
+          ],
           "issueID": "i2",
           "text": "second issue",
           Symbol(rc): 1,
@@ -4717,7 +4717,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".creator:source(user)",
+          ".creator_0:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4726,7 +4726,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":flipped-join(creator)",
+          ":flipped-join(creator_0)",
           "push",
           {
             "row": {
@@ -4739,7 +4739,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".assignee:source(user)",
+          ".assignee_1:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4761,7 +4761,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".creator:source(user)",
+          ".creator_0:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4770,7 +4770,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":flipped-join(creator)",
+          ":flipped-join(creator_0)",
           "push",
           {
             "row": {
@@ -4783,7 +4783,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".assignee:source(user)",
+          ".assignee_1:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4792,7 +4792,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ":flipped-join(assignee)",
+          ":flipped-join(assignee_1)",
           "push",
           {
             "row": {
@@ -4805,7 +4805,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".creator:source(user)",
+          ".creator_0:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4814,7 +4814,7 @@ describe('edit assignee', () => {
           },
         ],
         [
-          ".assignee:source(user)",
+          ".assignee_1:source(user)",
           "fetch",
           {
             "constraint": {
@@ -4830,7 +4830,7 @@ describe('edit assignee', () => {
         {
           "node": {
             "relationships": {
-              "assignee": [
+              "assignee_1": [
                 {
                   "relationships": {},
                   "row": {
@@ -4848,7 +4848,7 @@ describe('edit assignee', () => {
                   },
                 },
               ],
-              "creator": [
+              "creator_0": [
                 {
                   "relationships": {},
                   "row": {
@@ -4920,7 +4920,21 @@ describe('edit assignee', () => {
       [
         {
           "assigneeID": "u2",
+          "assignee_1": [
+            {
+              "name": "user 2",
+              "userID": "u2",
+              Symbol(rc): 1,
+            },
+          ],
           "creatorID": "u2",
+          "creator_0": [
+            {
+              "name": "user 2",
+              "userID": "u2",
+              Symbol(rc): 1,
+            },
+          ],
           "issueID": "i2",
           "text": "second issue",
           Symbol(rc): 1,
@@ -5190,7 +5204,23 @@ describe('edit assignee', () => {
       [
         {
           "assigneeID": "u2",
+          "assignee_1": [
+            {
+              "id": 2,
+              "name": "user 2",
+              "userID": "u2",
+              Symbol(rc): 1,
+            },
+          ],
           "creatorID": "u2",
+          "creator_0": [
+            {
+              "id": 2,
+              "name": "user 2",
+              "userID": "u2",
+              Symbol(rc): 1,
+            },
+          ],
           "issueID": "i2",
           "text": "second issue",
           Symbol(rc): 1,
