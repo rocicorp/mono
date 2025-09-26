@@ -33,6 +33,8 @@ export default function Home() {
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [timeRange, setTimeRange] = useState(7); // days
+  const [hoveredMetric, setHoveredMetric] = useState<string | null>(null);
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
 
   // Debounce search input
   useEffect(() => {
@@ -222,6 +224,15 @@ export default function Home() {
                     key={sparkline.benchmarkId}
                     className="bg-white rounded border border-gray-200 p-2 transition-all relative cursor-pointer hover:shadow-lg hover:z-10"
                     onClick={() => router.push(`/metric/${sparkline.benchmarkId}`)}
+                    onMouseEnter={(e) => {
+                      setHoveredMetric(sparkline.benchmarkName);
+                      const rect = e.currentTarget.getBoundingClientRect();
+                      setMousePosition({
+                        x: rect.left + rect.width / 2,
+                        y: rect.top - 10
+                      });
+                    }}
+                    onMouseLeave={() => setHoveredMetric(null)}
                   >
                     {/* Metric Name */}
                     <h3
@@ -301,6 +312,28 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {/* Tooltip */}
+      {hoveredMetric && (
+        <div
+          className="fixed z-50 bg-gray-900 text-white px-3 py-2 rounded-lg text-sm max-w-md break-words pointer-events-none shadow-xl"
+          style={{
+            left: `${mousePosition.x}px`,
+            top: `${mousePosition.y}px`,
+            transform: 'translate(-50%, -100%)'
+          }}
+        >
+          {hoveredMetric}
+          <div
+            className="absolute w-2 h-2 bg-gray-900 transform rotate-45"
+            style={{
+              bottom: '-4px',
+              left: '50%',
+              transform: 'translateX(-50%)'
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }
