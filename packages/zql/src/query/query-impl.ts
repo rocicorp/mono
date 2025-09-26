@@ -573,9 +573,8 @@ export abstract class AbstractQuery<
             this.#schema.tables[destSchema],
             sq._ast,
           ),
-          flip,
         },
-        op: 'EXISTS',
+        op: existsOp(flip),
       };
     }
 
@@ -610,7 +609,6 @@ export abstract class AbstractQuery<
             parentField: firstRelation.sourceField,
             childField: firstRelation.destField,
           },
-          flip,
           subquery: {
             table: junctionSchema,
             alias: `${SUBQ_PREFIX}${relationship}`,
@@ -631,13 +629,12 @@ export abstract class AbstractQuery<
                   this.#schema.tables[destSchema],
                   (queryToDest as QueryImpl<any, any>)._ast,
                 ),
-                flip,
               },
-              op: 'EXISTS',
+              op: existsOp(flip),
             },
           },
         },
-        op: 'EXISTS',
+        op: existsOp(flip),
       };
     }
 
@@ -696,6 +693,10 @@ export abstract class AbstractQuery<
 }
 
 const completedAstSymbol = Symbol();
+
+function existsOp(flip: boolean) {
+  return flip ? 'FLIPPED EXISTS' : 'EXISTS';
+}
 
 export function completedAST(q: Query<Schema, string, any>) {
   return (q as QueryImpl<Schema, string>)[completedAstSymbol];
