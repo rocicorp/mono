@@ -1058,15 +1058,6 @@ suite('push one:many', () => {
             },
           ],
           [
-            ".comments:source(comment)",
-            "fetch",
-            {
-              "constraint": {
-                "issueID": "i1",
-              },
-            },
-          ],
-          [
             ":flipped-join(comments)",
             "push",
             {
@@ -5692,16 +5683,6 @@ describe('joins with compound join keys', () => {
               "id": 0,
             },
             "type": "edit",
-          },
-        ],
-        [
-          ".ab:source(b)",
-          "fetch",
-          {
-            "constraint": {
-              "b1": 2,
-              "b2": 1,
-            },
           },
         ],
         [
