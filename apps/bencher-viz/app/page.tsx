@@ -30,6 +30,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [selectedSparkline, setSelectedSparkline] = useState<SparklineData | null>(null);
 
   // Debounce search input
   useEffect(() => {
@@ -128,6 +129,121 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Modal */}
+      {selectedSparkline && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4"
+          onClick={() => setSelectedSparkline(null)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-2xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => setSelectedSparkline(null)}
+              className="float-right text-gray-400 hover:text-gray-600 text-2xl leading-none"
+            >
+              ×
+            </button>
+
+            {/* Modal content */}
+            <h2 className="text-lg font-semibold text-gray-900 mb-4 pr-8">
+              {selectedSparkline.benchmarkName}
+            </h2>
+
+            {/* Large Sparkline */}
+            <div className="h-48 mb-6">
+              {selectedSparkline.data.length > 0 ? (
+                (() => {
+                  const { min, max } = getMinMax(selectedSparkline.data);
+                  const latest = selectedSparkline.data[selectedSparkline.data.length - 1];
+                  const first = selectedSparkline.data[0];
+                  const change = first && latest ? ((latest.value - first.value) / first.value) * 100 : 0;
+
+                  return (
+                    <>
+                      <Sparklines
+                        data={selectedSparkline.data.map(d => d.value)}
+                        min={min * 0.95}
+                        max={max * 1.05}
+                        margin={4}
+                      >
+                        <SparklinesLine
+                          color={change >= 0 ? '#10B981' : '#EF4444'}
+                          style={{ strokeWidth: 2, fill: "none" }}
+                        />
+                        <SparklinesReferenceLine
+                          type="mean"
+                          style={{ stroke: '#374151', strokeDasharray: '4 4', strokeWidth: 1.5, opacity: 0.8 }}
+                        />
+                        <SparklinesSpots
+                          size={3}
+                          style={{ fill: change >= 0 ? '#10B981' : '#EF4444' }}
+                        />
+                      </Sparklines>
+
+                      {/* Detailed Stats */}
+                      <div className="mt-6 grid grid-cols-2 gap-4">
+                        <div className="bg-gray-50 rounded p-3">
+                          <div className="text-sm text-gray-500 mb-1">Latest Value</div>
+                          <div className="text-xl font-bold text-gray-900">
+                            {latest ? formatValue(latest.value) : 'N/A'}
+                          </div>
+                        </div>
+                        <div className="bg-gray-50 rounded p-3">
+                          <div className="text-sm text-gray-500 mb-1">Change</div>
+                          <div className={`text-xl font-bold ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {change >= 0 ? '+' : ''}{change.toFixed(2)}%
+                          </div>
+                        </div>
+                        <div className="bg-gray-50 rounded p-3">
+                          <div className="text-sm text-gray-500 mb-1">Minimum</div>
+                          <div className="text-xl font-bold text-gray-900">
+                            {formatValue(min)}
+                          </div>
+                        </div>
+                        <div className="bg-gray-50 rounded p-3">
+                          <div className="text-sm text-gray-500 mb-1">Maximum</div>
+                          <div className="text-xl font-bold text-gray-900">
+                            {formatValue(max)}
+                          </div>
+                        </div>
+                        <div className="bg-gray-50 rounded p-3">
+                          <div className="text-sm text-gray-500 mb-1">Average</div>
+                          <div className="text-xl font-bold text-gray-900">
+                            {formatValue(selectedSparkline.data.reduce((sum, d) => sum + d.value, 0) / selectedSparkline.data.length)}
+                          </div>
+                        </div>
+                        <div className="bg-gray-50 rounded p-3">
+                          <div className="text-sm text-gray-500 mb-1">Data Points</div>
+                          <div className="text-xl font-bold text-gray-900">
+                            {selectedSparkline.data.length}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Time range */}
+                      <div className="mt-4 text-sm text-gray-500 text-center">
+                        {first && latest && (
+                          <>
+                            {new Date(first.timestamp).toLocaleDateString()} — {new Date(latest.timestamp).toLocaleDateString()}
+                          </>
+                        )}
+                      </div>
+                    </>
+                  );
+                })()
+              ) : (
+                <div className="flex items-center justify-center h-full text-gray-400">
+                  No data available
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="sticky top-0 z-20 bg-white shadow-sm border-b">
         <div className="px-4 py-3">
@@ -195,7 +311,8 @@ export default function Home() {
                 return (
                   <div
                     key={sparkline.benchmarkId}
-                    className="bg-white rounded border border-gray-200 p-2 hover:shadow-lg hover:z-10 transition-all relative"
+                    className="bg-white rounded border border-gray-200 p-2 transition-all relative cursor-pointer hover:shadow-lg hover:z-10"
+                    onClick={() => setSelectedSparkline(sparkline)}
                   >
                     {/* Metric Name */}
                     <h3
@@ -221,6 +338,10 @@ export default function Home() {
                           <SparklinesReferenceLine
                             type="mean"
                             style={{ stroke: '#374151', strokeDasharray: '2 2', strokeWidth: 1, opacity: 0.8 }}
+                          />
+                          <SparklinesSpots
+                            size={0}
+                            style={{ fill: change >= 0 ? '#10B981' : '#EF4444', opacity: 0 }}
                           />
                         </Sparklines>
                       ) : (
