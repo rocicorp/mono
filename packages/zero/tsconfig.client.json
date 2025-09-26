@@ -8,6 +8,7 @@
     "src/zero.ts",
     "src/react.ts",
     "src/solid.ts",
-    "src/react-native.ts"
+    "src/react-native.ts",
+    "src/bun.ts"
   ]
 }

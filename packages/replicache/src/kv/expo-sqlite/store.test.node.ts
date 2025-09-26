@@ -1,6 +1,5 @@
 import sqlite3 from '@rocicorp/zero-sqlite3';
 import fs from 'node:fs';
-import path from 'node:path';
 import {expect, test, vi} from 'vitest';
 import {withRead, withWrite} from '../../with-transactions.ts';
 import {
@@ -10,18 +9,14 @@ import {
 import {clearAllNamedStoresForTesting} from '../sqlite-store.ts';
 import {expoSQLiteStoreProvider, type ExpoSQLiteStoreOptions} from './store.ts';
 
-//Mock the expo-sqlite module with Node SQLite implementation
+// Mock the expo-sqlite module with Node SQLite implementation
 vi.mock('expo-sqlite', () => ({
   openDatabaseSync: (name: string) => {
-    // Add expo_ prefix to match the actual store implementation
-    const prefixedName = `expo_${name}`;
-    const filename = path.resolve(__dirname, `${prefixedName}.db`);
-
     // Register the store name for cleanup (not the filename)
     registerCreatedFile(name);
 
     // Create a new database connection - SQLite handles file locking and concurrency
-    const db = sqlite3(filename);
+    const db = sqlite3(name);
 
     return {
       execSync: (sql: string) => db.exec(sql),
@@ -86,10 +81,7 @@ vi.mock('expo-sqlite', () => ({
     };
   },
   deleteDatabaseSync: (name: string) => {
-    // Add expo_ prefix to match the actual store implementation
-    const prefixedName = `expo_${name}`;
-    const filename = path.resolve(__dirname, `${prefixedName}.db`);
-
+    const filename = name;
     // Simply delete the file if it exists - SQLite handles any open connections
     if (fs.existsSync(filename)) {
       fs.unlinkSync(filename);
