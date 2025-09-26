@@ -26,6 +26,11 @@ interface SparklineData {
   benchmarkId: string;
   benchmarkName: string;
   hasAlert: boolean;
+  alertInfo?: {
+    limit: string;
+    boundary?: any;
+    metric?: any;
+  };
   data: Array<{
     timestamp: number;
     value: number;
@@ -65,9 +70,12 @@ export async function GET(request: NextRequest) {
   try {
     // Step 1: Fetch active alerts to identify benchmarks with regressions
     const alertsCacheKey = `alerts:${BENCHER_PROJECT}:active`;
-    let alertedBenchmarkIds: Set<string> | null = cache.get(alertsCacheKey);
+    const alertDetailsCacheKey = `alertDetails:${BENCHER_PROJECT}:active`;
 
-    if (!alertedBenchmarkIds) {
+    let alertedBenchmarkIds: Set<string> | null = cache.get(alertsCacheKey);
+    let alertDetails: Map<string, any> | null = cache.get(alertDetailsCacheKey);
+
+    if (!alertedBenchmarkIds || !alertDetails) {
       const alertsUrl = new URL(
         `/v0/projects/${BENCHER_PROJECT}/alerts`,
         BENCHER_API_URL
@@ -80,24 +88,46 @@ export async function GET(request: NextRequest) {
         if (alertsResponse.ok) {
           const alertsData = await alertsResponse.json();
           alertedBenchmarkIds = new Set<string>();
+          alertDetails = new Map<string, any>();
 
-          // Extract benchmark IDs from alerts
+          // Extract benchmark IDs and alert details
           if (Array.isArray(alertsData)) {
             for (const alert of alertsData) {
               if (alert.benchmark?.uuid) {
                 alertedBenchmarkIds.add(alert.benchmark.uuid);
+                // Store the most recent alert for each benchmark
+                if (!alertDetails.has(alert.benchmark.uuid) ||
+                    new Date(alert.modified) > new Date(alertDetails.get(alert.benchmark.uuid).modified)) {
+                  alertDetails.set(alert.benchmark.uuid, {
+                    uuid: alert.uuid,
+                    limit: alert.limit,
+                    boundary: alert.boundary,
+                    status: alert.status,
+                    modified: alert.modified,
+                    metric: alert.metric
+                  });
+                }
               }
+            }
+            // Log an example alert to see structure
+            if (alertsData.length > 0) {
+              console.log('Example alert structure:', JSON.stringify(alertsData[0], null, 2));
             }
           }
 
-          // Cache the alerted benchmark IDs
+          // Cache both the IDs and details
           cache.set(alertsCacheKey, alertedBenchmarkIds);
+          cache.set(alertDetailsCacheKey, alertDetails);
           console.log(`Found ${alertedBenchmarkIds.size} benchmarks with active alerts`);
         }
       } catch (error) {
         console.error('Error fetching alerts:', error);
         alertedBenchmarkIds = new Set<string>();
+        alertDetails = new Map<string, any>();
       }
+    } else {
+      // If we have cached data, get the alert details too
+      alertDetails = cache.get(alertDetailsCacheKey) || new Map<string, any>();
     }
 
     // Step 2: Fetch benchmarks list
@@ -250,10 +280,14 @@ export async function GET(request: NextRequest) {
         // The metrics are in results[0].metrics array
         const dataPoints = perfData.results?.[0]?.metrics || [];
 
+        const hasAlert = alertedBenchmarkIds?.has(benchmark.uuid) || false;
         const sparklineData: SparklineData = {
           benchmarkId: benchmark.uuid,
           benchmarkName: benchmark.name,
-          hasAlert: alertedBenchmarkIds?.has(benchmark.uuid) || false,
+          hasAlert,
+          alertInfo: hasAlert && alertDetails?.has(benchmark.uuid)
+            ? alertDetails.get(benchmark.uuid)
+            : undefined,
           data: dataPoints.map((point: PerfDataPoint) => ({
             timestamp: new Date(point.start_time).getTime(),
             value: point.metric.value,
