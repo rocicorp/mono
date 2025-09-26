@@ -379,15 +379,15 @@ function HomeContent() {
                   {hoveredMetric.alertInfo.boundary.baseline && (
                     <div>Baseline: {formatValue(hoveredMetric.alertInfo.boundary.baseline)}</div>
                   )}
-                  {(hoveredMetric.alertInfo.boundary.lower_limit !== null ||
-                    hoveredMetric.alertInfo.boundary.upper_limit !== null) && (
+                  {(hoveredMetric.alertInfo.boundary.lower_limit != null ||
+                    hoveredMetric.alertInfo.boundary.upper_limit != null) && (
                     <div>
                       Limits: {
-                        hoveredMetric.alertInfo.boundary.lower_limit !== null
+                        hoveredMetric.alertInfo.boundary.lower_limit != null
                           ? formatValue(hoveredMetric.alertInfo.boundary.lower_limit)
                           : '—'
                       } to {
-                        hoveredMetric.alertInfo.boundary.upper_limit !== null
+                        hoveredMetric.alertInfo.boundary.upper_limit != null
                           ? formatValue(hoveredMetric.alertInfo.boundary.upper_limit)
                           : '—'
                       }

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import {NextRequest, NextResponse} from 'next/server';
 import cache from '@/lib/cache';
 
 interface BenchmarkItem {
@@ -13,7 +13,6 @@ interface PerfDataPoint {
   };
   start_time: string;
 }
-
 
 interface SparklineData {
   benchmarkId: string;
@@ -40,21 +39,25 @@ export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const search = searchParams.get('search') || '';
   const page = parseInt(searchParams.get('page') || '1', 10);
-  const perPage = Math.min(parseInt(searchParams.get('perPage') || '100', 10), 100);
+  const perPage = Math.min(
+    parseInt(searchParams.get('perPage') || '100', 10),
+    100,
+  );
   const days = parseInt(searchParams.get('days') || '7', 10);
 
   // Required Bencher API configuration
   const BENCHER_API_TOKEN = process.env.BENCHER_API_TOKEN;
   const BENCHER_PROJECT = process.env.BENCHER_PROJECT;
-  const BENCHER_API_URL = process.env.BENCHER_API_URL || 'https://api.bencher.dev';
+  const BENCHER_API_URL =
+    process.env.BENCHER_API_URL || 'https://api.bencher.dev';
   const BENCHER_BRANCH = process.env.BENCHER_BRANCH;
   const BENCHER_TESTBED = process.env.BENCHER_TESTBED;
   const BENCHER_MEASURE = process.env.BENCHER_MEASURE;
 
   if (!BENCHER_PROJECT) {
     return NextResponse.json(
-      { error: 'BENCHER_PROJECT environment variable is required' },
-      { status: 500 }
+      {error: 'BENCHER_PROJECT environment variable is required'},
+      {status: 500},
     );
   }
 
@@ -86,18 +89,19 @@ export async function GET(request: NextRequest) {
         value?: number;
       };
     }
-    let alertDetails: Map<string, AlertDetail> | null = cache.get(alertDetailsCacheKey);
+    let alertDetails: Map<string, AlertDetail> | null =
+      cache.get(alertDetailsCacheKey);
 
     if (!alertedBenchmarkIds || !alertDetails) {
       const alertsUrl = new URL(
         `/v0/projects/${BENCHER_PROJECT}/alerts`,
-        BENCHER_API_URL
+        BENCHER_API_URL,
       );
       alertsUrl.searchParams.append('status', 'active');
       alertsUrl.searchParams.append('per_page', '255');
 
       try {
-        const alertsResponse = await fetch(alertsUrl.toString(), { headers });
+        const alertsResponse = await fetch(alertsUrl.toString(), {headers});
         if (alertsResponse.ok) {
           const alertsData = await alertsResponse.json();
           alertedBenchmarkIds = new Set<string>();
@@ -109,15 +113,18 @@ export async function GET(request: NextRequest) {
               if (alert.benchmark?.uuid) {
                 alertedBenchmarkIds.add(alert.benchmark.uuid);
                 // Store the most recent alert for each benchmark
-                if (!alertDetails.has(alert.benchmark.uuid) ||
-                    new Date(alert.modified) > new Date(alertDetails.get(alert.benchmark.uuid).modified)) {
+                if (
+                  !alertDetails.has(alert.benchmark.uuid) ||
+                  new Date(alert.modified) >
+                    new Date(alertDetails.get(alert.benchmark.uuid)!.modified)
+                ) {
                   alertDetails.set(alert.benchmark.uuid, {
                     uuid: alert.uuid,
                     limit: alert.limit,
                     boundary: alert.boundary,
                     status: alert.status,
                     modified: alert.modified,
-                    metric: alert.metric
+                    metric: alert.metric,
                   });
                 }
               }
@@ -134,7 +141,8 @@ export async function GET(request: NextRequest) {
       }
     } else {
       // If we have cached data, get the alert details too
-      alertDetails = cache.get(alertDetailsCacheKey) || new Map<string, AlertDetail>();
+      alertDetails =
+        cache.get(alertDetailsCacheKey) || new Map<string, AlertDetail>();
     }
 
     // Step 2: Fetch benchmarks list
@@ -147,7 +155,7 @@ export async function GET(request: NextRequest) {
       // Fetch benchmarks matching the search string
       const benchmarksUrl = new URL(
         `/v0/projects/${BENCHER_PROJECT}/benchmarks`,
-        BENCHER_API_URL
+        BENCHER_API_URL,
       );
 
       if (search) {
@@ -157,13 +165,15 @@ export async function GET(request: NextRequest) {
       benchmarksUrl.searchParams.append('sort', 'name');
       benchmarksUrl.searchParams.append('direction', 'asc');
 
-      const benchmarksResponse = await fetch(benchmarksUrl.toString(), { headers });
+      const benchmarksResponse = await fetch(benchmarksUrl.toString(), {
+        headers,
+      });
 
       if (!benchmarksResponse.ok) {
         const errorText = await benchmarksResponse.text();
         return NextResponse.json(
-          { error: `Failed to fetch benchmarks: ${errorText}` },
-          { status: benchmarksResponse.status }
+          {error: `Failed to fetch benchmarks: ${errorText}`},
+          {status: benchmarksResponse.status},
         );
       }
 
@@ -176,6 +186,7 @@ export async function GET(request: NextRequest) {
       // Cache the benchmarks list
       cache.set(benchmarksCacheKey, benchmarks);
     }
+    benchmarks = benchmarks ?? [];
 
     // Sort benchmarks to prioritize those with alerts
     const sortedBenchmarks = [...benchmarks].sort((a, b) => {
@@ -224,33 +235,34 @@ export async function GET(request: NextRequest) {
 
       return NextResponse.json(
         {
-          error: `Missing required environment variables: ${missingConfig.join(', ')}. ` +
-                  'These are needed to specify which branch, testbed, and measure to query for performance data.'
+          error:
+            `Missing required environment variables: ${missingConfig.join(', ')}. ` +
+            'These are needed to specify which branch, testbed, and measure to query for performance data.',
         },
-        { status: 500 }
+        {status: 500},
       );
     }
 
     // Step 3: Fetch performance data for each paginated benchmark
-    const startTime = Date.now() - (days * 24 * 60 * 60 * 1000);
+    const startTime = Date.now() - days * 24 * 60 * 60 * 1000;
     const endTime = Date.now();
 
     const sparklines: SparklineData[] = [];
 
     // Batch requests for better performance
-    const perfPromises = paginatedBenchmarks.map(async (benchmark) => {
+    const perfPromises = paginatedBenchmarks.map(async benchmark => {
       // Create cache key for performance data
       const perfCacheKey = `perf:${benchmark.uuid}:${BENCHER_BRANCH}:${BENCHER_TESTBED}:${BENCHER_MEASURE}:${days}d`;
 
       // Check cache first
-      const cachedPerfData = cache.get(perfCacheKey);
+      const cachedPerfData = cache.get(perfCacheKey) as SparklineData | undefined;
       if (cachedPerfData) {
         return cachedPerfData;
       }
 
       const perfUrl = new URL(
         `/v0/projects/${BENCHER_PROJECT}/perf`,
-        BENCHER_API_URL
+        BENCHER_API_URL,
       );
 
       perfUrl.searchParams.append('benchmarks', benchmark.uuid);
@@ -261,7 +273,7 @@ export async function GET(request: NextRequest) {
       perfUrl.searchParams.append('end_time', endTime.toString());
 
       try {
-        const perfResponse = await fetch(perfUrl.toString(), { headers });
+        const perfResponse = await fetch(perfUrl.toString(), {headers});
 
         if (!perfResponse.ok) {
           return null;
@@ -278,13 +290,16 @@ export async function GET(request: NextRequest) {
           benchmarkId: benchmark.uuid,
           benchmarkName: benchmark.name,
           hasAlert,
-          alertInfo: hasAlert && alertDetails?.has(benchmark.uuid)
-            ? alertDetails.get(benchmark.uuid)
-            : undefined,
-          data: dataPoints.map((point: PerfDataPoint) => ({
-            timestamp: new Date(point.start_time).getTime(),
-            value: point.metric.value,
-          })).sort((a, b) => a.timestamp - b.timestamp),
+          alertInfo:
+            hasAlert && alertDetails?.has(benchmark.uuid)
+              ? alertDetails.get(benchmark.uuid)
+              : undefined,
+          data: dataPoints
+            .map((point: PerfDataPoint) => ({
+              timestamp: new Date(point.start_time).getTime(),
+              value: point.metric.value,
+            }))
+            .sort((a: {timestamp: number; value: number}, b: {timestamp: number; value: number}) => a.timestamp - b.timestamp),
         };
 
         // Cache the sparkline data
@@ -322,9 +337,6 @@ export async function GET(request: NextRequest) {
       },
     });
   } catch (_error) {
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({error: 'Internal server error'}, {status: 500});
   }
 }
