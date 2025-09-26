@@ -32,6 +32,7 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
+  const [timeRange, setTimeRange] = useState(7); // days
 
   // Debounce search input
   useEffect(() => {
@@ -53,6 +54,7 @@ export default function Home() {
       const params = new URLSearchParams({
         page: pageNum.toString(),
         perPage: '100',
+        days: timeRange.toString(),
       });
 
       if (searchTerm) {
@@ -82,12 +84,14 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [timeRange]);
 
-  // Initial load and search changes
+  // Initial load, search changes, and time range changes
   useEffect(() => {
+    setPage(1);
+    setSparklines([]);
     fetchMetrics(1, debouncedSearch, false);
-  }, [debouncedSearch, fetchMetrics]);
+  }, [debouncedSearch, timeRange, fetchMetrics]);
 
   // Load more function
   const loadMore = () => {
@@ -133,7 +137,7 @@ export default function Home() {
 
       {/* Header */}
       <div className="sticky top-0 z-20 bg-white shadow-sm border-b">
-        <div className="px-4 py-3">
+        <div className="px-4 py-3 space-y-3">
           <div className="flex items-center gap-4">
             <h1 className="text-lg font-bold text-gray-900">Bencher Metrics</h1>
 
@@ -165,6 +169,24 @@ export default function Home() {
             <span className="text-sm text-gray-500">
               {sparklines.length} metrics
             </span>
+          </div>
+
+          {/* Time Range Selector */}
+          <div className="flex gap-2 items-center">
+            <span className="text-sm text-gray-600">Time Range:</span>
+            {[7, 14, 30, 90].map(days => (
+              <button
+                key={days}
+                onClick={() => setTimeRange(days)}
+                className={`px-3 py-1 text-sm rounded transition-colors ${
+                  timeRange === days
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {days}d
+              </button>
+            ))}
           </div>
         </div>
       </div>

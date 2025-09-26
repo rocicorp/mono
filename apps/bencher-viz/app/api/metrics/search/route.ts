@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
   const search = searchParams.get('search') || '';
   const page = parseInt(searchParams.get('page') || '1', 10);
   const perPage = Math.min(parseInt(searchParams.get('perPage') || '100', 10), 100);
+  const days = parseInt(searchParams.get('days') || '7', 10);
 
   // Required Bencher API configuration
   const BENCHER_API_TOKEN = process.env.BENCHER_API_TOKEN;
@@ -132,7 +133,7 @@ export async function GET(request: NextRequest) {
           branch: BENCHER_BRANCH,
           testbed: BENCHER_TESTBED,
           measure: BENCHER_MEASURE,
-          lookbackMs: 7 * 24 * 60 * 60 * 1000,
+          lookbackMs: days * 24 * 60 * 60 * 1000,
         },
       });
     }
@@ -155,15 +156,15 @@ export async function GET(request: NextRequest) {
     }
 
     // Step 3: Fetch performance data for each paginated benchmark
-    const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
-    const now = Date.now();
+    const startTime = Date.now() - (days * 24 * 60 * 60 * 1000);
+    const endTime = Date.now();
 
     const sparklines: SparklineData[] = [];
 
     // Batch requests for better performance
     const perfPromises = paginatedBenchmarks.map(async (benchmark) => {
       // Create cache key for performance data
-      const perfCacheKey = `perf:${benchmark.uuid}:${BENCHER_BRANCH}:${BENCHER_TESTBED}:${BENCHER_MEASURE}:week`;
+      const perfCacheKey = `perf:${benchmark.uuid}:${BENCHER_BRANCH}:${BENCHER_TESTBED}:${BENCHER_MEASURE}:${days}d`;
 
       // Check cache first
       const cachedPerfData = cache.get(perfCacheKey);
@@ -181,8 +182,8 @@ export async function GET(request: NextRequest) {
       perfUrl.searchParams.append('branches', BENCHER_BRANCH);
       perfUrl.searchParams.append('testbeds', BENCHER_TESTBED);
       perfUrl.searchParams.append('measures', BENCHER_MEASURE);
-      perfUrl.searchParams.append('start_time', oneWeekAgo.toString());
-      perfUrl.searchParams.append('end_time', now.toString());
+      perfUrl.searchParams.append('start_time', startTime.toString());
+      perfUrl.searchParams.append('end_time', endTime.toString());
 
       try {
         const perfResponse = await fetch(perfUrl.toString(), { headers });
@@ -239,7 +240,7 @@ export async function GET(request: NextRequest) {
         branch: BENCHER_BRANCH,
         testbed: BENCHER_TESTBED,
         measure: BENCHER_MEASURE,
-        lookbackMs: 7 * 24 * 60 * 60 * 1000,
+        lookbackMs: days * 24 * 60 * 60 * 1000,
       },
     });
   } catch (error) {
