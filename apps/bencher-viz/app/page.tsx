@@ -129,38 +129,45 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="sticky top-0 z-10 bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Bencher Metrics Dashboard</h1>
+      <div className="sticky top-0 z-20 bg-white shadow-sm border-b">
+        <div className="px-4 py-3">
+          <div className="flex items-center gap-4">
+            <h1 className="text-lg font-bold text-gray-900">Bencher Metrics</h1>
 
-          {/* Search Input */}
-          <div className="relative">
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Filter metrics by name..."
-              className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-            <svg
-              className="absolute left-3 top-2.5 h-5 w-5 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            {/* Search Input */}
+            <div className="relative flex-1 max-w-md">
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Filter metrics..."
+                className="w-full px-3 py-1.5 pl-8 text-sm border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-transparent"
               />
-            </svg>
+              <svg
+                className="absolute left-2 top-2 h-4 w-4 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </div>
+
+            {/* Metrics count */}
+            <span className="text-sm text-gray-500">
+              {sparklines.length} metrics
+            </span>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="px-4 py-4">
         {/* Loading State */}
         {loading && sparklines.length === 0 && (
           <div className="flex justify-center items-center h-64">
@@ -178,7 +185,7 @@ export default function Home() {
         {/* Sparklines Grid */}
         {sparklines.length > 0 && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-2">
               {sparklines.map((sparkline) => {
                 const { min, max } = getMinMax(sparkline.data);
                 const latest = sparkline.data[sparkline.data.length - 1];
@@ -188,62 +195,50 @@ export default function Home() {
                 return (
                   <div
                     key={sparkline.benchmarkId}
-                    className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow"
+                    className="bg-white rounded border border-gray-200 p-2 hover:shadow-lg hover:z-10 transition-all relative"
                   >
                     {/* Metric Name */}
                     <h3
-                      className="text-sm font-medium text-gray-900 mb-2 truncate"
+                      className="text-xs font-medium text-gray-800 mb-1 truncate leading-tight"
                       title={sparkline.benchmarkName}
                     >
-                      {formatName(sparkline.benchmarkName)}
+                      {sparkline.benchmarkName.split(' > ').pop() || sparkline.benchmarkName}
                     </h3>
 
-                    {/* Stats Row */}
-                    <div className="flex justify-between items-center mb-2 text-xs">
-                      <span className="text-gray-500">
-                        Latest: <span className="font-semibold text-gray-700">{latest ? formatValue(latest.value) : 'N/A'}</span>
-                      </span>
-                      <span className={`font-semibold ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {change >= 0 ? '↑' : '↓'} {Math.abs(change).toFixed(1)}%
-                      </span>
-                    </div>
-
                     {/* Sparkline */}
-                    <div className="h-16">
+                    <div className="h-10 mb-1">
                       {sparkline.data.length > 0 ? (
                         <Sparklines
                           data={sparkline.data.map(d => d.value)}
                           min={min * 0.95}
                           max={max * 1.05}
-                          margin={2}
+                          margin={1}
                         >
                           <SparklinesLine
-                            color="#3B82F6"
-                            style={{ strokeWidth: 1.5, fill: "none" }}
+                            color={change >= 0 ? '#10B981' : '#EF4444'}
+                            style={{ strokeWidth: 1, fill: "none" }}
                           />
                           <SparklinesReferenceLine
                             type="mean"
-                            style={{ stroke: '#94A3B8', strokeDasharray: '2 2', strokeWidth: 1 }}
-                          />
-                          <SparklinesSpots
-                            size={2}
-                            style={{ fill: "#3B82F6" }}
+                            style={{ stroke: '#374151', strokeDasharray: '2 2', strokeWidth: 1, opacity: 0.8 }}
                           />
                         </Sparklines>
                       ) : (
-                        <div className="flex items-center justify-center h-full text-gray-400 text-sm">
-                          No data available
+                        <div className="flex items-center justify-center h-full text-gray-400 text-xs">
+                          No data
                         </div>
                       )}
                     </div>
 
-                    {/* Min/Max Labels */}
-                    {sparkline.data.length > 0 && (
-                      <div className="flex justify-between mt-1 text-xs text-gray-400">
-                        <span>Min: {formatValue(min)}</span>
-                        <span>Max: {formatValue(max)}</span>
-                      </div>
-                    )}
+                    {/* Compact Stats */}
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-gray-600 font-medium">
+                        {latest ? formatValue(latest.value) : 'N/A'}
+                      </span>
+                      <span className={`font-bold ${change >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {change >= 0 ? '+' : ''}{change.toFixed(0)}%
+                      </span>
+                    </div>
                   </div>
                 );
               })}
