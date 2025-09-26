@@ -3,6 +3,6 @@
   "compilerOptions": {
     "types": ["bun"]
   },
-  "include": ["src/bun-sqlite.ts"],
+  "include": ["src/bun.ts"],
   "exclude": []
 }

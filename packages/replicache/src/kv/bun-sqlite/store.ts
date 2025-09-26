@@ -1,7 +1,5 @@
-/* eslint-disable @typescript-eslint/ban-ts-comment */
-// @ts-ignore - Bun modules are available at runtime in Bun environments
 import {Database, type Statement} from 'bun:sqlite';
-import {unlinkSync, existsSync} from 'node:fs';
+import {existsSync, unlinkSync} from 'node:fs';
 import type {
   PreparedStatement,
   SQLiteDatabase,
@@ -58,14 +56,7 @@ class BunSQLiteDatabase implements SQLiteDatabase {
   }
 
   destroy(): void {
-    if (
-      (this.#db as {destroy?: () => void})?.destroy &&
-      // bun:sqlite doesn't have native "destroy" - this is to support our mock tests
-      process.env.NODE_ENV === 'test'
-    ) {
-      (this.#db as unknown as {destroy(): void}).destroy();
-    }
-
+    this.#db.close();
     if (existsSync(this.#filename)) {
       unlinkSync(this.#filename);
     }
