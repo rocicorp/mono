@@ -13,8 +13,18 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 FROM node:22.15.0-alpine3.20
 
 ARG ZERO_VERSION
+ARG ZERO_SYNC_PROTOCOL_VERSION
+ARG ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION
 
 RUN test -n "$ZERO_VERSION"
+RUN test -n "$ZERO_SYNC_PROTOCOL_VERSION"
+RUN test -n "$ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION"
+
+# Surface information about the build or server for the purposes of
+# production / release management.
+LABEL zero.version="$ZERO_VERSION"
+LABEL zero.sync-protocol-version="$ZERO_SYNC_PROTOCOL_VERSION"
+LABEL zero.min-supported-sync-protocol-version="$ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION"
 
 RUN apk add --update curl
 RUN apk add --no-cache readline readline-dev

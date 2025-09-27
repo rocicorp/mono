@@ -4,6 +4,7 @@ import {execSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'path';
+import {assertNumber} from '../../shared/src/asserts.ts';
 
 /** @param {string[]} parts */
 function basePath(...parts) {
@@ -34,6 +35,22 @@ function getPackageData(packagePath) {
  */
 function writePackageData(packagePath, data) {
   fs.writeFileSync(packagePath, JSON.stringify(data, null, 2));
+}
+
+async function getProtocolVersions() {
+  const {PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} = await import(
+    basePath(
+      'packages',
+      'zero',
+      'out',
+      'zero-protocol',
+      'src',
+      'protocol-version.js',
+    )
+  );
+  assertNumber(PROTOCOL_VERSION);
+  assertNumber(MIN_SERVER_SUPPORTED_SYNC_PROTOCOL);
+  return {PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL};
 }
 
 /**
@@ -176,6 +193,11 @@ try {
   execute('npm run format');
   execute('npx syncpack fix-mismatches');
 
+  // Surface information about the code as image metadata (labels) for
+  // production / release management.
+  const {PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} =
+    await getProtocolVersions();
+
   execute('git status');
   execute(`git commit -am "Bump version to ${nextCanaryVersion}"`);
 
@@ -216,6 +238,8 @@ try {
         `docker buildx build \
     --platform linux/amd64,linux/arm64 \
     --build-arg=ZERO_VERSION=${nextCanaryVersion} \
+    --build-arg=ZERO_SYNC_PROTOCOL_VERSION=${PROTOCOL_VERSION} \
+    --build-arg=ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION=${MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} \
     -t rocicorp/zero:${nextCanaryVersion} \
     --push .`,
         {cwd: basePath('packages', 'zero')},
