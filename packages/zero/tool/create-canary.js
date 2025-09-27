@@ -4,7 +4,6 @@ import {execSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'path';
-import {assertNumber} from '../../shared/src/asserts.ts';
 
 /** @param {string[]} parts */
 function basePath(...parts) {
@@ -48,8 +47,14 @@ async function getProtocolVersions() {
       'protocol-version.js',
     )
   );
-  assertNumber(PROTOCOL_VERSION);
-  assertNumber(MIN_SERVER_SUPPORTED_SYNC_PROTOCOL);
+  if (
+    typeof PROTOCOL_VERSION !== 'number' ||
+    typeof MIN_SERVER_SUPPORTED_SYNC_PROTOCOL !== 'number'
+  ) {
+    throw new Error(
+      'Could not extract protocol versions from protocol-version.js',
+    );
+  }
   return {PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL};
 }
 
