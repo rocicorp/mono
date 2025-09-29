@@ -3,7 +3,7 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {SchemaQuery} from '../mutate/custom.ts';
 import {newQuery} from './query-impl.ts';
-import type {HumanReadableRecursive, Query, QueryReturn} from './query.ts';
+import type {HumanReadable, Query, QueryReturn} from './query.ts';
 
 export type QueryFn<
   TContext,
@@ -27,7 +27,7 @@ export type SyncedQuery<
 };
 
 export type QueryFnReturn<TQuery extends QueryFn<any, any, any, any>> =
-  HumanReadableRecursive<QueryReturn<ReturnType<TQuery>>>;
+  HumanReadable<QueryReturn<ReturnType<TQuery>>>;
 
 function normalizeParser<T extends ReadonlyJSONValue[]>(
   parser: ParseFn<T> | HasParseFn<T> | undefined,
