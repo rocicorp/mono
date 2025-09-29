@@ -33,7 +33,6 @@ import {must} from '../../../shared/src/must.ts';
 import {navigator} from '../../../shared/src/navigator.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
-import {Subscribable} from '../../../shared/src/subscribable.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
@@ -161,6 +160,7 @@ import {version} from './version.ts';
 import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
+import {OnlineManager, type OnlineStatus} from './online-manager.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -426,7 +426,6 @@ export class Zero<
     const {
       userID,
       storageKey,
-      onOnlineChange,
       onUpdateNeeded,
       onClientStateNotFound,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
@@ -459,12 +458,6 @@ export class Zero<
       throw new Error(
         'ZeroOptions.hiddenTabDisconnectDelay must not be negative.',
       );
-    }
-
-    this.#onlineManager = new OnlineManager();
-
-    if (onOnlineChange) {
-      this.#onlineManager.subscribe(onOnlineChange);
     }
 
     this.#options = options;
@@ -514,6 +507,18 @@ export class Zero<
 
     const lc = new ZeroLogContext(logOptions.logLevel, {}, logSink);
 
+    // Configure offline delay
+    let offlineDelayMs = 300_000;
+    if (options.offlineDelayMs !== undefined) {
+      assert(
+        options.offlineDelayMs >= 0,
+        'ZeroOptions.offlineDelayMs must not be negative.',
+      );
+      offlineDelayMs = options.offlineDelayMs;
+    }
+
+    this.#onlineManager = new OnlineManager(offlineDelayMs, lc);
+
     this.#mutationTracker = new MutationTracker(lc, (upTo: MutationID) =>
       this.#send(['ackMutationResponses', upTo]),
     );
@@ -528,6 +533,7 @@ export class Zero<
             lc,
             mutatorOrMutators,
             schema,
+            this.#onlineManager,
             // Replicache expects mutators to only be able to return JSON
             // but Zero wraps the return with: `{server?: Promise<MutationResult>, client?: T}`
           ) as () => MutatorReturn;
@@ -544,6 +550,7 @@ export class Zero<
               lc,
               mutator as CustomMutatorImpl<S>,
               schema,
+              this.#onlineManager,
             ) as () => MutatorReturn;
           }
           continue;
@@ -680,8 +687,12 @@ export class Zero<
     this.#onClientStateNotFound = onClientStateNotFoundCallback;
     this.#rep.onClientStateNotFound = onClientStateNotFoundCallback;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const {mutate, mutateBatch} = makeCRUDMutate<S>(schema, rep.mutate) as any;
+    const {mutate, mutateBatch} = makeCRUDMutate<S>(
+      schema,
+      rep.mutate,
+      this.#onlineManager,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ) as any;
 
     if (options.mutators) {
       for (const [namespaceOrKey, mutatorsOrMutator] of Object.entries(
@@ -1655,7 +1666,7 @@ export class Zero<
             lc.debug?.('Connected successfully');
             gotError = false;
             needsReauth = false;
-            this.#setOnline(true);
+            this.#onlineManager.setOnline(true);
             break;
           }
 
@@ -1714,7 +1725,7 @@ export class Zero<
                 this.#disconnect(lc, {
                   client: 'Hidden',
                 });
-                this.#setOnline(false);
+                this.#onlineManager.setOnline(false);
                 break;
             }
 
@@ -1774,7 +1785,7 @@ export class Zero<
       // because it's a bad experience to wait many seconds for reconnection.
 
       if (gotError) {
-        this.#setOnline(false);
+        this.#onlineManager.setOnline(false);
         //
         // let cfGetCheckSucceeded = false;
         // const cfGetCheckURL = new URL(this.#server);
@@ -1881,27 +1892,38 @@ export class Zero<
     }
   }
 
-  #setOnline(online: boolean): void {
-    this.#onlineManager.setOnline(online);
-  }
-
   /**
    * A rough heuristic for whether the client is currently online and
    * authenticated.
+   *
+   * The status can be one of:
+   * - `online` - the client is online and accepting writes.
+   * - `offline` - the client is offline and will reject writes until the client becomes online again.
+   * - `offline-pending` - the client cannot reach the server and will enter offline mode after `offlineDelayMs` milliseconds,
+   *   but will accept writes until then.
+   *
+   * If the client cannot reach the server for `offlineDelayMs` milliseconds,
+   * it will enter offline mode. During this period, the status will be `offline-pending`.
+   *
+   * If the client is in offline mode, any write will throw an {@link OfflineError}.
    */
-  get online(): boolean {
-    return this.#onlineManager.online;
+  get online(): OnlineStatus {
+    return this.#onlineManager.status;
   }
 
   /**
    * Subscribe to online status changes.
    *
-   * This is useful when you want to update state based on the online status.
+   * The status can be one of:
+   * - `online` - the client is online and accepting writes.
+   * - `offline` - the client is offline and will reject writes until the client becomes online again.
+   * - `offline-pending` - the client cannot reach the server and will enter offline mode after `offlineDelayMs` milliseconds,
+   *   but will accept writes until then.
    *
    * @param listener - The listener to subscribe to.
    * @returns A function to unsubscribe the listener.
    */
-  onOnline = (listener: (online: boolean) => void): (() => void) =>
+  onOnline = (listener: (online: OnlineStatus) => void): (() => void) =>
     this.#onlineManager.subscribe(listener);
 
   /**
@@ -2038,22 +2060,6 @@ export class Zero<
       ...(args as ClientMetricMap[keyof ClientMetricMap]),
     );
   };
-}
-
-export class OnlineManager extends Subscribable<boolean> {
-  #online = false;
-
-  setOnline(online: boolean): void {
-    if (this.#online === online) {
-      return;
-    }
-    this.#online = online;
-    this.notify(online);
-  }
-
-  get online(): boolean {
-    return this.#online;
-  }
 }
 
 export async function createSocket(

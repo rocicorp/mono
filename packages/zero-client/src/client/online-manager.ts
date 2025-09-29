@@ -1,0 +1,55 @@
+import {Subscribable} from '../../../shared/src/subscribable.ts';
+import type {ZeroLogContext} from './zero-log-context.ts';
+
+export type OnlineStatus = 'online' | 'offline' | 'offline-pending';
+
+export class OnlineManager extends Subscribable<OnlineStatus> {
+  #status: OnlineStatus = 'offline';
+
+  #offlineDelayMs: number;
+  #pendingOfflineTimer: ReturnType<typeof setTimeout> | undefined;
+  #lc: ZeroLogContext;
+
+  constructor(offlineDelayMs: number, lc: ZeroLogContext) {
+    super();
+    this.#offlineDelayMs = offlineDelayMs;
+    this.#lc = lc;
+  }
+
+  setOnline(online: boolean): void {
+    if (this.#status === (online ? 'online' : 'offline')) {
+      return;
+    }
+
+    if (online) {
+      if (this.#pendingOfflineTimer !== undefined) {
+        clearTimeout(this.#pendingOfflineTimer);
+        this.#pendingOfflineTimer = undefined;
+      }
+      this.#setStatus('online');
+      return;
+    }
+
+    const lc = this.#lc;
+
+    if (this.#pendingOfflineTimer === undefined) {
+      lc.debug?.('Scheduling offline mode in', this.#offlineDelayMs, 'ms');
+      this.#setStatus('offline-pending');
+
+      this.#pendingOfflineTimer = setTimeout(() => {
+        this.#pendingOfflineTimer = undefined;
+        this.#setStatus('offline');
+        lc.info?.('Offline mode enabled');
+      }, this.#offlineDelayMs);
+    }
+  }
+
+  #setStatus(status: OnlineStatus): void {
+    this.#status = status;
+    this.notify(this.#status);
+  }
+
+  get status(): OnlineStatus {
+    return this.#status;
+  }
+}

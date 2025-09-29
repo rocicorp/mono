@@ -23,6 +23,8 @@ import type {
   UpsertValue,
   DeleteID,
 } from '../../../zql/src/mutate/custom.ts';
+import type {OnlineManager} from './online-manager.ts';
+import {assertNotOffline} from './client-error.ts';
 
 /**
  * This is the type of the generated mutate.<name>.<verb> function.
@@ -81,6 +83,7 @@ type ZeroCRUDMutate = {
 export function makeCRUDMutate<const S extends Schema>(
   schema: S,
   repMutate: ZeroCRUDMutate,
+  onlineManager: OnlineManager,
 ): {mutate: DBMutator<S>; mutateBatch: BatchMutator<S>} {
   const {[CRUD_MUTATION_NAME]: zeroCRUD} = repMutate;
 
@@ -88,7 +91,7 @@ export function makeCRUDMutate<const S extends Schema>(
     const ops: CRUDOp[] = [];
     const m = {} as Record<string, unknown>;
     for (const name of Object.keys(schema.tables)) {
-      m[name] = makeBatchCRUDMutate(name, schema, ops);
+      m[name] = makeBatchCRUDMutate(name, schema, ops, onlineManager);
     }
 
     const rv = await body(m as DBMutator<S>);
@@ -98,7 +101,12 @@ export function makeCRUDMutate<const S extends Schema>(
 
   const mutate: Record<string, TableMutator<TableSchema>> = {};
   for (const [name, tableSchema] of Object.entries(schema.tables)) {
-    mutate[name] = makeEntityCRUDMutate(name, tableSchema.primaryKey, zeroCRUD);
+    mutate[name] = makeEntityCRUDMutate(
+      name,
+      tableSchema.primaryKey,
+      zeroCRUD,
+      onlineManager,
+    );
   }
   return {
     mutate: mutate as DBMutator<S>,
@@ -114,9 +122,11 @@ function makeEntityCRUDMutate<S extends TableSchema>(
   tableName: string,
   primaryKey: S['primaryKey'],
   zeroCRUD: CRUDMutate,
+  onlineManager: OnlineManager,
 ): TableMutator<S> {
   return {
     insert: (value: InsertValue<S>) => {
+      assertNotOffline(onlineManager);
       const op: InsertOp = {
         op: 'insert',
         tableName,
@@ -126,6 +136,7 @@ function makeEntityCRUDMutate<S extends TableSchema>(
       return zeroCRUD({ops: [op]});
     },
     upsert: (value: UpsertValue<S>) => {
+      assertNotOffline(onlineManager);
       const op: UpsertOp = {
         op: 'upsert',
         tableName,
@@ -135,6 +146,7 @@ function makeEntityCRUDMutate<S extends TableSchema>(
       return zeroCRUD({ops: [op]});
     },
     update: (value: UpdateValue<S>) => {
+      assertNotOffline(onlineManager);
       const op: UpdateOp = {
         op: 'update',
         tableName,
@@ -144,6 +156,7 @@ function makeEntityCRUDMutate<S extends TableSchema>(
       return zeroCRUD({ops: [op]});
     },
     delete: (id: DeleteID<S>) => {
+      assertNotOffline(onlineManager);
       const op: DeleteOp = {
         op: 'delete',
         tableName,
@@ -156,17 +169,19 @@ function makeEntityCRUDMutate<S extends TableSchema>(
 }
 
 /**
- * Creates the `{inesrt, upsert, update, delete}` object for use inside a
+ * Creates the `{insert, upsert, update, delete}` object for use inside a
  * batch.
  */
 export function makeBatchCRUDMutate<S extends TableSchema>(
   tableName: string,
   schema: Schema,
   ops: CRUDOp[],
+  onlineManager: OnlineManager,
 ): TableMutator<S> {
   const {primaryKey} = schema.tables[tableName];
   return {
     insert: (value: InsertValue<S>) => {
+      assertNotOffline(onlineManager);
       const op: InsertOp = {
         op: 'insert',
         tableName,
@@ -177,6 +192,7 @@ export function makeBatchCRUDMutate<S extends TableSchema>(
       return promiseVoid;
     },
     upsert: (value: UpsertValue<S>) => {
+      assertNotOffline(onlineManager);
       const op: UpsertOp = {
         op: 'upsert',
         tableName,
@@ -187,6 +203,7 @@ export function makeBatchCRUDMutate<S extends TableSchema>(
       return promiseVoid;
     },
     update: (value: UpdateValue<S>) => {
+      assertNotOffline(onlineManager);
       const op: UpdateOp = {
         op: 'update',
         tableName,
@@ -197,6 +214,7 @@ export function makeBatchCRUDMutate<S extends TableSchema>(
       return promiseVoid;
     },
     delete: (id: DeleteID<S>) => {
+      assertNotOffline(onlineManager);
       const op: DeleteOp = {
         op: 'delete',
         tableName,

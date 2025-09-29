@@ -18,3 +18,4 @@ export {
 } from './use-query.tsx';
 export {createUseZero, useZero, ZeroProvider} from './zero-provider.tsx';
 export {useZeroOnline} from './use-zero-online.tsx';
+export type {OnlineStatus} from '../../zero-client/src/client/online-manager.ts';

@@ -110,17 +110,6 @@ export interface ZeroOptions<
   getQueriesURL?: string | undefined;
 
   /**
-   * `onOnlineChange` is called when the Zero instance's online status changes.
-   *
-   * @deprecated Use `onOnline` on the Zero instance instead. e.g.
-   * ```ts
-   * const zero = new Zero({...});
-   * zero.onOnline((online) => { ... });
-   * ```
-   */
-  onOnlineChange?: ((online: boolean) => void) | undefined;
-
-  /**
    * `onUpdateNeeded` is called when a client code update is needed.
    *
    * See {@link UpdateNeededReason} for why updates can be needed.
@@ -157,6 +146,14 @@ export interface ZeroOptions<
    * Default is 5_000.
    */
   hiddenTabDisconnectDelay?: number | undefined;
+
+  /**
+   * The number of milliseconds to wait after a disconnection/error before
+   * entering offline mode. While in offline mode, mutators throw immediately.
+   *
+   * Default is 300_000 (5 minutes).
+   */
+  offlineDelayMs?: number | undefined;
 
   /**
    * This gets called when the Zero instance encounters an error. The default
