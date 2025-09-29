@@ -82,6 +82,7 @@ jobs:
           DOMAIN_NAME: 'zgigabugs-sync.rocicorp.dev'
           DOMAIN_CERT: 'arn:aws:acm:us-east-1:712907626835:certificate/83339ba0-dc7e-4fb7-b834-65e8307eeb4f'
           DATADOG_API_KEY: ${{ secrets.GIGABUGS_DATADOG_API_KEY }}
+          ZERO_ADMIN_PASSWORD: ${{ secrets.ZERO_ADMIN_PASSWORD }}
         run: |
           cd prod/sst
           npm install
@@ -100,6 +101,7 @@ jobs:
           DOMAIN_NAME: 'zgigabugs2-sync.rocicorp.dev'
           DOMAIN_CERT: 'arn:aws:acm:us-east-1:712907626835:certificate/b0dd8b0b-2007-42e7-b61d-6573b571b19c'
           DATADOG_API_KEY: ${{ secrets.GIGABUGS_DATADOG_API_KEY }}
+          ZERO_ADMIN_PASSWORD: ${{ secrets.ZERO_ADMIN_PASSWORD }}
         run: |
           cd prod/sst
           npm install
