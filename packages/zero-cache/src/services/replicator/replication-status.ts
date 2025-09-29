@@ -89,9 +89,11 @@ export function replicationStatusEvent(
       stage,
       description,
       time: now.toISOString(),
-      tables: getReplicatedTables(db),
-      indexes: getReplicatedIndexes(db),
-      replicaSize: getReplicaSize(db),
+      state: {
+        tables: getReplicatedTables(db),
+        indexes: getReplicatedIndexes(db),
+        replicaSize: getReplicaSize(db),
+      },
     };
   } catch (e) {
     lc.warn?.(`Unable to create full ReplicationStatusEvent`, e);
@@ -102,9 +104,11 @@ export function replicationStatusEvent(
       stage,
       description,
       time: now.toISOString(),
-      tables: [],
-      indexes: [],
-      replicaSize: 0,
+      state: {
+        tables: [],
+        indexes: [],
+        replicaSize: 0,
+      },
     };
   }
 }

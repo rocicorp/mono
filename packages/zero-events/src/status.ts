@@ -40,6 +40,9 @@ export const statusEventSchema = zeroEventSchema.extend({
    */
   description: v.string().optional(),
 
+  /** Structured data describing the state of the component. */
+  state: jsonObjectSchema.optional(),
+
   /** Error details should be supplied for an 'ERROR' status message. */
   errorDetails: jsonObjectSchema.optional(),
 });
@@ -76,6 +79,14 @@ const replicatedIndexSchema = v.object({
 
 export type ReplicatedIndex = v.Infer<typeof replicatedIndexSchema>;
 
+const replicationStateSchema = v.object({
+  tables: v.array(replicatedTableSchema),
+  indexes: v.array(replicatedIndexSchema),
+  replicaSize: v.number().optional(),
+});
+
+export type ReplicationState = v.Infer<typeof replicationStateSchema>;
+
 const replicationStageSchema = v.literalUnion(
   'Initializing',
   'Indexing',
@@ -92,10 +103,7 @@ export const replicationStatusEventSchema = statusEventSchema.extend({
   type: v.literal('zero/events/status/replication/v1'),
   component: v.literal('replication'),
   stage: replicationStageSchema,
-
-  tables: v.array(replicatedTableSchema),
-  indexes: v.array(replicatedIndexSchema),
-  replicaSize: v.number().optional(),
+  state: replicationStateSchema,
 });
 
 // CloudEvent type: "zero.status/replication/v1"
