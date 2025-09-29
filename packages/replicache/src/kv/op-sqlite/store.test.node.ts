@@ -1,6 +1,5 @@
 import sqlite3 from '@rocicorp/zero-sqlite3';
 import fs from 'node:fs';
-import path from 'node:path';
 import {expect, test, vi} from 'vitest';
 import {withRead, withWrite} from '../../with-transactions.ts';
 import {
@@ -19,15 +18,12 @@ vi.mock('@op-engineering/op-sqlite', () => {
       encryptionKey?: string;
     }) => {
       const {name} = options;
-      // Add op_ prefix to match the actual store implementation
-      const prefixedName = `op_${name}`;
-      const filename = path.resolve(__dirname, `${prefixedName}.db`);
 
       // Register the store name for cleanup (not the filename)
       registerCreatedFile(name);
 
       // Create a new database connection - SQLite handles file locking and concurrency
-      const db = sqlite3(filename);
+      const db = sqlite3(name);
 
       return {
         // eslint-disable-next-line require-await
@@ -64,9 +60,8 @@ vi.mock('@op-engineering/op-sqlite', () => {
         delete: () => {
           // Close the database and delete the file
           db.close();
-          const filename = path.resolve(__dirname, `${prefixedName}.db`);
-          if (fs.existsSync(filename)) {
-            fs.unlinkSync(filename);
+          if (fs.existsSync(name)) {
+            fs.unlinkSync(name);
           }
         },
       };

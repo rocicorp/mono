@@ -1,0 +1,27 @@
+{
+  "name": "zero-bun",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "module": "true",
+  "scripts": {
+    "check-types": "tsc",
+    "check-types:watch": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "oxlint --type-aware src/"
+  },
+  "dependencies": {
+    "@rocicorp/resolver": "^1.0.2"
+  },
+  "devDependencies": {
+    "@rocicorp/prettier-config": "^0.3.0",
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "bun": ">=1.0.0"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}
