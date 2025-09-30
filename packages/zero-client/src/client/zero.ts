@@ -691,29 +691,29 @@ export class Zero<
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ) as any;
 
-    const wrapCustomMutator = <F extends (...args: unknown[]) => unknown>(
-      f: F,
-    ) => {
-      return ((...args: Parameters<F>) => {
-        if (this.#onlineManager.status === 'offline') {
-          const e = new OfflineError();
-          const rejected = Promise.reject(e);
-          return {
-            client: rejected,
-            server: rejected,
-            // eslint-disable-next-line no-thenable
-            then: (onFulfilled: unknown, onRejected: unknown) =>
-              (rejected as Promise<unknown>).then(
-                onFulfilled as (value: unknown) => unknown,
-                onRejected as (reason: unknown) => unknown,
-              ),
-          } as unknown as ReturnType<F>;
-        }
-        return (f as (...a: Parameters<F>) => ReturnType<F>)(...args);
-      }) as (...args: Parameters<F>) => ReturnType<F>;
-    };
-
     if (options.mutators) {
+      const wrapCustomMutator = <F extends (...args: unknown[]) => unknown>(
+        f: F,
+      ) => {
+        return ((...args: Parameters<F>) => {
+          if (this.#onlineManager.status === 'offline') {
+            const e = new OfflineError();
+            const rejected = Promise.reject(e);
+            return {
+              client: rejected,
+              server: rejected,
+              // eslint-disable-next-line no-thenable
+              then: (onFulfilled: unknown, onRejected: unknown) =>
+                (rejected as Promise<unknown>).then(
+                  onFulfilled as (value: unknown) => unknown,
+                  onRejected as (reason: unknown) => unknown,
+                ),
+            } as unknown as ReturnType<F>;
+          }
+          return (f as (...a: Parameters<F>) => ReturnType<F>)(...args);
+        }) as (...args: Parameters<F>) => ReturnType<F>;
+      };
+
       for (const [namespaceOrKey, mutatorsOrMutator] of Object.entries(
         options.mutators,
       )) {
