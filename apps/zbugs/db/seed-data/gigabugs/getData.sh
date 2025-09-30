@@ -1,7 +1,8 @@
 set -e
-BASE_URL="https://rocinante-dev.s3.us-east-1.amazonaws.com"
+BASE_URL="https://rocinante-dev.s3.us-east-1.amazonaws.com/gigabugsWProject"
 FILES=(
     "user_000.csv"
+    "project_000.csv"
     "label_000.csv"
     "comment_000.csv"
     "comment_001.csv"
