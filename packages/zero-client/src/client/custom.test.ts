@@ -795,15 +795,15 @@ test('offline rejects writes', async () => {
     } as const,
   });
 
+  const resultOnline = z.mutate.issue.create();
+  await resultOnline.client;
+
   await vi.advanceTimersByTimeAsync(offlineDelayMs);
   expect(z.online).equal('offline');
-  await expect(z.mutate.issue.create().client).rejects.toBeInstanceOf(
-    OfflineError,
-  );
-  await expect(z.mutate.issue.create().server).rejects.toBeInstanceOf(
-    OfflineError,
-  );
-  await expect(z.mutate.issue.create()).rejects.toBeInstanceOf(OfflineError);
+  const resultOffline = z.mutate.issue.create();
+  await expect(resultOffline.client).rejects.toBeInstanceOf(OfflineError);
+  await expect(resultOffline.server).rejects.toBeInstanceOf(OfflineError);
+  await expect(resultOffline).rejects.toBeInstanceOf(OfflineError);
 
   expect(z.testLogSink.messages).toMatchInlineSnapshot(`[]`);
 
