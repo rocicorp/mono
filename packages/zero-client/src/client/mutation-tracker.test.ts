@@ -13,7 +13,6 @@ import {makeReplicacheMutator} from './custom.ts';
 import {toMutationResponseKey} from './keys.ts';
 import {MutationTracker} from './mutation-tracker.ts';
 import type {WriteTransaction} from './replicache-types.ts';
-import {OnlineManager} from './online-manager.ts';
 
 const lc = createSilentLogContext();
 
@@ -192,7 +191,6 @@ describe('MutationTracker', () => {
         tables: [],
         relationships: [],
       }),
-      new OnlineManager(300_000, createSilentLogContext()),
     );
 
     const tx = {
