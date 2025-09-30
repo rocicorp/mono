@@ -161,7 +161,7 @@ import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
 import {OnlineManager, type OnlineStatus} from './online-manager.ts';
-import {OfflineError} from './client-error.ts';
+import {offlinePromiseRejection} from './client-error.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -696,9 +696,8 @@ export class Zero<
         f: F,
       ) => {
         return ((...args: Parameters<F>) => {
-          if (this.#onlineManager.status === 'offline') {
-            const e = new OfflineError();
-            const rejected = Promise.reject(e);
+          const rejected = offlinePromiseRejection(this.#onlineManager);
+          if (rejected) {
             return {
               client: rejected,
               server: rejected,
@@ -1926,7 +1925,10 @@ export class Zero<
    * If the client cannot reach the server for `offlineDelayMs` milliseconds,
    * it will enter offline mode. During this period, the status will be `offline-pending`.
    *
-   * If the client is in offline mode, any write will throw an {@link OfflineError}.
+   * If the client is in offline mode, any write will reject with an
+   * {@link OfflineError}.
+   *
+   * @see {@link https://zero.rocicorp.dev/docs/offline Offline mode docs}
    */
   get online(): OnlineStatus {
     return this.#onlineManager.status;
@@ -1943,6 +1945,8 @@ export class Zero<
    *
    * @param listener - The listener to subscribe to.
    * @returns A function to unsubscribe the listener.
+   *
+   * @see {@link https://zero.rocicorp.dev/docs/offline Offline mode docs}
    */
   onOnline = (listener: (online: OnlineStatus) => void): (() => void) =>
     this.#onlineManager.subscribe(listener);

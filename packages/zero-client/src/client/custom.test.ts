@@ -794,6 +794,7 @@ test('offline rejects writes', async () => {
       },
     } as const,
   });
+  await z.triggerClose();
 
   const resultOnline = z.mutate.issue.create();
   await resultOnline.client;
@@ -804,8 +805,6 @@ test('offline rejects writes', async () => {
   await expect(resultOffline.client).rejects.toBeInstanceOf(OfflineError);
   await expect(resultOffline.server).rejects.toBeInstanceOf(OfflineError);
   await expect(resultOffline).rejects.toBeInstanceOf(OfflineError);
-
-  expect(z.testLogSink.messages).toMatchInlineSnapshot(`[]`);
 
   await z.close();
 });

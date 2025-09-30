@@ -23,8 +23,8 @@ import type {
   UpsertValue,
   DeleteID,
 } from '../../../zql/src/mutate/custom.ts';
+import {offlinePromiseRejection} from './client-error.ts';
 import type {OnlineManager} from './online-manager.ts';
-import {assertNotOffline} from './client-error.ts';
 
 /**
  * This is the type of the generated mutate.<name>.<verb> function.
@@ -126,7 +126,10 @@ function makeEntityCRUDMutate<S extends TableSchema>(
 ): TableMutator<S> {
   return {
     insert: (value: InsertValue<S>) => {
-      assertNotOffline(onlineManager);
+      const rejected = offlinePromiseRejection(onlineManager);
+      if (rejected) {
+        return rejected;
+      }
       const op: InsertOp = {
         op: 'insert',
         tableName,
@@ -136,7 +139,10 @@ function makeEntityCRUDMutate<S extends TableSchema>(
       return zeroCRUD({ops: [op]});
     },
     upsert: (value: UpsertValue<S>) => {
-      assertNotOffline(onlineManager);
+      const rejected = offlinePromiseRejection(onlineManager);
+      if (rejected) {
+        return rejected;
+      }
       const op: UpsertOp = {
         op: 'upsert',
         tableName,
@@ -146,7 +152,10 @@ function makeEntityCRUDMutate<S extends TableSchema>(
       return zeroCRUD({ops: [op]});
     },
     update: (value: UpdateValue<S>) => {
-      assertNotOffline(onlineManager);
+      const rejected = offlinePromiseRejection(onlineManager);
+      if (rejected) {
+        return rejected;
+      }
       const op: UpdateOp = {
         op: 'update',
         tableName,
@@ -156,7 +165,10 @@ function makeEntityCRUDMutate<S extends TableSchema>(
       return zeroCRUD({ops: [op]});
     },
     delete: (id: DeleteID<S>) => {
-      assertNotOffline(onlineManager);
+      const rejected = offlinePromiseRejection(onlineManager);
+      if (rejected) {
+        return rejected;
+      }
       const op: DeleteOp = {
         op: 'delete',
         tableName,
@@ -181,7 +193,10 @@ export function makeBatchCRUDMutate<S extends TableSchema>(
   const {primaryKey} = schema.tables[tableName];
   return {
     insert: (value: InsertValue<S>) => {
-      assertNotOffline(onlineManager);
+      const rejected = offlinePromiseRejection(onlineManager);
+      if (rejected) {
+        return rejected;
+      }
       const op: InsertOp = {
         op: 'insert',
         tableName,
@@ -192,7 +207,10 @@ export function makeBatchCRUDMutate<S extends TableSchema>(
       return promiseVoid;
     },
     upsert: (value: UpsertValue<S>) => {
-      assertNotOffline(onlineManager);
+      const rejected = offlinePromiseRejection(onlineManager);
+      if (rejected) {
+        return rejected;
+      }
       const op: UpsertOp = {
         op: 'upsert',
         tableName,
@@ -203,7 +221,10 @@ export function makeBatchCRUDMutate<S extends TableSchema>(
       return promiseVoid;
     },
     update: (value: UpdateValue<S>) => {
-      assertNotOffline(onlineManager);
+      const rejected = offlinePromiseRejection(onlineManager);
+      if (rejected) {
+        return rejected;
+      }
       const op: UpdateOp = {
         op: 'update',
         tableName,
@@ -214,7 +235,10 @@ export function makeBatchCRUDMutate<S extends TableSchema>(
       return promiseVoid;
     },
     delete: (id: DeleteID<S>) => {
-      assertNotOffline(onlineManager);
+      const rejected = offlinePromiseRejection(onlineManager);
+      if (rejected) {
+        return rejected;
+      }
       const op: DeleteOp = {
         op: 'delete',
         tableName,

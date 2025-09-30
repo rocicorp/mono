@@ -170,34 +170,34 @@ test('onOnlineChange callback', async () => {
   {
     // Offline pending by default.
     await vi.advanceTimersByTimeAsync(1);
-    expect(z.online).equal('offline-pending');
+    expect(z.online).equal('online');
   }
 
   {
     // First test a disconnect followed by a reconnect. This should not trigger
     // the onOnlineChange callback.
     await z.waitForConnectionState(ConnectionState.Connecting);
-    expect(z.online).equal('offline-pending');
+    expect(z.online).equal('online');
     expect(onlineCount).toBe(0);
     expect(offlineCount).toBe(0);
     await z.triggerConnected();
     await z.waitForConnectionState(ConnectionState.Connected);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).equal('online');
-    expect(onlineCount).toBe(1);
+    expect(onlineCount).toBe(0);
     expect(offlineCount).toBe(0);
     await z.triggerClose();
     await z.waitForConnectionState(ConnectionState.Disconnected);
     // Still connected because we haven't yet failed to reconnect.
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).equal('online');
-    expect(onlineCount).toBe(1);
+    expect(onlineCount).toBe(0);
     expect(offlineCount).toBe(0);
     await z.triggerConnected();
     await z.waitForConnectionState(ConnectionState.Connected);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).equal('online');
-    expect(onlineCount).toBe(1);
+    expect(onlineCount).toBe(0);
     expect(offlineCount).toBe(0);
   }
 
@@ -362,18 +362,18 @@ test('onOnline listener', async () => {
     events2.push(online);
   });
 
-  // Offline pending by default.
+  // online by default.
   await vi.advanceTimersByTimeAsync(1);
-  expect(z.online).equal('offline-pending');
+  expect(z.online).equal('online');
 
-  // Connect: both listeners should be notified.
+  // Connected and no notification.
   await z.waitForConnectionState(ConnectionState.Connecting);
   await z.triggerConnected();
   await z.waitForConnectionState(ConnectionState.Connected);
   await vi.advanceTimersByTimeAsync(0);
   expect(z.online).equal('online');
-  expect(events1).toEqual(['online']);
-  expect(events2).toEqual(['online']);
+  expect(events1).toEqual([]);
+  expect(events2).toEqual([]);
 
   // Unsubscribe the first listener and trigger an error to go offline.
   unsubscribe1();
@@ -381,20 +381,20 @@ test('onOnline listener', async () => {
   await z.waitForConnectionState(ConnectionState.Disconnected);
   await vi.advanceTimersByTimeAsync(0);
   expect(z.online).equal('offline-pending');
-  expect(events1).toEqual(['online']);
-  expect(events2).toEqual(['online', 'offline-pending']);
+  expect(events1).toEqual([]);
+  expect(events2).toEqual(['offline-pending']);
 
   // Wait for the offline-pending state to expire.
   await vi.advanceTimersByTimeAsync(8_000);
   expect(z.online).equal('offline');
-  expect(events2).toEqual(['online', 'offline-pending', 'offline']);
+  expect(events2).toEqual(['offline-pending', 'offline']);
 
   // Reconnect: only the second listener should be notified.
   await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
   await z.triggerConnected();
   await vi.advanceTimersByTimeAsync(0);
   expect(z.online).equal('online');
-  expect(events2).toEqual(['online', 'offline-pending', 'offline', 'online']);
+  expect(events2).toEqual(['offline-pending', 'offline', 'online']);
 
   unsubscribe2();
 });
@@ -2181,7 +2181,7 @@ function expectLogMessages(r: TestZero<Schema>) {
 test('Connect timeout', async () => {
   const r = zeroForTest({logLevel: 'debug', offlineDelayMs: 100});
 
-  expect(r.online).equal('offline-pending');
+  expect(r.online).equal('online');
 
   await r.waitForConnectionState(ConnectionState.Connecting);
 
@@ -2550,12 +2550,10 @@ describe('Disconnect on hide', () => {
         expect(PING_INTERVAL_MS * 2).greaterThanOrEqual(
           DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
         );
-        let timeTillHiddenDisconnect = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS;
         changeVisibilityState('hidden');
-        await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS); // sends ping
-        timeTillHiddenDisconnect -= PING_INTERVAL_MS;
+        await vi.advanceTimersToNextTimerAsync(); // ping timer fires
         await r.triggerPong();
-        await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
+        await vi.advanceTimersToNextTimerAsync(); // hidden delay fires
       },
     },
     {
@@ -2704,7 +2702,6 @@ describe('Disconnect on hide', () => {
 
     await z.triggerConnected();
     expect(z.connectionState).toBe(ConnectionState.Connected);
-    expect(await onOnlineChangeP).equal('online');
     expect(z.online).equal('online');
 
     onOnlineChangeP = makeOnOnlineChangePromise();
@@ -3393,18 +3390,21 @@ describe('CRUD', () => {
     await z.mutate.issue.insert({id: 'a', title: 'A'});
     expect(view.data).toEqual([{id: 'a', title: 'A', [refCountSymbol]: 1}]);
 
+    await z.triggerClose();
     await vi.advanceTimersByTimeAsync(offlineDelayMs);
     expect(z.online).equal('offline');
-    expect(() => z.mutate.issue.insert({id: 'a', title: 'A'})).toThrow(
+    expect(() =>
+      z.mutate.issue.insert({id: 'a', title: 'A'}),
+    ).rejects.toBeInstanceOf(OfflineError);
+    expect(() =>
+      z.mutate.issue.update({id: 'a', title: 'A'}),
+    ).rejects.toBeInstanceOf(OfflineError);
+    expect(() => z.mutate.issue.delete({id: 'a'})).rejects.toBeInstanceOf(
       OfflineError,
     );
-    expect(() => z.mutate.issue.update({id: 'a', title: 'A'})).toThrow(
-      OfflineError,
-    );
-    expect(() => z.mutate.issue.delete({id: 'a'})).toThrow(OfflineError);
-    expect(() => z.mutate.issue.upsert({id: 'a', title: 'A'})).toThrow(
-      OfflineError,
-    );
+    expect(() =>
+      z.mutate.issue.upsert({id: 'a', title: 'A'}),
+    ).rejects.toBeInstanceOf(OfflineError);
   });
 });
 
@@ -3881,11 +3881,11 @@ test('push is called on initial connect and reconnect', async () => {
   {
     // Connect and check that we sent a push
     await z.waitForConnectionState(ConnectionState.Connecting);
-    expect(z.online === 'offline-pending').toBe(true);
+    expect(z.online).toEqual('online');
     await z.triggerConnected();
     await z.waitForConnectionState(ConnectionState.Connected);
     await vi.advanceTimersByTimeAsync(0);
-    expect(z.online === 'online').toBe(true);
+    expect(z.online).toEqual('online');
     expect(pushSpy).toBeCalledTimes(1);
 
     // disconnect and reconnect and check that we sent a push

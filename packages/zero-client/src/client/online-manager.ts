@@ -4,7 +4,9 @@ import type {ZeroLogContext} from './zero-log-context.ts';
 export type OnlineStatus = 'online' | 'offline' | 'offline-pending';
 
 export class OnlineManager extends Subscribable<OnlineStatus> {
-  #status: OnlineStatus = 'offline-pending';
+  // we start in online mode to assume connectivity, then
+  // update when Zero attempts connection
+  #status: OnlineStatus = 'online';
 
   #offlineDelayMs: number;
   #pendingOfflineTimer: ReturnType<typeof setTimeout> | undefined;
@@ -14,10 +16,6 @@ export class OnlineManager extends Subscribable<OnlineStatus> {
     super();
     this.#offlineDelayMs = offlineDelayMs;
     this.#lc = lc;
-
-    // we start in offline-pending state so that writes aren't rejected immediately
-    // but we still schedule offline in case the client never connects
-    this.#scheduleOffline();
   }
 
   setOnline(online: boolean): void {
@@ -40,18 +38,15 @@ export class OnlineManager extends Subscribable<OnlineStatus> {
         this.#offlineDelayMs,
         'ms',
       );
-      this.#scheduleOffline();
+
+      this.#setStatus('offline-pending');
+
+      this.#pendingOfflineTimer = setTimeout(() => {
+        this.#pendingOfflineTimer = undefined;
+        this.#setStatus('offline');
+        this.#lc.info?.('Offline mode enabled');
+      }, this.#offlineDelayMs);
     }
-  }
-
-  #scheduleOffline(): void {
-    this.#setStatus('offline-pending');
-
-    this.#pendingOfflineTimer = setTimeout(() => {
-      this.#pendingOfflineTimer = undefined;
-      this.#setStatus('offline');
-      this.#lc.info?.('Offline mode enabled');
-    }, this.#offlineDelayMs);
   }
 
   #setStatus(status: OnlineStatus): void {

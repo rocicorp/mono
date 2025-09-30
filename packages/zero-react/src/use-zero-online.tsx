@@ -21,6 +21,8 @@ import type {OnlineStatus} from '../../zero-client/src/client/online-manager.ts'
  * <span>
  *   {online === 'online' ? 'Online' : online === 'offline' ? 'Offline' : 'Offline Pending'}
  * </span>
+ *
+ * @see {@link https://zero.rocicorp.dev/docs/offline Offline mode docs}
  */
 export function useZeroOnline(): OnlineStatus {
   const zero = useZero();
