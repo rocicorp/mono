@@ -29,6 +29,8 @@ export type SourceChange =
   | SourceChangeRemove
   | SourceChangeEdit;
 
+export const dangerouslyClear = Symbol('dangerouslyClear');
+
 /**
  * A source is an input that serves as the root data source of the pipeline.
  * Sources have multiple outputs. To add an output, call `connect()`, then
@@ -84,6 +86,8 @@ export interface Source {
    * committed to the source.
    */
   genPush(change: SourceChange): Iterable<void>;
+
+  [dangerouslyClear](): void;
 }
 
 export interface SourceInput extends Input {

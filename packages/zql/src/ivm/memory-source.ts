@@ -37,14 +37,15 @@ import {
   type Start,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import type {
-  Source,
-  SourceChange,
-  SourceChangeAdd,
-  SourceChangeEdit,
-  SourceChangeRemove,
-  SourceChangeSet,
-  SourceInput,
+import {
+  dangerouslyClear,
+  type Source,
+  type SourceChange,
+  type SourceChangeAdd,
+  type SourceChangeEdit,
+  type SourceChangeRemove,
+  type SourceChangeSet,
+  type SourceInput,
 } from './source.ts';
 import type {Stream} from './stream.ts';
 import {once} from '../../../shared/src/iterables.ts';
@@ -124,6 +125,14 @@ export class MemorySource implements Source {
       columns: this.#columns,
       primaryKey: this.#primaryKey,
     };
+  }
+
+  [dangerouslyClear]() {
+    for (const index of this.#indexes.values()) {
+      index.data.clear();
+    }
+    this.#overlay = undefined;
+    this.#connections.length = 0;
   }
 
   fork() {

@@ -82,7 +82,7 @@ type QueriesBySource<TSchema extends Schema> = {
   memory: Queries<TSchema>;
 };
 
-type QueryInstances = {
+export type QueryInstances = {
   pg: AnyQuery;
   sqlite: AnyQuery;
   memory: AnyQuery;

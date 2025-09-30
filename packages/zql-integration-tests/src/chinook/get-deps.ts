@@ -10,6 +10,14 @@ const PG_URL =
   'https://github.com/lerocha/chinook-database/releases/download/v1.4.5/Chinook_PostgreSql.sql';
 const PG_FILE_NAME = 'Chinook_PostgreSql.sql';
 
+export function getChinookSchemaOnly(): Promise<string> {
+  // import the contents of ../schemas/chinook.sql
+  // relative to the current file
+  return readFile(new URL('../schemas/chinook.sql', import.meta.url), {
+    encoding: 'utf-8',
+  });
+}
+
 export async function getChinook(): Promise<string> {
   if (existsSync(PG_FILE_NAME)) {
     return readFile(PG_FILE_NAME, {encoding: 'utf-8'});

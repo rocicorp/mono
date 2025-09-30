@@ -33,11 +33,12 @@ import {
 } from '../../zql/src/ivm/memory-source.ts';
 import type {FetchRequest, Start} from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
-import type {
-  Source,
-  SourceChange,
-  SourceChangeSet,
-  SourceInput,
+import {
+  dangerouslyClear,
+  type Source,
+  type SourceChange,
+  type SourceChangeSet,
+  type SourceInput,
 } from '../../zql/src/ivm/source.ts';
 import type {Stream} from '../../zql/src/ivm/stream.ts';
 import {Database, Statement} from './db.ts';
@@ -80,6 +81,7 @@ export class TableSource implements Source {
   readonly #primaryKey: PrimaryKey;
   readonly #logConfig: LogConfig;
   readonly #lc: LogContext;
+  readonly #db: Database;
   #stmts: Statements;
   #overlay?: Overlay | undefined;
 
@@ -98,6 +100,7 @@ export class TableSource implements Source {
     this.#uniqueIndexes = getUniqueIndexes(db, tableName);
     this.#primaryKey = primaryKey;
     this.#stmts = this.#getStatementsFor(db);
+    this.#db = db;
 
     assert(
       this.#uniqueIndexes.has(JSON.stringify([...primaryKey].sort())),
@@ -107,6 +110,11 @@ export class TableSource implements Source {
 
   get table() {
     return this.#table;
+  }
+
+  [dangerouslyClear]() {
+    this.#connections.length = 0;
+    this.#db.exec(`DELETE FROM ${sql.ident(this.#table)}`);
   }
 
   /**
