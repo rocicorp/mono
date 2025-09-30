@@ -33,7 +33,7 @@ export class OnlineManager extends Subscribable<OnlineStatus> {
     }
 
     if (this.#pendingOfflineTimer === undefined) {
-      this.#lc.debug?.(`Scheduling offline mode in ${this.#offlineDelay}ms`);
+      this.#lc.debug?.('Scheduling offline mode in ', this.#offlineDelay, 'ms');
 
       this.#setStatus('offline-pending');
 

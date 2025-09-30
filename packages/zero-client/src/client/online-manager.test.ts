@@ -47,21 +47,21 @@ describe('OnlineManager', () => {
     expect(manager.status).toBe('offline-pending');
     expect(events).toEqual(['offline-pending']);
     expect(logSink.messages).toEqual([
-      ['debug', {}, [`Scheduling offline mode in ${offlineDelay}ms`]],
+      ['debug', {}, ['Scheduling offline mode in ', offlineDelay, 'ms']],
     ]);
 
     vi.advanceTimersByTime(offlineDelay - 1);
     expect(manager.status).toBe('offline-pending');
     expect(events).toEqual(['offline-pending']);
     expect(logSink.messages).toEqual([
-      ['debug', {}, [`Scheduling offline mode in ${offlineDelay}ms`]],
+      ['debug', {}, ['Scheduling offline mode in ', offlineDelay, 'ms']],
     ]);
 
     vi.advanceTimersByTime(1);
     expect(manager.status).toBe('offline');
     expect(events).toEqual(['offline-pending', 'offline']);
     expect(logSink.messages).toEqual([
-      ['debug', {}, [`Scheduling offline mode in ${offlineDelay}ms`]],
+      ['debug', {}, ['Scheduling offline mode in ', offlineDelay, 'ms']],
       ['info', {}, ['Offline mode enabled']],
     ]);
   });
@@ -83,7 +83,7 @@ describe('OnlineManager', () => {
     expect(manager.status).toBe('online');
     expect(events).toEqual(['offline-pending', 'online']);
     expect(logSink.messages).toEqual([
-      ['debug', {}, [`Scheduling offline mode in ${offlineDelay}ms`]],
+      ['debug', {}, ['Scheduling offline mode in ', offlineDelay, 'ms']],
     ]);
   });
 
@@ -98,7 +98,7 @@ describe('OnlineManager', () => {
     expect(manager.status).toBe('offline-pending');
     expect(events).toEqual(['offline-pending']);
     expect(logSink.messages).toEqual([
-      ['debug', {}, [`Scheduling offline mode in ${offlineDelay}ms`]],
+      ['debug', {}, ['Scheduling offline mode in ', offlineDelay, 'ms']],
     ]);
   });
 
@@ -114,7 +114,7 @@ describe('OnlineManager', () => {
     expect(manager.status).toBe('offline');
     expect(events).toEqual(['offline-pending', 'offline']);
     expect(logSink.messages).toEqual([
-      ['debug', {}, [`Scheduling offline mode in ${offlineDelay}ms`]],
+      ['debug', {}, ['Scheduling offline mode in ', offlineDelay, 'ms']],
       ['info', {}, ['Offline mode enabled']],
     ]);
 
