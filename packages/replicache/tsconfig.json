@@ -3,6 +3,5 @@
   "compilerOptions": {
     "lib": ["dom", "es2022"]
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["src/bun-sqlite.ts", "src/kv/bun-sqlite/**/*"]
+  "include": ["src/**/*.ts"]
 }

@@ -10,8 +10,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "noEmit": true,
-    "types": []
+    "noEmit": true
   },
   "include": ["api/**/*.ts", "vitest.config.ts"],
   "exclude": ["node_modules", "dist"]
