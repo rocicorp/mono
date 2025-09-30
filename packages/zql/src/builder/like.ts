@@ -7,9 +7,6 @@ export function getLikePredicate(
 ): SimplePredicateNoNull {
   const op = getLikeOp(String(pattern), flags);
   return (lhs: NonNullValue) => {
-    if (typeof lhs !== 'string') {
-      console.log('BAD LIKE LHS', lhs, pattern);
-    }
     assertString(lhs);
     return op(String(lhs));
   };

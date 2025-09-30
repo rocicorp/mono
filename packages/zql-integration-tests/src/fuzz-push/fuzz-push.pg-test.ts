@@ -33,21 +33,16 @@ beforeEach(() => {
 // Set this to reproduce a specific failure.
 const REPRO_SEED = undefined;
 test.each(
-  Array.from({length: REPRO_SEED ? 1 : 0}, () => createCase(REPRO_SEED)).concat(
-    [
-      manual(
-        staticQuery(schema, 'invoice').related('customer', q =>
-          q
-            .where('company', 'ILIKE', 'foo')
-            .orderBy('phone', 'desc')
-            .orderBy('company', 'desc')
-            .orderBy('id', 'asc')
-            .limit(167),
-        ),
-        1791595304,
+  Array.from({length: REPRO_SEED ? 1 : 100}, () =>
+    createCase(REPRO_SEED),
+  ).concat([
+    manual(
+      staticQuery(schema, 'invoice').related('customer', q =>
+        q.where('company', 'ILIKE', 'foo').orderBy('company', 'desc').limit(2),
       ),
-    ],
-  ),
+      1791595304,
+    ),
+  ]),
 )('fuzz-push $seed', runCase);
 
 function manual(query: AnyQuery, seed = 0) {

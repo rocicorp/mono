@@ -179,7 +179,6 @@ function generateRow(
       row[columnName] = generateColumnValue(ctx, columnSchema, false);
     }
   }
-
   return row;
 }
 
@@ -211,7 +210,8 @@ function generateColumnValue(
         // Use global counter for unique PKs
         return `pk_${ctx.pkCounter++}`;
       }
-      return faker.string.alphanumeric(10);
+      const ret = faker.string.alphanumeric(10);
+      return ret;
     case 'boolean':
       return rng() < 0.5;
     case 'json':
@@ -529,10 +529,49 @@ function generateOrderByChanges(
 ): void {
   if (ast.orderBy) {
     const tableName = ast.table;
+    const tableInfo = ctx.tables.get(tableName)!;
 
     for (const [columnName] of ast.orderBy) {
-      // Generate rows with different ordering values
-      const values = [0, 100, 50, 100, 25, 75]; // Include duplicates
+      const columnSchema = tableInfo.schema.columns[columnName];
+
+      // Generate rows with different ordering values based on type
+      const numValues = Math.floor(ctx.rng() * 5) + 5; // 5-9 values
+      const values: JSONValue[] = [];
+
+      switch (columnSchema.type) {
+        case 'number': {
+          // Generate a mix of values, including duplicates
+          const baseValues = new Set<number>();
+          while (baseValues.size < Math.max(3, Math.floor(numValues / 2))) {
+            baseValues.add(Math.floor(ctx.rng() * 1000));
+          }
+          values.push(...baseValues);
+          // Add some duplicates
+          values.push(...Array.from(baseValues).slice(0, 2));
+          break;
+        }
+        case 'string': {
+          // Generate strings that will sort differently
+          const stringValues = new Set<string>();
+          while (stringValues.size < Math.max(3, Math.floor(numValues / 2))) {
+            stringValues.add(ctx.faker.string.alphanumeric(10));
+          }
+          values.push(...stringValues);
+          // Add some duplicates
+          values.push(...Array.from(stringValues).slice(0, 2));
+          break;
+        }
+        case 'boolean':
+          // Only two values possible
+          values.push(true, false, true, false);
+          break;
+        default:
+          // For other types, generate random strings
+          for (let i = 0; i < numValues; i++) {
+            values.push(ctx.faker.string.alphanumeric(10));
+          }
+      }
+
       for (const value of values) {
         const row = generateRow(ctx, tableName, {[columnName]: value});
         addRow(ctx, tableName, row, changes);
