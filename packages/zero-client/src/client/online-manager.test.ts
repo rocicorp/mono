@@ -4,16 +4,16 @@ import type {OnlineStatus} from './online-manager.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import {LogContext} from '@rocicorp/logger';
 
-function createTestContext(offlineDelayMs = 100) {
+function createTestContext(offlineDelay = 100) {
   const logSink = new TestLogSink();
   const lc = new LogContext('debug', {}, logSink);
-  const manager = new OnlineManager(offlineDelayMs, lc);
+  const manager = new OnlineManager(offlineDelay, lc);
   const events: OnlineStatus[] = [];
   const unsubscribe = manager.subscribe(status => {
     events.push(status);
   });
 
-  return {manager, logSink, events, unsubscribe, offlineDelayMs};
+  return {manager, logSink, events, unsubscribe, offlineDelay};
 }
 
 describe('OnlineManager', () => {
@@ -41,39 +41,39 @@ describe('OnlineManager', () => {
   });
 
   test('schedules offline mode after the grace period', () => {
-    const {manager, events, logSink, offlineDelayMs} = createTestContext(150);
+    const {manager, events, logSink, offlineDelay} = createTestContext(150);
 
     manager.setOnline(false);
     expect(manager.status).toBe('offline-pending');
     expect(events).toEqual(['offline-pending']);
     expect(logSink.messages).toEqual([
-      ['debug', {}, ['Scheduling offline mode in', offlineDelayMs, 'ms']],
+      ['debug', {}, [`Scheduling offline mode in ${offlineDelay}ms`]],
     ]);
 
-    vi.advanceTimersByTime(offlineDelayMs - 1);
+    vi.advanceTimersByTime(offlineDelay - 1);
     expect(manager.status).toBe('offline-pending');
     expect(events).toEqual(['offline-pending']);
     expect(logSink.messages).toEqual([
-      ['debug', {}, ['Scheduling offline mode in', offlineDelayMs, 'ms']],
+      ['debug', {}, [`Scheduling offline mode in ${offlineDelay}ms`]],
     ]);
 
     vi.advanceTimersByTime(1);
     expect(manager.status).toBe('offline');
     expect(events).toEqual(['offline-pending', 'offline']);
     expect(logSink.messages).toEqual([
-      ['debug', {}, ['Scheduling offline mode in', offlineDelayMs, 'ms']],
+      ['debug', {}, [`Scheduling offline mode in ${offlineDelay}ms`]],
       ['info', {}, ['Offline mode enabled']],
     ]);
   });
 
   test('clears the pending offline timer when going back online', () => {
-    const {manager, events, logSink, offlineDelayMs} = createTestContext(200);
+    const {manager, events, logSink, offlineDelay} = createTestContext(200);
 
     manager.setOnline(false);
     expect(manager.status).toBe('offline-pending');
     expect(events).toEqual(['offline-pending']);
 
-    vi.advanceTimersByTime(offlineDelayMs - 1);
+    vi.advanceTimersByTime(offlineDelay - 1);
 
     manager.setOnline(true);
     expect(manager.status).toBe('online');
@@ -83,12 +83,12 @@ describe('OnlineManager', () => {
     expect(manager.status).toBe('online');
     expect(events).toEqual(['offline-pending', 'online']);
     expect(logSink.messages).toEqual([
-      ['debug', {}, ['Scheduling offline mode in', offlineDelayMs, 'ms']],
+      ['debug', {}, [`Scheduling offline mode in ${offlineDelay}ms`]],
     ]);
   });
 
   test('does not schedule additional timers while offline is pending', () => {
-    const {manager, events, logSink, offlineDelayMs} = createTestContext(123);
+    const {manager, events, logSink, offlineDelay} = createTestContext(123);
 
     manager.setOnline(false);
     expect(manager.status).toBe('offline-pending');
@@ -98,15 +98,15 @@ describe('OnlineManager', () => {
     expect(manager.status).toBe('offline-pending');
     expect(events).toEqual(['offline-pending']);
     expect(logSink.messages).toEqual([
-      ['debug', {}, ['Scheduling offline mode in', offlineDelayMs, 'ms']],
+      ['debug', {}, [`Scheduling offline mode in ${offlineDelay}ms`]],
     ]);
   });
 
   test('is idempotent when already offline', () => {
-    const {manager, events, offlineDelayMs, logSink} = createTestContext(100);
+    const {manager, events, offlineDelay, logSink} = createTestContext(100);
 
     manager.setOnline(false);
-    vi.advanceTimersByTime(offlineDelayMs);
+    vi.advanceTimersByTime(offlineDelay);
     expect(manager.status).toBe('offline');
     expect(events).toEqual(['offline-pending', 'offline']);
 
@@ -114,7 +114,7 @@ describe('OnlineManager', () => {
     expect(manager.status).toBe('offline');
     expect(events).toEqual(['offline-pending', 'offline']);
     expect(logSink.messages).toEqual([
-      ['debug', {}, ['Scheduling offline mode in', offlineDelayMs, 'ms']],
+      ['debug', {}, [`Scheduling offline mode in ${offlineDelay}ms`]],
       ['info', {}, ['Offline mode enabled']],
     ]);
 

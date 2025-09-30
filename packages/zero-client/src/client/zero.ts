@@ -434,7 +434,7 @@ export class Zero<
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
       maxRecentQueries = 0,
       slowMaterializeThreshold = 5_000,
-      offlineDelayMs = 300_000,
+      offlineDelay = 300_000,
     } = options as ZeroOptions<S, MD>;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
@@ -509,14 +509,14 @@ export class Zero<
 
     const lc = new ZeroLogContext(logOptions.logLevel, {}, logSink);
 
-    if (offlineDelayMs !== undefined) {
+    if (offlineDelay !== undefined) {
       assert(
-        offlineDelayMs >= 0,
+        offlineDelay >= 0,
         'ZeroOptions.offlineDelayMs must not be negative.',
       );
     }
 
-    this.#onlineManager = new OnlineManager(offlineDelayMs, lc);
+    this.#onlineManager = new OnlineManager(offlineDelay, lc);
 
     this.#mutationTracker = new MutationTracker(lc, (upTo: MutationID) =>
       this.#send(['ackMutationResponses', upTo]),

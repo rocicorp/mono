@@ -153,7 +153,7 @@ export interface ZeroOptions<
    *
    * Default is 300_000 (5 minutes).
    */
-  offlineDelayMs?: number | undefined;
+  offlineDelay?: number | undefined;
 
   /**
    * This gets called when the Zero instance encounters an error. The default

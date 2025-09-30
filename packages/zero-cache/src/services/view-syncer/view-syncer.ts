@@ -958,7 +958,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       ),
     );
 
-    lc.debug?.('Scheduling eviction timer to run in ', delay, 'ms');
+    lc.debug?.(`Scheduling eviction timer to run in ${delay}ms`);
     this.#expiredQueriesTimer = this.#setTimeout(() => {
       this.#expiredQueriesTimer = 0;
       this.#runInLockWithCVR((lc, cvr) =>

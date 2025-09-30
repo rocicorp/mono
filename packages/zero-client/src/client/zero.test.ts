@@ -349,9 +349,11 @@ test('onOnline listener', async () => {
   let events1: OnlineStatus[] = [];
   let events2: OnlineStatus[] = [];
 
+  const offlineDelay = 8_000;
+
   const z = zeroForTest({
     logLevel: 'debug',
-    offlineDelayMs: 8_000,
+    offlineDelay,
   });
 
   const unsubscribe1 = z.onOnline(online => {
@@ -385,7 +387,7 @@ test('onOnline listener', async () => {
   expect(events2).toEqual(['offline-pending']);
 
   // Wait for the offline-pending state to expire.
-  await vi.advanceTimersByTimeAsync(8_000);
+  await vi.advanceTimersByTimeAsync(offlineDelay);
   expect(z.online).equal('offline');
   expect(events2).toEqual(['offline-pending', 'offline']);
 
@@ -2179,7 +2181,7 @@ function expectLogMessages(r: TestZero<Schema>) {
 }
 
 test('Connect timeout', async () => {
-  const r = zeroForTest({logLevel: 'debug', offlineDelayMs: 100});
+  const r = zeroForTest({logLevel: 'debug', offlineDelay: 100});
 
   expect(r.online).equal('online');
 
@@ -2689,7 +2691,7 @@ describe('Disconnect on hide', () => {
 
     const z = zeroForTest({
       hiddenTabDisconnectDelay,
-      offlineDelayMs: 100,
+      offlineDelay: 100,
     });
     const unsubscribe = z.onOnline(online => {
       resolveOnlineChangePromise(online);
@@ -3383,15 +3385,15 @@ describe('CRUD', () => {
   });
 
   test('offline rejects writes', async () => {
-    const offlineDelayMs = 1_000;
-    const z = makeZero({offlineDelayMs});
+    const offlineDelay = 1_000;
+    const z = makeZero({offlineDelay});
 
     const view = z.query.issue.materialize();
     await z.mutate.issue.insert({id: 'a', title: 'A'});
     expect(view.data).toEqual([{id: 'a', title: 'A', [refCountSymbol]: 1}]);
 
     await z.triggerClose();
-    await vi.advanceTimersByTimeAsync(offlineDelayMs);
+    await vi.advanceTimersByTimeAsync(offlineDelay);
     expect(z.online).equal('offline');
     expect(() =>
       z.mutate.issue.insert({id: 'a', title: 'A'}),

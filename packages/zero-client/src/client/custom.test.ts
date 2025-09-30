@@ -782,10 +782,10 @@ test('run waiting for complete results throws in custom mutations', async () => 
 });
 
 test('offline rejects writes', async () => {
-  const offlineDelayMs = 1_000;
+  const offlineDelay = 1_000;
   const z = zeroForTest({
     schema,
-    offlineDelayMs,
+    offlineDelay,
     mutators: {
       issue: {
         create: async (tx: MutatorTx) => {
@@ -799,7 +799,7 @@ test('offline rejects writes', async () => {
   const resultOnline = z.mutate.issue.create();
   await resultOnline.client;
 
-  await vi.advanceTimersByTimeAsync(offlineDelayMs);
+  await vi.advanceTimersByTimeAsync(offlineDelay);
   expect(z.online).equal('offline');
   const resultOffline = z.mutate.issue.create();
   await expect(resultOffline.client).rejects.toBeInstanceOf(OfflineError);

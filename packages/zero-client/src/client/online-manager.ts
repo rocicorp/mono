@@ -8,13 +8,13 @@ export class OnlineManager extends Subscribable<OnlineStatus> {
   // update when Zero attempts connection
   #status: OnlineStatus = 'online';
 
-  #offlineDelayMs: number;
+  #offlineDelay: number;
   #pendingOfflineTimer: ReturnType<typeof setTimeout> | undefined;
   #lc: ZeroLogContext;
 
-  constructor(offlineDelayMs: number, lc: ZeroLogContext) {
+  constructor(offlineDelay: number, lc: ZeroLogContext) {
     super();
-    this.#offlineDelayMs = offlineDelayMs;
+    this.#offlineDelay = offlineDelay;
     this.#lc = lc;
   }
 
@@ -33,11 +33,7 @@ export class OnlineManager extends Subscribable<OnlineStatus> {
     }
 
     if (this.#pendingOfflineTimer === undefined) {
-      this.#lc.debug?.(
-        'Scheduling offline mode in',
-        this.#offlineDelayMs,
-        'ms',
-      );
+      this.#lc.debug?.(`Scheduling offline mode in ${this.#offlineDelay}ms`);
 
       this.#setStatus('offline-pending');
 
@@ -45,7 +41,7 @@ export class OnlineManager extends Subscribable<OnlineStatus> {
         this.#pendingOfflineTimer = undefined;
         this.#setStatus('offline');
         this.#lc.info?.('Offline mode enabled');
-      }, this.#offlineDelayMs);
+      }, this.#offlineDelay);
     }
   }
 
