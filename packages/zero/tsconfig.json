@@ -5,6 +5,5 @@
     "jsx": "react-jsx",
     "outDir": "out"
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["src/bun.ts"]
+  "include": ["src/**/*.ts"]
 }

@@ -3,17 +3,12 @@
   "compilerOptions": {
     "noEmit": false,
     "emitDeclarationOnly": true,
-    "outDir": "out",
-
-    // Needed for Bun. This is mostly OK because we run npm check-types in CI
-    // and that is more strict.
-    "types": ["bun", "node"]
+    "outDir": "out"
   },
   "include": [
     "src/mod.ts",
     "src/impl.ts",
     "src/expo-sqlite.ts",
-    "src/op-sqlite.ts",
-    "src/bun-sqlite.ts"
+    "src/op-sqlite.ts"
   ]
 }

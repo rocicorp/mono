@@ -17,7 +17,7 @@
     "build": "rm -rf out && npm run build-server && npm run build-client",
     "build-client": "tsc -p tsconfig.client.json && npx tsx tool/build.js",
     "build-server": "tsc -p tsconfig.server.json && chmod +x out/zero/src/cli.js out/zero/src/build-schema.js out/zero/src/deploy-permissions.js out/zero/src/zero-cache-dev.js out/zero/src/ast-to-zql.js out/zero/src/analyze-query.js out/zero/src/transform-query.js",
-    "check-types": "tsc && tsc --project tsconfig.bun.json",
+    "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
@@ -90,7 +90,6 @@
     "zqlite": "0.0.0",
     "zero-events": "0.0.0",
     "zero-solid": "0.0.0",
-    "zero-bun": "0.0.0",
     "zero-pg": "0.0.0",
     "zero-react": "0.0.0",
     "zero-server": "0.0.0",
@@ -141,10 +140,6 @@
     "./react-native": {
       "types": "./out/zero-react-native/src/mod.d.ts",
       "default": "./out/react-native.js"
-    },
-    "./bun": {
-      "types": "./out/zero-bun/src/mod.d.ts",
-      "default": "./out/bun.js"
     }
   },
   "bin": {
