@@ -97,7 +97,7 @@ export type PullRow<TTable extends string, TSchema extends ZeroSchema> = {
   >['columns']]: SchemaValueToTSType<
     PullTableSchema<TTable, TSchema>['columns'][K]
   >;
-};
+} & {};
 
 export type Row<T extends TableSchema | Query<ZeroSchema, string, any>> =
   T extends TableSchema
