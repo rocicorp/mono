@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1759131477534,
+  "lastUpdate": 1759220587129,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -53629,6 +53629,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/37655372571a58d427c3840212bc5a750f4b6e4a"
         },
         "date": 1759131465482,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302593,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54554,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111465,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31900,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": false,
+          "id": "ecef76b267037fc616eb8ffb4d0b5020c8f48567",
+          "message": "Revert \"feat(replicache): bun sqlite store (#4923)\" (#4950)\n\nThis reverts commit 37655372571a58d427c3840212bc5a750f4b6e4a.",
+          "timestamp": "2025-09-30T08:12:22Z",
+          "tree_id": "ac44ade03407c89d3140055d6012ec63a08a6a7a",
+          "url": "https://github.com/rocicorp/mono/commit/ecef76b267037fc616eb8ffb4d0b5020c8f48567"
+        },
+        "date": 1759220575022,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
