@@ -93,9 +93,9 @@
       "types": "./out/replicache/src/op-sqlite.d.ts",
       "default": "./out/op-sqlite.js"
     },
-    "./zero-sqlite": {
-      "types": "./out/replicache/src/zero-sqlite.d.ts",
-      "default": "./out/zero-sqlite.js"
+    "./sqlite": {
+      "types": "./out/replicache/src/sqlite.d.ts",
+      "default": "./out/sqlite.js"
     }
   },
   "files": [

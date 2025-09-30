@@ -112,6 +112,7 @@ async function buildZeroClient() {
         'react': basePath('src/react.ts'),
         'solid': basePath('src/solid.ts'),
         'react-native': basePath('src/react-native.ts'),
+        'sqlite': basePath('src/sqlite.ts'),
       };
   const result = await esbuild.build({
     ...sharedOptions(minify, metafile),
