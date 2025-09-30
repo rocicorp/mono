@@ -27,7 +27,9 @@ const DEFAULT_RETRIES_IF_REPLICATION_SLOT_ACTIVE = 5;
 // (https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-WAL-SENDER-TIMEOUT)
 // this shorter timeout accounts for Neon, which appears to run its instances with
 // a 30 second timeout.
-const MANUAL_KEEPALIVE_TIMEOUT = 20_000;
+const MANUAL_KEEPALIVE_TIMEOUT = parseInt(
+  process.env.PG_REPLICATION_STREAM_KEEPALIVE_TIMEOUT ?? '20000',
+);
 
 export type StreamMessage = [lsn: bigint, Message | {tag: 'keepalive'}];
 
@@ -73,6 +75,7 @@ export async function subscribe(
   function sendAck(lsn: bigint) {
     writable.write(makeAck(lsn));
     lastAckTime = Date.now();
+    lc.debug?.(`sent ack: ${lsn}`);
   }
 
   const livenessTimer = setInterval(() => {
@@ -177,11 +180,17 @@ function parseStreamMessage(
     return null;
   }
   const lsn = buffer.readBigUInt64BE(1);
-  return buffer[0] === 0x77 // XLogData
-    ? [lsn, parser.parse(buffer.subarray(25))]
-    : buffer.readInt8(17) // Primary keepalive message: shouldRespond
-      ? [lsn, {tag: 'keepalive'}]
-      : null;
+  if (buffer[0] === 0x77) {
+    // XLogData
+    return [lsn, parser.parse(buffer.subarray(25))];
+  }
+  if (buffer.readInt8(17)) {
+    // Primary keepalive message: shouldRespond
+    lc.debug?.(`pg keepalive (shouldRespond: true) ${lsn}`);
+    return [lsn, {tag: 'keepalive'}];
+  }
+  lc.debug?.(`pg keepalive (shouldRespond: false) ${lsn}`);
+  return null;
 }
 
 // https://www.postgresql.org/docs/current/protocol-replication.html#PROTOCOL-REPLICATION-STANDBY-STATUS-UPDATE
