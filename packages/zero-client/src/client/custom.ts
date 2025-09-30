@@ -23,11 +23,9 @@ import type {
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import {type Query, type RunOptions} from '../../../zql/src/query/query.ts';
 import type {ClientID} from '../types/client-state.ts';
-import {assertNotOffline} from './client-error.ts';
 import {ZeroContext} from './context.ts';
 import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
-import type {OnlineManager} from './online-manager.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
 
@@ -130,13 +128,11 @@ export function makeReplicacheMutator<S extends Schema, TWrappedTransaction>(
   lc: ZeroLogContext,
   mutator: CustomMutatorImpl<S, TWrappedTransaction>,
   schema: S,
-  onlineManager: OnlineManager,
 ) {
   return async (
     repTx: WriteTransaction,
     args: ReadonlyJSONValue,
   ): Promise<void> => {
-    assertNotOffline(onlineManager);
     const tx = new TransactionImpl(lc, repTx, schema);
     await mutator(tx, args);
   };

@@ -26,11 +26,19 @@ import {MockSocket, zeroForTest} from './test-utils.ts';
 import {createDb} from './test/create-db.ts';
 import {getInternalReplicacheImplForTesting} from './zero.ts';
 import {QueryManager} from './query-manager.ts';
+import {OfflineError} from './client-error.ts';
 
 type Schema = typeof schema;
 type MutatorTx = Transaction<Schema>;
 
-afterEach(() => vi.restoreAllMocks());
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
 test('argument types are preserved on the generated mutator interface', () => {
   const mutators = {
@@ -769,6 +777,35 @@ test('run waiting for complete results throws in custom mutations', async () => 
   expect(err).toMatchInlineSnapshot(
     `[Error: Cannot wait for complete results in custom mutations]`,
   );
+
+  await z.close();
+});
+
+test('offline rejects writes', async () => {
+  const offlineDelayMs = 1_000;
+  const z = zeroForTest({
+    schema,
+    offlineDelayMs,
+    mutators: {
+      issue: {
+        create: async (tx: MutatorTx) => {
+          await tx.query.issue;
+        },
+      },
+    } as const,
+  });
+
+  await vi.advanceTimersByTimeAsync(offlineDelayMs);
+  expect(z.online).equal('offline');
+  await expect(z.mutate.issue.create().client).rejects.toBeInstanceOf(
+    OfflineError,
+  );
+  await expect(z.mutate.issue.create().server).rejects.toBeInstanceOf(
+    OfflineError,
+  );
+  await expect(z.mutate.issue.create()).rejects.toBeInstanceOf(OfflineError);
+
+  expect(z.testLogSink.messages).toMatchInlineSnapshot(`[]`);
 
   await z.close();
 });

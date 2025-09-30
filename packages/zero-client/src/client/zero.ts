@@ -161,6 +161,7 @@ import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
 import {OnlineManager, type OnlineStatus} from './online-manager.ts';
+import {OfflineError} from './client-error.ts';
 
 type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
@@ -433,6 +434,7 @@ export class Zero<
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
       maxRecentQueries = 0,
       slowMaterializeThreshold = 5_000,
+      offlineDelayMs = 300_000,
     } = options as ZeroOptions<S, MD>;
     if (!userID) {
       throw new Error('ZeroOptions.userID must not be empty.');
@@ -507,14 +509,11 @@ export class Zero<
 
     const lc = new ZeroLogContext(logOptions.logLevel, {}, logSink);
 
-    // Configure offline delay
-    let offlineDelayMs = 300_000;
-    if (options.offlineDelayMs !== undefined) {
+    if (offlineDelayMs !== undefined) {
       assert(
-        options.offlineDelayMs >= 0,
+        offlineDelayMs >= 0,
         'ZeroOptions.offlineDelayMs must not be negative.',
       );
-      offlineDelayMs = options.offlineDelayMs;
     }
 
     this.#onlineManager = new OnlineManager(offlineDelayMs, lc);
@@ -533,7 +532,6 @@ export class Zero<
             lc,
             mutatorOrMutators,
             schema,
-            this.#onlineManager,
             // Replicache expects mutators to only be able to return JSON
             // but Zero wraps the return with: `{server?: Promise<MutationResult>, client?: T}`
           ) as () => MutatorReturn;
@@ -550,7 +548,6 @@ export class Zero<
               lc,
               mutator as CustomMutatorImpl<S>,
               schema,
-              this.#onlineManager,
             ) as () => MutatorReturn;
           }
           continue;
@@ -694,12 +691,36 @@ export class Zero<
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ) as any;
 
+    const wrapCustomMutator = <F extends (...args: unknown[]) => unknown>(
+      f: F,
+    ) => {
+      return ((...args: Parameters<F>) => {
+        if (this.#onlineManager.status === 'offline') {
+          const e = new OfflineError();
+          const rejected = Promise.reject(e);
+          return {
+            client: rejected,
+            server: rejected,
+            // eslint-disable-next-line no-thenable
+            then: (onFulfilled: unknown, onRejected: unknown) =>
+              (rejected as Promise<unknown>).then(
+                onFulfilled as (value: unknown) => unknown,
+                onRejected as (reason: unknown) => unknown,
+              ),
+          } as unknown as ReturnType<F>;
+        }
+        return (f as (...a: Parameters<F>) => ReturnType<F>)(...args);
+      }) as (...args: Parameters<F>) => ReturnType<F>;
+    };
+
     if (options.mutators) {
       for (const [namespaceOrKey, mutatorsOrMutator] of Object.entries(
         options.mutators,
       )) {
         if (typeof mutatorsOrMutator === 'function') {
-          mutate[namespaceOrKey] = must(rep.mutate[namespaceOrKey as string]);
+          mutate[namespaceOrKey] = wrapCustomMutator(
+            must(rep.mutate[namespaceOrKey as string]),
+          );
           continue;
         }
 
@@ -710,8 +731,8 @@ export class Zero<
         }
 
         for (const name of Object.keys(mutatorsOrMutator)) {
-          existing[name] = must(
-            rep.mutate[customMutatorKey(namespaceOrKey as string, name)],
+          existing[name] = wrapCustomMutator(
+            must(rep.mutate[customMutatorKey(namespaceOrKey as string, name)]),
           );
         }
       }

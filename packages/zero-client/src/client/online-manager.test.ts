@@ -38,7 +38,7 @@ describe('OnlineManager', () => {
 
   it('starts offline', () => {
     const {manager} = createTestContext();
-    expect(manager.status).toBe('offline');
+    expect(manager.status).toBe('offline-pending');
   });
 
   it('goes online immediately and notifies listeners', () => {
@@ -46,6 +46,24 @@ describe('OnlineManager', () => {
     manager.setOnline(true);
     expect(manager.status).toBe('online');
     expect(events).toEqual(['online']);
+  });
+
+  it('auto-transitions from offline-pending to offline after grace period', () => {
+    const {manager, events, lc, offlineDelayMs} = createTestContext(150);
+    // Initially in offline-pending
+    expect(manager.status).toBe('offline-pending');
+    expect(events).toEqual([]);
+
+    // Advance timers to trigger scheduled offline
+    vi.advanceTimersByTime(offlineDelayMs - 1);
+    // Not yet offline until full delay
+    expect(manager.status).toBe('offline-pending');
+    expect(lc.info).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    expect(manager.status).toBe('offline');
+    expect(events).toEqual(['offline']);
+    expect(lc.info).toHaveBeenCalledTimes(1);
   });
 
   it('schedules offline with a grace period, then flips offline', () => {
@@ -97,10 +115,10 @@ describe('OnlineManager', () => {
   it('is idempotent when already in the target state', () => {
     const {manager, events} = createTestContext(100);
 
-    // Already offline initially
+    // Already offline-pending initially
     manager.setOnline(false);
     expect(events).toEqual([]);
-    expect(manager.status).toBe('offline');
+    expect(manager.status).toBe('offline-pending');
 
     // Go online once
     manager.setOnline(true);
