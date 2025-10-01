@@ -52,7 +52,7 @@ export async function subscribe(
   // Postgres will send keepalives before timing out a wal_sender. It is possible that
   // these keepalives are not received if there is back-pressure in the replication
   // stream. To keep the connection alive, explicitly send keepalives if none have been
-  // sent within the last 90% of the wal_sender_timeout.
+  // sent within the last 75% of the wal_sender_timeout.
   //
   // https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-WAL-SENDER-TIMEOUT
   const [{walSenderTimeoutMs}] = await session<
@@ -60,7 +60,7 @@ export async function subscribe(
   >`SELECT EXTRACT(EPOCH FROM (setting || unit)::interval) * 1000 
         AS "walSenderTimeoutMs" FROM pg_settings
         WHERE name = 'wal_sender_timeout'`.simple();
-  const manualKeepaliveTimeout = Math.floor(walSenderTimeoutMs * 0.9);
+  const manualKeepaliveTimeout = Math.floor(walSenderTimeoutMs * 0.75);
   lc.info?.(
     `wal_sender_timeout: ${walSenderTimeoutMs}ms. ` +
       `Ensuring manual keepalives at least every ${manualKeepaliveTimeout}ms`,
