@@ -23,6 +23,13 @@ const user = table('user')
   })
   .primaryKey('id');
 
+const project = table('project')
+  .columns({
+    id: string(),
+    name: string(),
+  })
+  .primaryKey('id');
+
 const issue = table('issue')
   .columns({
     id: string(),
@@ -31,6 +38,7 @@ const issue = table('issue')
     open: boolean(),
     modified: number(),
     created: number(),
+    projectID: string(),
     creatorID: string(),
     assigneeID: string().optional(),
     description: string(),
@@ -60,6 +68,7 @@ const label = table('label')
   .columns({
     id: string(),
     name: string(),
+    projectID: string(),
   })
   .primaryKey('id');
 
@@ -67,6 +76,7 @@ const issueLabel = table('issueLabel')
   .columns({
     issueID: string(),
     labelID: string(),
+    projectID: string(),
   })
   .primaryKey('issueID', 'labelID');
 
@@ -112,7 +122,25 @@ const userRelationships = relationships(user, ({many}) => ({
   }),
 }));
 
+const projectRelationships = relationships(project, ({many}) => ({
+  issues: many({
+    sourceField: ['id'],
+    destField: ['projectID'],
+    destSchema: issue,
+  }),
+  labels: many({
+    sourceField: ['id'],
+    destField: ['projectID'],
+    destSchema: label,
+  }),
+}));
+
 const issueRelationships = relationships(issue, ({many, one}) => ({
+  project: one({
+    sourceField: ['projectID'],
+    destField: ['id'],
+    destSchema: project,
+  }),
   labels: many(
     {
       sourceField: ['id'],
@@ -204,6 +232,7 @@ const emojiRelationships = relationships(emoji, ({one}) => ({
 export const schema = createSchema({
   tables: [
     user,
+    project,
     issue,
     comment,
     label,
@@ -215,6 +244,7 @@ export const schema = createSchema({
   ],
   relationships: [
     userRelationships,
+    projectRelationships,
     issueRelationships,
     commentRelationships,
     issueLabelRelationships,
