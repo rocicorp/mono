@@ -140,6 +140,10 @@
     "./react-native": {
       "types": "./out/zero-react-native/src/mod.d.ts",
       "default": "./out/react-native.js"
+    },
+    "./sqlite": {
+      "types": "./out/zero/src/sqlite.d.ts",
+      "default": "./out/sqlite.js"
     }
   },
   "bin": {

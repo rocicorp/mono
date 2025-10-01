@@ -9,6 +9,7 @@
     "src/mod.ts",
     "src/impl.ts",
     "src/expo-sqlite.ts",
-    "src/op-sqlite.ts"
+    "src/op-sqlite.ts",
+    "src/sqlite.ts"
   ]
 }
