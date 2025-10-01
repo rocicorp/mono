@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1759220587129,
+  "lastUpdate": 1759315828669,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -53673,6 +53673,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/ecef76b267037fc616eb8ffb4d0b5020c8f48567"
         },
         "date": 1759220575022,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302593,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54554,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111465,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31900,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "1271f3d707dca556a82718831059d9f6520be01d",
+          "message": "chore(replicache/zero): Export SQLite Store factory (#4951)\n\nThis exports the types and the factory class for SQLite based KV stores\nfor Replicache and Zero client.\n\nThe exports are:\n\n```ts\nimport {SQLiteStore} from 'replicache/sqlite';\n```\n\nand\n\n```ts\nimport {SQLiteStore} from '@rocicorp/zero/sqlite';\n```",
+          "timestamp": "2025-10-01T10:40:03Z",
+          "tree_id": "b72890a8ee637942e123efbf95efd317ee7a7b08",
+          "url": "https://github.com/rocicorp/mono/commit/1271f3d707dca556a82718831059d9f6520be01d"
+        },
+        "date": 1759315815470,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
