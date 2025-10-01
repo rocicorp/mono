@@ -10,6 +10,7 @@ const __dirname = dirname(__filename);
 
 const TABLES_IN_SEED_ORDER = [
   'user',
+  'project',
   'issue',
   'comment',
   'label',

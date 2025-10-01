@@ -30,6 +30,15 @@ export const user = pgTable(
   ],
 );
 
+export const project = pgTable(
+  'project',
+  {
+    id: varchar().primaryKey().notNull(),
+    name: varchar().notNull(),
+  },
+  table => [uniqueIndex('project_name_idx').using('btree', table.name)],
+);
+
 export const issue = pgTable(
   'issue',
   {
@@ -49,15 +58,22 @@ export const issue = pgTable(
     created: doublePrecision().default(
       sql`(EXTRACT(epoch FROM CURRENT_TIMESTAMP) * (1000)::numeric)`,
     ),
+    projectID: varchar().default('iCNlS2qEpzYWEes1RTf-D').notNull(),
     creatorID: varchar().notNull(),
     assigneeID: varchar(),
     description: varchar({length: 10240}).default(''),
     visibility: varchar().default('public').notNull(),
   },
   table => [
+    uniqueIndex('issue_project_idx').using('btree', table.id, table.projectID),
     index('issue_created_idx').using('btree', table.created),
     index('issue_modified_idx').using('btree', table.modified),
     index('issue_open_modified_idx').using('btree', table.open, table.modified),
+    foreignKey({
+      columns: [table.projectID],
+      foreignColumns: [project.id],
+      name: 'issue_projectID_fkey',
+    }),
     foreignKey({
       columns: [table.creatorID],
       foreignColumns: [user.id],
@@ -95,10 +111,22 @@ export const comment = pgTable(
   ],
 );
 
-export const label = pgTable('label', {
-  id: varchar().primaryKey().notNull(),
-  name: varchar().notNull(),
-});
+export const label = pgTable(
+  'label',
+  {
+    id: varchar().primaryKey().notNull(),
+    name: varchar().notNull(),
+    projectID: varchar().default('iCNlS2qEpzYWEes1RTf-D').notNull(),
+  },
+  table => [
+    uniqueIndex('label_project_idx').using('btree', table.id, table.projectID),
+    foreignKey({
+      columns: [table.projectID],
+      foreignColumns: [project.id],
+      name: 'label_projectID_fkey',
+    }),
+  ],
+);
 
 export const emoji = pgTable(
   'emoji',
@@ -133,18 +161,19 @@ export const issueLabel = pgTable(
   {
     labelID: varchar().notNull(),
     issueID: varchar().notNull(),
+    projectID: varchar().default('iCNlS2qEpzYWEes1RTf-D').notNull(),
   },
   table => [
     index('issuelabel_issueid_idx').using('btree', table.issueID),
     foreignKey({
-      columns: [table.labelID],
-      foreignColumns: [label.id],
-      name: 'issueLabel_labelID_fkey',
+      columns: [table.labelID, table.projectID],
+      foreignColumns: [label.id, label.projectID],
+      name: 'issueLabel_labelID_projectID_fkey',
     }),
     foreignKey({
-      columns: [table.issueID],
-      foreignColumns: [issue.id],
-      name: 'issueLabel_issueID_fkey',
+      columns: [table.issueID, table.projectID],
+      foreignColumns: [issue.id, issue.projectID],
+      name: 'issueLabel_issueID_projectID_fkey',
     }).onDelete('cascade'),
     primaryKey({
       columns: [table.labelID, table.issueID],
