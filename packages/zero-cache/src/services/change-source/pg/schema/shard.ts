@@ -162,6 +162,7 @@ export function shardSetup(
   CREATE TABLE ${shard}."${SHARD_CONFIG_TABLE}" (
     "publications"  TEXT[] NOT NULL,
     "ddlDetection"  BOOL NOT NULL,
+    "ignoredTables" TEXT[] DEFAULT '{}',
 
     -- Ensure that there is only a single row in the table.
     "lock" BOOL PRIMARY KEY DEFAULT true CHECK (lock)
@@ -169,10 +170,12 @@ export function shardSetup(
 
   INSERT INTO ${shard}."${SHARD_CONFIG_TABLE}" (
       "publications",
-      "ddlDetection" 
+      "ddlDetection",
+      "ignoredTables" 
     ) VALUES (
       ARRAY[${literal(pubs)}], 
-      false  -- set in SAVEPOINT with triggerSetup() statements
+      false,  -- set in SAVEPOINT with triggerSetup() statements
+      ${shardConfig.ignoredTables?.length ? `ARRAY[${literal(shardConfig.ignoredTables)}]` : 'ARRAY[]::TEXT[]'}
     );
 
   CREATE TABLE ${shard}.replicas (
@@ -200,6 +203,7 @@ export function dropShard(appID: string, shardID: string | number): string {
 const internalShardConfigSchema = v.object({
   publications: v.array(v.string()),
   ddlDetection: v.boolean(),
+  ignoredTables: v.array(v.string()).optional(() => []).map(tables => new Set(tables)),
 });
 
 export type InternalShardConfig = v.Infer<typeof internalShardConfigSchema>;
@@ -259,7 +263,10 @@ export async function getInternalShardConfig(
   shard: ShardID,
 ): Promise<InternalShardConfig> {
   const result = await sql`
-    SELECT "publications", "ddlDetection"
+    SELECT 
+      "publications", 
+      "ddlDetection",
+      COALESCE("ignoredTables", '{}') as "ignoredTables"
       FROM ${sql(upstreamSchema(shard))}."shardConfig";
   `;
   assert(result.length === 1);

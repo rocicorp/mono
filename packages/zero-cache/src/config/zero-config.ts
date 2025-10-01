@@ -71,6 +71,33 @@ export const appOptions = {
       `should be created.`,
     ],
   },
+
+  ignoredPublicationTables: {
+    type: v.array(
+      v.string().assert(
+        name => name.includes('.'),
+        'Table names must be fully qualified (e.g., "public.users", not "users")'
+      )
+    ).optional(() => []),
+    desc: [
+      'List of fully qualified table names to ignore during publication sync.',
+      '',
+      'These tables will be created in the SQLite replica but remain empty.',
+      'All changes to these tables will be dropped during replication.',
+      '',
+      'Format: JSON array ["schema.table1", "schema.table2"]',
+      'Example: ["public.audit_logs", "staging.temp_data", "analytics.raw_events"]',
+      '',
+      'Use cases:',
+      '- Exclude high-volume audit/log tables that are not needed client-side',
+      '- Skip temporary or staging tables',
+      '- Ignore analytics tables with sensitive data',
+      '- Reduce SQLite database size and sync time',
+      '',
+      'Note: Table names MUST be fully qualified with schema prefix.',
+      'Note: Changing this list triggers a full resync, similar to changing publications.',
+    ],
+  },
 };
 
 export const shardOptions = {
