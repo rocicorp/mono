@@ -18,19 +18,6 @@ import type {Message} from './pgoutput.types.ts';
 
 const DEFAULT_RETRIES_IF_REPLICATION_SLOT_ACTIVE = 5;
 
-// Postgres will send keepalives every 30 seconds before timing out
-// a wal_sender. It is possible that these keepalives are not received
-// if there is back-pressure in the replication stream. To keep the
-// connection alive anyway, explicitly send keepalives if none have been sent.
-//
-// Note that although the default wal_sender timeout is 60 seconds
-// (https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-WAL-SENDER-TIMEOUT)
-// this shorter timeout accounts for Neon, which appears to run its instances with
-// a 30 second timeout.
-const MANUAL_KEEPALIVE_TIMEOUT = parseInt(
-  process.env.PG_REPLICATION_STREAM_KEEPALIVE_TIMEOUT ?? '20000',
-);
-
 export type StreamMessage = [lsn: bigint, Message | {tag: 'keepalive'}];
 
 export async function subscribe(
@@ -62,6 +49,23 @@ export async function subscribe(
     ),
   );
 
+  // Postgres will send keepalives before timing out a wal_sender. It is possible that
+  // these keepalives are not received if there is back-pressure in the replication
+  // stream. To keep the connection alive, explicitly send keepalives if none have been
+  // sent within the last 75% of the wal_sender_timeout.
+  //
+  // https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-WAL-SENDER-TIMEOUT
+  const [{walSenderTimeoutMs}] = await session<
+    {walSenderTimeoutMs: number}[]
+  >`SELECT EXTRACT(EPOCH FROM (setting || unit)::interval) * 1000 
+        AS "walSenderTimeoutMs" FROM pg_settings
+        WHERE name = 'wal_sender_timeout'`.simple();
+  const manualKeepaliveTimeout = Math.floor(walSenderTimeoutMs * 0.75);
+  lc.info?.(
+    `wal_sender_timeout: ${walSenderTimeoutMs}ms. ` +
+      `Ensuring manual keepalives at least every ${manualKeepaliveTimeout}ms`,
+  );
+
   const [readable, writable] = await startReplicationStream(
     lc,
     session,
@@ -75,15 +79,15 @@ export async function subscribe(
   function sendAck(lsn: bigint) {
     writable.write(makeAck(lsn));
     lastAckTime = Date.now();
-    lc.debug?.(`sent ack: ${lsn}`);
   }
 
   const livenessTimer = setInterval(() => {
     const now = Date.now();
-    if (now - lastAckTime > MANUAL_KEEPALIVE_TIMEOUT) {
+    if (now - lastAckTime > manualKeepaliveTimeout) {
       sendAck(0n);
+      lc.debug?.(`sent manual keepalive`);
     }
-  }, MANUAL_KEEPALIVE_TIMEOUT / 5);
+  }, manualKeepaliveTimeout / 5);
 
   let destroyed = false;
   const typeParsers = await getTypeParsers(db);
@@ -189,7 +193,6 @@ function parseStreamMessage(
     lc.debug?.(`pg keepalive (shouldRespond: true) ${lsn}`);
     return [lsn, {tag: 'keepalive'}];
   }
-  lc.debug?.(`pg keepalive (shouldRespond: false) ${lsn}`);
   return null;
 }
 
