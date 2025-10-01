@@ -100,7 +100,7 @@ class DrizzleInternalTransaction<
 /**
  * Turn `$1, $2...` placeholders into a Drizzle SQL object with bound params.
  */
-function fromDollarParams(text: string, params: unknown[]): SQL {
+export function fromDollarParams(text: string, params: unknown[]): SQL {
   const re = /\$(\d+)/g;
   const s = sql.empty();
   let last = 0;
@@ -126,8 +126,8 @@ function isIterable(value: unknown): value is Iterable<unknown> {
   );
 }
 
-function toIterableRows(result: unknown): Iterable<Row> {
-  if (result == null) {
+export function toIterableRows(result: unknown): Iterable<Row> {
+  if (result === null || result === undefined) {
     return [] as Row[];
   }
   if (Array.isArray(result)) {
@@ -138,7 +138,7 @@ function toIterableRows(result: unknown): Iterable<Row> {
   }
   if (typeof result === 'object') {
     const rows = (result as {rows?: unknown}).rows;
-    if (rows == null) {
+    if (rows === null || rows === undefined) {
       return [] as Row[];
     }
     if (Array.isArray(rows)) {
