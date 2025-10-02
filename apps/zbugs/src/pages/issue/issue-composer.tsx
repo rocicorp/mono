@@ -130,8 +130,9 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
         </div>
         <div className="w-full px-4 mt-4">
           <p className="aside">
-            Testing Zero? Please make sure to delete your issue after. Want a
-            faster response?{' '}
+            Testing Zero? Please make sure to delete your issue after.
+            <br />
+            Want a faster response?{' '}
             <a href="https://discord.rocicorp.dev/">
               Join us on Discord &rarr;
             </a>
