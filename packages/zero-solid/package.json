@@ -17,15 +17,11 @@
     "solid-js": "^1.9.4"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "@solidjs/testing-library": "^0.8.10",
     "jsdom": "^26.1.0",
     "solid-js": "^1.9.4",
     "vite-plugin-solid": "^2.11.7"
-  },
-  "eslintConfig": {
-    "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config"
 }

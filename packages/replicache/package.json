@@ -37,7 +37,6 @@
   },
   "devDependencies": {
     "@op-engineering/op-sqlite": "^15.0.1",
-    "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "@rocicorp/zero-sqlite3": "^1.0.8",
     "@types/command-line-usage": "^5.0.2",
@@ -102,8 +101,5 @@
     "out",
     "!*.tsbuildinfo"
   ],
-  "eslintConfig": {
-    "extends": "../../eslint-config.json"
-  },
   "prettier": "@rocicorp/prettier-config"
 }

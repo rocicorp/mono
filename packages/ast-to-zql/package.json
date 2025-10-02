@@ -16,7 +16,6 @@
   },
   "devDependencies": {
     "@faker-js/faker": "^9.6.0",
-    "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "shared": "0.0.0",
     "zero-cache": "0.0.0",
@@ -24,8 +23,5 @@
     "zero-schema": "0.0.0",
     "zql": "0.0.0"
   },
-  "prettier": "@rocicorp/prettier-config",
-  "eslintConfig": {
-    "extends": "../../eslint-config.json"
-  }
+  "prettier": "@rocicorp/prettier-config"
 }
