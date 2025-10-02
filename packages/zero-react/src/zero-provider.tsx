@@ -5,44 +5,47 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import {Zero} from '../../zero-client/src/client/zero.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
+import {Zero} from '../../zero-client/src/client/zero.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
 const ZeroContext = createContext<unknown | undefined>(undefined);
 
 export function useZero<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
->(): Zero<S, MD> {
+  Context = unknown,
+>(): Zero<S, MD, Context> {
   const zero = useContext(ZeroContext);
   if (zero === undefined) {
     throw new Error('useZero must be used within a ZeroProvider');
   }
-  return zero as Zero<S, MD>;
+  return zero as Zero<S, MD, Context>;
 }
 
 export function createUseZero<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
+  Context = unknown,
 >() {
-  return () => useZero<S, MD>();
+  return () => useZero<S, MD, Context>();
 }
 
 export type ZeroProviderProps<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
-> = (ZeroOptions<S, MD> | {zero: Zero<S, MD>}) & {
-  init?: (zero: Zero<S, MD>) => void;
+  Context = undefined,
+> = (ZeroOptions<S, MD, Context> | {zero: Zero<S, MD, Context>}) & {
+  init?: (zero: Zero<S, MD, Context>) => void;
   children: ReactNode;
 };
 
 export function ZeroProvider<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
->({children, init, ...props}: ZeroProviderProps<S, MD>) {
+  Context = undefined,
+>({children, init, ...props}: ZeroProviderProps<S, MD, Context>) {
   const [zero, setZero] = useState<Zero<S, MD> | undefined>(
     'zero' in props ? props.zero : undefined,
   );

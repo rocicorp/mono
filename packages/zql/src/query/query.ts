@@ -12,6 +12,7 @@ import type {
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {CustomQueryID} from './named.ts';
+import type {WithContext} from './new/types.ts';
 import type {QueryDelegate} from './query-delegate.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
@@ -111,75 +112,18 @@ export type Row<T extends TableSchema | Query<ZeroSchema, string, any>> =
       : never;
 
 /**
- * A hybrid query that runs on both client and server.
- * Results are returned immediately from the client followed by authoritative
- * results from the server.
- *
- * Queries are transactional in that all queries update at once when a new transaction
- * has been committed on the client or server. No query results will reflect stale state.
- *
- * A query can be:
- * - {@linkcode materialize | materialize}
- * - awaited (`then`/{@linkcode run})
- * - {@linkcode preload | preloaded}
- *
- * The normal way to use a query would be through your UI framework's bindings (e.g., useQuery(q))
- * or within a custom mutator.
- *
- * `materialize` and `run/then` are provided for more advanced use cases.
- * Remember that any `view` returned by `materialize` must be destroyed.
- *
- * A query can be run as a 1-shot query by awaiting it. E.g.,
- *
- * ```ts
- * const result = await z.query.issue.limit(10);
- * ```
- *
- * For more information on how to use queries, see the documentation:
- * https://zero.rocicorp.dev/docs/reading-data
+ * Core query interface containing the fundamental query building methods.
+ * This interface defines the methods for filtering, ordering, and structuring queries.
  *
  * @typeParam TSchema The database schema type extending ZeroSchema
  * @typeParam TTable The name of the table being queried, must be a key of TSchema['tables']
  * @typeParam TReturn The return type of the query, defaults to PullRow<TTable, TSchema>
  */
-export interface Query<
+export interface CoreQuery<
   TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
-  TReturn = PullRow<TTable, TSchema>,
+  TReturn,
 > {
-  /**
-   * Format is used to specify the shape of the query results. This is used by
-   * {@linkcode one} and it also describes the shape when using
-   * {@linkcode related}.
-   */
-  readonly format: Format;
-
-  /**
-   * A string that uniquely identifies this query. This can be used to determine
-   * if two queries are the same.
-   *
-   * The hash of a custom query, on the client, is the hash of its AST.
-   * The hash of a custom query, on the server, is the hash of its name and args.
-   *
-   * The first allows many client-side queries to be pinned to the same backend query.
-   * The second ensures we do not invoke a named query on the backend more than once for the same `name:arg` pairing.
-   *
-   * If the query.hash was of `name:args` then `useQuery` would de-dupe
-   * queries with divergent ASTs.
-   *
-   * QueryManager will hash based on `name:args` since it is speaking with
-   * the server which tracks queries by `name:args`.
-   */
-  hash(): string;
-  readonly ast: AST;
-  readonly customQueryID: CustomQueryID | undefined;
-
-  nameAndArgs(
-    name: string,
-    args: ReadonlyArray<ReadonlyJSONValue>,
-  ): Query<TSchema, TTable, TReturn>;
-  [delegateSymbol](delegate: QueryDelegate): Query<TSchema, TTable, TReturn>;
-
   /**
    * Related is used to add a related query to the current query. This is used
    * for subqueries and joins. These relationships are defined in the
@@ -215,6 +159,253 @@ export interface Query<
    */
   related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
+  ): CoreQuery<
+    TSchema,
+    TTable,
+    AddSubreturn<
+      TReturn,
+      DestRow<TTable, TSchema, TRelationship>,
+      TRelationship
+    >
+  >;
+  related<
+    TRelationship extends AvailableRelationships<TTable, TSchema>,
+    TSub extends CoreQuery<TSchema, string, any>,
+  >(
+    relationship: TRelationship,
+    cb: (
+      q: CoreQuery<
+        TSchema,
+        DestTableName<TTable, TSchema, TRelationship>,
+        DestRow<TTable, TSchema, TRelationship>
+      >,
+    ) => TSub,
+  ): CoreQuery<
+    TSchema,
+    TTable,
+    AddSubreturn<
+      TReturn,
+      TSub extends CoreQuery<TSchema, string, infer TSubReturn>
+        ? TSubReturn
+        : never,
+      TRelationship
+    >
+  >;
+
+  /**
+   * Represents a condition to filter the query results.
+   *
+   * @param field The column name to filter on.
+   * @param op The operator to use for filtering.
+   * @param value The value to compare against.
+   *
+   * @returns A new query instance with the applied filter.
+   *
+   * @example
+   *
+   * ```typescript
+   * const query = db.query('users')
+   *   .where('age', '>', 18)
+   *   .where('name', 'LIKE', '%John%');
+   * ```
+   */
+  where<
+    TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
+    TOperator extends SimpleOperator,
+  >(
+    field: TSelector,
+    op: TOperator,
+    value:
+      | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
+      | ParameterReference,
+  ): CoreQuery<TSchema, TTable, TReturn>;
+  /**
+   * Represents a condition to filter the query results.
+   *
+   * This overload is used when the operator is '='.
+   *
+   * @param field The column name to filter on.
+   * @param value The value to compare against.
+   *
+   * @returns A new query instance with the applied filter.
+   *
+   * @example
+   * ```typescript
+   * const query = db.query('users')
+   *  .where('age', 18)
+   * ```
+   */
+  where<
+    TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
+  >(
+    field: TSelector,
+    value:
+      | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
+      | ParameterReference,
+  ): CoreQuery<TSchema, TTable, TReturn>;
+
+  /**
+   * Represents a condition to filter the query results.
+   *
+   * @param expressionFactory A function that takes a query builder and returns an expression.
+   *
+   * @returns A new query instance with the applied filter.
+   *
+   * @example
+   * ```typescript
+   * const query = db.query('users')
+   *   .where(({cmp, or}) => or(cmp('age', '>', 18), cmp('name', 'LIKE', '%John%')));
+   * ```
+   */
+  where(
+    expressionFactory: ExpressionFactory<TSchema, TTable>,
+  ): CoreQuery<TSchema, TTable, TReturn>;
+
+  whereExists(
+    relationship: AvailableRelationships<TTable, TSchema>,
+    options?: ExistsOptions,
+  ): CoreQuery<TSchema, TTable, TReturn>;
+  whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
+    relationship: TRelationship,
+    cb: (
+      q: CoreQuery<
+        TSchema,
+        DestTableName<TTable, TSchema, TRelationship>,
+        unknown
+      >,
+    ) => CoreQuery<TSchema, string, unknown>,
+    options?: ExistsOptions,
+  ): CoreQuery<TSchema, TTable, TReturn>;
+
+  /**
+   * Skips the rows of the query until row matches the given row. If opts is
+   * provided, it determines whether the match is inclusive.
+   *
+   * @param row The row to start from. This is a partial row object and only the provided
+   *            fields will be used for the comparison.
+   * @param opts Optional options object that specifies whether the match is inclusive.
+   *             If `inclusive` is true, the row will be included in the result.
+   *             If `inclusive` is false, the row will be excluded from the result and the result
+   *             will start from the next row.
+   *
+   * @returns A new query instance with the applied start condition.
+   */
+  start(
+    row: Partial<PullRow<TTable, TSchema>>,
+    opts?: {inclusive: boolean},
+  ): CoreQuery<TSchema, TTable, TReturn>;
+
+  /**
+   * Limits the number of rows returned by the query.
+   * @param limit The maximum number of rows to return.
+   *
+   * @returns A new query instance with the applied limit.
+   */
+  limit(limit: number): CoreQuery<TSchema, TTable, TReturn>;
+
+  /**
+   * Orders the results by a specified column. If multiple orderings are
+   * specified, the results will be ordered by the first column, then the
+   * second column, and so on.
+   *
+   * @param field The column name to order by.
+   * @param direction The direction to order the results (ascending or descending).
+   *
+   * @returns A new query instance with the applied order.
+   */
+  orderBy<TSelector extends Selector<PullTableSchema<TTable, TSchema>>>(
+    field: TSelector,
+    direction: 'asc' | 'desc',
+  ): CoreQuery<TSchema, TTable, TReturn>;
+
+  /**
+   * Limits the number of rows returned by the query to a single row and then
+   * unpacks the result so that you do not get an array of rows but a single
+   * row. This is useful when you expect only one row to be returned and want to
+   * work with the row directly.
+   *
+   * If the query returns no rows, the result will be `undefined`.
+   *
+   * @returns A new query instance with the applied limit to one row.
+   */
+  one(): CoreQuery<TSchema, TTable, TReturn | undefined>;
+}
+
+/**
+ * A hybrid query that runs on both client and server.
+ * Results are returned immediately from the client followed by authoritative
+ * results from the server.
+ *
+ * Queries are transactional in that all queries update at once when a new transaction
+ * has been committed on the client or server. No query results will reflect stale state.
+ *
+ * A query can be:
+ * - {@linkcode materialize | materialize}
+ * - awaited (`then`/{@linkcode run})
+ * - {@linkcode preload | preloaded}
+ *
+ * The normal way to use a query would be through your UI framework's bindings (e.g., useQuery(q))
+ * or within a custom mutator.
+ *
+ * `materialize` and `run/then` are provided for more advanced use cases.
+ * Remember that any `view` returned by `materialize` must be destroyed.
+ *
+ * A query can be run as a 1-shot query by awaiting it. E.g.,
+ *
+ * ```ts
+ * const result = await z.query.issue.limit(10);
+ * ```
+ *
+ * For more information on how to use queries, see the documentation:
+ * https://zero.rocicorp.dev/docs/reading-data
+ *
+ * @typeParam TSchema The database schema type extending ZeroSchema
+ * @typeParam TTable The name of the table being queried, must be a key of TSchema['tables']
+ * @typeParam TReturn The return type of the query, defaults to PullRow<TTable, TSchema>
+ */
+export interface Query<
+  TSchema extends ZeroSchema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn = PullRow<TTable, TSchema>,
+> extends CoreQuery<TSchema, TTable, TReturn>,
+    WithContext<TSchema, TTable, TReturn, unknown> {
+  /**
+   * Format is used to specify the shape of the query results. This is used by
+   * {@linkcode one} and it also describes the shape when using
+   * {@linkcode related}.
+   */
+  readonly format: Format;
+
+  /**
+   * A string that uniquely identifies this query. This can be used to determine
+   * if two queries are the same.
+   *
+   * The hash of a custom query, on the client, is the hash of its AST.
+   * The hash of a custom query, on the server, is the hash of its name and args.
+   *
+   * The first allows many client-side queries to be pinned to the same backend query.
+   * The second ensures we do not invoke a named query on the backend more than once for the same `name:arg` pairing.
+   *
+   * If the query.hash was of `name:args` then `useQuery` would de-dupe
+   * queries with divergent ASTs.
+   *
+   * QueryManager will hash based on `name:args` since it is speaking with
+   * the server which tracks queries by `name:args`.
+   */
+  hash(): string;
+  readonly ast: AST;
+  readonly customQueryID: CustomQueryID | undefined;
+
+  nameAndArgs(
+    name: string,
+    args: ReadonlyArray<ReadonlyJSONValue>,
+  ): Query<TSchema, TTable, TReturn>;
+
+  [delegateSymbol](delegate: QueryDelegate): Query<TSchema, TTable, TReturn>;
+
+  // Override CoreQuery methods to return Query instead of CoreQuery for proper chaining
+  related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
+    relationship: TRelationship,
   ): Query<
     TSchema,
     TTable,
@@ -248,23 +439,6 @@ export interface Query<
     >
   >;
 
-  /**
-   * Represents a condition to filter the query results.
-   *
-   * @param field The column name to filter on.
-   * @param op The operator to use for filtering.
-   * @param value The value to compare against.
-   *
-   * @returns A new query instance with the applied filter.
-   *
-   * @example
-   *
-   * ```typescript
-   * const query = db.query('users')
-   *   .where('age', '>', 18)
-   *   .where('name', 'LIKE', '%John%');
-   * ```
-   */
   where<
     TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
     TOperator extends SimpleOperator,
@@ -275,22 +449,6 @@ export interface Query<
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
       | ParameterReference,
   ): Query<TSchema, TTable, TReturn>;
-  /**
-   * Represents a condition to filter the query results.
-   *
-   * This overload is used when the operator is '='.
-   *
-   * @param field The column name to filter on.
-   * @param value The value to compare against.
-   *
-   * @returns A new query instance with the applied filter.
-   *
-   * @example
-   * ```typescript
-   * const query = db.query('users')
-   *  .where('age', 18)
-   * ```
-   */
   where<
     TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
   >(
@@ -299,87 +457,34 @@ export interface Query<
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
       | ParameterReference,
   ): Query<TSchema, TTable, TReturn>;
-
-  /**
-   * Represents a condition to filter the query results.
-   *
-   * @param expressionFactory A function that takes a query builder and returns an expression.
-   *
-   * @returns A new query instance with the applied filter.
-   *
-   * @example
-   * ```typescript
-   * const query = db.query('users')
-   *   .where(({cmp, or}) => or(cmp('age', '>', 18), cmp('name', 'LIKE', '%John%')));
-   * ```
-   */
   where(
     expressionFactory: ExpressionFactory<TSchema, TTable>,
   ): Query<TSchema, TTable, TReturn>;
 
   whereExists(
     relationship: AvailableRelationships<TTable, TSchema>,
-    options?: ExistsOptions | undefined,
+    options?: ExistsOptions,
   ): Query<TSchema, TTable, TReturn>;
   whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb: (
       q: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
     ) => Query<TSchema, string>,
-    options?: ExistsOptions | undefined,
+    options?: ExistsOptions,
   ): Query<TSchema, TTable, TReturn>;
 
-  /**
-   * Skips the rows of the query until row matches the given row. If opts is
-   * provided, it determines whether the match is inclusive.
-   *
-   * @param row The row to start from. This is a partial row object and only the provided
-   *            fields will be used for the comparison.
-   * @param opts Optional options object that specifies whether the match is inclusive.
-   *             If `inclusive` is true, the row will be included in the result.
-   *             If `inclusive` is false, the row will be excluded from the result and the result
-   *             will start from the next row.
-   *
-   * @returns A new query instance with the applied start condition.
-   */
   start(
     row: Partial<PullRow<TTable, TSchema>>,
-    opts?: {inclusive: boolean} | undefined,
+    opts?: {inclusive: boolean},
   ): Query<TSchema, TTable, TReturn>;
 
-  /**
-   * Limits the number of rows returned by the query.
-   * @param limit The maximum number of rows to return.
-   *
-   * @returns A new query instance with the applied limit.
-   */
   limit(limit: number): Query<TSchema, TTable, TReturn>;
 
-  /**
-   * Orders the results by a specified column. If multiple orderings are
-   * specified, the results will be ordered by the first column, then the
-   * second column, and so on.
-   *
-   * @param field The column name to order by.
-   * @param direction The direction to order the results (ascending or descending).
-   *
-   * @returns A new query instance with the applied order.
-   */
   orderBy<TSelector extends Selector<PullTableSchema<TTable, TSchema>>>(
     field: TSelector,
     direction: 'asc' | 'desc',
   ): Query<TSchema, TTable, TReturn>;
 
-  /**
-   * Limits the number of rows returned by the query to a single row and then
-   * unpacks the result so that you do not get an array of rows but a single
-   * row. This is useful when you expect only one row to be returned and want to
-   * work with the row directly.
-   *
-   * If the query returns no rows, the result will be `undefined`.
-   *
-   * @returns A new query instance with the applied limit to one row.
-   */
   one(): Query<TSchema, TTable, TReturn | undefined>;
 
   /**
@@ -497,7 +602,7 @@ export type HumanReadableRecursive<T> = undefined extends T
  */
 export type RunOptions = {
   type: 'unknown' | 'complete';
-  ttl?: TTL;
+  ttl?: TTL | undefined;
 };
 
 export const DEFAULT_RUN_OPTIONS_UNKNOWN = {

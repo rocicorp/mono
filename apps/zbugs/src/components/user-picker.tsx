@@ -30,7 +30,7 @@ export function UserPicker({
   filter = undefined,
 }: Props) {
   const [unsortedUsers] = useQuery(
-    queries.userPicker(!!disabled, selected?.login ?? null, filter ?? null),
+    queries.userPicker([!!disabled, selected?.login ?? null, filter ?? null]),
   );
   // TODO: Support case-insensitive sorting in ZQL.
   const users = useMemo(

@@ -97,7 +97,6 @@ export function createHTMLPasswordPrompt(
     };
 
     dialog.onclose = () => {
-      // debugger;
       if (dialog.returnValue === 'ok') {
         resolve(passwordInput.value || null);
       } else {

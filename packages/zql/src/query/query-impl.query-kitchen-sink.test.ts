@@ -518,7 +518,6 @@ describe('kitchen sink query', () => {
       ]
     `);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let rows: unknown[] = [];
     view.addListener(data => {
       rows = [...data].map(row => ({

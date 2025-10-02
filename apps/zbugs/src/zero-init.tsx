@@ -1,9 +1,10 @@
-import {ZeroProvider} from '@rocicorp/zero/react';
-import {useLogin} from './hooks/use-login.tsx';
-import {createMutators} from '../shared/mutators.ts';
-import {useMemo, type ReactNode} from 'react';
-import {schema} from '../shared/schema.ts';
 import type {CustomMutatorDefs, Schema, ZeroOptions} from '@rocicorp/zero';
+import {ZeroProvider} from '@rocicorp/zero/react';
+import {useMemo, type ReactNode} from 'react';
+import type {AuthData} from '../shared/auth.ts';
+import {createMutators} from '../shared/mutators.ts';
+import {schema} from '../shared/schema.ts';
+import {useLogin} from './hooks/use-login.tsx';
 
 export function ZeroInit({children}: {children: ReactNode}) {
   const login = useLogin();
@@ -24,7 +25,8 @@ export function ZeroInit({children}: {children: ReactNode}) {
       },
       mutateURL: `${window.location.origin}/api/mutate`,
       getQueriesURL: `${window.location.origin}/api/get-queries`,
-    } satisfies ZeroOptions<Schema, CustomMutatorDefs>;
+      context: login.loginState?.decoded,
+    } satisfies ZeroOptions<Schema, CustomMutatorDefs, AuthData | undefined>;
   }, [login]);
 
   return <ZeroProvider {...props}>{children}</ZeroProvider>;
