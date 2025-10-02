@@ -82,8 +82,11 @@ export const changeLogEntrySchema = v
   })
   .map(val => ({
     ...val,
-    // Note: the empty string "" (for table-wide ops) will result in `null`
-    rowKey: val.rowKey ? v.parse(parse(val.rowKey), jsonObjectSchema) : null,
+    // Note: set the rowKey to `null` for table-wide ops / resets
+    rowKey:
+      val.op === 't' || val.op === 'r'
+        ? null
+        : v.parse(parse(val.rowKey), jsonObjectSchema),
   }));
 
 export type ChangeLogEntry = v.Infer<typeof changeLogEntrySchema>;
