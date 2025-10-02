@@ -21,7 +21,6 @@
     "@rocicorp/resolver": "^1.0.2"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "@vitest/ui": "^3.2.4",
     "datadog": "0.0.0",
@@ -31,9 +30,6 @@
     "shared": "0.0.0",
     "typescript": "~5.8.2",
     "zero-protocol": "0.0.0"
-  },
-  "eslintConfig": {
-    "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config"
 }

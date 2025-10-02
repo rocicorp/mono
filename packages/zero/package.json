@@ -76,7 +76,6 @@
     "ws": "^8.18.1"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "@vitest/runner": "3.2.4",
     "esbuild": "^0.25.0",
@@ -162,8 +161,5 @@
     "out",
     "!*.tsbuildinfo"
   ],
-  "eslintConfig": {
-    "extends": "../../eslint-config.json"
-  },
   "prettier": "@rocicorp/prettier-config"
 }

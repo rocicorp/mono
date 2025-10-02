@@ -66,7 +66,6 @@
     "zod": "^4.1.11"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "@tailwindcss/forms": "^0.5.0",
     "@types/js-cookie": "^3.0.6",
@@ -75,16 +74,11 @@
     "@types/pg": "^8.11.11",
     "@types/react": "^18.3.18",
     "@types/react-dom": "18.3.5",
-    "@typescript-eslint/eslint-plugin": "^5.16.0",
     "@vitejs/plugin-react": "^4.3.4",
     "@vitest/runner": "3.2.4",
     "concurrently": "^8.2.1",
     "drizzle-orm": "^0.44.2",
     "drizzle-kit": "^0.31.4",
-    "eslint": "^8.15.0",
-    "eslint-config-prettier": "^8.5.0",
-    "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-react-refresh": "^0.4.6",
     "postcss-preset-env": "^7.4.3",
     "prettier": "^3.5.3",
     "rehype-video": "^2.3.0",
@@ -97,9 +91,6 @@
     "vite-plugin-svgr": "^4.3.0",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "3.2.4"
-  },
-  "eslintConfig": {
-    "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config"
 }

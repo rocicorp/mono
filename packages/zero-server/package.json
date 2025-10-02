@@ -13,9 +13,6 @@
     "test": "vitest run",
     "test:watch": "vitest watch"
   },
-  "eslintConfig": {
-    "extends": "../../eslint-config.json"
-  },
   "prettier": "@rocicorp/prettier-config",
   "dependencies": {
     "@rocicorp/logger": "^5.4.0"

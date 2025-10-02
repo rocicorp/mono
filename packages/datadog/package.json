@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.4.0",
     "@rocicorp/prettier-config": "^0.3.0",
@@ -21,9 +20,6 @@
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "lint": "oxlint --type-aware src/"
-  },
-  "eslintConfig": {
-    "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config"
 }

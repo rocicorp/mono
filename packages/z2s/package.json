@@ -19,15 +19,11 @@
   },
   "devDependencies": {
     "@faker-js/faker": "^9.6.0",
-    "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "@types/pg": "^8.11.11",
     "@vitest/runner": "3.2.4",
     "pg": "^8.14.1",
     "vitest": "3.2.4"
-  },
-  "eslintConfig": {
-    "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config"
 }

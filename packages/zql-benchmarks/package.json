@@ -20,14 +20,10 @@
     "test-types:watch": "vitest watch --typecheck.only --no-browser.enabled"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "@types/tmp": "^0.2.6",
     "shared": "0.0.0",
     "typescript": "~5.8.2"
-  },
-  "eslintConfig": {
-    "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config",
   "dependencies": {
