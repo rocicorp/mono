@@ -148,7 +148,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
     dir: anchor.direction,
   });
 
-  //  TODO: FIX THIS needs useMemo
   // For detecting if the base query, i.e. ignoring pagination parameters, has
   // changed.
 
