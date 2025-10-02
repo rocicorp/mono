@@ -23,15 +23,15 @@ type User = Row<Schema['tables']['user']>;
 export function UserPicker({
   onSelect,
   selected,
-  disabled,
+  disabled = false,
   unselectedLabel,
   placeholder,
   allowNone = true,
-  filter = undefined,
+  filter,
 }: Props) {
   const [unsortedUsers] = useQuery(
     queries.userPicker({
-      disabled: !!disabled,
+      disabled,
       login: selected?.login ?? null,
       filter: filter ?? null,
     }),
