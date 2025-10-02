@@ -301,6 +301,7 @@ class TransactionProcessor {
   readonly #tableSpecs: Map<string, LiteTableSpec>;
   readonly #jsonFormat: JSONFormat;
 
+  #pos = 0;
   #schemaChanged = false;
 
   constructor(
@@ -652,13 +653,13 @@ class TransactionProcessor {
 
   #logSetOp(table: string, key: LiteRowKey) {
     if (this.#mode === 'serving') {
-      logSetOp(this.#db, this.#version, table, key);
+      logSetOp(this.#db, this.#version, this.#pos++, table, key);
     }
   }
 
   #logDeleteOp(table: string, key: LiteRowKey) {
     if (this.#mode === 'serving') {
-      logDeleteOp(this.#db, this.#version, table, key);
+      logDeleteOp(this.#db, this.#version, this.#pos++, table, key);
     }
   }
 
