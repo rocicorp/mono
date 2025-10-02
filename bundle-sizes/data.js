@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1759315828669,
+  "lastUpdate": 1759419866083,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -53717,6 +53717,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/1271f3d707dca556a82718831059d9f6520be01d"
         },
         "date": 1759315815470,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302593,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54554,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111465,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31900,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "distinct": true,
+          "id": "dd64760d7573cdd3e6c44977838759bde6d50535",
+          "message": "chore: Remove more eslint remnants\n\nreduces package-lock by 1200 lines.",
+          "timestamp": "2025-10-02T17:42:07+02:00",
+          "tree_id": "d10e2f861c75717a96915e439164c7b8f8407d31",
+          "url": "https://github.com/rocicorp/mono/commit/dd64760d7573cdd3e6c44977838759bde6d50535"
+        },
+        "date": 1759419852608,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
