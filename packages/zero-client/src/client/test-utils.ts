@@ -106,10 +106,6 @@ export class TestZero<
     resolve: (state: ConnectionState) => void;
   }> = new Set();
 
-  constructor(options: ZeroOptions<S, MD>) {
-    super(options);
-  }
-
   get perdag(): Store {
     return getInternalReplicacheImplForTesting(this).perdag;
   }

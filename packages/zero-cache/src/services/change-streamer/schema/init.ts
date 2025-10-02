@@ -21,6 +21,7 @@ async function migrateFromLegacySchemas(
   const rows = await db<{nspname: string}[]>`
     SELECT nspname FROM pg_namespace 
       WHERE nspname IN ${db([newSchema, ...legacy])}`.values();
+  // eslint-disable-next-line unicorn/prefer-set-has -- Small collection, array is more appropriate
   const names = rows.flat();
   if (names.includes(newSchema)) {
     return; // already migrated

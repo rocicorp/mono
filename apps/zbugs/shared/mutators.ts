@@ -10,6 +10,11 @@ import {
   assertIsLoggedIn,
 } from './auth.ts';
 
+const ZERO_PROJECT_ID = 'iCNlS2qEpzYWEes1RTf-D';
+function projectIDWithDefault(projectID: string | undefined): string {
+  return projectID ?? ZERO_PROJECT_ID;
+}
+
 export type AddEmojiArgs = {
   id: string;
   unicode: string;
@@ -24,6 +29,7 @@ export type CreateIssueArgs = {
   description?: string | undefined;
   created: number;
   modified: number;
+  projectID?: string | undefined;
 };
 
 export type AddCommentArgs = {
@@ -41,12 +47,13 @@ export function createMutators(authData: AuthData | undefined) {
     issue: {
       async create(
         tx: MutatorTx,
-        {id, title, description, created, modified}: CreateIssueArgs,
+        {id, title, description, created, modified, projectID}: CreateIssueArgs,
       ) {
         assertIsLoggedIn(authData);
         const creatorID = authData.sub;
         await tx.mutate.issue.insert({
           id,
+          projectID: projectIDWithDefault(projectID),
           title,
           description: description ?? '',
           created,
@@ -113,10 +120,18 @@ export function createMutators(authData: AuthData | undefined) {
 
       async addLabel(
         tx: MutatorTx,
-        {issueID, labelID}: {issueID: string; labelID: string},
+        {
+          issueID,
+          labelID,
+          projectID,
+        }: {issueID: string; labelID: string; projectID?: string | undefined},
       ) {
         await assertIsCreatorOrAdmin(authData, tx.query.issue, issueID);
-        await tx.mutate.issueLabel.insert({issueID, labelID});
+        await tx.mutate.issueLabel.insert({
+          issueID,
+          labelID,
+          projectID: projectIDWithDefault(projectID),
+        });
       },
 
       async removeLabel(
@@ -193,9 +208,20 @@ export function createMutators(authData: AuthData | undefined) {
     },
 
     label: {
-      async create(tx: MutatorTx, {id, name}: {id: string; name: string}) {
+      async create(
+        tx: MutatorTx,
+        {
+          id,
+          name,
+          projectID,
+        }: {id: string; name: string; projectID?: string | undefined},
+      ) {
         assert(isAdmin(authData), 'Only admins can create labels');
-        await tx.mutate.label.insert({id, name});
+        await tx.mutate.label.insert({
+          id,
+          name,
+          projectID: projectIDWithDefault(projectID),
+        });
       },
 
       async createAndAddToIssue(
@@ -204,11 +230,22 @@ export function createMutators(authData: AuthData | undefined) {
           issueID,
           labelID,
           labelName,
-        }: {labelID: string; issueID: string; labelName: string},
+          projectID,
+        }: {
+          labelID: string;
+          issueID: string;
+          labelName: string;
+          projectID?: string | undefined;
+        },
       ) {
         assert(isAdmin(authData), 'Only admins can create labels');
-        await tx.mutate.label.insert({id: labelID, name: labelName});
-        await tx.mutate.issueLabel.insert({issueID, labelID});
+        projectID = projectIDWithDefault(projectID);
+        await tx.mutate.label.insert({
+          id: labelID,
+          name: labelName,
+          projectID,
+        });
+        await tx.mutate.issueLabel.insert({issueID, labelID, projectID});
       },
     },
 

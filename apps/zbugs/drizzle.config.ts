@@ -6,11 +6,12 @@ const dbUrl = must(
   'ZERO_UPSTREAM_DB is required',
 );
 
+// eslint-disable-next-line no-console
 console.log(dbUrl);
 
 export default defineConfig({
   out: './db/migrations',
-  schema: './db/schema.ts',
+  schema: './db/drizzle-schema.ts',
   dialect: 'postgresql',
   strict: true,
   dbCredentials: {

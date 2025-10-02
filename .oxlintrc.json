@@ -1,13 +1,39 @@
 {
-  "extends": ["@rocicorp/eslint-config"],
   "rules": {
-    "no-restricted-syntax": [
+    // Disable unsafe optional chaining - many legitimate patterns in codebase
+    "no-unsafe-optional-chaining": "off",
+
+    "no-console": "error",
+
+    // Handle unused variables consistently with ESLint config
+    "no-unused-vars": [
       "error",
       {
-        "selector": "TSEnumDeclaration",
-        "message": "Enums are not allowed. See shared/enum.ts"
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
       }
     ],
+
+    // TypeScript-specific rules
+    "typescript/no-explicit-any": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "caughtErrorsIgnorePattern": "^_"
+      }
+    ],
+
+    // Require await in async functions
+    "require-await": "error",
+
+    // Private class members (with inline disables for false positives)
+    "no-unused-private-class-members": "error",
+
+    // Import restrictions - preserve the exact patterns from @rocicorp/eslint-config
     "no-restricted-imports": [
       "error",
       {
@@ -73,6 +99,13 @@
           {"name": "zqlite-zql-test", "message": "Use relative imports instead"}
         ]
       }
-    ]
+    ],
+
+    // Additional beneficial rules
+    "unicorn/prefer-set-size": "error",
+    "unicorn/prefer-string-starts-ends-with": "error",
+    "unicorn/prefer-array-find": "error",
+    "unicorn/prefer-array-flat-map": "error",
+    "unicorn/prefer-set-has": "error"
   }
 }

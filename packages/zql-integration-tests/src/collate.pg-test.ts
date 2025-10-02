@@ -142,7 +142,7 @@ beforeAll(async () => {
   }
 
   // Check that PG, SQLite, and test data are in sync
-  const [itemPgRows] = await Promise.all([pg`SELECT * FROM "item"`]);
+  const itemPgRows = await pg`SELECT * FROM "item"`;
   expect(mapResultToClientNames(itemPgRows, schema, 'item')).toEqual(
     testData.item,
   );

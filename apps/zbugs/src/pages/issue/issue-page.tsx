@@ -141,7 +141,11 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const editDescriptionRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (displayed?.shortID != null && idField !== 'shortID') {
+    if (
+      displayed?.shortID !== null &&
+      displayed !== undefined &&
+      idField !== 'shortID'
+    ) {
       navigate(links.issue(displayed), {
         replace: true,
         state: zbugsHistoryState,

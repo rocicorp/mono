@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
-
+          cache: 'npm'
       # Clear out potential user data dirs left over from previous failures.
       - run: rm -rf /tmp/replicache-playwright-*
       - run: npm ci

@@ -1,0 +1,24 @@
+name: 'Run ZQL Benchmarks'
+description: 'Run ZQL benchmarks and convert output to BMF format'
+outputs:
+  benchmark-output:
+    description: 'The BMF formatted benchmark output'
+    value: ${{ steps.run-benchmarks.outputs.result }}
+runs:
+  using: 'composite'
+  steps:
+    - name: Run ZQL benchmarks
+      id: run-benchmarks
+      working-directory: packages/zql-benchmarks
+      shell: bash
+      run: |
+        # Enable debug logging to diagnose the issue
+        export DEBUG_MITATA_CONVERTER=1
+        # First, run benchmarks and save raw output
+        BENCH_OUTPUT_FORMAT=json npm run bench 2>&1 > bench_output.txt || true
+        echo "Raw benchmark output (first 1000 chars):"
+        head -c 1000 bench_output.txt
+        echo ""
+        echo "---"
+        # Now try to convert it
+        cat bench_output.txt | npx tsx ../shared/src/tool/mitata-json-to-bmf.ts > output.json || (echo "Converter failed" && exit 1)

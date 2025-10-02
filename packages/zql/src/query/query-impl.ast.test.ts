@@ -24,6 +24,7 @@ describe('building the AST', () => {
       {
         "table": "issue",
         "where": {
+          "flip": false,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -48,6 +49,7 @@ describe('building the AST', () => {
               ],
               "table": "issueLabel",
               "where": {
+                "flip": false,
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
@@ -1491,6 +1493,7 @@ describe('exists', () => {
         {
           "table": "issue",
           "where": {
+            "flip": false,
             "op": "EXISTS",
             "related": {
               "correlation": {
@@ -1523,6 +1526,7 @@ describe('exists', () => {
       {
         "table": "issue",
         "where": {
+          "flip": false,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -1559,6 +1563,7 @@ describe('exists', () => {
         {
           "table": "issue",
           "where": {
+            "flip": false,
             "op": "EXISTS",
             "related": {
               "correlation": {
@@ -1608,6 +1613,7 @@ describe('exists', () => {
       {
         "table": "issue",
         "where": {
+          "flip": false,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -1672,6 +1678,7 @@ describe('exists', () => {
       {
         "table": "issue",
         "where": {
+          "flip": false,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -1696,6 +1703,7 @@ describe('exists', () => {
               ],
               "table": "issueLabel",
               "where": {
+                "flip": false,
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
@@ -1744,6 +1752,7 @@ describe('exists', () => {
         "where": {
           "conditions": [
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1769,6 +1778,7 @@ describe('exists', () => {
               "type": "correlatedSubquery",
             },
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1882,6 +1892,7 @@ describe('exists', () => {
               ],
               "table": "issueLabel",
               "where": {
+                "flip": false,
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
@@ -1943,6 +1954,7 @@ describe('exists', () => {
         "where": {
           "conditions": [
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1968,6 +1980,7 @@ describe('exists', () => {
               "type": "correlatedSubquery",
             },
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -1993,6 +2006,7 @@ describe('exists', () => {
               "type": "correlatedSubquery",
             },
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -2017,6 +2031,7 @@ describe('exists', () => {
                   ],
                   "table": "issueLabel",
                   "where": {
+                    "flip": false,
                     "op": "EXISTS",
                     "related": {
                       "correlation": {
@@ -2053,6 +2068,202 @@ describe('exists', () => {
     `);
   });
 
+  test('exists with flip option - field relationship', () => {
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
+
+    // Using whereExists with flip option
+    expect(ast(issueQuery.whereExists('owner', {flip: true})))
+      .toMatchInlineSnapshot(`
+        {
+          "table": "issue",
+          "where": {
+            "flip": true,
+            "op": "EXISTS",
+            "related": {
+              "correlation": {
+                "childField": [
+                  "id",
+                ],
+                "parentField": [
+                  "ownerId",
+                ],
+              },
+              "subquery": {
+                "alias": "zsubq_owner",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
+                "table": "user",
+              },
+              "system": "client",
+            },
+            "type": "correlatedSubquery",
+          },
+        }
+      `);
+
+    // Using exists in expression builder with flip option
+    expect(
+      ast(
+        issueQuery.where(({exists}) =>
+          exists('owner', undefined, {flip: true}),
+        ),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "flip": true,
+          "op": "EXISTS",
+          "related": {
+            "correlation": {
+              "childField": [
+                "id",
+              ],
+              "parentField": [
+                "ownerId",
+              ],
+            },
+            "subquery": {
+              "alias": "zsubq_owner",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "table": "user",
+            },
+            "system": "client",
+          },
+          "type": "correlatedSubquery",
+        },
+      }
+    `);
+  });
+
+  test('exists with flip option - junction relationship', () => {
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
+
+    expect(ast(issueQuery.whereExists('labels', {flip: true})))
+      .toMatchInlineSnapshot(`
+        {
+          "table": "issue",
+          "where": {
+            "flip": true,
+            "op": "EXISTS",
+            "related": {
+              "correlation": {
+                "childField": [
+                  "issueId",
+                ],
+                "parentField": [
+                  "id",
+                ],
+              },
+              "subquery": {
+                "alias": "zsubq_labels",
+                "orderBy": [
+                  [
+                    "issueId",
+                    "asc",
+                  ],
+                  [
+                    "labelId",
+                    "asc",
+                  ],
+                ],
+                "table": "issueLabel",
+                "where": {
+                  "flip": true,
+                  "op": "EXISTS",
+                  "related": {
+                    "correlation": {
+                      "childField": [
+                        "id",
+                      ],
+                      "parentField": [
+                        "labelId",
+                      ],
+                    },
+                    "subquery": {
+                      "alias": "zsubq_zhidden_labels",
+                      "orderBy": [
+                        [
+                          "id",
+                          "asc",
+                        ],
+                      ],
+                      "table": "label",
+                    },
+                    "system": "client",
+                  },
+                  "type": "correlatedSubquery",
+                },
+              },
+              "system": "client",
+            },
+            "type": "correlatedSubquery",
+          },
+        }
+      `);
+  });
+
+  test('exists with flip option and callback', () => {
+    const issueQuery = newQuery(mockDelegate, schema, 'issue');
+
+    expect(
+      ast(
+        issueQuery.whereExists('owner', q => q.where('id', '1'), {flip: true}),
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "table": "issue",
+        "where": {
+          "flip": true,
+          "op": "EXISTS",
+          "related": {
+            "correlation": {
+              "childField": [
+                "id",
+              ],
+              "parentField": [
+                "ownerId",
+              ],
+            },
+            "subquery": {
+              "alias": "zsubq_owner",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
+              "table": "user",
+              "where": {
+                "left": {
+                  "name": "id",
+                  "type": "column",
+                },
+                "op": "=",
+                "right": {
+                  "type": "literal",
+                  "value": "1",
+                },
+                "type": "simple",
+              },
+            },
+            "system": "client",
+          },
+          "type": "correlatedSubquery",
+        },
+      }
+    `);
+  });
+
   test('many exists on the same relationship', () => {
     const issueQuery = newQuery(mockDelegate, schema, 'issue');
     expect(
@@ -2070,6 +2281,7 @@ describe('exists', () => {
         "where": {
           "conditions": [
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -2107,6 +2319,7 @@ describe('exists', () => {
               "type": "correlatedSubquery",
             },
             {
+              "flip": false,
               "op": "EXISTS",
               "related": {
                 "correlation": {

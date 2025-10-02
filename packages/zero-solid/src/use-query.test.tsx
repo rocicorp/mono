@@ -7,6 +7,7 @@ import {
   type JSX,
 } from 'solid-js';
 import {afterEach, expect, test, vi} from 'vitest';
+import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import {
   createSchema,
@@ -22,17 +23,16 @@ import {
 } from '../../zero/src/zero.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import {idSymbol, refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
-import {materialize, newQuery} from '../../zql/src/query/query-impl.ts';
-import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
-import {useQuery, type UseQueryOptions} from './use-query.ts';
-import {ZeroProvider} from './use-zero.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
+import {materialize, newQuery} from '../../zql/src/query/query-impl.ts';
 import type {
   MaterializeOptions,
   QueryReturn,
   QueryTable,
 } from '../../zql/src/query/query.ts';
-import {assert} from '../../shared/src/asserts.ts';
+import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
+import {useQuery, type UseQueryOptions} from './use-query.ts';
+import {ZeroProvider} from './use-zero.ts';
 
 function setupTestEnvironment() {
   const schema = createSchema({
@@ -119,7 +119,7 @@ test('useQuery', async () => {
   expect(resultType()).toEqual({type: 'unknown'});
 
   must(queryDelegate.gotCallbacks[0])(true);
-  await 1;
+  await Promise.resolve();
 
   ms.push({row: {a: 3, b: 'c'}, type: 'add'});
   queryDelegate.commit();
@@ -252,7 +252,7 @@ test('useQuery query deps change', async () => {
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(rowLog).toEqual([]);
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
@@ -266,7 +266,7 @@ test('useQuery query deps change', async () => {
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(rowLog).toEqual([]);
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
@@ -312,7 +312,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates', async (
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(row0Log).toEqual([]);
   expect(row1Log).toEqual([]);
@@ -327,7 +327,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates', async (
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(row0Log).toEqual([]);
   expect(row1Log).toEqual([]);
@@ -344,7 +344,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates', async (
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(row0Log).toEqual([]);
   expect(row1Log).toEqual([]);
@@ -468,7 +468,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(row0IDLog).toEqual([]);
   expect(row1IDLog).toEqual([]);
@@ -515,7 +515,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(row0IDLog).toEqual([]);
   expect(row1IDLog).toEqual([]);
@@ -567,7 +567,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(row0IDLog).toEqual([]);
   expect(row1IDLog).toEqual([]);
@@ -611,7 +611,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(row0IDLog).toEqual([]);
   expect(row1IDLog).toEqual([]);
@@ -656,7 +656,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   resetLogs();
 
   queryDelegate.gotCallbacks.forEach(cb => cb?.(true));
-  await 1;
+  await Promise.resolve();
 
   expect(row0IDLog).toEqual([]);
   expect(row1IDLog).toEqual([]);

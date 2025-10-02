@@ -75,6 +75,7 @@ export class FanIn implements FilterOperator {
     pushAccumulatedChanges(
       this.#accumulatedPushes,
       this.#output,
+      this,
       fanOutChangeType,
       identity,
       identity,

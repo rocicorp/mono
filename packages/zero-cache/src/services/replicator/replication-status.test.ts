@@ -35,67 +35,69 @@ describe('replicator/replication-status', () => {
       {
         "component": "replication",
         "description": "my description",
-        "indexes": [
-          {
-            "columns": [
-              {
-                "column": "c",
-                "dir": "DESC",
-              },
-              {
-                "column": "d",
-                "dir": "ASC",
-              },
-            ],
-            "table": "bar",
-            "unique": true,
-          },
-          {
-            "columns": [
-              {
-                "column": "a",
-                "dir": "DESC",
-              },
-            ],
-            "table": "foo",
-            "unique": true,
-          },
-        ],
-        "replicaSize": 20480,
         "stage": "Initializing",
+        "state": {
+          "indexes": [
+            {
+              "columns": [
+                {
+                  "column": "c",
+                  "dir": "DESC",
+                },
+                {
+                  "column": "d",
+                  "dir": "ASC",
+                },
+              ],
+              "table": "bar",
+              "unique": true,
+            },
+            {
+              "columns": [
+                {
+                  "column": "a",
+                  "dir": "DESC",
+                },
+              ],
+              "table": "foo",
+              "unique": true,
+            },
+          ],
+          "replicaSize": 20480,
+          "tables": [
+            {
+              "columns": [
+                {
+                  "clientType": "string",
+                  "column": "c",
+                  "upstreamType": "varchar",
+                },
+                {
+                  "clientType": "boolean",
+                  "column": "d",
+                  "upstreamType": "bool",
+                },
+              ],
+              "table": "bar",
+            },
+            {
+              "columns": [
+                {
+                  "clientType": "number",
+                  "column": "a",
+                  "upstreamType": "int",
+                },
+                {
+                  "clientType": "string",
+                  "column": "b",
+                  "upstreamType": "TEXT",
+                },
+              ],
+              "table": "foo",
+            },
+          ],
+        },
         "status": "OK",
-        "tables": [
-          {
-            "columns": [
-              {
-                "clientType": "string",
-                "column": "c",
-                "upstreamType": "varchar",
-              },
-              {
-                "clientType": "boolean",
-                "column": "d",
-                "upstreamType": "bool",
-              },
-            ],
-            "table": "bar",
-          },
-          {
-            "columns": [
-              {
-                "clientType": "number",
-                "column": "a",
-                "upstreamType": "int",
-              },
-              {
-                "clientType": "string",
-                "column": "b",
-                "upstreamType": "TEXT",
-              },
-            ],
-            "table": "foo",
-          },
-        ],
         "time": "2025-10-14T01:02:03.000Z",
         "type": "zero/events/status/replication/v1",
       }
@@ -124,67 +126,69 @@ describe('replicator/replication-status', () => {
       {
         "component": "replication",
         "description": undefined,
-        "indexes": [
-          {
-            "columns": [
-              {
-                "column": "c",
-                "dir": "DESC",
-              },
-              {
-                "column": "d",
-                "dir": "ASC",
-              },
-            ],
-            "table": "bar",
-            "unique": true,
-          },
-          {
-            "columns": [
-              {
-                "column": "a",
-                "dir": "DESC",
-              },
-            ],
-            "table": "foo",
-            "unique": true,
-          },
-        ],
-        "replicaSize": 20480,
         "stage": "Replicating",
+        "state": {
+          "indexes": [
+            {
+              "columns": [
+                {
+                  "column": "c",
+                  "dir": "DESC",
+                },
+                {
+                  "column": "d",
+                  "dir": "ASC",
+                },
+              ],
+              "table": "bar",
+              "unique": true,
+            },
+            {
+              "columns": [
+                {
+                  "column": "a",
+                  "dir": "DESC",
+                },
+              ],
+              "table": "foo",
+              "unique": true,
+            },
+          ],
+          "replicaSize": 20480,
+          "tables": [
+            {
+              "columns": [
+                {
+                  "clientType": "string",
+                  "column": "c",
+                  "upstreamType": "varchar",
+                },
+                {
+                  "clientType": "boolean",
+                  "column": "d",
+                  "upstreamType": "bool",
+                },
+              ],
+              "table": "bar",
+            },
+            {
+              "columns": [
+                {
+                  "clientType": "number",
+                  "column": "a",
+                  "upstreamType": "int",
+                },
+                {
+                  "clientType": "string",
+                  "column": "b",
+                  "upstreamType": "TEXT",
+                },
+              ],
+              "table": "foo",
+            },
+          ],
+        },
         "status": "OK",
-        "tables": [
-          {
-            "columns": [
-              {
-                "clientType": "string",
-                "column": "c",
-                "upstreamType": "varchar",
-              },
-              {
-                "clientType": "boolean",
-                "column": "d",
-                "upstreamType": "bool",
-              },
-            ],
-            "table": "bar",
-          },
-          {
-            "columns": [
-              {
-                "clientType": "number",
-                "column": "a",
-                "upstreamType": "int",
-              },
-              {
-                "clientType": "string",
-                "column": "b",
-                "upstreamType": "TEXT",
-              },
-            ],
-            "table": "foo",
-          },
-        ],
         "time": "2025-10-14T01:02:03.000Z",
         "type": "zero/events/status/replication/v1",
       }
@@ -210,38 +214,40 @@ describe('replicator/replication-status', () => {
       {
         "component": "replication",
         "description": "another description",
-        "indexes": [
-          {
-            "columns": [
-              {
-                "column": "a",
-                "dir": "DESC",
-              },
-            ],
-            "table": "foo",
-            "unique": true,
-          },
-        ],
-        "replicaSize": 12288,
         "stage": "Initializing",
+        "state": {
+          "indexes": [
+            {
+              "columns": [
+                {
+                  "column": "a",
+                  "dir": "DESC",
+                },
+              ],
+              "table": "foo",
+              "unique": true,
+            },
+          ],
+          "replicaSize": 12288,
+          "tables": [
+            {
+              "columns": [
+                {
+                  "clientType": "number",
+                  "column": "a",
+                  "upstreamType": "int",
+                },
+                {
+                  "clientType": null,
+                  "column": "not_synced",
+                  "upstreamType": "bytea",
+                },
+              ],
+              "table": "foo",
+            },
+          ],
+        },
         "status": "OK",
-        "tables": [
-          {
-            "columns": [
-              {
-                "clientType": "number",
-                "column": "a",
-                "upstreamType": "int",
-              },
-              {
-                "clientType": null,
-                "column": "not_synced",
-                "upstreamType": "bytea",
-              },
-            ],
-            "table": "foo",
-          },
-        ],
         "time": "2025-10-14T01:02:03.000Z",
         "type": "zero/events/status/replication/v1",
       }

@@ -143,7 +143,7 @@ describe('MeasurePushOperator', () => {
 
     measurePushOperator.push(change);
 
-    expect(mockOutput.push).toHaveBeenCalledWith(change);
+    expect(mockOutput.push).toHaveBeenCalledWith(change, measurePushOperator);
     expect(mockMetricsDelegate.addMetric).toHaveBeenCalledWith(
       'query-update-client',
       expect.any(Number),
