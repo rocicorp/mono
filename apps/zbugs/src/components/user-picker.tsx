@@ -2,11 +2,11 @@ import {type Row} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {useEffect, useMemo, useState} from 'react';
 import {toSorted} from '../../../../packages/shared/src/to-sorted.ts';
+import {queries} from '../../shared/queries.ts';
 import {type Schema} from '../../shared/schema.ts';
 import avatarIcon from '../assets/icons/avatar-default.svg';
 import {avatarURLWithSize} from '../avatar-url-with-size.ts';
 import {Combobox} from './combobox.tsx';
-import {queries} from '../../shared/queries.ts';
 
 type Props = {
   onSelect?: ((user: User | undefined) => void) | undefined;
@@ -30,7 +30,11 @@ export function UserPicker({
   filter = undefined,
 }: Props) {
   const [unsortedUsers] = useQuery(
-    queries.userPicker([!!disabled, selected?.login ?? null, filter ?? null]),
+    queries.userPicker({
+      disabled: !!disabled,
+      login: selected?.login ?? null,
+      filter: filter ?? null,
+    }),
   );
   // TODO: Support case-insensitive sorting in ZQL.
   const users = useMemo(

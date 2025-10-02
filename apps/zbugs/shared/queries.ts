@@ -2,7 +2,9 @@ import {
   defineQuery,
   escapeLike,
   type Query,
+  type ReadonlyJSONValue,
 } from '@rocicorp/zero';
+import type {StandardSchemaV1} from '@standard-schema/spec';
 import * as z from 'zod/mini';
 import type {AuthData, Role} from './auth.ts';
 import {INITIAL_COMMENT_LIMIT} from './consts.ts';
@@ -40,6 +42,22 @@ const issueRowSort = z.object({
 
 type IssueRowSort = z.infer<typeof issueRowSort>;
 
+const defineAuthQuery = <
+  Name extends string,
+  Input extends ReadonlyJSONValue | undefined,
+  Output extends ReadonlyJSONValue | undefined,
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+>(
+  name: Name,
+  validator: StandardSchemaV1<Input, Output>,
+  queryFn: (input: {
+    args: Output;
+    ctx: AuthData | undefined;
+  }) => Query<TSchema, TTable, TReturn>,
+) => defineQuery(name, {validator}, queryFn);
+
 export const queries = {
   allLabels: defineQuery(
     'allLabels',
@@ -65,12 +83,10 @@ export const queries = {
     ({args: userID}) => builder.user.where('id', userID).one(),
   ),
 
-  issuePreload: defineQuery(
+  issuePreload: defineAuthQuery(
     'issuePreload',
-    {
-      validator: idValidator,
-    },
-    ({args: userID, ctx: auth}: {args: string; ctx: AuthData | undefined}) =>
+    idValidator,
+    ({args: userID, ctx: auth}) =>
       applyIssuePermissions(
         builder.issue
           .related('labels')
@@ -89,10 +105,10 @@ export const queries = {
       ),
   ),
 
-  userPref: defineQuery(
+  userPref: defineAuthQuery(
     'userPref',
-    {validator: keyValidator},
-    ({ctx: auth, args: key}: {ctx: AuthData | undefined; args: string}) =>
+    keyValidator,
+    ({ctx: auth, args: key}) =>
       builder.userPref
         .where('key', key)
         .where('userID', auth?.sub ?? '')
@@ -102,13 +118,14 @@ export const queries = {
   userPicker: defineQuery(
     'userPicker',
     {
-      validator: z.tuple([
-        z.boolean(),
-        z.nullable(z.string()),
-        z.nullable(z.enum(['crew', 'creators'])),
-      ]),
+      validator: z.object({
+        disabled: z.boolean(),
+        login: z.nullable(z.string()),
+        filter: z.nullable(z.enum(['crew', 'creators'])),
+      }),
     },
-    ({args: [disabled, login, filter]}) => {
+
+    ({args: {disabled, login, filter}}) => {
       let q = builder.user;
       if (disabled && login) {
         q = q.where('login', login);
@@ -127,16 +144,14 @@ export const queries = {
     },
   ),
 
-  issueDetail: defineQuery(
+  issueDetail: defineAuthQuery(
     'issueDetail',
-    {
-      validator: z.tuple([
-        z.union([z.literal('shortID'), z.literal('id')]),
-        z.union([z.string(), z.number()]),
-        z.string(),
-      ]),
-    },
-    ({args: [idField, id, userID], ctx: auth}: {args: ['shortID' | 'id', string | number, string]; ctx: AuthData | undefined}) =>
+    z.object({
+      idField: z.union([z.literal('shortID'), z.literal('id')]),
+      id: z.union([z.string(), z.number()]),
+      userID: z.string(),
+    }),
+    ({args: {idField, id, userID}, ctx: auth}) =>
       applyIssuePermissions(
         builder.issue
           .where(idField, id)
@@ -162,18 +177,16 @@ export const queries = {
       ),
   ),
 
-  issueListV2: defineQuery(
+  issueListV2: defineAuthQuery(
     'issueListV2',
-    {
-      validator: z.tuple([
-        listContextParams,
-        z.string(),
-        z.nullable(z.number()),
-        z.nullable(issueRowSort),
-        z.union([z.literal('forward'), z.literal('backward')]),
-      ]),
-    },
-    ({args: [listContext, userID, limit, start, dir], ctx: auth}: {args: [ListContextParams, string, number | null, IssueRowSort | null, 'forward' | 'backward']; ctx: AuthData | undefined}) =>
+    z.object({
+      listContext: listContextParams,
+      userID: z.string(),
+      limit: z.nullable(z.number()),
+      start: z.nullable(issueRowSort),
+      dir: z.union([z.literal('forward'), z.literal('backward')]),
+    }),
+    ({args: {listContext, userID, limit, start, dir}, ctx: auth}) =>
       issueListV2(listContext, limit, userID, auth, start, dir),
   ),
 
@@ -189,16 +202,14 @@ export const queries = {
   ),
 
   // The below queries are DEPRECATED
-  prevNext: defineQuery(
+  prevNext: defineAuthQuery(
     'prevNext',
-    {
-      validator: z.tuple([
-        z.nullable(listContextParams),
-        z.nullable(issueRowSort),
-        z.union([z.literal('next'), z.literal('prev')]),
-      ]),
-    },
-    ({args: [listContext, issue, dir], ctx: auth}: {args: [ListContextParams | null, IssueRowSort | null, 'next' | 'prev']; ctx: AuthData | undefined}) =>
+    z.object({
+      listContext: z.nullable(listContextParams),
+      issue: z.nullable(issueRowSort),
+      dir: z.union([z.literal('next'), z.literal('prev')]),
+    }),
+    ({args: {listContext, issue, dir}, ctx: auth}) =>
       buildListQuery({
         listContext: listContext ?? undefined,
         start: issue ?? undefined,
@@ -207,12 +218,14 @@ export const queries = {
       }).one(),
   ),
 
-  issueList: defineQuery(
+  issueList: defineAuthQuery(
     'issueList',
-    {
-      validator: z.tuple([listContextParams, z.string(), z.number()]),
-    },
-    ({args: [listContext, userID, limit], ctx: auth}: {args: [ListContextParams, string, number]; ctx: AuthData | undefined}) =>
+    z.object({
+      listContext: listContextParams,
+      userID: z.string(),
+      limit: z.number(),
+    }),
+    ({args: {listContext, userID, limit}, ctx: auth}) =>
       issueListV2(listContext, limit, userID, auth, null, 'forward'),
   ),
 };
