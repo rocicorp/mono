@@ -2,17 +2,19 @@ import {useQuery} from '@rocicorp/zero/react';
 import {useVirtualizer} from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import React, {
-  type CSSProperties,
-  type KeyboardEvent,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
+  type KeyboardEvent,
 } from 'react';
 import {useDebouncedCallback} from 'use-debounce';
 import {useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
+import {queries, type ListContext} from '../../../shared/queries.ts';
+import type {IssueRow} from '../../../shared/schema.ts';
 import {Button} from '../../components/button.tsx';
 import {Filter, type Selection} from '../../components/filter.tsx';
 import {IssueLink} from '../../components/issue-link.tsx';
@@ -25,10 +27,8 @@ import {useLogin} from '../../hooks/use-login.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
-import {preload} from '../../zero-preload.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
-import {queries, type ListContext} from '../../../shared/queries.ts';
-import type {IssueRow} from '../../../shared/schema.ts';
+import {preload} from '../../zero-preload.ts';
 
 let firstRowRendered = false;
 const ITEM_SIZE = 56;
@@ -71,7 +71,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const status = qs.get('status')?.toLowerCase() ?? 'open';
   const creator = qs.get('creator') ?? null;
   const assignee = qs.get('assignee') ?? null;
-  const labels = qs.getAll('label');
+  const labels = useMemo(() => qs.getAll('label'), [qs]);
 
   // Cannot drive entirely by URL params because we need to debounce the changes
   // while typing ito input box.
@@ -90,15 +90,19 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const [anchor, setAnchor] = useState<Anchor>(TOP_ANCHOR);
 
-  const listContextParams = {
-    sortDirection,
-    sortField,
-    assignee,
-    creator,
-    labels,
-    open,
-    textFilter,
-  } as const;
+  const listContextParams = useMemo(
+    () =>
+      ({
+        sortDirection,
+        sortField,
+        assignee,
+        creator,
+        labels,
+        open,
+        textFilter,
+      }) as const,
+    [sortDirection, sortField, assignee, creator, open, textFilter, labels],
+  );
 
   const listRef = useRef<HTMLDivElement>(null);
   const tableWrapperRef = useRef<HTMLDivElement>(null);
@@ -133,13 +137,17 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   // For detecting if the base query, i.e. ignoring pagination parameters, has
   // changed.
-  const baseQ = queries.issueListV2(
-    login.loginState?.decoded,
-    listContextParams,
-    z.userID,
-    null, // no limit
-    null, // no start
-    'forward', // fixed direction
+  const baseQ = useMemo(
+    () =>
+      queries.issueListV2(
+        login.loginState?.decoded,
+        listContextParams,
+        z.userID,
+        null, // no limit
+        null, // no start
+        'forward', // fixed direction
+      ),
+    [login.loginState?.decoded, listContextParams, z.userID],
   );
 
   const [estimatedTotal, setEstimatedTotal] = useState(0);
@@ -150,8 +158,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     setTotal(undefined);
     setAnchor(TOP_ANCHOR);
     virtualizer.scrollToIndex(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseQ.hash()]);
+  }, [baseQ]);
 
   // We don't want to cache every single keystroke. We already debounce
   // keystrokes for the URL, so we just reuse that.
