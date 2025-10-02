@@ -116,9 +116,30 @@ export type {
   ExpressionBuilder,
   ExpressionFactory,
 } from '../../zql/src/query/expression.ts';
-export * from '../../zql/src/query/named.ts';
+export {
+  createBuilder,
+  syncedQuery,
+  syncedQueryWithContext,
+  withValidation,
+} from '../../zql/src/query/named.ts';
+export type {
+  CustomQueryID,
+  HasParseFn,
+  ParseFn,
+  Parser,
+  QueryFn,
+  QueryFnReturn,
+  SyncedQuery,
+} from '../../zql/src/query/named.ts';
+export {defineQuery} from '../../zql/src/query/new/define-query.ts';
+export type {
+  DefineQueryOptions,
+  NamedQueryFunction,
+} from '../../zql/src/query/new/define-query.ts';
+export {RootNamedQuery} from '../../zql/src/query/new/root-named-query.ts';
 export type {AnyQuery} from '../../zql/src/query/query-impl.ts';
 export type {
+  CoreQuery,
   HumanReadable,
   PullRow,
   Query,

@@ -134,8 +134,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     }
   }, [pageSize, size]);
 
-  const q = queries.issueListV2(
-    login.loginState?.decoded,
+  const q = queries.issueListV2([
     listContextParams,
     z.userID,
     pageSize,
@@ -147,21 +146,22 @@ export function ListPage({onReady}: {onReady: () => void}) {
         }
       : null,
     anchor.direction,
-  );
+  ]);
 
+  //  TODO: FIX THIS needs useMemo
   // For detecting if the base query, i.e. ignoring pagination parameters, has
   // changed.
+
   const baseQ = useMemo(
     () =>
-      queries.issueListV2(
-        login.loginState?.decoded,
+      queries.issueListV2([
         listContextParams,
         z.userID,
         null, // no limit
         null, // no start
         'forward', // fixed direction
-      ),
-    [login.loginState?.decoded, listContextParams, z.userID],
+      ]),
+    [listContextParams, z.userID],
   );
 
   useEffect(() => {
@@ -202,7 +202,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   useEffect(() => {
     if (issuesResult.type === 'complete') {
       recordPageLoad('list-page');
-      preload(login.loginState?.decoded, z);
+      preload(z);
     }
   }, [login.loginState?.decoded, issuesResult.type, z]);
 

@@ -1,9 +1,4 @@
-import {
-  escapeLike,
-  syncedQuery,
-  syncedQueryWithContext,
-  type Query,
-} from '@rocicorp/zero';
+import {defineQuery, escapeLike, syncedQuery, type Query} from '@rocicorp/zero';
 import * as z from 'zod/mini';
 import type {AuthData, Role} from './auth.ts';
 import {INITIAL_COMMENT_LIMIT} from './consts.ts';
@@ -19,7 +14,7 @@ function applyIssuePermissions<TQuery extends Query<Schema, 'issue', any>>(
   ) as TQuery;
 }
 
-const idValidator = z.tuple([z.string()]);
+const idValidator = z.string();
 const keyValidator = idValidator;
 
 const listContextParams = z.object({
@@ -43,33 +38,49 @@ const issueRowSort = z.object({
 type IssueRowSort = z.infer<typeof issueRowSort>;
 
 export const queries = {
-  allLabels: syncedQuery('allLabels', z.tuple([]), () => builder.label),
+  allLabels: defineQuery(
+    'allLabels',
+    {
+      validator: z.undefined(),
+    },
+    () => builder.label,
+  ),
 
-  allUsers: syncedQuery('allUsers', z.tuple([]), () => builder.user),
+  allUsers: defineQuery(
+    'allUsers',
+    {
+      validator: z.undefined(),
+    },
+    () => builder.user,
+  ),
 
   allProjects: syncedQuery('allProjects', z.tuple([]), () => builder.project),
 
-  user: syncedQuery('user', idValidator, userID =>
-    builder.user.where('id', userID).one(),
+  user: defineQuery(
+    'user',
+    {
+      validator: idValidator,
+    },
+    ({args: userID}) => builder.user.where('id', userID).one(),
   ),
 
-  labelsForProject: syncedQuery(
+  labelsForProject: defineQuery(
     'labels',
-    z.tuple([
-      z.object({
-        projectName: z.string(),
-      }),
-    ]),
-    ({projectName}: {projectName: string}) =>
+    {
+      validator: z.string(),
+    },
+    ({args: projectName}) =>
       builder.label.whereExists('project', q =>
         q.where('lowerCaseName', projectName.toLocaleLowerCase()),
       ),
   ),
 
-  issuePreload: syncedQueryWithContext(
+  issuePreload: defineQuery(
     'issuePreload',
-    idValidator,
-    (auth: AuthData | undefined, userID) =>
+    {
+      validator: idValidator,
+    },
+    ({args: userID, ctx: auth}: {args: string; ctx: AuthData | undefined}) =>
       applyIssuePermissions(
         builder.issue
           .related('labels')
@@ -88,24 +99,26 @@ export const queries = {
       ),
   ),
 
-  userPref: syncedQueryWithContext(
+  userPref: defineQuery(
     'userPref',
-    keyValidator,
-    (auth: AuthData | undefined, key) =>
+    {validator: keyValidator},
+    ({ctx: auth, args: key}: {ctx: AuthData | undefined; args: string}) =>
       builder.userPref
         .where('key', key)
         .where('userID', auth?.sub ?? '')
         .one(),
   ),
 
-  userPicker: syncedQuery(
+  userPicker: defineQuery(
     'userPicker',
-    z.tuple([
-      z.boolean(),
-      z.nullable(z.string()),
-      z.nullable(z.enum(['crew', 'creators'])),
-    ]),
-    (disabled, login, filter) => {
+    {
+      validator: z.tuple([
+        z.boolean(),
+        z.nullable(z.string()),
+        z.nullable(z.enum(['crew', 'creators'])),
+      ]),
+    },
+    ({args: [disabled, login, filter]}) => {
       let q = builder.user;
       if (disabled && login) {
         q = q.where('login', login);
@@ -124,14 +137,22 @@ export const queries = {
     },
   ),
 
-  issueDetail: syncedQueryWithContext(
+  issueDetail: defineQuery(
     'issueDetail',
-    z.tuple([
-      z.union([z.literal('shortID'), z.literal('id')]),
-      z.union([z.string(), z.number()]),
-      z.string(),
-    ]),
-    (auth: AuthData | undefined, idField, id, userID) =>
+    {
+      validator: z.tuple([
+        z.union([z.literal('shortID'), z.literal('id')]),
+        z.union([z.string(), z.number()]),
+        z.string(),
+      ]),
+    },
+    ({
+      args: [idField, id, userID],
+      ctx: auth,
+    }: {
+      args: ['shortID' | 'id', string | number, string];
+      ctx: AuthData | undefined;
+    }) =>
       applyIssuePermissions(
         builder.issue
           .where(idField, id)
@@ -158,34 +179,60 @@ export const queries = {
       ),
   ),
 
-  issueListV2: syncedQueryWithContext(
+  issueListV2: defineQuery(
     'issueListV2',
-    z.tuple([
-      listContextParams,
-      z.string(),
-      z.nullable(z.number()),
-      z.nullable(issueRowSort),
-      z.union([z.literal('forward'), z.literal('backward')]),
-    ]),
-    (auth: AuthData | undefined, listContext, userID, limit, start, dir) =>
-      issueListV2(listContext, limit, userID, auth, start, dir),
+    {
+      validator: z.tuple([
+        listContextParams,
+        z.string(),
+        z.nullable(z.number()),
+        z.nullable(issueRowSort),
+        z.union([z.literal('forward'), z.literal('backward')]),
+      ]),
+    },
+    ({
+      args: [listContext, userID, limit, start, dir],
+      ctx: auth,
+    }: {
+      args: [
+        ListContextParams,
+        string,
+        number | null,
+        IssueRowSort | null,
+        'forward' | 'backward',
+      ];
+      ctx: AuthData | undefined;
+    }) => issueListV2(listContext, limit, userID, auth, start, dir),
   ),
 
-  emojiChange: syncedQuery('emojiChange', idValidator, subjectID =>
-    builder.emoji
-      .where('subjectID', subjectID ?? '')
-      .related('creator', creator => creator.one()),
+  emojiChange: defineQuery(
+    'emojiChange',
+    {
+      validator: idValidator,
+    },
+    ({args: subjectID}) =>
+      builder.emoji
+        .where('subjectID', subjectID ?? '')
+        .related('creator', creator => creator.one()),
   ),
 
   // The below queries are DEPRECATED
-  prevNext: syncedQueryWithContext(
+  prevNext: defineQuery(
     'prevNext',
-    z.tuple([
-      z.nullable(listContextParams),
-      z.nullable(issueRowSort),
-      z.union([z.literal('next'), z.literal('prev')]),
-    ]),
-    (auth: AuthData | undefined, listContext, issue, dir) =>
+    {
+      validator: z.tuple([
+        z.nullable(listContextParams),
+        z.nullable(issueRowSort),
+        z.union([z.literal('next'), z.literal('prev')]),
+      ]),
+    },
+    ({
+      args: [listContext, issue, dir],
+      ctx: auth,
+    }: {
+      args: [ListContextParams | null, IssueRowSort | null, 'next' | 'prev'];
+      ctx: AuthData | undefined;
+    }) =>
       buildListQuery({
         listContext: listContext ?? undefined,
         start: issue ?? undefined,
@@ -194,13 +241,20 @@ export const queries = {
       }).one(),
   ),
 
-  issueList: syncedQueryWithContext(
+  issueList: defineQuery(
     'issueList',
-    z.tuple([listContextParams, z.string(), z.number()]),
-    (auth: AuthData | undefined, listContext, userID, limit) =>
-      issueListV2(listContext, limit, userID, auth, null, 'forward'),
+    {
+      validator: z.tuple([listContextParams, z.string(), z.number()]),
+    },
+    ({
+      args: [listContext, userID, limit],
+      ctx: auth,
+    }: {
+      args: [ListContextParams, string, number];
+      ctx: AuthData | undefined;
+    }) => issueListV2(listContext, limit, userID, auth, null, 'forward'),
   ),
-} as const;
+};
 
 export type ListContext = {
   readonly href: string;

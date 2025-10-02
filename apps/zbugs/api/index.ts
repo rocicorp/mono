@@ -1,27 +1,27 @@
 // https://vercel.com/templates/other/fastify-serverless-function
-import '../../../packages/shared/src/dotenv.ts';
 import cookie from '@fastify/cookie';
 import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
 import {Octokit} from '@octokit/core';
 import type {ReadonlyJSONValue} from '@rocicorp/zero';
+import {
+  getMutation,
+  handleGetQueriesRequest,
+  handleMutationRequest,
+} from '@rocicorp/zero/server';
+import {zeroPostgresJS} from '@rocicorp/zero/server/adapters/postgresjs';
 import assert from 'assert';
 import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
 import type {IncomingHttpHeaders} from 'http';
 import {jwtVerify, SignJWT, type JWK} from 'jose';
 import {nanoid} from 'nanoid';
 import postgres from 'postgres';
+import '../../../packages/shared/src/dotenv.ts';
 import {must} from '../../../packages/shared/src/must.ts';
-import {jwtDataSchema, type JWTData} from '../shared/auth.ts';
 import {getQuery} from '../server/get-query.ts';
-import {
-  handleGetQueriesRequest,
-  handleMutationRequest,
-  getMutation,
-} from '@rocicorp/zero/server';
-import {zeroPostgresJS} from '@rocicorp/zero/server/adapters/postgresjs';
+import {createServerMutators} from '../server/server-mutators.ts';
+import {jwtDataSchema, type JWTData} from '../shared/auth.ts';
 import {schema} from '../shared/schema.ts';
 import {getPresignedUrl} from '../src/server/upload.ts';
-import {createServerMutators} from '../server/server-mutators.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -48,7 +48,6 @@ fastify.register(oauthPlugin, {
       id: process.env.GITHUB_CLIENT_ID as string,
       secret: process.env.GITHUB_CLIENT_SECRET as string,
     },
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore Not clear why this is not working when type checking with tsconfig.node.ts
     auth: oauthPlugin.GITHUB_CONFIGURATION,
   },
@@ -213,7 +212,7 @@ async function getQueriesHandler(
   await withAuth(request, reply, async authData => {
     reply.send(
       await handleGetQueriesRequest(
-        (name, args) => ({query: getQuery(authData, name, args)}),
+        (name, args) => getQuery(authData, name, args),
         schema,
         request.body,
       ),

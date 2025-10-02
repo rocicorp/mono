@@ -1,10 +1,10 @@
 import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {useCallback, useRef, useState} from 'react';
+import {queries} from '../../shared/queries.ts';
 import {useClickOutside} from '../hooks/use-click-outside.ts';
 import {Button} from './button.tsx';
 import style from './label-picker.module.css';
-import {queries} from '../../shared/queries.ts';
 
 const focusInput = (input: HTMLInputElement | null) => {
   if (input) {
@@ -27,7 +27,7 @@ export function LabelPicker({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [labels] = useQuery(
-    queries.labelsForProject({projectName}).orderBy('name', 'asc'),
+    queries.labelsForProject(projectName).orderBy('name', 'asc'),
   );
   const ref = useRef<HTMLDivElement>(null);
 

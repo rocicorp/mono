@@ -84,16 +84,14 @@ import {
   type MetricMap,
   isClientMetric,
 } from '../../../zql/src/query/metrics-delegate.ts';
+import type {WithContext} from '../../../zql/src/query/new/types.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {
-  type AnyQuery,
-  materialize,
-  newQuery,
-} from '../../../zql/src/query/query-impl.ts';
+import {materialize, newQuery} from '../../../zql/src/query/query-impl.ts';
 import {
   type HumanReadable,
   type MaterializeOptions,
   type PreloadOptions,
+  type PullRow,
   type Query,
   type QueryReturn,
   type QueryTable,
@@ -293,6 +291,7 @@ type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
 export class Zero<
   const S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
+  TContext = unknown,
 > {
   readonly version = version;
 
@@ -407,7 +406,7 @@ export class Zero<
   // 2. client successfully connects
   #totalToConnectStart: number | undefined = undefined;
 
-  readonly #options: ZeroOptions<S, MD>;
+  readonly #options: ZeroOptions<S, MD, TContext>;
 
   readonly query: MakeEntityQueriesFromSchema<S>;
 
@@ -422,7 +421,7 @@ export class Zero<
   /**
    * Constructs a new Zero client.
    */
-  constructor(options: ZeroOptions<S, MD>) {
+  constructor(options: ZeroOptions<S, MD, TContext>) {
     const {
       userID,
       storageKey,
@@ -828,42 +827,43 @@ export class Zero<
     return createLogOptions(options);
   }
 
-  preload(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    query: Query<S, keyof S['tables'] & string, any>,
-    options?: PreloadOptions | undefined,
-  ) {
-    return query[delegateSymbol](this.#zeroContext).preload(options);
+  preload<
+    TTable extends keyof S['tables'] & string,
+    TReturn extends PullRow<TTable, S>,
+    Q extends WithContext<S, TTable, TReturn, TContext>,
+  >(query: Q, options?: PreloadOptions) {
+    const q = query.withContext(this.context);
+    return q[delegateSymbol](this.#zeroContext).preload(options);
   }
 
-  run<Q>(
-    query: Q,
-    runOptions?: RunOptions | undefined,
-  ): Promise<HumanReadable<QueryReturn<Q>>> {
-    return (
-      (query as AnyQuery)
-        // eslint-disable-next-line no-unexpected-multiline
-        [delegateSymbol](this.#zeroContext)
-        .run(runOptions) as Promise<HumanReadable<QueryReturn<Q>>>
-    );
+  run<
+    TTable extends keyof S['tables'] & string,
+    TReturn extends PullRow<TTable, S>,
+    Q extends WithContext<S, TTable, TReturn, TContext>,
+  >(newQuery: Q, runOptions?: RunOptions): Promise<HumanReadable<TReturn>> {
+    const q = newQuery.withContext(this.context);
+    return q[delegateSymbol](this.#zeroContext).run(runOptions);
+  }
+
+  get context(): TContext {
+    return this.#options.context as TContext;
   }
 
   materialize<Q>(
     query: Q,
-    options?: MaterializeOptions | undefined,
+    options?: MaterializeOptions,
   ): TypedView<HumanReadable<QueryReturn<Q>>>;
   materialize<T, Q>(
     query: Q,
     factory: ViewFactory<S, QueryTable<Q>, QueryReturn<Q>, T>,
-    options?: MaterializeOptions | undefined,
+    options?: MaterializeOptions,
   ): T;
   materialize<T, Q>(
     query: Q,
     factoryOrOptions?:
       | ViewFactory<S, QueryTable<Q>, QueryReturn<Q>, T>
-      | MaterializeOptions
-      | undefined,
-    maybeOptions?: MaterializeOptions | undefined,
+      | MaterializeOptions,
+    maybeOptions?: MaterializeOptions,
   ) {
     return materialize(
       query,

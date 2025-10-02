@@ -1,0 +1,355 @@
+import type {StandardSchemaV1} from '@standard-schema/spec';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {ExpressionFactory, ParameterReference} from './expression.ts';
+import type {AnyQuery} from './query-impl.ts';
+import type {
+  AvailableRelationships,
+  CoreQuery,
+  DestTableName,
+  ExistsOptions,
+  GetFilterType,
+  NoCompoundTypeSelector,
+  PullRow,
+  PullTableSchema,
+  Query,
+} from './query.ts';
+
+type Func<
+  TContext,
+  TArgs,
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn = PullRow<TTable, TSchema>,
+> = (options: {ctx: TContext; args: TArgs}) => Query<TSchema, TTable, TReturn>;
+
+type ChainQuery<
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn1,
+  TReturn2,
+> = (q: Query<TSchema, TTable, TReturn1>) => Query<TSchema, TTable, TReturn2>;
+
+type AnyChainQuery = ChainQuery<
+  Schema,
+  string,
+  PullRow<string, Schema>,
+  PullRow<string, Schema>
+>;
+
+export class NamedQuery<
+  TName extends string,
+  TInput,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TContext,
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn = PullRow<TTable, TSchema>,
+> implements CoreQuery<TSchema, TTable, TReturn>
+{
+  readonly #name: TName;
+  readonly #input: TInput;
+  #output: TOutput | undefined;
+  readonly #func: Func<TContext, TOutput, TSchema, TTable, TReturn>;
+  readonly #validator: StandardSchemaV1<TInput, TOutput>;
+  #q: Query<TSchema, TTable, TReturn> | undefined;
+  readonly #parent:
+    | NamedQuery<
+        string,
+        unknown,
+        ReadonlyJSONValue | undefined,
+        TContext,
+        TSchema,
+        TTable,
+        unknown
+      >
+    | undefined;
+  readonly #chainFn: AnyChainQuery | undefined;
+
+  constructor(
+    name: TName,
+    func: Func<TContext, TOutput, TSchema, TTable, TReturn>,
+    input: TInput,
+    validator: StandardSchemaV1<TInput, TOutput>,
+    parent?: NamedQuery<
+      string,
+      unknown,
+      ReadonlyJSONValue | undefined,
+      TContext,
+      TSchema,
+      TTable,
+      unknown
+    >,
+    chainFn?: AnyChainQuery,
+  ) {
+    this.#name = name;
+    this.#func = func;
+    this.#input = input;
+    this.#validator = validator;
+    this.#parent = parent;
+    this.#chainFn = chainFn;
+  }
+
+  async withContext(ctx: TContext): Promise<Query<TSchema, TTable, TReturn>> {
+    if (this.#q) {
+      return this.#q;
+    }
+
+    let q: AnyQuery;
+    if (this.#parent && this.#chainFn) {
+      // This is a chained query - get the parent query and apply the chain function
+      const parentQuery = await this.#parent.withContext(ctx);
+      q = this.#chainFn(parentQuery as AnyQuery);
+    } else {
+      // This is a root query - call the function with the context
+      const output = await this.#getOutputValue();
+      q = this.#func({ctx, args: output});
+    }
+
+    this.#q = q;
+    return q;
+  }
+
+  async #getOutputValue(): Promise<TOutput> {
+    // Should only be called once.
+    assert(this.#output === undefined);
+    if (!this.#validator) {
+      // No validator, so we assume input and output are the same
+      this.#output = this.#input as unknown as TOutput;
+      return this.#output;
+    }
+    const result = await this.#validator['~standard'].validate(this.#input);
+    if (result.issues) {
+      throw new Error(
+        `Validation failed for query ${this.#name}: ${result.issues
+          .map(issue => issue.message)
+          .join(', ')}`,
+      );
+    }
+    this.#output = result.value;
+    return this.#output;
+  }
+
+  #withChain<TNewReturn>(
+    fn: (
+      q: Query<TSchema, TTable, TReturn>,
+    ) => Query<TSchema, TTable, TNewReturn>,
+  ): NamedQuery<TName, TInput, TOutput, TContext, TSchema, TTable, TNewReturn> {
+    return new NamedQuery(
+      this.#name,
+      this.#func,
+      this.#input,
+      this.#validator,
+      this as unknown as NamedQuery<
+        string,
+        unknown,
+        ReadonlyJSONValue | undefined,
+        TContext,
+        TSchema,
+        TTable,
+        unknown
+      >, // parent reference
+      fn as AnyChainQuery, // chain function
+    ) as unknown as NamedQuery<
+      TName,
+      TInput,
+      TOutput,
+      TContext,
+      TSchema,
+      TTable,
+      TNewReturn
+    >;
+  }
+
+  // Query interface
+
+  one(): NamedQuery<
+    TName,
+    TInput,
+    TOutput,
+    TContext,
+    TSchema,
+    TTable,
+    TReturn | undefined
+  > {
+    return this.#withChain(q => q.one());
+  }
+
+  whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
+    relationship: TRelationship,
+    options?: ExistsOptions,
+  ): NamedQuery<TName, TInput, TOutput, TContext, TSchema, TTable, TReturn>;
+  whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
+    relationship: TRelationship,
+    cb: (
+      q: CoreQuery<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
+    ) => CoreQuery<TSchema, string>,
+    options?: ExistsOptions,
+  ): NamedQuery<TName, TInput, TOutput, TContext, TSchema, TTable, TReturn>;
+  whereExists(
+    relationship: AvailableRelationships<TTable, TSchema>,
+    cbOrOptions?:
+      | ((q: CoreQuery<TSchema, string>) => CoreQuery<TSchema, string>)
+      | ExistsOptions,
+    options?: ExistsOptions,
+  ): NamedQuery<TName, TInput, TOutput, TContext, TSchema, TTable, TReturn> {
+    if (typeof cbOrOptions === 'function') {
+      return this.#withChain(q =>
+        q.whereExists(
+          relationship as string,
+          cbOrOptions as unknown as (q: AnyQuery) => AnyQuery,
+          options,
+        ),
+      );
+    }
+    return this.#withChain(q =>
+      q.whereExists(relationship as string, cbOrOptions),
+    );
+  }
+
+  related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
+    relationship: TRelationship,
+  ): NamedQuery<
+    TName,
+    TInput,
+    TOutput,
+    TContext,
+    TSchema,
+    TTable,
+    TReturn & Record<string, unknown>
+  >;
+  related<
+    TRelationship extends AvailableRelationships<TTable, TSchema>,
+    TSub extends CoreQuery<TSchema, string, unknown>,
+  >(
+    relationship: TRelationship,
+    cb: (
+      q: CoreQuery<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
+    ) => TSub,
+  ): NamedQuery<
+    TName,
+    TInput,
+    TOutput,
+    TContext,
+    TSchema,
+    TTable,
+    TReturn & Record<string, unknown>
+  >;
+  related(
+    relationship: AvailableRelationships<TTable, TSchema>,
+    cb?: (q: CoreQuery<TSchema, string>) => CoreQuery<TSchema, string>,
+  ): NamedQuery<
+    TName,
+    TInput,
+    TOutput,
+    TContext,
+    TSchema,
+    TTable,
+    TReturn & Record<string, unknown>
+  > {
+    if (cb) {
+      return this.#withChain(q =>
+        q.related(
+          relationship as string,
+          cb as unknown as (q: AnyQuery) => AnyQuery,
+        ),
+      ) as NamedQuery<
+        TName,
+        TInput,
+        TOutput,
+        TContext,
+        TSchema,
+        TTable,
+        TReturn & Record<string, unknown>
+      >;
+    }
+    return this.#withChain(q =>
+      q.related(relationship as string),
+    ) as NamedQuery<
+      TName,
+      TInput,
+      TOutput,
+      TContext,
+      TSchema,
+      TTable,
+      TReturn & Record<string, unknown>
+    >;
+  }
+
+  where<
+    TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
+    TOperator extends SimpleOperator,
+  >(
+    field: TSelector,
+    op: TOperator,
+    value:
+      | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
+      | ParameterReference,
+  ): NamedQuery<TName, TInput, TOutput, TContext, TSchema, TTable, TReturn>;
+  where<
+    TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
+  >(
+    field: TSelector,
+    value:
+      | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
+      | ParameterReference,
+  ): NamedQuery<TName, TInput, TOutput, TContext, TSchema, TTable, TReturn>;
+  where(
+    expressionFactory: ExpressionFactory<TSchema, TTable>,
+  ): NamedQuery<TName, TInput, TOutput, TContext, TSchema, TTable, TReturn>;
+  where(
+    fieldOrExpressionFactory:
+      | NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>
+      | ExpressionFactory<TSchema, TTable>,
+    opOrValue?: unknown,
+    value?: unknown,
+  ): NamedQuery<TName, TInput, TOutput, TContext, TSchema, TTable, TReturn> {
+    if (typeof fieldOrExpressionFactory === 'function') {
+      return this.#withChain(q => q.where(fieldOrExpressionFactory));
+    }
+    if (value !== undefined) {
+      return this.#withChain(q =>
+        // Cast to bypass TypeScript's strict type checking - this proxy method needs runtime flexibility
+        (
+          q as unknown as {
+            where(
+              field: unknown,
+              op: unknown,
+              val: unknown,
+            ): Query<TSchema, TTable, TReturn>;
+          }
+        ).where(fieldOrExpressionFactory, opOrValue, value),
+      );
+    }
+    return this.#withChain(q =>
+      // Cast to bypass TypeScript's strict type checking - this proxy method needs runtime flexibility
+      (
+        q as unknown as {
+          where(field: unknown, val: unknown): Query<TSchema, TTable, TReturn>;
+        }
+      ).where(fieldOrExpressionFactory, opOrValue),
+    );
+  }
+
+  start(
+    row: Partial<PullRow<TTable, TSchema>>,
+    opts?: {inclusive: boolean},
+  ): NamedQuery<TName, TInput, TOutput, TContext, TSchema, TTable, TReturn> {
+    return this.#withChain(q => q.start(row, opts));
+  }
+
+  limit(
+    limit: number,
+  ): NamedQuery<TName, TInput, TOutput, TContext, TSchema, TTable, TReturn> {
+    return this.#withChain(q => q.limit(limit));
+  }
+
+  orderBy<TSelector extends keyof PullTableSchema<TTable, TSchema>['columns']>(
+    field: TSelector,
+    direction: 'asc' | 'desc',
+  ): NamedQuery<TName, TInput, TOutput, TContext, TSchema, TTable, TReturn> {
+    return this.#withChain(q => q.orderBy(field as string, direction));
+  }
+}

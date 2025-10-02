@@ -13,6 +13,7 @@ import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 export interface ZeroOptions<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
+  Context = undefined,
 > {
   /**
    * URL to the zero-cache. This can be a simple hostname, e.g.
@@ -244,6 +245,12 @@ export interface ZeroOptions<
    * Defaults is 10.
    */
   queryChangeThrottleMs?: number | undefined;
+
+  /**
+   * Context is passed to Synced Queries when they are executed
+   */
+  // TODO(arv): Mutators should also get context.
+  context?: Context | undefined;
 }
 
 /**

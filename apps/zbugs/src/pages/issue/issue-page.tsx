@@ -21,14 +21,17 @@ import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {findLastIndex} from '../../../../../packages/shared/src/find-last-index.ts';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {difference} from '../../../../../packages/shared/src/set-utils.ts';
+import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
+import type {NotificationType} from '../../../shared/mutators.ts';
+import {queries, type ListContextParams} from '../../../shared/queries.ts';
 import {
   type CommentRow,
   type IssueRow,
   type UserRow,
 } from '../../../shared/schema.ts';
+import circle from '../../assets/icons/circle.svg';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
-import circle from '../../assets/icons/circle.svg';
 import {commentQuery} from '../../comment-query.ts';
 import {AvatarImage} from '../../components/avatar-image.tsx';
 import {Button} from '../../components/button.tsx';
@@ -61,13 +64,10 @@ import {LRUCache} from '../../lru-cache.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {CACHE_NAV} from '../../query-cache-policy.ts';
 import {links, type ZbugsHistoryState} from '../../routes.ts';
+import {preload} from '../../zero-preload.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
-import {queries, type ListContextParams} from '../../../shared/queries.ts';
-import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
-import {preload} from '../../zero-preload.ts';
-import type {NotificationType} from '../../../shared/mutators.ts';
 
 const {emojiChange, issueDetail, issueListV2} = queries;
 
@@ -92,7 +92,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const listContext = zbugsHistoryState?.zbugsListContext;
 
   const [issue, issueResult] = useQuery(
-    issueDetail(login.loginState?.decoded, idField, id, z.userID),
+    issueDetail([idField, id, z.userID]),
     CACHE_NAV,
   );
   useEffect(() => {
@@ -112,7 +112,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   useEffect(() => {
     if (issueResult.type === 'complete') {
       recordPageLoad('issue-page');
-      preload(login.loginState?.decoded, z);
+      preload(z);
     }
   }, [issueResult.type, login.loginState?.decoded, z]);
 
@@ -209,14 +209,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   };
 
   const [[next]] = useQuery(
-    issueListV2(
-      login.loginState?.decoded,
+    issueListV2([
       listContextParams,
       z.userID,
       1,
       start,
       'forward',
-    ),
+    ]),
     prevNextOptions,
   );
   useKeypress('j', () => {
@@ -229,14 +228,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   });
 
   const [[prev]] = useQuery(
-    issueListV2(
-      login.loginState?.decoded,
+    issueListV2([
       listContextParams,
       z.userID,
       1,
       start,
       'backward',
-    ),
+    ]),
     prevNextOptions,
   );
   useKeypress('k', () => {

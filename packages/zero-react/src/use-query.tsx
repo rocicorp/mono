@@ -1,17 +1,21 @@
-import React, {useSyncExternalStore} from 'react';
 import {resolver} from '@rocicorp/resolver';
+import React, {useSyncExternalStore} from 'react';
 import {deepClone} from '../../shared/src/deep-clone.ts';
 import type {Immutable} from '../../shared/src/immutable.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
+import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
-import {AbstractQuery} from '../../zql/src/query/query-impl.ts';
-import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
+import type {WithContext} from '../../zql/src/query/new/types.ts';
+import {
+  type HumanReadable,
+  type PullRow,
+  type Query,
+} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 import {useZero} from './zero-provider.tsx';
-import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 
 export type QueryResultDetails = Readonly<
   | {
@@ -71,7 +75,6 @@ export type UseSuspenseQueryOptions = UseQueryOptions & {
   suspendUntil?: 'complete' | 'partial';
 };
 
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
 const reactUse = (React as unknown as {use?: (p: Promise<unknown>) => void})
   .use;
 const suspend: (p: Promise<unknown>) => void = reactUse
@@ -80,12 +83,20 @@ const suspend: (p: Promise<unknown>) => void = reactUse
       throw p;
     };
 
+type UseQueryQuery<
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = unknown,
+> = WithContext<TSchema, TTable, TReturn, TContext>;
+
 export function useQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
+  TContext,
 >(
-  query: Query<TSchema, TTable, TReturn>,
+  query: UseQueryQuery<TSchema, TTable, TReturn, TContext>,
   options?: UseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -96,12 +107,13 @@ export function useQuery<
     ({enabled = true, ttl = DEFAULT_TTL_MS} = options);
   }
 
-  const view = viewStore.getView(
-    useZero(),
-    query as AbstractQuery<TSchema, TTable, TReturn>,
-    enabled,
-    ttl,
+  const zero = useZero();
+  const actualQuery: Query<TSchema, TTable, TReturn> = query.withContext(
+    zero.context as TContext,
   );
+
+  const view = viewStore.getView(zero, actualQuery, enabled, ttl);
+
   // https://react.dev/reference/react/useSyncExternalStore
   return useSyncExternalStore(
     view.subscribeReactInternals,
@@ -114,8 +126,9 @@ export function useSuspenseQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
+  TContext,
 >(
-  query: Query<TSchema, TTable, TReturn>,
+  query: UseQueryQuery<TSchema, TTable, TReturn, TContext>,
   options?: UseSuspenseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -131,12 +144,12 @@ export function useSuspenseQuery<
     } = options);
   }
 
-  const view = viewStore.getView(
-    useZero(),
-    query as AbstractQuery<TSchema, TTable, TReturn>,
-    enabled,
-    ttl,
+  const zero = useZero();
+  const actualQuery: Query<TSchema, TTable, TReturn> = query.withContext(
+    zero.context as TContext,
   );
+
+  const view = viewStore.getView(zero, actualQuery, enabled, ttl);
   // https://react.dev/reference/react/useSyncExternalStore
   const snapshot = useSyncExternalStore(
     view.subscribeReactInternals,

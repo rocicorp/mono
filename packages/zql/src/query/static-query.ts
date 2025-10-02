@@ -11,8 +11,9 @@ import type {TypedView} from './typed-view.ts';
 export function staticQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
->(schema: TSchema, tableName: TTable): Query<TSchema, TTable> {
-  return new StaticQuery<TSchema, TTable>(
+  TReturn = PullRow<TTable, TSchema>,
+>(schema: TSchema, tableName: TTable): Query<TSchema, TTable, TReturn> {
+  return new StaticQuery<TSchema, TTable, TReturn>(
     schema,
     tableName,
     {table: tableName},
@@ -28,7 +29,7 @@ export class StaticQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
-> extends AbstractQuery<TSchema, TTable, TReturn> {
+> extends AbstractQuery<TSchema, TTable, TReturn, unknown> {
   constructor(
     schema: TSchema,
     tableName: TTable,
