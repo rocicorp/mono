@@ -92,7 +92,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const listContext = zbugsHistoryState?.zbugsListContext;
 
   const [issue, issueResult] = useQuery(
-    issueDetail([idField, id, z.userID]),
+    issueDetail({idField, id, userID: z.userID}),
     CACHE_NAV,
   );
   useEffect(() => {
@@ -209,13 +209,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   };
 
   const [[next]] = useQuery(
-    issueListV2([
-      listContextParams,
-      z.userID,
-      1,
+    issueListV2({
+      listContext: listContextParams,
+      userID: z.userID,
+      limit: 1,
       start,
-      'forward',
-    ]),
+      dir: 'forward',
+    }),
     prevNextOptions,
   );
   useKeypress('j', () => {
@@ -228,13 +228,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   });
 
   const [[prev]] = useQuery(
-    issueListV2([
-      listContextParams,
-      z.userID,
-      1,
+    issueListV2({
+      listContext: listContextParams,
+      userID: z.userID,
+      limit: 1,
       start,
-      'backward',
-    ]),
+      dir: 'backward',
+    }),
     prevNextOptions,
   );
   useKeypress('k', () => {

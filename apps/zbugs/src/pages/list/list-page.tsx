@@ -134,19 +134,19 @@ export function ListPage({onReady}: {onReady: () => void}) {
     }
   }, [pageSize, size]);
 
-  const q = queries.issueListV2([
-    listContextParams,
-    z.userID,
-    pageSize,
-    anchor.startRow
+  const q = queries.issueListV2({
+    listContext: listContextParams,
+    userID: z.userID,
+    limit: pageSize,
+    start: anchor.startRow
       ? {
           id: anchor.startRow.id,
           modified: anchor.startRow.modified,
           created: anchor.startRow.created,
         }
       : null,
-    anchor.direction,
-  ]);
+    dir: anchor.direction,
+  });
 
   //  TODO: FIX THIS needs useMemo
   // For detecting if the base query, i.e. ignoring pagination parameters, has
@@ -154,13 +154,13 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const baseQ = useMemo(
     () =>
-      queries.issueListV2([
-        listContextParams,
-        z.userID,
-        null, // no limit
-        null, // no start
-        'forward', // fixed direction
-      ]),
+      queries.issueListV2({
+        listContext: listContextParams,
+        userID: z.userID,
+        limit: null, // no limit
+        start: null, // no start
+        dir: 'forward', // fixed direction
+      }),
     [listContextParams, z.userID],
   );
 
