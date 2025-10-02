@@ -52,7 +52,7 @@ const CREATE_CHANGELOG_SCHEMA =
   // table        : The table associated with the change
   // rowKey       : JSON row key for a row change. For table-wide changes RESET
   //                and TRUNCATE, there is no associated row; instead, `pos` is
-  //                set to 0 and the rowKey is set to the stateVersion,
+  //                set to -1 and the rowKey is set to the stateVersion,
   //                guaranteeing when attempting to process the transaction,
   //                the pipeline is reset (and the change log traversal
   //                aborted).
@@ -75,6 +75,7 @@ const CREATE_CHANGELOG_SCHEMA =
 export const changeLogEntrySchema = v
   .object({
     stateVersion: v.string(),
+    pos: v.number(),
     table: v.string(),
     rowKey: v.string().nullable(),
     op: v.literalUnion(SET_OP, DEL_OP, TRUNCATE_OP, RESET_OP),
@@ -165,7 +166,7 @@ function logTableWideOp(
   db.run(
     `
     INSERT OR REPLACE INTO "_zero.changeLog" (stateVersion, pos, "table", rowKey, op) 
-      VALUES (@version, 0, @table, @version, @op)
+      VALUES (@version, -1, @table, @version, @op)
     `,
     // See file JSDoc for explanation of the rowKey w.r.t. ordering of table-wide ops.
     {version, table, op},

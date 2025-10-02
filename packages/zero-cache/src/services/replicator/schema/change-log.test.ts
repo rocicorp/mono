@@ -146,7 +146,7 @@ describe('replicator/schema/change-log', () => {
         rowKey: '{"a":2,"b":3}',
         op: 'd',
       },
-      {stateVersion: '03', pos: 0, table: 'foo', rowKey: '03', op: 't'},
+      {stateVersion: '03', pos: -1, table: 'foo', rowKey: '03', op: 't'},
       {
         stateVersion: '03',
         pos: 2,
@@ -175,7 +175,7 @@ describe('replicator/schema/change-log', () => {
         rowKey: '{"a":1,"b":2}',
         op: 's',
       },
-      {stateVersion: '03', pos: 0, table: 'foo', rowKey: '03', op: 't'},
+      {stateVersion: '03', pos: -1, table: 'foo', rowKey: '03', op: 't'},
       {
         stateVersion: '03',
         pos: 2,
@@ -183,7 +183,7 @@ describe('replicator/schema/change-log', () => {
         rowKey: '{"a":8,"b":9}',
         op: 's',
       },
-      {stateVersion: '04', pos: 0, table: 'bar', rowKey: '04', op: 'r'},
+      {stateVersion: '04', pos: -1, table: 'bar', rowKey: '04', op: 'r'},
       {
         stateVersion: '04',
         pos: 2,
@@ -207,7 +207,7 @@ describe('replicator/schema/change-log', () => {
         rowKey: '{"a":1,"b":2}',
         op: 's',
       },
-      {stateVersion: '03', pos: 0, table: 'foo', rowKey: '03', op: 't'},
+      {stateVersion: '03', pos: -1, table: 'foo', rowKey: '03', op: 't'},
       {
         stateVersion: '03',
         pos: 2,
@@ -215,7 +215,7 @@ describe('replicator/schema/change-log', () => {
         rowKey: '{"a":8,"b":9}',
         op: 's',
       },
-      {stateVersion: '04', pos: 0, table: 'bar', rowKey: '04', op: 'r'},
+      {stateVersion: '04', pos: -1, table: 'bar', rowKey: '04', op: 'r'},
       {
         stateVersion: '04',
         pos: 2,
@@ -223,7 +223,7 @@ describe('replicator/schema/change-log', () => {
         rowKey: '{"a":7,"b":9}',
         op: 's',
       },
-      {stateVersion: '05', pos: 0, table: 'baz', rowKey: '05', op: 'r'},
+      {stateVersion: '05', pos: -1, table: 'baz', rowKey: '05', op: 'r'},
     );
 
     logResetOp(db, '06', 'baz');
@@ -239,7 +239,7 @@ describe('replicator/schema/change-log', () => {
         rowKey: '{"a":1,"b":2}',
         op: 's',
       },
-      {stateVersion: '03', pos: 0, table: 'foo', rowKey: '03', op: 't'},
+      {stateVersion: '03', pos: -1, table: 'foo', rowKey: '03', op: 't'},
       {
         stateVersion: '03',
         pos: 2,
@@ -247,7 +247,7 @@ describe('replicator/schema/change-log', () => {
         rowKey: '{"a":8,"b":9}',
         op: 's',
       },
-      {stateVersion: '04', pos: 0, table: 'bar', rowKey: '04', op: 'r'},
+      {stateVersion: '04', pos: -1, table: 'bar', rowKey: '04', op: 'r'},
       {
         stateVersion: '04',
         pos: 2,
@@ -255,8 +255,8 @@ describe('replicator/schema/change-log', () => {
         rowKey: '{"a":7,"b":9}',
         op: 's',
       },
-      {stateVersion: '05', pos: 0, table: 'baz', rowKey: '05', op: 'r'},
-      {stateVersion: '06', pos: 0, table: 'baz', rowKey: '06', op: 't'},
+      {stateVersion: '05', pos: -1, table: 'baz', rowKey: '05', op: 'r'},
+      {stateVersion: '06', pos: -1, table: 'baz', rowKey: '06', op: 't'},
     );
   });
 });
