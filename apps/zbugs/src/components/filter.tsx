@@ -14,13 +14,14 @@ export type Selection =
   | {label: string};
 
 type Props = {
+  projectName: string;
   onSelect?: ((selection: Selection) => void) | undefined;
 };
 
-export const Filter = memo(function Filter({onSelect}: Props) {
+export const Filter = memo(function Filter({projectName, onSelect}: Props) {
   const [isOpen, setIsOpen] = useState(false);
 
-  const [unsortedLabels] = useQuery(queries.allLabels());
+  const [unsortedLabels] = useQuery(queries.labelsForProject({projectName}));
   // TODO: Support case-insensitive sorting in ZQL.
   const labels = useMemo(
     () => toSorted(unsortedLabels, (a, b) => a.name.localeCompare(b.name)),

@@ -11,7 +11,7 @@ import {
   unique,
   primaryKey,
 } from 'drizzle-orm/pg-core';
-import {sql} from 'drizzle-orm';
+import {SQL, sql} from 'drizzle-orm';
 
 export const user = pgTable(
   'user',
@@ -35,8 +35,15 @@ export const project = pgTable(
   {
     id: varchar().primaryKey().notNull(),
     name: varchar().notNull(),
+    // Populated from name by trigger
+    lowerCaseName: varchar().default('').notNull(),
   },
-  table => [uniqueIndex('project_name_idx').using('btree', table.name)],
+  table => [
+    uniqueIndex('project_lower_case_name_idx').using(
+      'btree',
+      table.lowerCaseName,
+    ),
+  ],
 );
 
 export const issue = pgTable(
