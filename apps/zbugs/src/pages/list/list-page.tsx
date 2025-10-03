@@ -164,6 +164,12 @@ export function ListPage({onReady}: {onReady: () => void}) {
     [login.loginState?.decoded, listContextParams, z.userID],
   );
 
+  useEffect(() => {
+    setEstimatedTotal(0);
+    setTotal(undefined);
+    setAnchor(TOP_ANCHOR);
+  }, [baseQ]);
+
   const [estimatedTotal, setEstimatedTotal] = useState(0);
   const [total, setTotal] = useState<number | undefined>(undefined);
 
@@ -348,13 +354,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
     overscan: 5,
     getScrollElement: () => listRef.current,
   });
-
-  useEffect(() => {
-    setEstimatedTotal(0);
-    setTotal(undefined);
-    setAnchor(TOP_ANCHOR);
-    virtualizer.scrollToIndex(0);
-  }, [baseQ, virtualizer]);
 
   const virtualItems = virtualizer.getVirtualItems();
   useEffect(() => {
