@@ -1,12 +1,12 @@
 import {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
+import {stringify, type JSONValue} from '../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../../../zqlite/src/table-source.ts';
 import type {LiteAndZqlSpec, LiteTableSpecWithKeys} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
-import {stringify, type JSONValue} from '../../../../shared/src/bigint-json.ts';
 import {
   normalizedKeyOrder,
   type RowKey,
@@ -288,7 +288,7 @@ class Snapshot {
 
   changesSince(prevVersion: string) {
     const cached = this.db.statementCache.get(
-      'SELECT * FROM "_zero.changeLog" WHERE stateVersion > ?',
+      'SELECT * FROM "_zero.changeLog" WHERE stateVersion > ? ORDER BY stateVersion ASC, pos ASC',
     );
     return {
       changes: cached.statement.iterate(prevVersion),
