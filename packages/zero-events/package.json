@@ -31,7 +31,7 @@
     "lint": "oxlint --type-aware src/"
   },
   "dependencies": {
-    "@badrap/valita": "^0.4.6"
+    "@badrap/valita": "0.3.11"
   },
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.7.0",
