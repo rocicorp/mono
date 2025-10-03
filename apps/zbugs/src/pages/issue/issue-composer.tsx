@@ -12,10 +12,11 @@ import {
   MAX_ISSUE_TITLE_LENGTH,
 } from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
+import {ZERO_PROJECT_NAME} from '../../../shared/schema.ts';
 
 interface Props {
   /** If id is defined the issue created by the composer. */
-  onDismiss: (id?: string | undefined) => void;
+  onDismiss: (created?: {projectName: string; id: string} | undefined) => void;
   isOpen: boolean;
 }
 
@@ -65,7 +66,7 @@ export function IssueComposer({isOpen, onDismiss}: Props) {
       modified: Date.now(),
     });
     reset();
-    onDismiss(id);
+    onDismiss({id, projectName: ZERO_PROJECT_NAME});
   };
 
   const reset = () => {

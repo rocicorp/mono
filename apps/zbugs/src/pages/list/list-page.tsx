@@ -11,10 +11,10 @@ import React, {
   type KeyboardEvent,
 } from 'react';
 import {useDebouncedCallback} from 'use-debounce';
-import {useSearch} from 'wouter';
+import {useParams, useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import {queries, type ListContext} from '../../../shared/queries.ts';
-import type {IssueRow} from '../../../shared/schema.ts';
+import {type IssueRow} from '../../../shared/schema.ts';
 import {Button} from '../../components/button.tsx';
 import {Filter, type Selection} from '../../components/filter.tsx';
 import {IssueLink} from '../../components/issue-link.tsx';
@@ -29,6 +29,7 @@ import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {preload} from '../../zero-preload.ts';
+import {must} from '../../../../../packages/shared/src/must.ts';
 
 let firstRowRendered = false;
 const ITEM_SIZE = 56;
@@ -68,6 +69,9 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const qs = useMemo(() => new URLSearchParams(search), [search]);
   const z = useZero();
 
+  const params = useParams();
+  const projectName = must(params.projectName);
+
   const status = qs.get('status')?.toLowerCase() ?? 'open';
   const creator = qs.get('creator') ?? null;
   const assignee = qs.get('assignee') ?? null;
@@ -93,6 +97,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const listContextParams = useMemo(
     () =>
       ({
+        projectName,
         sortDirection,
         sortField,
         assignee,
@@ -101,7 +106,16 @@ export function ListPage({onReady}: {onReady: () => void}) {
         open,
         textFilter,
       }) as const,
-    [sortDirection, sortField, assignee, creator, open, textFilter, labels],
+    [
+      projectName,
+      sortDirection,
+      sortField,
+      assignee,
+      creator,
+      open,
+      textFilter,
+      labels,
+    ],
   );
 
   const listRef = useRef<HTMLDivElement>(null);
@@ -150,15 +164,14 @@ export function ListPage({onReady}: {onReady: () => void}) {
     [login.loginState?.decoded, listContextParams, z.userID],
   );
 
-  const [estimatedTotal, setEstimatedTotal] = useState(0);
-  const [total, setTotal] = useState<number | undefined>(undefined);
-
   useEffect(() => {
     setEstimatedTotal(0);
     setTotal(undefined);
     setAnchor(TOP_ANCHOR);
-    virtualizer.scrollToIndex(0);
   }, [baseQ]);
+
+  const [estimatedTotal, setEstimatedTotal] = useState(0);
+  const [total, setTotal] = useState<number | undefined>(undefined);
 
   // We don't want to cache every single keystroke. We already debounce
   // keystrokes for the URL, so we just reuse that.
@@ -311,7 +324,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       >
         <IssueLink
           className={classNames('issue-title', {'issue-closed': !issue.open})}
-          issue={issue}
+          issue={{projectName, id: issue.id, shortID: issue.shortID}}
           title={issue.title}
           listContext={listContext}
         >
@@ -506,7 +519,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
             return null;
           })}
         </div>
-        <Filter onSelect={onFilter} />
+        <Filter projectName={projectName} onSelect={onFilter} />
         <div className="sort-control-container">
           <Button
             className="sort-control"

@@ -13,18 +13,22 @@ const focusInput = (input: HTMLInputElement | null) => {
 };
 
 export function LabelPicker({
+  projectName,
   selected,
   onDisassociateLabel,
   onAssociateLabel,
   onCreateNewLabel,
 }: {
+  projectName: string;
   selected: Set<string>;
   onDisassociateLabel: (id: string) => void;
   onAssociateLabel: (id: string) => void;
   onCreateNewLabel: (name: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [labels] = useQuery(queries.allLabels().orderBy('name', 'asc'));
+  const [labels] = useQuery(
+    queries.labelsForProject({projectName}).orderBy('name', 'asc'),
+  );
   const ref = useRef<HTMLDivElement>(null);
 
   useClickOutside(

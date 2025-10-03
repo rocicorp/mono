@@ -9,7 +9,7 @@ export function IssueLink({
   className,
   listContext,
 }: {
-  issue: {id: string; shortID?: number | null};
+  issue: {projectName: string; id: string; shortID?: number | null};
   listContext: ListContext;
 } & Omit<LinkProps, 'href' | 'state'>) {
   return (

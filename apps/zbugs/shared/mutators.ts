@@ -1,4 +1,4 @@
-import {schema} from './schema.ts';
+import {schema, ZERO_PROJECT_ID} from './schema.ts';
 import {assert} from '../../../packages/shared/src/asserts.ts';
 import type {UpdateValue, Transaction} from '@rocicorp/zero';
 import {
@@ -10,7 +10,6 @@ import {
   assertIsLoggedIn,
 } from './auth.ts';
 
-const ZERO_PROJECT_ID = 'iCNlS2qEpzYWEes1RTf-D';
 function projectIDWithDefault(projectID: string | undefined): string {
   return projectID ?? ZERO_PROJECT_ID;
 }
