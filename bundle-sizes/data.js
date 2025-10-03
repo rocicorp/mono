@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1759419866083,
+  "lastUpdate": 1759478541244,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -53761,6 +53761,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/dd64760d7573cdd3e6c44977838759bde6d50535"
         },
         "date": 1759419852608,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302593,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54554,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111465,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31900,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4d3869fe5ca88f106062836e56b815c25d48bd04",
+          "message": "chore: Remove .eslintignore files (#4963)",
+          "timestamp": "2025-10-03T07:52:02Z",
+          "tree_id": "22b6acd03e341fe6876de3bf7ae12492646678df",
+          "url": "https://github.com/rocicorp/mono/commit/4d3869fe5ca88f106062836e56b815c25d48bd04"
+        },
+        "date": 1759478528261,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
