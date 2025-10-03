@@ -15,6 +15,7 @@ import {Button} from './button.tsx';
 import {Link} from './link.tsx';
 import {queries, type ListContext} from '../../shared/queries.ts';
 import {ZERO_PROJECT_NAME} from '../../shared/schema.ts';
+import {Combobox} from './combobox.tsx';
 
 export const Nav = memo(() => {
   const search = useSearch();
@@ -29,6 +30,8 @@ export const Nav = memo(() => {
   const [user] = useQuery(queries.user(login.loginState?.decoded.sub ?? ''));
   const isOnline = useZeroOnline();
   const {projectName} = useParams();
+
+  const [projects] = useQuery(queries.allProjects());
 
   const [showIssueModal, setShowIssueModal] = useState(false);
 
@@ -105,6 +108,15 @@ export const Nav = memo(() => {
           </Link>
         </div>
 
+        <Combobox<string>
+          items={projects.map(p => ({
+            text: p.name,
+            value: p.lowerCaseName,
+            icon: '',
+          }))}
+          selectedValue={projectName?.toLocaleLowerCase()}
+          onChange={value => navigate(links.list({projectName: value}))}
+        />
         <div className="user-login">
           {import.meta.env.DEV && (
             <FPSMeter className="fps-meter" width={192} height={38} />
