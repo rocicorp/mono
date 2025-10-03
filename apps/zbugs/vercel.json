@@ -8,5 +8,9 @@
       "source": "/issue/(.*)",
       "destination": "/index.html"
     }
+        {
+      "source": "/p/(.*)",
+      "destination": "/index.html"
+    }
   ]
 }
