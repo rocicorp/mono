@@ -24,6 +24,12 @@ async function seed() {
     process.env.ZERO_SEED_DATA_DIR ??
     join(__dirname, '../db/seed-data/github/');
 
+  const forceSeed =
+    process.env.ZERO_SEED_FORCE !== undefined &&
+    ['t', 'true', '1', ''].indexOf(
+      process.env.ZERO_SEED_FORCE.toLocaleLowerCase().trim(),
+    ) !== -1;
+
   // oxlint-disable-next-line no-console
   console.log(process.env.ZERO_UPSTREAM_DB);
 
@@ -46,7 +52,7 @@ async function seed() {
 
     // Use a single transaction for atomicity
     await sql.begin(async sql => {
-      let checkedIfAlreadySeeded = false;
+      let checkedIfAlreadySeeded = forceSeed;
       for (const tableName of TABLES_IN_SEED_ORDER) {
         for (const file of files) {
           if (
