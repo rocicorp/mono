@@ -14,7 +14,7 @@ import {useDebouncedCallback} from 'use-debounce';
 import {useParams, useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import {queries, type ListContext} from '../../../shared/queries.ts';
-import {ZERO_PROJECT_NAME, type IssueRow} from '../../../shared/schema.ts';
+import {type IssueRow} from '../../../shared/schema.ts';
 import {Button} from '../../components/button.tsx';
 import {Filter, type Selection} from '../../components/filter.tsx';
 import {IssueLink} from '../../components/issue-link.tsx';
@@ -172,7 +172,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     setTotal(undefined);
     setAnchor(TOP_ANCHOR);
     virtualizer.scrollToIndex(0);
-  }, [baseQ]);
+  }, [baseQ, virtualizer]);
 
   // We don't want to cache every single keystroke. We already debounce
   // keystrokes for the URL, so we just reuse that.
