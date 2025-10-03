@@ -2,6 +2,7 @@
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {SchemaQuery} from '../mutate/custom.ts';
+import type {NamedQueryFunction} from './new/define-query.ts';
 import {newQuery} from './query-impl.ts';
 import type {HumanReadable, Query, QueryReturn} from './query.ts';
 
@@ -88,24 +89,44 @@ function syncedQueryImpl<
   };
 }
 
-export function withValidation<T extends SyncedQuery<any, any, any, any, any>>(
-  fn: T,
-): T extends SyncedQuery<infer N, infer C, any, any, infer R>
-  ? SyncedQuery<N, C, true, ReadonlyJSONValue[], R>
-  : never {
-  if (!fn.parse) {
-    throw new Error('ret does not have a parse function defined');
-  }
-  const ret: any = (context: unknown, ...args: unknown[]) => {
-    const f = fn as any;
-    const parsed = f.parse(args);
-    return f.takesContext ? f(context, ...parsed) : f(...parsed);
-  };
-  ret.queryName = fn.queryName;
-  ret.parse = fn.parse;
-  ret.takesContext = true;
+export function withValidation<F extends SyncedQuery<any, any, any, any, any>>(
+  fn: F,
+): F extends SyncedQuery<infer N, infer C, any, infer A, infer R>
+  ? SyncedQuery<N, C, true, A, R>
+  : never;
 
-  return ret;
+export function withValidation<
+  F extends NamedQueryFunction<any, any, any, any, any, any, any>,
+>(fn: F): F;
+
+export function withValidation<
+  F extends
+    | SyncedQuery<any, any, any, any, any>
+    | NamedQueryFunction<any, any, any, any, any, any, any>,
+>(
+  fn: F,
+): F extends SyncedQuery<infer N, infer C, any, infer A, infer R>
+  ? SyncedQuery<N, C, true, A, R>
+  : F {
+  // If we have a parse function this is a SyncedQuery
+  if ('parse' in fn) {
+    const {parse} = fn;
+    if (!parse) {
+      throw new Error('ret does not have a parse function defined');
+    }
+    const ret: any = (context: unknown, ...args: unknown[]) => {
+      const parsed = parse(args);
+      return fn.takesContext ? fn(context, ...parsed) : (fn as any)(...parsed);
+    };
+    ret.queryName = fn.queryName;
+    ret.parse = fn.parse;
+    ret.takesContext = true;
+
+    return ret;
+  }
+
+  // Otherwise this is a NamedQueryFunction which always validates.
+  return fn as any;
 }
 
 export type ParseFn<T extends ReadonlyJSONValue[]> = (args: unknown[]) => T;

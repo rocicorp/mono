@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import chalk from 'chalk';
 import fs from 'node:fs';
 import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';

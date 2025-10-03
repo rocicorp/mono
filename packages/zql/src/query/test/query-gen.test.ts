@@ -28,7 +28,7 @@ test('stable generation', () => {
 
   const q = generateQuery(schema, {}, rng, faker);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  expect((q as StaticQuery<any, any>).ast).toMatchInlineSnapshot(`
+  expect((q as StaticQuery<any, any, any>).ast).toMatchInlineSnapshot(`
     {
       "limit": 126,
       "orderBy": [

@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import {expect, expectTypeOf, test} from 'vitest';
+import * as v from '../../../shared/src/valita.ts';
 import {
   createBuilder,
   syncedQuery,
@@ -7,10 +7,9 @@ import {
   withValidation,
   type QueryFnReturn,
 } from './named.ts';
+import {ast} from './query-impl.ts';
 import {schema} from './test/test-schemas.ts';
 const builder = createBuilder(schema);
-import * as v from '../../../shared/src/valita.ts';
-import {ast} from './query-impl.ts';
 
 test('syncedQuery', () => {
   const idArgs = v.tuple([v.string()]);
@@ -72,6 +71,7 @@ test('syncedQuery', () => {
   expect(wv.queryName).toEqual('myQuery');
   expect(wv.parse).toBeDefined();
   expect(wv.takesContext).toEqual(true);
+  // @ts-expect-error 123 is not a string
   expect(() => wv('ignored', 123)).toThrow(
     'invalid_type at .0 (expected string)',
   );
@@ -204,6 +204,7 @@ test('syncedQueryWithContext', () => {
   expect(wv.queryName).toEqual('myQuery');
   expect(wv.parse).toBeDefined();
   expect(wv.takesContext).toEqual(true);
+  // @ts-expect-error 123 is not a string
   expect(() => wv('ignored', 123)).toThrow(
     'invalid_type at .0 (expected string)',
   );
