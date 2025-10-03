@@ -167,13 +167,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const [estimatedTotal, setEstimatedTotal] = useState(0);
   const [total, setTotal] = useState<number | undefined>(undefined);
 
-  useEffect(() => {
-    setEstimatedTotal(0);
-    setTotal(undefined);
-    setAnchor(TOP_ANCHOR);
-    virtualizer.scrollToIndex(0);
-  }, [baseQ, virtualizer]);
-
   // We don't want to cache every single keystroke. We already debounce
   // keystrokes for the URL, so we just reuse that.
   const [issues, issuesResult] = useQuery(
@@ -355,6 +348,13 @@ export function ListPage({onReady}: {onReady: () => void}) {
     overscan: 5,
     getScrollElement: () => listRef.current,
   });
+
+  useEffect(() => {
+    setEstimatedTotal(0);
+    setTotal(undefined);
+    setAnchor(TOP_ANCHOR);
+    virtualizer.scrollToIndex(0);
+  }, [baseQ, virtualizer]);
 
   const virtualItems = virtualizer.getVirtualItems();
   useEffect(() => {
