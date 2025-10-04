@@ -6,7 +6,10 @@ import {watch} from 'chokidar';
 import {spawn, type ChildProcess} from 'node:child_process';
 import '../../shared/src/dotenv.ts';
 import {createLogContext} from '../../shared/src/logging.ts';
-import {parseOptionsAdvanced} from '../../shared/src/options.ts';
+import {
+  parseOptionsAdvanced,
+  filterArgsForOptions,
+} from '../../shared/src/options.ts';
 import {
   ZERO_ENV_VAR_PREFIX,
   zeroOptions,
@@ -49,10 +52,18 @@ async function main() {
     process.exit(-1);
   });
 
-  // Pass all CLI args to both subprocesses - they'll each parse what they need
+  // Filter CLI args so each subprocess only gets the args it knows about
   const cliArgs = process.argv.slice(2);
-  const zeroCacheArgs = cliArgs;
-  const deployPermissionsArgs = cliArgs;
+  const zeroCacheArgs = filterArgsForOptions(
+    zeroOptions,
+    cliArgs,
+    ZERO_ENV_VAR_PREFIX,
+  );
+  const deployPermissionsArgs = filterArgsForOptions(
+    deployPermissionsOptions,
+    cliArgs,
+    ZERO_ENV_VAR_PREFIX,
+  );
 
   const {path} = config.schema;
 
