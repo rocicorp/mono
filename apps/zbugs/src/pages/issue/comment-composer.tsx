@@ -99,10 +99,7 @@ export function CommentComposer({
           ref={textareaRef}
         />
       </ImageUploadArea>
-      <div
-        className="comment-bottom-bar"
-        style={{display: 'flex', gap: '0.5rem', alignItems: 'center'}}
-      >
+      <div className="comment-bottom-bar">
         <Button
           className="secondary-button"
           eventName={id ? 'Save comment edits' : 'Add new comment'}
@@ -121,8 +118,9 @@ export function CommentComposer({
           </Button>
         ) : null}
         <p className="aside">
-          Testing Zero? Please make sure to delete your comment after. Want a
-          faster response?{' '}
+          Testing Zero? Please make sure to delete your comment after.
+          <br />
+          Want a faster response?{' '}
           <a href="https://discord.rocicorp.dev/">Join us on Discord &rarr;</a>
         </p>
       </div>

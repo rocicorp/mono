@@ -1092,7 +1092,14 @@ textarea.autoResize {
 }
 
 .comment-bottom-bar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
   justify-content: space-between;
+
+  button {
+    flex-shrink: 0;
+  }
 
   .aside {
     display: none;
@@ -1299,6 +1306,18 @@ textarea.autoResize {
 /**************/
 /* Responsive */
 /**************/
+
+@media (max-width: 1100px) {
+  .comment-bottom-bar {
+    flex-direction: column;
+    align-items: flex-start;
+
+    .aside {
+      text-align: left;
+      margin-top: 0.5rem;
+    }
+  }
+}
 
 @media (max-width: 900px) {
   .primary-nav {
