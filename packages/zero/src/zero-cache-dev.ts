@@ -49,15 +49,10 @@ async function main() {
     process.exit(-1);
   });
 
-  const {unknown: zeroCacheArgs} = parseOptionsAdvanced(
-    deployPermissionsOptions,
-    {envNamePrefix: ZERO_ENV_VAR_PREFIX, allowUnknown: true},
-  );
-
-  const {unknown: deployPermissionsArgs} = parseOptionsAdvanced(zeroOptions, {
-    envNamePrefix: ZERO_ENV_VAR_PREFIX,
-    allowUnknown: true,
-  });
+  // Pass all CLI args to both subprocesses - they'll each parse what they need
+  const cliArgs = process.argv.slice(2);
+  const zeroCacheArgs = cliArgs;
+  const deployPermissionsArgs = cliArgs;
 
   const {path} = config.schema;
 
@@ -86,6 +81,7 @@ async function main() {
       deployPermissionsScript,
       deployPermissionsArgs ?? [],
       {
+        env: process.env,
         stdio: 'inherit',
         shell: true,
       },
