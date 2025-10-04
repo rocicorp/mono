@@ -1,4 +1,4 @@
-import * as v from '../../shared/src/valita.ts';
+import * as v from '@badrap/valita';
 
 /**
  * All ZeroEvents are routed via CloudEvents frameworks. The `type`

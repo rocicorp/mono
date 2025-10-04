@@ -62,6 +62,7 @@
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.3.0",
+    "@rocicorp/zero-events": "0.0.1",
     "@testcontainers/postgresql": "^10.9.0",
     "@types/node": "^20.8.4",
     "@types/pg-format": "^1.0.5",
@@ -74,7 +75,6 @@
     "shared": "0.0.0",
     "typescript": "~5.8.2",
     "vitest": "3.2.4",
-    "zero-events": "0.0.0",
     "zero-protocol": "0.0.0",
     "zero-schema": "0.0.0",
     "zql": "0.0.0"

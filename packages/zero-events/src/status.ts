@@ -1,8 +1,7 @@
-import {jsonObjectSchema} from '../../shared/src/json-schema.ts';
-import * as v from '../../shared/src/valita.ts';
+import * as v from '@badrap/valita';
 import {zeroEventSchema} from './index.ts';
 
-export const statusSchema = v.literalUnion('OK', 'ERROR');
+export const statusSchema = v.union(v.literal('OK'), v.literal('ERROR'));
 
 export type Status = v.Infer<typeof statusSchema>;
 
@@ -41,11 +40,13 @@ export const statusEventSchema = zeroEventSchema.extend({
   description: v.string().optional(),
 
   /** Structured data describing the state of the component. */
-  state: jsonObjectSchema.optional(),
+  state: v.object({}).optional(),
 
   /** Error details should be supplied for an 'ERROR' status message. */
-  errorDetails: jsonObjectSchema.optional(),
+  errorDetails: v.object({}).optional(),
 });
+
+export const ZERO_STATUS_EVENT_PREFIX = 'zero/events/status/';
 
 export type StatusEvent<
   T extends v.Infer<typeof statusEventSchema> & {
@@ -68,7 +69,7 @@ export type ReplicatedTable = v.Infer<typeof replicatedTableSchema>;
 
 const indexedColumnSchema = v.object({
   column: v.string(),
-  dir: v.literalUnion('ASC', 'DESC'),
+  dir: v.union(v.literal('ASC'), v.literal('DESC')),
 });
 
 const replicatedIndexSchema = v.object({
@@ -87,20 +88,23 @@ const replicationStateSchema = v.object({
 
 export type ReplicationState = v.Infer<typeof replicationStateSchema>;
 
-const replicationStageSchema = v.literalUnion(
-  'Initializing',
-  'Indexing',
-  'Replicating',
+const replicationStageSchema = v.union(
+  v.literal('Initializing'),
+  v.literal('Indexing'),
+  v.literal('Replicating'),
 );
 
 export type ReplicationStage = v.Infer<typeof replicationStageSchema>;
+
+export const REPLICATION_STATUS_EVENT_V1_TYPE =
+  'zero/events/status/replication/v1';
 
 /**
  * A ReplicationStatusEvent is a StatusEvent event subtype for the
  * "replication" component.
  */
 export const replicationStatusEventSchema = statusEventSchema.extend({
-  type: v.literal('zero/events/status/replication/v1'),
+  type: v.literal(REPLICATION_STATUS_EVENT_V1_TYPE),
   component: v.literal('replication'),
   stage: replicationStageSchema,
   state: replicationStateSchema,
