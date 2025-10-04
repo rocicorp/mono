@@ -599,9 +599,7 @@ export class Zero<
       (ast, ttl) => {
         if (enableLegacyQueries) {
           this.#queryManager.updateLegacy(ast, ttl);
-          return;
         }
-        this.#queryManager.updateLegacy(ast, ttl);
       },
       (customQueryID, ttl) =>
         this.#queryManager.updateCustom(customQueryID, ttl),
