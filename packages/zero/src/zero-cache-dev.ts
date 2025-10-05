@@ -6,10 +6,7 @@ import {watch} from 'chokidar';
 import {spawn, type ChildProcess} from 'node:child_process';
 import '../../shared/src/dotenv.ts';
 import {createLogContext} from '../../shared/src/logging.ts';
-import {
-  parseOptionsAdvanced,
-  filterArgsForOptions,
-} from '../../shared/src/options.ts';
+import {parseOptionsAdvanced} from '../../shared/src/options.ts';
 import {
   ZERO_ENV_VAR_PREFIX,
   zeroOptions,
@@ -52,18 +49,20 @@ async function main() {
     process.exit(-1);
   });
 
-  // Filter CLI args so each subprocess only gets the args it knows about
-  const cliArgs = process.argv.slice(2);
-  const zeroCacheArgs = filterArgsForOptions(
-    zeroOptions,
-    cliArgs,
-    ZERO_ENV_VAR_PREFIX,
-  );
-  const deployPermissionsArgs = filterArgsForOptions(
+  // Parse options for each subprocess to get environment variables
+  const {env: deployPermissionsEnv} = parseOptionsAdvanced(
     deployPermissionsOptions,
-    cliArgs,
-    ZERO_ENV_VAR_PREFIX,
+    {
+      envNamePrefix: ZERO_ENV_VAR_PREFIX,
+      allowUnknown: true,
+      allowPartial: true,
+    },
   );
+  const {env: zeroCacheEnv} = parseOptionsAdvanced(zeroOptions, {
+    envNamePrefix: ZERO_ENV_VAR_PREFIX,
+    allowUnknown: true,
+    allowPartial: true,
+  });
 
   const {path} = config.schema;
 
@@ -88,15 +87,11 @@ async function main() {
     permissionsProcess = undefined;
 
     lc.info?.(`Running ${deployPermissionsScript}.`);
-    permissionsProcess = spawn(
-      deployPermissionsScript,
-      deployPermissionsArgs ?? [],
-      {
-        env: process.env,
-        stdio: 'inherit',
-        shell: true,
-      },
-    );
+    permissionsProcess = spawn(deployPermissionsScript, [], {
+      env: {...process.env, ...deployPermissionsEnv},
+      stdio: 'inherit',
+      shell: true,
+    });
 
     const {promise: code, resolve} = resolver<number>();
     permissionsProcess.on('exit', resolve);
@@ -131,8 +126,9 @@ async function main() {
 
         // But let the developer override any of these dev defaults.
         ...process.env,
+        ...zeroCacheEnv,
       };
-      zeroCacheProcess = spawn(zeroCacheScript, zeroCacheArgs || [], {
+      zeroCacheProcess = spawn(zeroCacheScript, [], {
         env,
         stdio: 'inherit',
         shell: true,
