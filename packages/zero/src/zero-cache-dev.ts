@@ -55,13 +55,11 @@ async function main() {
     {
       envNamePrefix: ZERO_ENV_VAR_PREFIX,
       allowUnknown: true,
-      allowPartial: true,
     },
   );
   const {env: zeroCacheEnv} = parseOptionsAdvanced(zeroOptions, {
     envNamePrefix: ZERO_ENV_VAR_PREFIX,
     allowUnknown: true,
-    allowPartial: true,
   });
 
   const {path} = config.schema;
