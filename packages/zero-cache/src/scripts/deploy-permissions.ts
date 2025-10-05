@@ -43,7 +43,7 @@ async function validatePermissions(
 
   // Check if the shardConfig table has been initialized.
   const result = await db`
-    SELECT relname FROM pg_class 
+    SELECT relname FROM pg_class
       JOIN pg_namespace ON relnamespace = pg_namespace.oid
       WHERE nspname = ${schema} AND relname = ${SHARD_CONFIG_TABLE}`;
   if (result.length === 0) {
