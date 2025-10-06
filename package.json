@@ -12,16 +12,16 @@
   "type": "module",
   "scripts": {
     "download-deps": "bash ./deps/download.sh",
-    "build": "turbo run build",
-    "dev": "turbo run dev",
+    "build": "npx turbo run build",
+    "dev": "npx turbo run dev",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "oxlint --type-aware",
-    "format": "turbo run format",
-    "check-format": "turbo run check-format",
-    "check-types": "turbo run check-types",
-    "check-types:watch": "turbo watch check-types",
-    "build-ci": "npm install && turbo run build",
+    "format": "npx turbo run format",
+    "check-format": "npx turbo run check-format",
+    "check-types": "npx turbo run check-types",
+    "check-types:watch": "npx turbo watch check-types",
+    "build-ci": "npm install && npx turbo run build",
     "start-zero-cache": "cd packages/zero-cache && npm run start"
   },
   "devDependencies": {
