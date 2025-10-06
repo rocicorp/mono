@@ -56,6 +56,8 @@ type Statements = {
 
 let eventCount = 0;
 
+const JSON_SNIPPET_LENGTH = 128;
+
 /**
  * A source that is backed by a SQLite table.
  *
@@ -324,7 +326,13 @@ export class TableSource implements Source {
         if (result.done) {
           break;
         }
-        const row = fromSQLiteTypes(valueTypes, result.value);
+        let row: Row;
+        try {
+          row = fromSQLiteTypes(valueTypes, result.value);
+        } catch (error) {
+          this.#logConversionError(error);
+          throw error;
+        }
         debug?.rowVended(this.#table, query, row);
         yield row;
       } while (!result.done);
@@ -337,6 +345,27 @@ export class TableSource implements Source {
     for (const _ of this.genPush(change)) {
       // Nothing to do.
     }
+  }
+
+  #logConversionError(error: unknown): void {
+    if (!this.#lc.error) {
+      return;
+    }
+    if (error instanceof JSONColumnParseError) {
+      this.#lc.error(
+        `Failed to parse JSON column "${error.column}" for table "${this.#table}"`,
+        error,
+      );
+      return;
+    }
+    if (error instanceof UnsupportedValueError) {
+      this.#lc.error(
+        `Unsupported value encountered while reading table "${this.#table}"`,
+        error,
+      );
+      return;
+    }
+    this.#lc.error(`Error converting row for table "${this.#table}"`, error);
   }
 
   *genPush(change: SourceChange | SourceChangeSet) {
@@ -465,7 +494,12 @@ export class TableSource implements Source {
       cached.statement.safeIntegers(true).get<Row>(keyVals),
     );
     if (row) {
-      return fromSQLiteTypes(this.#columns, row);
+      try {
+        return fromSQLiteTypes(this.#columns, row);
+      } catch (error) {
+        this.#logConversionError(error);
+        throw error;
+      }
     }
     return row;
   }
@@ -821,14 +855,48 @@ function fromSQLiteType(valueType: ValueType, v: Value, column: string): Value {
         return Number(v);
       }
       return v;
-    case 'json':
-      return JSON.parse(v as string);
+    case 'json': {
+      const rawValue = typeof v === 'string' ? v : String(v);
+      try {
+        return JSON.parse(rawValue);
+      } catch (error) {
+        if (error instanceof SyntaxError) {
+          throw new JSONColumnParseError({
+            column,
+            rawValue,
+            cause: error,
+          });
+        }
+        throw error;
+      }
+    }
   }
 }
 
 export class UnsupportedValueError extends Error {
   constructor(msg: string) {
     super(msg);
+  }
+}
+
+type JsonParseErrorInit = {
+  column: string;
+  rawValue: string;
+  cause: SyntaxError;
+};
+
+export class JSONColumnParseError extends SyntaxError {
+  readonly column: string;
+  readonly cause: SyntaxError;
+  readonly snippet: string;
+
+  constructor({column, rawValue, cause}: JsonParseErrorInit) {
+    const prefix = `Failed to parse JSON for column "${column}"`;
+    super(`${prefix}: ${cause.message}`);
+    this.name = 'JSONColumnParseError';
+    this.column = column;
+    this.cause = cause;
+    this.snippet = rawValue.slice(0, JSON_SNIPPET_LENGTH);
   }
 }
 
