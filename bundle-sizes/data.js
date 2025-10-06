@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1759478541244,
+  "lastUpdate": 1759794567367,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -53805,6 +53805,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/4d3869fe5ca88f106062836e56b815c25d48bd04"
         },
         "date": 1759478528261,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302593,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54554,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111465,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31900,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "matt.wonlaw@gmail.com",
+            "name": "Matt Wonlaw",
+            "username": "tantaman"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0564ff33e91b112932f5c4d52e6343a05d54dc65",
+          "message": "chore(zero): update zero-sqlite3 version (#4970)\n\n- updates to sqlite 3.50\n- enables support for scanstat which we need for join planning",
+          "timestamp": "2025-10-06T23:38:24Z",
+          "tree_id": "52eafbe41bd06e6aec35220d3e67df98747de513",
+          "url": "https://github.com/rocicorp/mono/commit/0564ff33e91b112932f5c4d52e6343a05d54dc65"
+        },
+        "date": 1759794554648,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
