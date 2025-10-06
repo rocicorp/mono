@@ -30,16 +30,11 @@
     "check-format": "prettier --check .",
     "lint": "oxlint --type-aware src/"
   },
-  "dependencies": {
-    "@badrap/valita": "0.3.11"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "typescript": "~5.8.2"
-  },
-  "eslintConfig": {
-    "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config"
 }

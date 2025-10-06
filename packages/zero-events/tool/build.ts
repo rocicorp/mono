@@ -9,8 +9,6 @@ async function build() {
     bundle: true,
     target: 'es2022',
     format: 'esm',
-    minify: true,
-    sourcemap: true,
     platform: 'neutral',
     external,
     outdir: 'out',
