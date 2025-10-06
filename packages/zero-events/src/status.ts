@@ -84,7 +84,6 @@ export type ReplicationStage = 'Initializing' | 'Indexing' | 'Replicating';
 export const REPLICATION_STATUS_EVENT_V1_TYPE =
   'zero/events/status/replication/v1';
 
-// CloudEvent type: "zero.status/replication/v1"
 export type ReplicationStatusEvent = Extend<
   StatusEvent,
   {
