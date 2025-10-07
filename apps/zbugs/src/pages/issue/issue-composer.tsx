@@ -12,7 +12,7 @@ import {
   MAX_ISSUE_TITLE_LENGTH,
 } from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
-import {ZERO_PROJECT_NAME, type ProjectRow} from '../../../shared/schema.ts';
+import {type ProjectRow} from '../../../shared/schema.ts';
 import {ProjectPicker} from '../../components/project-picker.tsx';
 
 interface Props {
