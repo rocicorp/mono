@@ -1,5 +1,5 @@
 import {type ServerTransaction, type UpdateValue} from '@rocicorp/zero';
-import type {TransactionSql} from 'postgres';
+import type {PostgresJsTransaction} from '@rocicorp/zero/server/adapters/postgresjs';
 import {assert} from '../../../packages/shared/src/asserts.ts';
 import {type AuthData} from '../shared/auth.ts';
 import {
@@ -12,7 +12,7 @@ import {schema, type Schema} from '../shared/schema.ts';
 import {notify} from './notify.ts';
 
 export type PostCommitTask = () => Promise<void>;
-type MutatorTx = ServerTransaction<Schema, TransactionSql>;
+type MutatorTx = ServerTransaction<Schema, PostgresJsTransaction>;
 
 export function createServerMutators(
   authData: AuthData | undefined,
