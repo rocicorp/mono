@@ -16,6 +16,6 @@ export const extendAllowsNarrowing: IsValid<
   Extend<ZeroEvent, {type: 'foo/bar/baz'}>
 > = true;
 
-export const extendRejectsTypeChangeNarrowing: IsValid<
+export const extendRejectsTypeChange: IsValid<
   Extend<ZeroEvent, {type: number}>
 > = false;
