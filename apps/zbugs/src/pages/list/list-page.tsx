@@ -30,6 +30,7 @@ import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {preload} from '../../zero-preload.ts';
+import {useListContext} from '../../routes.tsx';
 
 let firstRowRendered = false;
 const ITEM_SIZE = 56;
@@ -213,19 +214,19 @@ export function ListPage({onReady}: {onReady: () => void}) {
     title = status.slice(0, 1).toUpperCase() + status.slice(1) + ' Issues';
   }
 
-  const listContext: ListContext = {
-    href: window.location.href,
-    title,
-    params: {
-      open,
-      assignee,
-      creator,
-      labels,
-      textFilter: textFilter ?? null,
-      sortField,
-      sortDirection,
-    },
-  };
+  const listContext: ListContext = useMemo(
+    () => ({
+      href: window.location.href,
+      title,
+      params: listContextParams,
+    }),
+    [window.location.href, title, listContextParams],
+  );
+
+  const {setListContext} = useListContext();
+  useEffect(() => {
+    setListContext(listContext);
+  });
 
   const onDeleteFilter = (e: React.MouseEvent) => {
     const target = e.currentTarget;

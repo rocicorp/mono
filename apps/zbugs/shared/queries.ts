@@ -83,7 +83,10 @@ export const queries = {
               .related('emoji', emoji => emoji.related('creator'))
               .limit(10)
               .orderBy('created', 'desc'),
-          ),
+          )
+          .orderBy('modified', 'desc')
+          .orderBy('id', 'desc')
+          .limit(1000),
         auth?.role,
       ),
   ),
@@ -98,14 +101,17 @@ export const queries = {
         .one(),
   ),
 
-  userPicker: syncedQuery(
-    'userPicker',
+  userPickerV2: syncedQuery(
+    'usersForProject',
     z.tuple([
-      z.boolean(),
-      z.nullable(z.string()),
-      z.nullable(z.enum(['crew', 'creators'])),
+      z.object({
+        disabled: z.boolean(),
+        login: z.optional(z.string()),
+        projectName: z.string(),
+        filter: z.optional(z.enum(['crew', 'creators', 'assignees'])),
+      }),
     ]),
-    (disabled, login, filter) => {
+    ({disabled, login, projectName, filter}) => {
       let q = builder.user;
       if (disabled && login) {
         q = q.where('login', login);
@@ -115,7 +121,21 @@ export const queries = {
             and(cmp('role', 'crew'), not(cmp('login', 'LIKE', 'rocibot%'))),
           );
         } else if (filter === 'creators') {
-          q = q.whereExists('createdIssues');
+          q = q.whereExists('createdIssues', i =>
+            i.whereExists(
+              'project',
+              p => p.where('lowerCaseName', projectName.toLocaleLowerCase()),
+              {flip: true},
+            ),
+          );
+        } else if (filter === 'assignees') {
+          q = q.whereExists('assignedIssues', i =>
+            i.whereExists(
+              'project',
+              p => p.where('lowerCaseName', projectName.toLocaleLowerCase()),
+              {flip: true},
+            ),
+          );
         } else {
           throw new Error(`Unknown filter: ${filter}`);
         }
@@ -199,6 +219,32 @@ export const queries = {
     z.tuple([listContextParams, z.string(), z.number()]),
     (auth: AuthData | undefined, listContext, userID, limit) =>
       issueListV2(listContext, limit, userID, auth, null, 'forward'),
+  ),
+
+  userPicker: syncedQuery(
+    'userPicker',
+    z.tuple([
+      z.boolean(),
+      z.nullable(z.string()),
+      z.nullable(z.enum(['crew', 'creators'])),
+    ]),
+    (disabled, login, filter) => {
+      let q = builder.user;
+      if (disabled && login) {
+        q = q.where('login', login);
+      } else if (filter) {
+        if (filter === 'crew') {
+          q = q.where(({cmp, not, and}) =>
+            and(cmp('role', 'crew'), not(cmp('login', 'LIKE', 'rocibot%'))),
+          );
+        } else if (filter === 'creators') {
+          q = q.whereExists('createdIssues');
+        } else {
+          throw new Error(`Unknown filter: ${filter}`);
+        }
+      }
+      return q;
+    },
   ),
 } as const;
 
