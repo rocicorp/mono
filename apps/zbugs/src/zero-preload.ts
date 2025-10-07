@@ -10,4 +10,5 @@ export function preload(auth: AuthData | undefined, z: Zero<Schema, Mutators>) {
   z.preload(queries.issuePreload(auth, z.userID), CACHE_PRELOAD);
   z.preload(queries.allUsers(), CACHE_PRELOAD);
   z.preload(queries.allLabels(), CACHE_PRELOAD);
+  z.preload(queries.allProjects(), CACHE_PRELOAD);
 }

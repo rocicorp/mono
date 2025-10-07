@@ -1,13 +1,14 @@
 import Cookies from 'js-cookie';
 import {useState} from 'react';
-import {Route, Switch} from 'wouter';
+import {Redirect, Route, Switch} from 'wouter';
 import {Nav} from './components/nav.tsx';
 import {OnboardingModal} from './components/onboarding-modal.tsx';
 import {useSoftNav} from './hooks/use-softnav.ts';
 import {ErrorPage} from './pages/error/error-page.tsx';
-import {IssuePage} from './pages/issue/issue-page.tsx';
+import {IssuePage, IssueRedirect} from './pages/issue/issue-page.tsx';
 import {ListPage} from './pages/list/list-page.tsx';
 import {routes} from './routes.ts';
+import {ZERO_PROJECT_NAME} from '../shared/schema.ts';
 
 export function Root() {
   const [contentReady, setContentReady] = useState(false);
@@ -29,7 +30,16 @@ export function Root() {
         <div className="primary-content">
           <Switch>
             <Route path={routes.home}>
+              <Redirect
+                to={`/p/${ZERO_PROJECT_NAME.toLocaleLowerCase()}${window.location.search}`}
+                replace
+              />
+            </Route>
+            <Route path={routes.list}>
               <ListPage onReady={() => setContentReady(true)} />
+            </Route>
+            <Route path={routes.deprecatedIssue}>
+              <IssueRedirect></IssueRedirect>
             </Route>
             <Route path={routes.issue}>
               {params => (

@@ -1,7 +1,7 @@
 import {FPSMeter} from '@schickling/fps-meter';
 import classNames from 'classnames';
 import {memo, useCallback, useEffect, useMemo, useState} from 'react';
-import {useRoute, useSearch} from 'wouter';
+import {useParams, useRoute, useSearch} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {useQuery, useZeroOnline} from '@rocicorp/zero/react';
 import logoURL from '../assets/images/logo.svg';
@@ -14,19 +14,21 @@ import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
 import {Button} from './button.tsx';
 import {Link} from './link.tsx';
 import {queries, type ListContext} from '../../shared/queries.ts';
+import {ZERO_PROJECT_NAME} from '../../shared/schema.ts';
 
 export const Nav = memo(() => {
   const search = useSearch();
   const qs = useMemo(() => new URLSearchParams(search), [search]);
-  const [isHome] = useRoute(routes.home);
+  const [isList] = useRoute(routes.list);
   const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
   const listContext = zbugsHistoryState?.zbugsListContext;
-  const status = getStatus(isHome, qs, listContext);
+  const status = getStatus(isList, qs, listContext);
   const login = useLogin();
   const [isMobile, setIsMobile] = useState(false);
   const [showUserPanel, setShowUserPanel] = useState(false); // State to control visibility of user-panel-mobile
   const [user] = useQuery(queries.user(login.loginState?.decoded.sub ?? ''));
   const isOnline = useZeroOnline();
+  const {projectName} = useParams();
 
   const [showIssueModal, setShowIssueModal] = useState(false);
 
@@ -75,7 +77,7 @@ export const Nav = memo(() => {
 
         <div className="section-tabs">
           <Link
-            href={addStatusParam(qs, undefined)}
+            href={addStatusParam(projectName, qs, undefined)}
             eventName="Toggle open issues"
             className={classNames('nav-item', {
               'nav-active': status === 'open',
@@ -84,7 +86,7 @@ export const Nav = memo(() => {
             Open
           </Link>
           <Link
-            href={addStatusParam(qs, 'closed')}
+            href={addStatusParam(projectName, qs, 'closed')}
             eventName="Toggle closed issues"
             className={classNames('nav-item', {
               'nav-active': status === 'closed',
@@ -93,7 +95,7 @@ export const Nav = memo(() => {
             Closed
           </Link>
           <Link
-            href={addStatusParam(qs, 'all')}
+            href={addStatusParam(projectName, qs, 'all')}
             eventName="Toggle all issues"
             className={classNames('nav-item', {
               'nav-active': status === 'all',
@@ -190,10 +192,10 @@ export const Nav = memo(() => {
       </div>
       <IssueComposer
         isOpen={showIssueModal}
-        onDismiss={id => {
+        onDismiss={created => {
           setShowIssueModal(false);
-          if (id) {
-            navigate(links.issue({id}));
+          if (created) {
+            navigate(links.issue(created));
           }
         }}
       />
@@ -202,6 +204,7 @@ export const Nav = memo(() => {
 });
 
 const addStatusParam = (
+  projectName: string = ZERO_PROJECT_NAME,
   qs: URLSearchParams,
   status: 'closed' | 'all' | undefined,
 ) => {
@@ -211,15 +214,18 @@ const addStatusParam = (
   } else {
     newParams.set('status', status);
   }
-  return '/?' + newParams.toString();
+  if (newParams.size === 0) {
+    return links.list({projectName});
+  }
+  return links.list({projectName}) + '?' + newParams.toString();
 };
 
 function getStatus(
-  isHome: boolean,
+  isList: boolean,
   qs: URLSearchParams,
   listContext: ListContext | undefined,
 ) {
-  if (isHome) {
+  if (isList) {
     const status = qs.get('status')?.toLowerCase();
     switch (status) {
       case 'closed':

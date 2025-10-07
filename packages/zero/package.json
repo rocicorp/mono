@@ -1,6 +1,6 @@
 {
   "name": "@rocicorp/zero",
-  "version": "0.24.2025093001",
+  "version": "0.24.2025100400",
   "description": "Zero is a web framework for serverless web development.",
   "author": "Rocicorp, Inc.",
   "repository": {
@@ -47,7 +47,7 @@
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.4.0",
     "@rocicorp/resolver": "^1.0.2",
-    "@rocicorp/zero-sqlite3": "^1.0.8",
+    "@rocicorp/zero-sqlite3": "^1.0.9",
     "@types/basic-auth": "^1.1.8",
     "basic-auth": "^2.0.1",
     "chalk": "^5.3.0",
@@ -76,7 +76,6 @@
     "ws": "^8.18.1"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "@vitest/runner": "3.2.4",
     "esbuild": "^0.25.0",
@@ -166,8 +165,5 @@
     "out",
     "!*.tsbuildinfo"
   ],
-  "eslintConfig": {
-    "extends": "../../eslint-config.json"
-  },
   "prettier": "@rocicorp/prettier-config"
 }

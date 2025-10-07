@@ -15,6 +15,13 @@
       "when": 1759200259268,
       "tag": "0001_add_project",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1759451535311,
+      "tag": "0002_project_lower_case_name",
+      "breakpoints": true
     }
   ]
 }

@@ -15,7 +15,6 @@
   },
   "devDependencies": {
     "@faker-js/faker": "^9.6.0",
-    "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/logger": "^5.4.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "@rocicorp/rails": "^0.10.0",
@@ -25,9 +24,6 @@
     "shared": "0.0.0",
     "typescript": "~5.8.2",
     "zero-protocol": "0.0.0"
-  },
-  "eslintConfig": {
-    "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config",
   "dependencies": {

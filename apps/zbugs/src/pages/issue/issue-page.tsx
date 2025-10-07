@@ -16,7 +16,7 @@ import {
 import TextareaAutosize from 'react-textarea-autosize';
 import {toast, ToastContainer} from 'react-toastify';
 import {assert} from 'shared/src/asserts.js';
-import {useParams} from 'wouter';
+import {useParams, type DefaultParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {findLastIndex} from '../../../../../packages/shared/src/find-last-index.ts';
 import {must} from '../../../../../packages/shared/src/must.ts';
@@ -84,9 +84,8 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const z = useZero();
   const params = useParams();
 
-  const idStr = must(params.id);
-  const idField = /[^\d]/.test(idStr) ? 'id' : 'shortID';
-  const id = idField === 'shortID' ? parseInt(idStr) : idStr;
+  const {idField, id} = getId(params);
+  const projectName = must(params.projectName);
   const login = useLogin();
 
   const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
@@ -144,12 +143,20 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     if (
       displayed?.shortID !== null &&
       displayed !== undefined &&
+      displayed.project !== undefined &&
       idField !== 'shortID'
     ) {
-      navigate(links.issue(displayed), {
-        replace: true,
-        state: zbugsHistoryState,
-      });
+      navigate(
+        links.issue({
+          projectName: displayed.project.name,
+          shortID: displayed.shortID,
+          id: displayed.id,
+        }),
+        {
+          replace: true,
+          state: zbugsHistoryState,
+        },
+      );
     }
   }, [displayed, idField, zbugsHistoryState]);
 
@@ -214,7 +221,10 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   );
   useKeypress('j', () => {
     if (next) {
-      softNavigate(links.issue(next), zbugsHistoryState);
+      softNavigate(
+        links.issue({projectName, shortID: next.shortID, id: next.id}),
+        zbugsHistoryState,
+      );
     }
   });
 
@@ -231,7 +241,10 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   );
   useKeypress('k', () => {
     if (prev) {
-      softNavigate(links.issue(prev), zbugsHistoryState);
+      softNavigate(
+        links.issue({projectName, shortID: prev.shortID, id: prev.id}),
+        zbugsHistoryState,
+      );
     }
   });
 
@@ -355,14 +368,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   useShowToastForNewComment(comments, virtualizer, highlightComment);
 
   if (!displayed && issueResult.type === 'complete') {
-    return (
-      <div>
-        <div>
-          <b>Error 404</b>
-        </div>
-        <div>zarro boogs found</div>
-      </div>
-    );
+    return <NotFound></NotFound>;
   }
 
   if (!displayed || !comments) {
@@ -372,7 +378,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const remove = () => {
     // TODO: Implement undo - https://github.com/rocicorp/undo
     z.mutate.issue.delete(displayed.id);
-    navigate(listContext?.href ?? links.home());
+    navigate(listContext?.href ?? links.list({projectName}));
   };
 
   // TODO: This check goes away once Zero's consistency model is implemented.
@@ -632,6 +638,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
             <CanEdit ownerID={displayed.creatorID}>
               <LabelPicker
                 selected={labelSet}
+                projectName={projectName}
                 onAssociateLabel={labelID =>
                   z.mutate.issue.addLabel({
                     issueID: displayed.id,
@@ -746,6 +753,24 @@ const MyToastContainer = memo(({position}: {position: 'top' | 'bottom'}) => {
 
 // This cache is stored outside the state so that it can be used between renders.
 const commentSizeCache = new LRUCache<string, number>(2000);
+
+function NotFound() {
+  return (
+    <div>
+      <div>
+        <b>Error 404</b>
+      </div>
+      <div>zarro boogs found</div>
+    </div>
+  );
+}
+
+function getId(params: DefaultParams) {
+  const idStr = must(params.id);
+  const idField = /[^\d]/.test(idStr) ? 'id' : 'shortID';
+  const id = idField === 'shortID' ? parseInt(idStr) : idStr;
+  return {idField, id} as const;
+}
 
 function maybeShowToastForEmoji(
   emoji: Emoji,
@@ -1084,4 +1109,34 @@ function useShowToastForNewComment(
 
     lastCommentIDs.current = currentCommentIDs;
   }, [comments, virtualizer, userID, highlightComment]);
+}
+
+export function IssueRedirect() {
+  const z = useZero();
+  const params = useParams();
+  const login = useLogin();
+
+  const {idField, id} = getId(params);
+
+  const [issue, issueResult] = useQuery(
+    issueDetail(login.loginState?.decoded, idField, id, z.userID),
+    CACHE_NAV,
+  );
+
+  useEffect(() => {
+    if (issue && issue.project) {
+      navigate(
+        links.issue({
+          projectName: issue.project.name,
+          shortID: issue.shortID,
+          id: issue.id,
+        }) + window.location.search,
+      );
+    }
+  }, [issue]);
+
+  if ((!issue || issue.project) && issueResult.type === 'complete') {
+    return <NotFound></NotFound>;
+  }
+  return undefined;
 }

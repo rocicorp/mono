@@ -7,7 +7,7 @@ import {
 import * as z from 'zod/mini';
 import type {AuthData, Role} from './auth.ts';
 import {INITIAL_COMMENT_LIMIT} from './consts.ts';
-import {builder, type Schema} from './schema.ts';
+import {builder, ZERO_PROJECT_NAME, type Schema} from './schema.ts';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyIssuePermissions<TQuery extends Query<Schema, 'issue', any>>(
@@ -24,6 +24,7 @@ const keyValidator = idValidator;
 
 const listContextParams = z.object({
   open: z.nullable(z.boolean()),
+  projectName: z.optional(z.string()),
   assignee: z.nullable(z.string()),
   creator: z.nullable(z.string()),
   labels: z.nullable(z.array(z.string())),
@@ -46,8 +47,23 @@ export const queries = {
 
   allUsers: syncedQuery('allUsers', z.tuple([]), () => builder.user),
 
+  allProjects: syncedQuery('allProjects', z.tuple([]), () => builder.project),
+
   user: syncedQuery('user', idValidator, userID =>
     builder.user.where('id', userID).one(),
+  ),
+
+  labelsForProject: syncedQuery(
+    'labels',
+    z.tuple([
+      z.object({
+        projectName: z.string(),
+      }),
+    ]),
+    ({projectName}: {projectName: string}) =>
+      builder.label.whereExists('project', q =>
+        q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+      ),
   ),
 
   issuePreload: syncedQueryWithContext(
@@ -119,6 +135,7 @@ export const queries = {
       applyIssuePermissions(
         builder.issue
           .where(idField, id)
+          .related('project')
           .related('emoji', emoji => emoji.related('creator'))
           .related('creator')
           .related('assignee')
@@ -212,6 +229,7 @@ function issueListV2(
 export type ListQueryArgs = {
   issueQuery?: (typeof builder)['issue'] | undefined;
   listContext?: ListContext['params'] | undefined;
+  project?: string | undefined;
   userID?: string;
   role?: Role | undefined;
   limit?: number | undefined;
@@ -240,6 +258,15 @@ export function buildListQuery(args: ListQueryArgs) {
   if (!listContext) {
     return q.where(({or}) => or());
   }
+  const {projectName = ZERO_PROJECT_NAME} = listContext;
+
+  q = q.whereExists(
+    'project',
+    q => q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+    {
+      flip: true,
+    },
+  );
 
   const {sortField, sortDirection} = listContext;
   const orderByDir =
