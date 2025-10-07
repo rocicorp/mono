@@ -1,10 +1,8 @@
-import type {StandardSchemaV1} from '@standard-schema/spec';
-import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
-import type {SimpleOperator} from '../../../../zero-protocol/src/ast.ts';
-import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
-import type {ExpressionFactory, ParameterReference} from '../expression.ts';
-import type {CustomQueryID} from '../named.ts';
-import type {AnyQuery} from '../query-impl.ts';
+import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {ExpressionFactory, ParameterReference} from './expression.ts';
+import type {AnyChainQuery} from './new/types.ts';
+import type {AnyQuery} from './query-impl.ts';
 import type {
   AvailableRelationships,
   CoreQuery,
@@ -15,43 +13,33 @@ import type {
   PullRow,
   PullTableSchema,
   Query,
-} from '../query.ts';
-import {ChainedQuery} from './chained-query.ts';
-import type {AnyChainQuery, Func, QueryImplementation} from './types.ts';
+} from './query.ts';
 
 /**
- * Root named query that has a name, input validation, and a function to execute.
- * This is the base query that doesn't chain from another query.
+ * Chained query that applies a transformation function to a parent query.
+ * This represents a query operation that builds on top of another query.
+ *
+ * This class provides chain methods and withContext() but doesn't implement
+ * the Query interface. It's an internal implementation detail.
  */
-export class RootNamedQuery<
-    TName extends string,
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-    TContext,
-    TOutput extends ReadonlyJSONValue | undefined,
-    TInput,
-  >
-  implements
-    QueryImplementation<TSchema, TTable, TReturn, TContext>,
-    QueryInternals
-{
-  readonly #name: TName;
-  readonly #input: TInput;
-  readonly #func: Func<TSchema, TTable, TReturn, TContext, TOutput>;
-  readonly #validator: StandardSchemaV1<TInput, TOutput> | undefined;
+export class ChainedQuery<
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+  TContext,
+> {
+  readonly #parent: {
+    withContext(ctx: TContext): Query<TSchema, TTable, unknown>;
+  };
+  readonly #chainFn: AnyChainQuery;
   #q: Query<TSchema, TTable, TReturn> | undefined;
 
   constructor(
-    name: TName,
-    func: Func<TSchema, TTable, TReturn, TContext, TOutput>,
-    input: TInput,
-    validator: StandardSchemaV1<TInput, TOutput> | undefined,
+    parent: {withContext(ctx: TContext): Query<TSchema, TTable, unknown>},
+    chainFn: AnyChainQuery,
   ) {
-    this.#name = name;
-    this.#func = func;
-    this.#input = input;
-    this.#validator = validator;
+    this.#parent = parent;
+    this.#chainFn = chainFn;
   }
 
   withContext(ctx: TContext): Query<TSchema, TTable, TReturn> {
@@ -59,34 +47,13 @@ export class RootNamedQuery<
       return this.#q;
     }
 
-    // This is a root query - call the function with the context
-    let output: TOutput;
-    if (!this.#validator) {
-      // No validator, so input and output are the same
-      output = this.#input as unknown as TOutput;
-    } else {
-      const result = this.#validator['~standard'].validate(this.#input);
-      if (result instanceof Promise) {
-        throw new Error(
-          `Async validators are not supported. Query name ${this.#name}`,
-        );
-      }
-      if (result.issues) {
-        throw new Error(
-          `Validation failed for query ${this.#name}: ${result.issues
-            .map(issue => issue.message)
-            .join(', ')}`,
-        );
-      }
-      output = result.value;
-    }
-
-    // TODO: Refactor to deal with the name and args at a different abstraction
-    // layer.
-    this.#q = (this.#func({ctx, args: output}) as AnyQuery).nameAndArgs(
-      this.#name,
-      this.#input === undefined ? [] : [this.#input as ReadonlyJSONValue],
-    ) as Query<TSchema, TTable, TReturn>;
+    // This is a chained query - get the parent query and apply the chain function
+    const parentQuery = this.#parent.withContext(ctx);
+    this.#q = this.#chainFn(parentQuery as AnyQuery) as Query<
+      TSchema,
+      TTable,
+      TReturn
+    >;
     return this.#q;
   }
 
@@ -94,23 +61,23 @@ export class RootNamedQuery<
     fn: (
       q: Query<TSchema, TTable, TReturn>,
     ) => Query<TSchema, TTable, TNewReturn>,
-  ): QueryImplementation<TSchema, TTable, TNewReturn, TContext> {
+  ): ChainedQuery<TSchema, TTable, TNewReturn, TContext> {
     return new ChainedQuery(
-      this as QueryImplementation<TSchema, TTable, unknown, TContext>,
+      this as {withContext(ctx: TContext): Query<TSchema, TTable, unknown>},
       fn as AnyChainQuery,
     );
   }
 
   // Query interface methods
 
-  one(): QueryImplementation<TSchema, TTable, TReturn | undefined, TContext> {
+  one(): ChainedQuery<TSchema, TTable, TReturn | undefined, TContext> {
     return this.#withChain(q => q.one());
   }
 
   whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     options?: ExistsOptions,
-  ): QueryImplementation<TSchema, TTable, TReturn, TContext>;
+  ): ChainedQuery<TSchema, TTable, TReturn, TContext>;
   whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb: (
@@ -121,7 +88,7 @@ export class RootNamedQuery<
       >,
     ) => CoreQuery<TSchema, string, TContext>,
     options?: ExistsOptions,
-  ): QueryImplementation<TSchema, TTable, TReturn, TContext>;
+  ): ChainedQuery<TSchema, TTable, TReturn, TContext>;
   whereExists(
     relationship: AvailableRelationships<TTable, TSchema>,
     cbOrOptions?:
@@ -130,7 +97,7 @@ export class RootNamedQuery<
         ) => CoreQuery<TSchema, string, TContext>)
       | ExistsOptions,
     options?: ExistsOptions,
-  ): QueryImplementation<TSchema, TTable, TReturn, TContext> {
+  ): ChainedQuery<TSchema, TTable, TReturn, TContext> {
     if (typeof cbOrOptions === 'function') {
       return this.#withChain(q =>
         q.whereExists(
@@ -147,12 +114,7 @@ export class RootNamedQuery<
 
   related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
-  ): QueryImplementation<
-    TSchema,
-    TTable,
-    TReturn & Record<string, unknown>,
-    TContext
-  >;
+  ): ChainedQuery<TSchema, TTable, TReturn & Record<string, unknown>, TContext>;
   related<
     TRelationship extends AvailableRelationships<TTable, TSchema>,
     TSub extends CoreQuery<TSchema, string, unknown>,
@@ -165,18 +127,13 @@ export class RootNamedQuery<
         TContext
       >,
     ) => TSub,
-  ): QueryImplementation<
-    TSchema,
-    TTable,
-    TReturn & Record<string, unknown>,
-    TContext
-  >;
+  ): ChainedQuery<TSchema, TTable, TReturn & Record<string, unknown>, TContext>;
   related(
     relationship: AvailableRelationships<TTable, TSchema>,
     cb?: (
       q: CoreQuery<TSchema, string, TContext>,
     ) => CoreQuery<TSchema, string, TContext>,
-  ): QueryImplementation<
+  ): ChainedQuery<
     TSchema,
     TTable,
     TReturn & Record<string, unknown>,
@@ -188,7 +145,7 @@ export class RootNamedQuery<
           relationship as string,
           cb as unknown as (q: AnyQuery) => AnyQuery,
         ),
-      ) as QueryImplementation<
+      ) as ChainedQuery<
         TSchema,
         TTable,
         TReturn & Record<string, unknown>,
@@ -197,7 +154,7 @@ export class RootNamedQuery<
     }
     return this.#withChain(q =>
       q.related(relationship as string),
-    ) as QueryImplementation<
+    ) as ChainedQuery<
       TSchema,
       TTable,
       TReturn & Record<string, unknown>,
@@ -214,7 +171,7 @@ export class RootNamedQuery<
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
       | ParameterReference,
-  ): QueryImplementation<TSchema, TTable, TReturn, TContext>;
+  ): ChainedQuery<TSchema, TTable, TReturn, TContext>;
   where<
     TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
   >(
@@ -222,17 +179,17 @@ export class RootNamedQuery<
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
       | ParameterReference,
-  ): QueryImplementation<TSchema, TTable, TReturn, TContext>;
+  ): ChainedQuery<TSchema, TTable, TReturn, TContext>;
   where(
     expressionFactory: ExpressionFactory<TSchema, TTable>,
-  ): QueryImplementation<TSchema, TTable, TReturn, TContext>;
+  ): ChainedQuery<TSchema, TTable, TReturn, TContext>;
   where(
     fieldOrExpressionFactory:
       | NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>
       | ExpressionFactory<TSchema, TTable>,
     opOrValue?: unknown,
     value?: unknown,
-  ): QueryImplementation<TSchema, TTable, TReturn, TContext> {
+  ): ChainedQuery<TSchema, TTable, TReturn, TContext> {
     if (typeof fieldOrExpressionFactory === 'function') {
       return this.#withChain(q => q.where(fieldOrExpressionFactory));
     }
@@ -263,33 +220,18 @@ export class RootNamedQuery<
   start(
     row: Partial<PullRow<TTable, TSchema>>,
     opts?: {inclusive: boolean},
-  ): QueryImplementation<TSchema, TTable, TReturn, TContext> {
+  ): ChainedQuery<TSchema, TTable, TReturn, TContext> {
     return this.#withChain(q => q.start(row, opts));
   }
 
-  limit(
-    limit: number,
-  ): QueryImplementation<TSchema, TTable, TReturn, TContext> {
+  limit(limit: number): ChainedQuery<TSchema, TTable, TReturn, TContext> {
     return this.#withChain(q => q.limit(limit));
   }
 
   orderBy<TSelector extends keyof PullTableSchema<TTable, TSchema>['columns']>(
     field: TSelector,
     direction: 'asc' | 'desc',
-  ): QueryImplementation<TSchema, TTable, TReturn, TContext> {
+  ): ChainedQuery<TSchema, TTable, TReturn, TContext> {
     return this.#withChain(q => q.orderBy(field as string, direction));
   }
-
-  // QueryInternals interface methods
-
-  get customQueryID(): CustomQueryID {
-    return {
-      name: this.#name,
-      args: this.#input === undefined ? [] : [this.#input as ReadonlyJSONValue],
-    };
-  }
-}
-
-export interface QueryInternals {
-  readonly customQueryID: CustomQueryID;
 }

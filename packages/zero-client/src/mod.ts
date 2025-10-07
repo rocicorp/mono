@@ -111,6 +111,11 @@ export type {
   UpdateValue,
   UpsertValue,
 } from '../../zql/src/mutate/custom.ts';
+export {defineQuery} from '../../zql/src/query/define-query.ts';
+export type {
+  DefineQueryOptions,
+  NamedQueryFunction,
+} from '../../zql/src/query/define-query.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {
   ExpressionBuilder,
@@ -131,13 +136,8 @@ export type {
   QueryFnReturn,
   SyncedQuery,
 } from '../../zql/src/query/named.ts';
-export {defineQuery} from '../../zql/src/query/new/define-query.ts';
-export type {
-  DefineQueryOptions,
-  NamedQueryFunction,
-} from '../../zql/src/query/new/define-query.ts';
-export {RootNamedQuery} from '../../zql/src/query/new/root-named-query.ts';
 export type {AnyQuery} from '../../zql/src/query/query-impl.ts';
+export type {QueryInternals} from '../../zql/src/query/query-internals.ts';
 export type {
   CoreQuery,
   HumanReadable,
@@ -146,6 +146,7 @@ export type {
   Row,
   RunOptions,
 } from '../../zql/src/query/query.ts';
+export {RootNamedQuery} from '../../zql/src/query/root-named-query.ts';
 export {type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 export type {BatchMutator, DBMutator, TableMutator} from './client/crud.ts';

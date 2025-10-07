@@ -2,9 +2,10 @@
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {SchemaQuery} from '../mutate/custom.ts';
-import type {NamedQueryFunction} from './new/define-query.ts';
+import type {NamedQueryFunction} from './define-query.ts';
 import {newQuery} from './query-impl.ts';
-import type {HumanReadable, Query, QueryReturn} from './query.ts';
+import {asQueryInternals} from './query-internals.ts';
+import {type HumanReadable, type Query, type QueryReturn} from './query.ts';
 
 export type QueryFn<
   TContext,
@@ -42,6 +43,9 @@ function normalizeParser<T extends ReadonlyJSONValue[]>(
   return undefined;
 }
 
+/**
+ * @deprecated Use {@linkcode defineQuery} instead.
+ */
 export function syncedQuery<
   TName extends string,
   TArg extends ReadonlyJSONValue[],
@@ -59,6 +63,9 @@ export function syncedQuery<
   return ret;
 }
 
+/**
+ * @deprecated Use {@linkcode defineQuery} instead.
+ */
 export function syncedQueryWithContext<
   TName extends string,
   TContext,
@@ -85,7 +92,7 @@ function syncedQueryImpl<
 >(name: TName, fn: any, takesContext: boolean) {
   return (context: TContext, args: TArg) => {
     const q = takesContext ? fn(context, ...args) : fn(...args);
-    return q.nameAndArgs(name, args) as TReturnQuery;
+    return asQueryInternals(q).nameAndArgs(name, args) as TReturnQuery;
   };
 }
 
@@ -145,15 +152,19 @@ export type CustomQueryID = {
 /**
  * Returns a set of query builders for the given schema.
  */
-export function createBuilder<S extends Schema>(s: S): SchemaQuery<S> {
-  return makeQueryBuilders(s) as SchemaQuery<S>;
+export function createBuilder<S extends Schema, TContext>(
+  s: S,
+): SchemaQuery<S, TContext> {
+  return makeQueryBuilders(s) as SchemaQuery<S, TContext>;
 }
 
 /**
  * This produces the query builders for a given schema.
  * For use in Zero on the server to process custom queries.
  */
-function makeQueryBuilders<S extends Schema>(schema: S): SchemaQuery<S> {
+function makeQueryBuilders<S extends Schema, TContext>(
+  schema: S,
+): SchemaQuery<S, TContext> {
   return new Proxy(
     {},
     {

@@ -1,3 +1,5 @@
+import {Suspense} from 'react';
+import {createRoot, type Root} from 'react-dom/client';
 import {
   afterEach,
   beforeEach,
@@ -7,20 +9,19 @@ import {
   vi,
   type Mock,
 } from 'vitest';
-import {Suspense} from 'react';
-import {createRoot, type Root} from 'react-dom/client';
+import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
+import type {Zero} from '../../zero-client/src/client/zero.ts';
+import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {type AbstractQuery} from '../../zql/src/query/query-impl.ts';
 import type {ResultType} from '../../zql/src/query/typed-view.ts';
 import {
   getAllViewsSizeForTesting,
-  ViewStore,
   useSuspenseQuery,
+  ViewStore,
   type QueryResultDetails,
 } from './use-query.tsx';
 import {ZeroProvider} from './zero-provider.tsx';
-import type {Zero} from '../../zero-client/src/client/zero.ts';
-import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 
 function newMockQuery(
   query: string,
@@ -35,13 +36,15 @@ function newMockQuery(
   return ret;
 }
 
-function newMockZero(clientID: string): Zero<Schema> {
+function newMockZero<MD extends CustomMutatorDefs, Context>(
+  clientID: string,
+): Zero<Schema, MD, Context> {
   const view = newView();
 
   return {
     clientID,
     materialize: vi.fn().mockImplementation(() => view),
-  } as unknown as Zero<Schema>;
+  } as unknown as Zero<Schema, MD, Context>;
 }
 
 function newView() {

@@ -3,16 +3,12 @@ import React, {useSyncExternalStore} from 'react';
 import {deepClone} from '../../shared/src/deep-clone.ts';
 import type {Immutable} from '../../shared/src/immutable.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
-import type {WithContext} from '../../zql/src/query/new/types.ts';
-import {
-  type HumanReadable,
-  type PullRow,
-  type Query,
-} from '../../zql/src/query/query.ts';
+import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 import {useZero} from './zero-provider.tsx';
@@ -83,20 +79,13 @@ const suspend: (p: Promise<unknown>) => void = reactUse
       throw p;
     };
 
-type UseQueryQuery<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn = PullRow<TTable, TSchema>,
-  TContext = unknown,
-> = WithContext<TSchema, TTable, TReturn, TContext>;
-
 export function useQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
   TContext,
 >(
-  query: UseQueryQuery<TSchema, TTable, TReturn, TContext>,
+  query: Query<TSchema, TTable, TReturn, TContext>,
   options?: UseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -108,11 +97,8 @@ export function useQuery<
   }
 
   const zero = useZero();
-  const actualQuery: Query<TSchema, TTable, TReturn> = query.withContext(
-    zero.context as TContext,
-  );
 
-  const view = viewStore.getView(zero, actualQuery, enabled, ttl);
+  const view = viewStore.getView(zero, query, enabled, ttl);
 
   // https://react.dev/reference/react/useSyncExternalStore
   return useSyncExternalStore(
@@ -128,7 +114,7 @@ export function useSuspenseQuery<
   TReturn,
   TContext,
 >(
-  query: UseQueryQuery<TSchema, TTable, TReturn, TContext>,
+  query: Query<TSchema, TTable, TReturn, TContext>,
   options?: UseSuspenseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -145,11 +131,8 @@ export function useSuspenseQuery<
   }
 
   const zero = useZero();
-  const actualQuery: Query<TSchema, TTable, TReturn> = query.withContext(
-    zero.context as TContext,
-  );
 
-  const view = viewStore.getView(zero, actualQuery, enabled, ttl);
+  const view = viewStore.getView(zero, query, enabled, ttl);
   // https://react.dev/reference/react/useSyncExternalStore
   const snapshot = useSyncExternalStore(
     view.subscribeReactInternals,
@@ -282,7 +265,7 @@ function makeError(
 declare const TESTING: boolean;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type ViewWrapperAny = ViewWrapper<any, any, any>;
+type ViewWrapperAny = ViewWrapper<any, any, any, any, any>;
 
 const allViews = new WeakMap<ViewStore, Map<string, ViewWrapperAny>>();
 
@@ -354,9 +337,11 @@ export class ViewStore {
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
+    MD extends CustomMutatorDefs | undefined,
+    TContext,
   >(
-    zero: Zero<TSchema>,
-    query: Query<TSchema, TTable, TReturn>,
+    zero: Zero<TSchema, MD, TContext>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
     enabled: boolean,
     ttl: TTL,
   ): {
@@ -396,7 +381,7 @@ export class ViewStore {
     } else {
       existing.updateTTL(ttl);
     }
-    return existing as ViewWrapper<TSchema, TTable, TReturn>;
+    return existing as ViewWrapper<TSchema, TTable, TReturn, MD, TContext>;
   }
 }
 
@@ -431,11 +416,13 @@ class ViewWrapper<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
+  MD extends CustomMutatorDefs | undefined,
+  TContext,
 > {
-  #zero: Zero<TSchema>;
+  #zero: Zero<TSchema, MD, TContext>;
   #view: TypedView<HumanReadable<TReturn>> | undefined;
   readonly #onDematerialized;
-  readonly #query: Query<TSchema, TTable, TReturn>;
+  readonly #query: Query<TSchema, TTable, TReturn, TContext>;
   readonly #format: Format;
   #snapshot: QueryResult<TReturn>;
   #reactInternals: Set<() => void>;
@@ -446,11 +433,13 @@ class ViewWrapper<
   #nonEmptyResolver = resolver<void>();
 
   constructor(
-    zero: Zero<TSchema>,
-    query: Query<TSchema, TTable, TReturn>,
+    zero: Zero<TSchema, MD, TContext>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
     format: Format,
     ttl: TTL,
-    onDematerialized: (view: ViewWrapper<TSchema, TTable, TReturn>) => void,
+    onDematerialized: (
+      view: ViewWrapper<TSchema, TTable, TReturn, MD, TContext>,
+    ) => void,
   ) {
     this.#zero = zero;
     this.#query = query;

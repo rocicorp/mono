@@ -8,6 +8,7 @@ import {
   type QueryFnReturn,
 } from './named.ts';
 import {ast} from './query-impl.ts';
+import {asQueryInternals} from './query-internals.ts';
 import {schema} from './test/test-schemas.ts';
 const builder = createBuilder(schema);
 
@@ -278,7 +279,10 @@ test('syncedQueryWithContext', () => {
 
 test('makeSchemaQuery', () => {
   const builders = createBuilder(schema);
-  const q1 = builders.issue.where('id', '123').nameAndArgs('myName', ['123']);
+  const q1 = asQueryInternals(builders.issue.where('id', '123')).nameAndArgs(
+    'myName',
+    ['123'],
+  );
   expect(ast(q1)).toMatchInlineSnapshot(`
     {
       "table": "issue",

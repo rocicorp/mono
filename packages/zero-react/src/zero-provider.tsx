@@ -14,7 +14,7 @@ const ZeroContext = createContext<unknown | undefined>(undefined);
 
 export function useZero<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
+  MD extends CustomMutatorDefs,
   Context = unknown,
 >(): Zero<S, MD, Context> {
   const zero = useContext(ZeroContext);
@@ -26,7 +26,7 @@ export function useZero<
 
 export function createUseZero<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
+  MD extends CustomMutatorDefs,
   Context = unknown,
 >() {
   return () => useZero<S, MD, Context>();
@@ -34,8 +34,8 @@ export function createUseZero<
 
 export type ZeroProviderProps<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
-  Context = undefined,
+  MD extends CustomMutatorDefs,
+  Context,
 > = (ZeroOptions<S, MD, Context> | {zero: Zero<S, MD, Context>}) & {
   init?: (zero: Zero<S, MD, Context>) => void;
   children: ReactNode;
@@ -43,10 +43,10 @@ export type ZeroProviderProps<
 
 export function ZeroProvider<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
-  Context = undefined,
->({children, init, ...props}: ZeroProviderProps<S, MD, Context>) {
-  const [zero, setZero] = useState<Zero<S, MD> | undefined>(
+  MD extends CustomMutatorDefs,
+  TContext,
+>({children, init, ...props}: ZeroProviderProps<S, MD, TContext>) {
+  const [zero, setZero] = useState<Zero<S, MD, TContext> | undefined>(
     'zero' in props ? props.zero : undefined,
   );
 

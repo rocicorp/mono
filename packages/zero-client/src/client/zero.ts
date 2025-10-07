@@ -84,19 +84,21 @@ import {
   type MetricMap,
   isClientMetric,
 } from '../../../zql/src/query/metrics-delegate.ts';
-import type {WithContext} from '../../../zql/src/query/new/types.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {materialize, newQuery} from '../../../zql/src/query/query-impl.ts';
+import {
+  materialize,
+  newQuery,
+  preload,
+  run,
+} from '../../../zql/src/query/query-impl.ts';
 import {
   type HumanReadable,
   type MaterializeOptions,
+  NoContext,
   type PreloadOptions,
   type PullRow,
   type Query,
-  type QueryReturn,
-  type QueryTable,
   type RunOptions,
-  delegateSymbol,
 } from '../../../zql/src/query/query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
@@ -179,6 +181,7 @@ export type TestingContext = {
   connectStart: () => number | undefined;
   socketResolver: () => Resolver<WebSocket>;
   connectionState: () => ConnectionState;
+  queryDelegate: () => QueryDelegate;
 };
 
 export const onSetConnectionStateSymbol = Symbol();
@@ -194,9 +197,11 @@ interface TestZero {
   }) => LogOptions;
 }
 
-function asTestZero<S extends Schema, MD extends CustomMutatorDefs | undefined>(
-  z: Zero<S, MD>,
-): TestZero {
+function asTestZero<
+  S extends Schema,
+  MD extends CustomMutatorDefs | undefined,
+  C,
+>(z: Zero<S, MD, C>): TestZero {
   return z as TestZero;
 }
 
@@ -291,7 +296,7 @@ type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
 export class Zero<
   const S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
-  TContext = unknown,
+  TContext = NoContext,
 > {
   readonly version = version;
 
@@ -356,7 +361,6 @@ export class Zero<
   };
 
   readonly #zeroContext: ZeroContext;
-  readonly queryDelegate: QueryDelegate;
 
   #connectResolver = resolver<void>();
   #pendingPullsByRequestID: Map<string, Resolver<PullResponseBody>> = new Map();
@@ -607,7 +611,6 @@ export class Zero<
       this.#addMetric,
       assertValidRunOptions,
     );
-    this.queryDelegate = this.#zeroContext;
 
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
@@ -762,8 +765,8 @@ export class Zero<
 
     if (TESTING) {
       asTestZero(this)[exposedToTestingSymbol] = {
-        puller: this.#puller,
-        pusher: this.#pusher,
+        puller: (req, rid) => this.#puller(req, rid),
+        pusher: (req, rid) => this.#pusher(req, rid),
         setReload: (r: () => void) => {
           this.#reload = r;
         },
@@ -771,6 +774,7 @@ export class Zero<
         connectStart: () => this.#connectStart,
         socketResolver: () => this.#socketResolver,
         connectionState: () => this.#connectionState,
+        queryDelegate: () => this.#zeroContext,
       };
     }
   }
@@ -830,44 +834,41 @@ export class Zero<
   preload<
     TTable extends keyof S['tables'] & string,
     TReturn extends PullRow<TTable, S>,
-    Q extends WithContext<S, TTable, TReturn, TContext>,
-  >(query: Q, options?: PreloadOptions) {
-    const q = query.withContext(this.context);
-    return q[delegateSymbol](this.#zeroContext).preload(options);
+  >(query: Query<S, TTable, TReturn, TContext>, options?: PreloadOptions) {
+    return preload(query, this.#zeroContext, this.context, options);
   }
 
-  run<
-    TTable extends keyof S['tables'] & string,
-    TReturn extends PullRow<TTable, S>,
-    Q extends WithContext<S, TTable, TReturn, TContext>,
-  >(newQuery: Q, runOptions?: RunOptions): Promise<HumanReadable<TReturn>> {
-    const q = newQuery.withContext(this.context);
-    return q[delegateSymbol](this.#zeroContext).run(runOptions);
+  run<TTable extends keyof S['tables'] & string, TReturn>(
+    query: Query<S, TTable, TReturn, TContext>,
+    runOptions?: RunOptions,
+  ): Promise<HumanReadable<TReturn>> {
+    return run(query, this.#zeroContext, this.context, runOptions);
   }
 
   get context(): TContext {
     return this.#options.context as TContext;
   }
 
-  materialize<Q>(
-    query: Q,
+  materialize<TTable extends keyof S['tables'] & string, TReturn>(
+    query: Query<S, TTable, TReturn, TContext>,
     options?: MaterializeOptions,
-  ): TypedView<HumanReadable<QueryReturn<Q>>>;
-  materialize<T, Q>(
-    query: Q,
-    factory: ViewFactory<S, QueryTable<Q>, QueryReturn<Q>, T>,
+  ): TypedView<HumanReadable<TReturn>>;
+  materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
+    query: Query<S, TTable, TReturn, TContext>,
+    factory: ViewFactory<S, TTable, TReturn, TContext, T>,
     options?: MaterializeOptions,
   ): T;
-  materialize<T, Q>(
-    query: Q,
+  materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
+    query: Query<S, TTable, TReturn, TContext>,
     factoryOrOptions?:
-      | ViewFactory<S, QueryTable<Q>, QueryReturn<Q>, T>
+      | ViewFactory<S, TTable, TReturn, TContext, T>
       | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
     return materialize(
       query,
       this.#zeroContext,
+      this.context,
       factoryOrOptions,
       maybeOptions,
     );
@@ -1974,7 +1975,7 @@ export class Zero<
   }
 
   #checkConnectivity(reason: string) {
-    void this.#checkConnectivityAsync(reason);
+    this.#checkConnectivityAsync(reason);
   }
 
   #checkConnectivityAsync(_reason: string) {

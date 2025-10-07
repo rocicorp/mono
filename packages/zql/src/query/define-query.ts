@@ -1,8 +1,8 @@
 import type {StandardSchemaV1} from '@standard-schema/spec';
-import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
-import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Func} from './new/types.ts';
 import {RootNamedQuery} from './root-named-query.ts';
-import type {Func} from './types.ts';
 
 export type DefineQueryOptions<Input, Output> = {
   validator?: StandardSchemaV1<Input, Output> | undefined;
@@ -166,4 +166,78 @@ export function defineQuery<
   >;
   f.queryName = name;
   return f;
+}
+
+/**
+ * Creates a type-safe query definition function that is parameterized by a
+ * custom context type.
+ *
+ * This utility allows you to define queries with explicit context typing,
+ * ensuring that the query function receives the correct context type. It
+ * returns a function that can be used to define named queries with schema,
+ * table, input, and output types.
+ *
+ * @typeParam TContext - The type of the context object that will be passed to
+ * the query function.
+ *
+ * @returns A function for defining named queries with the specified context
+ * type.
+ *
+ * @example
+ * ```ts
+ * const defineQuery = defineQueryWithContextType<MyContext>();
+ * const myQuery = defineQuery(
+ *   "getUser",
+ *   {validator: z.string()},
+ *   ({ctx, args}) => {
+ *     ctx satisfies MyContext;
+ *     ...
+ *   },
+ * );
+ * ```
+ */
+export function defineQueryWithContextType<TContext>(): <
+  TName extends string,
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TInput extends ReadonlyJSONValue | undefined = TOutput,
+>(
+  name: TName,
+  optionsOrQueryFn:
+    | DefineQueryOptions<TInput, TOutput>
+    | Func<TSchema, TTable, TReturn, TContext, TOutput>,
+  queryFn?: Func<TSchema, TTable, TReturn, TContext, TOutput>,
+) => NamedQueryFunction<
+  TName,
+  TSchema,
+  TTable,
+  TReturn,
+  TContext,
+  TOutput,
+  TInput
+> {
+  return defineQuery as <
+    TName extends string,
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+    TOutput extends ReadonlyJSONValue | undefined,
+    TInput extends ReadonlyJSONValue | undefined = TOutput,
+  >(
+    name: TName,
+    optionsOrQueryFn:
+      | DefineQueryOptions<TInput, TOutput>
+      | Func<TSchema, TTable, TReturn, TContext, TOutput>,
+    queryFn?: Func<TSchema, TTable, TReturn, TContext, TOutput>,
+  ) => NamedQueryFunction<
+    TName,
+    TSchema,
+    TTable,
+    TReturn,
+    TContext,
+    TOutput,
+    TInput
+  >;
 }

@@ -9,6 +9,7 @@ import {number, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {createSource} from '../ivm/test/source-factory.ts';
 import type {QueryDelegate} from './query-delegate.ts';
 import {newQuery} from './query-impl.ts';
+import {asQueryInternals} from './query-internals.ts';
 import {QueryDelegateImpl} from './test/query-delegate.ts';
 import {schema} from './test/test-schemas.ts';
 
@@ -2030,7 +2031,7 @@ describe('addCustom / addServer are called', () => {
     const queryDelegate = new QueryDelegateImpl();
     let query = newQuery(queryDelegate, schema, 'issue');
     if (type === 'addCustomQuery') {
-      query = query.nameAndArgs('issue', []);
+      query = asQueryInternals(query).nameAndArgs('issue', []);
     }
     const spy = vi.spyOn(queryDelegate, type);
     await query[op]();

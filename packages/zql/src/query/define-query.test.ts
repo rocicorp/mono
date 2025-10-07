@@ -1,14 +1,14 @@
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import {describe, expect, expectTypeOf, test} from 'vitest';
-import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
-import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   number,
   string,
   table,
-} from '../../../../zero-schema/src/builder/table-builder.ts';
-import {createBuilder} from '../named.ts';
+} from '../../../zero-schema/src/builder/table-builder.ts';
 import {defineQuery} from './define-query.ts';
+import {createBuilder} from './named.ts';
 
 const schema = createSchema({
   tables: [

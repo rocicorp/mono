@@ -21,11 +21,11 @@ import {
   type MutatorResult,
 } from './custom.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
+import {QueryManager} from './query-manager.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 import {MockSocket, zeroForTest} from './test-utils.ts';
 import {createDb} from './test/create-db.ts';
 import {getInternalReplicacheImplForTesting} from './zero.ts';
-import {QueryManager} from './query-manager.ts';
 
 type Schema = typeof schema;
 type MutatorTx = Transaction<Schema>;

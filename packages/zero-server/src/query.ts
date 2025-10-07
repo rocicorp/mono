@@ -1,18 +1,20 @@
 import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
-import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import type {DBTransaction, SchemaQuery} from '../../zql/src/mutate/custom.ts';
-import {
-  AbstractQuery,
-  defaultFormat,
-  newQuerySymbol,
-} from '../../zql/src/query/query-impl.ts';
-import type {HumanReadable, PullRow, Query} from '../../zql/src/query/query.ts';
-import type {TypedView} from '../../zql/src/query/typed-view.ts';
+import type {CustomQueryID} from '../../zql/src/query/named.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
+import {AbstractQuery, defaultFormat} from '../../zql/src/query/query-impl.ts';
+import type {
+  HumanReadable,
+  NoContext,
+  PullRow,
+  Query,
+} from '../../zql/src/query/query.ts';
+import type {TypedView} from '../../zql/src/query/typed-view.ts';
 
 export function makeSchemaQuery<S extends Schema>(
   schema: S,
@@ -71,7 +73,8 @@ export class ZPGQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
-> extends AbstractQuery<TSchema, TTable, TReturn> {
+  TContext = NoContext,
+> extends AbstractQuery<TSchema, TTable, TReturn, TContext> {
   readonly #dbTransaction: DBTransaction<unknown>;
   readonly #schema: TSchema;
   readonly #serverSchema: ServerSchema;
@@ -97,17 +100,20 @@ export class ZPGQuery<
     this.#serverSchema = serverSchema;
   }
 
-  protected [newQuerySymbol]<
+  protected _newQuerySymbol<
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
+    TContext,
   >(
     _delegate: QueryDelegate | undefined,
     schema: TSchema,
     tableName: TTable,
     ast: AST,
     format: Format,
-  ): ZPGQuery<TSchema, TTable, TReturn> {
+    _customQueryID: CustomQueryID | undefined,
+    _currentJunction: string | undefined,
+  ): AbstractQuery<TSchema, TTable, TReturn, TContext> {
     return new ZPGQuery(
       schema,
       this.#serverSchema,
@@ -125,7 +131,7 @@ export class ZPGQuery<
         compile(
           this.#serverSchema,
           this.#schema,
-          this._completeAst(),
+          this.completedAST,
           this.format,
         ),
       );

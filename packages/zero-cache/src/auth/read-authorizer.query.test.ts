@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/naming-convention */
-/* eslint-disable arrow-body-style */
 import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
@@ -38,7 +36,8 @@ import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {completedAST, newQuery} from '../../../zql/src/query/query-impl.ts';
+import {newQuery} from '../../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import {type Query, type Row} from '../../../zql/src/query/query.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
@@ -297,7 +296,6 @@ const schema = createSchema({
 
 type Schema = typeof schema;
 
-// eslint-disable-next-line arrow-body-style
 const permissions = must(
   await definePermissions<AuthData, typeof schema>(schema, () => {
     const isCommentCreator = (
@@ -920,7 +918,7 @@ function runReadQueryWithPermissions(
   const updatedAst = bindStaticParameters(
     transformQuery(
       new LogContext('debug'),
-      completedAST(query),
+      asQueryInternals(query).completedAST,
       permissions,
       authData,
     ),

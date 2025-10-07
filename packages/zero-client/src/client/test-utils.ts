@@ -275,6 +275,11 @@ export class TestZero<
     this[exposedToTestingSymbol].setReload(r);
   }
 
+  get queryDelegate() {
+    assert(TESTING);
+    return this[exposedToTestingSymbol].queryDelegate();
+  }
+
   persist(): Promise<void> {
     return getInternalReplicacheImplForTesting(this).persist();
   }

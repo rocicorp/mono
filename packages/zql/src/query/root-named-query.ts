@@ -1,55 +1,92 @@
-import type {SimpleOperator} from '../../../../zero-protocol/src/ast.ts';
-import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
-import type {ExpressionFactory, ParameterReference} from '../expression.ts';
-import type {AnyQuery} from '../query-impl.ts';
-import type {
-  AvailableRelationships,
-  CoreQuery,
-  DestTableName,
-  ExistsOptions,
-  GetFilterType,
-  NoCompoundTypeSelector,
-  PullRow,
-  PullTableSchema,
-  Query,
-} from '../query.ts';
-import type {AnyChainQuery, QueryImplementation} from './types.ts';
+import type {StandardSchemaV1} from '@standard-schema/spec';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {ChainedQuery} from './chained-query.ts';
+import type {ExpressionFactory, ParameterReference} from './expression.ts';
+import type {CustomQueryID} from './named.ts';
+import type {AnyChainQuery, Func} from './new/types.ts';
+import type {AnyQuery} from './query-impl.ts';
+import {asQueryInternals} from './query-internals.ts';
+import {
+  type AvailableRelationships,
+  type CoreQuery,
+  type DestTableName,
+  type ExistsOptions,
+  type GetFilterType,
+  type NoCompoundTypeSelector,
+  type PullRow,
+  type PullTableSchema,
+  type Query,
+} from './query.ts';
 
 /**
- * Chained query that applies a transformation function to a parent query.
- * This represents a query operation that builds on top of another query.
+ * Root named query that has a name, input validation, and a function to execute.
+ * This is the base query that doesn't chain from another query.
+ *
+ * This class provides chain methods and withContext() but doesn't implement
+ * the Query interface. It's an internal implementation detail.
  */
-export class ChainedQuery<
+export class RootNamedQuery<
+  TName extends string,
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
   TContext,
-> implements QueryImplementation<TSchema, TTable, TReturn, TContext>
-{
-  readonly #parent: QueryImplementation<TSchema, TTable, unknown, TContext>;
-  readonly #chainFn: AnyChainQuery;
-  #q: Query<TSchema, TTable, TReturn> | undefined;
+  TOutput extends ReadonlyJSONValue | undefined,
+  TInput,
+> {
+  readonly #name: TName;
+  readonly #input: TInput;
+  readonly #func: Func<TSchema, TTable, TReturn, TContext, TOutput>;
+  readonly #validator: StandardSchemaV1<TInput, TOutput> | undefined;
+  #q: Query<TSchema, TTable, TReturn, TContext> | undefined;
 
   constructor(
-    parent: QueryImplementation<TSchema, TTable, unknown, TContext>,
-    chainFn: AnyChainQuery,
+    name: TName,
+    func: Func<TSchema, TTable, TReturn, TContext, TOutput>,
+    input: TInput,
+    validator: StandardSchemaV1<TInput, TOutput> | undefined,
   ) {
-    this.#parent = parent;
-    this.#chainFn = chainFn;
+    this.#name = name;
+    this.#func = func;
+    this.#input = input;
+    this.#validator = validator;
   }
 
-  withContext(ctx: TContext): Query<TSchema, TTable, TReturn> {
+  withContext(ctx: TContext): Query<TSchema, TTable, TReturn, TContext> {
     if (this.#q) {
       return this.#q;
     }
 
-    // This is a chained query - get the parent query and apply the chain function
-    const parentQuery = this.#parent.withContext(ctx);
-    this.#q = this.#chainFn(parentQuery as AnyQuery) as Query<
-      TSchema,
-      TTable,
-      TReturn
-    >;
+    // This is a root query - call the function with the context
+    let output: TOutput;
+    if (!this.#validator) {
+      // No validator, so input and output are the same
+      output = this.#input as unknown as TOutput;
+    } else {
+      const result = this.#validator['~standard'].validate(this.#input);
+      if (result instanceof Promise) {
+        throw new Error(
+          `Async validators are not supported. Query name ${this.#name}`,
+        );
+      }
+      if (result.issues) {
+        throw new Error(
+          `Validation failed for query ${this.#name}: ${result.issues
+            .map(issue => issue.message)
+            .join(', ')}`,
+        );
+      }
+      output = result.value;
+    }
+
+    // TODO: Refactor to deal with the name and args at a different abstraction
+    // layer.
+    this.#q = asQueryInternals(this.#func({ctx, args: output})).nameAndArgs(
+      this.#name,
+      this.#input === undefined ? [] : [this.#input as ReadonlyJSONValue],
+    );
     return this.#q;
   }
 
@@ -59,7 +96,7 @@ export class ChainedQuery<
     ) => Query<TSchema, TTable, TNewReturn>,
   ): ChainedQuery<TSchema, TTable, TNewReturn, TContext> {
     return new ChainedQuery(
-      this as QueryImplementation<TSchema, TTable, unknown, TContext>,
+      this as {withContext(ctx: TContext): Query<TSchema, TTable, unknown>},
       fn as AnyChainQuery,
     );
   }
@@ -229,5 +266,14 @@ export class ChainedQuery<
     direction: 'asc' | 'desc',
   ): ChainedQuery<TSchema, TTable, TReturn, TContext> {
     return this.#withChain(q => q.orderBy(field as string, direction));
+  }
+
+  // QueryInternals interface methods
+
+  get customQueryID(): CustomQueryID {
+    return {
+      name: this.#name,
+      args: this.#input === undefined ? [] : [this.#input as ReadonlyJSONValue],
+    };
   }
 }

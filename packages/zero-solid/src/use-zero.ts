@@ -15,14 +15,16 @@ import {
   type ZeroOptions,
 } from '../../zero/src/zero.ts';
 
-// eslint-disable-next-line @typescript-eslint/naming-convention, @typescript-eslint/no-explicit-any
-const ZeroContext = createContext<Accessor<Zero<any, any>> | undefined>(
+// eslint-disable-next-line no-explicit-any
+const ZeroContext = createContext<Accessor<Zero<any, any, any>> | undefined>(
   undefined,
 );
 
-export function createZero<S extends Schema, MD extends CustomMutatorDefs>(
-  options: ZeroOptions<S, MD>,
-): Zero<S, MD> {
+export function createZero<
+  S extends Schema,
+  MD extends CustomMutatorDefs,
+  TContext,
+>(options: ZeroOptions<S, MD, TContext>): Zero<S, MD, TContext> {
   const opts = {
     ...options,
     batchViewUpdates: batch,
@@ -51,13 +53,14 @@ export function createUseZero<
 
 export function ZeroProvider<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined,
+  Context,
 >(
   props: {children: JSX.Element} & (
     | {
-        zero: Zero<S, MD>;
+        zero: Zero<S, MD, Context>;
       }
-    | ZeroOptions<S, MD>
+    | ZeroOptions<S, MD, Context>
   ),
 ) {
   const zero = createMemo(() => {

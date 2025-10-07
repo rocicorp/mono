@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {type AST, type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
+import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   LastInTuple,
@@ -9,13 +8,19 @@ import type {
   SchemaValueWithCustomType,
   TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
-import type {Format, ViewFactory} from '../ivm/view.ts';
+import type {ViewFactory} from '../ivm/view.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
-import type {CustomQueryID} from './named.ts';
-import type {WithContext} from './new/types.ts';
-import type {QueryDelegate} from './query-delegate.ts';
+import type {QueryInternals} from './query-internals.ts';
 import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
+
+/**
+ * Branded type to indicate that a query does not require context.
+ * This is used in conditional types to distinguish between queries that require
+ * context (named queries) and those that don't (regular queries).
+ */
+export const NoContext = Symbol('NoContext');
+export type NoContext = typeof NoContext;
 
 type Selector<E extends TableSchema> = keyof E['columns'];
 export type NoCompoundTypeSelector<T extends TableSchema> = Exclude<
@@ -35,9 +40,8 @@ type ArraySelectors<E extends TableSchema> = {
     : never;
 }[keyof E['columns']];
 
-export type QueryReturn<Q> = Q extends Query<any, any, infer R> ? R : never;
-export type QueryTable<Q> = Q extends Query<any, infer T, any> ? T : never;
-export const delegateSymbol = Symbol('delegate');
+export type QueryReturn<Q> =
+  Q extends Query<any, any, infer R, any> ? R : never;
 
 export type ExistsOptions = {flip: boolean};
 
@@ -362,47 +366,15 @@ export interface CoreQuery<
  * @typeParam TSchema The database schema type extending ZeroSchema
  * @typeParam TTable The name of the table being queried, must be a key of TSchema['tables']
  * @typeParam TReturn The return type of the query, defaults to PullRow<TTable, TSchema>
+ * @typeParam TContext The context type required for named queries, defaults to NoContext
  */
 export interface Query<
   TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
+  TContext = NoContext,
 > extends CoreQuery<TSchema, TTable, TReturn>,
-    WithContext<TSchema, TTable, TReturn, unknown> {
-  /**
-   * Format is used to specify the shape of the query results. This is used by
-   * {@linkcode one} and it also describes the shape when using
-   * {@linkcode related}.
-   */
-  readonly format: Format;
-
-  /**
-   * A string that uniquely identifies this query. This can be used to determine
-   * if two queries are the same.
-   *
-   * The hash of a custom query, on the client, is the hash of its AST.
-   * The hash of a custom query, on the server, is the hash of its name and args.
-   *
-   * The first allows many client-side queries to be pinned to the same backend query.
-   * The second ensures we do not invoke a named query on the backend more than once for the same `name:arg` pairing.
-   *
-   * If the query.hash was of `name:args` then `useQuery` would de-dupe
-   * queries with divergent ASTs.
-   *
-   * QueryManager will hash based on `name:args` since it is speaking with
-   * the server which tracks queries by `name:args`.
-   */
-  hash(): string;
-  readonly ast: AST;
-  readonly customQueryID: CustomQueryID | undefined;
-
-  nameAndArgs(
-    name: string,
-    args: ReadonlyArray<ReadonlyJSONValue>,
-  ): Query<TSchema, TTable, TReturn>;
-
-  [delegateSymbol](delegate: QueryDelegate): Query<TSchema, TTable, TReturn>;
-
+    QueryInternals<TSchema, TTable, TReturn, TContext> {
   // Override CoreQuery methods to return Query instead of CoreQuery for proper chaining
   related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
@@ -413,7 +385,8 @@ export interface Query<
       TReturn,
       DestRow<TTable, TSchema, TRelationship>,
       TRelationship
-    >
+    >,
+    TContext
   >;
   related<
     TRelationship extends AvailableRelationships<TTable, TSchema>,
@@ -436,7 +409,8 @@ export interface Query<
         ? TSubReturn
         : never,
       TRelationship
-    >
+    >,
+    TContext
   >;
 
   where<
@@ -448,7 +422,7 @@ export interface Query<
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
       | ParameterReference,
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TSchema, TTable, TReturn, TContext>;
   where<
     TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
   >(
@@ -456,36 +430,36 @@ export interface Query<
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
       | ParameterReference,
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TSchema, TTable, TReturn, TContext>;
   where(
     expressionFactory: ExpressionFactory<TSchema, TTable>,
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TSchema, TTable, TReturn, TContext>;
 
   whereExists(
     relationship: AvailableRelationships<TTable, TSchema>,
     options?: ExistsOptions,
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TSchema, TTable, TReturn, TContext>;
   whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb: (
       q: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
     ) => Query<TSchema, string>,
     options?: ExistsOptions,
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TSchema, TTable, TReturn, TContext>;
 
   start(
     row: Partial<PullRow<TTable, TSchema>>,
     opts?: {inclusive: boolean},
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TSchema, TTable, TReturn, TContext>;
 
-  limit(limit: number): Query<TSchema, TTable, TReturn>;
+  limit(limit: number): Query<TSchema, TTable, TReturn, TContext>;
 
   orderBy<TSelector extends Selector<PullTableSchema<TTable, TSchema>>>(
     field: TSelector,
     direction: 'asc' | 'desc',
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TSchema, TTable, TReturn, TContext>;
 
-  one(): Query<TSchema, TTable, TReturn | undefined>;
+  one(): Query<TSchema, TTable, TReturn | undefined, TContext>;
 
   /**
    * Creates a materialized view of the query. This is a view that will be kept
@@ -495,28 +469,32 @@ export interface Query<
    * `run`/`then` method to get the results of a query. This method is only
    * needed if you want to access to lower level APIs of the view.
    *
-   * @param ttl Time To Live. This is the amount of time to keep the rows
+   * @param options Options for materializing the query
+   * @param options.ttl Time To Live. This is the amount of time to keep the rows
    *            associated with this query after `TypedView.destroy`
    *            has been called.
+   * @param options.ctx Context required for named queries
    */
-  materialize(ttl?: TTL): TypedView<HumanReadable<TReturn>>;
+  materialize(options?: MaterializeOptions): TypedView<HumanReadable<TReturn>>;
   /**
    * Creates a custom materialized view using a provided factory function. This
    * allows framework-specific bindings (like SolidJS, Vue, etc.) to create
    * optimized views.
    *
    * @param factory A function that creates a custom view implementation
-   * @param ttl Optional Time To Live for the view's data after destruction
+   * @param options Options for materializing the query
+   * @param options.ttl Optional Time To Live for the view's data after destruction
+   * @param options.ctx Context required for named queries
    * @returns A custom view instance of type {@linkcode T}
    *
    * @example
    * ```ts
-   * const view = query.materialize(createSolidViewFactory, '1m');
+   * const view = query.materialize(createSolidViewFactory, {ttl: '1m'});
    * ```
    */
   materialize<T>(
-    factory: ViewFactory<TSchema, TTable, TReturn, T>,
-    ttl?: TTL,
+    factory: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
+    options?: MaterializeOptions,
   ): T;
 
   /**
@@ -537,6 +515,7 @@ export interface Query<
    * @param options.ttl Time To Live. This is the amount of time to keep the rows
    *                  associated with this query after the returned promise has
    *                  resolved.
+   * @param options.ctx Context required for named queries
    * @returns A promise resolving to the query result.
    *
    * @example
@@ -554,6 +533,7 @@ export interface Query<
    * @param options.ttl Time To Live. This is the amount of time to keep the rows
    *                  associated with this query after {@linkcode cleanup} has
    *                  been called.
+   * @param options.ctx Context required for named queries
    */
   preload(options?: PreloadOptions): {
     cleanup: () => void;
