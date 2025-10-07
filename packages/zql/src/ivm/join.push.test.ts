@@ -8920,14 +8920,6 @@ suite('test overlay on many:many (no junction) pushes', () => {
                       "num": 3,
                     },
                   },
-                  {
-                    "relationships": {},
-                    "row": {
-                      "id": "u2",
-                      "name": "Aaron",
-                      "num": 2,
-                    },
-                  },
                 ],
               },
               "row": {

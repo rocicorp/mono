@@ -248,87 +248,89 @@ describe('replicator/incremental-sync', () => {
         {
           "component": "replication",
           "description": "Replicating from 02",
-          "indexes": [
-            {
-              "columns": [
-                {
-                  "column": "bool",
-                  "dir": "ASC",
-                },
-                {
-                  "column": "issueID",
-                  "dir": "ASC",
-                },
-              ],
-              "table": "issues",
-              "unique": true,
-            },
-          ],
-          "replicaSize": 40960,
           "stage": "Replicating",
+          "state": {
+            "indexes": [
+              {
+                "columns": [
+                  {
+                    "column": "bool",
+                    "dir": "ASC",
+                  },
+                  {
+                    "column": "issueID",
+                    "dir": "ASC",
+                  },
+                ],
+                "table": "issues",
+                "unique": true,
+              },
+            ],
+            "replicaSize": 40960,
+            "tables": [
+              {
+                "columns": [
+                  {
+                    "clientType": "string",
+                    "column": "_0_version",
+                    "upstreamType": "TEXT",
+                  },
+                  {
+                    "clientType": "number",
+                    "column": "big",
+                    "upstreamType": "INTEGER",
+                  },
+                  {
+                    "clientType": "boolean",
+                    "column": "bool",
+                    "upstreamType": "BOOL",
+                  },
+                  {
+                    "clientType": null,
+                    "column": "bytes",
+                    "upstreamType": "bytesa",
+                  },
+                  {
+                    "clientType": "string",
+                    "column": "description",
+                    "upstreamType": "TEXT",
+                  },
+                  {
+                    "clientType": "number",
+                    "column": "flt",
+                    "upstreamType": "REAL",
+                  },
+                  {
+                    "clientType": "json",
+                    "column": "intArray",
+                    "upstreamType": "int4[]",
+                  },
+                  {
+                    "clientType": "number",
+                    "column": "issueID",
+                    "upstreamType": "INTEGER",
+                  },
+                  {
+                    "clientType": "json",
+                    "column": "json",
+                    "upstreamType": "JSON",
+                  },
+                  {
+                    "clientType": "json",
+                    "column": "json2",
+                    "upstreamType": "JSONB",
+                  },
+                  {
+                    "clientType": "number",
+                    "column": "time",
+                    "upstreamType": "TIMESTAMPTZ",
+                  },
+                ],
+                "table": "issues",
+              },
+            ],
+          },
           "status": "OK",
-          "tables": [
-            {
-              "columns": [
-                {
-                  "clientType": "string",
-                  "column": "_0_version",
-                  "upstreamType": "TEXT",
-                },
-                {
-                  "clientType": "number",
-                  "column": "big",
-                  "upstreamType": "INTEGER",
-                },
-                {
-                  "clientType": "boolean",
-                  "column": "bool",
-                  "upstreamType": "BOOL",
-                },
-                {
-                  "clientType": null,
-                  "column": "bytes",
-                  "upstreamType": "bytesa",
-                },
-                {
-                  "clientType": "string",
-                  "column": "description",
-                  "upstreamType": "TEXT",
-                },
-                {
-                  "clientType": "number",
-                  "column": "flt",
-                  "upstreamType": "REAL",
-                },
-                {
-                  "clientType": "json",
-                  "column": "intArray",
-                  "upstreamType": "int4[]",
-                },
-                {
-                  "clientType": "number",
-                  "column": "issueID",
-                  "upstreamType": "INTEGER",
-                },
-                {
-                  "clientType": "json",
-                  "column": "json",
-                  "upstreamType": "JSON",
-                },
-                {
-                  "clientType": "json",
-                  "column": "json2",
-                  "upstreamType": "JSONB",
-                },
-                {
-                  "clientType": "number",
-                  "column": "time",
-                  "upstreamType": "TIMESTAMPTZ",
-                },
-              ],
-              "table": "issues",
-            },
-          ],
           "time": "2025-08-14T01:02:03.000Z",
           "type": "zero/events/status/replication/v1",
         },
@@ -389,109 +391,113 @@ describe('replicator/incremental-sync', () => {
         {
           "component": "replication",
           "description": "Replicating from 09",
-          "indexes": [
-            {
-              "columns": [
-                {
-                  "column": "bool",
-                  "dir": "ASC",
-                },
-                {
-                  "column": "issueID",
-                  "dir": "ASC",
-                },
-              ],
-              "table": "issues",
-              "unique": true,
-            },
-          ],
-          "replicaSize": 40960,
           "stage": "Replicating",
+          "state": {
+            "indexes": [
+              {
+                "columns": [
+                  {
+                    "column": "bool",
+                    "dir": "ASC",
+                  },
+                  {
+                    "column": "issueID",
+                    "dir": "ASC",
+                  },
+                ],
+                "table": "issues",
+                "unique": true,
+              },
+            ],
+            "replicaSize": 40960,
+            "tables": [
+              {
+                "columns": [
+                  {
+                    "clientType": "string",
+                    "column": "_0_version",
+                    "upstreamType": "TEXT",
+                  },
+                  {
+                    "clientType": "number",
+                    "column": "big",
+                    "upstreamType": "INTEGER",
+                  },
+                  {
+                    "clientType": "boolean",
+                    "column": "bool",
+                    "upstreamType": "BOOL",
+                  },
+                  {
+                    "clientType": "number",
+                    "column": "issueID",
+                    "upstreamType": "INTEGER",
+                  },
+                ],
+                "table": "issues",
+              },
+            ],
+          },
           "status": "OK",
-          "tables": [
-            {
-              "columns": [
-                {
-                  "clientType": "string",
-                  "column": "_0_version",
-                  "upstreamType": "TEXT",
-                },
-                {
-                  "clientType": "number",
-                  "column": "big",
-                  "upstreamType": "INTEGER",
-                },
-                {
-                  "clientType": "boolean",
-                  "column": "bool",
-                  "upstreamType": "BOOL",
-                },
-                {
-                  "clientType": "number",
-                  "column": "issueID",
-                  "upstreamType": "INTEGER",
-                },
-              ],
-              "table": "issues",
-            },
-          ],
           "time": "2025-08-14T01:02:03.000Z",
           "type": "zero/events/status/replication/v1",
         },
         {
           "component": "replication",
           "description": "Schema updated",
-          "indexes": [
-            {
-              "columns": [
-                {
-                  "column": "bool",
-                  "dir": "ASC",
-                },
-                {
-                  "column": "issueID",
-                  "dir": "ASC",
-                },
-              ],
-              "table": "issues",
-              "unique": true,
-            },
-          ],
-          "replicaSize": 49152,
           "stage": "Replicating",
+          "state": {
+            "indexes": [
+              {
+                "columns": [
+                  {
+                    "column": "bool",
+                    "dir": "ASC",
+                  },
+                  {
+                    "column": "issueID",
+                    "dir": "ASC",
+                  },
+                ],
+                "table": "issues",
+                "unique": true,
+              },
+            ],
+            "replicaSize": 49152,
+            "tables": [
+              {
+                "columns": [
+                  {
+                    "clientType": "string",
+                    "column": "_0_version",
+                    "upstreamType": "TEXT",
+                  },
+                  {
+                    "clientType": "number",
+                    "column": "big",
+                    "upstreamType": "INTEGER",
+                  },
+                  {
+                    "clientType": "boolean",
+                    "column": "bool",
+                    "upstreamType": "BOOL",
+                  },
+                  {
+                    "clientType": "number",
+                    "column": "issueID",
+                    "upstreamType": "INTEGER",
+                  },
+                  {
+                    "clientType": "number",
+                    "column": "new_column",
+                    "upstreamType": "int8",
+                  },
+                ],
+                "table": "issues",
+              },
+            ],
+          },
           "status": "OK",
-          "tables": [
-            {
-              "columns": [
-                {
-                  "clientType": "string",
-                  "column": "_0_version",
-                  "upstreamType": "TEXT",
-                },
-                {
-                  "clientType": "number",
-                  "column": "big",
-                  "upstreamType": "INTEGER",
-                },
-                {
-                  "clientType": "boolean",
-                  "column": "bool",
-                  "upstreamType": "BOOL",
-                },
-                {
-                  "clientType": "number",
-                  "column": "issueID",
-                  "upstreamType": "INTEGER",
-                },
-                {
-                  "clientType": "number",
-                  "column": "new_column",
-                  "upstreamType": "int8",
-                },
-              ],
-              "table": "issues",
-            },
-          ],
           "time": "2025-08-14T01:02:03.000Z",
           "type": "zero/events/status/replication/v1",
         },

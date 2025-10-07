@@ -503,9 +503,9 @@ describe('createSocket', () => {
         new ZeroLogContext('error', undefined, new TestLogSink()),
         undefined,
         undefined,
-        1048 * 8,
         additionalConnectParams,
         {activeClients},
+        1048 * 8,
       );
       expect(`${mockSocket.url}`).equal(expectedURL);
       expect(mockSocket.protocol).equal(
@@ -542,9 +542,9 @@ describe('createSocket', () => {
         new ZeroLogContext('error', undefined, new TestLogSink()),
         undefined,
         undefined,
-        0, // do not put any extra information into headers
         additionalConnectParams,
         {activeClients},
+        0, // do not put any extra information into headers
       );
       expect(`${mockSocket.url}`).equal(expectedURL);
       expect(mockSocket2.protocol).equal(encodeSecProtocols(undefined, auth));
@@ -2392,6 +2392,10 @@ test('VersionNotSupported custom onUpdateNeeded handler', async () => {
   expect(r.connectionState).toBe(ConnectionState.Disconnected);
 
   expect(fake).toBeCalledTimes(1);
+  expect(fake).toHaveBeenCalledWith({
+    type: 'VersionNotSupported',
+    message: 'server test message',
+  });
 });
 
 test('SchemaVersionNotSupported default handler', async () => {
@@ -2434,6 +2438,10 @@ test('SchemaVersionNotSupported custom onUpdateNeeded handler', async () => {
   expect(r.connectionState).toBe(ConnectionState.Disconnected);
 
   expect(fake).toBeCalledTimes(1);
+  expect(fake).toHaveBeenCalledWith({
+    type: 'SchemaVersionNotSupported',
+    message: 'server test message',
+  });
 });
 
 test('ClientNotFound default handler', async () => {
@@ -3901,6 +3909,23 @@ test('onError is called on error', async () => {
       ],
     ]
   `);
+});
+
+test('onError includes server error reason', async () => {
+  const onErrorSpy = vi.fn();
+  const z = zeroForTest({onError: onErrorSpy});
+
+  await z.triggerConnected();
+  expect(z.connectionState).toBe(ConnectionState.Connected);
+
+  const serverMessage = 'table missing on remote';
+  await z.triggerError(ErrorKind.VersionNotSupported, serverMessage);
+
+  expect(onErrorSpy).toBeCalledTimes(1);
+  const [errorMessage, errorObject] = onErrorSpy.mock.calls[0];
+  expect(errorMessage).toContain('VersionNotSupported');
+  expect(errorMessage).toContain(serverMessage);
+  expect(errorObject).toBeInstanceOf(ServerError);
 });
 
 test('We should send a deleteClient when a Zero instance is closed', async () => {

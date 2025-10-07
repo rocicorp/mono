@@ -7,7 +7,7 @@
     "check-types": "tsc",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
+    "lint": "oxlint --type-aware src/"
   },
   "dependencies": {
     "@rocicorp/zero": "file:rocicorp-zero.tgz"

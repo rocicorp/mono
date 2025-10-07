@@ -162,20 +162,21 @@ function transformExistsCondition(
     nextSubquery.limit;
 
   if (op === 'EXISTS') {
+    const flipped = condition.flip ? ', {flip: true}' : '';
     if (!hasSubQueryProps) {
       if (prefix === '.where') {
-        return `.whereExists('${relationship}')`;
+        return `.whereExists('${relationship}'${flipped})`;
       }
       args.add('exists');
-      return `exists('${relationship}')`;
+      return `exists('${relationship}'${flipped})`;
     }
 
     if (prefix === '.where') {
-      return `.whereExists('${relationship}', q => q${astToZQL(nextSubquery)})`;
+      return `.whereExists('${relationship}', q => q${astToZQL(nextSubquery)}${flipped})`;
     }
     prefix satisfies 'cmp';
     args.add('exists');
-    return `exists('${relationship}', q => q${astToZQL(nextSubquery)})`;
+    return `exists('${relationship}', q => q${astToZQL(nextSubquery)}${flipped})`;
   }
 
   op satisfies 'NOT EXISTS';

@@ -11,7 +11,9 @@ import {schema} from '../../../../zql/src/query/test/test-schemas.ts';
 import {nanoid} from '../../util/nanoid.ts';
 import type {CustomMutatorDefs} from '../custom.ts';
 import {MockSocket, TestZero, zeroForTest} from '../test-utils.ts';
-import type {Inspector, Metrics, Query} from './types.ts';
+import type {Inspector} from './inspector.ts';
+import type {Metrics} from './lazy-inspector.ts';
+import type {Query} from './query.ts';
 
 const emptyMetrics = {
   'query-materialization-client': new TDigest(),
@@ -70,17 +72,11 @@ beforeEach(() => {
 
 test('basics', async () => {
   const z = zeroForTest();
-  const inspector = await z.inspect();
 
-  expect(inspector.client).toEqual({
-    clientGroup: {
-      id: await z.clientGroupID,
-    },
-    id: z.clientID,
-  });
-  expect(inspector.clientGroup).toEqual({
-    id: await z.clientGroupID,
-  });
+  const {client, clientGroup} = z.inspector;
+  expect(client.id).toBe(z.clientID);
+  expect(client.clientGroup).toBe(clientGroup);
+  expect(await clientGroup.id).toBe(await z.clientGroupID);
 
   await z.close();
 });
@@ -90,9 +86,7 @@ test('basics 2 clients', async () => {
   const z1 = zeroForTest({userID, kvStore: 'idb'});
   const z2 = zeroForTest({userID, kvStore: 'idb'});
 
-  const inspector = await z1.inspect();
-
-  expect(await inspector.clients()).toEqual([
+  expect(await z1.inspector.clients()).toEqual([
     {
       clientGroup: {
         id: await z1.clientGroupID,
@@ -116,8 +110,7 @@ test('client queries', async () => {
   const z = zeroForTest({userID, schema, kvStore: 'idb'});
   await z.triggerConnected();
 
-  const inspector = await z.inspect();
-  expect(await inspector.clients()).toEqual([
+  expect(await z.inspector.clients()).toEqual([
     {
       clientGroup: {
         id: await z.clientGroupID,
@@ -135,8 +128,8 @@ test('client queries', async () => {
     // The RPC uses our nanoid which uses Math.random
     vi.spyOn(Math, 'random').mockReturnValue(0.5);
     (await z.socket).messages.length = 0;
-    const p = inspector.client.queries();
-    await Promise.resolve();
+    const p = z.inspector.client.queries();
+    await waitForLazyModule();
     expect((await z.socket).jsonMessages).toEqual([
       [
         'inspect',
@@ -265,9 +258,8 @@ test('clientGroup queries', async () => {
   await z.triggerConnected();
 
   vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
-  const inspector = await z.inspect();
-  const p = inspector.clientGroup.queries();
-  await Promise.resolve();
+  const p = z.inspector.clientGroup.queries();
+  await waitForLazyModule();
   expect((await z.socket).messages).toMatchInlineSnapshot(`
     [
       "["inspect",{"op":"queries","id":"000000000000000000000"}]",
@@ -296,7 +288,7 @@ test('clientGroup queries', async () => {
     },
   ] satisfies InspectDownMessage);
   expect(await p).toEqual([
-    {
+    expect.objectContaining({
       name: null,
       args: null,
       clientID: z.clientID,
@@ -310,7 +302,15 @@ test('clientGroup queries', async () => {
       serverZQL:
         "issues.where(({cmp, or}) => or(cmp('id', '1'), cmp('id', '!=', '2')))",
       metrics: emptyMetrics,
-    },
+      hydrateClient: null,
+      hydrateServer: null,
+      hydrateTotal: null,
+      updateClientP50: null,
+      updateClientP95: null,
+      updateServerP50: null,
+      updateServerP95: null,
+      analyze: expect.any(Function),
+    }),
   ]);
 });
 
@@ -322,8 +322,7 @@ describe('query metrics', () => {
     const issueQuery = z.query.issue;
     await issueQuery.run();
 
-    const inspector = await z.inspect();
-    const metrics = await getMetrics(inspector, z);
+    const metrics = await getMetrics(z.inspector, z);
     expect(metrics['query-materialization-client'].count()).toBe(1);
     expect(
       metrics['query-materialization-client'].quantile(0.5),
@@ -341,9 +340,8 @@ describe('query metrics', () => {
     await z.triggerGotQueriesPatch(issueQuery);
 
     vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
-    const inspector = await z.inspect();
-    const p = inspector.client.queries();
-    await Promise.resolve();
+    const p = z.inspector.client.queries();
+    await waitForLazyModule();
 
     // Simulate the server response with query data
     await z.triggerMessage([
@@ -415,9 +413,8 @@ describe('query metrics', () => {
     await query2.run();
 
     // Check that metrics were actually collected
-    const inspector = await z.inspect();
 
-    const metrics = await getMetrics(inspector, z);
+    const metrics = await getMetrics(z.inspector, z);
     expect(metrics['query-materialization-client'].count()).toBe(2);
 
     const digest = metrics['query-materialization-client'];
@@ -438,10 +435,9 @@ describe('query metrics', () => {
     await z.query.issue.where('id', '2').run(); // Another filtered query
 
     // Test that the inspector can access the real metrics
-    const inspector = await z.inspect();
 
     // Verify global metrics were collected
-    const metrics = await getMetrics(inspector, z);
+    const metrics = await getMetrics(z.inspector, z);
     const globalMetricsQueryMaterializationClient =
       metrics['query-materialization-client'];
     expect(globalMetricsQueryMaterializationClient.count()).toBe(3);
@@ -470,7 +466,7 @@ describe('query metrics', () => {
     await z.triggerGotQueriesPatch(q);
 
     {
-      const metrics = await getMetrics(inspector, z);
+      const metrics = await getMetrics(z.inspector, z);
       const globalMetricsQueryMaterializationEndToEnd =
         metrics['query-materialization-end-to-end'];
 
@@ -495,7 +491,7 @@ describe('query metrics', () => {
     await z.triggerGotQueriesPatch(issueQuery);
 
     // Get initial inspector to verify no query-update metrics initially
-    const initialInspector = await z.inspect();
+    const initialInspector = z.inspector;
     const initialMetrics = await getMetrics(initialInspector, z);
     expect(initialMetrics['query-update-client'].count()).toBe(0);
 
@@ -527,8 +523,7 @@ describe('query metrics', () => {
       ],
     });
 
-    const inspector = await z.inspect();
-    const metrics = await getMetrics(inspector, z);
+    const metrics = await getMetrics(z.inspector, z);
 
     // Wait for the updates to process and check metrics
     await vi.waitFor(() => {
@@ -571,8 +566,7 @@ describe('query metrics', () => {
       ],
     });
 
-    const inspector = await z.inspect();
-    const metrics1 = await getMetrics(inspector, z);
+    const metrics1 = await getMetrics(z.inspector, z);
 
     // Wait for the update to be processed
     await vi.waitFor(() => {
@@ -582,8 +576,8 @@ describe('query metrics', () => {
 
     // Get query-specific metrics through the inspector
     vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
-    const p = inspector.client.queries();
-    await Promise.resolve();
+    const p = z.inspector.client.queries();
+    await waitForLazyModule();
 
     // Simulate the server response with query data
     await z.triggerMessage([
@@ -658,12 +652,11 @@ describe('query metrics', () => {
 test('server version', async () => {
   const z = zeroForTest({schema});
   await z.triggerConnected();
-  await Promise.resolve();
-  const inspector = await z.inspect();
+  await waitForLazyModule();
   vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
   await z.socket;
-  const p = inspector.serverVersion();
-  await Promise.resolve();
+  const p = z.inspector.serverVersion();
+  await waitForLazyModule();
   expect((await z.socket).jsonMessages).toEqual([
     ['inspect', {op: 'version', id: '000000000000000000000'}],
   ]);
@@ -685,11 +678,11 @@ test('server version', async () => {
 test('clientZQL', async () => {
   const z = zeroForTest({schema});
   await z.triggerConnected();
-  await Promise.resolve();
-  const inspector = await z.inspect();
+  await waitForLazyModule();
   vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
   await z.socket;
-  const p = inspector.client.queries();
+  const p = z.inspector.client.queries();
+  await waitForLazyModule();
 
   // Trigger QueryManager.#add by materializing a query and marking it as got
   const issueQuery = z.query.issue.where('ownerId', 'arv');
@@ -748,7 +741,6 @@ describe('query analyze', () => {
     const z = zeroForTest({schema});
     await z.triggerConnected();
 
-    const inspector = await z.inspect();
     const socket = await z.socket;
 
     // Create a query to analyze
@@ -770,7 +762,7 @@ describe('query analyze', () => {
         });
       });
 
-      const p = inspector.client.queries();
+      const p = z.inspector.client.queries();
       const id = await idPromise;
 
       await z.triggerMessage([
@@ -805,7 +797,7 @@ describe('query analyze', () => {
     (await z.socket).messages.length = 0; // Clear previous messages
 
     const analyzePromise = query.analyze(analyzeOptions);
-    await Promise.resolve(); // Allow the RPC call to be sent
+    await waitForLazyModule(); // Allow the RPC call to be sent
     expect((await z.socket).jsonMessages).toEqual([
       [
         'inspect',
@@ -861,7 +853,6 @@ describe('query analyze', () => {
     const z = zeroForTest({userID, schema, kvStore: 'idb'});
     await z.triggerConnected();
 
-    const inspector = await z.inspect();
     const socket = await z.socket;
 
     // Setup a query with server AST
@@ -876,7 +867,7 @@ describe('query analyze', () => {
         });
       });
 
-      const p = inspector.client.queries();
+      const p = z.inspector.client.queries();
       const id = await idPromise;
 
       await z.triggerMessage([
@@ -919,7 +910,7 @@ describe('query analyze', () => {
     (await z.socket).messages.length = 0; // Clear previous messages
 
     const analyzePromise = query.analyze({syncedRows: false});
-    await Promise.resolve(); // Allow the RPC call to be sent
+    await waitForLazyModule(); // Allow the RPC call to be sent
     expect((await z.socket).jsonMessages).toEqual([
       [
         'inspect',
@@ -967,7 +958,6 @@ describe('query analyze', () => {
     const z = zeroForTest({schema});
     await z.triggerConnected();
 
-    const inspector = await z.inspect();
     const socket = await z.socket;
 
     // Setup a query without server AST
@@ -982,7 +972,7 @@ describe('query analyze', () => {
         });
       });
 
-      const p = inspector.client.queries();
+      const p = z.inspector.client.queries();
       const id = await idPromise;
 
       await z.triggerMessage([
@@ -1024,7 +1014,6 @@ describe('query analyze', () => {
     const z = zeroForTest({schema});
     await z.triggerConnected();
 
-    const inspector = await z.inspect();
     const socket = await z.socket;
 
     const queries = await (async () => {
@@ -1038,7 +1027,7 @@ describe('query analyze', () => {
         });
       });
 
-      const p = inspector.client.queries();
+      const p = z.inspector.client.queries();
       const id = await idPromise;
 
       await z.triggerMessage([
@@ -1072,7 +1061,7 @@ describe('query analyze', () => {
     (await z.socket).messages.length = 0;
 
     const analyzePromise = query.analyze(); // No options provided
-    await Promise.resolve(); // Allow the RPC call to be sent
+    await waitForLazyModule(); // Allow the RPC call to be sent
     expect((await z.socket).jsonMessages).toEqual([
       [
         'inspect',
@@ -1112,11 +1101,11 @@ describe('authenticate', () => {
     const z = zeroForTest({schema});
     await z.triggerConnected();
     await Promise.resolve();
-    const inspector = await z.inspect();
+
     vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
     await z.socket;
-    const p = inspector.serverVersion();
-    await Promise.resolve();
+    const p = z.inspector.serverVersion();
+    await waitForLazyModule();
     expect((await z.socket).jsonMessages).toEqual([
       ['inspect', {op: 'version', id: '000000000000000000000'}],
     ]);
@@ -1172,11 +1161,11 @@ describe('authenticate', () => {
     const z = zeroForTest({schema});
     await z.triggerConnected();
     await Promise.resolve();
-    const inspector = await z.inspect();
+
     vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
     await z.socket;
-    const p = inspector.serverVersion();
-    await Promise.resolve();
+    const p = z.inspector.serverVersion();
+    await waitForLazyModule();
     expect((await z.socket).jsonMessages).toEqual([
       ['inspect', {op: 'version', id: '000000000000000000000'}],
     ]);
@@ -1201,11 +1190,11 @@ describe('authenticate', () => {
     const z = zeroForTest({schema});
     await z.triggerConnected();
     await Promise.resolve();
-    const inspector = await z.inspect();
+
     vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
     await z.socket;
-    const p = inspector.serverVersion();
-    await Promise.resolve();
+    const p = z.inspector.serverVersion();
+    await waitForLazyModule();
     expect((await z.socket).jsonMessages).toEqual([
       ['inspect', {op: 'version', id: '000000000000000000000'}],
     ]);
@@ -1243,4 +1232,244 @@ describe('authenticate', () => {
 
     await z.close();
   });
+
+  describe('Query metrics properties', () => {
+    test('hydration and update metrics are extracted from server metrics', async () => {
+      const z = zeroForTest({schema});
+      await z.triggerConnected();
+
+      // Create TDigest instances with test data for server metrics
+      const serverHydrationDigest = new TDigest();
+      serverHydrationDigest.add(50, 1); // 50ms
+      serverHydrationDigest.add(75, 1); // 75ms
+      serverHydrationDigest.add(100, 1); // 100ms
+
+      const serverUpdateDigest = new TDigest();
+      serverUpdateDigest.add(5, 1); // 5ms
+      serverUpdateDigest.add(10, 1); // 10ms
+      serverUpdateDigest.add(15, 1); // 15ms
+      serverUpdateDigest.add(20, 1); // 20ms
+      serverUpdateDigest.add(25, 1); // 25ms
+      serverUpdateDigest.add(30, 1); // 30ms
+      serverUpdateDigest.add(35, 1); // 35ms
+      serverUpdateDigest.add(40, 1); // 40ms
+      serverUpdateDigest.add(45, 1); // 45ms
+      serverUpdateDigest.add(50, 1); // 50ms
+
+      vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+
+      const p = z.inspector.client.queries();
+      await waitForLazyModule();
+
+      // Mock server response with metrics
+      await z.triggerMessage([
+        'inspect',
+        {
+          op: 'queries',
+          id: '000000000000000000000',
+          value: [
+            {
+              clientID: z.clientID,
+              queryID: 'test-query-1',
+              ast: {table: 'issues'},
+              name: null,
+              args: null,
+              deleted: false,
+              got: true,
+              inactivatedAt: null,
+              rowCount: 10,
+              ttl: 60_000,
+              metrics: {
+                'query-materialization-server': serverHydrationDigest.toJSON(),
+                'query-update-server': serverUpdateDigest.toJSON(),
+              },
+            },
+          ],
+        },
+      ] satisfies InspectDownMessage);
+
+      const queries = await p;
+      expect(queries).toHaveLength(1);
+
+      const query = queries[0];
+
+      // Test hydration metrics (P50/median) - client metrics will default to null since no client metrics are provided
+      expect(query.hydrateClient).toBeNull(); // null since no client metrics
+      expect(query.hydrateServer).toBe(75); // P50 of [50, 75, 100]
+      expect(query.hydrateTotal).toBeNull(); // null since no client metrics
+
+      // Test update metrics
+      expect(query.updateClientP50).toBeNull(); // null since no client metrics
+      expect(query.updateClientP95).toBeNull(); // null since no client metrics
+      expect(query.updateServerP50).toBe(27.5); // P50 of [5,10,15,20,25,30,35,40,45,50]
+      expect(query.updateServerP95).toBe(50); // P95 of [5,10,15,20,25,30,35,40,45,50] - TDigest returns 50
+
+      await z.close();
+    });
+
+    test('metrics properties default to null when no metrics available', async () => {
+      const z = zeroForTest({schema});
+      await z.triggerConnected();
+
+      vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+
+      const p = z.inspector.client.queries();
+      await waitForLazyModule();
+
+      // Mock server response with null metrics
+      await z.triggerMessage([
+        'inspect',
+        {
+          op: 'queries',
+          id: '000000000000000000000',
+          value: [
+            {
+              clientID: z.clientID,
+              queryID: 'test-query-no-metrics',
+              ast: {table: 'issues'},
+              name: null,
+              args: null,
+              deleted: false,
+              got: true,
+              inactivatedAt: null,
+              rowCount: 0,
+              ttl: 60_000,
+              metrics: null,
+            },
+          ],
+        },
+      ] satisfies InspectDownMessage);
+
+      const queries = await p;
+      expect(queries).toHaveLength(1);
+
+      const query = queries[0];
+
+      // All properties should default to null when no metrics available
+      expect(query.hydrateClient).toBeNull();
+      expect(query.hydrateServer).toBeNull();
+      expect(query.hydrateTotal).toBeNull();
+      expect(query.updateClientP50).toBeNull();
+      expect(query.updateClientP95).toBeNull();
+      expect(query.updateServerP50).toBeNull();
+      expect(query.updateServerP95).toBeNull();
+
+      await z.close();
+    });
+
+    test('metrics properties handle empty TDigest correctly', async () => {
+      const z = zeroForTest({schema});
+      await z.triggerConnected();
+
+      vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+
+      const p = z.inspector.client.queries();
+      await waitForLazyModule();
+
+      // Mock server response with empty metrics (empty TDigest)
+      const emptyDigest = new TDigest();
+      await z.triggerMessage([
+        'inspect',
+        {
+          op: 'queries',
+          id: '000000000000000000000',
+          value: [
+            {
+              clientID: z.clientID,
+              queryID: 'test-query-empty-metrics',
+              ast: {table: 'issues'},
+              name: null,
+              args: null,
+              deleted: false,
+              got: true,
+              inactivatedAt: null,
+              rowCount: 0,
+              ttl: 60_000,
+              metrics: {
+                'query-materialization-server': emptyDigest.toJSON(),
+                'query-update-server': emptyDigest.toJSON(),
+              },
+            },
+          ],
+        },
+      ] satisfies InspectDownMessage);
+
+      const queries = await p;
+      expect(queries).toHaveLength(1);
+
+      const query = queries[0];
+
+      // Empty TDigest quantile returns NaN, but our implementation should default to null
+      expect(query.hydrateClient).toBeNull();
+      expect(query.hydrateServer).toBeNull();
+      expect(query.hydrateTotal).toBeNull();
+      expect(query.updateClientP50).toBeNull();
+      expect(query.updateClientP95).toBeNull();
+      expect(query.updateServerP50).toBeNull();
+      expect(query.updateServerP95).toBeNull();
+
+      await z.close();
+    });
+
+    test('metrics properties handle single data point correctly', async () => {
+      const z = zeroForTest({schema});
+      await z.triggerConnected();
+
+      // Create TDigest instances with single data points
+      const singlePointDigest = new TDigest();
+      singlePointDigest.add(42, 1); // Single value: 42ms
+
+      vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+
+      const p = z.inspector.client.queries();
+      await waitForLazyModule();
+
+      // Mock server response with single-point metrics
+      await z.triggerMessage([
+        'inspect',
+        {
+          op: 'queries',
+          id: '000000000000000000000',
+          value: [
+            {
+              clientID: z.clientID,
+              queryID: 'test-query-single-point',
+              ast: {table: 'issues'},
+              name: null,
+              args: null,
+              deleted: false,
+              got: true,
+              inactivatedAt: null,
+              rowCount: 1,
+              ttl: 60_000,
+              metrics: {
+                'query-materialization-server': singlePointDigest.toJSON(),
+                'query-update-server': singlePointDigest.toJSON(),
+              },
+            },
+          ],
+        },
+      ] satisfies InspectDownMessage);
+
+      const queries = await p;
+      expect(queries).toHaveLength(1);
+
+      const query = queries[0];
+
+      // Single data point should return that value for all percentiles (server-side)
+      expect(query.hydrateClient).toBeNull(); // null since no client metrics
+      expect(query.hydrateServer).toBe(42);
+      expect(query.hydrateTotal).toBeNull(); // null since no client metrics
+      expect(query.updateClientP50).toBeNull(); // null since no client metrics
+      expect(query.updateClientP95).toBeNull(); // null since no client metrics
+      expect(query.updateServerP50).toBe(42);
+      expect(query.updateServerP95).toBe(42);
+
+      await z.close();
+    });
+  });
 });
+
+async function waitForLazyModule() {
+  await import('./lazy-inspector.ts');
+}

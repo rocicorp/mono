@@ -335,7 +335,7 @@ describe('MutationTracker', () => {
           },
         ],
       });
-    } catch (e) {
+    } catch (_e) {
       // expected
     }
 

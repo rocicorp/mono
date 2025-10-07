@@ -44,6 +44,6 @@ export class Filter implements FilterOperator {
   }
 
   push(change: Change) {
-    filterPush(change, this.#output, this.#predicate);
+    filterPush(change, this.#output, this, this.#predicate);
   }
 }

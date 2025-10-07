@@ -34,10 +34,10 @@ export class FanOut implements FilterOperator {
 
   destroy(): void {
     if (this.#destroyCount < this.#outputs.length) {
-      if (this.#destroyCount === 0) {
+      ++this.#destroyCount;
+      if (this.#destroyCount === this.#outputs.length) {
         this.#input.destroy();
       }
-      ++this.#destroyCount;
     } else {
       throw new Error('FanOut already destroyed once for each output');
     }
@@ -62,7 +62,7 @@ export class FanOut implements FilterOperator {
 
   push(change: Change) {
     for (const out of this.#outputs) {
-      out.push(change);
+      out.push(change, this);
     }
     must(
       this.#fanIn,

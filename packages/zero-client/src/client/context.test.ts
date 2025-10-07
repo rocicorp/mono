@@ -286,20 +286,24 @@ test('transactions', () => {
       op: 'add',
       newValue: {id: 's2', name: 'brian'},
     },
-    ...new Array(15).fill(0).map((_, i) => ({
-      key: `${ENTITIES_KEY_PREFIX}flair/f${i}`,
-      op: 'add' as const,
-      newValue: {id: `f${i}`, serverID: 's1', description: `desc${i}`},
-    })),
-    ...new Array(37).fill(0).map((_, i) => ({
-      key: `${ENTITIES_KEY_PREFIX}flair/f${15 + i}`,
-      op: 'add' as const,
-      newValue: {
-        id: `f${15 + i}`,
-        serverID: 's2',
-        description: `desc${15 + i}`,
-      },
-    })),
+    ...Array.from({length: 15})
+      .fill(0)
+      .map((_, i) => ({
+        key: `${ENTITIES_KEY_PREFIX}flair/f${i}`,
+        op: 'add' as const,
+        newValue: {id: `f${i}`, serverID: 's1', description: `desc${i}`},
+      })),
+    ...Array.from({length: 37})
+      .fill(0)
+      .map((_, i) => ({
+        key: `${ENTITIES_KEY_PREFIX}flair/f${15 + i}`,
+        op: 'add' as const,
+        newValue: {
+          id: `f${15 + i}`,
+          serverID: 's2',
+          description: `desc${15 + i}`,
+        },
+      })),
   ];
 
   let transactions = 0;

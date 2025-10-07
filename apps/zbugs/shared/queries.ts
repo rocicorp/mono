@@ -4,14 +4,13 @@ import {
   syncedQuery,
   syncedQueryWithContext,
 } from '@rocicorp/zero';
-import {builder, type Schema} from './schema.ts';
-import {INITIAL_COMMENT_LIMIT} from './consts.ts';
+import * as z from 'zod/mini';
 import type {AuthData, Role} from './auth.ts';
-import z from 'zod';
+import {INITIAL_COMMENT_LIMIT} from './consts.ts';
+import {builder, ZERO_PROJECT_NAME, type Schema} from './schema.ts';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function applyIssuePermissions<TQuery extends Query<Schema, 'issue', any>>(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   q: TQuery,
   role: Role | undefined,
 ): TQuery {
@@ -24,11 +23,12 @@ const idValidator = z.tuple([z.string()]);
 const keyValidator = idValidator;
 
 const listContextParams = z.object({
-  open: z.boolean().nullable(),
-  assignee: z.string().nullable(),
-  creator: z.string().nullable(),
-  labels: z.array(z.string()).nullable(),
-  textFilter: z.string().nullable(),
+  open: z.nullable(z.boolean()),
+  projectName: z.optional(z.string()),
+  assignee: z.nullable(z.string()),
+  creator: z.nullable(z.string()),
+  labels: z.nullable(z.array(z.string())),
+  textFilter: z.nullable(z.string()),
   sortField: z.union([z.literal('modified'), z.literal('created')]),
   sortDirection: z.union([z.literal('asc'), z.literal('desc')]),
 });
@@ -47,8 +47,23 @@ export const queries = {
 
   allUsers: syncedQuery('allUsers', z.tuple([]), () => builder.user),
 
+  allProjects: syncedQuery('allProjects', z.tuple([]), () => builder.project),
+
   user: syncedQuery('user', idValidator, userID =>
     builder.user.where('id', userID).one(),
+  ),
+
+  labelsForProject: syncedQuery(
+    'labels',
+    z.tuple([
+      z.object({
+        projectName: z.string(),
+      }),
+    ]),
+    ({projectName}: {projectName: string}) =>
+      builder.label.whereExists('project', q =>
+        q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+      ),
   ),
 
   issuePreload: syncedQueryWithContext(
@@ -87,8 +102,8 @@ export const queries = {
     'userPicker',
     z.tuple([
       z.boolean(),
-      z.string().nullable(),
-      z.enum(['crew', 'creators']).nullable(),
+      z.nullable(z.string()),
+      z.nullable(z.enum(['crew', 'creators'])),
     ]),
     (disabled, login, filter) => {
       let q = builder.user;
@@ -113,13 +128,14 @@ export const queries = {
     'issueDetail',
     z.tuple([
       z.union([z.literal('shortID'), z.literal('id')]),
-      z.string().or(z.number()),
+      z.union([z.string(), z.number()]),
       z.string(),
     ]),
     (auth: AuthData | undefined, idField, id, userID) =>
       applyIssuePermissions(
         builder.issue
           .where(idField, id)
+          .related('project')
           .related('emoji', emoji => emoji.related('creator'))
           .related('creator')
           .related('assignee')
@@ -147,8 +163,8 @@ export const queries = {
     z.tuple([
       listContextParams,
       z.string(),
-      z.number().nullable(),
-      issueRowSort.nullable(),
+      z.nullable(z.number()),
+      z.nullable(issueRowSort),
       z.union([z.literal('forward'), z.literal('backward')]),
     ]),
     (auth: AuthData | undefined, listContext, userID, limit, start, dir) =>
@@ -165,8 +181,8 @@ export const queries = {
   prevNext: syncedQueryWithContext(
     'prevNext',
     z.tuple([
-      listContextParams.nullable(),
-      issueRowSort.nullable(),
+      z.nullable(listContextParams),
+      z.nullable(issueRowSort),
       z.union([z.literal('next'), z.literal('prev')]),
     ]),
     (auth: AuthData | undefined, listContext, issue, dir) =>
@@ -213,6 +229,7 @@ function issueListV2(
 export type ListQueryArgs = {
   issueQuery?: (typeof builder)['issue'] | undefined;
   listContext?: ListContext['params'] | undefined;
+  project?: string | undefined;
   userID?: string;
   role?: Role | undefined;
   limit?: number | undefined;
@@ -241,6 +258,15 @@ export function buildListQuery(args: ListQueryArgs) {
   if (!listContext) {
     return q.where(({or}) => or());
   }
+  const {projectName = ZERO_PROJECT_NAME} = listContext;
+
+  q = q.whereExists(
+    'project',
+    q => q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+    {
+      flip: true,
+    },
+  );
 
   const {sortField, sortDirection} = listContext;
   const orderByDir =
@@ -262,9 +288,11 @@ export function buildListQuery(args: ListQueryArgs) {
   q = q.where(({and, cmp, exists, or}) =>
     and(
       open != null ? cmp('open', open) : undefined,
-      creator ? exists('creator', q => q.where('login', creator)) : undefined,
+      creator
+        ? exists('creator', q => q.where('login', creator), {flip: true})
+        : undefined,
       assignee
-        ? exists('assignee', q => q.where('login', assignee))
+        ? exists('assignee', q => q.where('login', assignee), {flip: true})
         : undefined,
       textFilter
         ? or(
@@ -276,7 +304,7 @@ export function buildListQuery(args: ListQueryArgs) {
           )
         : undefined,
       ...(labels ?? []).map(label =>
-        exists('labels', q => q.where('name', label)),
+        exists('labels', q => q.where('name', label), {flip: true}),
       ),
     ),
   );

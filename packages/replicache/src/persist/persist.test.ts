@@ -96,10 +96,10 @@ describe('persistDD31', () => {
   }) {
     const {
       memdagCookie = 'cookie1',
-      perdagClientGroupCookie: perdagClientGroupCookie = 'cookie1',
+      perdagClientGroupCookie = 'cookie1',
       memdagValueMap = [],
       memdagMutationIDs = {},
-      perdagClientGroupMutationIDs: perdagClientGroupMutationIDs = {},
+      perdagClientGroupMutationIDs = {},
     } = options || {};
     await perdagClientGroupChainBuilder.addGenesis(clients[0].clientID);
     const perdagClientGroupSnapshot =
@@ -262,10 +262,7 @@ describe('persistDD31', () => {
   }
 
   test('equal snapshot cookies no locals', async () => {
-    const {
-      perdagClientGroupHeadHash: perdagClientGroupHeadHash,
-      memdagHeadHash,
-    } = await setupSnapshots();
+    const {perdagClientGroupHeadHash, memdagHeadHash} = await setupSnapshots();
     await perdagClientGroupChainBuilder.removeHead();
 
     const {clientMap, clientGroup} = await getClientMapAndClientGroup(
@@ -353,10 +350,7 @@ describe('persistDD31', () => {
   });
 
   test('memdag older snapshot no locals', async () => {
-    const {
-      perdagClientGroupHeadHash: perdagClientGroupHeadHash,
-      memdagHeadHash,
-    } = await setupSnapshots({
+    const {perdagClientGroupHeadHash, memdagHeadHash} = await setupSnapshots({
       perdagClientGroupCookie: 'cookie2',
       memdagCookie: 'cookie1',
     });
@@ -459,7 +453,7 @@ describe('persistDD31', () => {
       memdagCookie: 'cookie1',
     });
 
-    const {memdagHeadHash} = await await setupMemdagLocals();
+    const {memdagHeadHash} = await setupMemdagLocals();
 
     // perdag client group:
     //   Snapshot

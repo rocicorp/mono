@@ -34,6 +34,7 @@ class AnonymousTelemetryManager {
   #totalConnectionsSuccess = 0;
   #totalConnectionsAttempted = 0;
   #activeClientGroupsGetter: (() => number) | undefined;
+  #activeUsersGetter: (() => number) | undefined;
   #lc: LogContext | undefined;
   #config: ZeroConfig | undefined;
   #processId: string;
@@ -203,6 +204,13 @@ class AnonymousTelemetryManager {
       },
     );
 
+    const activeUsersGauge = this.#meter.createObservableGauge(
+      'zero.active_users_last_day',
+      {
+        description: 'Count of CVR instances active in the last 24h',
+      },
+    );
+
     // Callbacks
     const attrs = this.#getAttributes();
     uptimeGauge.addCallback((result: ObservableResult) => {
@@ -271,6 +279,18 @@ class AnonymousTelemetryManager {
         `telemetry: gauge_active_client_groups=${activeClientGroups}`,
       );
     });
+
+    activeUsersGauge.addCallback((result: ObservableResult) => {
+      if (this.#activeUsersGetter) {
+        const activeUsers = this.#activeUsersGetter();
+        result.observe(activeUsers, attrs);
+        this.#lc?.debug?.(`telemetry: active_users_last_day=${activeUsers}`);
+      } else {
+        this.#lc?.debug?.(
+          'telemetry: no active users getter available, skipping observation',
+        );
+      }
+    });
   }
 
   recordMutation(type: 'crud' | 'custom', count = 1) {
@@ -303,6 +323,10 @@ class AnonymousTelemetryManager {
 
   setActiveClientGroupsGetter(getter: () => number) {
     this.#activeClientGroupsGetter = getter;
+  }
+
+  setActiveUsersGetter(getter: () => number) {
+    this.#activeUsersGetter = getter;
   }
 
   shutdown() {
@@ -482,4 +506,6 @@ export const recordConnectionAttempted = () =>
   manager().recordConnectionAttempted();
 export const setActiveClientGroupsGetter = (getter: () => number) =>
   manager().setActiveClientGroupsGetter(getter);
+export const setActiveUsersGetter = (getter: () => number) =>
+  manager().setActiveUsersGetter(getter);
 export const shutdownAnonymousTelemetry = () => manager().shutdown();

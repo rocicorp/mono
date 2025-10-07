@@ -2,17 +2,19 @@ import {useQuery} from '@rocicorp/zero/react';
 import {useVirtualizer} from '@tanstack/react-virtual';
 import classNames from 'classnames';
 import React, {
-  type CSSProperties,
-  type KeyboardEvent,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
+  type KeyboardEvent,
 } from 'react';
 import {useDebouncedCallback} from 'use-debounce';
-import {useSearch} from 'wouter';
+import {useParams, useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
+import {queries, type ListContext} from '../../../shared/queries.ts';
+import {type IssueRow} from '../../../shared/schema.ts';
 import {Button} from '../../components/button.tsx';
 import {Filter, type Selection} from '../../components/filter.tsx';
 import {IssueLink} from '../../components/issue-link.tsx';
@@ -25,10 +27,9 @@ import {useLogin} from '../../hooks/use-login.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
-import {preload} from '../../zero-preload.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
-import {queries, type ListContext} from '../../../shared/queries.ts';
-import type {IssueRow} from '../../../shared/schema.ts';
+import {preload} from '../../zero-preload.ts';
+import {must} from '../../../../../packages/shared/src/must.ts';
 
 let firstRowRendered = false;
 const ITEM_SIZE = 56;
@@ -68,10 +69,13 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const qs = useMemo(() => new URLSearchParams(search), [search]);
   const z = useZero();
 
+  const params = useParams();
+  const projectName = must(params.projectName);
+
   const status = qs.get('status')?.toLowerCase() ?? 'open';
   const creator = qs.get('creator') ?? null;
   const assignee = qs.get('assignee') ?? null;
-  const labels = qs.getAll('label');
+  const labels = useMemo(() => qs.getAll('label'), [qs]);
 
   // Cannot drive entirely by URL params because we need to debounce the changes
   // while typing ito input box.
@@ -90,15 +94,29 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const [anchor, setAnchor] = useState<Anchor>(TOP_ANCHOR);
 
-  const listContextParams = {
-    sortDirection,
-    sortField,
-    assignee,
-    creator,
-    labels,
-    open,
-    textFilter,
-  } as const;
+  const listContextParams = useMemo(
+    () =>
+      ({
+        projectName,
+        sortDirection,
+        sortField,
+        assignee,
+        creator,
+        labels,
+        open,
+        textFilter,
+      }) as const,
+    [
+      projectName,
+      sortDirection,
+      sortField,
+      assignee,
+      creator,
+      open,
+      textFilter,
+      labels,
+    ],
+  );
 
   const listRef = useRef<HTMLDivElement>(null);
   const tableWrapperRef = useRef<HTMLDivElement>(null);
@@ -133,25 +151,27 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   // For detecting if the base query, i.e. ignoring pagination parameters, has
   // changed.
-  const baseQ = queries.issueListV2(
-    login.loginState?.decoded,
-    listContextParams,
-    z.userID,
-    null, // no limit
-    null, // no start
-    'forward', // fixed direction
+  const baseQ = useMemo(
+    () =>
+      queries.issueListV2(
+        login.loginState?.decoded,
+        listContextParams,
+        z.userID,
+        null, // no limit
+        null, // no start
+        'forward', // fixed direction
+      ),
+    [login.loginState?.decoded, listContextParams, z.userID],
   );
-
-  const [estimatedTotal, setEstimatedTotal] = useState(0);
-  const [total, setTotal] = useState<number | undefined>(undefined);
 
   useEffect(() => {
     setEstimatedTotal(0);
     setTotal(undefined);
     setAnchor(TOP_ANCHOR);
-    virtualizer.scrollToIndex(0);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseQ.hash()]);
+  }, [baseQ]);
+
+  const [estimatedTotal, setEstimatedTotal] = useState(0);
+  const [total, setTotal] = useState<number | undefined>(undefined);
 
   // We don't want to cache every single keystroke. We already debounce
   // keystrokes for the URL, so we just reuse that.
@@ -294,7 +314,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
         className={classNames(
           'row',
           issue.modified > (issue.viewState?.viewed ?? 0) &&
-            login.loginState != undefined
+            login.loginState !== undefined
             ? 'unread'
             : null,
         )}
@@ -304,7 +324,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       >
         <IssueLink
           className={classNames('issue-title', {'issue-closed': !issue.open})}
-          issue={issue}
+          issue={{projectName, id: issue.id, shortID: issue.shortID}}
           title={issue.title}
           listContext={listContext}
         >
@@ -347,6 +367,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       anchor.index !== 0 &&
       firstItem.index <= getNearPageEdgeThreshold(pageSize)
     ) {
+      // eslint-disable-next-line no-console -- Debug logging in demo app
       console.log('anchoring to top');
       setAnchor(TOP_ANCHOR);
       return;
@@ -376,6 +397,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
         direction: 'backward',
         startRow: issues[issueArrayIndex],
       } as const;
+      // eslint-disable-next-line no-console -- Debug logging in demo app
       console.log('page up', a);
       setAnchor(a);
       return;
@@ -399,6 +421,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
         direction: 'forward',
         startRow: issues[issueArrayIndex],
       } as const;
+      // eslint-disable-next-line no-console -- Debug logging in demo app
       console.log('page down', a);
       setAnchor(a);
     }
@@ -496,7 +519,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
             return null;
           })}
         </div>
-        <Filter onSelect={onFilter} />
+        <Filter projectName={projectName} onSelect={onFilter} />
         <div className="sort-control-container">
           <Button
             className="sort-control"

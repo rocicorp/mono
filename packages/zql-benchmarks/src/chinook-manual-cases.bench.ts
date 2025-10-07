@@ -17,13 +17,16 @@ summary(() => {
   bench('tracks with artist name : flipped', async () => {
     await queries.sqlite.artist
       .where('name', 'AC/DC')
-      .related('albums', a => a.related('tracks'));
+      .related('albums', a => a.related('tracks'))
+      .run();
   });
 
   bench('tracks with artist name : not flipped', async () => {
-    await queries.sqlite.track.whereExists('album', a =>
-      a.whereExists('artist', ar => ar.where('name', 'AC/DC')),
-    );
+    await queries.sqlite.track
+      .whereExists('album', a =>
+        a.whereExists('artist', ar => ar.where('name', 'AC/DC')),
+      )
+      .run();
   });
 });
 

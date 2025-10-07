@@ -3,6 +3,7 @@ import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../ast-to-zql/src/format.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
+import {sleep} from '../../shared/src/sleep.ts';
 import {transformAndHashQuery} from '../../zero-cache/src/auth/read-authorizer.ts';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
@@ -46,7 +47,7 @@ export async function runAst(
     start: 0,
     end: 0,
     afterPermissions: undefined,
-    vendedRowCounts: undefined,
+    vendedRowCounts: {},
     vendedRows: undefined,
   };
 
@@ -82,14 +83,23 @@ export async function runAst(
   const seenByTable: Set<string> = new Set();
   for (const rowChange of hydrate(pipeline, hashOfAST(ast), tableSpecs)) {
     assert(rowChange.type === 'add');
+
+    // yield to other tasks to avoid blocking for too long
+    if (syncedRowCount % 10 === 0) {
+      await Promise.resolve();
+    }
+    if (syncedRowCount % 100 === 0) {
+      await sleep(1);
+    }
+
+    let rows: Row[] = rowsByTable[rowChange.table];
+    const s = rowChange.table + '.' + JSON.stringify(rowChange.row);
+    if (seenByTable.has(s)) {
+      continue; // skip duplicates
+    }
     syncedRowCount++;
+    seenByTable.add(s);
     if (options.syncedRows) {
-      let rows: Row[] = rowsByTable[rowChange.table];
-      const s = rowChange.table + '.' + JSON.stringify(rowChange.row);
-      if (seenByTable.has(s)) {
-        continue; // skip duplicates
-      }
-      seenByTable.add(s);
       if (!rows) {
         rows = [];
         rowsByTable[rowChange.table] = rows;
@@ -104,9 +114,12 @@ export async function runAst(
   }
   result.start = start;
   result.end = end;
+
+  // Always include the count of synced and vended rows.
   result.syncedRowCount = syncedRowCount;
+  result.vendedRowCounts = host.debug?.getVendedRowCounts() ?? {};
+
   if (options.vendedRows) {
-    result.vendedRowCounts = host.debug?.getVendedRowCounts();
     result.vendedRows = host.debug?.getVendedRows();
   }
   return result;

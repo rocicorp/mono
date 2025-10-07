@@ -1,3 +1,5 @@
+// eslint-disable no-explicit-any
+// eslint-disable no-console
 import {test} from '@playwright/test';
 const userCookies = process.env.USER_COOKIES
   ? JSON.parse(process.env.USER_COOKIES)
@@ -73,7 +75,7 @@ test('loadtest', async ({page, browser, context}) => {
     if (await onboardingButton.isVisible()) {
       await onboardingButton.click();
     }
-  } catch (error) {
+  } catch {
     console.log('No onboarding modal present, continuing...');
   }
 

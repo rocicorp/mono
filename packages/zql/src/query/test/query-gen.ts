@@ -73,16 +73,18 @@ function augmentQuery(
     return query;
   }
   generations.push(query);
-  return addLimit(
-    addOrderBy(
-      addWhere(
-        addExists(
-          // If we are in exists, adding `related` makes no sense.
-          inExists ? query : addRelated(query),
-        ),
-      ),
-    ),
-  );
+
+  if (inExists) {
+    // If we are in exists, adding:
+    // - related
+    // - limit
+    // - order by
+    // makes no sense.
+    // TODO: fuzzer does not fuzz start!
+    return addWhere(addExists(query));
+  }
+
+  return addLimit(addOrderBy(addWhere(addExists(addRelated(query)))));
 
   function addLimit(query: AnyQuery) {
     if (rng() < 0.2) {
@@ -271,18 +273,21 @@ function augmentQuery(
       } else {
         const subGenerations: Generation[] = [];
         const origQuery = query;
-        query = query.whereExists(relationshipName, q =>
-          augmentQuery(
-            schema,
-            data,
-            rng,
-            faker,
-            q,
-            serverSchema,
-            subGenerations,
-            depth + 1,
-            true,
-          ),
+        query = query.whereExists(
+          relationshipName,
+          q =>
+            augmentQuery(
+              schema,
+              data,
+              rng,
+              faker,
+              q,
+              serverSchema,
+              subGenerations,
+              depth + 1,
+              true,
+            ),
+          rng() < 0.5 ? {flip: true} : undefined,
         );
         for (const q of subGenerations) {
           generations.push(origQuery.whereExists(relationshipName, _ => q));

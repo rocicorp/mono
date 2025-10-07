@@ -1,47 +1,87 @@
-import {fileURLToPath} from 'url';
-import {dirname, join} from 'path';
 import * as fs from 'fs';
-import {db} from '../db/db.ts';
-import {sql} from 'drizzle-orm';
+import {dirname, join} from 'path';
+import postgres from 'postgres';
+import {pipeline} from 'stream/promises';
+import {fileURLToPath} from 'url';
+import '../../../packages/shared/src/dotenv.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+const TABLES_IN_SEED_ORDER = [
+  'user',
+  'project',
+  'issue',
+  'comment',
+  'label',
+  'issueLabel',
+] as const;
+const TABLE_CSV_FILE_REGEX = `^(${TABLES_IN_SEED_ORDER.join('|')})(_.*)?.csv$`;
+
 async function seed() {
-  const dataDir = join(__dirname, '../db/seed-data/github/');
+  const dataDir =
+    process.env.ZERO_SEED_DATA_DIR ??
+    join(__dirname, '../db/seed-data/github/');
+
+  // eslint-disable-next-line no-console
+  console.log(process.env.ZERO_UPSTREAM_DB);
+
+  const sql = postgres(process.env.ZERO_UPSTREAM_DB as string);
 
   try {
-    if (
-      (await (
-        await db.execute(sql.raw('select 1 from issue limit 1'))
-      ).rowCount) === 1
-    ) {
-      console.log('Database already seeded.');
-    } else {
-      const files = fs
-        .readdirSync(dataDir)
-        .filter(file => file.endsWith('.sql'))
-        // apply in sorted order
-        .sort();
+    const files = fs
+      .readdirSync(dataDir)
+      .filter(f => f.match(TABLE_CSV_FILE_REGEX))
+      // apply in sorted order
+      .sort();
 
-      if (files.length === 0) {
-        console.log('No *.sql files found to seed.');
-        process.exit(0);
-      }
-
-      // Use a single transaction for atomicity
-      await db.transaction(async tx => {
-        for (const file of files) {
-          const filePath = join(dataDir, file);
-          const sqlContent = fs.readFileSync(filePath, 'utf-8');
-          await tx.execute(sql.raw(sqlContent));
-        }
-      });
-
-      console.log('✅ Seeding complete.');
+    if (files.length === 0) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `No ${TABLE_CSV_FILE_REGEX} files found to seed in ${dataDir}.`,
+      );
+      process.exit(0);
     }
+
+    // Use a single transaction for atomicity
+    await sql.begin(async sql => {
+      let checkedIfAlreadySeeded = false;
+      for (const tableName of TABLES_IN_SEED_ORDER) {
+        for (const file of files) {
+          if (
+            !file.startsWith(`${tableName}.`) &&
+            !file.startsWith(`${tableName}_`)
+          ) {
+            continue;
+          }
+          const filePath = join(dataDir, file);
+
+          if (!checkedIfAlreadySeeded) {
+            const result = await sql`select 1 from ${sql(tableName)} limit 1`;
+            if (result.length === 1) {
+              // eslint-disable-next-line no-console
+              console.log('Database already seeded.');
+              return;
+            }
+            checkedIfAlreadySeeded = true;
+          }
+          // eslint-disable-next-line no-console
+          console.log(`Seeding table ${tableName} with rows from ${filePath}.`);
+          const fileStream = fs.createReadStream(filePath, {
+            encoding: 'utf8',
+          });
+          const query =
+            await sql`COPY ${sql(tableName)} FROM STDIN DELIMITER ',' CSV HEADER`.writable();
+          await pipeline(fileStream, query);
+        }
+      }
+    });
+
+    // eslint-disable-next-line no-console
+    console.log('✅ Seeding complete.');
     process.exit(0);
   } catch (err) {
+    // eslint-disable-next-line no-console
     console.error('❌ Seeding failed:', err);
     process.exit(1);
   }

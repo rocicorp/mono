@@ -77,6 +77,7 @@ jobs:
           DOMAIN_NAME: 'zbugs-sync-sandbox.rocicorp.dev'
           DOMAIN_CERT: ${{ vars.SANDBOX_CERTIFICATE_ARN }}
           DATADOG_API_KEY: ${{ secrets.SANDBOX_DATADOG_API_KEY }}
+          ZERO_ADMIN_PASSWORD: ${{ secrets.ZERO_ADMIN_PASSWORD }}
         run: |
           cd prod/sst
           # The permissions.deployer function's package.json is configured to install

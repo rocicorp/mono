@@ -24,17 +24,6 @@ jobs:
           cache: 'npm'
       - uses: bencherdev/bencher@main
 
-      - name: Cache node_modules
-        id: cache
-        uses: actions/cache@v3
-        with:
-          path: |
-            node_modules
-            node_modules/.vite-temp
-          key: npm-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            npm-
-
       - run: npm ci
 
       - run: npm run build
@@ -80,6 +69,31 @@ jobs:
     name: Perf PR
     # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    uses: ./.github/workflows/reusable-benchmark.yml
+    strategy:
+      matrix:
+        package:
+          - name: 'zero-client'
+            directory: 'packages/zero-client'
+            ci_id: 'perf'
+          - name: 'replicache'
+            directory: 'packages/replicache'
+            ci_id: 'replicache-perf'
+    with:
+      package_name: ${{ matrix.package.name }}
+      working_directory: ${{ matrix.package.directory }}
+      ci_id: ${{ matrix.package.ci_id }}
+      is_pr: true
+      base_ref: ${{ github.event.pull_request.base.ref }}
+      head_ref: ${{ github.event.pull_request.head.ref }}
+      base_sha: ${{ github.event.pull_request.base.sha }}
+    secrets:
+      BENCHER_API_TOKEN: ${{ secrets.BENCHER_API_TOKEN }}
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  zql_benchmarks:
+    name: ZQL Benchmarks PR
+    # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
 
     permissions:
       pull-requests: write
@@ -97,25 +111,20 @@ jobs:
 
       - run: npm ci
 
-      - name: Install Playwright
-        run: npx playwright install --with-deps
-
-      - name: Run benchmarks
-        working-directory: packages/zero-client
-        run: npm run bench -- --browser.name=chromium --outputJson output.json
+      - name: Run ZQL benchmarks
+        uses: ./.github/actions/run-zql-benchmarks
 
       - name: Upload PR benchmarks results to bencher.dev
-        working-directory: packages/zero-client
+        working-directory: packages/zql-benchmarks
         run: |
-          cat output.json |\
-          npx tsx ../shared/src/tool/vitest-perf-json-to-bmf.ts |\
+          cat output.json |
           bencher run \
           --project zero \
           --testbed self-hosted \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \
           --github-actions '${{ secrets.GITHUB_TOKEN }}' \
-          --ci-id perf \
+          --ci-id zql \
           --branch "$GITHUB_HEAD_REF" \
           --start-point "$GITHUB_BASE_REF" \
           --start-point-hash '${{ github.event.pull_request.base.sha }}' \

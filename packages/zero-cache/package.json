@@ -10,7 +10,7 @@
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "eslint --ext .ts,.tsx,.js,.jsx src/",
+    "lint": "oxlint --type-aware src/",
     "bench": "vitest bench --run --project zero-cache/no-pg",
     "local": "tsx tool/local.ts",
     "start": "tsx ./src/server/runner/main.ts",
@@ -37,7 +37,7 @@
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.4.0",
     "@rocicorp/resolver": "^1.0.2",
-    "@rocicorp/zero-sqlite3": "^1.0.8",
+    "@rocicorp/zero-sqlite3": "^1.0.9",
     "@types/basic-auth": "^1.1.8",
     "basic-auth": "^2.0.1",
     "chalk": "^5.3.0",
@@ -61,7 +61,6 @@
     "zqlite": "0.0.0"
   },
   "devDependencies": {
-    "@rocicorp/eslint-config": "^0.7.0",
     "@rocicorp/prettier-config": "^0.3.0",
     "@testcontainers/postgresql": "^10.9.0",
     "@types/node": "^20.8.4",
@@ -69,6 +68,7 @@
     "@types/strip-ansi": "^3.0.0",
     "@types/ws": "^8.5.12",
     "@vitest/runner": "3.2.4",
+    "analyze-query": "0.0.0",
     "concurrently": "^8.2.1",
     "nock": "^14.0.4",
     "shared": "0.0.0",
@@ -78,9 +78,6 @@
     "zero-protocol": "0.0.0",
     "zero-schema": "0.0.0",
     "zql": "0.0.0"
-  },
-  "eslintConfig": {
-    "extends": "../../eslint-config.json"
   },
   "prettier": "@rocicorp/prettier-config"
 }

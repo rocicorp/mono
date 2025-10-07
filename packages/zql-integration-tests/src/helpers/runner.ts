@@ -529,7 +529,7 @@ function makeBenchmark<TSchema extends Schema>({
 
 function benchHydration(name: string, q: AnyQuery) {
   bench(name, async () => {
-    await q;
+    await q.run();
   });
 }
 

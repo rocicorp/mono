@@ -49,12 +49,15 @@ async function main() {
     process.exit(-1);
   });
 
-  const {unknown: zeroCacheArgs} = parseOptionsAdvanced(
+  // Parse options for each subprocess to get environment variables
+  const {env: deployPermissionsEnv} = parseOptionsAdvanced(
     deployPermissionsOptions,
-    {envNamePrefix: ZERO_ENV_VAR_PREFIX, allowUnknown: true},
+    {
+      envNamePrefix: ZERO_ENV_VAR_PREFIX,
+      allowUnknown: true,
+    },
   );
-
-  const {unknown: deployPermissionsArgs} = parseOptionsAdvanced(zeroOptions, {
+  const {env: zeroCacheEnv} = parseOptionsAdvanced(zeroOptions, {
     envNamePrefix: ZERO_ENV_VAR_PREFIX,
     allowUnknown: true,
   });
@@ -82,14 +85,11 @@ async function main() {
     permissionsProcess = undefined;
 
     lc.info?.(`Running ${deployPermissionsScript}.`);
-    permissionsProcess = spawn(
-      deployPermissionsScript,
-      deployPermissionsArgs ?? [],
-      {
-        stdio: 'inherit',
-        shell: true,
-      },
-    );
+    permissionsProcess = spawn(deployPermissionsScript, [], {
+      env: {...process.env, ...deployPermissionsEnv},
+      stdio: 'inherit',
+      shell: true,
+    });
 
     const {promise: code, resolve} = resolver<number>();
     permissionsProcess.on('exit', resolve);
@@ -124,8 +124,9 @@ async function main() {
 
         // But let the developer override any of these dev defaults.
         ...process.env,
+        ...zeroCacheEnv,
       };
-      zeroCacheProcess = spawn(zeroCacheScript, zeroCacheArgs || [], {
+      zeroCacheProcess = spawn(zeroCacheScript, [], {
         env,
         stdio: 'inherit',
         shell: true,

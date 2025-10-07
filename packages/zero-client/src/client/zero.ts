@@ -128,7 +128,7 @@ import {
   appendPath,
   toWSString,
 } from './http-string.ts';
-import type {Inspector} from './inspector/types.ts';
+import {Inspector} from './inspector/inspector.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {type LogOptions, createLogOptions} from './log-options.ts';
 import {
@@ -240,10 +240,7 @@ function convertOnUpdateNeededReason(
   return {type: reason.type};
 }
 
-function updateNeededReloadReasonMessage(
-  reason: UpdateNeededReason,
-  serverErrMsg?: string | undefined,
-) {
+function updateNeededReloadReasonMessage(reason: UpdateNeededReason) {
   const {type} = reason;
   let reasonMsg = '';
   switch (type) {
@@ -261,8 +258,8 @@ function updateNeededReloadReasonMessage(
     default:
       unreachable(type);
   }
-  if (serverErrMsg) {
-    reasonMsg += ' ' + serverErrMsg;
+  if (reason.message) {
+    reasonMsg += ' ' + reason.message;
   }
   return reasonMsg;
 }
@@ -307,7 +304,6 @@ export class Zero<
   readonly #lc: ZeroLogContext;
   readonly #logOptions: LogOptions;
   readonly #enableAnalytics: boolean;
-  readonly #schema: S;
   readonly #clientSchema: ClientSchema;
 
   readonly #pokeHandler: PokeHandler;
@@ -343,10 +339,7 @@ export class Zero<
 
   readonly #onlineManager: OnlineManager;
 
-  readonly #onUpdateNeeded: (
-    reason: UpdateNeededReason,
-    serverErrorMsg?: string,
-  ) => void;
+  readonly #onUpdateNeeded: (reason: UpdateNeededReason) => void;
   readonly #onClientStateNotFound: (reason?: string) => void;
   // Last cookie used to initiate a connection
   #connectCookie: NullableVersion = null;
@@ -389,6 +382,7 @@ export class Zero<
   // We use an accessor pair to allow the subclass to override the setter.
   #connectionState: ConnectionState = ConnectionState.Disconnected;
   readonly #activeClientsManager: Promise<ActiveClientsManager>;
+  #inspector: Inspector | undefined;
 
   #setConnectionState(state: ConnectionState) {
     if (state === this.#connectionState) {
@@ -560,7 +554,6 @@ export class Zero<
 
     this.storageKey = storageKey ?? '';
 
-    this.#schema = schema;
     const {clientSchema, hash} = clientSchemaFrom(schema);
     this.#clientSchema = clientSchema;
 
@@ -606,9 +599,7 @@ export class Zero<
       (ast, ttl) => {
         if (enableLegacyQueries) {
           this.#queryManager.updateLegacy(ast, ttl);
-          return;
         }
-        this.#queryManager.updateLegacy(ast, ttl);
       },
       (customQueryID, ttl) =>
         this.#queryManager.updateCustom(customQueryID, ttl),
@@ -657,10 +648,7 @@ export class Zero<
         ]),
     );
 
-    const onUpdateNeededCallback = (
-      reason: UpdateNeededReason,
-      serverErrorMsg?: string | undefined,
-    ) => {
+    const onUpdateNeededCallback = (reason: UpdateNeededReason) => {
       if (onUpdateNeeded) {
         onUpdateNeeded(reason);
       } else {
@@ -668,7 +656,7 @@ export class Zero<
           this.#lc,
           this.#reload,
           reason.type,
-          updateNeededReloadReasonMessage(reason, serverErrorMsg),
+          updateNeededReloadReasonMessage(reason),
         );
       }
     };
@@ -1137,6 +1125,7 @@ export class Zero<
 
     lc.info?.(`${kind}: ${message}}`);
     const error = new ServerError(downMessage[1]);
+    lc.error?.(`${error.kind}:\n\n${error.errorBody.message}`, error);
 
     this.#rejectMessageError?.reject(error);
     lc.debug?.('Rejecting connect resolver due to error', error);
@@ -1144,10 +1133,13 @@ export class Zero<
     this.#disconnect(lc, {server: kind});
 
     if (kind === ErrorKind.VersionNotSupported) {
-      this.#onUpdateNeeded?.({type: kind}, message);
+      this.#onUpdateNeeded({type: kind, message});
     } else if (kind === ErrorKind.SchemaVersionNotSupported) {
       await this.#rep.disableClientGroup();
-      this.#onUpdateNeeded?.({type: 'SchemaVersionNotSupported'}, message);
+      this.#onUpdateNeeded({
+        type: 'SchemaVersionNotSupported',
+        message,
+      });
     } else if (kind === ErrorKind.ClientNotFound) {
       await this.#rep.disableClientGroup();
       this.#onClientStateNotFound?.(onClientStateNotFoundServerReason(message));
@@ -1349,9 +1341,9 @@ export class Zero<
       lc,
       this.#options.mutateURL,
       this.#options.getQueriesURL,
-      this.#options.maxHeaderLength,
       additionalConnectParams,
       await this.#activeClientsManager,
+      this.#options.maxHeaderLength,
     );
 
     if (this.closed) {
@@ -2011,27 +2003,24 @@ export class Zero<
   }
 
   /**
-   * `inspect` returns an object that can be used to inspect the state of the
+   * `inspector` is an object that can be used to inspect the state of the
    * queries a Zero instance uses. It is intended for debugging purposes.
    */
-  async inspect(): Promise<Inspector> {
+  get inspector(): Inspector {
     // We use esbuild dropLabels to strip this code when we build the code for the bundle size dashboard.
     // https://esbuild.github.io/api/#ignore-annotations
     // /packages/zero/tool/build.ts
 
     // eslint-disable-next-line no-unused-labels
     BUNDLE_SIZE: {
-      const m = await import('./inspector/inspector.ts');
-      // Wait for the web socket to be available
-      return m.newInspector(
+      return (this.#inspector ??= new Inspector(
         this.#rep,
         this.#queryManager,
-        this.#schema,
         async () => {
           await this.#connectResolver.promise;
           return this.#socket!;
         },
-      );
+      ));
     }
   }
 
@@ -2082,9 +2071,9 @@ export async function createSocket(
   lc: ZeroLogContext,
   userPushURL: string | undefined,
   userQueryURL: string | undefined,
-  maxHeaderLength = 1024 * 8,
   additionalConnectParams: Record<string, string> | undefined,
   activeClientsManager: Pick<ActiveClientsManager, 'activeClients'>,
+  maxHeaderLength = 1024 * 8,
 ): Promise<
   [
     WebSocket,

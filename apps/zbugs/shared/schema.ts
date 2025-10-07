@@ -23,6 +23,14 @@ const user = table('user')
   })
   .primaryKey('id');
 
+const project = table('project')
+  .columns({
+    id: string(),
+    name: string(),
+    lowerCaseName: string(),
+  })
+  .primaryKey('id');
+
 const issue = table('issue')
   .columns({
     id: string(),
@@ -31,6 +39,7 @@ const issue = table('issue')
     open: boolean(),
     modified: number(),
     created: number(),
+    projectID: string(),
     creatorID: string(),
     assigneeID: string().optional(),
     description: string(),
@@ -60,6 +69,7 @@ const label = table('label')
   .columns({
     id: string(),
     name: string(),
+    projectID: string(),
   })
   .primaryKey('id');
 
@@ -67,6 +77,7 @@ const issueLabel = table('issueLabel')
   .columns({
     issueID: string(),
     labelID: string(),
+    projectID: string(),
   })
   .primaryKey('issueID', 'labelID');
 
@@ -112,7 +123,25 @@ const userRelationships = relationships(user, ({many}) => ({
   }),
 }));
 
+const projectRelationships = relationships(project, ({many}) => ({
+  issues: many({
+    sourceField: ['id'],
+    destField: ['projectID'],
+    destSchema: issue,
+  }),
+  labels: many({
+    sourceField: ['id'],
+    destField: ['projectID'],
+    destSchema: label,
+  }),
+}));
+
 const issueRelationships = relationships(issue, ({many, one}) => ({
+  project: one({
+    sourceField: ['projectID'],
+    destField: ['id'],
+    destSchema: project,
+  }),
   labels: many(
     {
       sourceField: ['id'],
@@ -183,6 +212,14 @@ const issueLabelRelationships = relationships(issueLabel, ({one}) => ({
   }),
 }));
 
+const labelRelationships = relationships(label, ({one}) => ({
+  project: one({
+    sourceField: ['projectID'],
+    destField: ['id'],
+    destSchema: project,
+  }),
+}));
+
 const emojiRelationships = relationships(emoji, ({one}) => ({
   creator: one({
     sourceField: ['creatorID'],
@@ -204,6 +241,7 @@ const emojiRelationships = relationships(emoji, ({one}) => ({
 export const schema = createSchema({
   tables: [
     user,
+    project,
     issue,
     comment,
     label,
@@ -215,9 +253,11 @@ export const schema = createSchema({
   ],
   relationships: [
     userRelationships,
+    projectRelationships,
     issueRelationships,
     commentRelationships,
     issueLabelRelationships,
+    labelRelationships,
     emojiRelationships,
   ],
   enableLegacyMutators: false,
@@ -229,8 +269,12 @@ export type Schema = typeof schema;
 export type IssueRow = Row<typeof schema.tables.issue>;
 export type CommentRow = Row<typeof schema.tables.comment>;
 export type UserRow = Row<typeof schema.tables.user>;
+export type ProjectRow = Row<typeof schema.tables.project>;
 
 export const builder = createBuilder(schema);
 
 export const permissions: ReturnType<typeof definePermissions> =
   definePermissions<unknown, Schema>(schema, () => ({}));
+
+export const ZERO_PROJECT_ID = 'iCNlS2qEpzYWEes1RTf-D';
+export const ZERO_PROJECT_NAME = 'Zero';
