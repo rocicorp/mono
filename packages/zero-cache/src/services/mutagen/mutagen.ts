@@ -34,6 +34,7 @@ import {throwErrorForClientIfSchemaVersionNotSupported} from '../../types/schema
 import {appSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.ts';
 import type {RefCountedService, Service} from '../service.ts';
+import {MutationAlreadyProcessedError} from './error.ts';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
@@ -476,15 +477,6 @@ async function checkSchemaVersionAndIncrementLastMutationID(
       schemaVersion,
       supportedVersionRange[0],
     );
-  }
-}
-
-export class MutationAlreadyProcessedError extends Error {
-  constructor(clientID: string, received: number, actual: number | bigint) {
-    super(
-      `Ignoring mutation from ${clientID} with ID ${received} as it was already processed. Expected: ${actual}`,
-    );
-    assert(received < actual);
   }
 }
 
