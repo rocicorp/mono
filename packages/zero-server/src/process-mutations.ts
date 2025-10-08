@@ -9,7 +9,7 @@ import {
   type PushResponse,
 } from '../../zero-protocol/src/push.ts';
 import * as v from '../../shared/src/valita.ts';
-import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/mutagen.ts';
+import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
 import {createLogContext} from './logging.ts';
 import type {LogContext, LogLevel} from '@rocicorp/logger';
 import {assert} from '../../shared/src/asserts.ts';
