@@ -1609,7 +1609,7 @@ export class Zero<
     await this.#updateAuthToken(bareLogContext);
 
     let needsReauth = false;
-    let lastAuthErrorTime: number | undefined;
+    let lastReauthAttemptAt: number | undefined;
     let gotError = false;
     let backoffMs = RUN_LOOP_INTERVAL_MS;
     let additionalConnectParams: Record<string, string> | undefined;
@@ -1633,6 +1633,7 @@ export class Zero<
 
             // If we got an auth error we try to get a new auth token before reconnecting.
             if (needsReauth) {
+              lastReauthAttemptAt = Date.now();
               await this.#updateAuthToken(lc, 'invalid-token');
             }
 
@@ -1740,13 +1741,12 @@ export class Zero<
 
         if (isAuthError(ex)) {
           const now = Date.now();
-          const msSinceLastAuthError =
-            lastAuthErrorTime === undefined
+          const msSinceLastReauthAttempt =
+            lastReauthAttemptAt === undefined
               ? Number.POSITIVE_INFINITY
-              : now - lastAuthErrorTime;
-          lastAuthErrorTime = now;
+              : now - lastReauthAttemptAt;
           needsReauth = true;
-          if (msSinceLastAuthError > RUN_LOOP_INTERVAL_MS) {
+          if (msSinceLastReauthAttempt > RUN_LOOP_INTERVAL_MS) {
             // First auth error (or first in a while), try right away without waiting.
             continue;
           }
