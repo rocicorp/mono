@@ -1,12 +1,12 @@
 import {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
+import {stringify, type JSONValue} from '../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../../../zqlite/src/table-source.ts';
 import type {LiteAndZqlSpec, LiteTableSpecWithKeys} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
-import {stringify, type JSONValue} from '../../../../shared/src/bigint-json.ts';
 import {
   normalizedKeyOrder,
   type RowKey,
@@ -419,10 +419,10 @@ class Diff implements SnapshotDiff {
             // Modify the values in place when converting to ZQL rows
             // This is safe since we're the first node in the iterator chain.
             if (prevValue) {
-              prevValue = fromSQLiteTypes(zqlSpec, prevValue);
+              prevValue = fromSQLiteTypes(zqlSpec, prevValue, table);
             }
             if (nextValue) {
-              nextValue = fromSQLiteTypes(zqlSpec, nextValue);
+              nextValue = fromSQLiteTypes(zqlSpec, nextValue, table);
             }
             return {
               value: {table, prevValue, nextValue, rowKey} satisfies Change,

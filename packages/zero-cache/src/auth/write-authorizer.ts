@@ -32,6 +32,10 @@ import {
 import {simplifyCondition} from '../../../zql/src/query/expression.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {StaticQuery, staticQuery} from '../../../zql/src/query/static-query.ts';
+import {
+  DatabaseStorage,
+  type ClientGroupStorage,
+} from '../../../zqlite/src/database-storage.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {compile, sql} from '../../../zqlite/src/internal/sql.ts';
 import {
@@ -42,10 +46,6 @@ import type {LogConfig, ZeroConfig} from '../config/zero-config.ts';
 import {computeZqlSpecs} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../db/specs.ts';
 import {StatementRunner} from '../db/statements.ts';
-import {
-  DatabaseStorage,
-  type ClientGroupStorage,
-} from '../../../zqlite/src/database-storage.ts';
 import {mapLiteDataTypeToZqlSchemaValue} from '../types/lite.ts';
 import {
   getSchema,
@@ -433,7 +433,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     if (ret === undefined) {
       return ret;
     }
-    return fromSQLiteTypes(spec.zqlSpec, ret);
+    return fromSQLiteTypes(spec.zqlSpec, ret, op.tableName);
   }
 
   #requirePreMutationRow(op: UpdateOp | DeleteOp) {
