@@ -92,3 +92,4 @@ WARP.md
 *.db-wal
 
 1gb
+bun.lock

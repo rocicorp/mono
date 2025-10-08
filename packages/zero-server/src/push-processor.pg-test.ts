@@ -12,7 +12,7 @@ import type {MutationResult, PushBody} from '../../zero-protocol/src/push.ts';
 import {customMutatorKey} from '../../zql/src/mutate/custom.ts';
 import {ZQLDatabase} from './zql-database.ts';
 import {zip} from '../../shared/src/arrays.ts';
-import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/mutagen.ts';
+import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
 import {OutOfOrderMutation} from './process-mutations.ts';
 
 let pg: PostgresDB;
