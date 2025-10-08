@@ -139,113 +139,122 @@ test('expose and unexpose', async () => {
   expect(g.__zero).toBeUndefined();
 });
 
-test('onOnlineChange callback', async () => {
-  let onlineCount = 0;
-  let offlineCount = 0;
+describe('onOnlineChange callback', () => {
+  const getNewZero = () => {
+    let onlineCount = 0;
+    let offlineCount = 0;
 
-  const z = zeroForTest({
-    logLevel: 'debug',
-    schema: createSchema({
-      tables: [
-        table('foo')
-          .columns({
-            id: string(),
-            val: string(),
-          })
-          .primaryKey('id'),
-      ],
-    }),
-    onOnlineChange: online => {
-      if (online) {
-        onlineCount++;
-      } else {
-        offlineCount++;
-      }
-    },
-  });
+    return {
+      getOnlineCount: () => onlineCount,
+      getOfflineCount: () => offlineCount,
+      z: zeroForTest({
+        logLevel: 'debug',
+        schema: createSchema({
+          tables: [
+            table('foo')
+              .columns({
+                id: string(),
+                val: string(),
+              })
+              .primaryKey('id'),
+          ],
+        }),
+        onOnlineChange: online => {
+          if (online) {
+            onlineCount++;
+          } else {
+            offlineCount++;
+          }
+        },
+      }),
+    };
+  };
 
-  {
-    // Offline by default.
+  test('is offline by default', async () => {
+    const {z} = getNewZero();
     await vi.advanceTimersByTimeAsync(1);
     expect(z.online).false;
-  }
+  });
 
-  {
-    // First test a disconnect followed by a reconnect. This should not trigger
-    // the onOnlineChange callback.
+  test('does not trigger when reconnecting after close', async () => {
+    const {z, getOnlineCount, getOfflineCount} = getNewZero();
     await z.waitForConnectionState(ConnectionState.Connecting);
     expect(z.online).false;
-    expect(onlineCount).toBe(0);
-    expect(offlineCount).toBe(0);
+    expect(getOnlineCount()).toBe(0);
+    expect(getOfflineCount()).toBe(0);
     await z.triggerConnected();
     await z.waitForConnectionState(ConnectionState.Connected);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).toBe(1);
-    expect(offlineCount).toBe(0);
+    expect(getOnlineCount()).toBe(1);
+    expect(getOfflineCount()).toBe(0);
     await z.triggerClose();
     await z.waitForConnectionState(ConnectionState.Disconnected);
     // Still connected because we haven't yet failed to reconnect.
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).toBe(1);
-    expect(offlineCount).toBe(0);
+    expect(getOnlineCount()).toBe(1);
+    expect(getOfflineCount()).toBe(0);
     await z.triggerConnected();
     await z.waitForConnectionState(ConnectionState.Connected);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).toBe(1);
-    expect(offlineCount).toBe(0);
-  }
+    expect(getOnlineCount()).toBe(1);
+    expect(getOfflineCount()).toBe(0);
+  });
 
-  {
-    // Now testing with an error that causes the connection to close. This should
-    // trigger the callback.
-    onlineCount = offlineCount = 0;
+  test('triggers after fatal error and reconnects', async () => {
+    const {z, getOnlineCount, getOfflineCount} = getNewZero();
+    await z.triggerConnected();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(z.online).true;
     await z.triggerError(ErrorKind.InvalidMessage, 'aaa');
     await z.waitForConnectionState(ConnectionState.Disconnected);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).false;
-    expect(onlineCount).toBe(0);
-    expect(offlineCount).toBe(1);
-
+    // we connected once and then disconnected once
+    expect(getOnlineCount()).toBe(1);
+    expect(getOfflineCount()).toBe(1);
     // And followed by a reconnect.
-    expect(z.online).false;
     await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
     await z.triggerConnected();
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).toBe(1);
-    expect(offlineCount).toBe(1);
-  }
+    // we reconnected once more
+    expect(getOnlineCount()).toBe(2);
+    expect(getOfflineCount()).toBe(1);
+  });
 
-  {
-    // Now testing with ServerOverloaded error with a large backoff.
+  test('respects large backoff directives', async () => {
+    const {z, getOnlineCount, getOfflineCount} = getNewZero();
+    await z.triggerConnected();
+    await vi.advanceTimersByTimeAsync(0);
     const BACKOFF_MS = RUN_LOOP_INTERVAL_MS * 10;
-    onlineCount = offlineCount = 0;
     await z.triggerError(ErrorKind.ServerOverloaded, 'slow down', {
       minBackoffMs: BACKOFF_MS,
     });
     await z.waitForConnectionState(ConnectionState.Disconnected);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).false;
-    expect(onlineCount).toBe(0);
-    expect(offlineCount).toBe(1);
-
+    // we connected once and then disconnected once
+    expect(getOnlineCount()).toBe(1);
+    expect(getOfflineCount()).toBe(1);
     // And followed by a reconnect with the longer BACKOFF_MS.
-    expect(z.online).false;
     await tickAFewTimes(vi, BACKOFF_MS);
     await z.triggerConnected();
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).toBe(1);
-    expect(offlineCount).toBe(1);
-  }
+    // we reconnected once more
+    expect(getOnlineCount()).toBe(2);
+    expect(getOfflineCount()).toBe(1);
+  });
 
-  {
-    // Now test a short backoff directive.
+  test('respects short backoff directives with reconnect params', async () => {
+    const {z, getOnlineCount, getOfflineCount} = getNewZero();
+    await z.triggerConnected();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(z.online).true;
     const BACKOFF_MS = 10;
-    onlineCount = offlineCount = 0;
     await z.triggerError(ErrorKind.Rehome, 'rehomed', {
       maxBackoffMs: BACKOFF_MS,
       reconnectParams: {
@@ -256,11 +265,10 @@ test('onOnlineChange callback', async () => {
     await z.waitForConnectionState(ConnectionState.Disconnected);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).false;
-    expect(onlineCount).toBe(0);
-    expect(offlineCount).toBe(1);
-
+    // we connected once and then disconnected once
+    expect(getOnlineCount()).toBe(1);
+    expect(getOfflineCount()).toBe(1);
     // And followed by a reconnect with the longer BACKOFF_MS.
-    expect(z.online).false;
     await tickAFewTimes(vi, BACKOFF_MS);
     await z.triggerConnected();
     const connectMsg = z.testLogSink.messages.findLast(
@@ -272,72 +280,81 @@ test('onOnlineChange callback', async () => {
     );
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).toBe(1);
-    expect(offlineCount).toBe(1);
-  }
+    // we reconnected once more
+    expect(getOnlineCount()).toBe(2);
+    expect(getOfflineCount()).toBe(1);
+  });
 
-  {
-    // Now test with an auth error. This should not trigger the callback on the first error.
-    onlineCount = offlineCount = 0;
+  test('does not trigger offline on first unauthorized error', async () => {
+    const {z, getOnlineCount, getOfflineCount} = getNewZero();
+    await z.triggerConnected();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(z.online).true;
     await z.triggerError(ErrorKind.Unauthorized, 'bbb');
     await z.waitForConnectionState(ConnectionState.Disconnected);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).toBe(0);
-    expect(offlineCount).toBe(0);
-
+    // we connected once
+    expect(getOnlineCount()).toBe(1);
+    // we did not get an offline callback on the first error, as expected
+    expect(getOfflineCount()).toBe(0);
     // And followed by a reconnect.
-    expect(z.online).true;
     await z.triggerConnected();
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).toBe(0);
-    expect(offlineCount).toBe(0);
-  }
+    // online is only called once, since the first auth error
+    // did not trigger an offline callback
+    expect(getOnlineCount()).toBe(1);
+    expect(getOfflineCount()).toBe(0);
+  });
 
-  {
-    // Now test with two auth error. This should trigger the callback on the second error.
-    onlineCount = offlineCount = 0;
+  test('triggers offline on second unauthorized error', async () => {
+    const {z, getOnlineCount, getOfflineCount} = getNewZero();
+    await z.triggerConnected();
+    await vi.advanceTimersByTimeAsync(0);
     await z.triggerError(ErrorKind.Unauthorized, 'ccc');
     await z.waitForConnectionState(ConnectionState.Disconnected);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).toBe(0);
-    expect(offlineCount).toBe(0);
-
+    // we connected once
+    expect(getOnlineCount()).toBe(1);
+    // we did not get an offline callback on the first error, as expected
+    expect(getOfflineCount()).toBe(0);
     await z.waitForConnectionState(ConnectionState.Connecting);
     await z.triggerError(ErrorKind.Unauthorized, 'ddd');
     await z.waitForConnectionState(ConnectionState.Disconnected);
     await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).false;
-    expect(onlineCount).toBe(0);
-    expect(offlineCount).toBe(1);
-
+    expect(getOnlineCount()).toBe(1);
+    // on the second error, we got an offline callback
+    expect(getOfflineCount()).toBe(1);
     // And followed by a reconnect.
     await z.waitForConnectionState(ConnectionState.Connecting);
     await z.triggerConnected();
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).toBe(1);
-    expect(offlineCount).toBe(1);
-  }
+    expect(getOnlineCount()).toBe(2);
+    expect(getOfflineCount()).toBe(1);
+  });
 
-  {
-    // Connection timed out.
-    onlineCount = offlineCount = 0;
+  test('triggers offline when connection times out', async () => {
+    const {z, getOnlineCount, getOfflineCount} = getNewZero();
+    await z.triggerConnected();
     await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS);
     expect(z.online).false;
-    expect(onlineCount).toBe(0);
-    expect(offlineCount).toBe(1);
-    await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS);
+    // we connected once
+    expect(getOnlineCount()).toBe(1);
+    // and we got an offline callback on timeout
+    expect(getOfflineCount()).toBe(1);
     // and back online
+    await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS);
     await z.triggerConnected();
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).true;
-    expect(onlineCount).toBe(1);
-    expect(offlineCount).toBe(1);
-  }
+    expect(getOnlineCount()).toBe(2);
+    expect(getOfflineCount()).toBe(1);
+  });
 });
 
 test('onOnline listener', async () => {
@@ -2075,6 +2092,49 @@ test('Authentication', async () => {
     // Socket is kept as long as we are connected.
     expect(await r.socket).equal(socket);
   }
+});
+
+test('throttles reauth on rapid auth errors', async () => {
+  const authCallTimes: number[] = [];
+  let nextToken = 1;
+  const auth = () => {
+    const now = Date.now();
+    authCallTimes.push(now);
+    return `auth-token-${nextToken++}`;
+  };
+
+  const r = zeroForTest({auth});
+
+  await r.waitForConnectionState(ConnectionState.Connecting);
+  await r.triggerConnected();
+  await r.waitForConnectionState(ConnectionState.Connected);
+
+  await vi.advanceTimersByTimeAsync(0);
+  expect(authCallTimes).length(1);
+  const initialAuthTime = authCallTimes.shift();
+  expect(initialAuthTime).equal(startTime);
+
+  await r.triggerError(ErrorKind.Unauthorized, 'first auth error');
+  await r.waitForConnectionState(ConnectionState.Disconnected);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(authCallTimes).length(1);
+  expect(authCallTimes[0]).equal(startTime);
+
+  await r.waitForConnectionState(ConnectionState.Connecting);
+  await r.triggerConnected();
+  await r.waitForConnectionState(ConnectionState.Connected);
+
+  await r.triggerError(ErrorKind.Unauthorized, 'second auth error');
+  await r.waitForConnectionState(ConnectionState.Disconnected);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(authCallTimes).length(1);
+
+  await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS - 1);
+  expect(authCallTimes).length(1);
+
+  await vi.advanceTimersByTimeAsync(1);
+  expect(authCallTimes).length(2);
+  expect(authCallTimes[1]).equal(startTime + RUN_LOOP_INTERVAL_MS);
 });
 
 test(ErrorKind.AuthInvalidated, async () => {
