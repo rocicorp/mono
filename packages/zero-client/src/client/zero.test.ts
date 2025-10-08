@@ -2077,6 +2077,49 @@ test('Authentication', async () => {
   }
 });
 
+test('throttles reauth on rapid auth errors', async () => {
+  const authCallTimes: number[] = [];
+  let nextToken = 1;
+  const auth = vi.fn(() => {
+    const now = Date.now();
+    authCallTimes.push(now);
+    return `auth-token-${nextToken++}`;
+  });
+
+  const r = zeroForTest({auth});
+
+  await r.waitForConnectionState(ConnectionState.Connecting);
+  await r.triggerConnected();
+  await r.waitForConnectionState(ConnectionState.Connected);
+
+  await vi.advanceTimersByTimeAsync(0);
+  expect(authCallTimes).length(1);
+  const initialAuthTime = authCallTimes.shift();
+  expect(initialAuthTime).equal(startTime);
+
+  await r.triggerError(ErrorKind.Unauthorized, 'first auth error');
+  await r.waitForConnectionState(ConnectionState.Disconnected);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(authCallTimes).length(1);
+  expect(authCallTimes[0]).equal(startTime);
+
+  await r.waitForConnectionState(ConnectionState.Connecting);
+  await r.triggerConnected();
+  await r.waitForConnectionState(ConnectionState.Connected);
+
+  await r.triggerError(ErrorKind.Unauthorized, 'second auth error');
+  await r.waitForConnectionState(ConnectionState.Disconnected);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(authCallTimes).length(1);
+
+  await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS - 1);
+  expect(authCallTimes).length(1);
+
+  await vi.advanceTimersByTimeAsync(1);
+  expect(authCallTimes).length(2);
+  expect(authCallTimes[1]).equal(startTime + RUN_LOOP_INTERVAL_MS);
+});
+
 test(ErrorKind.AuthInvalidated, async () => {
   // In steady state we can get an AuthInvalidated error if the tokens expire on the server.
   // At this point we should disconnect and reconnect with a new auth token.
