@@ -1750,7 +1750,6 @@ export class Zero<
             // First auth error (or first in a while), try right away without waiting.
             continue;
           }
-          gotError = true;
         }
 
         if (
