@@ -47,8 +47,9 @@ export async function runAst(
     start: 0,
     end: 0,
     afterPermissions: undefined,
-    vendedRowCounts: {},
-    vendedRows: undefined,
+    readRows: undefined,
+    readRowCountsByQuery: {},
+    readRowCount: undefined,
   };
 
   if (!isTransformed) {
@@ -117,10 +118,17 @@ export async function runAst(
 
   // Always include the count of synced and vended rows.
   result.syncedRowCount = syncedRowCount;
-  result.vendedRowCounts = host.debug?.getVendedRowCounts() ?? {};
+  result.readRowCountsByQuery = host.debug?.getVendedRowCounts() ?? {};
+  let readRowCount = 0;
+  for (const c of Object.values(result.readRowCountsByQuery)) {
+    for (const v of Object.values(c)) {
+      readRowCount += v;
+    }
+  }
+  result.readRowCount = readRowCount;
 
   if (options.vendedRows) {
-    result.vendedRows = host.debug?.getVendedRows();
+    result.readRows = host.debug?.getVendedRows();
   }
   return result;
 }

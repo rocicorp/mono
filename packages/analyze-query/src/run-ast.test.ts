@@ -84,15 +84,16 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
     {
       "afterPermissions": undefined,
       "end": 1011,
-      "start": 1010,
-      "syncedRowCount": 0,
-      "syncedRows": undefined,
-      "vendedRowCounts": {
+      "readRowCount": 2,
+      "readRowCountsByQuery": {
         "users": {
           "SELECT * FROM users": 2,
         },
       },
-      "vendedRows": undefined,
+      "readRows": undefined,
+      "start": 1010,
+      "syncedRowCount": 0,
+      "syncedRows": undefined,
       "warnings": [],
     }
   `);
@@ -110,15 +111,13 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
     {
       "afterPermissions": undefined,
       "end": 1021,
-      "start": 1020,
-      "syncedRowCount": 0,
-      "syncedRows": undefined,
-      "vendedRowCounts": {
+      "readRowCount": 2,
+      "readRowCountsByQuery": {
         "users": {
           "SELECT * FROM users": 2,
         },
       },
-      "vendedRows": {
+      "readRows": {
         "users": {
           "SELECT * FROM users": [
             {
@@ -132,6 +131,9 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
           ],
         },
       },
+      "start": 1020,
+      "syncedRowCount": 0,
+      "syncedRows": undefined,
       "warnings": [],
     }
   `);
@@ -149,15 +151,16 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
     {
       "afterPermissions": undefined,
       "end": 1031,
-      "start": 1030,
-      "syncedRowCount": 0,
-      "syncedRows": undefined,
-      "vendedRowCounts": {
+      "readRowCount": 2,
+      "readRowCountsByQuery": {
         "users": {
           "SELECT * FROM users": 2,
         },
       },
-      "vendedRows": undefined,
+      "readRows": undefined,
+      "start": 1030,
+      "syncedRowCount": 0,
+      "syncedRows": undefined,
       "warnings": [],
     }
   `);
@@ -185,11 +188,12 @@ test('runAst returns empty object for vendedRowCounts when no debug tracking', a
     {
       "afterPermissions": undefined,
       "end": 1011,
+      "readRowCount": 0,
+      "readRowCountsByQuery": {},
+      "readRows": undefined,
       "start": 1010,
       "syncedRowCount": 0,
       "syncedRows": undefined,
-      "vendedRowCounts": {},
-      "vendedRows": undefined,
       "warnings": [],
     }
   `);
@@ -217,15 +221,16 @@ test('runAst basic structure and functionality', async () => {
     {
       "afterPermissions": undefined,
       "end": 1011,
-      "start": 1010,
-      "syncedRowCount": 0,
-      "syncedRows": undefined,
-      "vendedRowCounts": {
+      "readRowCount": 2,
+      "readRowCountsByQuery": {
         "users": {
           "SELECT * FROM users": 2,
         },
       },
-      "vendedRows": undefined,
+      "readRows": undefined,
+      "start": 1010,
+      "syncedRowCount": 0,
+      "syncedRows": undefined,
       "warnings": [],
     }
   `);

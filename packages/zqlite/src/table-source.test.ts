@@ -1,4 +1,5 @@
 import {describe, expect, test} from 'vitest';
+import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import type {Ordering} from '../../zero-protocol/src/ast.ts';
@@ -11,10 +12,10 @@ import {Database} from './db.ts';
 import {format} from './internal/sql.ts';
 import {
   filtersToSQL,
+  fromSQLiteTypes,
   TableSource,
   UnsupportedValueError,
 } from './table-source.ts';
-import {testLogConfig} from '../../otel/src/test-log-config.ts';
 
 const columns = {
   id: {type: 'string'},
@@ -939,3 +940,118 @@ describe('optional filters to sql', () => {
 });
 
 // TODO: Add constraint test with compound keys
+
+describe('fromSQLiteTypes error messages', () => {
+  test('invalid column error includes table name', () => {
+    const valueTypes = {
+      id: {type: 'string'},
+      name: {type: 'string'},
+    } as const;
+
+    const row = {
+      id: '123',
+      name: 'test',
+      invalidColumn: 'oops',
+    };
+
+    expect(() => fromSQLiteTypes(valueTypes, row, 'users')).toThrow(
+      'Invalid column "invalidColumn" for table "users". Synced columns include id, name',
+    );
+  });
+
+  test('bigint out of range error includes table name and column', () => {
+    const db = new Database(createSilentLogContext(), ':memory:');
+    db.exec(
+      /* sql */ `CREATE TABLE test_table (id TEXT PRIMARY KEY, big_value INTEGER);`,
+    );
+    db.exec(
+      /* sql */ `INSERT INTO test_table (id, big_value) VALUES ('1', ${
+        BigInt(Number.MAX_SAFE_INTEGER) + 1n
+      });`,
+    );
+
+    const source = new TableSource(
+      lc,
+      testLogConfig,
+      db,
+      'test_table',
+      {
+        id: {type: 'string'},
+        big_value: {type: 'number'},
+      },
+      ['id'],
+    );
+    const input = source.connect([['id', 'asc']]);
+
+    expect(() => [...input.fetch({})]).toThrow(
+      /value .* \(in test_table\.big_value\) is outside of supported bounds/,
+    );
+  });
+
+  test('invalid JSON error includes table name and column', () => {
+    const db = new Database(createSilentLogContext(), ':memory:');
+    db.exec(
+      /* sql */ `CREATE TABLE test_table (id TEXT PRIMARY KEY, json_data TEXT);`,
+    );
+    db.exec(
+      /* sql */ `INSERT INTO test_table (id, json_data) VALUES ('1', 'invalid json {');`,
+    );
+
+    const source = new TableSource(
+      lc,
+      testLogConfig,
+      db,
+      'test_table',
+      {
+        id: {type: 'string'},
+        json_data: {type: 'json'},
+      },
+      ['id'],
+    );
+    const input = source.connect([['id', 'asc']]);
+
+    expect(() => [...input.fetch({})]).toThrow(
+      /Failed to parse JSON for test_table\.json_data/,
+    );
+  });
+
+  test('error cause is preserved for JSON parse errors', () => {
+    const db = new Database(createSilentLogContext(), ':memory:');
+    db.exec(
+      /* sql */ `CREATE TABLE test_table (id TEXT PRIMARY KEY, json_data TEXT);`,
+    );
+    db.exec(
+      /* sql */ `INSERT INTO test_table (id, json_data) VALUES ('1', 'not valid json');`,
+    );
+
+    const source = new TableSource(
+      lc,
+      testLogConfig,
+      db,
+      'test_table',
+      {
+        id: {type: 'string'},
+        json_data: {type: 'json'},
+      },
+      ['id'],
+    );
+    const input = source.connect([['id', 'asc']]);
+
+    let caughtError: unknown;
+    try {
+      for (const _ of input.fetch({})) {
+        // Consume the iterator to trigger the error
+      }
+    } catch (error) {
+      caughtError = error;
+    }
+
+    expect(caughtError).toBeInstanceOf(UnsupportedValueError);
+    expect((caughtError as Error).message).toMatchInlineSnapshot(
+      `"Failed to parse JSON for test_table.json_data: Unexpected token 'o', "not valid json" is not valid JSON"`,
+    );
+    expect((caughtError as Error).cause).toMatchInlineSnapshot(
+      `[SyntaxError: Unexpected token 'o', "not valid json" is not valid JSON]`,
+    );
+  });
+});
