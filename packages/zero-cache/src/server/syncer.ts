@@ -5,14 +5,15 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
+import {DatabaseStorage} from '../../../zqlite/src/database-storage.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
+import {CustomQueryTransformer} from '../custom-queries/transform-query.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {initEventSink} from '../observability/events.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {MutagenService} from '../services/mutagen/mutagen.ts';
 import {PusherService} from '../services/mutagen/pusher.ts';
 import type {ReplicaState} from '../services/replicator/replicator.ts';
-import {DatabaseStorage} from '../../../zqlite/src/database-storage.ts';
 import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
 import {PipelineDriver} from '../services/view-syncer/pipeline-driver.ts';
 import {Snapshotter} from '../services/view-syncer/snapshotter.ts';
@@ -90,7 +91,19 @@ export default function runWorker(
       .withContext('clientGroupID', id)
       .withContext('instance', randomID());
     lc.debug?.(`creating view syncer`);
-    const inspectorDelegate = new InspectorDelegate();
+
+    // Create the custom query transformer if configured
+    const {getQueries} = config;
+    const customQueryTransformer =
+      getQueries.url &&
+      new CustomQueryTransformer(
+        logger,
+        {url: getQueries.url, forwardCookies: getQueries.forwardCookies},
+        shard,
+      );
+
+    const inspectorDelegate = new InspectorDelegate(customQueryTransformer);
+
     return new ViewSyncerService(
       config,
       logger,
@@ -112,6 +125,7 @@ export default function runWorker(
       drainCoordinator,
       config.log.slowHydrateThreshold,
       inspectorDelegate,
+      customQueryTransformer,
     );
   };
 

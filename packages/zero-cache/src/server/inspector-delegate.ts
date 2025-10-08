@@ -1,14 +1,20 @@
+import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {mapValues} from '../../../shared/src/objects.ts';
 import {TDigest} from '../../../shared/src/tdigest.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ServerMetrics as ServerMetricsJSON} from '../../../zero-protocol/src/inspect-down.ts';
+import {hashOfNameAndArgs} from '../../../zero-protocol/src/query-hash.ts';
 import {
   isServerMetric,
   type MetricMap,
   type MetricsDelegate,
 } from '../../../zql/src/query/metrics-delegate.ts';
 import {isDevelopmentMode} from '../config/normalize.ts';
+import type {CustomQueryTransformer} from '../custom-queries/transform-query.ts';
+import type {HeaderOptions} from '../custom/fetch.ts';
+import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
 
 /**
  * Server-side metrics collected for queries during materialization and update.
@@ -33,6 +39,11 @@ export class InspectorDelegate implements MetricsDelegate {
   readonly #hashToIDs = new Map<string, Set<string>>();
   readonly #queryIDToTransformationHash = new Map<string, string>();
   readonly #transformationASTs: Map<string, AST> = new Map();
+  readonly #customQueryTransformer: CustomQueryTransformer | undefined;
+
+  constructor(customQueryTransformer: CustomQueryTransformer | undefined) {
+    this.#customQueryTransformer = customQueryTransformer;
+  }
 
   addMetric<K extends keyof MetricMap>(
     metric: K,
@@ -109,6 +120,64 @@ export class InspectorDelegate implements MetricsDelegate {
 
   clearAuthenticated(clientGroupID: ClientGroupID) {
     authenticatedClientGroupIDs.delete(clientGroupID);
+  }
+
+  /**
+   * Transforms a single custom query by name and args using the configured
+   * CustomQueryTransformer. This is primarily used by the inspector to transform
+   * queries for analysis.
+   *
+   * @returns The transformed AST, or undefined if transformation fails or no transformer is configured
+   */
+  async transformCustomQuery(
+    lc: LogContext,
+    name: string,
+    args: readonly ReadonlyJSONValue[],
+    headerOptions: HeaderOptions,
+    userQueryURL: string | undefined,
+  ): Promise<AST | undefined> {
+    assert(
+      this.#customQueryTransformer,
+      'Custom query transformation requested but no CustomQueryTransformer is configured',
+    );
+
+    // Create a fake CustomQueryRecord for the single query
+    const queryID = hashOfNameAndArgs(name, args);
+    const queries: CustomQueryRecord[] = [
+      {
+        id: queryID,
+        type: 'custom',
+        name,
+        args,
+        clientState: {},
+      },
+    ];
+
+    try {
+      const results = await this.#customQueryTransformer.transform(
+        headerOptions,
+        queries,
+        userQueryURL,
+      );
+
+      const result = results[0];
+      if (!result) {
+        lc.error?.('No transformation result returned');
+        return undefined;
+      }
+
+      if ('error' in result) {
+        lc.error?.(
+          `Error transforming custom query ${name}: ${result.error} ${result.details}`,
+        );
+        return undefined;
+      }
+
+      return result.transformedAst;
+    } catch (e) {
+      lc.error?.('Failed to transform custom query', e);
+      return undefined;
+    }
   }
 }
 
