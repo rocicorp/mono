@@ -21,14 +21,9 @@ export const analyzeQueryResultSchema = v.object({
   start: v.number(),
   end: v.number(),
   afterPermissions: v.string().optional(),
-  /** @deprecated Use readRowCountsByQuery */
   vendedRowCounts: rowCountsBySourceSchema.optional(),
-  /** @deprecated Use readRows */
   vendedRows: rowsBySourceSchema.optional(),
   plans: v.record(v.array(v.string())).optional(),
-  readRows: rowsBySourceSchema.optional(),
-  readRowCountsByQuery: rowCountsBySourceSchema.optional(),
-  readRowCount: v.number().optional(),
 });
 
 export type AnalyzeQueryResult = v.Infer<typeof analyzeQueryResultSchema>;
