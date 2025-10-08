@@ -25,7 +25,7 @@ export type QueryResultDetails = Readonly<
 
 type QueryErrorDetails = {
   type: 'error';
-  refetch: (() => void) | undefined;
+  refetch: () => void;
   error:
     | {
         type: 'app';
