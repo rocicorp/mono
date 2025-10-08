@@ -822,7 +822,19 @@ describe('query analyze', () => {
           {id: '2', title: 'Another Issue'},
         ],
       },
-      vendedRowCounts: {
+      readRows: {
+        issues: {
+          'SELECT * FROM issues': [
+            {id: '1', title: 'Test Issue'},
+            {id: '2', title: 'Another Issue'},
+            {id: '3', title: 'Third Issue'},
+            {id: '4', title: 'Fourth Issue'},
+            {id: '5', title: 'Fifth Issue'},
+          ],
+        },
+      },
+      readRowCount: 5,
+      readRowCountsByQuery: {
         issues: {
           'SELECT * FROM issues': 5,
         },
