@@ -1,20 +1,16 @@
 {
+  "plugins": ["eslint", "typescript", "unicorn"],
   "ignorePatterns": [
     "node_modules",
-    ".eslintrc.cjs",
     "dist",
-    "lib",
-    "env.d.ts",
-    "vite.config.ts",
     "coverage",
     "out",
     "tool",
     "bin",
     "*_generated.ts",
     "src/*/generated/",
-    "web-test-runner.config.js",
     "perf/index.js",
-    "apps/zbugs/public/um.js"
+    "um.js"
   ],
   "rules": {
     // Disable unsafe optional chaining - many legitimate patterns in codebase
