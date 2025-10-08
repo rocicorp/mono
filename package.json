@@ -16,7 +16,7 @@
     "dev": "npx turbo run dev",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "oxlint --type-aware",
+    "lint": "oxlint --type-aware --quiet --ignore-pattern '**/um.js'",
     "format": "npx turbo run format",
     "check-format": "npx turbo run check-format",
     "check-types": "npx turbo run check-types",

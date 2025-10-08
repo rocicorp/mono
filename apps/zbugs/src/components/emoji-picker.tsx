@@ -50,7 +50,7 @@ export const EmojiPicker = memo(({onEmojiChange}: Props) => {
   };
   const onSkinToneChange = (e: SkinToneChangeEvent) => {
     const skinTone = e.detail.skinTone;
-    setUserPref(z, SKIN_TONE_PREF, skinTone + '');
+    void setUserPref(z, SKIN_TONE_PREF, skinTone + '');
   };
 
   // Stop propagation of keypress events to prevent the k/j useKeypress hook to

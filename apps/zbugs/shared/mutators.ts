@@ -1,14 +1,14 @@
-import {schema, ZERO_PROJECT_ID} from './schema.ts';
+import type {Transaction, UpdateValue} from '@rocicorp/zero';
 import {assert} from '../../../packages/shared/src/asserts.ts';
-import type {UpdateValue, Transaction} from '@rocicorp/zero';
 import {
   assertIsCreatorOrAdmin,
-  assertUserCanSeeIssue,
+  assertIsLoggedIn,
   assertUserCanSeeComment,
+  assertUserCanSeeIssue,
   isAdmin,
   type AuthData,
-  assertIsLoggedIn,
 } from './auth.ts';
+import {schema, ZERO_PROJECT_ID} from './schema.ts';
 
 function projectIDWithDefault(projectID: string | undefined): string {
   return projectID ?? ZERO_PROJECT_ID;
@@ -277,9 +277,9 @@ export function createMutators(authData: AuthData | undefined) {
     const creatorID = authData.sub;
 
     if (subjectType === 'issue') {
-      assertUserCanSeeIssue(tx, creatorID, subjectID);
+      await assertUserCanSeeIssue(tx, creatorID, subjectID);
     } else {
-      assertUserCanSeeComment(tx, creatorID, subjectID);
+      await assertUserCanSeeComment(tx, creatorID, subjectID);
     }
 
     await tx.mutate.emoji.insert({
