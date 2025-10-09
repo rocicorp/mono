@@ -1091,7 +1091,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             if (++count % TIME_SLICE_CHECK_SIZE === 0) {
               if (timer.elapsedLap() > TIME_SLICE_MS) {
                 timer.stopLap();
-                await yieldProcess(this.#setTimeout);
+                await yieldProcess();
                 timer.startLap();
               }
             }
@@ -1717,7 +1717,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           if (rows.size % TIME_SLICE_CHECK_SIZE === 0) {
             if (timer.elapsedLap() > TIME_SLICE_MS) {
               timer.stopLap();
-              await yieldProcess(this.#setTimeout);
+              await yieldProcess();
               timer.startLap();
             }
           }
@@ -1873,8 +1873,23 @@ function createHashToIDs(cvr: CVRSnapshot) {
   return hashToIDs;
 }
 
-function yieldProcess(setTimeoutFn: SetTimeout) {
-  return new Promise(resolve => setTimeoutFn(resolve, 0));
+// A global Lock acts as a queue to run a single IVM time slice per iteration
+// of the node event loop, thus bounding I/O delay to the duration of a single
+// time slice.
+//
+// Refresher:
+// https://nodejs.org/en/learn/asynchronous-work/event-loop-timers-and-nexttick#phases-overview
+//
+// Note that recursive use of setImmediate() (i.e. calling setImmediate() from
+// within a setImmediate() callback), results in enqueuing the latter
+// callback in the *next* event loop iteration, as documented in:
+// https://nodejs.org/api/timers.html#setimmediatecallback-args
+//
+// This effectively achieves the desired one-per-event-loop-iteration behavior.
+const timeSliceQueue = new Lock();
+
+function yieldProcess() {
+  return timeSliceQueue.withLock(() => new Promise(setImmediate));
 }
 
 function contentsAndVersion(row: Row) {

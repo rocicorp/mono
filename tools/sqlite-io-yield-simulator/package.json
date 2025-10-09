@@ -1,0 +1,23 @@
+{
+  "name": "sqlite-io-yield-simulator",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "go": "tsx src/main.ts",
+    "check-types": "tsc",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "oxlint --type-aware src/"
+  },
+  "dependencies": {
+    "@rocicorp/lock": "^1.0.4",
+    "@rocicorp/logger": "^5.4.0",
+    "ws": "^8.18.1",
+    "zqlite": "0.0.0"
+  },
+  "devDependencies": {
+    "@rocicorp/prettier-config": "^0.3.0"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}
