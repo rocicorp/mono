@@ -12,9 +12,6 @@ export type ConnectionState =
       name: ConnectionStatus.Connected;
     };
 
-const isSameState = (a: ConnectionState, b: ConnectionState): a is typeof b =>
-  a.name === b.name;
-
 export class ConnectionManager extends Subscribable<ConnectionState> {
   #state: ConnectionState = {
     name: ConnectionStatus.Disconnected,
@@ -24,18 +21,20 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
     return this.#state;
   }
 
-  setState(state: ConnectionState): boolean {
-    if (isSameState(state, this.#state)) {
+  /**
+   * Updates the connection status. Returns true if the status changed.
+   */
+  setStatus(status: ConnectionStatus): boolean {
+    if (status === this.#state.name) {
       return false;
     }
 
-    this.#state = state;
+    this.#state = {name: status};
     this.notify(this.#state);
     return true;
   }
 
-  is(state: ConnectionStatus): boolean {
-    const name = state;
-    return this.#state.name === name;
+  is(status: ConnectionStatus): boolean {
+    return this.#state.name === status;
   }
 }

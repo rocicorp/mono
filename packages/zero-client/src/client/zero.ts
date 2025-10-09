@@ -366,7 +366,7 @@ export class Zero<
   #socket: WebSocket | undefined = undefined;
   #socketResolver = resolver<WebSocket>();
 
-  #connectionStateChangeResolver = resolver<ConnectionState>();
+  #connectionStateChangeResolver = resolver<ConnectionStatus>();
 
   /**
    * This resolver is only used for rejections. It is awaited in the connected
@@ -384,16 +384,16 @@ export class Zero<
   readonly #activeClientsManager: Promise<ActiveClientsManager>;
   #inspector: Inspector | undefined;
 
-  #setConnectionState(state: ConnectionState) {
-    if (!this.#connectionManager.setState(state)) {
+  #setConnectionStatus(status: ConnectionStatus) {
+    if (!this.#connectionManager.setStatus(status)) {
       return;
     }
 
-    this.#connectionStateChangeResolver.resolve(state);
-    this.#connectionStateChangeResolver = resolver<ConnectionState>();
+    this.#connectionStateChangeResolver.resolve(status);
+    this.#connectionStateChangeResolver = resolver<ConnectionStatus>();
 
     if (TESTING) {
-      asTestZero(this)[onSetConnectionStateSymbol]?.(state.name);
+      asTestZero(this)[onSetConnectionStateSymbol]?.(status);
     }
   }
 
@@ -1255,7 +1255,7 @@ export class Zero<
 
     maybeSendDeletedClients();
 
-    this.#setConnectionState({name: ConnectionStatus.Connected});
+    this.#setConnectionStatus(ConnectionStatus.Connected);
     this.#connectResolver.resolve();
   }
 
@@ -1264,8 +1264,8 @@ export class Zero<
    * request to the server.
    *
    * {@link #connect} will throw an assertion error if the
-   * {@link #connectionManager} state is not {@link ConnectionState.Disconnected}.
-   * Callers MUST check the connection state before calling this method and log
+   * {@link #connectionManager} status is not {@link ConnectionState.Disconnected}.
+   * Callers MUST check the connection status before calling this method and log
    * an error as needed.
    *
    * The function will resolve once the socket is connected. If you need to know
@@ -1288,7 +1288,7 @@ export class Zero<
     lc = addWebSocketIDToLogContext(wsid, lc);
     lc.info?.('Connecting...', {navigatorOnline: navigator?.onLine});
 
-    this.#setConnectionState({name: ConnectionStatus.Connecting});
+    this.#setConnectionStatus(ConnectionStatus.Connecting);
 
     // connect() called but connect start time is defined. This should not
     // happen.
@@ -1437,7 +1437,7 @@ export class Zero<
     this.#socketResolver = resolver();
     lc.debug?.('Creating new connect resolver');
     this.#connectResolver = resolver();
-    this.#setConnectionState({name: ConnectionStatus.Disconnected});
+    this.#setConnectionStatus(ConnectionStatus.Disconnected);
     this.#messageCount = 0;
     this.#connectStart = undefined; // don't reset this._totalToConnectStart
     this.#connectedAt = 0;
