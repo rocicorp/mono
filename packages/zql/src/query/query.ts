@@ -34,7 +34,6 @@ type ArraySelectors<E extends TableSchema> = {
     : never;
 }[keyof E['columns']];
 
-export type QueryReturn<Q> = Q extends Query<any, any, infer R> ? R : never;
 export type QueryTable<Q> = Q extends Query<any, infer T, any> ? T : never;
 export const delegateSymbol = Symbol('delegate');
 
@@ -108,11 +107,23 @@ export type Row<
   ? {
       readonly [K in keyof T['columns']]: SchemaValueToTSType<T['columns'][K]>;
     }
-  : T extends (...args: any) => Query<ZeroSchema, string, infer TReturn>
-    ? TReturn
-    : T extends Query<ZeroSchema, string, infer TReturn>
-      ? TReturn
-      : never;
+  : T extends
+        | Query<ZeroSchema, string, any>
+        | ((...args: any) => Query<ZeroSchema, string, any>)
+    ? QueryRow<T>
+    : never;
+
+export type QueryRow<Q> = Q extends (...args: any) => Query<any, any, infer R>
+  ? R
+  : Q extends Query<any, any, infer R>
+    ? R
+    : never;
+
+export type QueryReturn<Q> = Q extends
+  | Query<ZeroSchema, string, any>
+  | ((...args: any) => Query<ZeroSchema, string, any>)
+  ? HumanReadable<QueryRow<Q>>
+  : never;
 
 /**
  * A hybrid query that runs on both client and server.
