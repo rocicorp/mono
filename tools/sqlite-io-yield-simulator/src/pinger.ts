@@ -21,7 +21,7 @@ const port = parseInt(args[0]);
 lc.debug?.(`Connecting to server at ${port}`);
 const ws = new WebSocket(`ws://localhost:${port}/`);
 
-ws.on('message', data => {
+ws.on('message', (data: Buffer) => {
   const now = Date.now();
   const {ping, pong} = JSON.parse(data.toString()) as {
     ping: number;
@@ -33,5 +33,5 @@ ws.on('message', data => {
 
 ws.on('open', () => {
   lc.debug?.(`Connected to server at ${port}`);
-  pingLoop(ws);
+  return pingLoop(ws);
 });

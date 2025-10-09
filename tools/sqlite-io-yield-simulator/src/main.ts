@@ -9,7 +9,7 @@ const lc = new LogContext('info', {}, consoleLogSink);
 
 const queue = new Lock();
 
-async function yieldProcess() {
+function yieldProcess() {
   // The old yield implementation ends up scheduling time slices
   // for all pipelines in the same iteration of the event loop,
   // potentially starving the I/O and incurring a delay proportional
@@ -69,7 +69,7 @@ const wss = new WebSocketServer({port});
 lc.debug?.(`Running server on port ${port}`);
 wss.on('connection', ws => {
   lc.debug?.(`Received client connection`);
-  ws.on('message', data => {
+  ws.on('message', (data: Buffer) => {
     const {ping} = JSON.parse(data.toString()) as {ping: number};
     const pong = Date.now() - ping;
     ws.send(JSON.stringify({ping, pong}));
