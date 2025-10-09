@@ -1,3 +1,4 @@
+import {assert} from '../../../shared/src/asserts.ts';
 import type {AST, System} from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../ivm/view.ts';
@@ -12,8 +13,12 @@ export function staticQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
+  TContext = NoContext,
 >(schema: TSchema, tableName: TTable): Query<TSchema, TTable, TReturn> {
+  // TODO(arv): How dow this going to work?
+  const delegate = {} as QueryDelegate<TContext>;
   return new StaticQuery<TSchema, TTable, TReturn>(
+    delegate,
     schema,
     tableName,
     {table: tableName},
@@ -32,6 +37,7 @@ export class StaticQuery<
   TContext = NoContext,
 > extends AbstractQuery<TSchema, TTable, TReturn, TContext> {
   constructor(
+    delegate: QueryDelegate<TContext>,
     schema: TSchema,
     tableName: TTable,
     ast: AST,
@@ -41,7 +47,7 @@ export class StaticQuery<
     currentJunction?: string | undefined,
   ) {
     super(
-      undefined,
+      delegate,
       schema,
       tableName,
       ast,
@@ -62,7 +68,7 @@ export class StaticQuery<
     TReturn,
     TContext,
   >(
-    _delegate: QueryDelegate | undefined,
+    delegate: QueryDelegate<TContext>,
     schema: TSchema,
     tableName: TTable,
     ast: AST,
@@ -71,6 +77,7 @@ export class StaticQuery<
     currentJunction: string | undefined,
   ): StaticQuery<TSchema, TTable, TReturn, TContext> {
     return new StaticQuery(
+      delegate,
       schema,
       tableName,
       ast,
@@ -95,4 +102,16 @@ export class StaticQuery<
   } {
     throw new Error('StaticQuery cannot be preloaded');
   }
+}
+
+export function asStaticQuery<
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = NoContext,
+>(
+  q: Query<TSchema, TTable, TReturn, TContext>,
+): StaticQuery<TSchema, TTable, TReturn, TContext> {
+  assert(q instanceof StaticQuery);
+  return q;
 }

@@ -47,6 +47,7 @@ import {
 } from './query-internals.ts';
 import {
   NoContext,
+  type AnyQuery,
   type ExistsOptions,
   type GetFilterType,
   type HumanReadable,
@@ -59,8 +60,6 @@ import {
 import {DEFAULT_PRELOAD_TTL_MS, DEFAULT_TTL_MS, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
-export type AnyQuery = Query<Schema, string, any, any>;
-
 export function materialize<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
@@ -68,15 +67,11 @@ export function materialize<
   TContext,
 >(
   query: Query<TSchema, TTable, TReturn, TContext>,
-  delegate: QueryDelegate,
-  ctx: TContext,
-  factoryOrOptions?:
-    | ViewFactory<TSchema, TTable, TReturn, TContext, unknown>
-    | MaterializeOptions,
-  maybeOptions?: MaterializeOptions,
+  delegate: QueryDelegate<TContext>,
+  factory?: ViewFactory<TSchema, TTable, TReturn, TContext, unknown>,
+  options?: MaterializeOptions,
 ) {
-  const qi = withContext(query, ctx);
-  return materializeImpl(qi, delegate, factoryOrOptions, maybeOptions);
+  return materializeImpl(query, delegate, factory, options);
 }
 
 export function preload<
@@ -86,15 +81,13 @@ export function preload<
   TContext,
 >(
   query: Query<TSchema, TTable, TReturn, TContext>,
-  delegate: QueryDelegate,
-  ctx: TContext,
+  delegate: QueryDelegate<TContext>,
   options?: PreloadOptions,
 ): {
   cleanup: () => void;
   complete: Promise<void>;
 } {
-  const qi = withContext(query, ctx);
-  return preloadImpl(qi, delegate, options);
+  return preloadImpl(query, delegate, options);
 }
 
 export function run<
@@ -104,12 +97,10 @@ export function run<
   TContext,
 >(
   query: Query<TSchema, TTable, TReturn, TContext>,
-  delegate: QueryDelegate,
-  ctx: TContext,
+  delegate: QueryDelegate<TContext>,
   options?: RunOptions,
 ): Promise<HumanReadable<TReturn>> {
-  const qi = withContext(query, ctx);
-  return runImpl(qi, delegate, options);
+  return runImpl(query, delegate, options);
 }
 
 export function newQuery<
@@ -118,7 +109,7 @@ export function newQuery<
   TReturn = PullRow<TTable, TSchema>,
   TContext = NoContext,
 >(
-  delegate: QueryDelegate | undefined,
+  delegate: QueryDelegate<TContext> | undefined,
   schema: TSchema,
   table: TTable,
 ): Query<TSchema, TTable, TReturn, TContext> {
@@ -163,7 +154,7 @@ export abstract class AbstractQuery<
   readonly [queryInternalsTag] = true;
 
   readonly #schema: TSchema;
-  protected readonly _delegate: QueryDelegate | undefined;
+  protected readonly _delegate: QueryDelegate<TContext> | undefined;
   readonly #tableName: TTable;
   readonly _ast: AST;
   readonly format: Format;
@@ -173,7 +164,7 @@ export abstract class AbstractQuery<
   readonly customQueryID: CustomQueryID | undefined;
 
   constructor(
-    delegate: QueryDelegate | undefined,
+    delegate: QueryDelegate<TContext> | undefined,
     schema: TSchema,
     tableName: TTable,
     ast: AST,
@@ -193,7 +184,7 @@ export abstract class AbstractQuery<
   }
 
   // withDelegate(
-  //   delegate: QueryDelegate,
+  //   delegate: QueryDelegate<TContext>,
   // ): Query<TSchema, TTable, TReturn, TContext> {
   //   return this._newQuerySymbol(
   //     delegate,
@@ -249,7 +240,7 @@ export abstract class AbstractQuery<
     TReturn,
     TContext = NoContext,
   >(
-    delegate: QueryDelegate | undefined,
+    delegate: QueryDelegate<TContext> | undefined,
     schema: TSchema,
     table: TTable,
     ast: AST,
@@ -745,31 +736,29 @@ export function materializeImpl<
   TContext,
   T,
 >(
-  query: QueryInternals<TSchema, TTable, TReturn, TContext>,
-  delegate: QueryDelegate,
+  query: Query<TSchema, TTable, TReturn, TContext>,
+  delegate: QueryDelegate<TContext>,
   // ast: AST,
   // format: Format,
   // customQueryID: CustomQueryID | undefined,
   // queryHash: string,
-  factoryOrOptions?:
-    | ViewFactory<TSchema, TTable, TReturn, TContext, T>
-    | MaterializeOptions,
-  maybeOptions?: MaterializeOptions,
+  factory: ViewFactory<
+    TSchema,
+    TTable,
+    TReturn,
+    TContext,
+    T
+  > = arrayViewFactory as any,
+  options?: MaterializeOptions,
 ): T {
-  let factory: ViewFactory<TSchema, TTable, TReturn, TContext, T> | undefined;
-  let ttl: TTL = DEFAULT_TTL_MS;
+  let ttl: TTL = options?.ttl ?? DEFAULT_TTL_MS;
 
-  const ast = query.completedAST;
-  const format = query.format;
-  const customQueryID = query.customQueryID;
-  const queryHash = query.hash();
+  const qi = delegate.withContext(query);
 
-  if (typeof factoryOrOptions === 'function') {
-    factory = factoryOrOptions;
-    ttl = maybeOptions?.ttl ?? DEFAULT_TTL_MS;
-  } else if (factoryOrOptions) {
-    ttl = factoryOrOptions.ttl ?? DEFAULT_TTL_MS;
-  }
+  const ast = qi.completedAST;
+  const format = qi.format;
+  const customQueryID = qi.customQueryID;
+  const queryHash = qi.hash();
 
   const queryID = customQueryID
     ? hashOfNameAndArgs(customQueryID.name, customQueryID.args)
@@ -816,7 +805,7 @@ export function materializeImpl<
 
   const view = delegate.batchViewUpdates(() =>
     (factory ?? arrayViewFactory)(
-      query,
+      qi,
       input,
       format,
       onDestroy,
@@ -843,15 +832,18 @@ export function runImpl<
   TReturn,
   TContext,
 >(
-  query: QueryInternals<TSchema, TTable, TReturn, TContext>,
-  delegate: QueryDelegate,
+  query: Query<TSchema, TTable, TReturn, TContext>,
+  delegate: QueryDelegate<TContext>,
   options?: RunOptions,
 ): Promise<HumanReadable<TReturn>> {
   delegate.assertValidRunOptions(options);
   const v: TypedView<HumanReadable<TReturn>> = materializeImpl(
     query,
     delegate,
-    {ttl: options?.ttl},
+    undefined,
+    {
+      ttl: options?.ttl,
+    },
   );
   if (options?.type === 'complete') {
     return new Promise(resolve => {
@@ -880,16 +872,17 @@ export function preloadImpl<
   TReturn,
   TContext,
 >(
-  query: QueryInternals<TSchema, TTable, TReturn, TContext>,
-  delegate: QueryDelegate,
+  query: Query<TSchema, TTable, TReturn, TContext>,
+  delegate: QueryDelegate<TContext>,
   options?: PreloadOptions,
 ): {
   cleanup: () => void;
   complete: Promise<void>;
 } {
+  const qi = delegate.withContext(query);
   const ttl = options?.ttl ?? DEFAULT_PRELOAD_TTL_MS;
   const {resolve, promise: complete} = resolver<void>();
-  const {customQueryID, completedAST} = query;
+  const {customQueryID, completedAST} = qi;
   if (customQueryID) {
     const cleanup = delegate.addCustomQuery(
       completedAST,
@@ -927,7 +920,7 @@ export class QueryImpl<
   readonly #system: System;
 
   constructor(
-    delegate: QueryDelegate | undefined,
+    delegate: QueryDelegate<TContext> | undefined,
     schema: TSchema,
     tableName: TTable,
     ast: AST = {table: tableName},
@@ -955,7 +948,7 @@ export class QueryImpl<
     TReturn,
     TContext,
   >(
-    delegate: QueryDelegate | undefined,
+    delegate: QueryDelegate<TContext> | undefined,
     schema: TSchema,
     tableName: TTable,
     ast: AST,
@@ -980,12 +973,18 @@ export class QueryImpl<
       | ViewFactory<TSchema, TTable, TReturn, TContext, T>
       | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
-  ): T {
+  ): T | TypedView<HumanReadable<TReturn>> {
     const delegate = must(
       this._delegate,
       'materialize requires a query delegate to be set',
     );
-    return delegate.materialize(this, factoryOrOptions, maybeOptions);
+    if (typeof factoryOrOptions === 'function') {
+      const factory = factoryOrOptions;
+      const options = maybeOptions;
+      return delegate.materialize(this, factory, options);
+    }
+
+    return delegate.materialize(this, undefined, maybeOptions);
   }
 
   run(options?: RunOptions): Promise<HumanReadable<TReturn>> {
@@ -1066,17 +1065,4 @@ function arrayViewFactory<
 
 function isCompoundKey(field: readonly string[]): field is CompoundKey {
   return Array.isArray(field) && field.length >= 1;
-}
-
-function withContext<
-  TSchema extends Schema,
-  TTable extends string,
-  TReturn,
-  TContext,
->(
-  query: Query<TSchema, TTable, TReturn, TContext>,
-  ctx: TContext,
-): QueryInternals<TSchema, TTable, TReturn, TContext> {
-  assert('withContext' in query);
-  return (query as any).withContext(ctx);
 }

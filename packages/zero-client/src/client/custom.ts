@@ -21,7 +21,11 @@ import type {
   UpsertValue,
 } from '../../../zql/src/mutate/custom.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
-import {type Query, type RunOptions} from '../../../zql/src/query/query.ts';
+import {
+  type HumanReadable,
+  type Query,
+  type RunOptions,
+} from '../../../zql/src/query/query.ts';
 import type {ClientID} from '../types/client-state.ts';
 import {ZeroContext} from './context.ts';
 import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
@@ -83,25 +87,28 @@ export type MakeCustomMutatorInterfaces<
       };
 };
 
-export type MakeCustomMutatorInterface<
-  S extends Schema,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  F,
-> = F extends (tx: ClientTransaction<S>, ...args: infer Args) => Promise<void>
+export type MakeCustomMutatorInterface<S extends Schema, F> = F extends (
+  tx: ClientTransaction<S>,
+  ...args: infer Args
+) => Promise<void>
   ? (...args: Args) => MutatorResult
   : never;
 
 export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
+  readonly location = 'client';
+  readonly mutate: SchemaCRUD<S>;
+  readonly query: SchemaQuery<S>;
+  readonly #repTx: WriteTransaction;
+  readonly #zeroContext: ZeroContext;
+
   constructor(lc: ZeroLogContext, repTx: WriteTransaction, schema: S) {
-    const castedRepTx = repTx as WriteTransactionImpl;
     must(repTx.reason === 'initial' || repTx.reason === 'rebase');
-    this.clientID = repTx.clientID;
-    this.mutationID = repTx.mutationID;
-    this.reason = repTx.reason === 'initial' ? 'optimistic' : 'rebase';
     const txData = must(
-      castedRepTx[zeroData],
+      (repTx as WriteTransactionImpl)[zeroData],
       'zero was not set on replicache internal options!',
     );
+
+    this.#repTx = repTx;
     this.mutate = makeSchemaCRUD(
       schema,
       repTx,
@@ -111,17 +118,38 @@ export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
       lc,
       schema,
       txData.ivmSources as IVMSourceBranch,
+      txData.context,
     );
-    this.token = txData.token;
+
+    this.#zeroContext = newZeroContext(
+      lc,
+      txData.ivmSources as IVMSourceBranch,
+      txData.context,
+    );
   }
 
-  readonly clientID: ClientID;
-  readonly mutationID: number;
-  readonly reason: 'optimistic' | 'rebase';
-  readonly location = 'client';
-  readonly mutate: SchemaCRUD<S>;
-  readonly query: SchemaQuery<S>;
-  readonly token: string | undefined;
+  get clientID(): ClientID {
+    return this.#repTx.clientID;
+  }
+
+  get mutationID(): number {
+    return this.#repTx.mutationID;
+  }
+
+  get reason(): 'optimistic' | 'rebase' {
+    return this.#repTx.reason === 'initial' ? 'optimistic' : 'rebase';
+  }
+
+  get token(): string | undefined {
+    return (this.#repTx as WriteTransactionImpl)[zeroData]?.token;
+  }
+
+  run<TTable extends keyof S['tables'] & string, TReturn, TContext>(
+    query: Query<S, TTable, TReturn, TContext>,
+    options?: RunOptions,
+  ): Promise<HumanReadable<TReturn>> {
+    return this.#zeroContext.run(query, options);
+  }
 }
 
 export function makeReplicacheMutator<S extends Schema, TWrappedTransaction>(
@@ -168,23 +196,13 @@ function assertValidRunOptions(options: RunOptions | undefined): void {
   );
 }
 
-function makeSchemaQuery<S extends Schema>(
+function makeSchemaQuery<S extends Schema, TContext>(
   lc: ZeroLogContext,
   schema: S,
   ivmBranch: IVMSourceBranch,
+  context: TContext,
 ) {
-  const context = new ZeroContext(
-    lc,
-    ivmBranch,
-    () => emptyFunction,
-    () => emptyFunction,
-    emptyFunction,
-    emptyFunction,
-    emptyFunction,
-    applyViewUpdates => applyViewUpdates(),
-    emptyFunction,
-    assertValidRunOptions,
-  );
+  const zeroContext = newZeroContext(lc, ivmBranch, context);
 
   return new Proxy(
     {},
@@ -194,11 +212,31 @@ function makeSchemaQuery<S extends Schema>(
           return target[prop];
         }
 
-        target[prop] = newQuery(context, schema, prop);
+        target[prop] = newQuery(zeroContext, schema, prop);
         return target[prop];
       },
     },
   ) as SchemaQuery<S>;
+}
+
+function newZeroContext<TContext>(
+  lc: ZeroLogContext,
+  ivmBranch: IVMSourceBranch,
+  context: TContext,
+) {
+  return new ZeroContext(
+    lc,
+    ivmBranch,
+    context,
+    () => emptyFunction,
+    () => emptyFunction,
+    emptyFunction,
+    emptyFunction,
+    emptyFunction,
+    applyViewUpdates => applyViewUpdates(),
+    emptyFunction,
+    assertValidRunOptions,
+  );
 }
 
 function makeTableCRUD(

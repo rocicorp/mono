@@ -4,8 +4,8 @@ import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts
 import type {ServerSchema} from '../../../../zero-schema/src/server-schema.ts';
 import {getDataForType} from '../../../../zql-integration-tests/src/helpers/data-gen.ts';
 import {NotImplementedError} from '../../error.ts';
-import type {AnyQuery} from '../query-impl.ts';
 import {asQueryInternals} from '../query-internals.ts';
+import type {AnyQuery} from '../query.ts';
 import {staticQuery} from '../static-query.ts';
 import {randomValueForType, selectRandom, shuffle, type Rng} from './util.ts';
 export type Dataset = {
@@ -63,7 +63,7 @@ function augmentQuery(
   generations: Generation[],
   depth = 0,
   inExists = false,
-) {
+): AnyQuery {
   if (depth > maxDepth) {
     return query;
   }

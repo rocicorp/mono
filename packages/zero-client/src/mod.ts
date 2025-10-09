@@ -136,9 +136,9 @@ export type {
   QueryFnReturn,
   SyncedQuery,
 } from '../../zql/src/query/named.ts';
-export type {AnyQuery} from '../../zql/src/query/query-impl.ts';
 export type {QueryInternals} from '../../zql/src/query/query-internals.ts';
 export type {
+  AnyQuery,
   CoreQuery,
   HumanReadable,
   PullRow,

@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {useCallback, useEffect, useState} from 'react';
 import {Panel, PanelGroup, PanelResizeHandle} from 'react-resizable-panels';
+import * as ts from 'typescript';
 import './App.css';
 import {CredentialsModal} from './components/credentials-modal.tsx';
 import {QueryEditor} from './components/query-editor.tsx';
@@ -15,7 +16,6 @@ import {
   type Result,
 } from './types.ts';
 // eslint-disable-next-line no-restricted-imports
-import * as ts from 'typescript';
 import * as zero from '../../../packages/zero-client/src/mod.ts';
 import {mapAST} from '../../../packages/zero-protocol/src/ast.ts';
 import {clientToServer} from '../../../packages/zero-schema/src/name-mapper.ts';
@@ -206,8 +206,8 @@ function App() {
         throw new Error('Failed to capture the query definition');
       }
       const vizDelegate = new VizDelegate(capturedSchema);
-      capturedQuery = capturedQuery.withDelegate(vizDelegate);
-      (await capturedQuery.run()) as any;
+      // capturedQuery = capturedQuery.withDelegate(vizDelegate);
+      (await vizDelegate.run(capturedQuery)) as any;
       const graph = vizDelegate.getGraph();
       const mapper = clientToServer(capturedSchema.tables);
 

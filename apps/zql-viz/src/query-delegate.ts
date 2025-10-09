@@ -1,7 +1,7 @@
-import type {Schema} from '@rocicorp/zero';
-import {MemoryStorage} from '../../../packages/zero/out/zql/src/ivm/memory-storage';
+import type {Schema} from '../../../packages/zero-schema/src/builder/schema-builder.ts';
 import type {FilterInput} from '../../../packages/zql/src/ivm/filter-operators.ts';
 import {MemorySource} from '../../../packages/zql/src/ivm/memory-source.ts';
+import {MemoryStorage} from '../../../packages/zql/src/ivm/memory-storage.ts';
 import type {
   Input,
   InputBase,
@@ -15,16 +15,18 @@ import {
   preloadImpl,
   runImpl,
 } from '../../../packages/zql/src/query/query-impl.ts';
-import type {QueryInternals} from '../../../packages/zql/src/query/query-internals.ts';
+import {asQueryInternals} from '../../../packages/zql/src/query/query-internals.ts';
 import type {
+  AnyQuery,
   HumanReadable,
   MaterializeOptions,
   PreloadOptions,
+  Query,
   RunOptions,
 } from '../../../packages/zql/src/query/query.ts';
 import type {Edge, Graph} from './types.ts';
 
-export class VizDelegate implements QueryDelegate {
+export class VizDelegate implements QueryDelegate<unknown> {
   readonly #sources: Map<string, MemorySource>;
   readonly #schema: Schema;
 
@@ -123,13 +125,11 @@ export class VizDelegate implements QueryDelegate {
     TContext,
     T,
   >(
-    query: QueryInternals<TSchema, TTable, TReturn, TContext>,
-    factoryOrOptions?:
-      | ViewFactory<TSchema, TTable, TReturn, TContext, T>
-      | MaterializeOptions,
-    maybeOptions?: MaterializeOptions,
+    query: Query<TSchema, TTable, TReturn, TContext>,
+    factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
+    options?: MaterializeOptions,
   ): T {
-    return materializeImpl(query, this, factoryOrOptions, maybeOptions);
+    return materializeImpl(query, this, factory, options);
   }
 
   run<
@@ -138,7 +138,7 @@ export class VizDelegate implements QueryDelegate {
     TReturn,
     TContext,
   >(
-    query: QueryInternals<TSchema, TTable, TReturn, TContext>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return runImpl(query, this, options);
@@ -150,13 +150,17 @@ export class VizDelegate implements QueryDelegate {
     TReturn,
     TContext,
   >(
-    query: QueryInternals<TSchema, TTable, TReturn, TContext>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
     options?: PreloadOptions,
   ): {
     cleanup: () => void;
     complete: Promise<void>;
   } {
     return preloadImpl(query, this, options);
+  }
+
+  withContext(query: AnyQuery) {
+    return asQueryInternals(query);
   }
 
   #getNode(input: InputBase, name?: string | undefined) {

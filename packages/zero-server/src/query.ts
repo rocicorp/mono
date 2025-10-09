@@ -106,7 +106,7 @@ export class ZPGQuery<
     TReturn,
     TContext,
   >(
-    _delegate: QueryDelegate | undefined,
+    _delegate: QueryDelegate<TContext> | undefined,
     schema: TSchema,
     tableName: TTable,
     ast: AST,

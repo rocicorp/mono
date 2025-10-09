@@ -173,7 +173,7 @@ export type MakeEntityQueriesFromSchema<S extends Schema> = {
 
 declare const TESTING: boolean;
 
-export type TestingContext = {
+export type TestingContext<TContext> = {
   puller: Puller;
   pusher: Pusher;
   setReload: (r: () => void) => void;
@@ -181,15 +181,15 @@ export type TestingContext = {
   connectStart: () => number | undefined;
   socketResolver: () => Resolver<WebSocket>;
   connectionState: () => ConnectionState;
-  queryDelegate: () => QueryDelegate;
+  queryDelegate: () => QueryDelegate<TContext>;
 };
 
 export const onSetConnectionStateSymbol = Symbol();
 export const exposedToTestingSymbol = Symbol();
 export const createLogOptionsSymbol = Symbol();
 
-interface TestZero {
-  [exposedToTestingSymbol]?: TestingContext;
+interface TestZero<TContext> {
+  [exposedToTestingSymbol]?: TestingContext<TContext>;
   [onSetConnectionStateSymbol]?: (state: ConnectionState) => void;
   [createLogOptionsSymbol]?: (options: {
     consoleLogLevel: LogLevel;
@@ -200,9 +200,9 @@ interface TestZero {
 function asTestZero<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined,
-  C,
->(z: Zero<S, MD, C>): TestZero {
-  return z as TestZero;
+  Context,
+>(z: Zero<S, MD, Context>): TestZero<Context> {
+  return z as TestZero<Context>;
 }
 
 export const RUN_LOOP_INTERVAL_MS = 5_000;
@@ -590,6 +590,7 @@ export class Zero<
     this.#zeroContext = new ZeroContext(
       lc,
       this.#ivmMain,
+      this.#options.context as TContext,
       (ast, ttl, gotCallback) => {
         if (enableLegacyQueries) {
           return this.#queryManager.addLegacy(ast, ttl, gotCallback);
@@ -835,14 +836,14 @@ export class Zero<
     TTable extends keyof S['tables'] & string,
     TReturn extends PullRow<TTable, S>,
   >(query: Query<S, TTable, TReturn, TContext>, options?: PreloadOptions) {
-    return preload(query, this.#zeroContext, this.context, options);
+    return preload(query, this.#zeroContext, options);
   }
 
   run<TTable extends keyof S['tables'] & string, TReturn>(
     query: Query<S, TTable, TReturn, TContext>,
     runOptions?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
-    return run(query, this.#zeroContext, this.context, runOptions);
+    return run(query, this.#zeroContext, runOptions);
   }
 
   get context(): TContext {
@@ -865,13 +866,18 @@ export class Zero<
       | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
-    return materialize(
-      query,
-      this.#zeroContext,
-      this.context,
-      factoryOrOptions,
-      maybeOptions,
-    );
+    let factory;
+    let options;
+
+    if (typeof factoryOrOptions === 'function') {
+      factory = factoryOrOptions;
+      options = maybeOptions;
+    } else {
+      factory = undefined;
+      options = factoryOrOptions;
+    }
+
+    return materialize(query, this.#zeroContext, factory, options);
   }
 
   /**
@@ -2023,6 +2029,7 @@ export class Zero<
       return (this.#inspector ??= new Inspector(
         this.#rep,
         this.#queryManager,
+        this.#zeroContext,
         async () => {
           await this.#connectResolver.promise;
           return this.#socket!;

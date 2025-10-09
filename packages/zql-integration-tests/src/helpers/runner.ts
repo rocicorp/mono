@@ -34,11 +34,7 @@ import type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
 import type {SourceChange} from '../../../zql/src/ivm/source.ts';
 import type {DBTransaction} from '../../../zql/src/mutate/custom.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {
-  ast,
-  defaultFormat,
-  QueryImpl,
-} from '../../../zql/src/query/query-impl.ts';
+import {defaultFormat, QueryImpl} from '../../../zql/src/query/query-impl.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../zql/src/query/test/query-delegate.ts';
 import {Database} from '../../../zqlite/src/db.ts';
@@ -64,8 +60,8 @@ type Delegates = {
     transaction: DBTransaction<unknown>;
     serverSchema: ServerSchema;
   };
-  sqlite: QueryDelegate;
-  memory: QueryDelegate;
+  sqlite: QueryDelegate<unknown>;
+  memory: QueryDelegate<unknown>;
   mapper: NameMapper;
 };
 

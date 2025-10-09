@@ -4,9 +4,10 @@ import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {expect, test} from 'vitest';
 import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../../ast-to-zql/src/format.ts';
-import {ast, type AnyQuery} from '../../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import type {AnyQuery} from '../../../zql/src/query/query.ts';
+import {QueryDelegateImpl} from '../../../zql/src/query/test/query-delegate.ts';
 import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
-import type {AnyStaticQuery} from '../../../zql/src/query/test/util.ts';
 import '../helpers/comparePg.ts';
 import {bootstrap, runAndCompare} from '../helpers/runner.ts';
 import {staticToRunnable} from '../helpers/static.ts';
@@ -40,7 +41,10 @@ if (REPRO_SEED) {
     const {query} = tc;
     console.log(
       'ZQL',
-      await formatOutput(ast(query[0]).table + astToZQL(ast(query[0]))),
+      await formatOutput(
+        asQueryInternals(query[0]).ast.table +
+          astToZQL(asQueryInternals(query[0]).ast),
+      ),
     );
     await runCase(tc);
   });
@@ -54,9 +58,11 @@ function createCase(seed?: number | undefined) {
     locale: en,
     randomizer,
   });
+  const delegate = new QueryDelegateImpl();
   return {
     seed,
     query: generateShrinkableQuery(
+      delegate,
       schema,
       {},
       rng,
@@ -77,7 +83,7 @@ async function runCase({
     await runAndCompare(
       schema,
       staticToRunnable({
-        qi: query[0] as AnyStaticQuery,
+        query: query[0],
         schema,
         harness,
       }),
@@ -105,7 +111,7 @@ async function shrink(generations: AnyQuery[], seed: number) {
       await runAndCompare(
         schema,
         staticToRunnable({
-          qi: generations[mid] as AnyStaticQuery,
+          query: generations[mid],
           schema,
           harness,
         }),

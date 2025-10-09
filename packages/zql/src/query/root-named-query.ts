@@ -6,8 +6,8 @@ import {ChainedQuery} from './chained-query.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {CustomQueryID} from './named.ts';
 import type {AnyChainQuery, Func} from './new/types.ts';
-import type {AnyQuery} from './query-impl.ts';
 import {asQueryInternals} from './query-internals.ts';
+import type {AnyQuery} from './query.ts';
 import {
   type AvailableRelationships,
   type CoreQuery,

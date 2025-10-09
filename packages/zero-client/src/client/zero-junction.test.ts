@@ -51,7 +51,7 @@ test('Zero Junction', async () => {
     schema,
   });
   const q = z.query.event.related('athletes');
-  const view = q.materialize();
+  const view = z.materialize(q);
   const listener = vi.fn();
   view.addListener(listener);
 

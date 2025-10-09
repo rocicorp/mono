@@ -2,8 +2,8 @@ import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {AnyChainQuery} from './new/types.ts';
-import type {AnyQuery} from './query-impl.ts';
 import type {
+  AnyQuery,
   AvailableRelationships,
   CoreQuery,
   DestTableName,

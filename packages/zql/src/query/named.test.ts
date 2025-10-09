@@ -48,7 +48,7 @@ test('syncedQuery', () => {
     args: ['123'],
   });
 
-  expect(q.ast).toEqual({
+  expect(q.completedAST).toEqual({
     table: 'issue',
     where: {
       left: {
@@ -101,7 +101,7 @@ test('syncedQuery', () => {
     args: ['123'],
   });
 
-  expect(vq.ast).toEqual({
+  expect(vq.completedAST).toEqual({
     table: 'issue',
     where: {
       left: {
@@ -158,7 +158,7 @@ test('syncedQueryWithContext', () => {
     args: ['123'],
   });
 
-  expect(q.ast).toEqual({
+  expect(q.completedAST).toEqual({
     table: 'issue',
     where: {
       conditions: [
@@ -228,7 +228,7 @@ test('syncedQueryWithContext', () => {
     args: ['123'],
   });
 
-  expect(vq.ast).toEqual({
+  expect(vq.completedAST).toEqual({
     table: 'issue',
     where: {
       conditions: [

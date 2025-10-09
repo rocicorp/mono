@@ -1,17 +1,17 @@
 import {expect, expectTypeOf, test} from 'vitest';
-import {zeroForTest} from './test-utils.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {DBMutator} from './crud.ts';
+import {zeroForTest} from './test-utils.ts';
 
+import type {ImmutableArray} from '../../../shared/src/immutable.ts';
 import {
   number,
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import {createBuilder} from '../../../zql/src/query/named.ts';
-import type {ImmutableArray} from '../../../shared/src/immutable.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
+import {createBuilder} from '../../../zql/src/query/named.ts';
 
 test('run', async () => {
   const schema = createSchema({
@@ -214,7 +214,7 @@ test('CRUD and custom mutators work together with enableLegacyMutators: true', a
   await z.mutate.issues.insert({id: '1', title: 'Test Issue', status: 'open'});
   await z.mutate.issue.closeIssue({id: '1'});
 
-  const issues = await z.query.issues.where('id', '1').one().run();
+  const issues = await z.run(z.query.issues.where('id', '1').one());
   expect(issues?.status).toBe('closed');
 });
 

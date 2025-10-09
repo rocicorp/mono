@@ -14,6 +14,7 @@ import type {
   RunOptions,
 } from './query.ts';
 import type {TTL} from './ttl.ts';
+import type {TypedView} from './typed-view.ts';
 
 export type CommitListener = () => void;
 export type GotCallback = (
@@ -38,23 +39,38 @@ export interface NewQueryDelegate {
  * Interface for delegates that support materializing, running, and preloading queries.
  * This interface contains the methods needed to execute queries and manage their lifecycle.
  */
-export interface MaterializableQueryDelegate
+export interface QueryDelegate<TContext>
   extends BuilderDelegate,
     MetricsDelegate {
+  withContext<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+  >(
+    query: Query<TSchema, TTable, TReturn, TContext>,
+  ): QueryInternals<TSchema, TTable, TReturn, TContext>;
+
   addServerQuery(
     ast: AST,
     ttl: TTL,
     gotCallback?: GotCallback | undefined,
   ): () => void;
+
   addCustomQuery(
     ast: AST,
     customQueryID: CustomQueryID,
     ttl: TTL,
     gotCallback?: GotCallback | undefined,
   ): () => void;
+
   updateServerQuery(ast: AST, ttl: TTL): void;
+
   updateCustomQuery(customQueryID: CustomQueryID, ttl: TTL): void;
+
+  flushQueryChanges(): void;
+
   onTransactionCommit(cb: CommitListener): () => void;
+
   /**
    * batchViewUpdates is used to allow the view to batch multiple view updates together.
    * Normally, `applyViewUpdates` is called directly but for some cases, SolidJS for example,
@@ -78,6 +94,29 @@ export interface MaterializableQueryDelegate
    */
   readonly defaultQueryComplete: boolean;
 
+  materialize<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+    TContext,
+  >(
+    query: Query<TSchema, TTable, TReturn, TContext>,
+    factory?: undefined,
+    options?: MaterializeOptions,
+  ): TypedView<HumanReadable<TReturn>>;
+
+  materialize<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+    TContext,
+    T,
+  >(
+    query: Query<TSchema, TTable, TReturn, TContext>,
+    factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
+    options?: MaterializeOptions,
+  ): T;
+
   /**
    * Materialize a query into a custom view using a provided factory function.
    */
@@ -88,24 +127,10 @@ export interface MaterializableQueryDelegate
     TContext,
     T,
   >(
-    query: QueryInternals<TSchema, TTable, TReturn, TContext>,
-    factory: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
+    factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
     options?: MaterializeOptions,
   ): T;
-
-  /**
-   * Materialize a query into a view that automatically updates when data changes.
-   * When no factory is provided, returns a TypedView with the query results.
-   */
-  materialize<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-    TContext,
-  >(
-    query: QueryInternals<TSchema, TTable, TReturn, TContext>,
-    options?: MaterializeOptions,
-  ): import('./typed-view.ts').TypedView<HumanReadable<TReturn>>;
 
   /**
    * Run a query and return the results as a Promise.
@@ -116,7 +141,7 @@ export interface MaterializableQueryDelegate
     TReturn,
     TContext,
   >(
-    query: QueryInternals<TSchema, TTable, TReturn, TContext>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>>;
 
@@ -129,7 +154,7 @@ export interface MaterializableQueryDelegate
     TReturn,
     TContext,
   >(
-    query: QueryInternals<TSchema, TTable, TReturn, TContext>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
     options?: PreloadOptions,
   ): {
     cleanup: () => void;
@@ -137,6 +162,13 @@ export interface MaterializableQueryDelegate
   };
 }
 
-export interface QueryDelegate extends MaterializableQueryDelegate {
-  flushQueryChanges(): void;
+export interface WithContext<
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+  TContext,
+> {
+  withContext(
+    ctx: TContext,
+  ): QueryInternals<TSchema, TTable, TReturn, TContext>;
 }

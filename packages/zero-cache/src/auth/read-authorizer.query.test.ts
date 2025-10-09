@@ -43,7 +43,11 @@ import {
   runImpl,
 } from '../../../zql/src/query/query-impl.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
-import {type Query, type Row} from '../../../zql/src/query/query.ts';
+import {
+  type AnyQuery,
+  type Query,
+  type Row,
+} from '../../../zql/src/query/query.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
@@ -457,7 +461,7 @@ const permissions = must(
   }),
 );
 
-let queryDelegate: QueryDelegate;
+let queryDelegate: QueryDelegate<unknown>;
 let replica: Database;
 function toDbType(type: ValueType) {
   switch (type) {
@@ -539,8 +543,13 @@ beforeEach(() => {
     flushQueryChanges() {},
     defaultQueryComplete: true,
     addMetric() {},
-    materialize(query, factoryOrOptions, maybeOptions) {
-      return materializeImpl(query, this, factoryOrOptions, maybeOptions);
+    // oxlint-disable-next-line no-explicit-any
+    materialize(query: AnyQuery, factory?: any, options?: any) {
+      // oxlint-disable-next-line no-explicit-any
+      return materializeImpl(query, this, factory, options) as any;
+    },
+    withContext(q) {
+      return asQueryInternals(q);
     },
     run(query, options) {
       return runImpl(query, this, options);

@@ -1,7 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
 import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
-import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {
+  Schema,
+  Schema as ZeroSchema,
+} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   LastInTuple,
   SchemaValueToTSType,
@@ -588,3 +591,5 @@ export const DEFAULT_RUN_OPTIONS_UNKNOWN = {
 export const DEFAULT_RUN_OPTIONS_COMPLETE = {
   type: 'complete',
 } as const;
+
+export type AnyQuery = Query<Schema, string, any, any>;

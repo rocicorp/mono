@@ -55,7 +55,7 @@ describe('defineQuery', () => {
     expect(query.queryName).toBe('testNoOptions');
 
     const result = query(undefined).withContext('noOptionsContext');
-    expect(asQueryInternals(result).ast).toEqual({
+    expect(asQueryInternals(result).completedAST).toEqual({
       table: 'foo',
       where: {
         type: 'simple',
@@ -81,7 +81,7 @@ describe('defineQuery', () => {
     expect(query.queryName).toBe('testEmptyOptions');
 
     const result = query(42).withContext('emptyContext');
-    expect(asQueryInternals(result).ast).toEqual({
+    expect(asQueryInternals(result).completedAST).toEqual({
       table: 'foo',
       where: {
         type: 'simple',
@@ -120,7 +120,7 @@ describe('defineQuery', () => {
 
     // Input is string, but should be converted to number by validator
     const result = query('123').withContext('validatorContext');
-    expect(asQueryInternals(result).ast).toEqual({
+    expect(asQueryInternals(result).completedAST).toEqual({
       table: 'foo',
       where: {
         type: 'simple',
@@ -152,7 +152,7 @@ describe('defineQuery', () => {
     );
 
     const result = query().withContext('undefinedValidatorContext');
-    expect(asQueryInternals(result).ast).toEqual({
+    expect(asQueryInternals(result).completedAST).toEqual({
       table: 'foo',
       where: {
         type: 'simple',
@@ -258,7 +258,7 @@ describe('defineQuery', () => {
 
     // All should return the basic table query
     [result1, result2, result3, result4].forEach(result => {
-      expect(asQueryInternals(result).ast).toEqual({
+      expect(asQueryInternals(result).completedAST).toEqual({
         table: 'foo',
         orderBy: [['id', 'asc']],
       });

@@ -42,7 +42,12 @@ import {
   runImpl,
 } from '../../zql/src/query/query-impl.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
-import {type PullRow, type Query} from '../../zql/src/query/query.ts';
+import {
+  type AnyQuery,
+  type MaterializeOptions,
+  type PullRow,
+  type Query,
+} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
 import {explainQueries} from './explain-queries.ts';
@@ -203,7 +208,7 @@ const sources = new Map<string, TableSource>();
 const clientToServerMapper = clientToServer(schema.tables);
 const debug = new Debug();
 const tableSpecs = computeZqlSpecs(lc, db);
-const host: QueryDelegate = {
+const host: QueryDelegate<unknown> = {
   debug,
   getSource: (serverTableName: string) => {
     let source = sources.get(serverTableName);
@@ -252,14 +257,19 @@ const host: QueryDelegate = {
   assertValidRunOptions() {},
   defaultQueryComplete: true,
   addMetric() {},
-  materialize(query, factoryOrOptions, maybeOptions) {
-    return materializeImpl(query, this, factoryOrOptions, maybeOptions);
+  // oxlint-disable-next-line no-explicit-any
+  materialize(query: AnyQuery, factory: any, options: MaterializeOptions) {
+    // oxlint-disable-next-line no-explicit-any
+    return materializeImpl(query, this, factory, options) as any;
   },
   run(query, options) {
     return runImpl(query, this, options);
   },
   preload(query, options) {
     return preloadImpl(query, this, options);
+  },
+  withContext(q) {
+    return asQueryInternals(q);
   },
 };
 

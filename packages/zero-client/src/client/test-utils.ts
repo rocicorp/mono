@@ -30,6 +30,7 @@ import type {
 } from '../../../zero-protocol/src/push.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {PullRow, Query} from '../../../zql/src/query/query.ts';
 import * as ConnectionState from './connection-state-enum.ts';
 import type {CustomMutatorDefs} from './custom.ts';
@@ -98,7 +99,8 @@ export class MockSocket extends EventTarget {
 export class TestZero<
   const S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
-> extends Zero<S, MD> {
+  TContext = unknown,
+> extends Zero<S, MD, TContext> {
   pokeIDCounter = 0;
 
   #connectionStateResolvers: Set<{
@@ -247,18 +249,17 @@ export class TestZero<
   async triggerGotQueriesPatch(
     q: Query<S, keyof S['tables'] & string>,
   ): Promise<void> {
-    q.hash();
     await this.triggerPoke(null, '1', {
       gotQueriesPatch: [
         {
           op: 'put',
-          hash: q.hash(),
+          hash: asQueryInternals(q).hash(),
         },
       ],
     });
   }
 
-  declare [exposedToTestingSymbol]: TestingContext;
+  declare [exposedToTestingSymbol]: TestingContext<TContext>;
 
   get pusher() {
     assert(TESTING);
@@ -295,7 +296,7 @@ export class TestZero<
       gotQueriesPatch: [
         {
           op: 'put',
-          hash: q.hash(),
+          hash: asQueryInternals(q).hash(),
         },
       ],
     });

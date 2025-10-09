@@ -55,10 +55,6 @@ export interface QueryInternals<
 
   readonly customQueryID: CustomQueryID | undefined;
 
-  // withDelegate(
-  //   delegate: QueryDelegate,
-  // ): Query<TSchema, TTable, TReturn, TContext>;
-
   /**
    * Associates a name and arguments with this query for custom query tracking.
    * This is used internally to track named queries on the server.
@@ -69,10 +65,6 @@ export interface QueryInternals<
     name: string,
     args: ReadonlyArray<ReadonlyJSONValue>,
   ): Query<TSchema, TTable, TReturn, TContext>;
-
-  // withContext(
-  //   ctx: TContext,
-  // ): QueryInternals<TSchema, TTable, TReturn, TContext>;
 }
 
 export function asQueryInternals<
@@ -86,3 +78,6 @@ export function asQueryInternals<
   assert(queryInternalsTag in query);
   return query as unknown as QueryInternals<TSchema, TTable, TReturn, TContext>;
 }
+
+// eslint-disable-next-line no-explicit-any
+export type AnyQueryInternals = QueryInternals<ZeroSchema, string, any, any>;

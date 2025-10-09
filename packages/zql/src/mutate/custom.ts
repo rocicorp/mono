@@ -5,7 +5,13 @@ import type {
   SchemaValueToTSType,
   TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
-import type {NoContext, PullRow, Query} from '../query/query.ts';
+import type {
+  HumanReadable,
+  NoContext,
+  PullRow,
+  Query,
+  RunOptions,
+} from '../query/query.ts';
 
 type ClientID = string;
 
@@ -27,6 +33,11 @@ export interface TransactionBase<S extends Schema> {
 
   readonly mutate: SchemaCRUD<S>;
   readonly query: SchemaQuery<S>;
+
+  run<TTable extends keyof S['tables'] & string, TReturn, TContext>(
+    query: Query<S, TTable, TReturn, TContext>,
+    options?: RunOptions,
+  ): Promise<HumanReadable<TReturn>>;
 }
 
 export type Transaction<S extends Schema, TWrappedTransaction = unknown> =

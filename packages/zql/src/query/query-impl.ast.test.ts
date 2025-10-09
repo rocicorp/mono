@@ -1,11 +1,17 @@
 import {describe, expect, test} from 'vitest';
 import type {ExpressionFactory} from './expression.ts';
-import {ast, newQuery} from './query-impl.ts';
+import type {QueryDelegate} from './query-delegate.ts';
+import {newQuery} from './query-impl.ts';
+import {asQueryInternals} from './query-internals.ts';
+import {type AnyQuery} from './query.ts';
 import {staticQuery} from './static-query.ts';
 import {schema} from './test/test-schemas.ts';
-import type {QueryDelegate} from './query-delegate.ts';
 
-const mockDelegate = {} as QueryDelegate;
+const mockDelegate = {} as QueryDelegate<unknown>;
+
+function ast(q: AnyQuery) {
+  return asQueryInternals(q).ast;
+}
 
 describe('building the AST', () => {
   test('creates a new query', () => {
