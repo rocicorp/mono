@@ -29,6 +29,13 @@
       "when": 1759798541293,
       "tag": "0003_index_rework_for_gigagbugs",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1759812367732,
+      "tag": "0004_all_index",
+      "breakpoints": true
     }
   ]
 }
