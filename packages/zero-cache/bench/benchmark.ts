@@ -6,7 +6,12 @@ import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {Source} from '../../zql/src/ivm/source.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
-import {newQuery} from '../../zql/src/query/query-impl.ts';
+import {
+  materializeImpl,
+  newQuery,
+  preloadImpl,
+  runImpl,
+} from '../../zql/src/query/query-impl.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
 import {computeZqlSpecs} from '../src/db/lite-tables.ts';
@@ -78,6 +83,15 @@ export function bench(opts: Options) {
     flushQueryChanges() {},
     defaultQueryComplete: true,
     addMetric() {},
+    materialize(query, factoryOrOptions, maybeOptions) {
+      return materializeImpl(query, this, factoryOrOptions, maybeOptions);
+    },
+    run(query, options) {
+      return runImpl(query, this, options);
+    },
+    preload(query, options) {
+      return preloadImpl(query, this, options);
+    },
   };
 
   const issueQuery = newQuery(host, schema, 'issue');

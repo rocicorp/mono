@@ -35,7 +35,8 @@ export class RootNamedQuery<
   TContext,
   TOutput extends ReadonlyJSONValue | undefined,
   TInput,
-> {
+> implements Query<TSchema, TTable, TReturn, TContext>
+{
   readonly #name: TName;
   readonly #input: TInput;
   readonly #func: Func<TSchema, TTable, TReturn, TContext, TOutput>;

@@ -3,17 +3,30 @@ import type {Hash} from '../../../replicache/src/hash.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Input, Storage} from '../../../zql/src/ivm/operator.ts';
 import type {Source, SourceInput} from '../../../zql/src/ivm/source.ts';
+import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import {MeasurePushOperator} from '../../../zql/src/query/measure-push-operator.ts';
 import type {MetricsDelegate} from '../../../zql/src/query/metrics-delegate.ts';
 import type {
   CommitListener,
   QueryDelegate,
 } from '../../../zql/src/query/query-delegate.ts';
-import type {RunOptions} from '../../../zql/src/query/query.ts';
+import {
+  materializeImpl,
+  preloadImpl,
+  runImpl,
+} from '../../../zql/src/query/query-impl.ts';
+import type {QueryInternals} from '../../../zql/src/query/query-internals.ts';
+import type {
+  HumanReadable,
+  MaterializeOptions,
+  PreloadOptions,
+  RunOptions,
+} from '../../../zql/src/query/query.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
 import type {QueryManager} from './query-manager.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
@@ -155,5 +168,48 @@ export class ZeroContext implements QueryDelegate {
         );
       }
     }
+  }
+
+  materialize<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+    TContext,
+    T,
+  >(
+    query: QueryInternals<TSchema, TTable, TReturn, TContext>,
+    factoryOrOptions?:
+      | ViewFactory<TSchema, TTable, TReturn, TContext, T>
+      | MaterializeOptions,
+    maybeOptions?: MaterializeOptions,
+  ): T {
+    return materializeImpl(query, this, factoryOrOptions, maybeOptions);
+  }
+
+  run<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+    TContext,
+  >(
+    query: QueryInternals<TSchema, TTable, TReturn, TContext>,
+    options?: RunOptions,
+  ): Promise<HumanReadable<TReturn>> {
+    return runImpl(query, this, options);
+  }
+
+  preload<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+    TContext,
+  >(
+    query: QueryInternals<TSchema, TTable, TReturn, TContext>,
+    options?: PreloadOptions,
+  ): {
+    cleanup: () => void;
+    complete: Promise<void>;
+  } {
+    return preloadImpl(query, this, options);
   }
 }

@@ -6,6 +6,8 @@ import type {Format} from '../ivm/view.ts';
 import type {CustomQueryID} from './named.ts';
 import type {NoContext, Query} from './query.ts';
 
+export const queryInternalsTag = Symbol('QueryInternals');
+
 /**
  * Internal interface for query implementation details.
  * This is not part of the public API and should only be accessed via
@@ -21,6 +23,8 @@ export interface QueryInternals<
   TReturn,
   TContext = NoContext,
 > {
+  readonly [queryInternalsTag]: true;
+
   /**
    * Format is used to specify the shape of the query results. This is used by
    * {@linkcode one} and it also describes the shape when using
@@ -79,6 +83,6 @@ export function asQueryInternals<
 >(
   query: Query<TSchema, TTable, TReturn, TContext>,
 ): QueryInternals<TSchema, TTable, TReturn, TContext> {
-  assert('ast' in query);
-  return query;
+  assert(queryInternalsTag in query);
+  return query as unknown as QueryInternals<TSchema, TTable, TReturn, TContext>;
 }

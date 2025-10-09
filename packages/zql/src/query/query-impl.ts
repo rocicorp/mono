@@ -40,7 +40,11 @@ import {
 } from './expression.ts';
 import type {CustomQueryID} from './named.ts';
 import type {GotCallback, QueryDelegate} from './query-delegate.ts';
-import {asQueryInternals, type QueryInternals} from './query-internals.ts';
+import {
+  asQueryInternals,
+  queryInternalsTag,
+  type QueryInternals,
+} from './query-internals.ts';
 import {
   NoContext,
   type ExistsOptions,
@@ -108,21 +112,16 @@ export function run<
   return runImpl(qi, delegate, options);
 }
 
-const astSymbol = Symbol();
-
-export function ast(query: AnyQuery): AST {
-  return (query as AbstractQuery<Schema, string, unknown, unknown>)[astSymbol];
-}
-
 export function newQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
+  TContext = NoContext,
 >(
   delegate: QueryDelegate | undefined,
   schema: TSchema,
   table: TTable,
-): Query<TSchema, TTable, TReturn> {
+): Query<TSchema, TTable, TReturn, TContext> {
   return new QueryImpl(
     delegate,
     schema,
@@ -152,12 +151,17 @@ export const defaultFormat = {singular: false, relationships: {}} as const;
 // export const newQuerySymbol = Symbol();
 
 export abstract class AbstractQuery<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn = PullRow<TTable, TSchema>,
-  TContext = NoContext,
-> implements Query<TSchema, TTable, TReturn, TContext>
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn = PullRow<TTable, TSchema>,
+    TContext = NoContext,
+  >
+  implements
+    Query<TSchema, TTable, TReturn, TContext>,
+    QueryInternals<TSchema, TTable, TReturn, TContext>
 {
+  readonly [queryInternalsTag] = true;
+
   readonly #schema: TSchema;
   protected readonly _delegate: QueryDelegate | undefined;
   readonly #tableName: TTable;
@@ -227,12 +231,8 @@ export abstract class AbstractQuery<
     );
   }
 
-  get [astSymbol](): AST {
-    return this._ast;
-  }
-
   get ast() {
-    return this.#completeAst();
+    return this._ast;
   }
 
   hash(): string {
@@ -738,14 +738,6 @@ export abstract class AbstractQuery<
   };
 }
 
-// export function completedAST(
-//   q: Query<Schema, string, PullRow<string, Schema>>,
-// ) {
-//   return (q as QueryImpl<Schema, string, PullRow<string, Schema>>)[
-//     completedAstSymbol
-//   ];
-// }
-
 export function materializeImpl<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
@@ -845,7 +837,7 @@ export function materializeImpl<
   return view as T;
 }
 
-function runImpl<
+export function runImpl<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
@@ -993,7 +985,7 @@ export class QueryImpl<
       this._delegate,
       'materialize requires a query delegate to be set',
     );
-    return materializeImpl(this, delegate, factoryOrOptions, maybeOptions);
+    return delegate.materialize(this, factoryOrOptions, maybeOptions);
   }
 
   run(options?: RunOptions): Promise<HumanReadable<TReturn>> {
@@ -1001,7 +993,7 @@ export class QueryImpl<
       this._delegate,
       'run requires a query delegate to be set',
     );
-    return runImpl(this, delegate, options);
+    return delegate.run(this, options);
   }
 
   preload(options?: PreloadOptions): {
@@ -1012,7 +1004,7 @@ export class QueryImpl<
       this._delegate,
       'preload requires a query delegate to be set',
     );
-    return preloadImpl(this, delegate, options);
+    return delegate.preload(this, options);
   }
 }
 

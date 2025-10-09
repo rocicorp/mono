@@ -6,17 +6,27 @@ import {
 } from '../../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import type {FilterInput} from '../../ivm/filter-operators.ts';
 import {MemoryStorage} from '../../ivm/memory-storage.ts';
 import type {Input} from '../../ivm/operator.ts';
 import type {Source, SourceInput} from '../../ivm/source.ts';
 import {createSource} from '../../ivm/test/source-factory.ts';
+import type {ViewFactory} from '../../ivm/view.ts';
 import type {CustomQueryID} from '../named.ts';
 import type {
   CommitListener,
   GotCallback,
   QueryDelegate,
 } from '../query-delegate.ts';
+import {materializeImpl, preloadImpl, runImpl} from '../query-impl.ts';
+import type {QueryInternals} from '../query-internals.ts';
+import type {
+  HumanReadable,
+  MaterializeOptions,
+  PreloadOptions,
+  RunOptions,
+} from '../query.ts';
 import type {TTL} from '../ttl.ts';
 import {
   commentSchema,
@@ -165,6 +175,69 @@ export class QueryDelegateImpl implements QueryDelegate {
   }
 
   addMetric() {}
+
+  materialize<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+    TContext,
+    T,
+  >(
+    query: QueryInternals<TSchema, TTable, TReturn, TContext>,
+    factory: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
+    options?: MaterializeOptions,
+  ): T;
+  materialize<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+    TContext,
+  >(
+    query: QueryInternals<TSchema, TTable, TReturn, TContext>,
+    options?: MaterializeOptions,
+  ): TypedView<HumanReadable<TReturn>>;
+  materialize<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+    TContext,
+    T,
+  >(
+    query: QueryInternals<TSchema, TTable, TReturn, TContext>,
+    factoryOrOptions?:
+      | ViewFactory<TSchema, TTable, TReturn, TContext, T>
+      | MaterializeOptions,
+    maybeOptions?: MaterializeOptions,
+  ): T | TypedView<HumanReadable<TReturn>> {
+    return materializeImpl(query, this, factoryOrOptions, maybeOptions);
+  }
+
+  run<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+    TContext,
+  >(
+    query: QueryInternals<TSchema, TTable, TReturn, TContext>,
+    options?: RunOptions,
+  ): Promise<HumanReadable<TReturn>> {
+    return runImpl(query, this, options);
+  }
+
+  preload<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+    TContext,
+  >(
+    query: QueryInternals<TSchema, TTable, TReturn, TContext>,
+    options?: PreloadOptions,
+  ): {
+    cleanup: () => void;
+    complete: Promise<void>;
+  } {
+    return preloadImpl(query, this, options);
+  }
 }
 
 function makeSources() {

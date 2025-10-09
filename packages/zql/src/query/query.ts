@@ -8,11 +8,8 @@ import type {
   SchemaValueWithCustomType,
   TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
-import type {ViewFactory} from '../ivm/view.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
-import type {QueryInternals} from './query-internals.ts';
 import type {TTL} from './ttl.ts';
-import type {TypedView} from './typed-view.ts';
 
 /**
  * Branded type to indicate that a query does not require context.
@@ -373,8 +370,7 @@ export interface Query<
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
   TContext = NoContext,
-> extends CoreQuery<TSchema, TTable, TReturn>,
-    QueryInternals<TSchema, TTable, TReturn, TContext> {
+> extends CoreQuery<TSchema, TTable, TReturn> {
   // Override CoreQuery methods to return Query instead of CoreQuery for proper chaining
   related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
@@ -461,84 +457,84 @@ export interface Query<
 
   one(): Query<TSchema, TTable, TReturn | undefined, TContext>;
 
-  /**
-   * Creates a materialized view of the query. This is a view that will be kept
-   * in memory and updated as the query results change.
-   *
-   * Most of the time you will want to use the `useQuery` hook or the
-   * `run`/`then` method to get the results of a query. This method is only
-   * needed if you want to access to lower level APIs of the view.
-   *
-   * @param options Options for materializing the query
-   * @param options.ttl Time To Live. This is the amount of time to keep the rows
-   *            associated with this query after `TypedView.destroy`
-   *            has been called.
-   * @param options.ctx Context required for named queries
-   */
-  materialize(options?: MaterializeOptions): TypedView<HumanReadable<TReturn>>;
-  /**
-   * Creates a custom materialized view using a provided factory function. This
-   * allows framework-specific bindings (like SolidJS, Vue, etc.) to create
-   * optimized views.
-   *
-   * @param factory A function that creates a custom view implementation
-   * @param options Options for materializing the query
-   * @param options.ttl Optional Time To Live for the view's data after destruction
-   * @param options.ctx Context required for named queries
-   * @returns A custom view instance of type {@linkcode T}
-   *
-   * @example
-   * ```ts
-   * const view = query.materialize(createSolidViewFactory, {ttl: '1m'});
-   * ```
-   */
-  materialize<T>(
-    factory: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
-    options?: MaterializeOptions,
-  ): T;
+  // /**
+  //  * Creates a materialized view of the query. This is a view that will be kept
+  //  * in memory and updated as the query results change.
+  //  *
+  //  * Most of the time you will want to use the `useQuery` hook or the
+  //  * `run`/`then` method to get the results of a query. This method is only
+  //  * needed if you want to access to lower level APIs of the view.
+  //  *
+  //  * @param options Options for materializing the query
+  //  * @param options.ttl Time To Live. This is the amount of time to keep the rows
+  //  *            associated with this query after `TypedView.destroy`
+  //  *            has been called.
+  //  * @param options.ctx Context required for named queries
+  //  */
+  // materialize(options?: MaterializeOptions): TypedView<HumanReadable<TReturn>>;
+  // /**
+  //  * Creates a custom materialized view using a provided factory function. This
+  //  * allows framework-specific bindings (like SolidJS, Vue, etc.) to create
+  //  * optimized views.
+  //  *
+  //  * @param factory A function that creates a custom view implementation
+  //  * @param options Options for materializing the query
+  //  * @param options.ttl Optional Time To Live for the view's data after destruction
+  //  * @param options.ctx Context required for named queries
+  //  * @returns A custom view instance of type {@linkcode T}
+  //  *
+  //  * @example
+  //  * ```ts
+  //  * const view = query.materialize(createSolidViewFactory, {ttl: '1m'});
+  //  * ```
+  //  */
+  // materialize<T>(
+  //   factory: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
+  //   options?: MaterializeOptions,
+  // ): T;
 
-  /**
-   * Executes the query and returns the result once. The `options` parameter
-   * specifies whether to wait for complete results or return immediately,
-   * and the time to live for the query.
-   *
-   * - `{type: 'unknown'}`: Returns a snapshot of the data immediately.
-   * - `{type: 'complete'}`: Waits for the latest, complete results from the server.
-   *
-   * By default, `run` uses `{type: 'unknown'}` to avoid waiting for the server.
-   *
-   * `Query` implements `PromiseLike`, and calling `then` on it will invoke `run`
-   * with the default behavior (`unknown`).
-   *
-   * @param options Options to control the result type.
-   * @param options.type The type of result to return.
-   * @param options.ttl Time To Live. This is the amount of time to keep the rows
-   *                  associated with this query after the returned promise has
-   *                  resolved.
-   * @param options.ctx Context required for named queries
-   * @returns A promise resolving to the query result.
-   *
-   * @example
-   * ```js
-   * const result = await query.run({type: 'complete', ttl: '1m'});
-   * ```
-   */
-  run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
+  // /**
+  //  * Executes the query and returns the result once. The `options` parameter
+  //  * specifies whether to wait for complete results or return immediately,
+  //  * and the time to live for the query.
+  //  *
+  //  * - `{type: 'unknown'}`: Returns a snapshot of the data immediately.
+  //  * - `{type: 'complete'}`: Waits for the latest, complete results from the server.
+  //  *
+  //  * By default, `run` uses `{type: 'unknown'}` to avoid waiting for the server.
+  //  *
+  //  * `Query` implements `PromiseLike`, and calling `then` on it will invoke `run`
+  //  * with the default behavior (`unknown`).
+  //  *
+  //  * @param options Options to control the result type.
+  //  * @param options.type The type of result to return.
+  //  * @param options.ttl Time To Live. This is the amount of time to keep the rows
+  //  *                  associated with this query after the returned promise has
+  //  *                  resolved.
+  //  * @param options.ctx Context required for named queries
+  //  * @returns A promise resolving to the query result.
+  //  *
+  //  * @example
+  //  * ```js
+  //  * const result = await query.run({type: 'complete', ttl: '1m'});
+  //  * ```
+  //  */
+  // run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
 
-  /**
-   * Preload loads the data into the clients cache without keeping it in memory.
-   * This is useful for preloading data that will be used later.
-   *
-   * @param options Options for preloading the query.
-   * @param options.ttl Time To Live. This is the amount of time to keep the rows
-   *                  associated with this query after {@linkcode cleanup} has
-   *                  been called.
-   * @param options.ctx Context required for named queries
-   */
-  preload(options?: PreloadOptions): {
-    cleanup: () => void;
-    complete: Promise<void>;
-  };
+  // /**
+  //  * Preload loads the data into the clients cache without keeping it in memory.
+  //  * This is useful for preloading data that will be used later.
+  //  *
+  //  * @param options Options for preloading the query.
+  //  * @param options.ttl Time To Live. This is the amount of time to keep the rows
+  //  *                  associated with this query after {@linkcode cleanup} has
+  //  *                  been called.
+  //  * @param options.ctx Context required for named queries
+  //  */
+  // preload(options?: PreloadOptions): {
+  //   cleanup: () => void;
+  //   complete: Promise<void>;
+  // };
 }
 
 export type PreloadOptions = {

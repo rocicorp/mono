@@ -36,7 +36,12 @@ import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {newQuery} from '../../../zql/src/query/query-impl.ts';
+import {
+  materializeImpl,
+  newQuery,
+  preloadImpl,
+  runImpl,
+} from '../../../zql/src/query/query-impl.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import {type Query, type Row} from '../../../zql/src/query/query.ts';
 import {Database} from '../../../zqlite/src/db.ts';
@@ -534,6 +539,15 @@ beforeEach(() => {
     flushQueryChanges() {},
     defaultQueryComplete: true,
     addMetric() {},
+    materialize(query, factoryOrOptions, maybeOptions) {
+      return materializeImpl(query, this, factoryOrOptions, maybeOptions);
+    },
+    run(query, options) {
+      return runImpl(query, this, options);
+    },
+    preload(query, options) {
+      return preloadImpl(query, this, options);
+    },
   };
 
   for (const table of Object.values(schema.tables)) {

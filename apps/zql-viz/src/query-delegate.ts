@@ -1,15 +1,28 @@
 import type {Schema} from '@rocicorp/zero';
+import {MemoryStorage} from '../../../packages/zero/out/zql/src/ivm/memory-storage';
+import type {FilterInput} from '../../../packages/zql/src/ivm/filter-operators.ts';
 import {MemorySource} from '../../../packages/zql/src/ivm/memory-source.ts';
-import type {QueryDelegate} from '../../../packages/zql/src/query/query-delegate.ts';
 import type {
   Input,
   InputBase,
   Storage,
 } from '../../../packages/zql/src/ivm/operator.ts';
-import {MemoryStorage} from '../../../packages/zero/out/zql/src/ivm/memory-storage';
-import type {Edge, Graph} from './types.ts';
 import type {SourceInput} from '../../../packages/zql/src/ivm/source.ts';
-import type {FilterInput} from '../../../packages/zql/src/ivm/filter-operators.ts';
+import type {ViewFactory} from '../../../packages/zql/src/ivm/view.ts';
+import type {QueryDelegate} from '../../../packages/zql/src/query/query-delegate.ts';
+import {
+  materializeImpl,
+  preloadImpl,
+  runImpl,
+} from '../../../packages/zql/src/query/query-impl.ts';
+import type {QueryInternals} from '../../../packages/zql/src/query/query-internals.ts';
+import type {
+  HumanReadable,
+  MaterializeOptions,
+  PreloadOptions,
+  RunOptions,
+} from '../../../packages/zql/src/query/query.ts';
+import type {Edge, Graph} from './types.ts';
 
 export class VizDelegate implements QueryDelegate {
   readonly #sources: Map<string, MemorySource>;
@@ -102,6 +115,49 @@ export class VizDelegate implements QueryDelegate {
   assertValidRunOptions() {}
   flushQueryChanges() {}
   addMetric() {}
+
+  materialize<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+    TContext,
+    T,
+  >(
+    query: QueryInternals<TSchema, TTable, TReturn, TContext>,
+    factoryOrOptions?:
+      | ViewFactory<TSchema, TTable, TReturn, TContext, T>
+      | MaterializeOptions,
+    maybeOptions?: MaterializeOptions,
+  ): T {
+    return materializeImpl(query, this, factoryOrOptions, maybeOptions);
+  }
+
+  run<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+    TContext,
+  >(
+    query: QueryInternals<TSchema, TTable, TReturn, TContext>,
+    options?: RunOptions,
+  ): Promise<HumanReadable<TReturn>> {
+    return runImpl(query, this, options);
+  }
+
+  preload<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+    TContext,
+  >(
+    query: QueryInternals<TSchema, TTable, TReturn, TContext>,
+    options?: PreloadOptions,
+  ): {
+    cleanup: () => void;
+    complete: Promise<void>;
+  } {
+    return preloadImpl(query, this, options);
+  }
 
   #getNode(input: InputBase, name?: string | undefined) {
     const existing = this.#nodeIds.get(input);

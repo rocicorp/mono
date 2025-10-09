@@ -19,6 +19,11 @@ import type {Input} from '../../../zql/src/ivm/operator.ts';
 import type {Source, SourceInput} from '../../../zql/src/ivm/source.ts';
 import type {SourceFactory} from '../../../zql/src/ivm/test/source-factory.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
+import {
+  materializeImpl,
+  preloadImpl,
+  runImpl,
+} from '../../../zql/src/query/query-impl.ts';
 import {Database} from '../db.ts';
 import {compile, sql} from '../internal/sql.ts';
 import {TableSource, toSQLiteTypeName} from '../table-source.ts';
@@ -184,5 +189,14 @@ export function newQueryDelegate(
     flushQueryChanges() {},
     defaultQueryComplete: true,
     addMetric() {},
+    materialize(query, factoryOrOptions, maybeOptions) {
+      return materializeImpl(query, this, factoryOrOptions, maybeOptions);
+    },
+    run(query, options) {
+      return runImpl(query, this, options);
+    },
+    preload(query, options) {
+      return preloadImpl(query, this, options);
+    },
   };
 }

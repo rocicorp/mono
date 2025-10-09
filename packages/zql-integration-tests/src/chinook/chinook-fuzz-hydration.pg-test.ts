@@ -1,20 +1,17 @@
 /* eslint-disable no-console */
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
-import {bootstrap, runAndCompare} from '../helpers/runner.ts';
-import {getChinook} from './get-deps.ts';
-import {schema} from './schema.ts';
 import {expect, test} from 'vitest';
-import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
-import '../helpers/comparePg.ts';
-import {ast} from '../../../zql/src/query/query-impl.ts';
-import type {
-  AnyQuery,
-  AnyStaticQuery,
-} from '../../../zql/src/query/test/util.ts';
 import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../../ast-to-zql/src/format.ts';
+import {ast, type AnyQuery} from '../../../zql/src/query/query-impl.ts';
+import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
+import type {AnyStaticQuery} from '../../../zql/src/query/test/util.ts';
+import '../helpers/comparePg.ts';
+import {bootstrap, runAndCompare} from '../helpers/runner.ts';
 import {staticToRunnable} from '../helpers/static.ts';
+import {getChinook} from './get-deps.ts';
+import {schema} from './schema.ts';
 
 const pgContent = await getChinook();
 
@@ -80,7 +77,7 @@ async function runCase({
     await runAndCompare(
       schema,
       staticToRunnable({
-        query: query[0] as AnyStaticQuery,
+        qi: query[0] as AnyStaticQuery,
         schema,
         harness,
       }),
@@ -108,7 +105,7 @@ async function shrink(generations: AnyQuery[], seed: number) {
       await runAndCompare(
         schema,
         staticToRunnable({
-          query: generations[mid] as AnyStaticQuery,
+          qi: generations[mid] as AnyStaticQuery,
           schema,
           harness,
         }),

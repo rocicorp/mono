@@ -17,7 +17,6 @@ vi.mock('../../../analyze-query/src/explain-queries.ts', () => ({
 
 // Mock Database
 vi.mock('../../../zqlite/src/db.ts', () => ({
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   Database: class {
     [Symbol.dispose]() {}
   },
@@ -31,19 +30,16 @@ vi.mock('../db/lite-tables.ts', () => ({
 
 // Mock MemoryStorage
 vi.mock('../../../zql/src/ivm/memory-storage.ts', () => ({
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   MemoryStorage: vi.fn(),
 }));
 
 // Mock TableSource
 vi.mock('../../../zqlite/src/table-source.ts', () => ({
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   TableSource: vi.fn(),
 }));
 
 // Mock Debug
 vi.mock('../../../zql/src/builder/debug-delegate.ts', () => ({
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   Debug: vi.fn(),
 }));
 
@@ -266,7 +262,7 @@ describe('analyzeQuery', () => {
   test('creates proper host delegate with getSource function', async () => {
     const {runAst} = await import('../../../analyze-query/src/run-ast.ts');
     const {mustGetTableSpec} = await import('../db/lite-tables.ts');
-    // eslint-disable-next-line @typescript-eslint/naming-convention
+
     const {TableSource} = await import('../../../zqlite/src/table-source.ts');
 
     const mockTableSpec = {
@@ -322,7 +318,6 @@ describe('analyzeQuery', () => {
       '../../../analyze-query/src/explain-queries.ts'
     );
     const {mustGetTableSpec} = await import('../db/lite-tables.ts');
-    // eslint-disable-next-line @typescript-eslint/naming-convention
     const {TableSource} = await import('../../../zqlite/src/table-source.ts');
 
     const mockTableSpec = {

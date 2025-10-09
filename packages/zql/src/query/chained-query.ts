@@ -27,7 +27,8 @@ export class ChainedQuery<
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
   TContext,
-> {
+> implements Query<TSchema, TTable, TReturn, TContext>
+{
   readonly #parent: {
     withContext(ctx: TContext): Query<TSchema, TTable, unknown>;
   };

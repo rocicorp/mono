@@ -12,6 +12,7 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {must} from '../../../shared/src/must.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {Row} from '../../../zql/src/query/query.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import * as ConnectionState from './connection-state-enum.ts';
@@ -360,7 +361,10 @@ describe('rebasing custom mutators', () => {
     // Pokes are scheduled using raf... give it a macro task.
     await vi.waitFor(async () => {
       const rep = getInternalReplicacheImplForTesting(z);
-      expect(await rep.query(tx => tx.has(`g/${q.hash()}`))).toEqual(true);
+
+      expect(
+        await rep.query(tx => tx.has(`g/${asQueryInternals(q).hash()}`)),
+      ).toEqual(true);
     });
 
     expect(completed).toEqual(true);

@@ -35,7 +35,13 @@ import {
 } from '../../zql/src/builder/debug-delegate.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
-import {completedAST, newQuery} from '../../zql/src/query/query-impl.ts';
+import {
+  materializeImpl,
+  newQuery,
+  preloadImpl,
+  runImpl,
+} from '../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import {type PullRow, type Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
@@ -246,6 +252,15 @@ const host: QueryDelegate = {
   assertValidRunOptions() {},
   defaultQueryComplete: true,
   addMetric() {},
+  materialize(query, factoryOrOptions, maybeOptions) {
+    return materializeImpl(query, this, factoryOrOptions, maybeOptions);
+  },
+  run(query, options) {
+    return runImpl(query, this, options);
+  },
+  preload(query, options) {
+    return preloadImpl(query, this, options);
+  },
 };
 
 let result: AnalyzeQueryResult;
@@ -282,9 +297,9 @@ function runQuery(queryString: string): Promise<AnalyzeQueryResult> {
   };
 
   const f = new Function('z', `return z.query.${queryString};`);
-  const q: Query<Schema, string, PullRow<string, Schema>> = f(z);
+  const q: Query<Schema, string, PullRow<string, Schema>, unknown> = f(z);
 
-  const ast = completedAST(q);
+  const ast = asQueryInternals(q).completedAST;
   return runAst(lc, ast, false, {
     applyPermissions: config.applyPermissions,
     authData: config.authData,

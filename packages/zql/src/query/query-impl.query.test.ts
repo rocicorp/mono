@@ -12,6 +12,7 @@ import {newQuery} from './query-impl.ts';
 import {asQueryInternals} from './query-internals.ts';
 import {QueryDelegateImpl} from './test/query-delegate.ts';
 import {schema} from './test/test-schemas.ts';
+import type {TypedView} from './typed-view.ts';
 
 /**
  * Some basic manual tests to get us started.
@@ -152,7 +153,9 @@ describe('bare select', () => {
   test('empty source', () => {
     const queryDelegate = new QueryDelegateImpl();
     const issueQuery = newQuery(queryDelegate, schema, 'issue');
-    const m = issueQuery.materialize();
+    const m: TypedView<unknown[]> = queryDelegate.materialize(
+      asQueryInternals(issueQuery),
+    );
 
     let rows: readonly unknown[] = [];
     let called = false;
@@ -174,7 +177,9 @@ describe('bare select', () => {
   test('empty source followed by changes', () => {
     const queryDelegate = new QueryDelegateImpl();
     const issueQuery = newQuery(queryDelegate, schema, 'issue');
-    const m = issueQuery.materialize();
+    const m: TypedView<unknown[]> = queryDelegate.materialize(
+      asQueryInternals(issueQuery),
+    );
 
     let rows: unknown[] = [];
     m.addListener(data => {
@@ -231,7 +236,9 @@ describe('bare select', () => {
     });
 
     const issueQuery = newQuery(queryDelegate, schema, 'issue');
-    const m = issueQuery.materialize();
+    const m: TypedView<unknown[]> = queryDelegate.materialize(
+      asQueryInternals(issueQuery),
+    );
 
     let rows: unknown[] = [];
     m.addListener(data => {
@@ -266,7 +273,9 @@ describe('bare select', () => {
     });
 
     const issueQuery = newQuery(queryDelegate, schema, 'issue');
-    const m = issueQuery.materialize();
+    const m: TypedView<unknown[]> = queryDelegate.materialize(
+      asQueryInternals(issueQuery),
+    );
 
     let rows: unknown[] = [];
     m.addListener(data => {
@@ -320,7 +329,9 @@ describe('bare select', () => {
   test('changes after destroy', () => {
     const queryDelegate = new QueryDelegateImpl();
     const issueQuery = newQuery(queryDelegate, schema, 'issue');
-    const m = issueQuery.materialize();
+    const m: TypedView<unknown[]> = queryDelegate.materialize(
+      asQueryInternals(issueQuery),
+    );
 
     let rows: unknown[] = [];
     m.addListener(data => {
@@ -388,16 +399,23 @@ describe('joins and filters', () => {
       'issue 1',
     );
 
-    const singleFilterView = issueQuery.materialize();
+    const singleFilterView: TypedView<{id: string}[]> =
+      queryDelegate.materialize(asQueryInternals(issueQuery));
     let singleFilterRows: {id: string}[] = [];
     let doubleFilterRows: {id: string}[] = [];
     let doubleFilterWithNoResultsRows: {id: string}[] = [];
-    const doubleFilterView = issueQuery
-      .where('closed', '=', false)
-      .materialize();
-    const doubleFilterViewWithNoResults = issueQuery
-      .where('closed', '=', true)
-      .materialize();
+    const doubleFilterQuery = issueQuery.where('closed', '=', false);
+    const doubleFilterView: TypedView<{id: string}[]> =
+      queryDelegate.materialize(asQueryInternals(doubleFilterQuery));
+    const doubleFilterQueryWithNoResults = issueQuery.where(
+      'closed',
+      '=',
+      true,
+    );
+    const doubleFilterViewWithNoResults: TypedView<{id: string}[]> =
+      queryDelegate.materialize(
+        asQueryInternals(doubleFilterQueryWithNoResults),
+      );
 
     singleFilterView.addListener(data => {
       singleFilterRows = deepClone(data) as {id: string}[];
@@ -463,7 +481,9 @@ describe('joins and filters', () => {
       .related('labels')
       .related('owner')
       .related('comments');
-    const view = issueQuery.materialize();
+    const view: TypedView<unknown[]> = queryDelegate.materialize(
+      asQueryInternals(issueQuery),
+    );
 
     let rows: unknown[] = [];
     view.addListener(data => {
@@ -589,7 +609,7 @@ describe('joins and filters', () => {
     addData(queryDelegate);
 
     const q1 = newQuery(queryDelegate, schema, 'issue').one();
-    expect(q1.format).toEqual({
+    expect(asQueryInternals(q1).format).toEqual({
       singular: true,
       relationships: {},
     });
@@ -597,7 +617,7 @@ describe('joins and filters', () => {
     const q2 = newQuery(queryDelegate, schema, 'issue')
       .one()
       .related('comments', q => q.one());
-    expect(q2.format).toEqual({
+    expect(asQueryInternals(q2).format).toEqual({
       singular: true,
       relationships: {
         comments: {
@@ -610,7 +630,7 @@ describe('joins and filters', () => {
     const q3 = newQuery(queryDelegate, schema, 'issue').related('comments', q =>
       q.one(),
     );
-    expect(q3.format).toEqual({
+    expect(asQueryInternals(q3).format).toEqual({
       singular: false,
       relationships: {
         comments: {
@@ -628,7 +648,7 @@ describe('joins and filters', () => {
       .where('closed', false)
       .limit(100)
       .orderBy('title', 'desc');
-    expect(q4.format).toEqual({
+    expect(asQueryInternals(q4).format).toEqual({
       singular: true,
       relationships: {
         comments: {
@@ -647,7 +667,7 @@ describe('joins and filters', () => {
       .related('owner')
       .related('comments', q => q.related('author').related('revisions'))
       .where('id', '=', '0001');
-    const data = await query.run();
+    const data = await queryDelegate.run(asQueryInternals(query));
     expect(data).toMatchInlineSnapshot(`
       [
         {
@@ -749,13 +769,19 @@ test('run', async () => {
     'issue 1',
   );
 
-  const singleFilterRows = await issueQuery1.run();
+  const singleFilterRows = await queryDelegate.run(
+    asQueryInternals(issueQuery1),
+  );
   queryDelegate.synchronouslyCallNextGotCallback = true;
-  const doubleFilterRows = await issueQuery1.where('closed', '=', false).run();
+  const doubleFilterQuery = issueQuery1.where('closed', '=', false);
+  const doubleFilterRows = await queryDelegate.run(
+    asQueryInternals(doubleFilterQuery),
+  );
   queryDelegate.synchronouslyCallNextGotCallback = true;
-  const doubleFilterWithNoResultsRows = await issueQuery1
-    .where('closed', '=', true)
-    .run();
+  const doubleFilterWithNoResultsQuery = issueQuery1.where('closed', '=', true);
+  const doubleFilterWithNoResultsRows = await queryDelegate.run(
+    asQueryInternals(doubleFilterWithNoResultsQuery),
+  );
   expect(singleFilterRows.map(r => r.id)).toEqual(['0001']);
   expect(doubleFilterRows.map(r => r.id)).toEqual(['0001']);
   expect(doubleFilterWithNoResultsRows).toEqual([]);
@@ -765,7 +791,7 @@ test('run', async () => {
     .related('labels')
     .related('owner')
     .related('comments');
-  const rows = await issueQuery2.run();
+  const rows = await queryDelegate.run(asQueryInternals(issueQuery2));
   expect(rows).toMatchInlineSnapshot(`
     [
       {
@@ -860,11 +886,13 @@ describe('pk lookup optimization', () => {
   addData(queryDelegate);
 
   test('pk lookup', async () => {
-    expect(
-      await newQuery(queryDelegate, schema, 'issue')
-        .where('id', '=', '0001')
-        .run(),
-    ).toMatchInlineSnapshot(`
+    const pkQuery1 = newQuery(queryDelegate, schema, 'issue').where(
+      'id',
+      '=',
+      '0001',
+    );
+    expect(await queryDelegate.run(asQueryInternals(pkQuery1)))
+      .toMatchInlineSnapshot(`
       [
         {
           "closed": false,
@@ -877,11 +905,13 @@ describe('pk lookup optimization', () => {
         },
       ]
     `);
-    expect(
-      await newQuery(queryDelegate, schema, 'user')
-        .where('id', '=', '0001')
-        .run(),
-    ).toMatchInlineSnapshot(`
+    const pkQuery2 = newQuery(queryDelegate, schema, 'user').where(
+      'id',
+      '=',
+      '0001',
+    );
+    expect(await queryDelegate.run(asQueryInternals(pkQuery2)))
+      .toMatchInlineSnapshot(`
       [
         {
           "id": "0001",
@@ -897,12 +927,11 @@ describe('pk lookup optimization', () => {
   });
 
   test('pk lookup with sort applied for whatever reason', async () => {
-    expect(
-      await newQuery(queryDelegate, schema, 'issue')
-        .where('id', '=', '0001')
-        .orderBy('id', 'desc')
-        .run(),
-    ).toMatchInlineSnapshot(`
+    const pkQuery3 = newQuery(queryDelegate, schema, 'issue')
+      .where('id', '=', '0001')
+      .orderBy('id', 'desc');
+    expect(await queryDelegate.run(asQueryInternals(pkQuery3)))
+      .toMatchInlineSnapshot(`
       [
         {
           "closed": false,
@@ -916,12 +945,11 @@ describe('pk lookup optimization', () => {
       ]
     `);
 
-    expect(
-      await newQuery(queryDelegate, schema, 'user')
-        .where('id', '=', '0001')
-        .orderBy('name', 'desc')
-        .run(),
-    ).toMatchInlineSnapshot(`
+    const pkQuery4 = newQuery(queryDelegate, schema, 'user')
+      .where('id', '=', '0001')
+      .orderBy('name', 'desc');
+    expect(await queryDelegate.run(asQueryInternals(pkQuery4)))
+      .toMatchInlineSnapshot(`
       [
         {
           "id": "0001",
@@ -937,12 +965,11 @@ describe('pk lookup optimization', () => {
   });
 
   test('related with pk constraint', async () => {
-    expect(
-      await newQuery(queryDelegate, schema, 'issue')
-        .where('id', '=', '0001')
-        .related('comments', q => q.where('id', '=', '0001'))
-        .run(),
-    ).toMatchInlineSnapshot(`
+    const relatedPkQuery = newQuery(queryDelegate, schema, 'issue')
+      .where('id', '=', '0001')
+      .related('comments', q => q.where('id', '=', '0001'));
+    expect(await queryDelegate.run(asQueryInternals(relatedPkQuery)))
+      .toMatchInlineSnapshot(`
       [
         {
           "closed": false,
@@ -968,12 +995,11 @@ describe('pk lookup optimization', () => {
   });
 
   test('exists with pk constraint', async () => {
-    expect(
-      await newQuery(queryDelegate, schema, 'issue')
-        .where('id', '=', '0001')
-        .whereExists('comments', q => q.where('id', '=', '0001'))
-        .run(),
-    ).toMatchInlineSnapshot(`
+    const existsPkQuery = newQuery(queryDelegate, schema, 'issue')
+      .where('id', '=', '0001')
+      .whereExists('comments', q => q.where('id', '=', '0001'));
+    expect(await queryDelegate.run(asQueryInternals(existsPkQuery)))
+      .toMatchInlineSnapshot(`
       [
         {
           "closed": false,
@@ -989,12 +1015,11 @@ describe('pk lookup optimization', () => {
   });
 
   test('junction with pk constraint', async () => {
-    expect(
-      await newQuery(queryDelegate, schema, 'issue')
-        .where('id', '=', '0001')
-        .related('labels', q => q.where('id', '=', '0001'))
-        .run(),
-    ).toMatchInlineSnapshot(`
+    const junctionPkQuery = newQuery(queryDelegate, schema, 'issue')
+      .where('id', '=', '0001')
+      .related('labels', q => q.where('id', '=', '0001'));
+    expect(await queryDelegate.run(asQueryInternals(junctionPkQuery)))
+      .toMatchInlineSnapshot(`
       [
         {
           "closed": false,
@@ -1017,12 +1042,11 @@ describe('pk lookup optimization', () => {
   });
 
   test('junction with exists with pk constraint', async () => {
-    expect(
-      await newQuery(queryDelegate, schema, 'issue')
-        .where('id', '=', '0001')
-        .whereExists('labels', q => q.where('id', '=', '0001'))
-        .run(),
-    ).toMatchInlineSnapshot(`
+    const junctionExistsPkQuery = newQuery(queryDelegate, schema, 'issue')
+      .where('id', '=', '0001')
+      .whereExists('labels', q => q.where('id', '=', '0001'));
+    expect(await queryDelegate.run(asQueryInternals(junctionExistsPkQuery)))
+      .toMatchInlineSnapshot(`
       [
         {
           "closed": false,
@@ -1038,16 +1062,15 @@ describe('pk lookup optimization', () => {
   });
 
   test('pk constraints in or branches', async () => {
-    expect(
-      await newQuery(queryDelegate, schema, 'issue')
-        .where(({or, exists}) =>
-          or(
-            exists('comments', q => q.where('id', '=', '0001')),
-            exists('labels', q => q.where('id', '=', '0001')),
-          ),
-        )
-        .run(),
-    ).toMatchInlineSnapshot(`
+    const pkOrQuery = newQuery(queryDelegate, schema, 'issue').where(
+      ({or, exists}) =>
+        or(
+          exists('comments', q => q.where('id', '=', '0001')),
+          exists('labels', q => q.where('id', '=', '0001')),
+        ),
+    );
+    expect(await queryDelegate.run(asQueryInternals(pkOrQuery)))
+      .toMatchInlineSnapshot(`
       [
         {
           "closed": false,
@@ -1063,12 +1086,11 @@ describe('pk lookup optimization', () => {
   });
 
   test('pk exists anded', async () => {
-    expect(
-      await newQuery(queryDelegate, schema, 'issue')
-        .whereExists('comments', q => q.where('id', '=', '0001'))
-        .whereExists('labels', q => q.where('id', '=', '0001'))
-        .run(),
-    ).toMatchInlineSnapshot(`
+    const existsAndedQuery = newQuery(queryDelegate, schema, 'issue')
+      .whereExists('comments', q => q.where('id', '=', '0001'))
+      .whereExists('labels', q => q.where('id', '=', '0001'));
+    expect(await queryDelegate.run(asQueryInternals(existsAndedQuery)))
+      .toMatchInlineSnapshot(`
       [
         {
           "closed": false,
@@ -1093,8 +1115,14 @@ describe('run with options', () => {
       '=',
       'issue 1',
     );
-    const singleFilterRowsUnknownP = issueQuery.run({type: 'unknown'});
-    const singleFilterRowsCompleteP = issueQuery.run({type: 'complete'});
+    const singleFilterRowsUnknownP = queryDelegate.run(
+      asQueryInternals(issueQuery),
+      {type: 'unknown'},
+    );
+    const singleFilterRowsCompleteP = queryDelegate.run(
+      asQueryInternals(issueQuery),
+      {type: 'complete'},
+    );
     issueSource.push({
       type: 'remove',
       row: {
@@ -1133,9 +1161,18 @@ describe('run with options', () => {
       '=',
       'issue 1',
     );
-    const unknownP = issueQuery.run({ttl: '1s', type: 'unknown'});
-    const completeP = issueQuery.run({ttl: '1m', type: 'complete'});
-    const hourP = issueQuery.run({ttl: '1h', type: 'unknown'});
+    const unknownP = queryDelegate.run(asQueryInternals(issueQuery), {
+      ttl: '1s',
+      type: 'unknown',
+    });
+    const completeP = queryDelegate.run(asQueryInternals(issueQuery), {
+      ttl: '1m',
+      type: 'complete',
+    });
+    const hourP = queryDelegate.run(asQueryInternals(issueQuery), {
+      ttl: '1h',
+      type: 'unknown',
+    });
     queryDelegate.callAllGotCallbacks();
     await Promise.all([unknownP, completeP, hourP]);
 
@@ -1169,7 +1206,10 @@ test('view creation is wrapped in context.batchViewUpdates call', () => {
   const queryDelegate = new TestQueryDelegate();
 
   const issueQuery = newQuery(queryDelegate, schema, 'issue');
-  const view = issueQuery.materialize(viewFactory);
+  const view = queryDelegate.materialize(
+    asQueryInternals(issueQuery),
+    viewFactory,
+  );
   expect(viewFactoryCalls).toEqual(1);
   expect(view).toBe(testView);
 });
@@ -1178,7 +1218,8 @@ test('json columns are returned as JS objects', async () => {
   const queryDelegate = new QueryDelegateImpl({callGot: true});
   addData(queryDelegate);
 
-  const rows = await newQuery(queryDelegate, schema, 'user').run();
+  const userQuery = newQuery(queryDelegate, schema, 'user');
+  const rows = await queryDelegate.run(asQueryInternals(userQuery));
   expect(rows).toMatchInlineSnapshot(`
     [
       {
@@ -1212,11 +1253,11 @@ test('complex expression', async () => {
   const queryDelegate = new QueryDelegateImpl({callGot: true});
   addData(queryDelegate);
 
-  let rows = await newQuery(queryDelegate, schema, 'issue')
-    .where(({or, cmp}) =>
+  const complexQuery1 = newQuery(queryDelegate, schema, 'issue').where(
+    ({or, cmp}) =>
       or(cmp('title', '=', 'issue 1'), cmp('title', '=', 'issue 2')),
-    )
-    .run();
+  );
+  let rows = await queryDelegate.run(asQueryInternals(complexQuery1));
   expect(rows).toMatchInlineSnapshot(`
     [
       {
@@ -1240,14 +1281,14 @@ test('complex expression', async () => {
     ]
   `);
 
-  rows = await newQuery(queryDelegate, schema, 'issue')
-    .where(({and, cmp, or}) =>
+  const complexQuery2 = newQuery(queryDelegate, schema, 'issue').where(
+    ({and, cmp, or}) =>
       and(
         cmp('ownerId', '=', '0001'),
         or(cmp('title', '=', 'issue 1'), cmp('title', '=', 'issue 2')),
       ),
-    )
-    .run();
+  );
+  rows = await queryDelegate.run(asQueryInternals(complexQuery2));
 
   expect(rows).toMatchInlineSnapshot(`
     [
@@ -1268,9 +1309,12 @@ test('null compare', async () => {
   const queryDelegate = new QueryDelegateImpl({callGot: true});
   addData(queryDelegate);
 
-  let rows = await newQuery(queryDelegate, schema, 'issue')
-    .where('ownerId', 'IS', null)
-    .run();
+  const nullQuery1 = newQuery(queryDelegate, schema, 'issue').where(
+    'ownerId',
+    'IS',
+    null,
+  );
+  let rows = await queryDelegate.run(asQueryInternals(nullQuery1));
   expect(rows).toMatchInlineSnapshot(`
     [
       {
@@ -1285,9 +1329,12 @@ test('null compare', async () => {
     ]
   `);
 
-  rows = await newQuery(queryDelegate, schema, 'issue')
-    .where('ownerId', 'IS NOT', null)
-    .run();
+  const nullQuery2 = newQuery(queryDelegate, schema, 'issue').where(
+    'ownerId',
+    'IS NOT',
+    null,
+  );
+  rows = await queryDelegate.run(asQueryInternals(nullQuery2));
 
   expect(rows).toMatchInlineSnapshot(`
     [
@@ -1317,14 +1364,16 @@ test('literal filter', async () => {
   const queryDelegate = new QueryDelegateImpl({callGot: true});
   addData(queryDelegate);
 
-  let rows = await newQuery(queryDelegate, schema, 'issue')
-    .where(({cmpLit}) => cmpLit(true, '=', false))
-    .run();
+  const literalQuery1 = newQuery(queryDelegate, schema, 'issue').where(
+    ({cmpLit}) => cmpLit(true, '=', false),
+  );
+  let rows = await queryDelegate.run(asQueryInternals(literalQuery1));
   expect(rows).toEqual([]);
 
-  rows = await newQuery(queryDelegate, schema, 'issue')
-    .where(({cmpLit}) => cmpLit(true, '=', true))
-    .run();
+  const literalQuery2 = newQuery(queryDelegate, schema, 'issue').where(
+    ({cmpLit}) => cmpLit(true, '=', true),
+  );
+  rows = await queryDelegate.run(asQueryInternals(literalQuery2));
 
   expect(rows).toMatchInlineSnapshot(`
     [
@@ -1434,7 +1483,8 @@ test('join with compound keys', async () => {
     });
   }
 
-  const rows = await newQuery(queryDelegate, schema, 'a').related('b').run();
+  const relatedQuery = newQuery(queryDelegate, schema, 'a').related('b');
+  const rows = await queryDelegate.run(asQueryInternals(relatedQuery));
 
   expect(rows).toMatchInlineSnapshot(`
     [
@@ -1532,11 +1582,13 @@ test('where exists', () => {
     },
   });
 
-  const materialized = newQuery(queryDelegate, schema, 'issue')
+  const materializedQuery = newQuery(queryDelegate, schema, 'issue')
     .where('closed', true)
     .whereExists('labels', q => q.where('name', 'bug'))
-    .related('labels')
-    .materialize();
+    .related('labels');
+  const materialized: TypedView<unknown[]> = queryDelegate.materialize(
+    asQueryInternals(materializedQuery),
+  );
 
   expect(materialized.data).toEqual([]);
 
@@ -1605,7 +1657,7 @@ test("flipped exists, or'ed", () => {
     ),
   );
 
-  const view = q.materialize();
+  const view = queryDelegate.materialize(asQueryInternals(q));
 
   commentSource.push({
     type: 'add',
@@ -1759,9 +1811,11 @@ test('broken flipped exists', async () => {
     },
   });
 
-  const data = await newQuery(queryDelegate, schema, 'issue')
-    .whereExists('comments', q => q.whereExists('issue', {flip: true}))
-    .run();
+  const flipQuery = newQuery(queryDelegate, schema, 'issue').whereExists(
+    'comments',
+    q => q.whereExists('issue', {flip: true}),
+  );
+  const data = await queryDelegate.run(asQueryInternals(flipQuery));
 
   // only issue 1 is returned since issue 2 has no comments
   expect(data).toMatchInlineSnapshot(`
@@ -1814,12 +1868,14 @@ test('duplicative where exists', () => {
     },
   });
 
-  const materialized = newQuery(queryDelegate, schema, 'issue')
+  const materializedQuery2 = newQuery(queryDelegate, schema, 'issue')
     .where('closed', true)
     .whereExists('labels', q => q.where('name', 'bug'))
     .whereExists('labels', q => q.where('name', 'bug'))
-    .related('labels')
-    .materialize();
+    .related('labels');
+  const materialized: TypedView<unknown[]> = queryDelegate.materialize(
+    asQueryInternals(materializedQuery2),
+  );
 
   expect(materialized.data).toEqual([]);
 
@@ -1867,10 +1923,12 @@ test('where exists before where, see https://bugs.rocicorp.dev/issue/3417', () =
   const queryDelegate = new QueryDelegateImpl();
   const issueSource = must(queryDelegate.getSource('issue'));
 
-  const materialized = newQuery(queryDelegate, schema, 'issue')
+  const materializedQuery3 = newQuery(queryDelegate, schema, 'issue')
     .whereExists('labels')
-    .where('closed', true)
-    .materialize();
+    .where('closed', true);
+  const materialized: TypedView<unknown[]> = queryDelegate.materialize(
+    asQueryInternals(materializedQuery3),
+  );
 
   // push a row that does not match the where filter
   issueSource.push({
@@ -1891,7 +1949,9 @@ test('where exists before where, see https://bugs.rocicorp.dev/issue/3417', () =
 test('result type unknown then complete', async () => {
   const queryDelegate = new QueryDelegateImpl();
   const issueQuery = newQuery(queryDelegate, schema, 'issue');
-  const m = issueQuery.materialize();
+  const m: TypedView<unknown[]> = queryDelegate.materialize(
+    asQueryInternals(issueQuery),
+  );
 
   let rows: unknown[] = [undefined];
   let resultType = '';
@@ -1919,7 +1979,9 @@ test('result type initially complete', () => {
   const queryDelegate = new QueryDelegateImpl();
   queryDelegate.synchronouslyCallNextGotCallback = true;
   const issueQuery = newQuery(queryDelegate, schema, 'issue');
-  const m = issueQuery.materialize();
+  const m: TypedView<unknown[]> = queryDelegate.materialize(
+    asQueryInternals(issueQuery),
+  );
 
   let rows: unknown[] = [undefined];
   let resultType = '';
@@ -2029,12 +2091,22 @@ describe('addCustom / addServer are called', () => {
     op: 'preload' | 'materialize' | 'run',
   ) {
     const queryDelegate = new QueryDelegateImpl();
-    let query = newQuery(queryDelegate, schema, 'issue');
+    let query = asQueryInternals(newQuery(queryDelegate, schema, 'issue'));
     if (type === 'addCustomQuery') {
-      query = asQueryInternals(query).nameAndArgs('issue', []);
+      query = asQueryInternals(query.nameAndArgs('issue', []));
     }
     const spy = vi.spyOn(queryDelegate, type);
-    await query[op]();
+    switch (op) {
+      case 'preload':
+        queryDelegate.preload(query);
+        break;
+      case 'materialize':
+        queryDelegate.materialize(query);
+        break;
+      case 'run':
+        await queryDelegate.run(query);
+        break;
+    }
 
     expect(spy).toHaveBeenCalledOnce();
   }

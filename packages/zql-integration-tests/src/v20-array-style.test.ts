@@ -8,6 +8,8 @@ import {
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import {createBuilder} from '../../zql/src/query/named.ts';
+import {run} from '../../zql/src/query/query-impl.ts';
+import {NoContext} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {newQueryDelegate} from '../../zqlite/src/test/source-factory.ts';
 
@@ -45,7 +47,8 @@ test('reading from old array style tables', async () => {
   const d = newQueryDelegate(lc, testLogConfig, sqlite, schema);
   const queries = createBuilder(schema);
 
-  const rows = await queries.bar.withDelegate(d).run();
+  const rows = await run(queries.bar, d, NoContext);
+
   expect(rows).toMatchInlineSnapshot(`
     [
       {

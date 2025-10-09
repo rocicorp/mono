@@ -9,6 +9,7 @@ import {
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {defineQuery} from './define-query.ts';
 import {createBuilder} from './named.ts';
+import {asQueryInternals} from './query-internals.ts';
 
 const schema = createSchema({
   tables: [
@@ -54,7 +55,7 @@ describe('defineQuery', () => {
     expect(query.queryName).toBe('testNoOptions');
 
     const result = query(undefined).withContext('noOptionsContext');
-    expect(result.ast).toEqual({
+    expect(asQueryInternals(result).ast).toEqual({
       table: 'foo',
       where: {
         type: 'simple',
@@ -80,7 +81,7 @@ describe('defineQuery', () => {
     expect(query.queryName).toBe('testEmptyOptions');
 
     const result = query(42).withContext('emptyContext');
-    expect(result.ast).toEqual({
+    expect(asQueryInternals(result).ast).toEqual({
       table: 'foo',
       where: {
         type: 'simple',
@@ -119,7 +120,7 @@ describe('defineQuery', () => {
 
     // Input is string, but should be converted to number by validator
     const result = query('123').withContext('validatorContext');
-    expect(result.ast).toEqual({
+    expect(asQueryInternals(result).ast).toEqual({
       table: 'foo',
       where: {
         type: 'simple',
@@ -151,7 +152,7 @@ describe('defineQuery', () => {
     );
 
     const result = query().withContext('undefinedValidatorContext');
-    expect(result.ast).toEqual({
+    expect(asQueryInternals(result).ast).toEqual({
       table: 'foo',
       where: {
         type: 'simple',
@@ -257,7 +258,7 @@ describe('defineQuery', () => {
 
     // All should return the basic table query
     [result1, result2, result3, result4].forEach(result => {
-      expect(result.ast).toEqual({
+      expect(asQueryInternals(result).ast).toEqual({
         table: 'foo',
         orderBy: [['id', 'asc']],
       });
