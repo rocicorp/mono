@@ -5,12 +5,12 @@ import {
   syncedQuery,
   syncedQueryWithContext,
   withValidation,
-  type QueryFnReturn,
 } from './named.ts';
 import {schema} from './test/test-schemas.ts';
 const builder = createBuilder(schema);
 import * as v from '../../../shared/src/valita.ts';
 import {ast} from './query-impl.ts';
+import type {Row} from './query.ts';
 
 test('syncedQuery', () => {
   const idArgs = v.tuple([v.string()]);
@@ -21,7 +21,7 @@ test('syncedQuery', () => {
   expect(def.parse).toBeDefined();
   expect(def.takesContext).toEqual(false);
 
-  expectTypeOf<QueryFnReturn<typeof def>>().toEqualTypeOf<
+  expectTypeOf<Row<typeof def>>().toEqualTypeOf<
     {
       readonly id: string;
       readonly title: string;
@@ -76,7 +76,7 @@ test('syncedQuery', () => {
     'invalid_type at .0 (expected string)',
   );
 
-  expectTypeOf<QueryFnReturn<typeof wv>>().toEqualTypeOf<
+  expectTypeOf<Row<typeof wv>>().toEqualTypeOf<
     {
       readonly id: string;
       readonly title: string;
@@ -136,7 +136,7 @@ test('syncedQueryWithContext', () => {
   expect(def.parse).toBeDefined();
   expect(def.takesContext).toEqual(true);
 
-  expectTypeOf<QueryFnReturn<typeof def>>().toEqualTypeOf<
+  expectTypeOf<Row<typeof def>>().toEqualTypeOf<
     {
       readonly id: string;
       readonly title: string;
@@ -208,7 +208,7 @@ test('syncedQueryWithContext', () => {
     'invalid_type at .0 (expected string)',
   );
 
-  expectTypeOf<QueryFnReturn<typeof wv>>().toEqualTypeOf<
+  expectTypeOf<Row<typeof wv>>().toEqualTypeOf<
     {
       readonly id: string;
       readonly title: string;
