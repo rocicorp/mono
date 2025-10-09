@@ -1073,7 +1073,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       transformationHash,
       transformedAst,
     } of transformedQueries) {
-      const timer = new Timer();
+      const timer = new TimeSliceTimer();
       let count = 0;
       await startAsyncSpan(
         tracer,
@@ -1086,13 +1086,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             transformationHash,
             queryID,
             transformedAst,
-            timer.start(),
+            await timer.start(),
           )) {
             if (++count % TIME_SLICE_CHECK_SIZE === 0) {
               if (timer.elapsedLap() > TIME_SLICE_MS) {
-                timer.stopLap();
-                await yieldProcess();
-                timer.startLap();
+                await timer.yieldProcess();
               }
             }
           }
@@ -1457,12 +1455,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       let totalProcessTime = 0;
-      const timer = new Timer();
+      const timer = new TimeSliceTimer();
       const pipelines = this.#pipelines;
       const hydrations = this.#hydrations;
       const hydrationTime = this.#hydrationTime;
       // eslint-disable-next-line @typescript-eslint/no-this-alias
       const self = this;
+
+      // yield at the very beginning so that the first time slice
+      // is properly processed by the time-slice queue.
+      await yieldProcess();
 
       function* generateRowChanges(slowHydrateThreshold: number) {
         for (const q of addQueries) {
@@ -1475,7 +1477,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             q.transformationHash,
             q.id,
             q.ast,
-            timer.start(),
+            timer.startWithoutYielding(),
           );
           const elapsed = timer.stop();
           totalProcessTime += elapsed;
@@ -1637,7 +1639,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #processChanges(
     lc: LogContext,
-    timer: Timer,
+    timer: TimeSliceTimer,
     changes: Iterable<RowChange>,
     updater: CVRQueryDrivenUpdater,
     pokers: PokeHandler,
@@ -1716,9 +1718,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
           if (rows.size % TIME_SLICE_CHECK_SIZE === 0) {
             if (timer.elapsedLap() > TIME_SLICE_MS) {
-              timer.stopLap();
-              await yieldProcess();
-              timer.startLap();
+              await timer.yieldProcess();
             }
           }
         }
@@ -1749,7 +1749,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
       const start = performance.now();
 
-      const timer = new Timer();
+      const timer = new TimeSliceTimer();
       const {version, numChanges, changes} = this.#pipelines.advance(timer);
       lc = lc.withContext('newVersion', version);
 
@@ -1774,7 +1774,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       try {
         await this.#processChanges(
           lc,
-          timer.start(),
+          await timer.start(),
           changes,
           updater,
           pokers,
@@ -2017,17 +2017,30 @@ function hasExpiredQueries(cvr: CVRSnapshot): boolean {
   return false;
 }
 
-export class Timer {
+export class TimeSliceTimer {
   #total = 0;
   #start = 0;
 
-  start() {
+  async start() {
+    // yield at the very beginning so that the first time slice
+    // is properly processed by the time-slice queue.
+    await yieldProcess();
+    return this.startWithoutYielding();
+  }
+
+  startWithoutYielding() {
     this.#total = 0;
-    this.startLap();
+    this.#startLap();
     return this;
   }
 
-  startLap() {
+  async yieldProcess() {
+    this.#stopLap();
+    await yieldProcess();
+    this.#startLap();
+  }
+
+  #startLap() {
     assert(this.#start === 0, 'already running');
     this.#start = performance.now();
   }
@@ -2037,7 +2050,7 @@ export class Timer {
     return performance.now() - this.#start;
   }
 
-  stopLap() {
+  #stopLap() {
     assert(this.#start !== 0, 'not running');
     this.#total += performance.now() - this.#start;
     this.#start = 0;
@@ -2045,7 +2058,7 @@ export class Timer {
 
   /** @returns the total elapsed time */
   stop(): number {
-    this.stopLap();
+    this.#stopLap();
     return this.#total;
   }
 
