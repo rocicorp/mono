@@ -3,6 +3,10 @@ import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import {
+  CREATE_STORAGE_TABLE,
+  DatabaseStorage,
+} from '../../../../zqlite/src/database-storage.ts';
 import type {Database as DB} from '../../../../zqlite/src/db.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {InspectorDelegate} from '../../server/inspector-delegate.ts';
@@ -15,13 +19,9 @@ import {
   type FakeReplicator,
 } from '../replicator/test-utils.ts';
 import {getMutationResultsQuery} from './cvr.ts';
-import {
-  CREATE_STORAGE_TABLE,
-  DatabaseStorage,
-} from '../../../../zqlite/src/database-storage.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
 import {ResetPipelinesSignal, Snapshotter} from './snapshotter.ts';
-import {Timer} from './view-syncer.ts';
+import {TimeSliceTimer} from './view-syncer.ts';
 
 describe('view-syncer/pipeline-driver', () => {
   let dbFile: DbFile;
@@ -317,7 +317,7 @@ describe('view-syncer/pipeline-driver', () => {
   );
 
   function startTimer() {
-    return new Timer().start();
+    return new TimeSliceTimer().startWithoutYielding();
   }
 
   function changes() {
