@@ -134,34 +134,33 @@ export function ListPage({onReady}: {onReady: () => void}) {
     }
   }, [pageSize, size]);
 
-  const q = queries.issueListV2(
-    login.loginState?.decoded,
-    listContextParams,
-    z.userID,
-    pageSize,
-    anchor.startRow
+  const q = queries.issueListV2({
+    listContext: listContextParams,
+    userID: z.userID,
+    limit: pageSize,
+    start: anchor.startRow
       ? {
           id: anchor.startRow.id,
           modified: anchor.startRow.modified,
           created: anchor.startRow.created,
         }
       : null,
-    anchor.direction,
-  );
+    dir: anchor.direction,
+  });
 
   // For detecting if the base query, i.e. ignoring pagination parameters, has
   // changed.
+
   const baseQ = useMemo(
     () =>
-      queries.issueListV2(
-        login.loginState?.decoded,
-        listContextParams,
-        z.userID,
-        null, // no limit
-        null, // no start
-        'forward', // fixed direction
-      ),
-    [login.loginState?.decoded, listContextParams, z.userID],
+      queries.issueListV2({
+        listContext: listContextParams,
+        userID: z.userID,
+        limit: null, // no limit
+        start: null, // no start
+        dir: 'forward', // fixed direction
+      }),
+    [listContextParams, z.userID],
   );
 
   useEffect(() => {
@@ -202,7 +201,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   useEffect(() => {
     if (issuesResult.type === 'complete') {
       recordPageLoad('list-page');
-      preload(login.loginState?.decoded, z);
+      preload(z);
     }
   }, [login.loginState?.decoded, issuesResult.type, z]);
 

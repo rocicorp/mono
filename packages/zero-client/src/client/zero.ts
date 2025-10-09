@@ -86,19 +86,19 @@ import {
 } from '../../../zql/src/query/metrics-delegate.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {
-  type AnyQuery,
   materialize,
   newQuery,
+  preload,
+  run,
 } from '../../../zql/src/query/query-impl.ts';
 import {
   type HumanReadable,
   type MaterializeOptions,
+  NoContext,
   type PreloadOptions,
+  type PullRow,
   type Query,
-  type QueryReturn,
-  type QueryTable,
   type RunOptions,
-  delegateSymbol,
 } from '../../../zql/src/query/query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
@@ -173,7 +173,7 @@ export type MakeEntityQueriesFromSchema<S extends Schema> = {
 
 declare const TESTING: boolean;
 
-export type TestingContext = {
+export type TestingContext<TContext> = {
   puller: Puller;
   pusher: Pusher;
   setReload: (r: () => void) => void;
@@ -181,14 +181,15 @@ export type TestingContext = {
   connectStart: () => number | undefined;
   socketResolver: () => Resolver<WebSocket>;
   connectionState: () => ConnectionState;
+  queryDelegate: () => QueryDelegate<TContext>;
 };
 
 export const onSetConnectionStateSymbol = Symbol();
 export const exposedToTestingSymbol = Symbol();
 export const createLogOptionsSymbol = Symbol();
 
-interface TestZero {
-  [exposedToTestingSymbol]?: TestingContext;
+interface TestZero<TContext> {
+  [exposedToTestingSymbol]?: TestingContext<TContext>;
   [onSetConnectionStateSymbol]?: (state: ConnectionState) => void;
   [createLogOptionsSymbol]?: (options: {
     consoleLogLevel: LogLevel;
@@ -196,10 +197,12 @@ interface TestZero {
   }) => LogOptions;
 }
 
-function asTestZero<S extends Schema, MD extends CustomMutatorDefs | undefined>(
-  z: Zero<S, MD>,
-): TestZero {
-  return z as TestZero;
+function asTestZero<
+  S extends Schema,
+  MD extends CustomMutatorDefs | undefined,
+  Context,
+>(z: Zero<S, MD, Context>): TestZero<Context> {
+  return z as TestZero<Context>;
 }
 
 export const RUN_LOOP_INTERVAL_MS = 5_000;
@@ -293,6 +296,7 @@ type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
 export class Zero<
   const S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
+  TContext = NoContext,
 > {
   readonly version = version;
 
@@ -357,7 +361,6 @@ export class Zero<
   };
 
   readonly #zeroContext: ZeroContext;
-  readonly queryDelegate: QueryDelegate;
 
   #connectResolver = resolver<void>();
   #pendingPullsByRequestID: Map<string, Resolver<PullResponseBody>> = new Map();
@@ -407,7 +410,7 @@ export class Zero<
   // 2. client successfully connects
   #totalToConnectStart: number | undefined = undefined;
 
-  readonly #options: ZeroOptions<S, MD>;
+  readonly #options: ZeroOptions<S, MD, TContext>;
 
   readonly query: MakeEntityQueriesFromSchema<S>;
 
@@ -422,7 +425,7 @@ export class Zero<
   /**
    * Constructs a new Zero client.
    */
-  constructor(options: ZeroOptions<S, MD>) {
+  constructor(options: ZeroOptions<S, MD, TContext>) {
     const {
       userID,
       storageKey,
@@ -587,6 +590,7 @@ export class Zero<
     this.#zeroContext = new ZeroContext(
       lc,
       this.#ivmMain,
+      this.#options.context as TContext,
       (ast, ttl, gotCallback) => {
         if (enableLegacyQueries) {
           return this.#queryManager.addLegacy(ast, ttl, gotCallback);
@@ -608,7 +612,6 @@ export class Zero<
       this.#addMetric,
       assertValidRunOptions,
     );
-    this.queryDelegate = this.#zeroContext;
 
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
@@ -763,8 +766,8 @@ export class Zero<
 
     if (TESTING) {
       asTestZero(this)[exposedToTestingSymbol] = {
-        puller: this.#puller,
-        pusher: this.#pusher,
+        puller: (req, rid) => this.#puller(req, rid),
+        pusher: (req, rid) => this.#pusher(req, rid),
         setReload: (r: () => void) => {
           this.#reload = r;
         },
@@ -772,6 +775,7 @@ export class Zero<
         connectStart: () => this.#connectStart,
         socketResolver: () => this.#socketResolver,
         connectionState: () => this.#connectionState,
+        queryDelegate: () => this.#zeroContext,
       };
     }
   }
@@ -828,49 +832,52 @@ export class Zero<
     return createLogOptions(options);
   }
 
-  preload(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    query: Query<S, keyof S['tables'] & string, any>,
-    options?: PreloadOptions | undefined,
-  ) {
-    return query[delegateSymbol](this.#zeroContext).preload(options);
+  preload<
+    TTable extends keyof S['tables'] & string,
+    TReturn extends PullRow<TTable, S>,
+  >(query: Query<S, TTable, TReturn, TContext>, options?: PreloadOptions) {
+    return preload(query, this.#zeroContext, options);
   }
 
-  run<Q>(
-    query: Q,
-    runOptions?: RunOptions | undefined,
-  ): Promise<HumanReadable<QueryReturn<Q>>> {
-    return (
-      (query as AnyQuery)
-        // eslint-disable-next-line no-unexpected-multiline
-        [delegateSymbol](this.#zeroContext)
-        .run(runOptions) as Promise<HumanReadable<QueryReturn<Q>>>
-    );
+  run<TTable extends keyof S['tables'] & string, TReturn>(
+    query: Query<S, TTable, TReturn, TContext>,
+    runOptions?: RunOptions,
+  ): Promise<HumanReadable<TReturn>> {
+    return run(query, this.#zeroContext, runOptions);
   }
 
-  materialize<Q>(
-    query: Q,
-    options?: MaterializeOptions | undefined,
-  ): TypedView<HumanReadable<QueryReturn<Q>>>;
-  materialize<T, Q>(
-    query: Q,
-    factory: ViewFactory<S, QueryTable<Q>, QueryReturn<Q>, T>,
-    options?: MaterializeOptions | undefined,
+  get context(): TContext {
+    return this.#options.context as TContext;
+  }
+
+  materialize<TTable extends keyof S['tables'] & string, TReturn>(
+    query: Query<S, TTable, TReturn, TContext>,
+    options?: MaterializeOptions,
+  ): TypedView<HumanReadable<TReturn>>;
+  materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
+    query: Query<S, TTable, TReturn, TContext>,
+    factory: ViewFactory<S, TTable, TReturn, TContext, T>,
+    options?: MaterializeOptions,
   ): T;
-  materialize<T, Q>(
-    query: Q,
+  materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
+    query: Query<S, TTable, TReturn, TContext>,
     factoryOrOptions?:
-      | ViewFactory<S, QueryTable<Q>, QueryReturn<Q>, T>
-      | MaterializeOptions
-      | undefined,
-    maybeOptions?: MaterializeOptions | undefined,
+      | ViewFactory<S, TTable, TReturn, TContext, T>
+      | MaterializeOptions,
+    maybeOptions?: MaterializeOptions,
   ) {
-    return materialize(
-      query,
-      this.#zeroContext,
-      factoryOrOptions,
-      maybeOptions,
-    );
+    let factory;
+    let options;
+
+    if (typeof factoryOrOptions === 'function') {
+      factory = factoryOrOptions;
+      options = maybeOptions;
+    } else {
+      factory = undefined;
+      options = factoryOrOptions;
+    }
+
+    return materialize(query, this.#zeroContext, factory, options);
   }
 
   /**
@@ -1974,7 +1981,7 @@ export class Zero<
   }
 
   #checkConnectivity(reason: string) {
-    void this.#checkConnectivityAsync(reason);
+    this.#checkConnectivityAsync(reason);
   }
 
   #checkConnectivityAsync(_reason: string) {
@@ -2022,6 +2029,7 @@ export class Zero<
       return (this.#inspector ??= new Inspector(
         this.#rep,
         this.#queryManager,
+        this.#zeroContext,
         async () => {
           await this.#connectResolver.promise;
           return this.#socket!;

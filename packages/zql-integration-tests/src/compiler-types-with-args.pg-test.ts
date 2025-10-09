@@ -4,13 +4,10 @@ import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
-import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
 import {initialSync} from '../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
 import {type PostgresDB} from '../../zero-cache/src/types/pg.ts';
-import {getServerSchema} from '../../zero-server/src/schema.ts';
-import {Transaction} from '../../zero-server/src/test/util.ts';
 import {type Row} from '../../zero-protocol/src/data.ts';
 import {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
@@ -20,7 +17,11 @@ import {
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
-import {completedAST, newQuery} from '../../zql/src/query/query-impl.ts';
+import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
+import {getServerSchema} from '../../zero-server/src/schema.ts';
+import {Transaction} from '../../zero-server/src/test/util.ts';
+import {newQuery} from '../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import {type Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../zqlite/src/table-source.ts';
@@ -200,7 +201,11 @@ describe('compiling ZQL to SQL', () => {
   ) {
     test('basic', async () => {
       const query = issueQuery.related('comments');
-      const c = compile(serverSchema, schema, completedAST(query));
+      const c = compile(
+        serverSchema,
+        schema,
+        asQueryInternals(query).completedAST,
+      );
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
@@ -275,7 +280,11 @@ describe('compiling ZQL to SQL', () => {
       const query = issueQuery
         .related('comments', q => q.orderBy('hash', 'asc'))
         .limit(2);
-      const c = compile(serverSchema, schema, completedAST(query));
+      const c = compile(
+        serverSchema,
+        schema,
+        asQueryInternals(query).completedAST,
+      );
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
@@ -335,7 +344,11 @@ describe('compiling ZQL to SQL', () => {
       const query = issueQuery.related('comments', q =>
         q.where('hash', '>=', 'hash-51'),
       );
-      const c = compile(serverSchema, schema, completedAST(query));
+      const c = compile(
+        serverSchema,
+        schema,
+        asQueryInternals(query).completedAST,
+      );
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
@@ -376,7 +389,11 @@ describe('compiling ZQL to SQL', () => {
       const q2 = issueQuery.related('comments', q =>
         q.where('hash', '=', 'hash-1'),
       );
-      const c2 = compile(serverSchema, schema, completedAST(q2));
+      const c2 = compile(
+        serverSchema,
+        schema,
+        asQueryInternals(q2).completedAST,
+      );
       const sqlQuery2 = formatPgInternalConvert(c2);
       const pgResult2 = extractZqlResult(
         await runPgQuery(sqlQuery2.text, sqlQuery2.values as JSONValue[]),
@@ -422,7 +439,11 @@ describe('compiling ZQL to SQL', () => {
       const query = issueQuery.related('comments', q =>
         q.where('weight', '>=', 5.551),
       );
-      const c = compile(serverSchema, schema, completedAST(query));
+      const c = compile(
+        serverSchema,
+        schema,
+        asQueryInternals(query).completedAST,
+      );
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
@@ -463,7 +484,11 @@ describe('compiling ZQL to SQL', () => {
       const q2 = issueQuery.related('comments', q =>
         q.where('weight', '=', 1.11),
       );
-      const c2 = compile(serverSchema, schema, completedAST(q2));
+      const c2 = compile(
+        serverSchema,
+        schema,
+        asQueryInternals(q2).completedAST,
+      );
       const sqlQuery2 = formatPgInternalConvert(c2);
       const pgResult2 = extractZqlResult(
         await runPgQuery(sqlQuery2.text, sqlQuery2.values as JSONValue[]),

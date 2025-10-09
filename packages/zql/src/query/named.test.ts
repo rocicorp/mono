@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import {expect, expectTypeOf, test} from 'vitest';
+import * as v from '../../../shared/src/valita.ts';
 import {
   createBuilder,
   syncedQuery,
@@ -7,10 +7,10 @@ import {
   withValidation,
   type QueryFnReturn,
 } from './named.ts';
+import {asQueryInternals} from './query-internals.ts';
+import type {QueryReturn} from './query.ts';
 import {schema} from './test/test-schemas.ts';
 const builder = createBuilder(schema);
-import * as v from '../../../shared/src/valita.ts';
-import {ast} from './query-impl.ts';
 
 test('syncedQuery', () => {
   const idArgs = v.tuple([v.string()]);
@@ -32,26 +32,23 @@ test('syncedQuery', () => {
     }[]
   >();
 
-  const q = def('123');
-  expectTypeOf<ReturnType<typeof q.run>>().toEqualTypeOf<
-    Promise<
-      {
-        readonly id: string;
-        readonly title: string;
-        readonly description: string;
-        readonly closed: boolean;
-        readonly ownerId: string | null;
-        readonly createdAt: number;
-      }[]
-    >
-  >();
+  const query = def('123');
+  expectTypeOf<QueryReturn<typeof query>>().toEqualTypeOf<{
+    readonly id: string;
+    readonly title: string;
+    readonly description: string;
+    readonly closed: boolean;
+    readonly ownerId: string | null;
+    readonly createdAt: number;
+  }>();
 
+  const q = asQueryInternals(query);
   expect(q.customQueryID).toEqual({
     name: 'myQuery',
     args: ['123'],
   });
 
-  expect(q.ast).toEqual({
+  expect(q.completedAST).toEqual({
     table: 'issue',
     where: {
       left: {
@@ -72,6 +69,7 @@ test('syncedQuery', () => {
   expect(wv.queryName).toEqual('myQuery');
   expect(wv.parse).toBeDefined();
   expect(wv.takesContext).toEqual(true);
+  // @ts-expect-error 123 is not a string
   expect(() => wv('ignored', 123)).toThrow(
     'invalid_type at .0 (expected string)',
   );
@@ -87,26 +85,23 @@ test('syncedQuery', () => {
     }[]
   >();
 
-  const vq = wv('ignored', '123');
-  expectTypeOf<ReturnType<typeof vq.run>>().toEqualTypeOf<
-    Promise<
-      {
-        readonly id: string;
-        readonly title: string;
-        readonly description: string;
-        readonly closed: boolean;
-        readonly ownerId: string | null;
-        readonly createdAt: number;
-      }[]
-    >
-  >();
+  const vquery = wv('ignored', '123');
+  expectTypeOf<QueryReturn<typeof vquery>>().toEqualTypeOf<{
+    readonly id: string;
+    readonly title: string;
+    readonly description: string;
+    readonly closed: boolean;
+    readonly ownerId: string | null;
+    readonly createdAt: number;
+  }>();
 
+  const vq = asQueryInternals(vquery);
   expect(vq.customQueryID).toEqual({
     name: 'myQuery',
     args: ['123'],
   });
 
-  expect(vq.ast).toEqual({
+  expect(vq.completedAST).toEqual({
     table: 'issue',
     where: {
       left: {
@@ -147,26 +142,23 @@ test('syncedQueryWithContext', () => {
     }[]
   >();
 
-  const q = def('user1', '123');
-  expectTypeOf<ReturnType<typeof q.run>>().toEqualTypeOf<
-    Promise<
-      {
-        readonly id: string;
-        readonly title: string;
-        readonly description: string;
-        readonly closed: boolean;
-        readonly ownerId: string | null;
-        readonly createdAt: number;
-      }[]
-    >
-  >();
+  const query2 = def('user1', '123');
+  expectTypeOf<QueryReturn<typeof query2>>().toEqualTypeOf<{
+    readonly id: string;
+    readonly title: string;
+    readonly description: string;
+    readonly closed: boolean;
+    readonly ownerId: string | null;
+    readonly createdAt: number;
+  }>();
 
+  const q = asQueryInternals(query2);
   expect(q.customQueryID).toEqual({
     name: 'myQuery',
     args: ['123'],
   });
 
-  expect(q.ast).toEqual({
+  expect(q.completedAST).toEqual({
     table: 'issue',
     where: {
       conditions: [
@@ -204,6 +196,7 @@ test('syncedQueryWithContext', () => {
   expect(wv.queryName).toEqual('myQuery');
   expect(wv.parse).toBeDefined();
   expect(wv.takesContext).toEqual(true);
+  // @ts-expect-error 123 is not a string
   expect(() => wv('ignored', 123)).toThrow(
     'invalid_type at .0 (expected string)',
   );
@@ -219,26 +212,23 @@ test('syncedQueryWithContext', () => {
     }[]
   >();
 
-  const vq = wv('user1', '123');
-  expectTypeOf<ReturnType<typeof vq.run>>().toEqualTypeOf<
-    Promise<
-      {
-        readonly id: string;
-        readonly title: string;
-        readonly description: string;
-        readonly closed: boolean;
-        readonly ownerId: string | null;
-        readonly createdAt: number;
-      }[]
-    >
-  >();
+  const vquery2 = wv('user1', '123');
+  expectTypeOf<QueryReturn<typeof vquery2>>().toEqualTypeOf<{
+    readonly id: string;
+    readonly title: string;
+    readonly description: string;
+    readonly closed: boolean;
+    readonly ownerId: string | null;
+    readonly createdAt: number;
+  }>();
 
+  const vq = asQueryInternals(vquery2);
   expect(vq.customQueryID).toEqual({
     name: 'myQuery',
     args: ['123'],
   });
 
-  expect(vq.ast).toEqual({
+  expect(vq.completedAST).toEqual({
     table: 'issue',
     where: {
       conditions: [
@@ -277,8 +267,12 @@ test('syncedQueryWithContext', () => {
 
 test('makeSchemaQuery', () => {
   const builders = createBuilder(schema);
-  const q1 = builders.issue.where('id', '123').nameAndArgs('myName', ['123']);
-  expect(ast(q1)).toMatchInlineSnapshot(`
+  const q1 = asQueryInternals(
+    asQueryInternals(builders.issue.where('id', '123')).nameAndArgs('myName', [
+      '123',
+    ]),
+  );
+  expect(q1.ast).toMatchInlineSnapshot(`
     {
       "table": "issue",
       "where": {

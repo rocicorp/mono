@@ -31,7 +31,10 @@ import {
 } from '../../../zql/src/builder/builder.ts';
 import {simplifyCondition} from '../../../zql/src/query/expression.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
-import {StaticQuery, staticQuery} from '../../../zql/src/query/static-query.ts';
+import {
+  asStaticQuery,
+  staticQuery,
+} from '../../../zql/src/query/static-query.ts';
 import {
   DatabaseStorage,
   type ClientGroupStorage,
@@ -479,7 +482,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     if (policy.length === 0) {
       return false;
     }
-    let rowQueryAst = (rowQuery as StaticQuery<Schema, string>).ast;
+    let rowQueryAst = asStaticQuery(rowQuery).completedAST;
     rowQueryAst = bindStaticParameters(
       {
         ...rowQueryAst,

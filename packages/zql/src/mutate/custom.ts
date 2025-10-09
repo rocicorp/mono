@@ -5,7 +5,13 @@ import type {
   SchemaValueToTSType,
   TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
-import type {Query} from '../query/query.ts';
+import type {
+  HumanReadable,
+  NoContext,
+  PullRow,
+  Query,
+  RunOptions,
+} from '../query/query.ts';
 
 type ClientID = string;
 
@@ -27,6 +33,11 @@ export interface TransactionBase<S extends Schema> {
 
   readonly mutate: SchemaCRUD<S>;
   readonly query: SchemaQuery<S>;
+
+  run<TTable extends keyof S['tables'] & string, TReturn, TContext>(
+    query: Query<S, TTable, TReturn, TContext>,
+    options?: RunOptions,
+  ): Promise<HumanReadable<TReturn>>;
 }
 
 export type Transaction<S extends Schema, TWrappedTransaction = unknown> =
@@ -104,8 +115,13 @@ export type TableCRUD<S extends TableSchema> = {
   delete: (id: DeleteID<S>) => Promise<void>;
 };
 
-export type SchemaQuery<S extends Schema> = {
-  readonly [K in keyof S['tables'] & string]: Query<S, K>;
+export type SchemaQuery<S extends Schema, TContext = NoContext> = {
+  readonly [K in keyof S['tables'] & string]: Query<
+    S,
+    K,
+    PullRow<K, S>,
+    TContext
+  >;
 };
 
 export type DeleteID<S extends TableSchema> = Expand<PrimaryKeyFields<S>>;
