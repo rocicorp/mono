@@ -1,5 +1,12 @@
 import type {ValueType} from '../../../zero-protocol/src/client-schema.ts';
 
+/**
+ * We do not know the value a constraint will take until runtime.
+ *
+ * However, we do know the column and the type of value it will take.
+ *
+ * E.g., we know that `issue.assignee_id` will be constrained to typeof issue.assignee_id.
+ */
 export interface PlannerConstraint {
   [column: string]: ValueType;
 }
