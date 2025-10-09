@@ -41,7 +41,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 33 adds `flip` to CorrelatedSubquery (0.25)
 // -- version 34 moves `flip` from CorrelatedSubquery to CorrelatedSubqueryCondition (0.25)
 // -- version 35 adds `readRows`, `readRowCountsByQuery` and `readRowCount` to analyze-query result (0.25)
-export const PROTOCOL_VERSION = 35;
+// -- version 36 changes inspector analyze-query and adds error response to RPC
+export const PROTOCOL_VERSION = 36;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version

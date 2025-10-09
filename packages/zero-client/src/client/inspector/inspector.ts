@@ -1,3 +1,6 @@
+import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
+import type {AnalyzeQueryOptions} from '../../../../zero-protocol/src/inspect-up.ts';
+import type {AnyQuery} from '../../../../zql/src/query/query-impl.ts';
 import type {ClientGroup} from './client-group.ts';
 import {Client} from './client.ts';
 import type {
@@ -52,5 +55,16 @@ export class Inspector {
 
   async serverVersion(): Promise<string> {
     return (await this.#delegate.lazy).serverVersion(this.#delegate);
+  }
+
+  async analyzeQuery(
+    query: AnyQuery,
+    options?: AnalyzeQueryOptions,
+  ): Promise<AnalyzeQueryResult> {
+    return (await this.#delegate.lazy).analyzeQuery(
+      this.#delegate,
+      query,
+      options,
+    );
   }
 }

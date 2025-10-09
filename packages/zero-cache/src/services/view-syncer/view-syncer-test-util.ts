@@ -32,6 +32,7 @@ import {
 import {Database} from '../../../../zqlite/src/db.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
+import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {TestDBs} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
@@ -674,12 +675,31 @@ export async function setup(
   const operatorStorage = new DatabaseStorage(
     storageDB,
   ).createClientGroupStorage(serviceID);
-  const inspectorDelegate = new InspectorDelegate();
+
+  const config = {
+    getQueries: queryConfig,
+    adminPassword: TEST_ADMIN_PASSWORD,
+    replica: {
+      file: replicaDbFile.path,
+    },
+    log: {
+      level: 'error',
+    },
+  } as NormalizedZeroConfig;
+
+  // Create the custom query transformer if configured
+  const {getQueries} = config;
+  const customQueryTransformer =
+    getQueries.url &&
+    new CustomQueryTransformer(
+      lc,
+      {url: getQueries.url, forwardCookies: getQueries.forwardCookies},
+      SHARD,
+    );
+
+  const inspectorDelegate = new InspectorDelegate(customQueryTransformer);
   const vs = new ViewSyncerService(
-    {
-      getQueries: queryConfig,
-      adminPassword: TEST_ADMIN_PASSWORD,
-    } as NormalizedZeroConfig,
+    config,
     lc,
     SHARD,
     TASK_ID,
@@ -699,6 +719,7 @@ export async function setup(
     drainCoordinator,
     100,
     inspectorDelegate,
+    customQueryTransformer,
     undefined,
     setTimeoutFn,
   );
@@ -760,6 +781,7 @@ export async function setup(
     connectWithQueueAndSource,
     setTimeoutFn,
     inspectorDelegate,
+    customQueryTransformer,
   };
 }
 

@@ -36,12 +36,9 @@ import {
   type TransformedAndHashed,
 } from '../../auth/read-authorizer.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
-import {
-  getServerVersion,
-  isAdminPasswordValid,
-  type ZeroConfig,
-} from '../../config/zero-config.ts';
+import type {ZeroConfig} from '../../config/zero-config.ts';
 import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
+import type {HeaderOptions} from '../../custom/fetch.ts';
 import {
   getOrCreateCounter,
   getOrCreateHistogram,
@@ -54,7 +51,6 @@ import {rowIDString, type RowKey} from '../../types/row-key.ts';
 import type {ShardID} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
-import {analyzeQuery} from '../analyze.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.ts';
 import type {ActivityBasedService} from '../service.ts';
@@ -75,6 +71,7 @@ import {
   type RowUpdate,
 } from './cvr.ts';
 import type {DrainCoordinator} from './drain-coordinator.ts';
+import {handleInspect} from './inspect-handler.ts';
 import {PipelineDriver, type RowChange} from './pipeline-driver.ts';
 import {
   cmpVersions,
@@ -218,6 +215,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   // DEPRECATED: remove `authData` in favor of forwarding
   // auth and cookie headers directly
   #authData: TokenData | undefined;
+
+  // Not sure why lint can't see that this is used?
+  // eslint-disable-next-line no-unused-private-class-members
   #httpCookie: string | undefined;
 
   #expiredQueriesTimer: ReturnType<SetTimeout> | 0 = 0;
@@ -265,6 +265,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     drainCoordinator: DrainCoordinator,
     slowHydrateThreshold: number,
     inspectorDelegate: InspectorDelegate,
+    customQueryTransformer: CustomQueryTransformer | undefined,
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
     setTimeoutFn: SetTimeout = setTimeout.bind(globalThis),
   ) {
@@ -280,6 +281,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#keepaliveMs = keepaliveMs;
     this.#slowHydrateThreshold = slowHydrateThreshold;
     this.#inspectorDelegate = inspectorDelegate;
+    this.#customQueryTransformer = customQueryTransformer;
     this.#cvrStore = new CVRStore(
       lc,
       cvrDb,
@@ -293,19 +295,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
     this.#setTimeout = setTimeoutFn;
 
-    if (pullConfig.url) {
-      this.#customQueryTransformer = new CustomQueryTransformer(
-        this.#lc,
-        {
-          url: pullConfig.url,
-          forwardCookies: pullConfig.forwardCookies,
-        },
-        shard,
-      );
-    }
-
     // Wait for the first connection to init.
     this.keepalive();
+  }
+
+  #getHeaderOptions(forwardCookie: boolean): HeaderOptions {
+    return {
+      apiKey: this.#queryConfig.apiKey,
+      token: this.#authData?.raw,
+      cookie: forwardCookie ? this.#httpCookie : undefined,
+    };
   }
 
   #runInLockWithCVR(
@@ -1039,13 +1038,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       const transformedCustomQueries =
         await this.#customQueryTransformer.transform(
-          {
-            apiKey: this.#queryConfig.apiKey,
-            token: this.#authData?.raw,
-            cookie: this.#queryConfig.forwardCookies
-              ? this.#httpCookie
-              : undefined,
-          },
+          this.#getHeaderOptions(this.#queryConfig.forwardCookies),
           filteredCustomQueries,
           this.userQueryURL,
         );
@@ -1273,11 +1266,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
         const transformedCustomQueries =
           await this.#customQueryTransformer.transform(
-            {
-              apiKey: this.#queryConfig.apiKey,
-              token: this.#authData?.raw,
-              cookie: this.#httpCookie,
-            },
+            this.#getHeaderOptions(true),
             filteredCustomQueries,
             this.userQueryURL,
           );
@@ -1827,99 +1816,18 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     cvr: CVRSnapshot,
   ): Promise<void> => {
     const client = must(this.#clients.get(clientID));
-
-    // Check if the client is already authenticated. We only authenticate the clientGroup
-    // once per "worker".
-    if (
-      body.op !== 'authenticate' &&
-      !this.#inspectorDelegate.isAuthenticated(this.id)
-    ) {
-      lc.info?.(
-        'Client not authenticated to access the inspector protocol. Sending authentication challenge',
-      );
-      client.sendInspectResponse(lc, {
-        op: 'authenticated',
-        id: body.id,
-        value: false,
-      });
-      return;
-    }
-
-    switch (body.op) {
-      case 'queries': {
-        const queryRows = await this.#cvrStore.inspectQueries(
-          lc,
-          cvr.ttlClock,
-          body.clientID,
-        );
-
-        // Enhance query rows with server-side materialization metrics
-        const enhancedRows = queryRows.map(row => ({
-          ...row,
-          ast:
-            row.ast ??
-            this.#inspectorDelegate.getASTForQuery(row.queryID) ??
-            null,
-          metrics: this.#inspectorDelegate.getMetricsJSONForQuery(row.queryID),
-        }));
-
-        client.sendInspectResponse(lc, {
-          op: 'queries',
-          id: body.id,
-          value: enhancedRows,
-        });
-        break;
-      }
-
-      case 'metrics': {
-        client.sendInspectResponse(lc, {
-          op: 'metrics',
-          id: body.id,
-          value: this.#inspectorDelegate.getMetricsJSON(),
-        });
-        break;
-      }
-
-      case 'version':
-        client.sendInspectResponse(lc, {
-          op: 'version',
-          id: body.id,
-          value: getServerVersion(this.#config),
-        });
-        break;
-
-      case 'authenticate': {
-        const password = body.value;
-        const ok = isAdminPasswordValid(lc, this.#config, password);
-        if (ok) {
-          this.#inspectorDelegate.setAuthenticated(this.id);
-        } else {
-          this.#inspectorDelegate.clearAuthenticated(this.id);
-        }
-
-        client.sendInspectResponse(lc, {
-          op: 'authenticated',
-          id: body.id,
-          value: ok,
-        });
-
-        break;
-      }
-
-      case 'analyze-query': {
-        const ast = body.value;
-        const result = await analyzeQuery(lc, this.#config, ast, body.options);
-        client.sendInspectResponse(lc, {
-          op: 'analyze-query',
-          id: body.id,
-          value: result,
-        });
-        break;
-      }
-
-      default:
-        unreachable(body);
-    }
+    return handleInspect(
+      lc,
+      body,
+      cvr,
+      client,
+      this.#inspectorDelegate,
+      this.id,
+      this.#cvrStore,
+      this.#config,
+      this.#getHeaderOptions(this.#queryConfig.forwardCookies ?? false),
+      this.userQueryURL,
+    );
   };
 
   stop(): Promise<void> {
