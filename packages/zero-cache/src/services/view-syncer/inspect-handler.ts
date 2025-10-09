@@ -107,7 +107,6 @@ export async function handleInspect(
         if (ast === undefined && body.name && body.args) {
           // Get the AST from the API server by transforming the named query
           ast = await inspectorDelegate.transformCustomQuery(
-            lc,
             body.name,
             body.args,
             headerOptions,

@@ -1,4 +1,3 @@
-import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {mapValues} from '../../../shared/src/objects.ts';
@@ -128,7 +127,6 @@ export class InspectorDelegate implements MetricsDelegate {
    * queries for analysis.
    */
   async transformCustomQuery(
-    lc: LogContext,
     name: string,
     args: readonly ReadonlyJSONValue[],
     headerOptions: HeaderOptions,
@@ -159,15 +157,13 @@ export class InspectorDelegate implements MetricsDelegate {
 
     const result = results[0];
     if (!result) {
-      const error = 'No transformation result returned';
-      lc.error?.(error);
-      throw new Error(error);
+      throw new Error('No transformation result returned');
     }
 
     if ('error' in result) {
-      const error = `Error transforming custom query ${name}: ${result.error} ${result.details}`;
-      lc.error?.(error);
-      throw new Error(error);
+      throw new Error(
+        `Error transforming custom query ${name}: ${result.error} ${JSON.stringify(result.details)}`,
+      );
     }
 
     return result.transformedAst;
