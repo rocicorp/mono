@@ -140,7 +140,12 @@ async function checkAndUpdateUpstream(
   // Perform any shard schema updates
   await updateShardSchema(lc, sql, shard, replicaVersion);
 
-  const upstreamReplica = await getReplicaAtVersion(sql, shard, replicaVersion);
+  const upstreamReplica = await getReplicaAtVersion(
+    lc,
+    sql,
+    shard,
+    replicaVersion,
+  );
   if (!upstreamReplica) {
     throw new AutoResetSignal(
       `No replication slot for replica at version ${replicaVersion}`,
