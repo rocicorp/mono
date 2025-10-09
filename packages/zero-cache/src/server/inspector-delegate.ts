@@ -126,8 +126,6 @@ export class InspectorDelegate implements MetricsDelegate {
    * Transforms a single custom query by name and args using the configured
    * CustomQueryTransformer. This is primarily used by the inspector to transform
    * queries for analysis.
-   *
-   * @returns The transformed AST, or undefined if transformation fails or no transformer is configured
    */
   async transformCustomQuery(
     lc: LogContext,
@@ -135,7 +133,7 @@ export class InspectorDelegate implements MetricsDelegate {
     args: readonly ReadonlyJSONValue[],
     headerOptions: HeaderOptions,
     userQueryURL: string | undefined,
-  ): Promise<AST | undefined> {
+  ): Promise<AST> {
     assert(
       this.#customQueryTransformer,
       'Custom query transformation requested but no CustomQueryTransformer is configured',
@@ -153,31 +151,26 @@ export class InspectorDelegate implements MetricsDelegate {
       },
     ];
 
-    try {
-      const results = await this.#customQueryTransformer.transform(
-        headerOptions,
-        queries,
-        userQueryURL,
-      );
+    const results = await this.#customQueryTransformer.transform(
+      headerOptions,
+      queries,
+      userQueryURL,
+    );
 
-      const result = results[0];
-      if (!result) {
-        lc.error?.('No transformation result returned');
-        return undefined;
-      }
-
-      if ('error' in result) {
-        lc.error?.(
-          `Error transforming custom query ${name}: ${result.error} ${result.details}`,
-        );
-        return undefined;
-      }
-
-      return result.transformedAst;
-    } catch (e) {
-      lc.error?.('Failed to transform custom query', e);
-      return undefined;
+    const result = results[0];
+    if (!result) {
+      const error = 'No transformation result returned';
+      lc.error?.(error);
+      throw new Error(error);
     }
+
+    if ('error' in result) {
+      const error = `Error transforming custom query ${name}: ${result.error} ${result.details}`;
+      lc.error?.(error);
+      throw new Error(error);
+    }
+
+    return result.transformedAst;
   }
 }
 

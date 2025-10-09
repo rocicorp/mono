@@ -45,7 +45,7 @@ describe('view-syncer/pipeline-driver', () => {
       {appID: 'zeroz', shardNum: 1},
       new DatabaseStorage(storage).createClientGroupStorage('foo-client-group'),
       'pipeline-driver.test.ts',
-      new InspectorDelegate(),
+      new InspectorDelegate(undefined),
     );
 
     db = dbFile.connect(lc);

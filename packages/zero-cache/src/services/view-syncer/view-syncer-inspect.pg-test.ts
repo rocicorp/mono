@@ -1,7 +1,7 @@
 import {beforeEach, describe, expect, vi} from 'vitest';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
-import {sleep} from '../../../../shared/src/sleep.ts';
+import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import type {InspectDownMessage} from '../../../../zero-protocol/src/inspect-down.ts';
@@ -362,7 +362,7 @@ describe('view-syncer/service', () => {
   });
 
   test('analyze-query requires AST or custom query name/args', async () => {
-    const {queue: client, source} = connectWithQueueAndSource(SYNC_CONTEXT, []);
+    const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
 
     await nextPoke(client);
     stateChanges.push({state: 'version-ready'});
@@ -370,18 +370,6 @@ describe('view-syncer/service', () => {
     await expectNoPokes(client);
 
     const inspectId = 'test-analyze-query-no-ast';
-
-    // Track whether the source closes with an error
-    let sourceError: unknown;
-    void (async () => {
-      try {
-        for await (const _msg of source) {
-          // consume messages
-        }
-      } catch (e) {
-        sourceError = e;
-      }
-    })();
 
     // Call inspect without providing AST or custom query name/args
     await vs.inspect(SYNC_CONTEXT, [
@@ -393,14 +381,14 @@ describe('view-syncer/service', () => {
       },
     ]);
 
-    // Wait a bit for the error to propagate
-    await sleep(100);
-
-    // Verify that an error was thrown and propagated to the client
-    expect(sourceError).toBeInstanceOf(Error);
-    expect(sourceError).toMatchInlineSnapshot(
-      `[Error: AST is required for analyze-query operation. Either provide an AST directly or ensure custom query transformation is configured.]`,
-    );
+    // Verify that an error response is sent back to the client
+    const msg = (await client.dequeue()) as InspectDownMessage;
+    expect(msg[0]).toBe('inspect');
+    expect(msg[1]).toMatchObject({
+      id: inspectId,
+      op: 'error',
+      value: expect.stringContaining('AST is required'),
+    });
   });
 
   test('analyze-query with custom query name and args', async () => {
@@ -466,5 +454,124 @@ describe('view-syncer/service', () => {
       type: 'custom',
     });
     expect(userQueryURL).toBeUndefined();
+  });
+
+  describe('inspect error handling', () => {
+    test('returns error response when analyze-query fails', async () => {
+      const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+      await expectNoPokes(client);
+
+      const inspectId = 'test-analyze-error';
+
+      // Pass an invalid AST that will cause analyzeQuery to throw
+      await vs.inspect(SYNC_CONTEXT, [
+        'inspect',
+        {
+          op: 'analyze-query',
+          id: inspectId,
+          ast: {invalid: 'ast'} as unknown as AST,
+          options: {},
+        },
+      ]);
+
+      const msg = (await client.dequeue()) as InspectDownMessage;
+      expect(msg[0]).toBe('inspect');
+      expect(msg[1]).toMatchObject({
+        id: inspectId,
+        op: 'error',
+        value: expect.any(String),
+      });
+      // Verify it's an error message (not the successful analyze response)
+      expect((msg[1] as {op: string}).op).toBe('error');
+    });
+
+    test('returns error response when custom query transformation fails', async () => {
+      assert(customQueryTransformer);
+
+      const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+      await expectNoPokes(client);
+
+      const inspectId = 'test-transform-error';
+
+      // Spy on the transform method and make it return an empty array (no results)
+      using transformSpy = vi
+        .spyOn(customQueryTransformer, 'transform')
+        .mockResolvedValue([]);
+
+      await vs.inspect(SYNC_CONTEXT, [
+        'inspect',
+        {
+          op: 'analyze-query',
+          id: inspectId,
+          name: 'myQuery',
+          args: ['arg1', 'arg2'],
+          options: {},
+        },
+      ]);
+
+      const msg = (await client.dequeue()) as InspectDownMessage;
+      expect(msg[0]).toBe('inspect');
+      expect(msg[1]).toMatchObject({
+        id: inspectId,
+        op: 'error',
+        value: 'No transformation result returned',
+      });
+
+      expect(transformSpy).toHaveBeenCalledOnce();
+    });
+
+    test('returns error response when custom query transformation returns error result', async () => {
+      assert(customQueryTransformer);
+
+      const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+      await expectNoPokes(client);
+
+      const inspectId = 'test-transform-error-result';
+
+      // Spy on the transform method and make it return an error result
+      using transformSpy = vi
+        .spyOn(customQueryTransformer, 'transform')
+        .mockResolvedValue([
+          {
+            id: 'test-query',
+            name: 'myQuery',
+            error: 'app',
+            details: 'Invalid query syntax: Missing required field',
+          },
+        ]);
+
+      await vs.inspect(SYNC_CONTEXT, [
+        'inspect',
+        {
+          op: 'analyze-query',
+          id: inspectId,
+          name: 'myQuery',
+          args: ['arg1', 'arg2'],
+          options: {},
+        },
+      ]);
+
+      const msg = (await client.dequeue()) as InspectDownMessage;
+      expect(msg[0]).toBe('inspect');
+      expect(msg[1]).toMatchObject({
+        id: inspectId,
+        op: 'error',
+        value: expect.stringContaining('Invalid query syntax'),
+      });
+
+      expect(transformSpy).toHaveBeenCalledOnce();
+    });
   });
 });

@@ -1480,6 +1480,100 @@ describe('authenticate', () => {
       await z.close();
     });
   });
+
+  describe('RPC error handling', () => {
+    test('handles validation error for wrong op in response', async () => {
+      const z = zeroForTest({schema});
+      await z.triggerConnected();
+      await Promise.resolve();
+
+      vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+      await z.socket;
+      const p = z.inspector.serverVersion();
+      await waitForLazyModule();
+
+      expect((await z.socket).jsonMessages).toEqual([
+        ['inspect', {op: 'version', id: '000000000000000000000'}],
+      ]);
+
+      // Simulate error response - this will fail schema validation
+      // because inspectVersionDownSchema expects op: 'version', not op: 'error'
+      await z.triggerMessage([
+        'inspect',
+        {
+          op: 'error',
+          id: '000000000000000000000',
+          value: 'Server encountered an internal error',
+        },
+      ] satisfies InspectDownMessage);
+
+      // The RPC will reject with a validation error since the response
+      // doesn't match the expected schema
+      await expect(p).rejects.toThrow('Expected literal value "version"');
+
+      await z.close();
+    });
+
+    test('handles validation error for malformed response', async () => {
+      const z = zeroForTest({schema});
+      await z.triggerConnected();
+      await Promise.resolve();
+
+      vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+      await z.socket;
+      const p = z.inspector.serverVersion();
+      await waitForLazyModule();
+
+      expect((await z.socket).jsonMessages).toEqual([
+        ['inspect', {op: 'version', id: '000000000000000000000'}],
+      ]);
+
+      // Simulate malformed response that doesn't match any schema
+      // Use type assertion to bypass compile-time check
+      await z.triggerMessage([
+        'inspect',
+        {
+          op: 'invalid-operation',
+          id: '000000000000000000000',
+          value: 'something',
+        } as unknown as InspectDownMessage[1],
+      ]);
+
+      await expect(p).rejects.toThrow();
+
+      await z.close();
+    });
+
+    test('handles missing value in response', async () => {
+      const z = zeroForTest({schema});
+      await z.triggerConnected();
+      await Promise.resolve();
+
+      vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+      await z.socket;
+      const p = z.inspector.serverVersion();
+      await waitForLazyModule();
+
+      expect((await z.socket).jsonMessages).toEqual([
+        ['inspect', {op: 'version', id: '000000000000000000000'}],
+      ]);
+
+      // Simulate response with missing value field
+      // Use type assertion to bypass compile-time check
+      await z.triggerMessage([
+        'inspect',
+        {
+          op: 'version',
+          id: '000000000000000000000',
+          // missing 'value' field
+        } as InspectDownMessage[1],
+      ]);
+
+      await expect(p).rejects.toThrow();
+
+      await z.close();
+    });
+  });
 });
 
 async function waitForLazyModule() {

@@ -99,7 +99,11 @@ function rpcNoAuthTry<T extends InspectDownBody>(
         }
         const res = valita.test(body, downSchema);
         if (res.ok) {
-          resolve(res.value.value);
+          if (res.value.op === 'error') {
+            reject(new Error(res.value.value));
+          } else {
+            resolve(res.value.value);
+          }
         } else {
           // Check if we got un authenticated/false response
           const authRes = valita.test(body, inspectAuthenticatedDownSchema);

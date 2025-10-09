@@ -10,7 +10,7 @@ vi.mock('../config/normalize.ts', () => ({
 
 describe('InspectorDelegate', () => {
   test('routes one query meta data to all queries sharing a transformationHash', () => {
-    const d = new InspectorDelegate();
+    const d = new InspectorDelegate(undefined);
 
     const hash = 'same-xform-hash';
     const q1 = 'query-A';
@@ -39,7 +39,7 @@ describe('InspectorDelegate', () => {
   });
 
   test('addMetric accumulates metrics for global and per-query tracking', () => {
-    const d = new InspectorDelegate();
+    const d = new InspectorDelegate(undefined);
     const hash = 'test-hash';
     const queryID = 'test-query';
     const ast: AST = {table: 'users'};
@@ -65,17 +65,17 @@ describe('InspectorDelegate', () => {
   });
 
   test('getMetricsJSONForQuery returns null for non-existent query', () => {
-    const d = new InspectorDelegate();
+    const d = new InspectorDelegate(undefined);
     expect(d.getMetricsJSONForQuery('non-existent')).toBe(null);
   });
 
   test('getASTForQuery returns undefined for non-existent query', () => {
-    const d = new InspectorDelegate();
+    const d = new InspectorDelegate(undefined);
     expect(d.getASTForQuery('non-existent')).toBe(undefined);
   });
 
   test('removeQuery cleans up all associated data', () => {
-    const d = new InspectorDelegate();
+    const d = new InspectorDelegate(undefined);
     const hash = 'test-hash';
     const queryID = 'test-query';
     const ast: AST = {table: 'products'};
@@ -96,7 +96,7 @@ describe('InspectorDelegate', () => {
   });
 
   test('removeQuery cleans up transformation hash when no queries remain', () => {
-    const d = new InspectorDelegate();
+    const d = new InspectorDelegate(undefined);
     const hash = 'shared-hash';
     const q1 = 'query-1';
     const q2 = 'query-2';
@@ -115,7 +115,7 @@ describe('InspectorDelegate', () => {
   });
 
   test('addQuery with same hash and queryID updates existing mapping', () => {
-    const d = new InspectorDelegate();
+    const d = new InspectorDelegate(undefined);
     const hash = 'test-hash';
     const queryID = 'test-query';
     const ast1: AST = {table: 'table1'};
@@ -130,7 +130,7 @@ describe('InspectorDelegate', () => {
   });
 
   test('metrics are isolated between different transformation hashes', () => {
-    const d = new InspectorDelegate();
+    const d = new InspectorDelegate(undefined);
     const hash1 = 'hash-1';
     const hash2 = 'hash-2';
     const q1 = 'query-1';
@@ -160,21 +160,21 @@ describe('InspectorDelegate', () => {
   describe('Authentication', () => {
     test('isAuthenticated returns true in development mode', () => {
       vi.mocked(isDevelopmentMode).mockReturnValue(true);
-      const d = new InspectorDelegate();
+      const d = new InspectorDelegate(undefined);
 
       expect(d.isAuthenticated('any-client')).toBe(true);
     });
 
     test('isAuthenticated returns false for unauthenticated client in production', () => {
       vi.mocked(isDevelopmentMode).mockReturnValue(false);
-      const d = new InspectorDelegate();
+      const d = new InspectorDelegate(undefined);
 
       expect(d.isAuthenticated('client-1')).toBe(false);
     });
 
     test('setAuthenticated and isAuthenticated work together', () => {
       vi.mocked(isDevelopmentMode).mockReturnValue(false);
-      const d = new InspectorDelegate();
+      const d = new InspectorDelegate(undefined);
       const clientID = 'client-123';
 
       expect(d.isAuthenticated(clientID)).toBe(false);
@@ -185,7 +185,7 @@ describe('InspectorDelegate', () => {
 
     test('clearAuthenticated removes authentication', () => {
       vi.mocked(isDevelopmentMode).mockReturnValue(false);
-      const d = new InspectorDelegate();
+      const d = new InspectorDelegate(undefined);
       const clientID = 'client-456';
 
       d.setAuthenticated(clientID);
@@ -197,8 +197,8 @@ describe('InspectorDelegate', () => {
 
     test('authentication state is shared across InspectorDelegate instances', () => {
       vi.mocked(isDevelopmentMode).mockReturnValue(false);
-      const d1 = new InspectorDelegate();
-      const d2 = new InspectorDelegate();
+      const d1 = new InspectorDelegate(undefined);
+      const d2 = new InspectorDelegate(undefined);
       const clientID = 'shared-client';
 
       d1.setAuthenticated(clientID);
@@ -210,7 +210,7 @@ describe('InspectorDelegate', () => {
   });
 
   test('addMetric throws for invalid server metrics', () => {
-    const d = new InspectorDelegate();
+    const d = new InspectorDelegate(undefined);
 
     expect(() => {
       // @ts-expect-error - Testing invalid metric
@@ -219,7 +219,7 @@ describe('InspectorDelegate', () => {
   });
 
   test('global metrics accumulate across all queries', () => {
-    const d = new InspectorDelegate();
+    const d = new InspectorDelegate(undefined);
     const hash1 = 'hash-1';
     const hash2 = 'hash-2';
     const ast: AST = {table: 'global'};
@@ -240,7 +240,7 @@ describe('InspectorDelegate', () => {
   });
 
   test('metrics are created lazily for queries', () => {
-    const d = new InspectorDelegate();
+    const d = new InspectorDelegate(undefined);
     const hash = 'test-hash';
     const queryID = 'test-query';
     const ast: AST = {table: 'lazy'};
@@ -256,7 +256,7 @@ describe('InspectorDelegate', () => {
   });
 
   test('addMetric for non-existent transformation hash does not crash', () => {
-    const d = new InspectorDelegate();
+    const d = new InspectorDelegate(undefined);
 
     // Should not throw even if no queries exist for this hash
     expect(() => {
@@ -272,7 +272,7 @@ describe('InspectorDelegate', () => {
   });
 
   test('multiple queries with same ID but different hashes', () => {
-    const d = new InspectorDelegate();
+    const d = new InspectorDelegate(undefined);
     const queryID = 'same-query-id';
     const hash1 = 'hash-1';
     const hash2 = 'hash-2';
@@ -298,7 +298,7 @@ describe('InspectorDelegate', () => {
   });
 
   test('removeQuery handles non-existent query gracefully', () => {
-    const d = new InspectorDelegate();
+    const d = new InspectorDelegate(undefined);
 
     // Should not throw for non-existent query
     expect(() => {
@@ -307,7 +307,7 @@ describe('InspectorDelegate', () => {
   });
 
   test('empty metrics object has correct structure', () => {
-    const d = new InspectorDelegate();
+    const d = new InspectorDelegate(undefined);
 
     const globalMetrics = d.getMetricsJSON();
     expect(globalMetrics).toEqual({
