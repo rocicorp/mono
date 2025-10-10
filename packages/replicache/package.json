@@ -36,7 +36,7 @@
     "@rocicorp/resolver": "^1.0.2"
   },
   "devDependencies": {
-    "@op-engineering/op-sqlite": "^15.0.1",
+    "@op-engineering/op-sqlite": ">=15",
     "@rocicorp/prettier-config": "^0.4.0",
     "@rocicorp/zero-sqlite3": "^1.0.11",
     "@types/command-line-usage": "^5.0.2",
@@ -45,7 +45,7 @@
     "command-line-usage": "^7.0.3",
     "compare-utf8": "^0.1.1",
     "esbuild": "^0.25.10",
-    "expo-sqlite": "^15.2.14",
+    "expo-sqlite": ">=15",
     "fetch-mock": "^9.11.0",
     "playwright": "^1.53.2",
     "shared": "0.0.0",
@@ -53,9 +53,9 @@
     "vitest": "3.2.4"
   },
   "peerDependencies": {
-    "@op-engineering/op-sqlite": "^15.0.1",
+    "@op-engineering/op-sqlite": ">=15",
     "@rocicorp/zero-sqlite3": "^1.0.11",
-    "expo-sqlite": "^15.2.14"
+    "expo-sqlite": ">=15"
   },
   "peerDependenciesMeta": {
     "expo-sqlite": {
