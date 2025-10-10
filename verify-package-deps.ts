@@ -1,19 +1,13 @@
-import {readdir, readFile, writeFile} from 'fs/promises';
-import {dirname, join, relative} from 'path';
+/* eslint-disable no-console */
+import {readdir, readFile, writeFile} from 'node:fs/promises';
+import {dirname, join, relative} from 'node:path';
 
-interface PackageDependency {
-  source: string;
-  target: string;
-  importPath: string;
-  file: string;
-}
-
-interface PackageJson {
-  name?: string;
-  version?: string;
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-}
+type PackageJson = {
+  name?: string | undefined;
+  version?: string | undefined;
+  dependencies?: Record<string, string> | undefined;
+  devDependencies?: Record<string, string> | undefined;
+};
 
 async function findTypeScriptFiles(dir: string): Promise<string[]> {
   const files: string[] = [];
@@ -35,6 +29,7 @@ async function findTypeScriptFiles(dir: string): Promise<string[]> {
             '__tests__',
             'test',
             'tests',
+            'out',
           ].includes(entry.name)
         ) {
           files.push(...(await findTypeScriptFiles(fullPath)));
@@ -52,25 +47,28 @@ async function findTypeScriptFiles(dir: string): Promise<string[]> {
         }
       }
     }
-  } catch (error) {
+  } catch {
     // Ignore directories we can't read
   }
 
   return files;
 }
 
-function getPackageName(filePath: string): string | null {
+function getPackageName(filePath: string): string | undefined {
   const parts = filePath.split('/');
-  if (parts.length >= 2 && (parts[0] === 'packages' || parts[0] === 'apps')) {
+  if (
+    parts.length >= 2 &&
+    (parts[0] === 'packages' || parts[0] === 'apps' || parts[0] === 'tools')
+  ) {
     return `${parts[0]}/${parts[1]}`;
   }
-  return null;
+  return undefined;
 }
 
 function extractImports(
   content: string,
-): Array<{path: string; line: number; ignored: boolean}> {
-  const imports: Array<{path: string; line: number; ignored: boolean}> = [];
+): {path: string; line: number; ignored: boolean}[] {
+  const imports: {path: string; line: number; ignored: boolean}[] = [];
   const lines = content.split('\n');
 
   // Match import statements and export-from statements
@@ -102,24 +100,39 @@ function extractImports(
   return imports;
 }
 
-async function analyzePackageDependencies(): Promise<{
+type AnalyzeResult = {
   packageDeps: Map<string, Set<string>>;
   exampleFiles: Map<
     string,
     {source: string; sourceLine: number; target: string}
   >;
-  importLocations: Map<
-    string,
-    Map<string, Array<{file: string; line: number}>>
-  >;
-}> {
+  importLocations: Map<string, Map<string, {file: string; line: number}[]>>;
+};
+
+async function analyzePackageDependencies(): Promise<AnalyzeResult> {
   console.log('Finding TypeScript files...');
 
   const packagesFiles = await findTypeScriptFiles('packages');
   const appsFiles = await findTypeScriptFiles('apps');
-  const allFiles = [...packagesFiles, ...appsFiles];
+  const toolsFiles = await findTypeScriptFiles('tools');
+  const allFiles = [...packagesFiles, ...appsFiles, ...toolsFiles];
 
   console.log(`Found ${allFiles.length} TypeScript files to analyze`);
+
+  // Build a map from package name to package path
+  const packageNameToPath = new Map<string, string>();
+  for (const dir of ['packages', 'apps', 'tools']) {
+    const entries = await readdir(dir, {withFileTypes: true});
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const pkgPath = join(dir, entry.name);
+        const pkgJson = await getPackageJson(pkgPath);
+        if (pkgJson?.name) {
+          packageNameToPath.set(pkgJson.name, pkgPath);
+        }
+      }
+    }
+  }
 
   const packageDeps = new Map<string, Set<string>>();
   // Map from "sourcePackage -> targetPackage" to an example file pair (source:line -> target)
@@ -130,7 +143,7 @@ async function analyzePackageDependencies(): Promise<{
   // Map from sourcePackage to targetWorkspaceName to list of import locations
   const importLocations = new Map<
     string,
-    Map<string, Array<{file: string; line: number}>>
+    Map<string, {file: string; line: number}[]>
   >();
 
   for (const filePath of allFiles) {
@@ -147,47 +160,56 @@ async function analyzePackageDependencies(): Promise<{
           continue;
         }
 
+        let targetPackage: string | undefined;
+        let normalizedPath: string | undefined;
+
         // Check if this is a relative import that goes to another package
         if (importInfo.path.startsWith('../')) {
           // Resolve the relative path
           const fileDir = dirname(filePath);
           const resolvedPath = join(fileDir, importInfo.path);
-          const normalizedPath = relative('.', resolvedPath).replace(
-            /\\/g,
-            '/',
-          );
+          normalizedPath = relative('.', resolvedPath).replace(/\\/g, '/');
+          targetPackage = getPackageName(normalizedPath);
+        } else {
+          // Check if this is a non-relative import that matches a workspace package
+          // Extract the package name (before any subpath)
+          const packageName = importInfo.path.split('/').slice(0, 2).join('/');
+          const targetPath = packageNameToPath.get(packageName);
+          if (targetPath) {
+            targetPackage = targetPath;
+            normalizedPath = targetPath;
+          }
+        }
 
-          const targetPackage = getPackageName(normalizedPath);
-          if (targetPackage && targetPackage !== sourcePackage) {
-            if (!packageDeps.has(sourcePackage)) {
-              packageDeps.set(sourcePackage, new Set());
-            }
-            packageDeps.get(sourcePackage)!.add(targetPackage);
+        if (targetPackage && targetPackage !== sourcePackage) {
+          if (!packageDeps.has(sourcePackage)) {
+            packageDeps.set(sourcePackage, new Set());
+          }
+          packageDeps.get(sourcePackage)!.add(targetPackage);
 
-            // Store an example file pair for this dependency edge
-            const edgeKey = `${sourcePackage} -> ${targetPackage}`;
-            if (!exampleFiles.has(edgeKey)) {
-              // Use the resolved import path as-is (imports always have full extension)
-              exampleFiles.set(edgeKey, {
-                source: filePath,
-                sourceLine: importInfo.line,
-                target: normalizedPath,
-              });
-            }
-
-            // Track import location by target package path (not workspace name yet)
-            if (!importLocations.has(sourcePackage)) {
-              importLocations.set(sourcePackage, new Map());
-            }
-            const packageImports = importLocations.get(sourcePackage)!;
-            if (!packageImports.has(targetPackage)) {
-              packageImports.set(targetPackage, []);
-            }
-            packageImports.get(targetPackage)!.push({
-              file: filePath,
-              line: importInfo.line,
+          // Store an example file pair for this dependency edge
+          const edgeKey = `${sourcePackage} -> ${targetPackage}`;
+          if (!exampleFiles.has(edgeKey)) {
+            // Use the resolved import path as-is (imports always have full extension)
+            exampleFiles.set(edgeKey, {
+              source: filePath,
+              sourceLine: importInfo.line,
+              target: normalizedPath!,
             });
           }
+
+          // Track import location by target package path (not workspace name yet)
+          if (!importLocations.has(sourcePackage)) {
+            importLocations.set(sourcePackage, new Map());
+          }
+          const packageImports = importLocations.get(sourcePackage)!;
+          if (!packageImports.has(targetPackage)) {
+            packageImports.set(targetPackage, []);
+          }
+          packageImports.get(targetPackage)!.push({
+            file: filePath,
+            line: importInfo.line,
+          });
         }
       }
     } catch (error) {
@@ -200,8 +222,8 @@ async function analyzePackageDependencies(): Promise<{
 
 function findCircularDependencies(
   packageDeps: Map<string, Set<string>>,
-): Array<string[]> {
-  const cycles: Array<string[]> = [];
+): string[][] {
+  const cycles: string[][] = [];
   const visited = new Set<string>();
   const recursionStack = new Set<string>();
 
@@ -276,27 +298,46 @@ async function getPackageJson(
   packagePath: string,
 ): Promise<PackageJson | null> {
   try {
-    const pkgJsonPath = join(packagePath, 'package.json');
-    const content = await readFile(pkgJsonPath, 'utf-8');
-    return JSON.parse(content);
+    return (await readPackageJsonFile(packagePath)).json;
   } catch {
     return null;
   }
 }
 
-async function getWorkspaceName(packagePath: string): Promise<string | null> {
-  // Read the actual package name from package.json
-  const pkgJson = await getPackageJson(packagePath);
-  return pkgJson?.name || null;
+async function readPackageJsonFile(packagePath: string): Promise<{
+  path: string;
+  content: string;
+  json: PackageJson;
+}> {
+  const pkgJsonPath = join(packagePath, 'package.json');
+  const content = await readFile(pkgJsonPath, 'utf-8');
+  const json = JSON.parse(content) as PackageJson;
+  return {path: pkgJsonPath, content, json};
+}
+
+function sortDependencies(
+  deps: Record<string, string>,
+): Record<string, string> {
+  const sorted: Record<string, string> = {};
+  for (const key of Object.keys(deps).sort()) {
+    sorted[key] = deps[key];
+  }
+  return sorted;
+}
+
+async function writePackageJsonFile(
+  pkgJsonPath: string,
+  pkgJson: PackageJson,
+): Promise<void> {
+  await writeFile(pkgJsonPath, JSON.stringify(pkgJson, null, 2) + '\n');
 }
 
 async function fixPackageJson(
   packagePath: string,
-  missingDeps: Array<{name: string; version: string}>,
+  missingDeps: {name: string; version: string}[],
 ): Promise<void> {
-  const pkgJsonPath = join(packagePath, 'package.json');
-  const content = await readFile(pkgJsonPath, 'utf-8');
-  const pkgJson = JSON.parse(content);
+  const {path: pkgJsonPath, json: pkgJson} =
+    await readPackageJsonFile(packagePath);
 
   // Initialize devDependencies if it doesn't exist
   if (!pkgJson.devDependencies) {
@@ -309,14 +350,40 @@ async function fixPackageJson(
   }
 
   // Sort devDependencies alphabetically
-  const sortedDevDeps: Record<string, string> = {};
-  for (const key of Object.keys(pkgJson.devDependencies).sort()) {
-    sortedDevDeps[key] = pkgJson.devDependencies[key];
-  }
-  pkgJson.devDependencies = sortedDevDeps;
+  pkgJson.devDependencies = sortDependencies(pkgJson.devDependencies);
 
   // Write back with proper formatting
-  await writeFile(pkgJsonPath, JSON.stringify(pkgJson, null, 2) + '\n');
+  await writePackageJsonFile(pkgJsonPath, pkgJson);
+}
+
+async function removePackageJsonDeps(
+  packagePath: string,
+  depsToRemove: string[],
+): Promise<void> {
+  const {path: pkgJsonPath, json: pkgJson} =
+    await readPackageJsonFile(packagePath);
+
+  // Remove from both dependencies and devDependencies
+  for (const dep of depsToRemove) {
+    if (pkgJson.dependencies?.[dep]) {
+      delete pkgJson.dependencies[dep];
+    }
+    if (pkgJson.devDependencies?.[dep]) {
+      delete pkgJson.devDependencies[dep];
+    }
+  }
+
+  // Sort dependencies alphabetically if they exist
+  if (pkgJson.dependencies) {
+    pkgJson.dependencies = sortDependencies(pkgJson.dependencies);
+  }
+
+  if (pkgJson.devDependencies) {
+    pkgJson.devDependencies = sortDependencies(pkgJson.devDependencies);
+  }
+
+  // Write back with proper formatting
+  await writePackageJsonFile(pkgJsonPath, pkgJson);
 }
 
 async function verifyPackageJsonDependencies(fix: boolean) {
@@ -345,20 +412,20 @@ async function verifyPackageJsonDependencies(fix: boolean) {
     console.log();
   }
 
-  const missingDeps: Array<{
+  const missingDeps: {
     package: string;
-    missing: Array<{name: string; version: string}>;
-  }> = [];
-  const versionMismatches: Array<{
+    missing: {name: string; version: string}[];
+  }[] = [];
+  const versionMismatches: {
     package: string;
     dependency: string;
     expected: string;
     actual: string;
-  }> = [];
-  const extraDeps: Array<{
+  }[] = [];
+  const extraDeps: {
     package: string;
-    extra: Array<string>;
-  }> = [];
+    extra: string[];
+  }[] = [];
 
   // Build a map of all workspace package names
   const allWorkspacePackages = new Set<string>();
@@ -382,7 +449,7 @@ async function verifyPackageJsonDependencies(fix: boolean) {
       ...pkgJson.devDependencies,
     };
 
-    const missing: Array<{name: string; version: string}> = [];
+    const missing: {name: string; version: string}[] = [];
 
     // Build a map from targetPackage to workspace name for this source package
     const targetPackageToWorkspaceName = new Map<string, string>();
@@ -397,7 +464,7 @@ async function verifyPackageJsonDependencies(fix: boolean) {
     // Convert importLocations from targetPackage to targetWorkspaceName
     const workspaceImportLocations = new Map<
       string,
-      Array<{file: string; line: number}>
+      {file: string; line: number}[]
     >();
     const packageImportLocs = importLocations.get(sourcePackage);
     if (packageImportLocs) {
@@ -448,7 +515,7 @@ async function verifyPackageJsonDependencies(fix: boolean) {
     }
 
     // Check for extra workspace dependencies (declared but not used)
-    const extra: Array<string> = [];
+    const extra: string[] = [];
     for (const declaredDep of Object.keys(allDeclaredDeps)) {
       // Only check workspace packages
       if (
@@ -500,7 +567,7 @@ async function verifyPackageJsonDependencies(fix: boolean) {
       // Group mismatches by package
       const mismatchesByPackage = new Map<
         string,
-        Array<{name: string; version: string}>
+        {name: string; version: string}[]
       >();
       for (const mismatch of versionMismatches) {
         if (!mismatchesByPackage.has(mismatch.package)) {
@@ -525,29 +592,26 @@ async function verifyPackageJsonDependencies(fix: boolean) {
 
     if (extraDeps.length > 0) {
       console.log(
-        '⚠️  Extra dependencies detected (not automatically removed):\n',
+        '🔧 Removing extra dependencies from package.json files...\n',
       );
 
       for (const {package: pkg, extra} of extraDeps) {
         console.log(`${pkg}:`);
-        console.log(`  Unused workspace dependencies:`);
+        console.log(`  Removing devDependencies:`);
         for (const dep of extra) {
-          console.log(`    ? ${dep}`);
+          console.log(`    - ${dep}`);
         }
+        await removePackageJsonDeps(pkg, extra);
         console.log();
       }
     }
 
-    const total = missingDeps.length + versionMismatches.length;
+    const total =
+      missingDeps.length + versionMismatches.length + extraDeps.length;
     console.log(
       `✅ Fixed ${total} issue(s). Run 'npm install' to update lockfile.`,
     );
-    if (extraDeps.length > 0) {
-      console.log(
-        `⚠️  ${extraDeps.length} package(s) with extra dependencies (review manually)`,
-      );
-    }
-    return extraDeps.length === 0;
+    return true;
   } else {
     let hasErrors = false;
 
@@ -562,7 +626,7 @@ async function verifyPackageJsonDependencies(fix: boolean) {
         const packageImportLocs = importLocations.get(pkg);
         const pkgWorkspaceImportLocations = new Map<
           string,
-          Array<{file: string; line: number}>
+          {file: string; line: number}[]
         >();
 
         if (packageImportLocs) {

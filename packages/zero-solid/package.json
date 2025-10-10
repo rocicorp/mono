@@ -20,8 +20,11 @@
     "@rocicorp/prettier-config": "^0.3.0",
     "@solidjs/testing-library": "^0.8.10",
     "jsdom": "^26.1.0",
+    "shared": "0.0.0",
     "solid-js": "^1.9.4",
-    "vite-plugin-solid": "^2.11.7"
+    "vite-plugin-solid": "^2.11.7",
+    "zero-client": "0.0.0",
+    "zql": "0.0.0"
   },
   "prettier": "@rocicorp/prettier-config"
 }

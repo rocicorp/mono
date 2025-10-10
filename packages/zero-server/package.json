@@ -23,6 +23,12 @@
     "drizzle-orm": "^0.44.2",
     "pg": "^8.16.3",
     "postgres": "^3.4.4",
-    "vitest": "3.2.4"
+    "shared": "0.0.0",
+    "vitest": "3.2.4",
+    "z2s": "0.0.0",
+    "zero-cache": "0.0.0",
+    "zero-protocol": "0.0.0",
+    "zero-schema": "0.0.0",
+    "zql": "0.0.0"
   }
 }
