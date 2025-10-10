@@ -1,5 +1,5 @@
 import type {ProjectRow} from '../../shared/schema.ts';
-import projectIcon from '../assets/icons/project.svg';
+import projectIcon from '../assets/icons/project-box.svg';
 import {Combobox} from './combobox.tsx';
 
 interface Props {
@@ -28,6 +28,7 @@ export function ProjectPicker({
   return projects.length > 1 ? (
     <Combobox<ProjectRow>
       editable={false}
+      className="project-picker-dropdown"
       items={reorderedProjects.map(p => ({
         text: p.name,
         value: p,

@@ -124,7 +124,17 @@ export function IssueComposer({
       isDirty={isDirty}
     >
       <ModalBody>
-        <div className="flex items-center w-full mt-1.5 px-4">
+        <div
+          className="w-full px-4"
+          style={{width: 'fit-content', marginBottom: '1rem'}}
+        >
+          <ProjectPicker
+            projects={projects}
+            selectedProjectName={project?.name}
+            onChange={value => setProject(value)}
+          ></ProjectPicker>
+        </div>
+        <div className="flex items-center w-full px-4">
           <input
             className="new-issue-title"
             placeholder="Issue title"
@@ -147,11 +157,6 @@ export function IssueComposer({
               ref={textareaRef}
             ></textarea>
           </ImageUploadArea>
-          <ProjectPicker
-            projects={projects}
-            selectedProjectName={project?.name}
-            onChange={value => setProject(value)}
-          ></ProjectPicker>
         </div>
         <div className="w-full px-4 mt-4">
           <p className="aside">
