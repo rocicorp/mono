@@ -20,7 +20,12 @@ import {
 } from '../../../zero-schema/src/table-schema.ts';
 import type {ExpressionFactory} from './expression.ts';
 import {staticParam} from './query-impl.ts';
-import {type Query, type Row} from './query.ts';
+import {
+  type Query,
+  type QueryResultType,
+  type QueryRowType,
+  type Row,
+} from './query.ts';
 
 const mockQuery = {
   select() {
@@ -232,6 +237,97 @@ type TestSchemaWithMoreRelationships =
 type TestSchema = Schema['tables']['test'];
 
 describe('types', () => {
+  test('Row helper shape for table schemas', () => {
+    type TestRow = Row<typeof schema.tables.test>;
+
+    expectTypeOf<TestRow>().toEqualTypeOf<{
+      readonly s: string;
+      readonly b: boolean;
+      readonly n: number;
+    }>();
+
+    type NullableRow = Row<typeof schema.tables.testWithNulls>;
+    expectTypeOf<NullableRow>().toEqualTypeOf<{
+      readonly n: number;
+      readonly s: string | null;
+    }>();
+  });
+
+  test('Row helper shape for queries and query factories', () => {
+    type BaseQuery = Query<Schema, 'test'>;
+    expectTypeOf<Row<BaseQuery>>().toEqualTypeOf<{
+      readonly s: string;
+      readonly b: boolean;
+      readonly n: number;
+    }>();
+
+    type OneQuery = ReturnType<BaseQuery['one']>;
+    expectTypeOf<Row<OneQuery>>().toEqualTypeOf<
+      | {
+          readonly s: string;
+          readonly b: boolean;
+          readonly n: number;
+        }
+      | undefined
+    >();
+
+    type QueryFactory = (limit?: number) => Query<Schema, 'test'>;
+    type FactoryRow = Row<QueryFactory>;
+    expectTypeOf<FactoryRow>().toEqualTypeOf<Row<BaseQuery>>();
+  });
+
+  test('QueryRowType extracts return types', () => {
+    type TableQuery = Query<Schema, 'test'>;
+    type TableQueryRow = QueryRowType<TableQuery>;
+    expectTypeOf<TableQueryRow>().toEqualTypeOf<{
+      readonly s: string;
+      readonly b: boolean;
+      readonly n: number;
+    }>();
+
+    type OneQuery = ReturnType<TableQuery['one']>;
+    expectTypeOf<QueryRowType<OneQuery>>().toEqualTypeOf<
+      | {
+          readonly s: string;
+          readonly b: boolean;
+          readonly n: number;
+        }
+      | undefined
+    >();
+
+    type RelatedQuery = ReturnType<TableQuery['related']>;
+    expectTypeOf<QueryRowType<RelatedQuery>>().toMatchTypeOf<
+      QueryRowType<TableQuery>
+    >();
+
+    const baseQuery = mockQuery as unknown as TableQuery;
+    expectTypeOf<QueryRowType<typeof baseQuery>>().toEqualTypeOf<
+      QueryRowType<TableQuery>
+    >();
+  });
+
+  test('QueryResultType builds human readable arrays', () => {
+    type TableQuery = Query<Schema, 'test'>;
+
+    expectTypeOf<QueryResultType<TableQuery>>().toEqualTypeOf<
+      {
+        readonly s: string;
+        readonly b: boolean;
+        readonly n: number;
+      }[]
+    >();
+
+    type OneQuery = ReturnType<TableQuery['one']>;
+    expectTypeOf<QueryResultType<OneQuery>>().toEqualTypeOf<
+      | {
+          readonly s: string;
+          readonly b: boolean;
+          readonly n: number;
+        }
+      | undefined
+    >();
+  });
+
   test('simple select', () => {
     const query = mockQuery as unknown as Query<Schema, 'test'>;
 
