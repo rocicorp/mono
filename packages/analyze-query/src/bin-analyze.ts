@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import chalk from 'chalk';
 import fs from 'node:fs';
 import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
@@ -355,10 +354,12 @@ for (const [query, plan] of Object.entries(plans)) {
 function showStats() {
   let totalRowsConsidered = 0;
   for (const source of sources.values()) {
-    const entries = Object.entries(
+    const values = Object.values(
       debug.getVendedRowCounts()?.[source.table] ?? {},
     );
-    totalRowsConsidered += entries.reduce((acc, entry) => acc + entry[1], 0);
+    for (const v of values) {
+      totalRowsConsidered += v;
+    }
     colorConsole.log(
       chalk.bold(source.table + ' vended:'),
       debug.getVendedRowCounts()?.[source.table] ?? {},

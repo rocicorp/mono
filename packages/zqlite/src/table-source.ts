@@ -18,6 +18,7 @@ import type {
   SchemaValue,
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
+import type {DebugDelegate} from '../../zql/src/builder/debug-delegate.ts';
 import {
   createPredicate,
   transformFilters,
@@ -43,7 +44,6 @@ import type {Stream} from '../../zql/src/ivm/stream.ts';
 import {Database, Statement} from './db.ts';
 import {compile, format, sql} from './internal/sql.ts';
 import {StatementCache} from './internal/statement-cache.ts';
-import type {DebugDelegate} from '../../zql/src/builder/debug-delegate.ts';
 
 type Statements = {
   readonly cache: StatementCache;
@@ -324,7 +324,7 @@ export class TableSource implements Source {
         if (result.done) {
           break;
         }
-        const row = fromSQLiteTypes(valueTypes, result.value);
+        const row = fromSQLiteTypes(valueTypes, result.value, this.#table);
         debug?.rowVended(this.#table, query, row);
         yield row;
       } while (!result.done);
@@ -464,7 +464,7 @@ export class TableSource implements Source {
       cached.statement.safeIntegers(true).get<Row>(keyVals),
     );
     if (row) {
-      return fromSQLiteTypes(this.#columns, row);
+      return fromSQLiteTypes(this.#columns, row, this.#table);
     }
     return row;
   }
@@ -785,23 +785,28 @@ export function toSQLiteTypeName(type: ValueType) {
 export function fromSQLiteTypes(
   valueTypes: Record<string, SchemaValue>,
   row: Row,
+  tableName: string,
 ): Row {
   const newRow: Writable<Row> = {};
   for (const key of Object.keys(row)) {
     const valueType = valueTypes[key];
     if (valueType === undefined) {
+      const columnList = Object.keys(valueTypes).sort().join(', ');
       throw new Error(
-        `Invalid column "${key}". Synced columns include ${Object.keys(
-          valueTypes,
-        ).sort()}`,
+        `Invalid column "${key}" for table "${tableName}". Synced columns include ${columnList}`,
       );
     }
-    newRow[key] = fromSQLiteType(valueType.type, row[key], key);
+    newRow[key] = fromSQLiteType(valueType.type, row[key], key, tableName);
   }
   return newRow;
 }
 
-function fromSQLiteType(valueType: ValueType, v: Value, column: string): Value {
+function fromSQLiteType(
+  valueType: ValueType,
+  v: Value,
+  column: string,
+  tableName: string,
+): Value {
   if (v === null) {
     return null;
   }
@@ -814,14 +819,23 @@ function fromSQLiteType(valueType: ValueType, v: Value, column: string): Value {
       if (typeof v === 'bigint') {
         if (v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER) {
           throw new UnsupportedValueError(
-            `value ${v} (in column ${column}) is outside of supported bounds`,
+            `value ${v} (in ${tableName}.${column}) is outside of supported bounds`,
           );
         }
         return Number(v);
       }
       return v;
     case 'json':
-      return JSON.parse(v as string);
+      try {
+        return JSON.parse(v as string);
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error ? error.message : String(error);
+        throw new UnsupportedValueError(
+          `Failed to parse JSON for ${tableName}.${column}: ${errorMessage}`,
+          {cause: error},
+        );
+      }
   }
 }
 

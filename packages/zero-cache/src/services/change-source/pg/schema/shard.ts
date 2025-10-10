@@ -239,6 +239,7 @@ export async function addReplica(
 }
 
 export async function getReplicaAtVersion(
+  lc: LogContext,
   sql: PostgresDB,
   shard: ShardID,
   replicaVersion: string,
@@ -249,6 +250,10 @@ export async function getReplicaAtVersion(
       WHERE version = ${replicaVersion};
   `;
   if (result.length === 0) {
+    // log out all the replicas and the joined shardConfig
+    const allReplicas = await sql`
+      SELECT * FROM ${schema}.replicas JOIN ${schema}."shardConfig" ON true`;
+    lc.debug?.(`Replica not found in: ${JSON.stringify(allReplicas)}`);
     return null;
   }
   return v.parse(result[0], replicaSchema, 'passthrough');

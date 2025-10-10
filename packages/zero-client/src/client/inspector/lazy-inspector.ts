@@ -15,9 +15,11 @@ import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
 import {mapValues} from '../../../../shared/src/objects.ts';
 import {TDigest, type ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
 import * as valita from '../../../../shared/src/valita.ts';
+import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import {
+  inspectAnalyzeQueryDownSchema,
   inspectAuthenticatedDownSchema,
   inspectMetricsDownSchema,
   inspectQueriesDownSchema,
@@ -26,11 +28,15 @@ import {
   type InspectQueryRow,
   type ServerMetrics as ServerMetricsJSON,
 } from '../../../../zero-protocol/src/inspect-down.ts';
-import type {InspectUpBody} from '../../../../zero-protocol/src/inspect-up.ts';
+import type {
+  AnalyzeQueryOptions,
+  InspectUpBody,
+} from '../../../../zero-protocol/src/inspect-up.ts';
 import type {
   ClientMetricMap,
   ServerMetricMap,
 } from '../../../../zql/src/query/metrics-delegate.ts';
+import type {AnyQuery} from '../../../../zql/src/query/query-impl.ts';
 import {nanoid} from '../../util/nanoid.ts';
 import {ENTITIES_KEY_PREFIX} from '../keys.ts';
 import type {MutatorDefs} from '../replicache-types.ts';
@@ -93,7 +99,11 @@ function rpcNoAuthTry<T extends InspectDownBody>(
         }
         const res = valita.test(body, downSchema);
         if (res.ok) {
-          resolve(res.value.value);
+          if (res.value.op === 'error') {
+            reject(new Error(res.value.value));
+          } else {
+            resolve(res.value.value);
+          }
         } else {
           // Check if we got un authenticated/false response
           const authRes = valita.test(body, inspectAuthenticatedDownSchema);
@@ -317,6 +327,27 @@ export async function clientQueries(
     inspectQueriesDownSchema,
   );
   return rows.map(row => new Query(row, delegate, delegate.getSocket));
+}
+
+export async function analyzeQuery(
+  delegate: ExtendedInspectorDelegate,
+  query: AnyQuery,
+  options?: AnalyzeQueryOptions,
+): Promise<AnalyzeQueryResult> {
+  const {customQueryID} = query;
+  const queryParameters = customQueryID
+    ? {name: customQueryID.name, args: customQueryID.args}
+    : {ast: query.ast};
+
+  return rpc(
+    await delegate.getSocket(),
+    {
+      op: 'analyze-query',
+      ...queryParameters,
+      options,
+    },
+    inspectAnalyzeQueryDownSchema,
+  );
 }
 
 class UnauthenticatedError extends Error {}

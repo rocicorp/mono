@@ -47,6 +47,19 @@ jobs:
       - name: Install dependencies
         run: |
           npm run build-ci
+      - name: Resolve Zero protocol versions
+        run: |
+          PROTOCOL_FILE=packages/zero/out/zero-protocol/src/protocol-version.js
+          ZERO_SYNC_PROTOCOL_VERSION=$(grep -E "export const PROTOCOL_VERSION" "$PROTOCOL_FILE" | sed -E "s/.*= ([0-9]+);/\1/")
+          ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION=$(grep -E "export const MIN_SERVER_SUPPORTED_SYNC_PROTOCOL" "$PROTOCOL_FILE" | sed -E "s/.*= ([0-9]+);/\1/")
+          if [ -z "$ZERO_SYNC_PROTOCOL_VERSION" ] || [ -z "$ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION" ]; then
+            echo "Could not extract protocol versions from $PROTOCOL_FILE"
+            exit 1
+          fi
+          {
+            echo "ZERO_SYNC_PROTOCOL_VERSION=$ZERO_SYNC_PROTOCOL_VERSION"
+            echo "ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION=$ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION"
+          } >> "$GITHUB_ENV"
       - name: Get Git SHA
         id: git-sha
         run: echo "SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
@@ -62,7 +75,7 @@ jobs:
           cd packages/zero
           docker buildx create --use
           docker buildx inspect --bootstrap
-          docker buildx build --platform linux/amd64 --build-arg ZERO_VERSION=${{ env.ZERO_VERSION }} -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_ZERO_CACHE:${{ env.SHA }} -f ./Dockerfile --push .
+          docker buildx build --platform linux/amd64 --build-arg ZERO_VERSION=${{ env.ZERO_VERSION }} --build-arg ZERO_SYNC_PROTOCOL_VERSION=${{ env.ZERO_SYNC_PROTOCOL_VERSION }} --build-arg ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION=${{ env.ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION }} -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_ZERO_CACHE:${{ env.SHA }} -f ./Dockerfile --push .
       - name: Deploy SST app
         env:
           ZERO_UPSTREAM_DB: ${{ secrets.SANDBOX_ZERO_UPSTREAM_DB }}

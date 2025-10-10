@@ -72,12 +72,20 @@ export type InspectAnalyzeQueryDown = v.Infer<
   typeof inspectAnalyzeQueryDownSchema
 >;
 
+export const inspectErrorDownSchema = inspectBaseDownSchema.extend({
+  op: v.literal('error'),
+  value: v.string(),
+});
+
+export type InspectErrorDown = v.Infer<typeof inspectErrorDownSchema>;
+
 export const inspectDownBodySchema = v.union(
   inspectQueriesDownSchema,
   inspectMetricsDownSchema,
   inspectVersionDownSchema,
   inspectAuthenticatedDownSchema,
   inspectAnalyzeQueryDownSchema,
+  inspectErrorDownSchema,
 );
 
 export const inspectDownMessageSchema = v.tuple([
