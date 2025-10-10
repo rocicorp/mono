@@ -27,7 +27,7 @@ import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {materialize, newQuery} from '../../zql/src/query/query-impl.ts';
 import type {
   MaterializeOptions,
-  QueryReturn,
+  QueryRowType,
   QueryTable,
 } from '../../zql/src/query/query.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
@@ -68,7 +68,7 @@ function newMockZero(
   function m<T, Q>(
     query: Q,
     factoryOrOptions?:
-      | ViewFactory<Schema, QueryTable<Q>, QueryReturn<Q>, T>
+      | ViewFactory<Schema, QueryTable<Q>, QueryRowType<Q>, T>
       | MaterializeOptions
       | undefined,
     maybeOptions?: MaterializeOptions | undefined,
