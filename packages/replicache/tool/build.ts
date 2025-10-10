@@ -1,5 +1,6 @@
 import * as esbuild from 'esbuild';
 import {writeFile} from 'node:fs/promises';
+import {builtinModules} from 'node:module';
 import * as path from 'node:path';
 import process from 'node:process';
 import {fileURLToPath} from 'node:url';
@@ -69,7 +70,7 @@ async function buildCLI() {
   });
 }
 
-const external = ['node:*', 'expo*', '@op-engineering/op-sqlite'];
+const external = ['node:*', 'expo*', '@op-engineering/*', ...builtinModules];
 
 if (perf) {
   await buildReplicache({minify: true, ext: 'js', mode: 'release', external});

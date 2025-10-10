@@ -18,7 +18,8 @@
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.3.0",
-    "vitest": "3.2.4"
+    "vitest": "3.2.4",
+    "zero-cache": "0.0.0"
   },
   "prettier": "@rocicorp/prettier-config"
 }
