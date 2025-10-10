@@ -7,6 +7,7 @@ import type {
   CorrelatedSubqueryCondition,
   Disjunction,
 } from '../../../zero-protocol/src/ast.ts';
+import {planIdSymbol} from '../../../zero-protocol/src/ast.ts';
 import type {ValueType} from '../../../zero-protocol/src/client-schema.ts';
 import type {ConnectionCostModel} from './planner-connection.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
@@ -57,6 +58,7 @@ export type Plans = {
  */
 export function buildPlanGraph(ast: AST, model: ConnectionCostModel): Plans {
   const graph = new PlannerGraph();
+  let nextPlanId = 0;
 
   // Create source for the main table
   const source = graph.addSource(ast.table, model);
@@ -68,7 +70,14 @@ export function buildPlanGraph(ast: AST, model: ConnectionCostModel): Plans {
   // Process WHERE clause to build joins
   let end: PlannerNode = connection;
   if (ast.where) {
-    end = processCondition(ast.where, end, graph, model, ast.table);
+    end = processCondition(
+      ast.where,
+      end,
+      graph,
+      model,
+      ast.table,
+      () => nextPlanId++,
+    );
   }
 
   // Create terminus
@@ -99,6 +108,7 @@ function processCondition(
   graph: PlannerGraph,
   model: ConnectionCostModel,
   parentTable: string,
+  getPlanId: () => number,
 ): PlannerNode {
   switch (condition.type) {
     case 'simple':
@@ -106,10 +116,10 @@ function processCondition(
       return input;
 
     case 'and':
-      return processAnd(condition, input, graph, model, parentTable);
+      return processAnd(condition, input, graph, model, parentTable, getPlanId);
 
     case 'or':
-      return processOr(condition, input, graph, model, parentTable);
+      return processOr(condition, input, graph, model, parentTable, getPlanId);
 
     case 'correlatedSubquery':
       return processCorrelatedSubquery(
@@ -118,6 +128,7 @@ function processCondition(
         graph,
         model,
         parentTable,
+        getPlanId,
       );
   }
 }
@@ -131,10 +142,18 @@ function processAnd(
   graph: PlannerGraph,
   model: ConnectionCostModel,
   parentTable: string,
+  getPlanId: () => number,
 ): PlannerNode {
   let end = input;
   for (const subCondition of condition.conditions) {
-    end = processCondition(subCondition, end, graph, model, parentTable);
+    end = processCondition(
+      subCondition,
+      end,
+      graph,
+      model,
+      parentTable,
+      getPlanId,
+    );
   }
   return end;
 }
@@ -149,6 +168,7 @@ function processOr(
   graph: PlannerGraph,
   model: ConnectionCostModel,
   parentTable: string,
+  getPlanId: () => number,
 ): PlannerNode {
   // Separate subquery conditions from simple conditions
   const subqueryConditions = condition.conditions.filter(
@@ -174,6 +194,7 @@ function processOr(
       graph,
       model,
       parentTable,
+      getPlanId,
     );
     branches.push(branch);
     fanOut.addOutput(branch);
@@ -198,6 +219,7 @@ function processCorrelatedSubquery(
   graph: PlannerGraph,
   model: ConnectionCostModel,
   parentTable: string,
+  getPlanId: () => number,
 ): PlannerNode {
   const {related} = condition;
   const childTable = related.subquery.table;
@@ -224,6 +246,7 @@ function processCorrelatedSubquery(
       graph,
       model,
       childTable,
+      getPlanId,
     );
   }
 
@@ -237,12 +260,21 @@ function processCorrelatedSubquery(
     childTable,
   );
 
+  // Determine if join can be flipped (NOT EXISTS cannot be flipped)
+  const flippable = condition.op !== 'NOT EXISTS';
+
+  // Generate plan ID and attach to both AST and planner join
+  const planId = getPlanId();
+  (condition as unknown as Record<symbol, number>)[planIdSymbol] = planId;
+
   // Create join
   const join = new PlannerJoin(
     input,
     childEnd,
     parentConstraint,
     childConstraint,
+    flippable,
+    planId,
   );
   graph.joins.push(join);
 
