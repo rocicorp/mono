@@ -1,5 +1,7 @@
 import type {PlannerConstraint} from './planner-constraint.ts';
 
+export type FromType = 'pinned' | 'unpinned' | 'terminus';
+
 export interface PlannerNode {
   /**
    * At each step of the planning phase,
@@ -15,5 +17,6 @@ export interface PlannerNode {
   propagateConstraints(
     branchPattern: number[],
     constraint: PlannerConstraint | undefined,
+    from: FromType,
   ): void;
 }
