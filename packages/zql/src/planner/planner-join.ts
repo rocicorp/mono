@@ -5,9 +5,10 @@ import {
 } from './planner-constraint.ts';
 import type {FromType, PlannerNode} from './planner-node.ts';
 
-export class PlannerJoin implements PlannerNode {
+export class PlannerJoin {
   #type: 'left' | 'flipped';
   #pinned: boolean;
+  #output?: PlannerNode | undefined;
   readonly #parent: PlannerNode;
   readonly #child: PlannerNode;
   #parentConstraint: PlannerConstraint | undefined;
@@ -23,6 +24,15 @@ export class PlannerJoin implements PlannerNode {
     this.#parent = parent;
     this.#child = child;
     this.#childConstraint = childConstraint;
+  }
+
+  setOutput(node: PlannerNode): void {
+    this.#output = node;
+  }
+
+  get output(): PlannerNode {
+    assert(this.#output !== undefined, 'Output not set');
+    return this.#output;
   }
 
   flip(): void {

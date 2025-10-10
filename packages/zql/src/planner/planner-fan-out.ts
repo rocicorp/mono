@@ -1,8 +1,9 @@
 import type {PlannerConstraint} from './planner-constraint.ts';
 import type {FromType, PlannerNode} from './planner-node.ts';
 
-export class PlannerFanOut implements PlannerNode {
+export class PlannerFanOut {
   #type: 'FO' | 'UFO';
+  readonly #outputs: PlannerNode[] = [];
   readonly #input: PlannerNode;
 
   constructor(input: PlannerNode) {
@@ -12,6 +13,14 @@ export class PlannerFanOut implements PlannerNode {
 
   get type() {
     return this.#type;
+  }
+
+  addOutput(node: PlannerNode): void {
+    this.#outputs.push(node);
+  }
+
+  get outputs(): PlannerNode[] {
+    return this.#outputs;
   }
 
   propagateConstraints(

@@ -188,4 +188,6 @@ Costs are updated to reflect the new constraints.
 
 ---
 
-TODO: not exists
+We do not support flipping `not exists` so exists within a `not` are not allowed to be flipped.
+
+- not exists will be considered non-flippable. So its child inputs will be considered non-selectable? Its a sub-tree tho...

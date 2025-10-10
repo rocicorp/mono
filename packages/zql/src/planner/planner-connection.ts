@@ -1,7 +1,7 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
-import type {Constraint} from '../ivm/constraint.ts';
-import type {PlannerNode} from './planner-node.ts';
+import type {PlannerConstraint} from './planner-constraint.ts';
+import type {FromType, PlannerNode} from './planner-node.ts';
 
 /**
  * Represents a connection to a source.
@@ -52,18 +52,19 @@ import type {PlannerNode} from './planner-node.ts';
  * E.g., if we choose `issue` as the outer loop, then `assignee` must be the inner loop
  * since only two connections are involved.
  */
-export class PlannerConnection implements PlannerNode {
+export class PlannerConnection {
   pinned: boolean;
   readonly #sort: Ordering;
   readonly #filters: Condition | undefined;
   readonly #model: ConnectionCostModel;
+  #output?: PlannerNode | undefined;
 
   /**
    * Undefined constraints are possible to handle the case where
    * a FO gets converted to a UFO. If only a single join in the UFO is flipped,
    * all the other joins will report undefined constraints.
    */
-  readonly #constraints: Map<string, Constraint | undefined>;
+  readonly #constraints: Map<string, PlannerConstraint | undefined>;
 
   constructor(
     model: ConnectionCostModel,
@@ -75,6 +76,15 @@ export class PlannerConnection implements PlannerNode {
     this.#filters = filters;
     this.#model = model;
     this.#constraints = new Map();
+  }
+
+  setOutput(node: PlannerNode): void {
+    this.#output = node;
+  }
+
+  get output(): PlannerNode {
+    assert(this.#output !== undefined, 'Output not set');
+    return this.#output;
   }
 
   /**
@@ -93,8 +103,8 @@ export class PlannerConnection implements PlannerNode {
    */
   propagateConstraints(
     path: number[],
-    c: Constraint | undefined,
-    from: 'pinned' | 'unpinned' | 'terminus',
+    c: PlannerConstraint | undefined,
+    from: FromType,
   ): void {
     const key = path.join(',');
     this.#constraints.set(key, c);
@@ -125,11 +135,12 @@ export class PlannerConnection implements PlannerNode {
 
   reset() {
     this.#constraints.clear();
+    this.pinned = false;
   }
 }
 
 export type ConnectionCostModel = (
   sort: Ordering,
   filters: Condition | undefined,
-  constraint: Constraint | undefined,
+  constraint: PlannerConstraint | undefined,
 ) => number;

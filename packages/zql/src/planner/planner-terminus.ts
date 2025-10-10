@@ -1,6 +1,6 @@
 import type {PlannerNode} from './planner-node.ts';
 
-export class PlannerTerminus implements PlannerNode {
+export class PlannerTerminus {
   readonly #input: PlannerNode;
 
   constructor(input: PlannerNode) {
