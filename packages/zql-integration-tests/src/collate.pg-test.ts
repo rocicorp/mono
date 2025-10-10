@@ -155,7 +155,9 @@ beforeAll(async () => {
     ) as Schema['tables']['item'][],
   ];
   expect(
-    itemLiteRows.map(row => fromSQLiteTypes(schema.tables.item.columns, row)),
+    itemLiteRows.map(row =>
+      fromSQLiteTypes(schema.tables.item.columns, row, 'item'),
+    ),
   ).toEqual(testData.item);
 
   const {host, port, user, pass} = pg.options;

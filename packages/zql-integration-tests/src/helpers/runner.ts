@@ -36,12 +36,9 @@ import type {SourceChange} from '../../../zql/src/ivm/source.ts';
 import type {Format} from '../../../zql/src/ivm/view.ts';
 import type {DBTransaction} from '../../../zql/src/mutate/custom.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {
-  ast,
-  defaultFormat,
-  QueryImpl,
-} from '../../../zql/src/query/query-impl.ts';
+import {ast, QueryImpl} from '../../../zql/src/query/query-impl.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
+import {defaultFormat} from '../../../zero-schema/src/default-format.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../zql/src/query/test/query-delegate.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {

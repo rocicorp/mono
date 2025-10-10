@@ -14,7 +14,7 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import {staticParam} from '../../../zero-schema/src/default-format.ts';
+import {staticParam} from '../../../zero-schema/src/permissions.ts';
 import {
   type Opaque,
   type TableSchema,

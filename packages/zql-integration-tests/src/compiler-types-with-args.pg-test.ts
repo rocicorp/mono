@@ -160,11 +160,13 @@ beforeAll(async () => {
     ) as Schema['tables']['comment'][],
   ];
   expect(
-    issueLiteRows.map(row => fromSQLiteTypes(schema.tables.issue.columns, row)),
+    issueLiteRows.map(row =>
+      fromSQLiteTypes(schema.tables.issue.columns, row, 'issue'),
+    ),
   ).toEqual(testData.issue);
   expect(
     commentLiteRows.map(row =>
-      fromSQLiteTypes(schema.tables.comment.columns, row),
+      fromSQLiteTypes(schema.tables.comment.columns, row, 'comment'),
     ),
   ).toEqual(testData.comment);
 
