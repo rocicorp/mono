@@ -4,6 +4,9 @@ import {
   type ConnectionCostModel,
 } from './planner-connection.ts';
 
+/**
+ *
+ */
 export class PlannerSource {
   readonly name: string;
   readonly #model: ConnectionCostModel;
