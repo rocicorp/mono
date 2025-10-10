@@ -110,19 +110,23 @@ export type Row<
   : T extends
         | Query<ZeroSchema, string, any>
         | ((...args: any) => Query<ZeroSchema, string, any>)
-    ? QueryRow<T>
+    ? QueryRowType<T>
     : never;
 
-export type QueryRow<Q> = Q extends (...args: any) => Query<any, any, infer R>
+export type QueryRowType<Q> = Q extends (
+  ...args: any
+) => Query<any, any, infer R>
   ? R
   : Q extends Query<any, any, infer R>
     ? R
     : never;
 
-export type QueryReturn<Q> = Q extends
+export type ZeRow<Q> = QueryRowType<Q>;
+
+export type QueryResultType<Q> = Q extends
   | Query<ZeroSchema, string, any>
   | ((...args: any) => Query<ZeroSchema, string, any>)
-  ? HumanReadable<QueryRow<Q>>
+  ? HumanReadable<QueryRowType<Q>>
   : never;
 
 /**
