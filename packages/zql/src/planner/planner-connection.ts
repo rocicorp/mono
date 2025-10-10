@@ -53,6 +53,7 @@ import type {FromType, PlannerNode} from './planner-node.ts';
  * since only two connections are involved.
  */
 export class PlannerConnection {
+  readonly kind = 'connection' as const;
   pinned: boolean;
   readonly #sort: Ordering;
   readonly #filters: Condition | undefined;

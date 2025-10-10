@@ -1,6 +1,7 @@
 import type {PlannerNode} from './planner-node.ts';
 
 export class PlannerTerminus {
+  readonly kind = 'terminus' as const;
   readonly #input: PlannerNode;
 
   constructor(input: PlannerNode) {

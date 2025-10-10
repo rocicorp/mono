@@ -2,6 +2,7 @@ import type {PlannerConstraint} from './planner-constraint.ts';
 import type {FromType, PlannerNode} from './planner-node.ts';
 
 export class PlannerFanOut {
+  readonly kind = 'fan-out' as const;
   #type: 'FO' | 'UFO';
   readonly #outputs: PlannerNode[] = [];
   readonly #input: PlannerNode;
