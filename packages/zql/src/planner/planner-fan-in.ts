@@ -19,6 +19,7 @@ import type {FromType, PlannerNode} from './planner-node.ts';
  * each time a UFI is present. planner-connection will return the sum of the costs of each unique branch pattern.
  */
 export class PlannerFanIn {
+  readonly kind = 'fan-in' as const;
   #type: 'FI' | 'UFI';
   #output?: PlannerNode | undefined;
   readonly #inputs: PlannerNode[];

@@ -6,17 +6,19 @@ import {
 import type {FromType, PlannerNode} from './planner-node.ts';
 
 export class PlannerJoin {
+  readonly kind = 'join' as const;
   #type: 'left' | 'flipped';
   #pinned: boolean;
   #output?: PlannerNode | undefined;
   readonly #parent: PlannerNode;
   readonly #child: PlannerNode;
-  #parentConstraint: PlannerConstraint | undefined;
+  readonly #parentConstraint: PlannerConstraint;
   readonly #childConstraint: PlannerConstraint;
 
   constructor(
     parent: PlannerNode,
     child: PlannerNode,
+    parentConstraint: PlannerConstraint,
     childConstraint: PlannerConstraint,
   ) {
     this.#type = 'left';
@@ -24,6 +26,7 @@ export class PlannerJoin {
     this.#parent = parent;
     this.#child = child;
     this.#childConstraint = childConstraint;
+    this.#parentConstraint = parentConstraint;
   }
 
   setOutput(node: PlannerNode): void {
@@ -35,8 +38,19 @@ export class PlannerJoin {
     return this.#output;
   }
 
+  maybeFlip(input: PlannerNode): void {
+    assert(this.#pinned === false, 'Cannot flip a pinned join');
+    if (input === this.#child) {
+      this.flip();
+    } else {
+      assert(
+        input === this.#parent,
+        'Can only flip a join from one of its inputs',
+      );
+    }
+  }
+
   flip(): void {
-    // TODO: compute the parent constraint
     assert(this.#type === 'left', 'Can only flip a left join');
     assert(this.#pinned === false, 'Cannot flip a pinned join');
     this.#type = 'flipped';
