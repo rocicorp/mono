@@ -8,6 +8,17 @@ import type {PlannerNode} from './planner-node.ts';
 import {PlannerSource, type ConnectionCostModel} from './planner-source.ts';
 
 /**
+ * Error thrown when attempting to flip a non-flippable join.
+ * This indicates that a connection path is unreachable from the current starting point.
+ */
+export class UnflippableJoinError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UnflippableJoinError';
+  }
+}
+
+/**
  * Captured state of a plan for comparison and restoration.
  */
 type PlanState = {
@@ -252,28 +263,61 @@ export class PlannerGraph {
       let costs = this.estimateCosts();
       if (i >= costs.length) break;
 
-      // Pick costs[i] as root for this attempt
-      let connection = costs[i].connection;
-      connection.pinned = true; // Pin FIRST
-      pinAndMaybeFlipJoins(connection); // Then flip/pin joins
-      this.propagateConstraints(); // Then propagate
-
-      // Continue with greedy selection
-      while (!this.hasPlan()) {
-        costs = this.estimateCosts();
-        if (costs.length === 0) break;
-
-        connection = costs[0].connection; // Always pick lowest cost
+      // Try to pick costs[i] as root for this attempt
+      try {
+        let connection = costs[i].connection;
         connection.pinned = true; // Pin FIRST
-        pinAndMaybeFlipJoins(connection); // Then flip/pin joins
+        pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
         this.propagateConstraints(); // Then propagate
-      }
 
-      // Evaluate this plan
-      const totalCost = this.getTotalCost();
-      if (totalCost < bestCost) {
-        bestCost = totalCost;
-        bestPlan = this.savePlan();
+        // Continue with greedy selection
+        while (!this.hasPlan()) {
+          costs = this.estimateCosts();
+          if (costs.length === 0) break;
+
+          // Try connections in order until one works
+          let success = false;
+          for (const {connection} of costs) {
+            // Save state before attempting this connection
+            const stateBeforeAttempt = this.savePlan();
+
+            try {
+              connection.pinned = true; // Pin FIRST
+              pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
+              this.propagateConstraints(); // Then propagate
+              success = true;
+              break; // Success, exit the inner loop
+            } catch (e) {
+              if (e instanceof UnflippableJoinError) {
+                // Restore to state before this attempt
+                this.restorePlan(stateBeforeAttempt);
+                // Try next connection
+                continue;
+              }
+              throw e; // Re-throw other errors
+            }
+          }
+
+          if (!success) {
+            // No connection could be pinned, this plan attempt failed
+            break;
+          }
+        }
+
+        // Evaluate this plan (if complete)
+        if (this.hasPlan()) {
+          const totalCost = this.getTotalCost();
+          if (totalCost < bestCost) {
+            bestCost = totalCost;
+            bestPlan = this.savePlan();
+          }
+        }
+      } catch (e) {
+        if (e instanceof UnflippableJoinError) {
+          // This root connection led to an unreachable path, try next root
+          continue;
+        }
+        throw e; // Re-throw other errors
       }
     }
 
@@ -295,6 +339,7 @@ export function pinAndMaybeFlipJoins(connection: PlannerConnection): void {
         }
 
         node.maybeFlip(from);
+        node.pin();
         traverse(node, node.output);
         return;
       case 'fan-out':

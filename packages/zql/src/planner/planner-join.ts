@@ -1,8 +1,10 @@
 import {assert} from '../../../shared/src/asserts.ts';
+import {planIdSymbol} from '../../../zero-protocol/src/ast.ts';
 import {
   mergeConstraints,
   type PlannerConstraint,
 } from './planner-constraint.ts';
+import {UnflippableJoinError} from './planner-graph.ts';
 import type {FromType, PlannerNode} from './planner-node.ts';
 
 export class PlannerJoin {
@@ -14,12 +16,16 @@ export class PlannerJoin {
   readonly #child: PlannerNode;
   readonly #parentConstraint: PlannerConstraint;
   readonly #childConstraint: PlannerConstraint;
+  readonly #flippable: boolean;
+  readonly [planIdSymbol]?: number | undefined;
 
   constructor(
     parent: PlannerNode,
     child: PlannerNode,
     parentConstraint: PlannerConstraint,
     childConstraint: PlannerConstraint,
+    flippable: boolean,
+    planId?: number | undefined,
   ) {
     this.#type = 'left';
     this.#pinned = false;
@@ -27,6 +33,8 @@ export class PlannerJoin {
     this.#child = child;
     this.#childConstraint = childConstraint;
     this.#parentConstraint = parentConstraint;
+    this.#flippable = flippable;
+    this[planIdSymbol] = planId;
   }
 
   setOutput(node: PlannerNode): void {
@@ -53,6 +61,11 @@ export class PlannerJoin {
   flip(): void {
     assert(this.#type === 'left', 'Can only flip a left join');
     assert(this.#pinned === false, 'Cannot flip a pinned join');
+    if (!this.#flippable) {
+      throw new UnflippableJoinError(
+        'Cannot flip a non-flippable join (e.g., NOT EXISTS)',
+      );
+    }
     this.#type = 'flipped';
   }
 
@@ -67,6 +80,10 @@ export class PlannerJoin {
 
   get pinned(): boolean {
     return this.#pinned;
+  }
+
+  get planId(): number | undefined {
+    return this[planIdSymbol];
   }
 
   propagateConstraints(
