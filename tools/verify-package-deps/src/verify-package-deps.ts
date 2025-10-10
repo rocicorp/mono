@@ -1,12 +1,16 @@
 /* eslint-disable no-console */
 import {readdir, readFile, writeFile} from 'node:fs/promises';
 import {dirname, join, relative} from 'node:path';
+import {fileURLToPath} from 'node:url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const WORKSPACE_ROOT = join(__dirname, '../../..');
 
 type PackageJson = {
-  name?: string | undefined;
-  version?: string | undefined;
-  dependencies?: Record<string, string> | undefined;
-  devDependencies?: Record<string, string> | undefined;
+  name?: string;
+  version?: string;
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
 };
 
 async function findTypeScriptFiles(dir: string): Promise<string[]> {
@@ -55,7 +59,9 @@ async function findTypeScriptFiles(dir: string): Promise<string[]> {
 }
 
 function getPackageName(filePath: string): string | undefined {
-  const parts = filePath.split('/');
+  // Convert to relative path from workspace root
+  const relativePath = relative(WORKSPACE_ROOT, filePath);
+  const parts = relativePath.split('/');
   if (
     parts.length >= 2 &&
     (parts[0] === 'packages' || parts[0] === 'apps' || parts[0] === 'tools')
@@ -112,9 +118,11 @@ type AnalyzeResult = {
 async function analyzePackageDependencies(): Promise<AnalyzeResult> {
   console.log('Finding TypeScript files...');
 
-  const packagesFiles = await findTypeScriptFiles('packages');
-  const appsFiles = await findTypeScriptFiles('apps');
-  const toolsFiles = await findTypeScriptFiles('tools');
+  const packagesFiles = await findTypeScriptFiles(
+    join(WORKSPACE_ROOT, 'packages'),
+  );
+  const appsFiles = await findTypeScriptFiles(join(WORKSPACE_ROOT, 'apps'));
+  const toolsFiles = await findTypeScriptFiles(join(WORKSPACE_ROOT, 'tools'));
   const allFiles = [...packagesFiles, ...appsFiles, ...toolsFiles];
 
   console.log(`Found ${allFiles.length} TypeScript files to analyze`);
@@ -122,11 +130,12 @@ async function analyzePackageDependencies(): Promise<AnalyzeResult> {
   // Build a map from package name to package path
   const packageNameToPath = new Map<string, string>();
   for (const dir of ['packages', 'apps', 'tools']) {
-    const entries = await readdir(dir, {withFileTypes: true});
+    const fullDir = join(WORKSPACE_ROOT, dir);
+    const entries = await readdir(fullDir, {withFileTypes: true});
     for (const entry of entries) {
       if (entry.isDirectory()) {
         const pkgPath = join(dir, entry.name);
-        const pkgJson = await getPackageJson(pkgPath);
+        const pkgJson = await getPackageJson(join(WORKSPACE_ROOT, pkgPath));
         if (pkgJson?.name) {
           packageNameToPath.set(pkgJson.name, pkgPath);
         }
@@ -168,8 +177,11 @@ async function analyzePackageDependencies(): Promise<AnalyzeResult> {
           // Resolve the relative path
           const fileDir = dirname(filePath);
           const resolvedPath = join(fileDir, importInfo.path);
-          normalizedPath = relative('.', resolvedPath).replace(/\\/g, '/');
-          targetPackage = getPackageName(normalizedPath);
+          normalizedPath = relative(WORKSPACE_ROOT, resolvedPath).replace(
+            /\\/g,
+            '/',
+          );
+          targetPackage = getPackageName(resolvedPath);
         } else {
           // Check if this is a non-relative import that matches a workspace package
           // Extract the package name (before any subpath)
@@ -430,14 +442,14 @@ async function verifyPackageJsonDependencies(fix: boolean) {
   // Build a map of all workspace package names
   const allWorkspacePackages = new Set<string>();
   for (const pkg of packageDeps.keys()) {
-    const pkgJson = await getPackageJson(pkg);
+    const pkgJson = await getPackageJson(join(WORKSPACE_ROOT, pkg));
     if (pkgJson?.name) {
       allWorkspacePackages.add(pkgJson.name);
     }
   }
 
   for (const [sourcePackage, deps] of packageDeps) {
-    const pkgJson = await getPackageJson(sourcePackage);
+    const pkgJson = await getPackageJson(join(WORKSPACE_ROOT, sourcePackage));
 
     if (!pkgJson) {
       console.log(`⚠️  ${sourcePackage}: No package.json found`);
@@ -454,7 +466,9 @@ async function verifyPackageJsonDependencies(fix: boolean) {
     // Build a map from targetPackage to workspace name for this source package
     const targetPackageToWorkspaceName = new Map<string, string>();
     for (const targetPackage of deps) {
-      const targetPkgJson = await getPackageJson(targetPackage);
+      const targetPkgJson = await getPackageJson(
+        join(WORKSPACE_ROOT, targetPackage),
+      );
       const targetWorkspaceName = targetPkgJson?.name;
       if (targetWorkspaceName) {
         targetPackageToWorkspaceName.set(targetPackage, targetWorkspaceName);
@@ -482,7 +496,9 @@ async function verifyPackageJsonDependencies(fix: boolean) {
     // Collect the workspace names of actual dependencies
     const actualWorkspaceDeps = new Set<string>();
     for (const targetPackage of deps) {
-      const targetPkgJson = await getPackageJson(targetPackage);
+      const targetPkgJson = await getPackageJson(
+        join(WORKSPACE_ROOT, targetPackage),
+      );
       const targetWorkspaceName = targetPkgJson?.name;
       const targetVersion = targetPkgJson?.version || '0.0.0';
 
@@ -556,7 +572,7 @@ async function verifyPackageJsonDependencies(fix: boolean) {
         for (const dep of missing) {
           console.log(`    + ${dep.name}@${dep.version}`);
         }
-        await fixPackageJson(pkg, missing);
+        await fixPackageJson(join(WORKSPACE_ROOT, pkg), missing);
         console.log();
       }
     }
@@ -585,7 +601,7 @@ async function verifyPackageJsonDependencies(fix: boolean) {
         for (const dep of deps) {
           console.log(`    ~ ${dep.name}@${dep.version}`);
         }
-        await fixPackageJson(pkg, deps);
+        await fixPackageJson(join(WORKSPACE_ROOT, pkg), deps);
         console.log();
       }
     }
@@ -601,7 +617,7 @@ async function verifyPackageJsonDependencies(fix: boolean) {
         for (const dep of extra) {
           console.log(`    - ${dep}`);
         }
-        await removePackageJsonDeps(pkg, extra);
+        await removePackageJsonDeps(join(WORKSPACE_ROOT, pkg), extra);
         console.log();
       }
     }
@@ -632,7 +648,9 @@ async function verifyPackageJsonDependencies(fix: boolean) {
         if (packageImportLocs) {
           // Get package.json for each target to map to workspace names
           for (const targetPackage of packageDeps.get(pkg) || []) {
-            const targetPkgJson = await getPackageJson(targetPackage);
+            const targetPkgJson = await getPackageJson(
+              join(WORKSPACE_ROOT, targetPackage),
+            );
             const targetWorkspaceName = targetPkgJson?.name;
             if (targetWorkspaceName && packageImportLocs.has(targetPackage)) {
               if (!pkgWorkspaceImportLocations.has(targetWorkspaceName)) {
