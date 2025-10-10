@@ -126,6 +126,7 @@ export type {
   RunOptions,
   QueryResultType,
   QueryRowType,
+  ZeRow,
 } from '../../zql/src/query/query.ts';
 export {type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
