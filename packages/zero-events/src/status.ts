@@ -1,10 +1,9 @@
-import {jsonObjectSchema} from '../../shared/src/json-schema.ts';
-import * as v from '../../shared/src/valita.ts';
-import {zeroEventSchema} from './index.ts';
+import type {ZeroEvent} from './index.ts';
+import type {Extend, JSONObject} from './util.ts';
 
-export const statusSchema = v.literalUnion('OK', 'ERROR');
+export type Status = 'OK' | 'ERROR';
 
-export type Status = v.Infer<typeof statusSchema>;
+export const ZERO_STATUS_EVENT_PREFIX = 'zero/events/status/';
 
 /**
  * A StatusEvent conveys the most current status of a given component,
@@ -18,95 +17,79 @@ export type Status = v.Infer<typeof statusSchema>;
  * "zero/events/status/*" and display general status information without
  * needing to understand subtype-specific fields.
  */
-export const statusEventSchema = zeroEventSchema.extend({
-  /**
-   * The component of the zero-cache to which the event pertains,
-   * e.g. "replication".
-   */
-  component: v.string(),
-
-  /** Whether the component is healthy. */
-  status: statusSchema,
-
-  /**
-   * The stage describing the component's current state. This is meant to be
-   * both machine and human readable (e.g. a single work serving as a well-known
-   * constant).
-   */
-  stage: v.string(),
-
-  /**
-   * An optional, human readable description.
-   */
-  description: v.string().optional(),
-
-  /** Structured data describing the state of the component. */
-  state: jsonObjectSchema.optional(),
-
-  /** Error details should be supplied for an 'ERROR' status message. */
-  errorDetails: jsonObjectSchema.optional(),
-});
-
-export type StatusEvent<
-  T extends v.Infer<typeof statusEventSchema> & {
+export type StatusEvent = Extend<
+  ZeroEvent,
+  {
     type: `zero/events/status/${string}`;
-  },
-> = T;
 
-const replicatedColumnSchema = v.object({
-  column: v.string(),
-  upstreamType: v.string(),
-  clientType: v.string().nullable(),
-});
+    /**
+     * The component of the zero-cache to which the event pertains,
+     * e.g. "replication".
+     */
+    component: string;
 
-const replicatedTableSchema = v.object({
-  table: v.string(),
-  columns: v.array(replicatedColumnSchema),
-});
+    /** Whether the component is healthy. */
+    status: Status;
 
-export type ReplicatedTable = v.Infer<typeof replicatedTableSchema>;
+    /**
+     * The stage describing the component's current state. This is meant to be
+     * both machine and human readable (e.g. a single work serving as a well-known
+     * constant).
+     */
+    stage: string;
 
-const indexedColumnSchema = v.object({
-  column: v.string(),
-  dir: v.literalUnion('ASC', 'DESC'),
-});
+    /**
+     * An optional, human readable description.
+     */
+    description?: string | undefined;
 
-const replicatedIndexSchema = v.object({
-  table: v.string(),
-  columns: v.array(indexedColumnSchema),
-  unique: v.boolean(),
-});
+    /** Structured data describing the state of the component. */
+    state?: JSONObject | undefined;
 
-export type ReplicatedIndex = v.Infer<typeof replicatedIndexSchema>;
+    /** Error details should be supplied for an 'ERROR' status message. */
+    errorDetails?: JSONObject | undefined;
+  }
+>;
 
-const replicationStateSchema = v.object({
-  tables: v.array(replicatedTableSchema),
-  indexes: v.array(replicatedIndexSchema),
-  replicaSize: v.number().optional(),
-});
+export type ReplicatedColumn = {
+  column: string;
+  upstreamType: string;
+  clientType: string | null;
+};
 
-export type ReplicationState = v.Infer<typeof replicationStateSchema>;
+export type ReplicatedTable = {
+  table: string;
+  columns: ReplicatedColumn[];
+};
 
-const replicationStageSchema = v.literalUnion(
-  'Initializing',
-  'Indexing',
-  'Replicating',
-);
+export type IndexedColumn = {
+  column: string;
+  dir: 'ASC' | 'DESC';
+};
 
-export type ReplicationStage = v.Infer<typeof replicationStageSchema>;
+export type ReplicatedIndex = {
+  table: string;
+  columns: IndexedColumn[];
+  unique: boolean;
+};
 
-/**
- * A ReplicationStatusEvent is a StatusEvent event subtype for the
- * "replication" component.
- */
-export const replicationStatusEventSchema = statusEventSchema.extend({
-  type: v.literal('zero/events/status/replication/v1'),
-  component: v.literal('replication'),
-  stage: replicationStageSchema,
-  state: replicationStateSchema,
-});
+export type ReplicationState = {
+  tables: ReplicatedTable[];
+  indexes: ReplicatedIndex[];
+  replicaSize?: number | undefined;
+};
 
-// CloudEvent type: "zero.status/replication/v1"
-export type ReplicationStatusEvent = StatusEvent<
-  v.Infer<typeof replicationStatusEventSchema>
+export type ReplicationStage = 'Initializing' | 'Indexing' | 'Replicating';
+
+export const REPLICATION_STATUS_EVENT_V1_TYPE =
+  'zero/events/status/replication/v1';
+
+export type ReplicationStatusEvent = Extend<
+  StatusEvent,
+  {
+    type: 'zero/events/status/replication/v1';
+    component: 'replication';
+    stage: ReplicationStage;
+    state: ReplicationState;
+  }
 >;
