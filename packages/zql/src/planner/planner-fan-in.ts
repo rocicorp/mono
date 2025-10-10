@@ -46,6 +46,10 @@ export class PlannerFanIn {
     this.#type = 'FI';
   }
 
+  convertToUFI(): void {
+    this.#type = 'UFI';
+  }
+
   propagateConstraints(
     branchPattern: number[],
     constraint: PlannerConstraint | undefined,
