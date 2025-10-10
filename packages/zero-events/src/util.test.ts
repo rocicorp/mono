@@ -1,21 +1,9 @@
+import {expectTypeOf, test} from 'vitest';
 import type {ZeroEvent} from './index.ts';
-import type {StatusEvent} from './status.ts';
 import type {Extend} from './util.ts';
 
-type IsValid<T> = [T] extends [never] ? false : true;
+test('Extends handles narrowing and rejects field type changes', () => {
+  expectTypeOf<Extend<ZeroEvent, {type: 'foo/bar/baz'}>>().not.toBeNever();
 
-export const extendAcceptsValidType: IsValid<
-  Extend<StatusEvent, {type: 'zero/events/status/foo/bar'}>
-> = true;
-
-export const extendRejectsInvalidType: IsValid<
-  Extend<StatusEvent, {type: 'not/a/proper/subtype'}>
-> = false;
-
-export const extendAllowsNarrowing: IsValid<
-  Extend<ZeroEvent, {type: 'foo/bar/baz'}>
-> = true;
-
-export const extendRejectsTypeChange: IsValid<
-  Extend<ZeroEvent, {type: number}>
-> = false;
+  expectTypeOf<Extend<ZeroEvent, {type: number}>>().toBeNever();
+});

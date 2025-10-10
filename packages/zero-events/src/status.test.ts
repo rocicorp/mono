@@ -1,10 +1,18 @@
-import type {ReplicationStatusEvent} from './status.ts';
+import {expectTypeOf, test} from 'vitest';
+import type {ReplicationStatusEvent, StatusEvent} from './status.ts';
+import type {Extend} from './util.ts';
 
-export const replicationStatusEventIsValidType: ReplicationStatusEvent = {
-  type: 'zero/events/status/replication/v1',
-  time: '2025-10-06T23:25:09.421Z',
-  status: 'OK',
-  component: 'replication',
-  stage: 'Indexing',
-  state: {tables: [], indexes: []},
-};
+test('type name prefix required by StatusEvent', () => {
+  expectTypeOf<
+    Extend<StatusEvent, {type: 'zero/events/status/foo/bar'}>
+  >().not.toBeNever();
+
+  expectTypeOf<
+    Extend<StatusEvent, {type: 'not/a/proper/subtype'}>
+  >().toBeNever();
+});
+
+test('replication status event', () => {
+  expectTypeOf<ReplicationStatusEvent>().not.toBeNever();
+  expectTypeOf<ReplicationStatusEvent>().toExtend<StatusEvent>();
+});
