@@ -1,5 +1,5 @@
 import {test} from 'vitest';
-import {defaultFormat} from '../../../zero-schema/src/default-format.ts';
+import {defaultFormat} from '../../../zql/src/ivm/default-format.ts';
 import {StaticQuery} from '../../../zql/src/query/static-query.ts';
 import type {AnyStaticQuery} from '../../../zql/src/query/test/util.ts';
 import '../helpers/comparePg.ts';

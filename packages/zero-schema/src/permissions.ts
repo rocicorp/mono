@@ -5,6 +5,7 @@ import {
   type Condition,
   type Parameter,
 } from '../../zero-protocol/src/ast.ts';
+import {defaultFormat} from '../../zql/src/ivm/default-format.ts';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
 import type {Query} from '../../zql/src/query/query.ts';
 import {StaticQuery} from '../../zql/src/query/static-query.ts';
@@ -13,7 +14,6 @@ import type {
   AssetPermissions as CompiledAssetPermissions,
   PermissionsConfig as CompiledPermissionsConfig,
 } from './compiled-permissions.ts';
-import {defaultFormat} from './default-format.ts';
 import {clientToServer, NameMapper} from './name-mapper.ts';
 
 export const ANYONE_CAN = [

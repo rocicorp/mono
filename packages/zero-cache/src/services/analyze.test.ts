@@ -6,12 +6,12 @@ import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {analyzeQuery} from './analyze.ts';
 
 // Mock the runAst function
-vi.mock('../../../analyze-query/src/run-ast.ts', () => ({
+vi.mock('./run-ast.ts', () => ({
   runAst: vi.fn(),
 }));
 
 // Mock the explainQueries function
-vi.mock('../../../analyze-query/src/explain-queries.ts', () => ({
+vi.mock('../../../zqlite/src/explain-queries.ts', () => ({
   explainQueries: vi.fn(),
 }));
 

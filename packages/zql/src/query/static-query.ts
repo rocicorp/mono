@@ -1,6 +1,6 @@
 import type {AST, System} from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {defaultFormat} from '../../../zero-schema/src/default-format.ts';
+import {defaultFormat} from '../ivm/default-format.ts';
 import type {Format} from '../ivm/view.ts';
 import {ExpressionBuilder} from './expression.ts';
 import type {CustomQueryID} from './named.ts';

@@ -5,32 +5,27 @@ import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
-import type {
-  AST,
-  CompoundKey,
-  Condition,
-  Ordering,
-  Parameter,
-  SimpleOperator,
-  System,
+import {
+  SUBQ_PREFIX,
+  type AST,
+  type CompoundKey,
+  type Condition,
+  type Ordering,
+  type Parameter,
+  type SimpleOperator,
+  type System,
 } from '../../../zero-protocol/src/ast.ts';
+import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {Row as IVMRow} from '../../../zero-protocol/src/data.ts';
 import {
   hashOfAST,
   hashOfNameAndArgs,
 } from '../../../zero-protocol/src/query-hash.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
-// Import and re-export from zero-schema to avoid circular dependency
-import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
-import {defaultFormat} from '../../../zero-schema/src/default-format.ts';
-import {
-  isOneHop,
-  isTwoHop,
-  type TableSchema,
-} from '../../../zero-schema/src/table-schema.ts';
 import {buildPipeline} from '../builder/builder.ts';
 import {NotImplementedError} from '../error.ts';
 import {ArrayView} from '../ivm/array-view.ts';
+import {defaultFormat} from '../ivm/default-format.ts';
 import type {Input} from '../ivm/operator.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import {assertNoNotExists} from './assert-no-not-exists.ts';
@@ -73,17 +68,15 @@ export function materialize<S extends Schema, T, Q>(
   if (typeof factoryOrOptions === 'function') {
     return (
       (query as AnyQuery)
-        // eslint-disable-next-line no-unexpected-multiline
+        //
         [delegateSymbol](delegate)
         .materialize(factoryOrOptions, maybeOptions?.ttl)
     );
   }
-  return (
-    (query as AnyQuery)
-      // eslint-disable-next-line no-unexpected-multiline
-      [delegateSymbol](delegate)
-      .materialize(factoryOrOptions?.ttl)
-  );
+  return (query as AnyQuery)
+
+    [delegateSymbol](delegate)
+    .materialize(factoryOrOptions?.ttl);
 }
 
 const astSymbol = Symbol();
@@ -109,8 +102,6 @@ export function newQuery<
     undefined,
   );
 }
-
-export const SUBQ_PREFIX = 'zsubq_';
 
 export const newQuerySymbol = Symbol();
 
@@ -899,6 +890,10 @@ export class QueryImpl<
   }
 }
 
+type TableSchema = {
+  primaryKey: readonly string[];
+};
+
 function addPrimaryKeys(
   schema: TableSchema,
   orderBy: Ordering | undefined,
@@ -956,4 +951,12 @@ function arrayViewFactory<
 
 function isCompoundKey(field: readonly string[]): field is CompoundKey {
   return Array.isArray(field) && field.length >= 1;
+}
+
+function isOneHop<T>(r: readonly T[]): r is readonly [T] {
+  return r.length === 1;
+}
+
+function isTwoHop<T>(r: readonly T[]): r is readonly [T, T] {
+  return r.length === 2;
 }

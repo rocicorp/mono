@@ -104,16 +104,6 @@ export function atLeastOne<T>(arr: readonly T[]): AtLeastOne<T> {
   return arr as AtLeastOne<T>;
 }
 
-export function isOneHop(r: Relationship): r is readonly [Connection] {
-  return r.length === 1;
-}
-
-export function isTwoHop(
-  r: Relationship,
-): r is readonly [Connection, Connection] {
-  return r.length === 2;
-}
-
 export type Opaque<BaseType, BrandType = unknown> = BaseType & {
   readonly [base]: BaseType;
   readonly [brand]: BrandType;
