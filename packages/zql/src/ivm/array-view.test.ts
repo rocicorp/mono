@@ -5,7 +5,7 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {stringCompare} from '../../../shared/src/string-compare.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
-import type {ResultStatus} from '../query/typed-view.ts';
+import type {ResultType} from '../query/typed-view.ts';
 import {ArrayView} from './array-view.ts';
 import type {Change} from './change.ts';
 import {Join} from './join.ts';
@@ -1817,17 +1817,17 @@ test('listeners receive error when queryComplete rejects - plural', async () => 
   );
 
   let receivedData: unknown;
-  let receivedResultStatus: ResultStatus | undefined;
+  let receivedResultType: ResultType | undefined;
   let receivedError: ErroredQuery | undefined;
 
   view.addListener((data, resultType, error) => {
     receivedData = data;
-    receivedResultStatus = resultType;
+    receivedResultType = resultType;
     receivedError = error;
   });
 
   // Initial call should have unknown state with data
-  expect(receivedResultStatus).toBe('unknown');
+  expect(receivedResultType).toBe('unknown');
   expect(receivedData).toEqual([
     {a: 1, b: 'a', [refCountSymbol]: 1},
     {a: 2, b: 'b', [refCountSymbol]: 1},
@@ -1838,7 +1838,7 @@ test('listeners receive error when queryComplete rejects - plural', async () => 
   await new Promise(resolve => setTimeout(resolve, 0));
 
   // After rejection, should have error state
-  expect(receivedResultStatus).toBe('error');
+  expect(receivedResultType).toBe('error');
   expect(receivedData).toEqual([
     {a: 1, b: 'a', [refCountSymbol]: 1},
     {a: 2, b: 'b', [refCountSymbol]: 1},
@@ -1873,17 +1873,17 @@ test('listeners receive error when queryComplete rejects - singular', async () =
   );
 
   let receivedData: unknown;
-  let receivedResultStatus: ResultStatus | undefined;
+  let receivedResultType: ResultType | undefined;
   let receivedError: ErroredQuery | undefined;
 
   view.addListener((data, resultType, error) => {
     receivedData = data;
-    receivedResultStatus = resultType;
+    receivedResultType = resultType;
     receivedError = error;
   });
 
   // Initial state
-  expect(receivedResultStatus).toBe('unknown');
+  expect(receivedResultType).toBe('unknown');
   expect(receivedData).toEqual({a: 1, b: 'a', [refCountSymbol]: 1});
   expect(receivedError).toBeUndefined();
 
@@ -1891,7 +1891,7 @@ test('listeners receive error when queryComplete rejects - singular', async () =
   await new Promise(resolve => setTimeout(resolve, 0));
 
   // Error state - data preserved
-  expect(receivedResultStatus).toBe('error');
+  expect(receivedResultType).toBe('error');
   expect(receivedData).toEqual({a: 1, b: 'a', [refCountSymbol]: 1});
   expect(receivedError).toEqual(testError);
 });
@@ -1923,8 +1923,8 @@ test('all listeners receive error when queryComplete rejects', async () => {
     () => {},
   );
 
-  const listener1Results: ResultStatus[] = [];
-  const listener2Results: ResultStatus[] = [];
+  const listener1Results: ResultType[] = [];
+  const listener2Results: ResultType[] = [];
   const listener1Errors: (ErroredQuery | undefined)[] = [];
   const listener2Errors: (ErroredQuery | undefined)[] = [];
 
@@ -1981,16 +1981,16 @@ test('listeners added after error still receive error state', async () => {
   await new Promise(resolve => setTimeout(resolve, 0));
 
   // Add listener after error
-  let receivedResultStatus: ResultStatus | undefined;
+  let receivedResultType: ResultType | undefined;
   let receivedError: ErroredQuery | undefined;
 
   view.addListener((_data, resultType, error) => {
-    receivedResultStatus = resultType;
+    receivedResultType = resultType;
     receivedError = error;
   });
 
   // Should immediately receive error state
-  expect(receivedResultStatus).toBe('error');
+  expect(receivedResultType).toBe('error');
   expect(receivedError).toEqual(testError);
 });
 
@@ -2021,16 +2021,16 @@ test('error state persists through flush operations', async () => {
   );
 
   let callCount = 0;
-  let lastResultStatus: ResultStatus | undefined;
+  let lastResultType: ResultType | undefined;
 
   view.addListener((_data, resultType, _error) => {
     callCount++;
-    lastResultStatus = resultType;
+    lastResultType = resultType;
   });
 
   await new Promise(resolve => setTimeout(resolve, 0));
 
-  expect(lastResultStatus).toBe('error');
+  expect(lastResultType).toBe('error');
   const callsAfterError = callCount;
 
   // Add more data and flush
@@ -2038,6 +2038,6 @@ test('error state persists through flush operations', async () => {
   view.flush();
 
   // Should still be in error state
-  expect(lastResultStatus).toBe('error');
+  expect(lastResultType).toBe('error');
   expect(callCount).toBeGreaterThan(callsAfterError);
 });

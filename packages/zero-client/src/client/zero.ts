@@ -95,7 +95,7 @@ import {
   type MaterializeOptions,
   type PreloadOptions,
   type Query,
-  type RowType,
+  type QueryRow,
   type QueryTable,
   type RunOptions,
   delegateSymbol,
@@ -839,28 +839,28 @@ export class Zero<
   run<Q>(
     query: Q,
     runOptions?: RunOptions | undefined,
-  ): Promise<HumanReadable<RowType<Q>>> {
+  ): Promise<HumanReadable<QueryRow<Q>>> {
     return (
       (query as AnyQuery)
         // eslint-disable-next-line no-unexpected-multiline
         [delegateSymbol](this.#zeroContext)
-        .run(runOptions) as Promise<HumanReadable<RowType<Q>>>
+        .run(runOptions) as Promise<HumanReadable<QueryRow<Q>>>
     );
   }
 
   materialize<Q>(
     query: Q,
     options?: MaterializeOptions | undefined,
-  ): TypedView<HumanReadable<RowType<Q>>>;
+  ): TypedView<HumanReadable<QueryRow<Q>>>;
   materialize<T, Q>(
     query: Q,
-    factory: ViewFactory<S, QueryTable<Q>, RowType<Q>, T>,
+    factory: ViewFactory<S, QueryTable<Q>, QueryRow<Q>, T>,
     options?: MaterializeOptions | undefined,
   ): T;
   materialize<T, Q>(
     query: Q,
     factoryOrOptions?:
-      | ViewFactory<S, QueryTable<Q>, RowType<Q>, T>
+      | ViewFactory<S, QueryTable<Q>, QueryRow<Q>, T>
       | MaterializeOptions
       | undefined,
     maybeOptions?: MaterializeOptions | undefined,

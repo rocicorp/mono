@@ -124,12 +124,11 @@ export type {
   Query,
   Row,
   RunOptions,
-  ResultType,
-  RowType,
-  ZeRow,
+  QueryReturn,
+  QueryRow,
 } from '../../zql/src/query/query.ts';
 export {type TTL} from '../../zql/src/query/ttl.ts';
-export type {ResultStatus, TypedView} from '../../zql/src/query/typed-view.ts';
+export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 export type {BatchMutator, DBMutator, TableMutator} from './client/crud.ts';
 export type {
   CustomMutatorDefs,

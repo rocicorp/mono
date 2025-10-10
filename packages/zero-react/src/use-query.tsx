@@ -9,7 +9,7 @@ import type {Format} from '../../zql/src/ivm/view.ts';
 import {AbstractQuery} from '../../zql/src/query/query-impl.ts';
 import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
-import type {ResultStatus, TypedView} from '../../zql/src/query/typed-view.ts';
+import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 import {useZero} from './zero-provider.tsx';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 
@@ -184,7 +184,7 @@ function getDefaultSnapshot<TReturn>(singular: boolean): QueryResult<TReturn> {
 function getSnapshot<TReturn>(
   singular: boolean,
   data: HumanReadable<TReturn>,
-  resultType: ResultStatus,
+  resultType: ResultType,
   refetchFn: () => void,
   error?: ErroredQuery | undefined,
 ): QueryResult<TReturn> {
@@ -451,7 +451,7 @@ class ViewWrapper<
 
   #onData = (
     snap: Immutable<HumanReadable<TReturn>>,
-    resultType: ResultStatus,
+    resultType: ResultType,
     error?: ErroredQuery | undefined,
   ) => {
     const data =
