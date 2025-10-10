@@ -1,5 +1,5 @@
 import type {PlannerConstraint} from './planner-constraint.ts';
-import type {PlannerNode} from './planner-node.ts';
+import type {FromType, PlannerNode} from './planner-node.ts';
 
 /**
  * A PlannerFanIn node can either be a normal FanIn or UnionFanIn.
@@ -33,6 +33,7 @@ export class PlannerFanIn implements PlannerNode {
   propagateConstraints(
     branchPattern: number[],
     constraint: PlannerConstraint | undefined,
+    from: FromType,
   ): void {
     if (this.#type === 'FI') {
       const updatedPattern = [0, ...branchPattern];
@@ -44,14 +45,14 @@ export class PlannerFanIn implements PlannerNode {
        *    to send to their children.
        */
       for (const input of this.#inputs) {
-        input.propagateConstraints(updatedPattern, constraint);
+        input.propagateConstraints(updatedPattern, constraint, from);
       }
       return;
     }
 
     let i = 0;
     for (const input of this.#inputs) {
-      input.propagateConstraints([i, ...branchPattern], constraint);
+      input.propagateConstraints([i, ...branchPattern], constraint, from);
       i++;
     }
   }

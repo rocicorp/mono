@@ -1,3 +1,4 @@
+import {assert} from '../../../shared/src/asserts.ts';
 import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Constraint} from '../ivm/constraint.ts';
 import type {PlannerNode} from './planner-node.ts';
@@ -90,9 +91,24 @@ export class PlannerConnection implements PlannerNode {
    * The max of the last element of the paths is the number of
    * root branches.
    */
-  propagateConstraints(path: number[], c: Constraint | undefined): void {
+  propagateConstraints(
+    path: number[],
+    c: Constraint | undefined,
+    from: 'pinned' | 'unpinned' | 'terminus',
+  ): void {
     const key = path.join(',');
     this.#constraints.set(key, c);
+    if (this.pinned) {
+      assert(
+        from === 'pinned',
+        'It should be impossible for a pinned connection to receive constraints from a non-pinned node',
+      );
+    }
+    if (from === 'pinned') {
+      this.pinned = true;
+    }
+
+    assert(from !== 'terminus', 'Graph contains no joins!');
   }
 
   estimateCost(): number {

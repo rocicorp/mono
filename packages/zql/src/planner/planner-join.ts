@@ -3,7 +3,7 @@ import {
   mergeConstraints,
   type PlannerConstraint,
 } from './planner-constraint.ts';
-import type {PlannerNode} from './planner-node.ts';
+import type {FromType, PlannerNode} from './planner-node.ts';
 
 export class PlannerJoin implements PlannerNode {
   #type: 'left' | 'flipped';
@@ -48,25 +48,38 @@ export class PlannerJoin implements PlannerNode {
   propagateConstraints(
     branchPattern: number[],
     constraint: PlannerConstraint | undefined,
+    from: FromType,
   ): void {
+    if (this.#pinned) {
+      assert(
+        from === 'pinned',
+        'It should be impossible for a pinned join to receive constraints from a non-pinned node',
+      );
+    }
+
     if (this.#pinned && this.#type === 'left') {
       // A left join always has constraints for its child.
       // They are defined by the correlated between parent and child.
-      this.#child.propagateConstraints(branchPattern, this.#childConstraint);
+      this.#child.propagateConstraints(
+        branchPattern,
+        this.#childConstraint,
+        'pinned',
+      );
       // A left join forwards constraints to its parent.
-      this.#parent.propagateConstraints(branchPattern, constraint);
+      this.#parent.propagateConstraints(branchPattern, constraint, 'pinned');
     }
     if (this.#pinned && this.#type === 'flipped') {
       // A flipped join has no constraints to pass to its child.
       // It is a standalone fetch that is relying on the filters of the child
       // connection to do the heavy work.
-      this.#child.propagateConstraints(branchPattern, undefined);
+      this.#child.propagateConstraints(branchPattern, undefined, 'pinned');
       // A flipped join will have constraints to send to its parent.
       // - The constraints its output sent
       // - The constraints its child creates
       this.#parent.propagateConstraints(
         branchPattern,
         mergeConstraints(constraint, this.#parentConstraint),
+        'pinned',
       );
     }
     if (!this.#pinned && this.#type === 'left') {
@@ -74,7 +87,7 @@ export class PlannerJoin implements PlannerNode {
       // Contributing constraints to its child would reduce the child's cost too early
       // causing the child to be picked by the planning algorithm before the parent
       // that is contributing the constraints has been picked.
-      this.#parent.propagateConstraints(branchPattern, constraint);
+      this.#parent.propagateConstraints(branchPattern, constraint, 'unpinned');
     }
     if (!this.#pinned && this.#type === 'flipped') {
       // If a join has been flipped that means it has been picked by the planning algorithm.
