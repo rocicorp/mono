@@ -36,6 +36,13 @@
       "when": 1759812367732,
       "tag": "0004_all_index",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1760128631173,
+      "tag": "0005_more-index-tweaks-for-all",
+      "breakpoints": true
     }
   ]
 }

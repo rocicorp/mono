@@ -98,6 +98,20 @@ export const issue = pgTable(
       table.modified,
       table.id,
     ),
+    index('issue_projectID_assigneeID_modified_idx').using(
+      'btree',
+      table.projectID,
+      table.assigneeID,
+      table.modified,
+      table.id,
+    ),
+    index('issue_projectID_creatorID_modified_idx').using(
+      'btree',
+      table.projectID,
+      table.creatorID,
+      table.modified,
+      table.id,
+    ),
     index('issue_projectID_modified_idx').using(
       'btree',
       table.projectID,
