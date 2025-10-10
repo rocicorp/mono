@@ -20,6 +20,9 @@ import {
   hashOfNameAndArgs,
 } from '../../../zero-protocol/src/query-hash.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+// Import and re-export from zero-schema to avoid circular dependency
+import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
+import {defaultFormat} from '../../../zero-schema/src/default-format.ts';
 import {
   isOneHop,
   isTwoHop,
@@ -55,7 +58,6 @@ import {
 } from './query.ts';
 import {DEFAULT_PRELOAD_TTL_MS, DEFAULT_TTL_MS, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
-import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 
 export type AnyQuery = Query<Schema, string, any>;
 
@@ -108,21 +110,7 @@ export function newQuery<
   );
 }
 
-export function staticParam(
-  anchorClass: 'authData' | 'preMutationRow',
-  field: string | string[],
-): Parameter {
-  return {
-    type: 'static',
-    anchor: anchorClass,
-    // for backwards compatibility
-    field: field.length === 1 ? field[0] : field,
-  };
-}
-
 export const SUBQ_PREFIX = 'zsubq_';
-
-export const defaultFormat = {singular: false, relationships: {}} as const;
 
 export const newQuerySymbol = Symbol();
 

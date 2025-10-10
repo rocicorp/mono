@@ -14,12 +14,12 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
+import {staticParam} from '../../../zero-schema/src/default-format.ts';
 import {
   type Opaque,
   type TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
 import type {ExpressionFactory} from './expression.ts';
-import {staticParam} from './query-impl.ts';
 import {type Query, type Row} from './query.ts';
 
 const mockQuery = {
