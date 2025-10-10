@@ -2,7 +2,7 @@ import {assert} from '../../../shared/src/asserts.ts';
 import type {Immutable} from '../../../shared/src/immutable.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {TTL} from '../query/ttl.ts';
-import type {Listener, ResultType, TypedView} from '../query/typed-view.ts';
+import type {Listener, ResultStatus, TypedView} from '../query/typed-view.ts';
 import type {Change} from './change.ts';
 import type {Input, Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
@@ -33,7 +33,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   onDestroy: (() => void) | undefined;
 
   #dirty = false;
-  #resultType: ResultType = 'unknown';
+  #resultType: ResultStatus = 'unknown';
   #error: ErroredQuery | undefined;
   readonly #updateTTL: (ttl: TTL) => void;
 

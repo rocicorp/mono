@@ -11,7 +11,7 @@ import {Suspense} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {type AbstractQuery} from '../../zql/src/query/query-impl.ts';
-import type {ResultType} from '../../zql/src/query/typed-view.ts';
+import type {ResultStatus} from '../../zql/src/query/typed-view.ts';
 import {
   getAllViewsSizeForTesting,
   ViewStore,
@@ -419,7 +419,7 @@ describe('useSuspenseQuery', () => {
     await expect.poll(() => element.textContent).toBe('loading');
 
     const view = materializeSpy.mock.results[0].value as {
-      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+      listeners: Set<(snap: unknown, resultType: ResultStatus) => void>;
     };
 
     view.listeners.forEach(cb => cb([{a: 1}], 'complete'));
@@ -447,7 +447,7 @@ describe('useSuspenseQuery', () => {
     await expect.poll(() => element.textContent).toBe('loading');
 
     const view = materializeSpy.mock.results[0].value as {
-      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+      listeners: Set<(snap: unknown, resultType: ResultStatus) => void>;
     };
 
     view.listeners.forEach(cb => cb([{a: 1}], 'complete'));
@@ -485,7 +485,7 @@ describe('useSuspenseQuery', () => {
     await expect.poll(() => element.textContent).toBe('loading');
 
     const view = materializeSpy.mock.results[0].value as {
-      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+      listeners: Set<(snap: unknown, resultType: ResultStatus) => void>;
     };
 
     view.listeners.forEach(cb => cb([{a: 1}], 'unknown'));
@@ -513,7 +513,7 @@ describe('useSuspenseQuery', () => {
     await expect.poll(() => element.textContent).toBe('loading');
 
     const view = materializeSpy.mock.results[0].value as {
-      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+      listeners: Set<(snap: unknown, resultType: ResultStatus) => void>;
     };
 
     view.listeners.forEach(cb => cb([{a: 1}], 'unknown'));
@@ -551,7 +551,7 @@ describe('useSuspenseQuery', () => {
     await expect.poll(() => element.textContent).toBe('loading');
 
     const view = materializeSpy.mock.results[0].value as {
-      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+      listeners: Set<(snap: unknown, resultType: ResultStatus) => void>;
     };
 
     view.listeners.forEach(cb => cb({a: 1}, 'unknown'));
@@ -579,7 +579,7 @@ describe('useSuspenseQuery', () => {
     await expect.poll(() => element.textContent).toBe('loading');
 
     const view = materializeSpy.mock.results[0].value as {
-      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+      listeners: Set<(snap: unknown, resultType: ResultStatus) => void>;
     };
 
     view.listeners.forEach(cb => cb([], 'complete'));
@@ -611,7 +611,7 @@ describe('useSuspenseQuery', () => {
     await expect.poll(() => element.textContent).toBe('loading');
 
     const view = materializeSpy.mock.results[0].value as {
-      listeners: Set<(snap: unknown, resultType: ResultType) => void>;
+      listeners: Set<(snap: unknown, resultType: ResultStatus) => void>;
     };
 
     view.listeners.forEach(cb => cb(undefined, 'complete'));
@@ -647,7 +647,11 @@ describe('useSuspenseQuery', () => {
 
       const view = materializeSpy.mock.results[0].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (
+            snap: unknown,
+            resultType: ResultStatus,
+            error?: ErroredQuery,
+          ) => void
         >;
       };
 
@@ -689,7 +693,11 @@ describe('useSuspenseQuery', () => {
 
       const view = materializeSpy.mock.results[0].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (
+            snap: unknown,
+            resultType: ResultStatus,
+            error?: ErroredQuery,
+          ) => void
         >;
       };
 
@@ -731,7 +739,11 @@ describe('useSuspenseQuery', () => {
 
       const view = materializeSpy.mock.results[0].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (
+            snap: unknown,
+            resultType: ResultStatus,
+            error?: ErroredQuery,
+          ) => void
         >;
       };
 
@@ -781,7 +793,11 @@ describe('useSuspenseQuery', () => {
 
       const view = materializeSpy.mock.results[0].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (
+            snap: unknown,
+            resultType: ResultStatus,
+            error?: ErroredQuery,
+          ) => void
         >;
       };
 
@@ -825,7 +841,11 @@ describe('useSuspenseQuery', () => {
 
       const view = materializeSpy.mock.results[0].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (
+            snap: unknown,
+            resultType: ResultStatus,
+            error?: ErroredQuery,
+          ) => void
         >;
       };
 
@@ -870,7 +890,11 @@ describe('useSuspenseQuery', () => {
 
       const view = materializeSpy.mock.results[0].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (
+            snap: unknown,
+            resultType: ResultStatus,
+            error?: ErroredQuery,
+          ) => void
         >;
       };
 
@@ -922,7 +946,11 @@ describe('useSuspenseQuery', () => {
       // First materialize call
       const firstView = materializeSpy.mock.results[0].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (
+            snap: unknown,
+            resultType: ResultStatus,
+            error?: ErroredQuery,
+          ) => void
         >;
         destroy: Mock;
       };
@@ -957,7 +985,11 @@ describe('useSuspenseQuery', () => {
       // Second materialize call creates new view
       const secondView = materializeSpy.mock.results[1].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (
+            snap: unknown,
+            resultType: ResultStatus,
+            error?: ErroredQuery,
+          ) => void
         >;
       };
 
@@ -1007,7 +1039,11 @@ describe('useSuspenseQuery', () => {
       // First materialize call
       const firstView = materializeSpy.mock.results[0].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (
+            snap: unknown,
+            resultType: ResultStatus,
+            error?: ErroredQuery,
+          ) => void
         >;
         destroy: Mock;
       };
@@ -1033,7 +1069,11 @@ describe('useSuspenseQuery', () => {
       // Second view also fails
       const secondView = materializeSpy.mock.results[1].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (
+            snap: unknown,
+            resultType: ResultStatus,
+            error?: ErroredQuery,
+          ) => void
         >;
         destroy: Mock;
       };
@@ -1061,7 +1101,11 @@ describe('useSuspenseQuery', () => {
       // Third view succeeds
       const thirdView = materializeSpy.mock.results[2].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (
+            snap: unknown,
+            resultType: ResultStatus,
+            error?: ErroredQuery,
+          ) => void
         >;
       };
       thirdView.listeners.forEach(cb => cb({success: true}, 'complete'));
@@ -1100,7 +1144,11 @@ describe('useSuspenseQuery', () => {
 
       const view = materializeSpy.mock.results[0].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (
+            snap: unknown,
+            resultType: ResultStatus,
+            error?: ErroredQuery,
+          ) => void
         >;
       };
 

@@ -20,12 +20,7 @@ import {
 } from '../../../zero-schema/src/table-schema.ts';
 import type {ExpressionFactory} from './expression.ts';
 import {staticParam} from './query-impl.ts';
-import {
-  type Query,
-  type QueryReturn,
-  type QueryRow,
-  type Row,
-} from './query.ts';
+import {type Query, type ResultType, type RowType, type Row} from './query.ts';
 
 const mockQuery = {
   select() {
@@ -276,17 +271,17 @@ describe('types', () => {
     expectTypeOf<FactoryRow>().toEqualTypeOf<Row<BaseQuery>>();
   });
 
-  test('QueryRow extracts return types', () => {
+  test('RowType extracts return types', () => {
     type TableQuery = Query<Schema, 'test'>;
-    type TableQueryRow = QueryRow<TableQuery>;
-    expectTypeOf<TableQueryRow>().toEqualTypeOf<{
+    type TableRowType = RowType<TableQuery>;
+    expectTypeOf<TableRowType>().toEqualTypeOf<{
       readonly s: string;
       readonly b: boolean;
       readonly n: number;
     }>();
 
     type OneQuery = ReturnType<TableQuery['one']>;
-    expectTypeOf<QueryRow<OneQuery>>().toEqualTypeOf<
+    expectTypeOf<RowType<OneQuery>>().toEqualTypeOf<
       | {
           readonly s: string;
           readonly b: boolean;
@@ -296,20 +291,18 @@ describe('types', () => {
     >();
 
     type RelatedQuery = ReturnType<TableQuery['related']>;
-    expectTypeOf<QueryRow<RelatedQuery>>().toMatchTypeOf<
-      QueryRow<TableQuery>
-    >();
+    expectTypeOf<RowType<RelatedQuery>>().toMatchTypeOf<RowType<TableQuery>>();
 
     const baseQuery = mockQuery as unknown as TableQuery;
-    expectTypeOf<QueryRow<typeof baseQuery>>().toEqualTypeOf<
-      QueryRow<TableQuery>
+    expectTypeOf<RowType<typeof baseQuery>>().toEqualTypeOf<
+      RowType<TableQuery>
     >();
   });
 
-  test('QueryReturn builds human readable arrays', () => {
+  test('ResultType builds human readable arrays', () => {
     type TableQuery = Query<Schema, 'test'>;
 
-    expectTypeOf<QueryReturn<TableQuery>>().toEqualTypeOf<
+    expectTypeOf<ResultType<TableQuery>>().toEqualTypeOf<
       {
         readonly s: string;
         readonly b: boolean;
@@ -318,7 +311,7 @@ describe('types', () => {
     >();
 
     type OneQuery = ReturnType<TableQuery['one']>;
-    expectTypeOf<QueryReturn<OneQuery>>().toEqualTypeOf<
+    expectTypeOf<ResultType<OneQuery>>().toEqualTypeOf<
       | {
           readonly s: string;
           readonly b: boolean;

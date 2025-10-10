@@ -10,7 +10,7 @@ import {schema} from './test/test-schemas.ts';
 const builder = createBuilder(schema);
 import * as v from '../../../shared/src/valita.ts';
 import {ast} from './query-impl.ts';
-import type {QueryReturn, QueryRow, Row} from './query.ts';
+import type {ResultType, RowType, Row} from './query.ts';
 
 type IssueRow = {
   readonly id: string;
@@ -32,14 +32,14 @@ describe('types', () => {
     type NamedQuery = typeof query;
 
     expectTypeOf<Row<NamedQuery>>().toEqualTypeOf<IssueRow>();
-    expectTypeOf<QueryRow<NamedQuery>>().toEqualTypeOf<IssueRow>();
-    expectTypeOf<QueryReturn<NamedQuery>>().toEqualTypeOf<IssueRow[]>();
+    expectTypeOf<RowType<NamedQuery>>().toEqualTypeOf<IssueRow>();
+    expectTypeOf<ResultType<NamedQuery>>().toEqualTypeOf<IssueRow[]>();
 
     type OneNamedQuery = ReturnType<typeof query.one>;
-    expectTypeOf<QueryRow<OneNamedQuery>>().toEqualTypeOf<
+    expectTypeOf<RowType<OneNamedQuery>>().toEqualTypeOf<
       IssueRow | undefined
     >();
-    expectTypeOf<QueryReturn<OneNamedQuery>>().toEqualTypeOf<
+    expectTypeOf<ResultType<OneNamedQuery>>().toEqualTypeOf<
       IssueRow | undefined
     >();
   });
@@ -55,14 +55,14 @@ describe('types', () => {
     type NamedQuery = typeof query;
 
     expectTypeOf<Row<NamedQuery>>().toEqualTypeOf<IssueRow>();
-    expectTypeOf<QueryRow<NamedQuery>>().toEqualTypeOf<IssueRow>();
-    expectTypeOf<QueryReturn<NamedQuery>>().toEqualTypeOf<IssueRow[]>();
+    expectTypeOf<RowType<NamedQuery>>().toEqualTypeOf<IssueRow>();
+    expectTypeOf<ResultType<NamedQuery>>().toEqualTypeOf<IssueRow[]>();
 
     type OneNamedQuery = ReturnType<typeof query.one>;
-    expectTypeOf<QueryRow<OneNamedQuery>>().toEqualTypeOf<
+    expectTypeOf<RowType<OneNamedQuery>>().toEqualTypeOf<
       IssueRow | undefined
     >();
-    expectTypeOf<QueryReturn<OneNamedQuery>>().toEqualTypeOf<
+    expectTypeOf<ResultType<OneNamedQuery>>().toEqualTypeOf<
       IssueRow | undefined
     >();
   });
@@ -77,8 +77,8 @@ test('syncedQuery', () => {
   expect(def.parse).toBeDefined();
   expect(def.takesContext).toEqual(false);
 
-  expectTypeOf<Row<typeof def>>().toEqualTypeOf<QueryRow<typeof def>>();
-  expectTypeOf<QueryRow<typeof def>>().toEqualTypeOf<{
+  expectTypeOf<Row<typeof def>>().toEqualTypeOf<RowType<typeof def>>();
+  expectTypeOf<RowType<typeof def>>().toEqualTypeOf<{
     readonly id: string;
     readonly title: string;
     readonly description: string;
@@ -86,7 +86,7 @@ test('syncedQuery', () => {
     readonly ownerId: string | null;
     readonly createdAt: number;
   }>();
-  expectTypeOf<QueryReturn<typeof def>>().toEqualTypeOf<
+  expectTypeOf<ResultType<typeof def>>().toEqualTypeOf<
     {
       readonly id: string;
       readonly title: string;
@@ -141,8 +141,8 @@ test('syncedQuery', () => {
     'invalid_type at .0 (expected string)',
   );
 
-  expectTypeOf<Row<typeof wv>>().toEqualTypeOf<QueryRow<typeof wv>>();
-  expectTypeOf<QueryRow<typeof wv>>().toEqualTypeOf<{
+  expectTypeOf<Row<typeof wv>>().toEqualTypeOf<RowType<typeof wv>>();
+  expectTypeOf<RowType<typeof wv>>().toEqualTypeOf<{
     readonly id: string;
     readonly title: string;
     readonly description: string;
@@ -150,7 +150,7 @@ test('syncedQuery', () => {
     readonly ownerId: string | null;
     readonly createdAt: number;
   }>();
-  expectTypeOf<QueryReturn<typeof wv>>().toEqualTypeOf<
+  expectTypeOf<ResultType<typeof wv>>().toEqualTypeOf<
     {
       readonly id: string;
       readonly title: string;
@@ -210,8 +210,8 @@ test('syncedQueryWithContext', () => {
   expect(def.parse).toBeDefined();
   expect(def.takesContext).toEqual(true);
 
-  expectTypeOf<Row<typeof def>>().toEqualTypeOf<QueryRow<typeof def>>();
-  expectTypeOf<QueryRow<typeof def>>().toEqualTypeOf<{
+  expectTypeOf<Row<typeof def>>().toEqualTypeOf<RowType<typeof def>>();
+  expectTypeOf<RowType<typeof def>>().toEqualTypeOf<{
     readonly id: string;
     readonly title: string;
     readonly description: string;
@@ -219,7 +219,7 @@ test('syncedQueryWithContext', () => {
     readonly ownerId: string | null;
     readonly createdAt: number;
   }>();
-  expectTypeOf<QueryReturn<typeof def>>().toEqualTypeOf<
+  expectTypeOf<ResultType<typeof def>>().toEqualTypeOf<
     {
       readonly id: string;
       readonly title: string;
@@ -291,8 +291,8 @@ test('syncedQueryWithContext', () => {
     'invalid_type at .0 (expected string)',
   );
 
-  expectTypeOf<Row<typeof wv>>().toEqualTypeOf<QueryRow<typeof wv>>();
-  expectTypeOf<QueryRow<typeof wv>>().toEqualTypeOf<{
+  expectTypeOf<Row<typeof wv>>().toEqualTypeOf<RowType<typeof wv>>();
+  expectTypeOf<RowType<typeof wv>>().toEqualTypeOf<{
     readonly id: string;
     readonly title: string;
     readonly description: string;
@@ -300,7 +300,7 @@ test('syncedQueryWithContext', () => {
     readonly ownerId: string | null;
     readonly createdAt: number;
   }>();
-  expectTypeOf<QueryReturn<typeof wv>>().toEqualTypeOf<
+  expectTypeOf<ResultType<typeof wv>>().toEqualTypeOf<
     {
       readonly id: string;
       readonly title: string;

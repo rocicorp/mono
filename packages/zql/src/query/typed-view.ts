@@ -2,7 +2,7 @@ import type {Immutable} from '../../../shared/src/immutable.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {TTL} from './ttl.ts';
 
-export type ResultType = 'unknown' | 'complete' | 'error';
+export type ResultStatus = 'unknown' | 'complete' | 'error';
 
 /**
  * Called when the view changes. The received data should be considered
@@ -11,7 +11,7 @@ export type ResultType = 'unknown' | 'complete' | 'error';
  */
 export type Listener<T> = (
   data: Immutable<T>,
-  resultType: ResultType,
+  resultType: ResultStatus,
   error?: ErroredQuery | undefined,
 ) => void;
 
