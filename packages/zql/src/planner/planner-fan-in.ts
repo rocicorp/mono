@@ -1,3 +1,4 @@
+import {assert} from '../../../shared/src/asserts.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import type {FromType, PlannerNode} from './planner-node.ts';
 
@@ -17,8 +18,9 @@ import type {FromType, PlannerNode} from './planner-node.ts';
  * Since UFI will generate a unique branch pattern per input, planner-connection will yield a higher cost
  * each time a UFI is present. planner-connection will return the sum of the costs of each unique branch pattern.
  */
-export class PlannerFanIn implements PlannerNode {
+export class PlannerFanIn {
   #type: 'FI' | 'UFI';
+  #output?: PlannerNode | undefined;
   readonly #inputs: PlannerNode[];
 
   constructor(inputs: PlannerNode[]) {
@@ -28,6 +30,19 @@ export class PlannerFanIn implements PlannerNode {
 
   get type() {
     return this.#type;
+  }
+
+  setOutput(node: PlannerNode): void {
+    this.#output = node;
+  }
+
+  get output(): PlannerNode {
+    assert(this.#output !== undefined, 'Output not set');
+    return this.#output;
+  }
+
+  reset() {
+    this.#type = 'FI';
   }
 
   propagateConstraints(

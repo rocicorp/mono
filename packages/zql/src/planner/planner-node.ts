@@ -1,22 +1,14 @@
-import type {PlannerConstraint} from './planner-constraint.ts';
+import type {PlannerConnection} from './planner-connection.ts';
+import type {PlannerFanIn} from './planner-fan-in.ts';
+import type {PlannerFanOut} from './planner-fan-out.ts';
+import type {PlannerJoin} from './planner-join.ts';
+import type {PlannerTerminus} from './planner-terminus.ts';
 
 export type FromType = 'pinned' | 'unpinned' | 'terminus';
 
-export interface PlannerNode {
-  /**
-   * At each step of the planning phase,
-   * we need to send constraints up the tree
-   * for joins we have pinned.
-   *
-   * `branchPattern` exists to help us track how many fetches
-   * a single source connection will end up receiving.
-   *
-   * UnionFanOut causes a branching that incurs additional fetches.
-   * Each branch potentially having a unique set of constraints,
-   */
-  propagateConstraints(
-    branchPattern: number[],
-    constraint: PlannerConstraint | undefined,
-    from: FromType,
-  ): void;
-}
+export type PlannerNode =
+  | PlannerJoin
+  | PlannerConnection
+  | PlannerFanOut
+  | PlannerFanIn
+  | PlannerTerminus;
