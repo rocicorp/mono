@@ -20,27 +20,42 @@ export const simpleCostModel: ConnectionCostModel = (
  * Predictable cost model for testing optimal plan selection.
  *
  * Base costs by table:
- * - issue: 1000
+ * - issue: 10000 (very expensive)
  * - project: 100
  * - project_member: 1
  * - creator: 2
  *
  * Constraint reductions:
- * - creatorId constraint: divide by 20
- * - projectId constraint: divide by 10
- * - memberId constraint: divide by 100
+ * - creatorId constraint: divide by 5 (issue: 10000 -> 2000, then with projectId -> 200)
+ * - projectId constraint: divide by 100 (issue: 10000 -> 100, project: 100 -> 1)
+ *
+ * This creates the following progression:
+ * Initial: issue=10000, project=100, project_member=1, creator=2
+ * Pick project_member (1) -> project gets projectId (100->1), issue unchanged (10000)
+ * Pick creator (2) -> issue gets creatorId (10000->2000)
+ * Pick project (1) with projectId constraint
+ * Pick issue (2000) with creatorId constraint
+ * Total: 1 + 2 + 1 + 2000 = 2004 (suboptimal)
+ *
+ * OR pick creator first:
+ * Pick creator (2) -> issue gets creatorId (10000->2000)
+ * Pick project_member (1) -> project gets projectId (100->1), issue gets projectId (2000->20)
+ * Pick project (1) with projectId constraint
+ * Pick issue (20) with both constraints
+ * Total: 2 + 1 + 1 + 20 = 24 (optimal!)
  */
 export const predictableCostModel: ConnectionCostModel = (
   sort: Ordering,
   _filters: Condition | undefined,
   constraint: PlannerConstraint | undefined,
 ): number => {
-  // Determine table name from sort (first column)
-  const tableName = sort[0]?.[0]?.split('.')[0] ?? 'unknown';
+  // Extract table name - the sort column format is "table.column"
+  const firstColumn = sort[0]?.[0] ?? 'unknown.id';
+  const tableName = firstColumn.split('.')[0];
 
   // Base costs
   const baseCosts: Record<string, number> = {
-    issue: 1000,
+    issue: 10000,
     project: 100,
     project_member: 1,
     creator: 2,
@@ -51,17 +66,14 @@ export const predictableCostModel: ConnectionCostModel = (
   // Apply constraint reductions
   if (constraint) {
     if ('creatorId' in constraint) {
-      cost = cost / 20;
+      cost = Math.floor(cost / 5);
     }
     if ('projectId' in constraint) {
-      cost = cost / 10;
-    }
-    if ('memberId' in constraint) {
-      cost = cost / 100;
+      cost = Math.floor(cost / 100);
     }
   }
 
-  return Math.max(1, Math.floor(cost));
+  return Math.max(1, cost);
 };
 
 /**
