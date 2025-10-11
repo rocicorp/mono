@@ -34,7 +34,7 @@ export interface TransactionProviderInput {
 export interface Database<T> {
   transaction: <R>(
     callback: (tx: T, transactionHooks: TransactionProviderHooks) => Promise<R>,
-    transactionInput: TransactionProviderInput,
+    transactionInput?: TransactionProviderInput | undefined,
   ) => Promise<R>;
 }
 

@@ -49,8 +49,18 @@ export class ZQLDatabase<S extends Schema, WrappedTransaction>
       tx: TransactionImpl<S, WrappedTransaction>,
       transactionHooks: TransactionProviderHooks,
     ) => Promise<R>,
-    transactionInput: TransactionProviderInput,
+    transactionInput?: TransactionProviderInput | undefined,
   ): Promise<R> {
+    if (!transactionInput) {
+      // Icky hack. This is just here to have user not have to do this.
+      // These interfaces need to be factored better.
+      transactionInput = {
+        upstreamSchema: undefined as unknown as string,
+        clientGroupID: undefined as unknown as string,
+        clientID: undefined as unknown as string,
+        mutationID: undefined as unknown as number,
+      };
+    }
     return this.connection.transaction(async dbTx => {
       const zeroTx = await makeServerTransaction(
         dbTx,
