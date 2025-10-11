@@ -1,18 +1,15 @@
 import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
-import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
+import {defaultFormat} from '../../zql/src/ivm/default-format.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import type {DBTransaction, SchemaQuery} from '../../zql/src/mutate/custom.ts';
-import {
-  AbstractQuery,
-  defaultFormat,
-  newQuerySymbol,
-} from '../../zql/src/query/query-impl.ts';
+import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
+import {AbstractQuery, newQuerySymbol} from '../../zql/src/query/query-impl.ts';
 import type {HumanReadable, PullRow, Query} from '../../zql/src/query/query.ts';
 import type {TypedView} from '../../zql/src/query/typed-view.ts';
-import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 
 export function makeSchemaQuery<S extends Schema>(
   schema: S,

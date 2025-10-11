@@ -1,5 +1,5 @@
 import type {AST} from '../../../zero-protocol/src/ast.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {BuilderDelegate} from '../builder/builder.ts';
 import type {Format} from '../ivm/view.ts';
 import type {MetricsDelegate} from './metrics-delegate.ts';

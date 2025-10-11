@@ -1,4 +1,4 @@
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {PullRow, Query} from './query.ts';
 
 /** @deprecated Use Query instead */

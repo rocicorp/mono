@@ -22,7 +22,9 @@
     "check-types": "npx turbo run check-types",
     "check-types:watch": "npx turbo watch check-types",
     "build-ci": "npm install && npx turbo run build",
-    "start-zero-cache": "cd packages/zero-cache && npm run start"
+    "start-zero-cache": "cd packages/zero-cache && npm run start",
+    "verify-deps": "cd tools/verify-package-deps && npm run verify",
+    "verify-deps:fix": "cd tools/verify-package-deps && npm run verify:fix"
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.3.0",
@@ -31,6 +33,7 @@
     "oxlint": "^1.16.0",
     "oxlint-tsgolint": "^0.2.0",
     "prettier": "^3.5.3",
+    "skott": "^0.35.6",
     "syncpack": "^12.3.2",
     "tsx": "^4.19.1",
     "turbo": "^2.4.4",

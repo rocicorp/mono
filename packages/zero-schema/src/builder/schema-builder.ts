@@ -5,34 +5,12 @@ import {
   normalizeClientSchema,
   type ClientSchema,
 } from '../../../zero-protocol/src/client-schema.ts';
-import type {
-  Relationship,
-  RelationshipsSchema,
-  TableSchema,
-} from '../table-schema.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {Relationship, TableSchema} from '../table-schema.ts';
 import type {Relationships} from './relationship-builder.ts';
 import {type TableBuilderWithColumns} from './table-builder.ts';
 
-export type Schema = {
-  readonly tables: {readonly [table: string]: TableSchema};
-  readonly relationships: {readonly [table: string]: RelationshipsSchema};
-  /**
-   * Enables legacy query support.
-   * When this is true, old-style queries that do not require server side implementations will be enabled.
-   * This will flip to false in the future and what we currently call "custom queries" will become "queries" and
-   * the only option for reading data.
-   * The default is true, but will flip to false in the future.
-   */
-  readonly enableLegacyQueries?: boolean | undefined;
-  /**
-   * Enables legacy mutator support.
-   * When this is true, old-style mutations that do not require server side implementations will be enabled.
-   * This will flip to false in the future and what we currently call "custom mutations" will become "mutations" and
-   * the only option for writing data.
-   * The default is true, but will flip to false in the future.
-   */
-  readonly enableLegacyMutators?: boolean | undefined;
-};
+export type {Schema};
 
 /**
  * Note: the keys of the `tables` and `relationships` parameters do not matter.

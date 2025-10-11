@@ -1,13 +1,9 @@
 import {createComputed, createSignal, onCleanup, type Accessor} from 'solid-js';
 import {createStore} from 'solid-js/store';
-import {
-  type ClientID,
-  type HumanReadable,
-  type Query,
-  type Schema,
-  type TTL,
-} from '../../zero/src/zero.ts';
-import {DEFAULT_TTL_MS} from '../../zql/src/query/ttl.ts';
+import type {ClientID} from '../../replicache/src/sync/ids.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import type {HumanReadable, Query} from '../../zql/src/query/query.ts';
+import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import {
   createSolidViewFactory,
   UNKNOWN,

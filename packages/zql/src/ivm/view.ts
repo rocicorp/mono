@@ -1,6 +1,7 @@
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {Value} from '../../../zero-protocol/src/data.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {Format} from '../../../zero-types/src/format.ts';
 import type {Query} from '../query/query.ts';
 import type {TTL} from '../query/ttl.ts';
 import type {Input} from './operator.ts';
@@ -9,10 +10,7 @@ export type View = EntryList | Entry | undefined;
 export type EntryList = readonly Entry[];
 export type Entry = {readonly [key: string]: Value | View};
 
-export type Format = {
-  singular: boolean;
-  relationships: Record<string, Format>;
-};
+export type {Format};
 
 export type ViewFactory<
   TSchema extends Schema,

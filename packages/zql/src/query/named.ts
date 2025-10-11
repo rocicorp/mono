@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {SchemaQuery} from '../mutate/custom.ts';
 import {newQuery} from './query-impl.ts';
 import type {Query} from './query.ts';

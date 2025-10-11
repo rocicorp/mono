@@ -1,6 +1,7 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {BTreeSet} from '../../../shared/src/btree-set.ts';
 import {hasOwn} from '../../../shared/src/has-own.ts';
+import {once} from '../../../shared/src/iterables.ts';
 import type {
   Condition,
   Ordering,
@@ -8,8 +9,9 @@ import type {
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
-import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
+import type {SchemaValue} from '../../../zero-types/src/schema-value.ts';
 import {assertOrderingIncludesPK} from '../builder/builder.ts';
+import type {DebugDelegate} from '../builder/debug-delegate.ts';
 import {
   createPredicate,
   transformFilters,
@@ -24,8 +26,8 @@ import {
 } from './constraint.ts';
 import {
   compareValues,
-  valuesEqual,
   makeComparator,
+  valuesEqual,
   type Comparator,
   type Node,
 } from './data.ts';
@@ -47,8 +49,6 @@ import type {
   SourceInput,
 } from './source.ts';
 import type {Stream} from './stream.ts';
-import {once} from '../../../shared/src/iterables.ts';
-import type {DebugDelegate} from '../builder/debug-delegate.ts';
 
 export type Overlay = {
   outputIndex: number;

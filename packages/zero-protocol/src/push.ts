@@ -1,6 +1,6 @@
 import {jsonSchema} from '../../shared/src/json-schema.ts';
 import * as v from '../../shared/src/valita.ts';
-import type {NameMapper} from '../../zero-schema/src/name-mapper.ts';
+import type {NameMapper} from '../../zero-types/src/name-mapper.ts';
 import {rowSchema} from './data.ts';
 import * as MutationType from './mutation-type-enum.ts';
 import {primaryKeySchema, primaryKeyValueRecordSchema} from './primary-key.ts';

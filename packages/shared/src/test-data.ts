@@ -3,7 +3,7 @@
  * Used by both replicache-perf and benchmark tests.
  */
 
-import {getSizeOfValue} from '../../replicache/src/size-of-value.ts';
+import {getSizeOfValue} from './size-of-value.ts';
 
 export type RandomDataType = 'string' | 'object' | 'arraybuffer' | 'blob';
 export type RandomDatum = string | Record<string, string> | ArrayBuffer | Blob;

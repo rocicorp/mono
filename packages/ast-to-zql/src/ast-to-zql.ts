@@ -13,7 +13,7 @@ import type {
   SimpleCondition,
   ValuePosition,
 } from '../../zero-protocol/src/ast.ts';
-import {SUBQ_PREFIX} from '../../zql/src/query/query-impl.ts';
+import {SUBQ_PREFIX} from '../../zero-protocol/src/ast.ts';
 
 /**
  * Converts an AST to the equivalent query builder code.

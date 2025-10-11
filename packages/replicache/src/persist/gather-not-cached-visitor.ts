@@ -1,10 +1,10 @@
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import {getSizeOfValue} from '../../../shared/src/size-of-value.ts';
 import type {Chunk} from '../dag/chunk.ts';
 import type {LazyStore} from '../dag/lazy-store.ts';
 import type {Read} from '../dag/store.ts';
 import {Visitor} from '../dag/visitor.ts';
 import type {Hash} from '../hash.ts';
-import {getSizeOfValue} from '../size-of-value.ts';
 
 export type ChunkWithSize = {chunk: Chunk; size: number};
 

@@ -7,7 +7,7 @@ import {
   type Parameter,
   type SimpleOperator,
 } from '../../../zero-protocol/src/ast.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {
   AvailableRelationships,
   DestTableName,

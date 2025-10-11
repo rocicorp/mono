@@ -8,12 +8,10 @@ import {
   type Accessor,
   type JSX,
 } from 'solid-js';
-import {
-  Zero,
-  type CustomMutatorDefs,
-  type Schema,
-  type ZeroOptions,
-} from '../../zero/src/zero.ts';
+import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
+import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
+import {Zero} from '../../zero-client/src/client/zero.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 
 // eslint-disable-next-line @typescript-eslint/naming-convention, @typescript-eslint/no-explicit-any
 const ZeroContext = createContext<Accessor<Zero<any, any>> | undefined>(

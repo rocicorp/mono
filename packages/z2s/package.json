@@ -23,7 +23,12 @@
     "@types/pg": "^8.11.11",
     "@vitest/runner": "3.2.4",
     "pg": "^8.16.3",
-    "vitest": "3.2.4"
+    "shared": "0.0.0",
+    "vitest": "3.2.4",
+    "zero-cache": "0.0.0",
+    "zero-protocol": "0.0.0",
+    "zero-schema": "0.0.0",
+    "zql": "0.0.0"
   },
   "prettier": "@rocicorp/prettier-config"
 }
