@@ -144,3 +144,63 @@ export function runPushTest(t: PushTest) {
     data,
   };
 }
+
+export type FetchTest = {
+  sources: Sources;
+  sourceContents: SourceContents;
+  ast: AST;
+  format: Format;
+};
+
+export function runFetchTest(t: FetchTest) {
+  function innerTest<T>(makeFinalOutput: (j: Input) => T) {
+    const sources: Record<string, Source> = Object.fromEntries(
+      Object.entries(t.sources).map(([name, {columns, primaryKeys}]) => [
+        name,
+        makeSource(name, t.sourceContents[name] ?? [], columns, primaryKeys),
+      ]),
+    );
+
+    const builderDelegate = new TestBuilderDelegate(sources, true);
+    const pipeline = buildPipeline(t.ast, builderDelegate, 'query-id');
+
+    const finalOutput = makeFinalOutput(pipeline);
+
+    return {
+      log: builderDelegate.log,
+      finalOutput,
+      actualStorage: builderDelegate.clonedStorage,
+    };
+  }
+
+  const {log, actualStorage} = innerTest(j => {
+    const c = new Catch(j);
+    c.fetch();
+    return c;
+  });
+
+  let data;
+  const {
+    log: log2,
+    finalOutput: view,
+    actualStorage: actualStorage2,
+  } = innerTest(j => {
+    const view = new ArrayView(j, t.format, true, () => {});
+    data = view.data;
+    return view;
+  });
+
+  view.addListener(v => {
+    data = v;
+  });
+
+  expect(log).toEqual(log2);
+  expect(actualStorage).toEqual(actualStorage2);
+
+  view.flush();
+  return {
+    log,
+    actualStorage,
+    data,
+  };
+}

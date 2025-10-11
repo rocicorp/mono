@@ -3,7 +3,7 @@ import {
   runPushTest,
   type SourceContents,
   type Sources,
-} from './test/push-tests.ts';
+} from './test/fetch-and-push-tests.ts';
 import type {Format} from './view.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 
