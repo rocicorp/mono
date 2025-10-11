@@ -21,7 +21,7 @@ import {
   hashOfAST,
   hashOfNameAndArgs,
 } from '../../../zero-protocol/src/query-hash.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {Schema, TableSchema} from '../../../zero-types/src/schema.ts';
 import {buildPipeline} from '../builder/builder.ts';
 import {NotImplementedError} from '../error.ts';
 import {ArrayView} from '../ivm/array-view.ts';
@@ -73,7 +73,6 @@ export function materialize<S extends Schema, T, Q>(
     );
   }
   return (query as AnyQuery)
-
     [delegateSymbol](delegate)
     .materialize(factoryOrOptions?.ttl);
 }
@@ -888,10 +887,6 @@ export class QueryImpl<
     };
   }
 }
-
-type TableSchema = {
-  primaryKey: readonly string[];
-};
 
 function addPrimaryKeys(
   schema: TableSchema,
