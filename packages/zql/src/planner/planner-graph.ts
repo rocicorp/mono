@@ -257,11 +257,12 @@ export class PlannerGraph {
    *
    * Returns the best plan found across all attempts.
    */
-  plan(): void {
+  plan(debug = false): void {
     const numAttempts = Math.min(this.connections.length, 6);
     let bestCost = Infinity;
     let bestPlan: PlanState | undefined = undefined;
 
+    /* eslint-disable no-console */
     for (let i = 0; i < numAttempts; i++) {
       // Reset to initial state
       this.reset();
@@ -270,6 +271,10 @@ export class PlannerGraph {
       let costs = this.estimateCosts();
       if (i >= costs.length) break;
 
+      if (debug) {
+        console.error(`\n--- Attempt ${i + 1}: Starting with connection at index ${i} (cost: ${costs[i].cost}) ---`);
+      }
+
       // Try to pick costs[i] as root for this attempt
       try {
         let connection = costs[i].connection;
@@ -277,14 +282,19 @@ export class PlannerGraph {
         pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
         this.propagateConstraints(); // Then propagate
 
+        let step = 1;
         // Continue with greedy selection
         while (!this.hasPlan()) {
           costs = this.estimateCosts();
           if (costs.length === 0) break;
 
+          if (debug) {
+            console.error(`  Step ${step}: Available connections: ${costs.length}, costs: [${costs.map(c => c.cost).join(', ')}]`);
+          }
+
           // Try connections in order until one works
           let success = false;
-          for (const {connection} of costs) {
+          for (const {connection, cost} of costs) {
             // Save state before attempting this connection
             const stateBeforeAttempt = this.savePlan();
 
@@ -292,6 +302,9 @@ export class PlannerGraph {
               connection.pinned = true; // Pin FIRST
               pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
               this.propagateConstraints(); // Then propagate
+              if (debug) {
+                console.error(`  Step ${step}: Picked connection with cost ${cost}`);
+              }
               success = true;
               break; // Success, exit the inner loop
             } catch (e) {
@@ -307,30 +320,39 @@ export class PlannerGraph {
 
           if (!success) {
             // No connection could be pinned, this plan attempt failed
+            if (debug) console.error(`  Step ${step}: No connection could be pinned - plan failed`);
             break;
           }
+          step++;
         }
 
         // Evaluate this plan (if complete)
         if (this.hasPlan()) {
           const totalCost = this.getTotalCost();
+          if (debug) console.error(`  Attempt ${i + 1}: Complete! Total cost: ${totalCost}`);
           if (totalCost < bestCost) {
             bestCost = totalCost;
             bestPlan = this.savePlan();
+            if (debug) console.error(`  *** New best plan found! ***`);
           }
         }
       } catch (e) {
         if (e instanceof UnflippableJoinError) {
           // This root connection led to an unreachable path, try next root
+          if (debug) console.error(`  Attempt ${i + 1}: Failed with unflippable join`);
           continue;
         }
         throw e; // Re-throw other errors
       }
     }
+    /* eslint-enable no-console */
 
     // Restore best plan
     if (bestPlan) {
       this.restorePlan(bestPlan);
+      // After restoring the plan structure, we need to propagate constraints
+      // to repopulate the connection constraints based on the restored plan
+      this.propagateConstraints();
     }
   }
 }
