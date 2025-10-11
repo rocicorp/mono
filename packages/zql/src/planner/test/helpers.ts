@@ -17,6 +17,54 @@ export const simpleCostModel: ConnectionCostModel = (
 };
 
 /**
+ * Predictable cost model for testing optimal plan selection.
+ *
+ * Base costs by table:
+ * - issue: 1000
+ * - project: 100
+ * - project_member: 1
+ * - creator: 2
+ *
+ * Constraint reductions:
+ * - creatorId constraint: divide by 20
+ * - projectId constraint: divide by 10
+ * - memberId constraint: divide by 100
+ */
+export const predictableCostModel: ConnectionCostModel = (
+  sort: Ordering,
+  _filters: Condition | undefined,
+  constraint: PlannerConstraint | undefined,
+): number => {
+  // Determine table name from sort (first column)
+  const tableName = sort[0]?.[0]?.split('.')[0] ?? 'unknown';
+
+  // Base costs
+  const baseCosts: Record<string, number> = {
+    issue: 1000,
+    project: 100,
+    project_member: 1,
+    creator: 2,
+  };
+
+  let cost = baseCosts[tableName] ?? 100;
+
+  // Apply constraint reductions
+  if (constraint) {
+    if ('creatorId' in constraint) {
+      cost = cost / 20;
+    }
+    if ('projectId' in constraint) {
+      cost = cost / 10;
+    }
+    if ('memberId' in constraint) {
+      cost = cost / 100;
+    }
+  }
+
+  return Math.max(1, Math.floor(cost));
+};
+
+/**
  * Create a simple AST for testing
  */
 export function createAST(

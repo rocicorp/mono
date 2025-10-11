@@ -1,6 +1,6 @@
 import {expect, suite, test} from 'vitest';
-import {planQuery} from './planner-builder.ts';
-import {createAST, createExistsCondition, createCorrelatedSubquery, simpleCostModel} from './test/helpers.ts';
+import {planQuery, buildPlanGraph} from './planner-builder.ts';
+import {createAST, createExistsCondition, createCorrelatedSubquery, simpleCostModel, predictableCostModel} from './test/helpers.ts';
 
 suite('Planner Integration Tests', () => {
   test('plans simple EXISTS query', () => {
@@ -216,5 +216,85 @@ suite('Planner Integration Tests', () => {
     expect(result.related![0].subquery.alias).toBe('userPosts');
     expect(result.related![0].subquery.related).toHaveLength(1);
     expect(result.related![0].subquery.related![0].subquery.alias).toBe('postComments');
+  });
+
+  test('selects optimal plan based on cost model', () => {
+    // Query structure from diagram:
+    // issue
+    //   .whereExists('project', p => p.whereExists('project_member', m => m.where('memberId', ?)))
+    //   .whereExists('creator', c => c.where('name', ?))
+    //
+    // Expected optimal order based on costs:
+    // 1. Pick creator (cost: 2) - lowest initial cost
+    // 2. Pick project_member (cost: 1) - still lowest after constraints
+    // 3. Pick project (cost: 10) - constrained by project_member
+    // 4. Pick issue (cost: 50) - constrained by creator
+    // Total expected cost: 2 + 1 + 10 + 50 = 63
+
+    // Build nested EXISTS: project -> project_member
+    const projectMemberSubquery = createAST('project_member', {
+      orderBy: [['project_member.id', 'asc']],
+      where: {
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: 'memberId'},
+        right: {type: 'literal', value: 'user123'},
+      },
+    });
+    const projectMemberCorrelated = createCorrelatedSubquery(
+      projectMemberSubquery,
+      ['projectId'],
+      ['projectId'],
+    );
+    const projectMemberCondition = createExistsCondition(projectMemberCorrelated, 'EXISTS');
+
+    const projectSubquery = createAST('project', {
+      orderBy: [['project.id', 'asc']],
+      where: projectMemberCondition,
+    });
+    const projectCorrelated = createCorrelatedSubquery(projectSubquery, ['projectId'], ['projectId']);
+    const projectCondition = createExistsCondition(projectCorrelated, 'EXISTS');
+
+    // Build creator EXISTS
+    const creatorSubquery = createAST('creator', {
+      orderBy: [['creator.id', 'asc']],
+      where: {
+        type: 'simple',
+        op: '=',
+        left: {type: 'column', name: 'name'},
+        right: {type: 'literal', value: 'Alice'},
+      },
+    });
+    const creatorCorrelated = createCorrelatedSubquery(creatorSubquery, ['creatorId'], ['creatorId']);
+    const creatorCondition = createExistsCondition(creatorCorrelated, 'EXISTS');
+
+    // Combine with AND
+    const ast = createAST('issue', {
+      orderBy: [['issue.id', 'asc']],
+      where: {
+        type: 'and',
+        conditions: [projectCondition, creatorCondition],
+      },
+    });
+
+    // Build the plan graph to inspect costs
+    const {plan} = buildPlanGraph(ast, predictableCostModel);
+
+    // Run the planner
+    plan.plan();
+
+    // Verify the total cost matches expected optimal plan
+    const totalCost = plan.getTotalCost();
+    expect(totalCost).toBe(63);
+
+    // Verify all joins are properly planned
+    const summary = plan.getPlanSummary();
+    expect(summary.totalConnections).toBe(4); // issue, project, project_member, creator
+    expect(summary.pinnedConnections).toBe(4); // All should be pinned
+    expect(summary.totalJoins).toBe(3); // Three EXISTS joins
+    expect(summary.pinnedJoins).toBe(3); // All joins should be pinned
+
+    // The planner should have found the optimal solution
+    // Expected plan: creator (2) -> project_member (1) -> project (10) -> issue (50) = 63
   });
 });
