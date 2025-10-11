@@ -2,8 +2,11 @@ import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {AnalyzeQueryResult} from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {explainQueries} from '../../../zqlite/src/explain-queries.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {analyzeQuery} from './analyze.ts';
+import {runAst} from './run-ast.ts';
+// eslint-disable-next-line @typescript-eslint/naming-convention
 
 // Mock the runAst function
 vi.mock('./run-ast.ts', () => ({
@@ -69,11 +72,6 @@ describe('analyzeQuery', () => {
   };
 
   test('analyzes basic query with default options', async () => {
-    const {runAst} = await import('./run-ast.ts');
-    const {explainQueries} = await import(
-      '../../../zqlite/src/explain-queries.ts'
-    );
-
     const mockResult: AnalyzeQueryResult = {
       warnings: [],
       syncedRowCount: 5,
@@ -129,11 +127,6 @@ describe('analyzeQuery', () => {
   });
 
   test('analyzes query with custom options', async () => {
-    const {runAst} = await import('./run-ast.ts');
-    const {explainQueries} = await import(
-      '../../../zqlite/src/explain-queries.ts'
-    );
-
     const mockResult: AnalyzeQueryResult = {
       warnings: ['Custom warning'],
       syncedRowCount: 3,
@@ -167,8 +160,6 @@ describe('analyzeQuery', () => {
   });
 
   test('handles query with complex AST', async () => {
-    const {runAst} = await import('./run-ast.ts');
-
     const complexAST: AST = {
       table: 'users',
       where: {
@@ -207,11 +198,6 @@ describe('analyzeQuery', () => {
   });
 
   test('handles query with no vended row counts', async () => {
-    const {runAst} = await import('./run-ast.ts');
-    const {explainQueries} = await import(
-      '../../../zqlite/src/explain-queries.ts'
-    );
-
     const mockResult: AnalyzeQueryResult = {
       warnings: [],
       syncedRowCount: 0,
