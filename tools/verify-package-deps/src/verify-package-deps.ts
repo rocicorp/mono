@@ -2,6 +2,7 @@
 import {readdir, readFile, writeFile} from 'node:fs/promises';
 import {dirname, join, relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {parseAsync} from 'oxc-parser';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WORKSPACE_ROOT = join(__dirname, '../../..');
@@ -71,39 +72,79 @@ function getPackageName(filePath: string): string | undefined {
   return undefined;
 }
 
-function extractImports(
+async function extractImports(
   content: string,
-): {path: string; line: number; ignored: boolean}[] {
+  filePath: string,
+): Promise<{path: string; line: number; ignored: boolean}[]> {
   const imports: {path: string; line: number; ignored: boolean}[] = [];
   const lines = content.split('\n');
 
-  // Match import statements and export-from statements
-  const importRegex =
-    /(?:import\s+(?:(?:\{[^}]*\}|\*\s+as\s+\w+|\w+)(?:\s*,\s*(?:\{[^}]*\}|\*\s+as\s+\w+|\w+))*\s+from\s+)?|export\s+(?:\{[^}]*\}|\*)\s+from\s+)['"]([^'"]+)['"]/g;
+  try {
+    const result = await parseAsync(filePath, content);
 
-  let match;
-  while ((match = importRegex.exec(content)) !== null) {
-    // Calculate line number by counting newlines up to this point
-    const lineNumber = content.substring(0, match.index).split('\n').length;
+    // Extract static imports from the module info
+    for (const imp of result.module.staticImports) {
+      const lineNumber = getLineNumber(content, imp.start);
 
-    // Check if the line or previous line has an ignore comment
-    const currentLine = lines[lineNumber - 1] || '';
-    const previousLine = lines[lineNumber - 2] || '';
+      // Check if the line or previous line has an ignore comment
+      const currentLine = lines[lineNumber - 1] || '';
+      const previousLine = lines[lineNumber - 2] || '';
 
-    // Current line: inline comment is fine
-    const currentLineIgnored = currentLine.includes('@circular-dep-ignore');
+      // Current line: inline comment is fine
+      const currentLineIgnored = currentLine.includes('@circular-dep-ignore');
 
-    // Previous line: must be a comment-only line (not code with inline comment)
-    const previousLineIgnored =
-      previousLine.includes('@circular-dep-ignore') &&
-      previousLine.trim().startsWith('//');
+      // Previous line: must be a comment-only line (not code with inline comment)
+      const previousLineIgnored =
+        previousLine.includes('@circular-dep-ignore') &&
+        previousLine.trim().startsWith('//');
 
-    const ignored = currentLineIgnored || previousLineIgnored;
+      const ignored = currentLineIgnored || previousLineIgnored;
 
-    imports.push({path: match[1], line: lineNumber, ignored});
+      imports.push({
+        path: imp.moduleRequest.value,
+        line: lineNumber,
+        ignored,
+      });
+    }
+
+    // Extract export-from statements
+    for (const exp of result.module.staticExports) {
+      for (const entry of exp.entries) {
+        if (entry.moduleRequest) {
+          const lineNumber = getLineNumber(content, exp.start);
+
+          // Check if the line or previous line has an ignore comment
+          const currentLine = lines[lineNumber - 1] || '';
+          const previousLine = lines[lineNumber - 2] || '';
+
+          const currentLineIgnored = currentLine.includes(
+            '@circular-dep-ignore',
+          );
+          const previousLineIgnored =
+            previousLine.includes('@circular-dep-ignore') &&
+            previousLine.trim().startsWith('//');
+
+          const ignored = currentLineIgnored || previousLineIgnored;
+
+          imports.push({
+            path: entry.moduleRequest.value,
+            line: lineNumber,
+            ignored,
+          });
+          break; // Only add once per export statement
+        }
+      }
+    }
+  } catch (_error) {
+    // If parsing fails, silently skip this file
+    // This can happen for files with syntax errors or unsupported syntax
   }
 
   return imports;
+}
+
+function getLineNumber(content: string, offset: number): number {
+  return content.substring(0, offset).split('\n').length;
 }
 
 type AnalyzeResult = {
@@ -118,11 +159,11 @@ type AnalyzeResult = {
 async function analyzePackageDependencies(): Promise<AnalyzeResult> {
   console.log('Finding TypeScript files...');
 
-  const packagesFiles = await findTypeScriptFiles(
-    join(WORKSPACE_ROOT, 'packages'),
-  );
-  const appsFiles = await findTypeScriptFiles(join(WORKSPACE_ROOT, 'apps'));
-  const toolsFiles = await findTypeScriptFiles(join(WORKSPACE_ROOT, 'tools'));
+  const [packagesFiles, appsFiles, toolsFiles] = await Promise.all([
+    findTypeScriptFiles(join(WORKSPACE_ROOT, 'packages')),
+    findTypeScriptFiles(join(WORKSPACE_ROOT, 'apps')),
+    findTypeScriptFiles(join(WORKSPACE_ROOT, 'tools')),
+  ]);
   const allFiles = [...packagesFiles, ...appsFiles, ...toolsFiles];
 
   console.log(`Found ${allFiles.length} TypeScript files to analyze`);
@@ -155,79 +196,85 @@ async function analyzePackageDependencies(): Promise<AnalyzeResult> {
     Map<string, {file: string; line: number}[]>
   >();
 
-  for (const filePath of allFiles) {
-    const sourcePackage = getPackageName(filePath);
-    if (!sourcePackage) continue;
+  // Process all files in parallel
+  await Promise.all(
+    allFiles.map(async filePath => {
+      const sourcePackage = getPackageName(filePath);
+      if (!sourcePackage) return;
 
-    try {
-      const content = await readFile(filePath, 'utf-8');
-      const imports = extractImports(content);
+      try {
+        const content = await readFile(filePath, 'utf-8');
+        const imports = await extractImports(content, filePath);
 
-      for (const importInfo of imports) {
-        // Skip imports with @circular-dep-ignore comment
-        if (importInfo.ignored) {
-          continue;
-        }
-
-        let targetPackage: string | undefined;
-        let normalizedPath: string | undefined;
-
-        // Check if this is a relative import that goes to another package
-        if (importInfo.path.startsWith('../')) {
-          // Resolve the relative path
-          const fileDir = dirname(filePath);
-          const resolvedPath = join(fileDir, importInfo.path);
-          normalizedPath = relative(WORKSPACE_ROOT, resolvedPath).replace(
-            /\\/g,
-            '/',
-          );
-          targetPackage = getPackageName(resolvedPath);
-        } else {
-          // Check if this is a non-relative import that matches a workspace package
-          // Extract the package name (before any subpath)
-          const packageName = importInfo.path.split('/').slice(0, 2).join('/');
-          const targetPath = packageNameToPath.get(packageName);
-          if (targetPath) {
-            targetPackage = targetPath;
-            normalizedPath = targetPath;
+        for (const importInfo of imports) {
+          // Skip imports with @circular-dep-ignore comment
+          if (importInfo.ignored) {
+            continue;
           }
-        }
 
-        if (targetPackage && targetPackage !== sourcePackage) {
-          if (!packageDeps.has(sourcePackage)) {
-            packageDeps.set(sourcePackage, new Set());
+          let targetPackage: string | undefined;
+          let normalizedPath: string | undefined;
+
+          // Check if this is a relative import that goes to another package
+          if (importInfo.path.startsWith('../')) {
+            // Resolve the relative path
+            const fileDir = dirname(filePath);
+            const resolvedPath = join(fileDir, importInfo.path);
+            normalizedPath = relative(WORKSPACE_ROOT, resolvedPath).replace(
+              /\\/g,
+              '/',
+            );
+            targetPackage = getPackageName(resolvedPath);
+          } else {
+            // Check if this is a non-relative import that matches a workspace package
+            // Extract the package name (before any subpath)
+            const packageName = importInfo.path
+              .split('/')
+              .slice(0, 2)
+              .join('/');
+            const targetPath = packageNameToPath.get(packageName);
+            if (targetPath) {
+              targetPackage = targetPath;
+              normalizedPath = targetPath;
+            }
           }
-          packageDeps.get(sourcePackage)!.add(targetPackage);
 
-          // Store an example file pair for this dependency edge
-          const edgeKey = `${sourcePackage} -> ${targetPackage}`;
-          if (!exampleFiles.has(edgeKey)) {
-            // Use the resolved import path as-is (imports always have full extension)
-            exampleFiles.set(edgeKey, {
-              source: filePath,
-              sourceLine: importInfo.line,
-              target: normalizedPath!,
+          if (targetPackage && targetPackage !== sourcePackage) {
+            if (!packageDeps.has(sourcePackage)) {
+              packageDeps.set(sourcePackage, new Set());
+            }
+            packageDeps.get(sourcePackage)!.add(targetPackage);
+
+            // Store an example file pair for this dependency edge
+            const edgeKey = `${sourcePackage} -> ${targetPackage}`;
+            if (!exampleFiles.has(edgeKey)) {
+              // Use the resolved import path as-is (imports always have full extension)
+              exampleFiles.set(edgeKey, {
+                source: filePath,
+                sourceLine: importInfo.line,
+                target: normalizedPath!,
+              });
+            }
+
+            // Track import location by target package path (not workspace name yet)
+            if (!importLocations.has(sourcePackage)) {
+              importLocations.set(sourcePackage, new Map());
+            }
+            const packageImports = importLocations.get(sourcePackage)!;
+            if (!packageImports.has(targetPackage)) {
+              packageImports.set(targetPackage, []);
+            }
+            packageImports.get(targetPackage)!.push({
+              file: filePath,
+              line: importInfo.line,
             });
           }
-
-          // Track import location by target package path (not workspace name yet)
-          if (!importLocations.has(sourcePackage)) {
-            importLocations.set(sourcePackage, new Map());
-          }
-          const packageImports = importLocations.get(sourcePackage)!;
-          if (!packageImports.has(targetPackage)) {
-            packageImports.set(targetPackage, []);
-          }
-          packageImports.get(targetPackage)!.push({
-            file: filePath,
-            line: importInfo.line,
-          });
         }
+      } catch (error) {
+        console.error(`Error reading file ${filePath}:`, error);
       }
-    } catch (error) {
-      console.error(`Error reading file ${filePath}:`, error);
-    }
-  }
+    }),
+  );
 
   return {packageDeps, exampleFiles, importLocations};
 }

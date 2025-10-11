@@ -11,6 +11,9 @@
     "check-format": "prettier --check .",
     "lint": "oxlint --type-aware src/"
   },
+  "dependencies": {
+    "oxc-parser": "^0.94.0"
+  },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.3.0",
     "@types/node": "^22.10.5",

@@ -25,6 +25,7 @@
     "typescript": "~5.8.2",
     "z2s": "0.0.0",
     "zero-cache": "0.0.0",
+    "zero-protocol": "0.0.0",
     "zero-schema": "0.0.0",
     "zero-server": "0.0.0",
     "zql": "0.0.0",

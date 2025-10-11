@@ -21,7 +21,7 @@ import {
   hashOfAST,
   hashOfNameAndArgs,
 } from '../../../zero-protocol/src/query-hash.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import {buildPipeline} from '../builder/builder.ts';
 import {NotImplementedError} from '../error.ts';
 import {ArrayView} from '../ivm/array-view.ts';

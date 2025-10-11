@@ -1,5 +1,5 @@
 import {type Faker} from '@faker-js/faker';
-import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../../zero-types/src/schema.ts';
 import {ast} from '../query-impl.ts';
 import {staticQuery} from '../static-query.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';

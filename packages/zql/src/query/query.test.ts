@@ -4,7 +4,6 @@ import {describe, expectTypeOf, test} from 'vitest';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {toStaticParam} from '../../../zero-protocol/src/ast.ts';
 import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
-import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
@@ -19,6 +18,7 @@ import {
   type Opaque,
   type TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
+import type {Schema as ZeroSchema} from '../../../zero-types/src/schema.ts';
 import type {ExpressionFactory} from './expression.ts';
 import {type Query, type Row} from './query.ts';
 
