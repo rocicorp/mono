@@ -47,7 +47,7 @@ import {
   type PreloadOptions,
   type PullRow,
   type Query,
-  type QueryReturn,
+  type QueryRowType,
   type QueryTable,
   type RunOptions,
 } from './query.ts';
@@ -60,7 +60,7 @@ export function materialize<S extends Schema, T, Q>(
   query: Q,
   delegate: QueryDelegate,
   factoryOrOptions?:
-    | ViewFactory<S, QueryTable<Q>, QueryReturn<Q>, T>
+    | ViewFactory<S, QueryTable<Q>, QueryRowType<Q>, T>
     | MaterializeOptions
     | undefined,
   maybeOptions?: MaterializeOptions | undefined,
