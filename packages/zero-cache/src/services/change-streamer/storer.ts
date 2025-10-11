@@ -159,7 +159,7 @@ export class Storer implements Service {
   }
 
   purgeRecordsBefore(watermark: string): Promise<number> {
-    return this.#db.begin(async sql => {
+    return this.#db.begin(Mode.SERIALIZABLE, async sql => {
       // Check ownership before performing the purge. The server is expected to
       // exit immediately when an ownership change is detected, but checking
       // explicitly guards against race conditions.
