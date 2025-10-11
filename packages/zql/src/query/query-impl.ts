@@ -68,7 +68,6 @@ export function materialize<S extends Schema, T, Q>(
   if (typeof factoryOrOptions === 'function') {
     return (
       (query as AnyQuery)
-        //
         [delegateSymbol](delegate)
         .materialize(factoryOrOptions, maybeOptions?.ttl)
     );
