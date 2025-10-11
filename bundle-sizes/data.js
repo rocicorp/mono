@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1759794567367,
+  "lastUpdate": 1760201398270,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -53859,6 +53859,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.mjs.br (Brotli compressed)",
             "value": 54554,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111465,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31900,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "85312ad2b7460d97986de345efee041c544334c8",
+          "message": "chore: Fix dependencies (#4993)\n\nThis PR fixes package dependencies across the monorepo by adding a new\ndependency verification tool and correcting numerous missing workspace\ndependencies in package.json files.\n\nKey changes:\n\n- Introduces a new verification tool (`tools/verify-package-deps`) that\nscans TypeScript imports to validate package dependencies\n- Adds missing devDependencies for internal workspace packages across\nmultiple packages\n- Refactors shared type definitions by creating a new `zero-types`\npackage to break cyclic dependencies\n\n---------\n\nCo-authored-by: Copilot <175728472+Copilot@users.noreply.github.com>",
+          "timestamp": "2025-10-11T16:38:45Z",
+          "tree_id": "28cc5e10e98f8bee5fca2c9ff43949167f1e756c",
+          "url": "https://github.com/rocicorp/mono/commit/85312ad2b7460d97986de345efee041c544334c8"
+        },
+        "date": 1760201386290,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302603,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54540,
             "unit": "bytes"
           },
           {
