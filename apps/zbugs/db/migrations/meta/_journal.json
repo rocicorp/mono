@@ -33,15 +33,8 @@
     {
       "idx": 4,
       "version": "7",
-      "when": 1759812367732,
-      "tag": "0004_all_index",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1760128631173,
-      "tag": "0005_more-index-tweaks-for-all",
+      "when": 1760142579459,
+      "tag": "0004_status_all_index_changes_for_gigabugs",
       "breakpoints": true
     }
   ]

@@ -1,5 +1,5 @@
 {
-  "id": "51fbef5b-701d-49b9-8145-7053272cc383",
+  "id": "fe7f0a3e-5222-4e2b-bf9b-c0de5ac281c9",
   "prevId": "f7b25624-92a0-4c8b-8704-965b8afea382",
   "version": "7",
   "dialect": "postgresql",
@@ -423,6 +423,72 @@
             },
             {
               "expression": "open",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "modified",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "issue_projectID_assigneeID_modified_idx": {
+          "name": "issue_projectID_assigneeID_modified_idx",
+          "columns": [
+            {
+              "expression": "projectID",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "assigneeID",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "modified",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "issue_projectID_creatorID_modified_idx": {
+          "name": "issue_projectID_creatorID_modified_idx",
+          "columns": [
+            {
+              "expression": "projectID",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "creatorID",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
