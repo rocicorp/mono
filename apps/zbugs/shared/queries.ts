@@ -350,8 +350,8 @@ export function buildListQuery(args: ListQueryArgs) {
             ),
           )
         : undefined,
-      ...(labels ?? []).map((label, index) =>
-        exists('labels', q => q.where('name', label), {flip: index === 0}),
+      ...(labels ?? []).map(label =>
+        exists('labels', q => q.where('name', label), {flip: true}),
       ),
     ),
   );

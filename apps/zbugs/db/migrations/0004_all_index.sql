@@ -1,1 +1,0 @@
-CREATE INDEX "issue_projectID_modified_idx" ON "issue" USING btree ("projectID","modified","id");
