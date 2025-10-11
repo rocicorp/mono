@@ -29,7 +29,12 @@ export class PlannerFanOut {
     constraint: PlannerConstraint | undefined,
     from: FromType,
   ): void {
-    this.#input.propagateConstraints(branchPattern, constraint, from);
+    // Check if the input is pinned and adjust the 'from' value accordingly
+    const inputFrom = (this.#input.kind === 'connection' && this.#input.pinned) ||
+                      (this.#input.kind === 'join' && this.#input.pinned)
+      ? 'pinned'
+      : from;
+    this.#input.propagateConstraints(branchPattern, constraint, inputFrom);
   }
 
   convertToUFO(): void {
