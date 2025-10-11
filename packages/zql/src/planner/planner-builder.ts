@@ -316,3 +316,105 @@ function extractConstraint(
   }
   return constraint;
 }
+
+/**
+ * Recursively plan all graphs in a Plans tree.
+ * Uses post-order traversal so subqueries are planned before their parents.
+ *
+ * @param plans - The Plans tree to execute planning on
+ */
+function planRecursively(plans: Plans): void {
+  // Plan subqueries first (post-order traversal)
+  for (const subPlan of Object.values(plans.subPlans)) {
+    planRecursively(subPlan);
+  }
+
+  // Then plan this graph
+  plans.plan.plan();
+}
+
+/**
+ * Plan a query and return an optimized AST with flip flags applied.
+ * This is the main entrypoint for query planning.
+ *
+ * Orchestrates:
+ * 1. Build plan graphs for query and all related subqueries
+ * 2. Execute planning algorithm recursively (children before parents)
+ * 3. Apply computed plans back to AST by marking flipped joins
+ *
+ * @param ast - The input AST to plan
+ * @param model - The cost model for connection estimation
+ * @returns Optimized AST with flip: true on joins that should use FlippedJoin
+ */
+export function planQuery(ast: AST, model: ConnectionCostModel): AST {
+  // Build plan graphs recursively
+  const plans = buildPlanGraph(ast, model);
+
+  // Execute planning algorithm recursively (post-order)
+  planRecursively(plans);
+
+  // Apply plans to AST
+  return applyPlansToAST(ast, plans);
+}
+
+/**
+ * Apply plans recursively to an AST by marking flipped joins.
+ * Handles main plan and all subPlans for 'related' queries.
+ *
+ * @param ast - The AST to modify
+ * @param plans - The Plans tree containing plan graphs
+ * @returns The modified AST with flip flags applied
+ */
+function applyPlansToAST(ast: AST, plans: Plans): AST {
+  // Build set of flipped join plan IDs for O(1) lookup
+  const flippedIds = new Set<number>();
+  for (const join of plans.plan.joins) {
+    if (join.type === 'flipped' && join.planId !== undefined) {
+      flippedIds.add(join.planId);
+    }
+  }
+
+  // Single-pass traversal to apply flip flags
+  const applyToCondition = (condition: Condition): Condition => {
+    if (condition.type === 'simple') {
+      return condition;
+    }
+
+    if (condition.type === 'correlatedSubquery') {
+      const planId = (condition as unknown as Record<symbol, number>)[
+        planIdSymbol
+      ];
+      const shouldFlip = planId !== undefined && flippedIds.has(planId);
+
+      return {
+        ...condition,
+        flip: shouldFlip ? true : condition.flip,
+        // Note: Don't recurse here - related subqueries are handled separately
+      };
+    }
+
+    // Handle 'and' and 'or'
+    return {
+      ...condition,
+      conditions: condition.conditions.map(applyToCondition),
+    };
+  };
+
+  return {
+    ...ast,
+    where: ast.where ? applyToCondition(ast.where) : undefined,
+    related: ast.related?.map(csq => {
+      const alias = must(
+        csq.subquery.alias,
+        'Related subquery must have alias',
+      );
+      const subPlan = plans.subPlans[alias];
+      return {
+        ...csq,
+        subquery: subPlan
+          ? applyPlansToAST(csq.subquery, subPlan)
+          : csq.subquery,
+      };
+    }),
+  };
+}

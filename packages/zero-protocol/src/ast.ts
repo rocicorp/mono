@@ -16,6 +16,7 @@ import {rowSchema, type Row} from './data.ts';
 
 export const selectorSchema = v.string();
 export const toStaticParam = Symbol();
+export const planIdSymbol = Symbol('planId');
 
 const orderingElementSchema = v.readonly(
   v.tuple([selectorSchema, v.literalUnion('asc', 'desc')]),
@@ -318,6 +319,7 @@ export type CorrelatedSubqueryCondition = {
   related: CorrelatedSubquery;
   op: CorrelatedSubqueryConditionOperator;
   flip?: boolean | undefined;
+  [planIdSymbol]?: number | undefined;
 };
 
 export type CorrelatedSubqueryConditionOperator = 'EXISTS' | 'NOT EXISTS';
