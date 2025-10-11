@@ -327,13 +327,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
     while (this.#state.shouldRun()) {
       let err: unknown;
+      let watermark: string | null = null;
       try {
         const startAfter = await this.#storer.getLastWatermarkToStartStream();
         const stream = await this.#source.startStream(startAfter);
         this.#stream = stream;
         this.#state.resetBackoff();
-
-        let watermark: string | null = null;
+        watermark = null;
 
         for await (const change of stream.changes) {
           const [type, msg] = change;
@@ -385,10 +385,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       }
 
       // When the change stream is interrupted, abort any pending transaction.
-      const aborted = await this.#storer.abort();
-      if (aborted) {
-        this.#lc.warn?.(`aborting interrupted transaction ${aborted}`);
-        this.#forwarder.forward([aborted, ['rollback', {tag: 'rollback'}]]);
+      if (watermark) {
+        this.#lc.warn?.(`aborting interrupted transaction ${watermark}`);
+        this.#storer.abort();
+        this.#forwarder.forward([watermark, ['rollback', {tag: 'rollback'}]]);
       }
 
       await this.#state.backoff(this.#lc, err);
