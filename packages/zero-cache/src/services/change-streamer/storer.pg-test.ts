@@ -132,7 +132,7 @@ describe('change-streamer/storer', () => {
         {watermark: '06', pos: 2n},
       ]);
 
-      // Should be rejected as an invalid watermark.
+      // TODO: Consider rejecting as an invalid watermark?
       expect(await storer.purgeRecordsBefore('04')).toBe(3);
       expect(
         await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
@@ -153,8 +153,9 @@ describe('change-streamer/storer', () => {
     });
 
     test('non-owner purge prevented', async () => {
-      await db`UPDATE "xero_5/cdc"."replicationState" SET owner = 'different-task-id'`,
-        expect(await storer.purgeRecordsBefore('06')).toBe(0);
+      await db`UPDATE "xero_5/cdc"."replicationState" SET owner = 'different-task-id'`;
+
+      expect(await storer.purgeRecordsBefore('06')).toBe(0);
       expect(
         await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
       ).toEqual([
