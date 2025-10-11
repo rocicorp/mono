@@ -80,8 +80,9 @@ export function buildPlanGraph(ast: AST, model: ConnectionCostModel): Plans {
     );
   }
 
-  // Create terminus
+  // Create terminus and wire the end node to it
   const terminus = new PlannerTerminus(end);
+  wireOutput(end, terminus);
   graph.setTerminus(terminus);
 
   // Build subplans for 'related' queries
@@ -225,10 +226,9 @@ function processCorrelatedSubquery(
   const childTable = related.subquery.table;
 
   // Create source for child table if not exists
-  let childSource = graph.getSource(childTable);
-  if (!childSource) {
-    childSource = graph.addSource(childTable, model);
-  }
+  const childSource = graph.hasSource(childTable)
+    ? graph.getSource(childTable)
+    : graph.addSource(childTable, model);
 
   // Create connection for child
   const childConnection = childSource.connect(

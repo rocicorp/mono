@@ -75,6 +75,13 @@ export class PlannerGraph {
   }
 
   /**
+   * Check if a source exists by table name.
+   */
+  hasSource(name: string): boolean {
+    return this.#sources.has(name);
+  }
+
+  /**
    * Set the terminus (final output) node of the graph.
    * Constraint propagation starts from this node.
    */
