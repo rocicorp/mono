@@ -2,16 +2,19 @@ import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {AnalyzeQueryResult} from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {explainQueries} from '../../../zqlite/src/explain-queries.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {analyzeQuery} from './analyze.ts';
+import {runAst} from './run-ast.ts';
+// eslint-disable-next-line @typescript-eslint/naming-convention
 
 // Mock the runAst function
-vi.mock('../../../analyze-query/src/run-ast.ts', () => ({
+vi.mock('./run-ast.ts', () => ({
   runAst: vi.fn(),
 }));
 
 // Mock the explainQueries function
-vi.mock('../../../analyze-query/src/explain-queries.ts', () => ({
+vi.mock('../../../zqlite/src/explain-queries.ts', () => ({
   explainQueries: vi.fn(),
 }));
 
@@ -69,11 +72,6 @@ describe('analyzeQuery', () => {
   };
 
   test('analyzes basic query with default options', async () => {
-    const {runAst} = await import('../../../analyze-query/src/run-ast.ts');
-    const {explainQueries} = await import(
-      '../../../analyze-query/src/explain-queries.ts'
-    );
-
     const mockResult: AnalyzeQueryResult = {
       warnings: [],
       syncedRowCount: 5,
@@ -129,11 +127,6 @@ describe('analyzeQuery', () => {
   });
 
   test('analyzes query with custom options', async () => {
-    const {runAst} = await import('../../../analyze-query/src/run-ast.ts');
-    const {explainQueries} = await import(
-      '../../../analyze-query/src/explain-queries.ts'
-    );
-
     const mockResult: AnalyzeQueryResult = {
       warnings: ['Custom warning'],
       syncedRowCount: 3,
@@ -167,8 +160,6 @@ describe('analyzeQuery', () => {
   });
 
   test('handles query with complex AST', async () => {
-    const {runAst} = await import('../../../analyze-query/src/run-ast.ts');
-
     const complexAST: AST = {
       table: 'users',
       where: {
@@ -207,11 +198,6 @@ describe('analyzeQuery', () => {
   });
 
   test('handles query with no vended row counts', async () => {
-    const {runAst} = await import('../../../analyze-query/src/run-ast.ts');
-    const {explainQueries} = await import(
-      '../../../analyze-query/src/explain-queries.ts'
-    );
-
     const mockResult: AnalyzeQueryResult = {
       warnings: [],
       syncedRowCount: 0,
@@ -230,9 +216,9 @@ describe('analyzeQuery', () => {
   });
 
   test('handles empty vended row counts', async () => {
-    const {runAst} = await import('../../../analyze-query/src/run-ast.ts');
+    const {runAst} = await import('./run-ast.ts');
     const {explainQueries} = await import(
-      '../../../analyze-query/src/explain-queries.ts'
+      '../../../zqlite/src/explain-queries.ts'
     );
 
     const mockResult: AnalyzeQueryResult = {
@@ -253,7 +239,7 @@ describe('analyzeQuery', () => {
   });
 
   test('propagates errors from runAst', async () => {
-    const {runAst} = await import('../../../analyze-query/src/run-ast.ts');
+    const {runAst} = await import('./run-ast.ts');
 
     const error = new Error('Query analysis failed');
     vi.mocked(runAst).mockRejectedValue(error);
@@ -264,7 +250,7 @@ describe('analyzeQuery', () => {
   });
 
   test('creates proper host delegate with getSource function', async () => {
-    const {runAst} = await import('../../../analyze-query/src/run-ast.ts');
+    const {runAst} = await import('./run-ast.ts');
     const {mustGetTableSpec} = await import('../db/lite-tables.ts');
     // eslint-disable-next-line @typescript-eslint/naming-convention
     const {TableSource} = await import('../../../zqlite/src/table-source.ts');
@@ -317,9 +303,9 @@ describe('analyzeQuery', () => {
   });
 
   test('caches table sources in host delegate', async () => {
-    const {runAst} = await import('../../../analyze-query/src/run-ast.ts');
+    const {runAst} = await import('./run-ast.ts');
     const {explainQueries} = await import(
-      '../../../analyze-query/src/explain-queries.ts'
+      '../../../zqlite/src/explain-queries.ts'
     );
     const {mustGetTableSpec} = await import('../db/lite-tables.ts');
     // eslint-disable-next-line @typescript-eslint/naming-convention
@@ -366,7 +352,7 @@ describe('analyzeQuery', () => {
   });
 
   test('passes through all analyze options correctly', async () => {
-    const {runAst} = await import('../../../analyze-query/src/run-ast.ts');
+    const {runAst} = await import('./run-ast.ts');
 
     const options = {
       syncedRows: false,

@@ -13,5 +13,8 @@
   "dependencies": {
     "@opentelemetry/api": "^1.9.0"
   },
-  "prettier": "@rocicorp/prettier-config"
+  "prettier": "@rocicorp/prettier-config",
+  "devDependencies": {
+    "shared": "0.0.0"
+  }
 }

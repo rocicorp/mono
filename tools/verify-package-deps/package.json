@@ -1,0 +1,23 @@
+{
+  "name": "verify-package-deps",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "verify": "node src/verify-package-deps.ts",
+    "verify:fix": "node src/verify-package-deps.ts --fix",
+    "check-types": "tsc",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "oxlint --type-aware src/"
+  },
+  "dependencies": {
+    "oxc-parser": "^0.94.0"
+  },
+  "devDependencies": {
+    "@rocicorp/prettier-config": "^0.3.0",
+    "@types/node": "^22.10.5",
+    "typescript": "~5.8.2"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}

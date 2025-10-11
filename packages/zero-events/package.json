@@ -1,20 +1,39 @@
 {
-  "name": "zero-events",
-  "version": "0.0.0",
-  "private": true,
+  "name": "@rocicorp/zero-events",
+  "version": "0.0.1",
+  "author": "Rocicorp, LLC.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rocicorp/mono.git",
+    "directory": "packages/zero-events"
+  },
+  "license": "Apache-2.0",
   "type": "module",
+  "module": "out/mod.js",
+  "types": "out/mod.d.ts",
+  "exports": {
+    ".": {
+      "types": "./out/mod.d.ts",
+      "default": "./out/mod.js"
+    }
+  },
+  "files": [
+    "out",
+    "!*.tsbuildinfo"
+  ],
   "scripts": {
+    "build": "rm -rf out && tsc && npx tsx tool/build.ts",
+    "prepack": "npm run build",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "lint": "oxlint --type-aware src/"
-  },
-  "dependencies": {
-    "shared": "0.0.0"
+    "lint": "oxlint --type-aware src/",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.3.0",
+    "shared": "0.0.0",
     "typescript": "~5.8.2"
   },
   "prettier": "@rocicorp/prettier-config"

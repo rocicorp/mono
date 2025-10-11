@@ -23,7 +23,11 @@
     "@rocicorp/prettier-config": "^0.3.0",
     "@types/tmp": "^0.2.6",
     "shared": "0.0.0",
-    "typescript": "~5.8.2"
+    "typescript": "~5.8.2",
+    "zero-cache": "0.0.0",
+    "zero-protocol": "0.0.0",
+    "zql": "0.0.0",
+    "zql-integration-tests": "0.0.0"
   },
   "prettier": "@rocicorp/prettier-config",
   "dependencies": {

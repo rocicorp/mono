@@ -4,11 +4,11 @@ import {resolver, type Resolver} from '@rocicorp/resolver';
 import postgres from 'postgres';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
+import {type JSONValue} from '../../../../shared/src/bigint-json.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
-import {type JSONValue} from '../../../../shared/src/bigint-json.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../types/shards.ts';
 import {type Commit} from '../change-source/protocol/current/downstream.ts';
@@ -33,9 +33,9 @@ type SubscriberAndMode = {
 type QueueEntry =
   | ['change', WatermarkedChange]
   | ['ready', callback: () => void]
-  | ['abort', callback: (abortedWatermark: string | null) => void]
   | ['subscriber', SubscriberAndMode]
   | StatusMessage
+  | ['abort']
   | 'stop';
 
 type PendingTransaction = {
@@ -158,27 +158,36 @@ export class Storer implements Service {
     return lastWatermark;
   }
 
-  async purgeRecordsBefore(watermark: string): Promise<number> {
-    const result = await this.#db<{deleted: bigint}[]>`
-      WITH purged AS (
-        DELETE FROM ${this.#cdc('changeLog')} WHERE watermark < ${watermark} 
-          RETURNING watermark, pos
-      ) SELECT COUNT(*) as deleted FROM purged;`;
+  purgeRecordsBefore(watermark: string): Promise<number> {
+    return this.#db.begin(Mode.SERIALIZABLE, async sql => {
+      // Check ownership before performing the purge. The server is expected to
+      // exit immediately when an ownership change is detected, but checking
+      // explicitly guards against race conditions.
+      const [{owner}] = await sql<ReplicationState[]>`
+        SELECT * FROM ${this.#cdc('replicationState')}`;
+      if (owner !== this.#taskID) {
+        this.#lc.error?.(
+          `Change log purge requested (${watermark}) while no longer owner`,
+        );
+        void this.stop();
+        return 0;
+      }
 
-    return Number(result[0].deleted);
+      const [{deleted}] = await sql<{deleted: bigint}[]>`
+        WITH purged AS (
+          DELETE FROM ${this.#cdc('changeLog')} WHERE watermark < ${watermark} 
+            RETURNING watermark, pos
+        ) SELECT COUNT(*) as deleted FROM purged;`;
+      return Number(deleted);
+    });
   }
 
   store(entry: WatermarkedChange) {
     this.#queue.enqueue(['change', entry]);
   }
 
-  abort(): Promise<string | null> {
-    if (!this.#running) {
-      return Promise.resolve(null);
-    }
-    const abortedWatermark = resolver<string | null>();
-    this.#queue.enqueue(['abort', abortedWatermark.resolve]);
-    return abortedWatermark.promise;
+  abort() {
+    this.#queue.enqueue(['abort']);
   }
 
   status(s: StatusMessage) {
@@ -192,6 +201,9 @@ export class Storer implements Service {
   #readyForMore: Resolver<void> | null = null;
 
   readyForMore(): Promise<void> | undefined {
+    if (!this.#running) {
+      return undefined;
+    }
     if (
       this.#readyForMore === null &&
       this.#queue.size() > QUEUE_SIZE_BACK_PRESSURE_THRESHOLD
@@ -224,6 +236,7 @@ export class Storer implements Service {
       await this.#processQueue();
     } finally {
       this.#running = false;
+      this.#lc.info?.('storer stopped');
     }
   }
 
@@ -255,15 +268,10 @@ export class Storer implements Service {
           this.#onConsumed(msg);
           continue;
         case 'abort': {
-          const aborted = msg[1];
-          if (tx === null) {
-            aborted(null);
-          } else {
-            const {preCommitWatermark} = tx;
+          if (tx) {
             tx.pool.abort();
             await tx.pool.done();
             tx = null;
-            aborted(preCommitWatermark);
           }
           continue;
         }
@@ -366,8 +374,6 @@ export class Storer implements Service {
         await this.#startCatchup(catchupQueue.splice(0));
       }
     }
-
-    this.#lc.info?.('storer stopped');
   }
 
   async #startCatchup(subs: SubscriberAndMode[]) {

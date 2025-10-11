@@ -2,12 +2,12 @@ import {Lock} from '@rocicorp/lock';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {getSizeOfEntry} from '../../../shared/src/size-of-value.ts';
 import {type Chunk, type CreateChunk, toRefs} from '../dag/chunk.ts';
 import type {Write} from '../dag/store.ts';
 import * as FormatVersion from '../format-version-enum.ts';
 import type {FrozenJSONValue} from '../frozen-json.ts';
 import {type Hash, emptyHash, newRandomHash} from '../hash.ts';
-import {getSizeOfEntry} from '../size-of-value.ts';
 import {
   DataNodeImpl,
   type Entry,

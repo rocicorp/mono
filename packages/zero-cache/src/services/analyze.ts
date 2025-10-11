@@ -1,8 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import auth from 'basic-auth';
 import type {FastifyReply, FastifyRequest} from 'fastify';
-import {explainQueries} from '../../../analyze-query/src/explain-queries.ts';
-import {runAst} from '../../../analyze-query/src/run-ast.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {AnalyzeQueryResult} from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
@@ -10,11 +8,13 @@ import {astSchema} from '../../../zero-protocol/src/ast.ts';
 import {Debug} from '../../../zql/src/builder/debug-delegate.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import {Database} from '../../../zqlite/src/db.ts';
+import {explainQueries} from '../../../zqlite/src/explain-queries.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {isAdminPasswordValid} from '../config/zero-config.ts';
 import {computeZqlSpecs, mustGetTableSpec} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../db/specs.ts';
+import {runAst} from './run-ast.ts';
 
 export function setCors(res: FastifyReply) {
   return res

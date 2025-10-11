@@ -4,13 +4,10 @@ import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
-import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
 import {initialSync} from '../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
 import {type PostgresDB} from '../../zero-cache/src/types/pg.ts';
-import {getServerSchema} from '../../zero-server/src/schema.ts';
-import {Transaction} from '../../zero-server/src/test/util.ts';
 import {type Row} from '../../zero-protocol/src/data.ts';
 import {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
@@ -20,6 +17,9 @@ import {
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
+import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
+import {getServerSchema} from '../../zero-server/src/schema.ts';
+import {Transaction} from '../../zero-server/src/test/util.ts';
 import {completedAST, newQuery} from '../../zql/src/query/query-impl.ts';
 import {type Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
@@ -156,11 +156,15 @@ beforeAll(async () => {
     ) as Schema['tables']['comment'][],
   ];
   expect(
-    issueLiteRows.map(row => fromSQLiteTypes(schema.tables.issue.columns, row)),
+    issueLiteRows.map(row =>
+      fromSQLiteTypes(schema.tables.issue.columns, row, 'issue'),
+    ),
   ).toEqual(testData.issue);
   expect(
     commentLiteRows
-      .map(row => fromSQLiteTypes(schema.tables.comment.columns, row))
+      .map(row =>
+        fromSQLiteTypes(schema.tables.comment.columns, row, 'comment'),
+      )
       .map(mapHash),
   ).toEqual(testData.comment);
 

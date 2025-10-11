@@ -4,7 +4,6 @@ import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
-import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
 import {type PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {type Row} from '../../zero-protocol/src/data.ts';
@@ -14,7 +13,9 @@ import {
   string,
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
+import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
+import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {completedAST, newQuery} from '../../zql/src/query/query-impl.ts';
 import {type Query} from '../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../zql/src/query/test/query-delegate.ts';
@@ -26,7 +27,6 @@ import {
 } from '../../zqlite/src/test/source-factory.ts';
 import './helpers/comparePg.ts';
 import {fillPgAndSync} from './helpers/setup.ts';
-import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 
 const lc = createSilentLogContext();
 
@@ -155,7 +155,9 @@ beforeAll(async () => {
     ) as Schema['tables']['item'][],
   ];
   expect(
-    itemLiteRows.map(row => fromSQLiteTypes(schema.tables.item.columns, row)),
+    itemLiteRows.map(row =>
+      fromSQLiteTypes(schema.tables.item.columns, row, 'item'),
+    ),
   ).toEqual(testData.item);
 
   const {host, port, user, pass} = pg.options;
