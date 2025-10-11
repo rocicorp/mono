@@ -217,18 +217,24 @@ textarea.autoResize {
   gap: 0.5rem;
 }
 
+.section-tabs .project-picker-dropdown {
+  margin-bottom: 1.95rem;
+}
+
 .nav-item {
   padding: 0.375rem 1rem;
   border-radius: var(--ui-button-radius);
 }
 
 .nav-item:hover {
-  color: var(--color-text-primary-active);
+  color: var(--color-primary-cta);
 }
 
 .nav-active {
-  color: var(--color-text-primary-active);
-  background-color: var(--color-nav-selected);
+  color: var(--color-primary-cta);
+  border-right: 2px solid;
+  border-radius: 0;
+  background-color: transparent;
 }
 
 .nav-container .spacer {
@@ -1343,13 +1349,30 @@ textarea.autoResize {
   }
 
   .primary-content {
-    padding: 5rem 0 0 0;
+    padding: 9rem 0 0 0;
   }
 
   .section-tabs {
+    position: fixed;
+    top: 6rem;
+    left: 0;
+    width: 100%;
+    padding: 0 0 0 2rem;
+    background-color: transparent;
+    z-index: var(--z-index-primary-nav);
     flex-direction: row;
     font-size: var(--typo-label-size);
     font-weight: var(--typo-label-weight);
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .section-tabs .project-picker-dropdown {
+    margin-bottom: 0;
+  }
+
+  .nav-active {
+    border-right: none;
   }
 
   .primary-cta {
@@ -1470,6 +1493,11 @@ textarea.autoResize {
 
   .zero-mark {
     display: block;
+  }
+
+  .section-tabs {
+    top: 5.5rem;
+    padding: 0 0 0 1.5rem;
   }
 
   .app-container {

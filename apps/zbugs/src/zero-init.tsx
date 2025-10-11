@@ -24,6 +24,7 @@ export function ZeroInit({children}: {children: ReactNode}) {
       },
       mutateURL: `${window.location.origin}/api/mutate`,
       getQueriesURL: `${window.location.origin}/api/get-queries`,
+      slowMaterializeThreshold: 1,
     } satisfies ZeroOptions<Schema, CustomMutatorDefs>;
   }, [login]);
 

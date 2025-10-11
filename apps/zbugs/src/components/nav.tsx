@@ -1,34 +1,35 @@
 import {FPSMeter} from '@schickling/fps-meter';
 import classNames from 'classnames';
 import {memo, useCallback, useEffect, useMemo, useState} from 'react';
-import {useParams, useRoute, useSearch} from 'wouter';
-import {navigate, useHistoryState} from 'wouter/use-browser-location';
+import {useSearch} from 'wouter';
+import {navigate} from 'wouter/use-browser-location';
 import {useQuery, useZeroOnline} from '@rocicorp/zero/react';
 import logoURL from '../assets/images/logo.svg';
 import markURL from '../assets/images/mark.svg';
 import {useLogin} from '../hooks/use-login.tsx';
 import {IssueComposer} from '../pages/issue/issue-composer.tsx';
-import {links, routes, type ZbugsHistoryState} from '../routes.ts';
+import {links, useListContext} from '../routes.tsx';
 import {AvatarImage} from './avatar-image.tsx';
 import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
 import {Button} from './button.tsx';
 import {Link} from './link.tsx';
 import {queries, type ListContext} from '../../shared/queries.ts';
 import {ZERO_PROJECT_NAME} from '../../shared/schema.ts';
+import {ProjectPicker} from './project-picker.tsx';
 
 export const Nav = memo(() => {
   const search = useSearch();
   const qs = useMemo(() => new URLSearchParams(search), [search]);
-  const [isList] = useRoute(routes.list);
-  const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
-  const listContext = zbugsHistoryState?.zbugsListContext;
-  const status = getStatus(isList, qs, listContext);
+  const {listContext} = useListContext();
+  const status = getStatus(listContext);
+  const projectName = listContext?.params.projectName ?? ZERO_PROJECT_NAME;
   const login = useLogin();
   const [isMobile, setIsMobile] = useState(false);
   const [showUserPanel, setShowUserPanel] = useState(false); // State to control visibility of user-panel-mobile
   const [user] = useQuery(queries.user(login.loginState?.decoded.sub ?? ''));
   const isOnline = useZeroOnline();
-  const {projectName} = useParams();
+
+  const [projects] = useQuery(queries.allProjects());
 
   const [showIssueModal, setShowIssueModal] = useState(false);
 
@@ -64,7 +65,7 @@ export const Nav = memo(() => {
         <Link className="logo-link-container" href="/">
           <img src={logoURL} className="zero-logo" />
           <img src={markURL} className="zero-mark" />
-        </Link>
+        </Link>{' '}
         {/* could not figure out how to add this color to tailwind.config.js */}
         <ButtonWithLoginCheck
           className="primary-cta"
@@ -74,8 +75,16 @@ export const Nav = memo(() => {
         >
           <span className="primary-cta-text">New Issue</span>
         </ButtonWithLoginCheck>
-
         <div className="section-tabs">
+          <div>
+            <ProjectPicker
+              projects={projects}
+              selectedProjectName={projectName}
+              onChange={value =>
+                navigate(links.list({projectName: value.name}))
+              }
+            ></ProjectPicker>
+          </div>
           <Link
             href={addStatusParam(projectName, qs, undefined)}
             eventName="Toggle open issues"
@@ -104,7 +113,6 @@ export const Nav = memo(() => {
             All
           </Link>
         </div>
-
         <div className="user-login">
           {import.meta.env.DEV && (
             <FPSMeter className="fps-meter" width={192} height={38} />
@@ -191,6 +199,8 @@ export const Nav = memo(() => {
         </div>
       </div>
       <IssueComposer
+        projects={projects}
+        projectName={projectName}
         isOpen={showIssueModal}
         onDismiss={created => {
           setShowIssueModal(false);
@@ -204,7 +214,7 @@ export const Nav = memo(() => {
 });
 
 const addStatusParam = (
-  projectName: string = ZERO_PROJECT_NAME,
+  projectName: string,
   qs: URLSearchParams,
   status: 'closed' | 'all' | undefined,
 ) => {
@@ -220,22 +230,7 @@ const addStatusParam = (
   return links.list({projectName}) + '?' + newParams.toString();
 };
 
-function getStatus(
-  isList: boolean,
-  qs: URLSearchParams,
-  listContext: ListContext | undefined,
-) {
-  if (isList) {
-    const status = qs.get('status')?.toLowerCase();
-    switch (status) {
-      case 'closed':
-        return 'closed';
-      case 'all':
-        return 'all';
-      default:
-        return 'open';
-    }
-  }
+function getStatus(listContext: ListContext | undefined) {
   if (listContext) {
     const open = listContext.params.open;
     switch (open) {
