@@ -6,12 +6,7 @@ import {assert, unreachable} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import {difference} from '../../shared/src/set-utils.ts';
 import type {Writable} from '../../shared/src/writable.ts';
-import type {
-  Condition,
-  Ordering,
-  SimpleCondition,
-  ValuePosition,
-} from '../../zero-protocol/src/ast.ts';
+import type {Condition, Ordering} from '../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
 import type {
@@ -22,9 +17,15 @@ import type {DebugDelegate} from '../../zql/src/builder/debug-delegate.ts';
 import {
   createPredicate,
   transformFilters,
-  type NoSubqueryCondition,
 } from '../../zql/src/builder/filter.ts';
 import {makeComparator, type Node} from '../../zql/src/ivm/data.ts';
+import type {ConnectionCostModel} from '../../zql/src/planner/planner-connection.ts';
+import {
+  filtersToSQL,
+  toSQLiteType,
+  type NoSubqueryCondition,
+} from './query-builder.ts';
+import {createSQLiteCostModel} from './sqlite-cost-model.ts';
 import {
   generateWithOverlay,
   generateWithStart,
@@ -245,6 +246,18 @@ export class TableSource implements Source {
 
     this.#connections.push(connection);
     return input;
+  }
+
+  /**
+   * Creates a cost model for query planning using SQLite's scanstatus API.
+   * The cost model estimates query costs based on constraints, filters, and ordering.
+   *
+   * @param db Database instance to use for cost estimation
+   * @returns ConnectionCostModel for use with the query planner
+   */
+  createCostModel(db: Database): ConnectionCostModel {
+    const columns = Object.keys(this.#columns);
+    return createSQLiteCostModel(db, this.#table, columns);
   }
 
   toSQLiteRow(row: Row): Row {
@@ -545,92 +558,6 @@ export class TableSource implements Source {
 }
 
 /**
- * This applies all filters present in the AST for a query to the source.
- * This will work until subquery filters are added
- * at which point either:
- * a. we move filters to connect
- * b. we do the transform of removing subquery filters from filters while
- *    preserving the meaning of the filters.
- *
- * https://www.notion.so/replicache/Optional-Filters-OR-1303bed895458013a26ee5aafd5725d2
- */
-export function filtersToSQL(filters: NoSubqueryCondition): SQLQuery {
-  switch (filters.type) {
-    case 'simple':
-      return simpleConditionToSQL(filters);
-    case 'and':
-      return filters.conditions.length > 0
-        ? sql`(${sql.join(
-            filters.conditions.map(condition => filtersToSQL(condition)),
-            sql` AND `,
-          )})`
-        : sql`TRUE`;
-    case 'or':
-      return filters.conditions.length > 0
-        ? sql`(${sql.join(
-            filters.conditions.map(condition => filtersToSQL(condition)),
-            sql` OR `,
-          )})`
-        : sql`FALSE`;
-  }
-}
-
-function simpleConditionToSQL(filter: SimpleCondition): SQLQuery {
-  const {op} = filter;
-  if (op === 'IN' || op === 'NOT IN') {
-    switch (filter.right.type) {
-      case 'literal':
-        return sql`${valuePositionToSQL(
-          filter.left,
-        )} ${sql.__dangerous__rawValue(
-          filter.op,
-        )} (SELECT value FROM json_each(${JSON.stringify(
-          filter.right.value,
-        )}))`;
-      case 'static':
-        throw new Error(
-          'Static parameters must be replaced before conversion to SQL',
-        );
-    }
-  }
-  return sql`${valuePositionToSQL(filter.left)} ${sql.__dangerous__rawValue(
-    // SQLite's LIKE operator is case-insensitive by default, so we
-    // convert ILIKE to LIKE and NOT ILIKE to NOT LIKE.
-    filter.op === 'ILIKE'
-      ? 'LIKE'
-      : filter.op === 'NOT ILIKE'
-        ? 'NOT LIKE'
-        : filter.op,
-  )} ${valuePositionToSQL(filter.right)}`;
-}
-
-function valuePositionToSQL(value: ValuePosition): SQLQuery {
-  switch (value.type) {
-    case 'column':
-      return sql.ident(value.name);
-    case 'literal':
-      return sql`${toSQLiteType(value.value, getJsType(value.value))}`;
-    case 'static':
-      throw new Error(
-        'Static parameters must be replaced before conversion to SQL',
-      );
-  }
-}
-
-function getJsType(value: unknown): ValueType {
-  if (value === null) {
-    return 'null';
-  }
-  return typeof value === 'string'
-    ? 'string'
-    : typeof value === 'number'
-      ? 'number'
-      : typeof value === 'boolean'
-        ? 'boolean'
-        : 'json';
-}
-
-/**
  * The ordering could be complex such as:
  * `ORDER BY a ASC, b DESC, c ASC`
  *
@@ -752,19 +679,6 @@ export function toSQLiteTypes(
   columnTypes: Record<string, SchemaValue>,
 ): readonly unknown[] {
   return columns.map(col => toSQLiteType(row[col], columnTypes[col].type));
-}
-
-function toSQLiteType(v: unknown, type: ValueType): unknown {
-  switch (type) {
-    case 'boolean':
-      return v === null ? null : v ? 1 : 0;
-    case 'number':
-    case 'string':
-    case 'null':
-      return v;
-    case 'json':
-      return JSON.stringify(v);
-  }
 }
 
 export function toSQLiteTypeName(type: ValueType) {

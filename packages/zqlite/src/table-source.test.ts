@@ -10,8 +10,8 @@ import type {Change} from '../../zql/src/ivm/change.ts';
 import {makeComparator} from '../../zql/src/ivm/data.ts';
 import {Database} from './db.ts';
 import {format} from './internal/sql.ts';
+import {filtersToSQL} from './query-builder.ts';
 import {
-  filtersToSQL,
   fromSQLiteTypes,
   TableSource,
   UnsupportedValueError,

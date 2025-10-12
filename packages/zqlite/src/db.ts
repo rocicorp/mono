@@ -171,6 +171,7 @@ export class Statement {
   readonly #lc: LogContext;
   readonly #threshold: number;
   readonly #attrs: Attributes;
+  readonly scanStatus: SQLite3Statement['scanStatusV2'];
 
   constructor(
     lc: LogContext,
@@ -182,6 +183,7 @@ export class Statement {
     this.#attrs = attrs;
     this.#stmt = stmt;
     this.#threshold = threshold;
+    this.scanStatus = this.#stmt.scanStatusV2.bind(this.#stmt);
   }
 
   safeIntegers(useBigInt: boolean): this {
