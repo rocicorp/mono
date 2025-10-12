@@ -1,6 +1,11 @@
 import {expect, suite, test} from 'vitest';
 import {buildPlanGraph, planQuery} from './planner-builder.ts';
-import {simpleCostModel, createAST, createExistsCondition, createCorrelatedSubquery} from './test/helpers.ts';
+import {
+  simpleCostModel,
+  createAST,
+  createExistsCondition,
+  createCorrelatedSubquery,
+} from './test/helpers.ts';
 import {planIdSymbol} from '../../../zero-protocol/src/ast.ts';
 
 suite('buildPlanGraph', () => {
@@ -26,11 +31,7 @@ suite('buildPlanGraph', () => {
       },
     });
 
-    const correlated = createCorrelatedSubquery(
-      subquery,
-      ['id'],
-      ['userId'],
-    );
+    const correlated = createCorrelatedSubquery(subquery, ['id'], ['userId']);
 
     const ast = createAST('users', {
       where: createExistsCondition(correlated, 'EXISTS'),
@@ -58,7 +59,9 @@ suite('buildPlanGraph', () => {
     expect(plan.joins[0].planId).toBeDefined();
 
     // Check that the AST condition has the same plan ID
-    const astPlanId = (condition as unknown as Record<symbol, number>)[planIdSymbol];
+    const astPlanId = (condition as unknown as Record<symbol, number>)[
+      planIdSymbol
+    ];
     expect(astPlanId).toBe(plan.joins[0].planId);
   });
 
@@ -139,7 +142,11 @@ suite('buildPlanGraph', () => {
 
   test('creates subPlans for related queries', () => {
     const relatedSubquery = createAST('posts', {alias: 'userPosts'});
-    const correlated = createCorrelatedSubquery(relatedSubquery, ['id'], ['userId']);
+    const correlated = createCorrelatedSubquery(
+      relatedSubquery,
+      ['id'],
+      ['userId'],
+    );
 
     const ast = createAST('users', {
       related: [correlated],
@@ -214,14 +221,22 @@ suite('planQuery', () => {
   test('recursively plans subPlans with joins', () => {
     // Create a related subquery WITH a join so it can be planned
     const nestedSubquery = createAST('comments');
-    const nestedCorrelated = createCorrelatedSubquery(nestedSubquery, ['id'], ['postId']);
+    const nestedCorrelated = createCorrelatedSubquery(
+      nestedSubquery,
+      ['id'],
+      ['postId'],
+    );
     const nestedCondition = createExistsCondition(nestedCorrelated, 'EXISTS');
 
     const relatedSubquery = createAST('posts', {
       alias: 'userPosts',
       where: nestedCondition,
     });
-    const correlated = createCorrelatedSubquery(relatedSubquery, ['id'], ['userId']);
+    const correlated = createCorrelatedSubquery(
+      relatedSubquery,
+      ['id'],
+      ['userId'],
+    );
 
     const ast = createAST('users', {
       related: [correlated],

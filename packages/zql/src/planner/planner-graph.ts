@@ -167,14 +167,19 @@ export class PlannerGraph {
   // ========================================================================
 
   /**
-   * Calculate total cost of the current plan by summing all connection costs.
+   * Calculate total cost of the current plan by multiplying connection costs.
+   * Uses log/exp to avoid numerical overflow: exp(Σlog(costs)) = Π(costs)
+   *
+   * This is correct for nested loop joins where inner connections execute
+   * once per outer connection row, making costs multiplicative not additive.
    */
   getTotalCost(): number {
-    let total = 0;
+    let logSum = 0;
     for (const connection of this.connections) {
-      total += connection.estimateCost();
+      const cost = connection.estimateCost();
+      logSum += Math.log(cost);
     }
-    return total;
+    return Math.exp(logSum);
   }
 
   /**
@@ -272,7 +277,9 @@ export class PlannerGraph {
       if (i >= costs.length) break;
 
       if (debug) {
-        console.error(`\n--- Attempt ${i + 1}: Starting with connection at index ${i} (cost: ${costs[i].cost}) ---`);
+        console.error(
+          `\n--- Attempt ${i + 1}: Starting with connection at index ${i} (cost: ${costs[i].cost}) ---`,
+        );
       }
 
       // Try to pick costs[i] as root for this attempt
@@ -289,7 +296,9 @@ export class PlannerGraph {
           if (costs.length === 0) break;
 
           if (debug) {
-            console.error(`  Step ${step}: Available connections: ${costs.length}, costs: [${costs.map(c => c.cost).join(', ')}]`);
+            console.error(
+              `  Step ${step}: Available connections: ${costs.length}, costs: [${costs.map(c => c.cost).join(', ')}]`,
+            );
           }
 
           // Try connections in order until one works
@@ -303,7 +312,9 @@ export class PlannerGraph {
               pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
               this.propagateConstraints(); // Then propagate
               if (debug) {
-                console.error(`  Step ${step}: Picked connection with cost ${cost}`);
+                console.error(
+                  `  Step ${step}: Picked connection with cost ${cost}`,
+                );
               }
               success = true;
               break; // Success, exit the inner loop
@@ -320,7 +331,10 @@ export class PlannerGraph {
 
           if (!success) {
             // No connection could be pinned, this plan attempt failed
-            if (debug) console.error(`  Step ${step}: No connection could be pinned - plan failed`);
+            if (debug)
+              console.error(
+                `  Step ${step}: No connection could be pinned - plan failed`,
+              );
             break;
           }
           step++;
@@ -329,7 +343,10 @@ export class PlannerGraph {
         // Evaluate this plan (if complete)
         if (this.hasPlan()) {
           const totalCost = this.getTotalCost();
-          if (debug) console.error(`  Attempt ${i + 1}: Complete! Total cost: ${totalCost}`);
+          if (debug)
+            console.error(
+              `  Attempt ${i + 1}: Complete! Total cost: ${totalCost}`,
+            );
           if (totalCost < bestCost) {
             bestCost = totalCost;
             bestPlan = this.savePlan();
@@ -339,7 +356,8 @@ export class PlannerGraph {
       } catch (e) {
         if (e instanceof UnflippableJoinError) {
           // This root connection led to an unreachable path, try next root
-          if (debug) console.error(`  Attempt ${i + 1}: Failed with unflippable join`);
+          if (debug)
+            console.error(`  Attempt ${i + 1}: Failed with unflippable join`);
           continue;
         }
         throw e; // Re-throw other errors

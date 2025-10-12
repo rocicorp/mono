@@ -152,7 +152,7 @@ suite('PlannerGraph', () => {
     expect(summary.flippedJoins).toBe(1);
   });
 
-  test('getTotalCost() sums all connection costs', () => {
+  test('getTotalCost() multiplies all connection costs', () => {
     const graph = new PlannerGraph();
     const source = graph.addSource('users', simpleCostModel);
 
@@ -165,7 +165,7 @@ suite('PlannerGraph', () => {
     conn2.propagateConstraints([0], {a: 'string', b: 'string'}, 'unpinned'); // 80
 
     const totalCost = graph.getTotalCost();
-    expect(totalCost).toBe(170); // 90 + 80
+    expect(totalCost).toBeCloseTo(7200, 0); // 90 × 80 = 7200
   });
 
   test('reset() resets all nodes to initial state', () => {

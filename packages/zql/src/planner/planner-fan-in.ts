@@ -66,7 +66,8 @@ export class PlannerFanIn {
        */
       for (const input of this.#inputs) {
         // Check if this input is pinned and adjust the 'from' value accordingly
-        const inputFrom = (input.kind === 'join' && input.pinned) ? 'pinned' : from;
+        const inputFrom =
+          input.kind === 'join' && input.pinned ? 'pinned' : from;
         input.propagateConstraints(updatedPattern, constraint, inputFrom);
       }
       return;
@@ -75,7 +76,7 @@ export class PlannerFanIn {
     let i = 0;
     for (const input of this.#inputs) {
       // Check if this input is pinned and adjust the 'from' value accordingly
-      const inputFrom = (input.kind === 'join' && input.pinned) ? 'pinned' : from;
+      const inputFrom = input.kind === 'join' && input.pinned ? 'pinned' : from;
       input.propagateConstraints([i, ...branchPattern], constraint, inputFrom);
       i++;
     }

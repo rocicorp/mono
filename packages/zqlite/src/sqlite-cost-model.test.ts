@@ -71,7 +71,7 @@ describe('SQLite cost model', () => {
 
     // Test 2: Query with creatorId constraint - should be relatively cheap (uses index)
     const cost2 = costModel([['modified', 'desc']], undefined, {
-      creatorId: 'user1',
+      creatorId: 'string',
     });
 
     // Test 3: Query with creatorId AND modified constraint - should be cheapest
@@ -84,7 +84,7 @@ describe('SQLite cost model', () => {
         op: '>',
         right: {type: 'literal', value: Date.now() - 1000 * 60 * 60 * 24 * 30},
       },
-      {creatorId: 'user1'},
+      {creatorId: 'string'},
     );
 
     // Test 4: Query with non-indexed constraint - should be very expensive (full scan)
@@ -104,16 +104,10 @@ describe('SQLite cost model', () => {
     const cost5 = costModel(
       [['created', 'desc']], // created is not in the index with creatorId
       undefined,
-      {creatorId: 'user1'},
+      {creatorId: 'string'},
     );
 
     // Verify relative costs
-    console.log('Cost analysis:');
-    console.log(`  No constraints (full scan): ${cost1}`);
-    console.log(`  With creatorId constraint: ${cost2}`);
-    console.log(`  With creatorId + modified filter: ${cost3}`);
-    console.log(`  With non-indexed title filter: ${cost4}`);
-    console.log(`  With creatorId constraint, ORDER BY created: ${cost5}`);
 
     // Cost assertions - verify relative ordering
     // Full scan should be expensive
@@ -154,7 +148,7 @@ describe('SQLite cost model', () => {
     // Even without ANALYZE or data, should return fallback costs
     const costNoConstraint = costModel([['id', 'asc']], undefined, undefined);
     const costWithConstraint = costModel([['id', 'asc']], undefined, {
-      id: 'test',
+      id: 'string',
     });
 
     // Should get default fallback costs
@@ -220,7 +214,7 @@ describe('SQLite cost model', () => {
           },
         ],
       },
-      {creatorId: 'user1'},
+      {creatorId: 'string'},
     );
 
     // Test with OR condition (typically more expensive)
@@ -243,12 +237,8 @@ describe('SQLite cost model', () => {
           },
         ],
       },
-      {creatorId: 'user1'},
+      {creatorId: 'string'},
     );
-
-    console.log('Complex filter costs:');
-    console.log(`  AND condition: ${costAnd}`);
-    console.log(`  OR condition: ${costOr}`);
 
     // Both should return reasonable costs
     expect(costAnd).toBeGreaterThan(0);
@@ -300,7 +290,7 @@ describe('SQLite cost model', () => {
         ['status', 'asc'],
       ],
       undefined,
-      {projectId: 'proj1'},
+      {projectId: 'string'},
     );
 
     // Order by indexed column (projectId, created) - should be cheap
@@ -310,18 +300,13 @@ describe('SQLite cost model', () => {
         ['created', 'desc'],
       ],
       undefined,
-      {projectId: 'proj1'},
+      {projectId: 'string'},
     );
 
     // Order by non-indexed column - should be more expensive (requires sort)
     const costNonIndexedOrder = costModel([['priority', 'asc']], undefined, {
-      projectId: 'proj1',
+      projectId: 'string',
     });
-
-    console.log('Ordering costs:');
-    console.log(`  Indexed (projectId, status): ${costIndexedOrder}`);
-    console.log(`  Indexed (projectId, created): ${costIndexedOrder2}`);
-    console.log(`  Non-indexed (priority): ${costNonIndexedOrder}`);
 
     // All should return valid costs
     expect(costIndexedOrder).toBeGreaterThan(0);

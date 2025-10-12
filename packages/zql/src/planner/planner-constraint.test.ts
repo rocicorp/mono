@@ -1,5 +1,8 @@
 import {expect, suite, test} from 'vitest';
-import {mergeConstraints, type PlannerConstraint} from './planner-constraint.ts';
+import {
+  mergeConstraints,
+  type PlannerConstraint,
+} from './planner-constraint.ts';
 
 suite('mergeConstraints', () => {
   test('both undefined returns undefined', () => {

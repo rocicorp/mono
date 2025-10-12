@@ -1,4 +1,10 @@
-import type {AST, Condition, CorrelatedSubquery, CorrelatedSubqueryCondition, Ordering} from '../../../../zero-protocol/src/ast.ts';
+import type {
+  AST,
+  Condition,
+  CorrelatedSubquery,
+  CorrelatedSubqueryCondition,
+  Ordering,
+} from '../../../../zero-protocol/src/ast.ts';
 import type {ConnectionCostModel} from '../planner-connection.ts';
 import type {PlannerConstraint} from '../planner-constraint.ts';
 

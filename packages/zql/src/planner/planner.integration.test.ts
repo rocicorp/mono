@@ -17,7 +17,11 @@ suite('Planner Integration Tests', () => {
   test('plans simple EXISTS query', () => {
     // Query: SELECT * FROM users WHERE EXISTS (SELECT * FROM posts WHERE posts.userId = users.id)
     const postsSubquery = createAST('posts');
-    const correlated = createCorrelatedSubquery(postsSubquery, ['id'], ['userId']);
+    const correlated = createCorrelatedSubquery(
+      postsSubquery,
+      ['id'],
+      ['userId'],
+    );
     const condition = createExistsCondition(correlated, 'EXISTS');
 
     const ast = createAST('users', {
@@ -33,19 +37,32 @@ suite('Planner Integration Tests', () => {
 
     // flip flag should be set (either true or undefined depending on planner decision)
     if (result.where!.type === 'correlatedSubquery') {
-      expect(result.where!.flip === true || result.where!.flip === undefined).toBe(true);
+      expect(
+        result.where!.flip === true || result.where!.flip === undefined,
+      ).toBe(true);
     }
   });
 
   test('plans AND with multiple EXISTS', () => {
     // Query: users WHERE EXISTS posts AND EXISTS comments
     const postsSubquery = createAST('posts');
-    const postsCorrelated = createCorrelatedSubquery(postsSubquery, ['id'], ['userId']);
+    const postsCorrelated = createCorrelatedSubquery(
+      postsSubquery,
+      ['id'],
+      ['userId'],
+    );
     const postsCondition = createExistsCondition(postsCorrelated, 'EXISTS');
 
     const commentsSubquery = createAST('comments');
-    const commentsCorrelated = createCorrelatedSubquery(commentsSubquery, ['id'], ['userId']);
-    const commentsCondition = createExistsCondition(commentsCorrelated, 'EXISTS');
+    const commentsCorrelated = createCorrelatedSubquery(
+      commentsSubquery,
+      ['id'],
+      ['userId'],
+    );
+    const commentsCondition = createExistsCondition(
+      commentsCorrelated,
+      'EXISTS',
+    );
 
     const ast = createAST('users', {
       where: {
@@ -68,12 +85,23 @@ suite('Planner Integration Tests', () => {
   test('plans OR with EXISTS', () => {
     // Query: users WHERE EXISTS posts OR EXISTS comments
     const postsSubquery = createAST('posts');
-    const postsCorrelated = createCorrelatedSubquery(postsSubquery, ['id'], ['userId']);
+    const postsCorrelated = createCorrelatedSubquery(
+      postsSubquery,
+      ['id'],
+      ['userId'],
+    );
     const postsCondition = createExistsCondition(postsCorrelated, 'EXISTS');
 
     const commentsSubquery = createAST('comments');
-    const commentsCorrelated = createCorrelatedSubquery(commentsSubquery, ['id'], ['userId']);
-    const commentsCondition = createExistsCondition(commentsCorrelated, 'EXISTS');
+    const commentsCorrelated = createCorrelatedSubquery(
+      commentsSubquery,
+      ['id'],
+      ['userId'],
+    );
+    const commentsCondition = createExistsCondition(
+      commentsCorrelated,
+      'EXISTS',
+    );
 
     const ast = createAST('users', {
       where: {
@@ -92,7 +120,11 @@ suite('Planner Integration Tests', () => {
   test('plans NOT EXISTS (non-flippable join)', () => {
     // Query: users WHERE NOT EXISTS posts
     const postsSubquery = createAST('posts');
-    const correlated = createCorrelatedSubquery(postsSubquery, ['id'], ['userId']);
+    const correlated = createCorrelatedSubquery(
+      postsSubquery,
+      ['id'],
+      ['userId'],
+    );
     const condition = createExistsCondition(correlated, 'NOT EXISTS');
 
     const ast = createAST('users', {
@@ -114,13 +146,24 @@ suite('Planner Integration Tests', () => {
   test('plans nested subqueries', () => {
     // Query: users WHERE EXISTS (posts WHERE EXISTS comments)
     const commentsSubquery = createAST('comments');
-    const commentsCorrelated = createCorrelatedSubquery(commentsSubquery, ['id'], ['postId']);
-    const commentsCondition = createExistsCondition(commentsCorrelated, 'EXISTS');
+    const commentsCorrelated = createCorrelatedSubquery(
+      commentsSubquery,
+      ['id'],
+      ['postId'],
+    );
+    const commentsCondition = createExistsCondition(
+      commentsCorrelated,
+      'EXISTS',
+    );
 
     const postsSubquery = createAST('posts', {
       where: commentsCondition,
     });
-    const postsCorrelated = createCorrelatedSubquery(postsSubquery, ['id'], ['userId']);
+    const postsCorrelated = createCorrelatedSubquery(
+      postsSubquery,
+      ['id'],
+      ['userId'],
+    );
     const postsCondition = createExistsCondition(postsCorrelated, 'EXISTS');
 
     const ast = createAST('users', {
@@ -135,21 +178,34 @@ suite('Planner Integration Tests', () => {
     // Check nested structure is preserved
     if (result.where!.type === 'correlatedSubquery') {
       expect(result.where!.related.subquery.where).toBeDefined();
-      expect(result.where!.related.subquery.where!.type).toBe('correlatedSubquery');
+      expect(result.where!.related.subquery.where!.type).toBe(
+        'correlatedSubquery',
+      );
     }
   });
 
   test('plans related subqueries independently', () => {
     // Query: users with related posts (WHERE posts has comments)
     const commentsSubquery = createAST('comments');
-    const commentsCorrelated = createCorrelatedSubquery(commentsSubquery, ['id'], ['postId']);
-    const commentsCondition = createExistsCondition(commentsCorrelated, 'EXISTS');
+    const commentsCorrelated = createCorrelatedSubquery(
+      commentsSubquery,
+      ['id'],
+      ['postId'],
+    );
+    const commentsCondition = createExistsCondition(
+      commentsCorrelated,
+      'EXISTS',
+    );
 
     const postsSubquery = createAST('posts', {
       alias: 'userPosts',
       where: commentsCondition,
     });
-    const postsCorrelated = createCorrelatedSubquery(postsSubquery, ['id'], ['userId']);
+    const postsCorrelated = createCorrelatedSubquery(
+      postsSubquery,
+      ['id'],
+      ['userId'],
+    );
 
     const ast = createAST('users', {
       related: [postsCorrelated],
@@ -169,15 +225,30 @@ suite('Planner Integration Tests', () => {
   test('plans complex query with AND, OR, and nested subqueries', () => {
     // Query: users WHERE (EXISTS posts OR EXISTS comments) AND EXISTS likes
     const postsSubquery = createAST('posts');
-    const postsCorrelated = createCorrelatedSubquery(postsSubquery, ['id'], ['userId']);
+    const postsCorrelated = createCorrelatedSubquery(
+      postsSubquery,
+      ['id'],
+      ['userId'],
+    );
     const postsCondition = createExistsCondition(postsCorrelated, 'EXISTS');
 
     const commentsSubquery = createAST('comments');
-    const commentsCorrelated = createCorrelatedSubquery(commentsSubquery, ['id'], ['userId']);
-    const commentsCondition = createExistsCondition(commentsCorrelated, 'EXISTS');
+    const commentsCorrelated = createCorrelatedSubquery(
+      commentsSubquery,
+      ['id'],
+      ['userId'],
+    );
+    const commentsCondition = createExistsCondition(
+      commentsCorrelated,
+      'EXISTS',
+    );
 
     const likesSubquery = createAST('likes');
-    const likesCorrelated = createCorrelatedSubquery(likesSubquery, ['id'], ['userId']);
+    const likesCorrelated = createCorrelatedSubquery(
+      likesSubquery,
+      ['id'],
+      ['userId'],
+    );
     const likesCondition = createExistsCondition(likesCorrelated, 'EXISTS');
 
     const orCondition = {
@@ -208,13 +279,21 @@ suite('Planner Integration Tests', () => {
   test('handles multiple levels of nested related subqueries', () => {
     // Users with posts (posts with comments)
     const commentsSubquery = createAST('comments', {alias: 'postComments'});
-    const commentsCorrelated = createCorrelatedSubquery(commentsSubquery, ['id'], ['postId']);
+    const commentsCorrelated = createCorrelatedSubquery(
+      commentsSubquery,
+      ['id'],
+      ['postId'],
+    );
 
     const postsSubquery = createAST('posts', {
       alias: 'userPosts',
       related: [commentsCorrelated],
     });
-    const postsCorrelated = createCorrelatedSubquery(postsSubquery, ['id'], ['userId']);
+    const postsCorrelated = createCorrelatedSubquery(
+      postsSubquery,
+      ['id'],
+      ['userId'],
+    );
 
     const ast = createAST('users', {
       related: [postsCorrelated],
@@ -226,7 +305,9 @@ suite('Planner Integration Tests', () => {
     expect(result.related).toHaveLength(1);
     expect(result.related![0].subquery.alias).toBe('userPosts');
     expect(result.related![0].subquery.related).toHaveLength(1);
-    expect(result.related![0].subquery.related![0].subquery.alias).toBe('postComments');
+    expect(result.related![0].subquery.related![0].subquery.alias).toBe(
+      'postComments',
+    );
   });
 
   test('selects optimal plan based on cost model', () => {
@@ -260,13 +341,20 @@ suite('Planner Integration Tests', () => {
       ['projectId'],
       ['projectId'],
     );
-    const projectMemberCondition = createExistsCondition(projectMemberCorrelated, 'EXISTS');
+    const projectMemberCondition = createExistsCondition(
+      projectMemberCorrelated,
+      'EXISTS',
+    );
 
     const projectSubquery = createAST('project', {
       orderBy: [['project.id', 'asc']],
       where: projectMemberCondition,
     });
-    const projectCorrelated = createCorrelatedSubquery(projectSubquery, ['projectId'], ['projectId']);
+    const projectCorrelated = createCorrelatedSubquery(
+      projectSubquery,
+      ['projectId'],
+      ['projectId'],
+    );
     const projectCondition = createExistsCondition(projectCorrelated, 'EXISTS');
 
     // Build creator EXISTS
@@ -279,7 +367,11 @@ suite('Planner Integration Tests', () => {
         right: {type: 'literal', value: 'Alice'},
       },
     });
-    const creatorCorrelated = createCorrelatedSubquery(creatorSubquery, ['creatorId'], ['creatorId']);
+    const creatorCorrelated = createCorrelatedSubquery(
+      creatorSubquery,
+      ['creatorId'],
+      ['creatorId'],
+    );
     const creatorCondition = createExistsCondition(creatorCorrelated, 'EXISTS');
 
     // Combine with AND
@@ -305,13 +397,11 @@ suite('Planner Integration Tests', () => {
     expect(summary.pinnedJoins).toBe(3); // All joins should be pinned
 
     // Verify the planner found the optimal plan!
-    // The multi-start greedy search should try:
-    // - Attempt 1: Start with project_member (cost 1) → total 103
-    // - Attempt 2: Start with creator (cost 2) → total 24 (optimal!)
-    // - Attempt 3: Start with project (cost 100) → total 202
-    // - Attempt 4: Start with issue (cost 10000) → total 10003
+    // The multi-start greedy search should try different orderings.
+    // Optimal order: creator(2) × project_member(1) × project(1) × issue(20)
+    // Total cost (multiplicative): 2 × 1 × 1 × 20 = 40
     const totalCost = plan.getTotalCost();
-    expect(totalCost).toBe(24); // Optimal plan!
+    expect(totalCost).toBeCloseTo(40, 0); // Optimal plan!
   });
 
   test('optimal plan: linear chain (A → B → C)', () => {
@@ -323,7 +413,7 @@ suite('Planner Integration Tests', () => {
     // 1. Pick C (cost: 10) - no constraint yet
     // 2. Pick B (cost: 10) - with cId constraint (100/10)
     // 3. Pick A (cost: 100) - with bId constraint (1000/10)
-    // Total: 10 + 10 + 100 = 120
+    // Total cost (multiplicative): 10 × 10 × 100 = 10,000
 
     // Build nested chain: A → B → C
     const cSubquery = createAST('C', {
@@ -356,7 +446,7 @@ suite('Planner Integration Tests', () => {
 
     // Verify optimal cost
     const totalCost = plan.getTotalCost();
-    expect(totalCost).toBe(120); // C(10) + B(10) + A(100) = 120
+    expect(totalCost).toBeCloseTo(10000, 0); // C(10) × B(10) × A(100) = 10,000
   });
 
   test('optimal plan: star schema (central with 3 satellites)', () => {
@@ -371,24 +461,36 @@ suite('Planner Integration Tests', () => {
     // 2. Pick sat2 (cost: 50) - central gets sat2Id (500->250)
     // 3. Pick sat1 (cost: 100) - central gets sat1Id (250->125)
     // 4. Pick central (cost: 125) - with all 3 constraints
-    // Total: 10 + 50 + 100 + 125 = 285
+    // Total cost (multiplicative): 10 × 50 × 100 × 125 = 6,250,000
 
     const sat1Subquery = createAST('sat1', {
       orderBy: [['sat1.id', 'asc']],
     });
-    const sat1Correlated = createCorrelatedSubquery(sat1Subquery, ['sat1Id'], ['sat1Id']);
+    const sat1Correlated = createCorrelatedSubquery(
+      sat1Subquery,
+      ['sat1Id'],
+      ['sat1Id'],
+    );
     const sat1Condition = createExistsCondition(sat1Correlated, 'EXISTS');
 
     const sat2Subquery = createAST('sat2', {
       orderBy: [['sat2.id', 'asc']],
     });
-    const sat2Correlated = createCorrelatedSubquery(sat2Subquery, ['sat2Id'], ['sat2Id']);
+    const sat2Correlated = createCorrelatedSubquery(
+      sat2Subquery,
+      ['sat2Id'],
+      ['sat2Id'],
+    );
     const sat2Condition = createExistsCondition(sat2Correlated, 'EXISTS');
 
     const sat3Subquery = createAST('sat3', {
       orderBy: [['sat3.id', 'asc']],
     });
-    const sat3Correlated = createCorrelatedSubquery(sat3Subquery, ['sat3Id'], ['sat3Id']);
+    const sat3Correlated = createCorrelatedSubquery(
+      sat3Subquery,
+      ['sat3Id'],
+      ['sat3Id'],
+    );
     const sat3Condition = createExistsCondition(sat3Correlated, 'EXISTS');
 
     const ast = createAST('central', {
@@ -409,7 +511,7 @@ suite('Planner Integration Tests', () => {
     expect(summary.pinnedJoins).toBe(3);
 
     const totalCost = plan.getTotalCost();
-    expect(totalCost).toBe(285); // sat3(10) + sat2(50) + sat1(100) + central(125) = 285
+    expect(totalCost).toBeCloseTo(6250000, 0); // sat3(10) × sat2(50) × sat1(100) × central(125) = 6,250,000
   });
 
   test('optimal plan: diamond pattern (two paths converge)', () => {
@@ -430,25 +532,37 @@ suite('Planner Integration Tests', () => {
     // 2. Pick right (cost: 10) - with bottomId constraint, root gets rightId (10000->2000)
     // 3. Pick left (cost: 50) - root gets leftId (2000->200)
     // 4. Pick root (cost: 200) - with leftId+rightId constraints
-    // Total: 1 + 10 + 50 + 200 = 261
+    // Total cost (multiplicative): 1 × 10 × 50 × 200 = 100,000
 
     const bottomSubquery = createAST('bottom', {
       orderBy: [['bottom.id', 'asc']],
     });
-    const bottomCorrelated = createCorrelatedSubquery(bottomSubquery, ['bottomId'], ['bottomId']);
+    const bottomCorrelated = createCorrelatedSubquery(
+      bottomSubquery,
+      ['bottomId'],
+      ['bottomId'],
+    );
     const bottomCondition = createExistsCondition(bottomCorrelated, 'EXISTS');
 
     const rightSubquery = createAST('right', {
       orderBy: [['right.id', 'asc']],
       where: bottomCondition,
     });
-    const rightCorrelated = createCorrelatedSubquery(rightSubquery, ['rightId'], ['rightId']);
+    const rightCorrelated = createCorrelatedSubquery(
+      rightSubquery,
+      ['rightId'],
+      ['rightId'],
+    );
     const rightCondition = createExistsCondition(rightCorrelated, 'EXISTS');
 
     const leftSubquery = createAST('left', {
       orderBy: [['left.id', 'asc']],
     });
-    const leftCorrelated = createCorrelatedSubquery(leftSubquery, ['leftId'], ['leftId']);
+    const leftCorrelated = createCorrelatedSubquery(
+      leftSubquery,
+      ['leftId'],
+      ['leftId'],
+    );
     const leftCondition = createExistsCondition(leftCorrelated, 'EXISTS');
 
     const ast = createAST('root', {
@@ -469,7 +583,7 @@ suite('Planner Integration Tests', () => {
     expect(summary.pinnedJoins).toBe(3);
 
     const totalCost = plan.getTotalCost();
-    expect(totalCost).toBe(261); // bottom(1) + right(10) + left(50) + root(200) = 261
+    expect(totalCost).toBeCloseTo(100000, 0); // bottom(1) × right(10) × left(50) × root(200) = 100,000
   });
 
   test('optimal plan: wide vs narrow branches', () => {
@@ -485,11 +599,11 @@ suite('Planner Integration Tests', () => {
     // - Since joins are independent, main CAN be selected after just narrow
     // - Greedy picks main (100)
     // - Then wide (1000)
-    // Total: narrow(10) → main(100) → wide(1000) = 1110
+    // Total cost (multiplicative): narrow(10) × main(100) × wide(1000) = 1,000,000
     //
     // This demonstrates a case where the greedy algorithm finds a local optimum
     // that is not globally optimal. A better order would be:
-    // narrow(10) → wide(1000) → main(1 with both constraints) = 1011
+    // narrow(10) × wide(1000) × main(1 with both constraints) = 10,000
     //
     // However, the multi-start greedy with only 3 connections tries all 3 starting
     // points, and all lead to similar greedy choices.
@@ -497,13 +611,21 @@ suite('Planner Integration Tests', () => {
     const wideSubquery = createAST('wide', {
       orderBy: [['wide.id', 'asc']],
     });
-    const wideCorrelated = createCorrelatedSubquery(wideSubquery, ['wideId'], ['wideId']);
+    const wideCorrelated = createCorrelatedSubquery(
+      wideSubquery,
+      ['wideId'],
+      ['wideId'],
+    );
     const wideCondition = createExistsCondition(wideCorrelated, 'EXISTS');
 
     const narrowSubquery = createAST('narrow', {
       orderBy: [['narrow.id', 'asc']],
     });
-    const narrowCorrelated = createCorrelatedSubquery(narrowSubquery, ['narrowId'], ['narrowId']);
+    const narrowCorrelated = createCorrelatedSubquery(
+      narrowSubquery,
+      ['narrowId'],
+      ['narrowId'],
+    );
     const narrowCondition = createExistsCondition(narrowCorrelated, 'EXISTS');
 
     const ast = createAST('main', {
@@ -524,9 +646,9 @@ suite('Planner Integration Tests', () => {
     expect(summary.pinnedJoins).toBe(2);
 
     const totalCost = plan.getTotalCost();
-    // Greedy algorithm finds: narrow(10) + main(100) + wide(1000) = 1110
+    // Greedy algorithm finds: narrow(10) × main(100) × wide(1000) = 1,000,000
     // This is suboptimal, demonstrating greedy limitations
-    expect(totalCost).toBe(1110);
+    expect(totalCost).toBeCloseTo(1000000, 0);
   });
 
   test('optimal plan: deep nesting with constraint accumulation', () => {
@@ -543,7 +665,7 @@ suite('Planner Integration Tests', () => {
     // 3. Pick C (cost: 10) - with dId constraint from D (100/10)
     // 4. Pick B (cost: 100) - with cId constraint from C (1000/10)
     // 5. Pick A (cost: 1000) - with bId constraint from B (10000/10)
-    // Total: 1 + 1 + 10 + 100 + 1000 = 1112
+    // Total cost (multiplicative): 1 × 1 × 10 × 100 × 1000 = 1,000,000
     //
     // This shows that constraints propagate incrementally, not transitively
 
@@ -589,6 +711,6 @@ suite('Planner Integration Tests', () => {
     expect(summary.pinnedJoins).toBe(4);
 
     const totalCost = plan.getTotalCost();
-    expect(totalCost).toBe(1112); // E(1) + D(1) + C(10) + B(100) + A(1000) = 1112
+    expect(totalCost).toBeCloseTo(1000000, 0); // E(1) × D(1) × C(10) × B(100) × A(1000) = 1,000,000
   });
 });
