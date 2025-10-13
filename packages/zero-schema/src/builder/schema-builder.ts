@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* oxlint-disable @typescript-eslint/no-explicit-any */
 import {h64} from '../../../shared/src/hash.ts';
 import {mapEntries} from '../../../shared/src/objects.ts';
 import {

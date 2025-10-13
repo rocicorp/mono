@@ -198,7 +198,7 @@ describe('write', () => {
 
   test('ref count invalid', async () => {
     const chunkHasher = makeNewFakeHashFunction();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     const t = async (v: any, expectError?: string) => {
       const kv = new TestMemStore();
       const h = fakeHash('face1');

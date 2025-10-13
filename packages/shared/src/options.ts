@@ -542,7 +542,7 @@ function parseArgs(
     partial: true,
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   const result: Record<string, any> = {};
   const envObj: Record<string, string> = {};
 

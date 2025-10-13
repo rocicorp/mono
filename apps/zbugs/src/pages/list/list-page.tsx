@@ -13,6 +13,7 @@ import React, {
 import {useDebouncedCallback} from 'use-debounce';
 import {useParams, useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
+import {must} from '../../../../../packages/shared/src/must.ts';
 import {queries, type ListContext} from '../../../shared/queries.ts';
 import {type IssueRow} from '../../../shared/schema.ts';
 import {Button} from '../../components/button.tsx';
@@ -29,7 +30,6 @@ import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {preload} from '../../zero-preload.ts';
-import {must} from '../../../../../packages/shared/src/must.ts';
 
 let firstRowRendered = false;
 const ITEM_SIZE = 56;
@@ -367,7 +367,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       anchor.index !== 0 &&
       firstItem.index <= getNearPageEdgeThreshold(pageSize)
     ) {
-      // eslint-disable-next-line no-console -- Debug logging in demo app
+      // oxlint-disable-next-line no-console -- Debug logging in demo app
       console.log('anchoring to top');
       setAnchor(TOP_ANCHOR);
       return;
@@ -397,7 +397,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
         direction: 'backward',
         startRow: issues[issueArrayIndex],
       } as const;
-      // eslint-disable-next-line no-console -- Debug logging in demo app
+      // oxlint-disable-next-line no-console -- Debug logging in demo app
       console.log('page up', a);
       setAnchor(a);
       return;
@@ -421,7 +421,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
         direction: 'forward',
         startRow: issues[issueArrayIndex],
       } as const;
-      // eslint-disable-next-line no-console -- Debug logging in demo app
+      // oxlint-disable-next-line no-console -- Debug logging in demo app
       console.log('page down', a);
       setAnchor(a);
     }

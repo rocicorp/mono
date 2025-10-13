@@ -1,16 +1,15 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import {describe, expect, expectTypeOf, test} from 'vitest';
+import * as v from '../../../shared/src/valita.ts';
 import {
   createBuilder,
   syncedQuery,
   syncedQueryWithContext,
   withValidation,
 } from './named.ts';
-import {schema} from './test/test-schemas.ts';
-const builder = createBuilder(schema);
-import * as v from '../../../shared/src/valita.ts';
 import {ast} from './query-impl.ts';
 import type {QueryResultType, QueryRowType, Row} from './query.ts';
+import {schema} from './test/test-schemas.ts';
+const builder = createBuilder(schema);
 
 type IssueRow = {
   readonly id: string;

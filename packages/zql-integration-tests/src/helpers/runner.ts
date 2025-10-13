@@ -115,7 +115,7 @@ async function makeDatabases<TSchema extends Schema>(
       const crud = makeSchemaCRUD(schema)(new Transaction(tx), serverSchema);
 
       for (const [table, rows] of Object.entries(testData(serverSchema))) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
         await Promise.all(rows.map(row => crud[table].insert(row as any)));
       }
     });
@@ -294,7 +294,7 @@ export async function createVitests<TSchema extends Schema>(
   }: Options<TSchema>,
   ...testSpecs: (readonly {
     name: string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     createQuery: (q: Queries<TSchema>) => Query<TSchema, string, any>;
     manualVerification?: unknown;
   }[])[]
@@ -725,7 +725,7 @@ async function checkPush(
   await checkEditToMatch(zqlSchema, delegates, editedRows, queries);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyQuery = Query<any, any, any>;
 function gatherRows(
   zqlSchema: Schema,

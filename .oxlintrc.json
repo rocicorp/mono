@@ -1,5 +1,5 @@
 {
-  "plugins": ["eslint", "typescript", "unicorn"],
+  "plugins": ["eslint", "typescript", "unicorn", "jest"],
   "ignorePatterns": [
     "node_modules",
     "dist",
@@ -10,13 +10,16 @@
     "*_generated.ts",
     "src/*/generated/",
     "perf/index.js",
-    "um.js"
+    "um.js",
+    "prod/sst/sst-env.d.ts"
   ],
   "rules": {
     // Disable unsafe optional chaining - many legitimate patterns in codebase
     "no-unsafe-optional-chaining": "off",
 
     "no-console": "error",
+    "eqeqeq": "error",
+    "arrow-body-style": "error",
 
     // Handle unused variables consistently with ESLint config
     "no-unused-vars": [
@@ -31,6 +34,7 @@
     // TypeScript-specific rules
     "typescript/no-explicit-any": "error",
     "typescript/no-floating-promises": "error",
+    "typescript/no-non-null-assertion": "warn",
     "typescript/no-unused-vars": [
       "error",
       {
@@ -42,6 +46,9 @@
 
     // Require await in async functions
     "require-await": "error",
+
+    // Vitest rules uses "jest" plugin
+    "jest/no-focused-tests": "error",
 
     // Private class members (with inline disables for false positives)
     "no-unused-private-class-members": "error",

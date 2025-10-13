@@ -1,16 +1,16 @@
 import {
+  beforeEach,
   describe,
   expect,
-  vi,
-  beforeEach,
   type MockedFunction,
   test,
+  vi,
 } from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {fetchFromAPIServer, urlMatch} from './fetch.ts';
-import {ErrorForClient} from '../types/error-for-client.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorForClient} from '../types/error-for-client.ts';
 import type {ShardID} from '../types/shards.ts';
+import {fetchFromAPIServer, urlMatch} from './fetch.ts';
 
 // Mock the global fetch function
 const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
@@ -56,7 +56,6 @@ describe('fetchFromAPIServer', () => {
         headers: {
           'Content-Type': 'application/json',
           'X-Api-Key': 'test-api-key',
-          // eslint-disable-next-line @typescript-eslint/naming-convention
           'Authorization': 'Bearer test-token',
         },
         body: JSON.stringify(body),
@@ -104,7 +103,6 @@ describe('fetchFromAPIServer', () => {
       expect.any(String),
       expect.objectContaining({
         headers: expect.objectContaining({
-          // eslint-disable-next-line @typescript-eslint/naming-convention
           Authorization: 'Bearer my-token',
         }),
       }),

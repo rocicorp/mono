@@ -8,7 +8,7 @@ const start = performance.now();
 let enabled = false;
 if (location.search.includes('perf')) {
   enabled = true;
-  // eslint-disable-next-line no-console -- Performance logging in demo app
+  // oxlint-disable-next-line no-console -- Performance logging in demo app
   console.info('js-loaded', {
     ...lastMark,
     elapsed: 0,
@@ -20,7 +20,7 @@ export function mark(event: string) {
     return;
   }
   const time = performance.now();
-  // eslint-disable-next-line no-console -- Performance logging in demo app
+  // oxlint-disable-next-line no-console -- Performance logging in demo app
   console.info({
     event,
     sinceLast: time - lastMark.time,

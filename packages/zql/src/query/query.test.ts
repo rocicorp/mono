@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-floating-promises */
-/* eslint-disable @typescript-eslint/ban-types */
 import {describe, expectTypeOf, test} from 'vitest';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {toStaticParam} from '../../../zero-protocol/src/ast.ts';
@@ -492,7 +490,6 @@ describe('types', () => {
       >
     >();
 
-    // eslint-disable-next-line @typescript-eslint/naming-convention
     const q1_1 = mockQuery as unknown as Query<Schema, 'test'>;
     expectTypeOf(q1_1.one().one().materialize().data).toMatchTypeOf<
       | {
@@ -518,7 +515,6 @@ describe('types', () => {
       | undefined
     >();
 
-    // eslint-disable-next-line @typescript-eslint/naming-convention
     const q2_1 = mockQuery as unknown as Query<Schema, 'testWithRelationships'>;
     expectTypeOf(q2_1.one().related('test').materialize().data).toMatchTypeOf<
       | {
@@ -534,7 +530,6 @@ describe('types', () => {
       | undefined
     >();
 
-    // eslint-disable-next-line @typescript-eslint/naming-convention
     const q2_2 = mockQuery as unknown as Query<Schema, 'testWithRelationships'>;
     expectTypeOf(
       q2_2.related('test', t => t.one()).materialize().data,
@@ -553,7 +548,6 @@ describe('types', () => {
       }>
     >();
 
-    // eslint-disable-next-line @typescript-eslint/naming-convention
     const q2_3 = mockQuery as unknown as Query<Schema, 'testWithRelationships'>;
     expectTypeOf(
       q2_3.related('test', t => t.one().where('b', true)).materialize().data,
@@ -597,7 +591,6 @@ describe('types', () => {
       | undefined
     >();
 
-    // eslint-disable-next-line @typescript-eslint/naming-convention
     const q3_1 = mockQuery as unknown as Query<
       Schema,
       'testWithMoreRelationships'

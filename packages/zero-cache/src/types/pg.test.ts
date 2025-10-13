@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import {describe, expect, test} from 'vitest';
 import {
   dataTypeToZqlValueType,
@@ -236,7 +235,7 @@ describe('postgresTimeToMilliseconds', () => {
       ['object instead of string', {}],
       ['array instead of string', []],
     ])('should throw for %s', (_caseName, input) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       expect(() => postgresTimeToMilliseconds(input as any)).toThrow(
         'Invalid time string: must be a non-empty string',
       );

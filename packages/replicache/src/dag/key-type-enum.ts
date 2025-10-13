@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/naming-convention */
-
 export const ChunkData = 0;
 export const ChunkMeta = 1;
 export const ChunkRefCount = 2;

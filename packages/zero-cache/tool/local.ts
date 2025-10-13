@@ -13,10 +13,11 @@
  */
 
 import '../../shared/src/dotenv.ts';
+
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
-import {subscribe} from '../src/services/change-source/pg/logical-replication/stream.ts';
 import {stringify} from '../../shared/src/bigint-json.ts';
+import {subscribe} from '../src/services/change-source/pg/logical-replication/stream.ts';
 import type {PostgresDB} from '../src/types/pg.ts';
 
 const slotName = 'zero_slot';

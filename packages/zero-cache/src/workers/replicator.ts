@@ -46,16 +46,13 @@ async function connect(
   // Start by folding any (e.g. restored) WAL(2) files into the main db.
   replica.pragma('journal_mode = delete');
 
-  //eslint-disable-next-line @typescript-eslint/naming-convention
   const [{page_size: pageSize}] = replica.pragma<{page_size: number}>(
     'page_size',
   );
-  //eslint-disable-next-line @typescript-eslint/naming-convention
   const [{page_count: pageCount}] = replica.pragma<{page_count: number}>(
     'page_count',
   );
   const [{freelist_count: freelistCount}] = replica.pragma<{
-    //eslint-disable-next-line @typescript-eslint/naming-convention
     freelist_count: number;
   }>('freelist_count');
 

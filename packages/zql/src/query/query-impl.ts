@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/naming-convention */
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* oxlint-disable @typescript-eslint/no-explicit-any */
 import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
@@ -161,7 +160,7 @@ export abstract class AbstractQuery<
       this.format,
       {
         name,
-        args: args as ReadonlyArray<ReadonlyJSONValue>,
+        args,
       },
       this.#currentJunction,
     );

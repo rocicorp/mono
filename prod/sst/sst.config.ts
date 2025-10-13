@@ -1,4 +1,4 @@
-/* eslint-disable */
+/* oxlint-disable */
 /// <reference path="./.sst/platform/config.d.ts" />
 // Load .env file
 require('@dotenvx/dotenvx').config();

@@ -19,7 +19,7 @@ describe('services/runner', () => {
       return this.resolver.promise;
     }
 
-    // eslint-disable-next-line require-await
+    // oxlint-disable-next-line require-await
     async stop(): Promise<void> {
       this.resolver.resolve();
     }

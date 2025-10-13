@@ -24,7 +24,7 @@ To create a subscription, use the `useSubscribe()` React hook. You can do multip
 Let's use a subscription to implement our chat UI. Replace `index.tsx` with the below code:
 
 ```tsx
-/* eslint-disable @typescript-eslint/no-unused-vars */
+/* oxlint-disable @typescript-eslint/no-unused-vars */
 import React, {useEffect, useRef, useState} from 'react';
 import ReactDOM from 'react-dom/client';
 import {Replicache, WriteTransaction} from 'replicache';

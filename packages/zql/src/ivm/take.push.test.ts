@@ -2102,7 +2102,7 @@ suite('take with no partition', () => {
       expect(pushes).toMatchInlineSnapshot(`[]`);
     });
 
-    describe('less than limit ', () => {
+    describe('less than limit', () => {
       test('edit row at start', () => {
         const {data, messages, storage, pushes} = takeNoPartitionTest({
           ...base,
@@ -4686,7 +4686,7 @@ suite('take with partition', () => {
       expect(pushes).toMatchInlineSnapshot(`[]`);
     });
 
-    describe('less than limit ', () => {
+    describe('less than limit', () => {
       test('edit row at start', () => {
         const {data, messages, storage, pushes} = takeTestWithPartition({
           ...base,

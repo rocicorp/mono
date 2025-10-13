@@ -1,8 +1,8 @@
-/* eslint-disable no-console */
+import '../../shared/src/dotenv.ts';
+
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../ast-to-zql/src/format.ts';
-import '../../shared/src/dotenv.ts';
 import {must} from '../../shared/src/must.ts';
 import {parseOptions} from '../../shared/src/options.ts';
 import * as v from '../../shared/src/valita.ts';
@@ -51,9 +51,11 @@ const queryAst = transformAndHashQuery(
   rows[0].internal,
 ).transformedAst;
 
+// oxlint-disable no-console
 console.log('\n=== AST ===\n');
 console.log(JSON.stringify(queryAst, null, 2));
 console.log('\n=== ZQL ===\n');
 console.log(await formatOutput(queryAst.table + astToZQL(queryAst)));
+// oxlint-enable no-console
 
 await cvrDB.end();

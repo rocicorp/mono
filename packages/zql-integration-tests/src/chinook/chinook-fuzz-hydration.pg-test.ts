@@ -1,20 +1,19 @@
-/* eslint-disable no-console */
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* oxlint-disable no-console */
 import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
-import {bootstrap, runAndCompare} from '../helpers/runner.ts';
-import {getChinook} from './get-deps.ts';
-import {schema} from './schema.ts';
 import {expect, test} from 'vitest';
-import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
-import '../helpers/comparePg.ts';
+import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
+import {formatOutput} from '../../../ast-to-zql/src/format.ts';
 import {ast} from '../../../zql/src/query/query-impl.ts';
+import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
 import type {
   AnyQuery,
   AnyStaticQuery,
 } from '../../../zql/src/query/test/util.ts';
-import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
-import {formatOutput} from '../../../ast-to-zql/src/format.ts';
+import '../helpers/comparePg.ts';
+import {bootstrap, runAndCompare} from '../helpers/runner.ts';
 import {staticToRunnable} from '../helpers/static.ts';
+import {getChinook} from './get-deps.ts';
+import {schema} from './schema.ts';
 
 const pgContent = await getChinook();
 
@@ -37,7 +36,7 @@ test('sentinel', () => {
 });
 
 if (REPRO_SEED) {
-  // eslint-disable-next-line no-only-tests/no-only-tests
+  // oxlint-disable-next-line no-focused-tests
   test.only('repro', async () => {
     const tc = createCase(REPRO_SEED);
     const {query} = tc;

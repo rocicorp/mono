@@ -496,7 +496,7 @@ class ChangeMaker {
     }
   }
 
-  // eslint-disable-next-line require-await
+  // oxlint-disable-next-line require-await
   async #makeChanges(msg: Message): Promise<ChangeStreamData[]> {
     switch (msg.tag) {
       case 'begin':

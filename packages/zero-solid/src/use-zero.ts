@@ -13,7 +13,7 @@ import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 
-// eslint-disable-next-line @typescript-eslint/naming-convention, @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line no-explicit-any
 const ZeroContext = createContext<Accessor<Zero<any, any>> | undefined>(
   undefined,
 );

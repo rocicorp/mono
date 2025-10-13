@@ -1,10 +1,5 @@
-/* eslint-disable @typescript-eslint/naming-convention */
 import {describe, expect, test} from 'vitest';
 import {unreachable} from '../../shared/src/asserts.ts';
-import type {
-  ServerColumnSchema,
-  ServerSchema,
-} from '../../zero-schema/src/server-schema.ts';
 import {pgToZqlTypeMap} from '../../zero-cache/src/types/pg.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
@@ -15,6 +10,10 @@ import {
   table,
   type ColumnBuilder,
 } from '../../zero-schema/src/builder/table-builder.ts';
+import type {
+  ServerColumnSchema,
+  ServerSchema,
+} from '../../zero-schema/src/server-schema.ts';
 import type {
   SchemaValue,
   ValueType,
@@ -221,7 +220,6 @@ describe('checkSchemasAreCompatible', () => {
     });
 
     const serverSchema: ServerSchema = {
-      // eslint-disable-next-line @typescript-eslint/naming-convention
       server_test: {
         id: {type: 'text', isEnum: false, isArray: false},
         value: {type: 'integer', isEnum: false, isArray: false},

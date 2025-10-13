@@ -65,13 +65,13 @@ test('does not flush more than max entries', async () => {
     interval: 10,
   });
 
-  // eslint-disable-next-line no-unused-vars -- Used in closure below
   let fetchCount = 0;
   const fetchLatches = [resolver<void>(), resolver<void>(), resolver<void>()];
   const {promise: canFinishFetch, resolve: finishFetch} = resolver<Response>();
 
   fetch.mockImplementation(() => {
-    fetchLatches[fetchCount++].resolve();
+    fetchLatches[fetchCount].resolve();
+    fetchCount++;
     return canFinishFetch;
   });
   // Trigger the first force flush.
@@ -113,7 +113,6 @@ test('flushes MAX_LOG_ENTRIES_PER_FLUSH at a time until size is below FORCE_FLUS
     interval: 10,
   });
 
-  // eslint-disable-next-line no-unused-vars -- Used in closure below
   let fetchCount = 0;
   const fetchLatches = [
     resolver<void>(),
@@ -131,7 +130,8 @@ test('flushes MAX_LOG_ENTRIES_PER_FLUSH at a time until size is below FORCE_FLUS
   ];
 
   fetch.mockImplementation(() => {
-    const i = fetchCount++;
+    const i = fetchCount;
+    fetchCount++;
     fetchLatches[i].resolve();
     return fetchResponseResolvers[i].promise;
   });
@@ -790,7 +790,6 @@ async function microtasksUntil(p: () => boolean) {
     if (p()) {
       return;
     }
-    // eslint-disable-next-line unicorn/no-unnecessary-await -- intentional for test timing
-    await 'microtask';
+    await Promise.resolve();
   }
 }

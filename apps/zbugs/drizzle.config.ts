@@ -6,7 +6,7 @@ const dbUrl = must(
   'ZERO_UPSTREAM_DB is required',
 );
 
-// eslint-disable-next-line no-console
+// oxlint-disable-next-line no-console
 console.log(dbUrl);
 
 export default defineConfig({

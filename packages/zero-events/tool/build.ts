@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+/* oxlint-disable no-console */
 import * as esbuild from 'esbuild';
 import pkg from '../package.json' with {type: 'json'};
 

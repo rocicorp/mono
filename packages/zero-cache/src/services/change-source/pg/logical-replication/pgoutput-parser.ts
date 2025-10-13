@@ -1,5 +1,5 @@
 // Forked from https://github.com/kibae/pg-logical-replication/blob/c55abddc62eadd61bd38922037ecb7a1469fa8c3/src/output-plugins/pgoutput/pgoutput-parser.ts
-/* eslint-disable */
+/* oxlint-disable */
 
 // https://www.postgresql.org/docs/current/protocol-logicalrep-message-formats.html
 

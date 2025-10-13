@@ -1,5 +1,5 @@
-import {beforeEach, describe, expect, test, vi} from 'vitest';
 import type {LogContext} from '@rocicorp/logger';
+import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {resetOtelDiagnosticLogger} from './otel-diag-logger.js';
 
 // Mock OpenTelemetry modules to avoid actual SDK initialization
@@ -22,7 +22,6 @@ vi.mock('@opentelemetry/api-logs', () => ({
 }));
 
 vi.mock('@opentelemetry/sdk-node', () => ({
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   NodeSDK: vi.fn().mockImplementation(() => ({
     start: vi.fn(),
   })),
@@ -55,12 +54,10 @@ vi.mock('../config/zero-config.js', () => ({
 
 // Mock other modules that might be imported
 vi.mock('@opentelemetry/exporter-metrics-otlp-http', () => ({
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   OTLPMetricExporter: vi.fn(),
 }));
 
 vi.mock('@opentelemetry/sdk-metrics', () => ({
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   MeterProvider: vi.fn().mockImplementation(() => ({
     getMeter: vi.fn().mockReturnValue({
       createObservableGauge: vi.fn().mockReturnValue({
@@ -72,7 +69,6 @@ vi.mock('@opentelemetry/sdk-metrics', () => ({
     }),
     shutdown: vi.fn(),
   })),
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   PeriodicExportingMetricReader: vi.fn(),
 }));
 

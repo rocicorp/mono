@@ -264,7 +264,7 @@ export class SQLiteWrite implements Write {
     await this.#preparedStatements.del.exec([key]);
   }
 
-  // eslint-disable-next-line require-await
+  // oxlint-disable-next-line require-await
   async commit(): Promise<void> {
     throwIfTransactionClosed(this);
     this.#dbDelegate.execSync('COMMIT');

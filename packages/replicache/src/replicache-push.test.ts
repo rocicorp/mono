@@ -10,7 +10,6 @@ import {
 import type {WriteTransaction} from './transactions.ts';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
 import {getDefaultPusher} from './get-default-pusher.ts';
@@ -239,7 +238,7 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
   fetchMock.postAny({});
   let pusherCallCount = 0;
 
-  // eslint-disable-next-line require-await
+  // oxlint-disable-next-line require-await
   rep.pusher = async () => {
     pusherCallCount++;
     return {
@@ -287,7 +286,7 @@ test('Version not supported on server', async () => {
 
     const onUpdateNeededStub = (rep.onUpdateNeeded = vi.fn());
 
-    // eslint-disable-next-line require-await
+    // oxlint-disable-next-line require-await
     const pusher: Pusher = async () => ({
       response,
       httpRequestInfo: {
@@ -331,7 +330,7 @@ test('ClientStateNotFound on server', async () => {
 
   const onUpdateNeededStub = (rep.onUpdateNeeded = vi.fn());
 
-  // eslint-disable-next-line require-await
+  // oxlint-disable-next-line require-await
   const pusher: Pusher = async () => ({
     response: {error: 'ClientStateNotFound'},
     httpRequestInfo: {

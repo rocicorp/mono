@@ -14,15 +14,15 @@ import {
 } from '../../../zero-protocol/src/push.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
-import type {IVMSourceBranch} from './ivm-branch.ts';
-import {toPrimaryKeyString} from './keys.ts';
-import type {MutatorDefs, WriteTransaction} from './replicache-types.ts';
 import type {
+  DeleteID,
   InsertValue,
   UpdateValue,
   UpsertValue,
-  DeleteID,
 } from '../../../zql/src/mutate/custom.ts';
+import type {IVMSourceBranch} from './ivm-branch.ts';
+import {toPrimaryKeyString} from './keys.ts';
+import type {MutatorDefs, WriteTransaction} from './replicache-types.ts';
 
 /**
  * This is the type of the generated mutate.<name>.<verb> function.
@@ -60,7 +60,7 @@ export type TableMutator<S extends TableSchema> = {
 
 export type DBMutator<S extends Schema> =
   S['enableLegacyMutators'] extends false
-    ? {} // eslint-disable-line @typescript-eslint/ban-types -- {} is needed here for intersection type identity
+    ? {} // {} is needed here for intersection type identity
     : {
         [K in keyof S['tables']]: TableMutator<S['tables'][K]>;
       };

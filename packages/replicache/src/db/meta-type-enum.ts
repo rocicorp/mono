@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/naming-convention */
-
 // These three were used before...
 // IndexChangeSDD = 1;
 // LocalSDD = 2;
