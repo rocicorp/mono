@@ -103,6 +103,6 @@ export async function analyzeQuery(
     },
   });
 
-  result.plans = explainQueries(result.vendedRowCounts ?? {}, db);
+  result.plans = explainQueries(result.readRowCountsByQuery ?? {}, db);
   return result;
 }
