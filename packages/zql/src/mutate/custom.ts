@@ -1,10 +1,7 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Expand} from '../../../shared/src/expand.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import type {
-  SchemaValueToTSType,
-  TableSchema,
-} from '../../../zero-schema/src/table-schema.ts';
+import type {SchemaValueToTSType} from '../../../zero-types/src/schema-value.ts';
+import type {Schema, TableSchema} from '../../../zero-types/src/schema.ts';
 import type {Query} from '../query/query.ts';
 
 type ClientID = string;

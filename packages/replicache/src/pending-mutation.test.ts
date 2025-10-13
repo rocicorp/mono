@@ -8,7 +8,6 @@ import {
 } from './test-util.ts';
 import type {WriteTransaction} from './transactions.ts';
 // fetch-mock has invalid d.ts file so we removed that on npm install.
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
 import {TestStore} from './dag/test-store.ts';

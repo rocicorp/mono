@@ -1,6 +1,6 @@
 import type {Ordering, System} from '../../../zero-protocol/src/ast.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
-import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
+import type {SchemaValue} from '../../../zero-types/src/schema-value.ts';
 import type {Comparator} from './data.ts';
 
 /**

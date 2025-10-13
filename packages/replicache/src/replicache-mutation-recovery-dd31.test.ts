@@ -36,7 +36,6 @@ import {
 import {withRead, withWriteNoImplicitCommit} from './with-transactions.ts';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
 
@@ -1619,7 +1618,6 @@ describe('DD31', () => {
       pullURL,
       schemaVersion: schemaVersion1,
       mutators: {
-        // eslint-disable-next-line @typescript-eslint/naming-convention
         mutator_name_2: () => undefined,
       },
     });
@@ -1821,7 +1819,6 @@ describe('DD31', () => {
       pullURL,
       schemaVersion: schemaVersion1,
       mutators: {
-        // eslint-disable-next-line @typescript-eslint/naming-convention
         mutator_name_2: () => undefined,
       },
     });

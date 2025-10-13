@@ -1,14 +1,16 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* oxlint-disable @typescript-eslint/no-explicit-any */
 import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {type AST, type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
-import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
-  LastInTuple,
   SchemaValueToTSType,
   SchemaValueWithCustomType,
+} from '../../../zero-types/src/schema-value.ts';
+import type {
+  LastInTuple,
   TableSchema,
-} from '../../../zero-schema/src/table-schema.ts';
+  Schema as ZeroSchema,
+} from '../../../zero-types/src/schema.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {CustomQueryID} from './named.ts';
@@ -34,7 +36,6 @@ type ArraySelectors<E extends TableSchema> = {
     : never;
 }[keyof E['columns']];
 
-export type QueryReturn<Q> = Q extends Query<any, any, infer R> ? R : never;
 export type QueryTable<Q> = Q extends Query<any, infer T, any> ? T : never;
 export const delegateSymbol = Symbol('delegate');
 
@@ -99,16 +100,36 @@ export type PullRow<TTable extends string, TSchema extends ZeroSchema> = {
   >;
 } & {};
 
-export type Row<T extends TableSchema | Query<ZeroSchema, string, any>> =
-  T extends TableSchema
-    ? {
-        readonly [K in keyof T['columns']]: SchemaValueToTSType<
-          T['columns'][K]
-        >;
-      }
-    : T extends Query<ZeroSchema, string, infer TReturn>
-      ? TReturn
-      : never;
+export type Row<
+  T extends
+    | TableSchema
+    | Query<ZeroSchema, string, any>
+    | ((...args: any) => Query<ZeroSchema, string, any>),
+> = T extends TableSchema
+  ? {
+      readonly [K in keyof T['columns']]: SchemaValueToTSType<T['columns'][K]>;
+    }
+  : T extends
+        | Query<ZeroSchema, string, any>
+        | ((...args: any) => Query<ZeroSchema, string, any>)
+    ? QueryRowType<T>
+    : never;
+
+export type QueryRowType<Q> = Q extends (
+  ...args: any
+) => Query<any, any, infer R>
+  ? R
+  : Q extends Query<any, any, infer R>
+    ? R
+    : never;
+
+export type ZeRow<Q> = QueryRowType<Q>;
+
+export type QueryResultType<Q> = Q extends
+  | Query<ZeroSchema, string, any>
+  | ((...args: any) => Query<ZeroSchema, string, any>)
+  ? HumanReadable<QueryRowType<Q>>
+  : never;
 
 /**
  * A hybrid query that runs on both client and server.

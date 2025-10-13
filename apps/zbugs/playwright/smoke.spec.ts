@@ -1,5 +1,5 @@
-// eslint-disable no-explicit-any
-// eslint-disable no-console
+// oxlint-disable no-explicit-any
+// oxlint-disable no-console
 import {test} from '@playwright/test';
 const userCookies = process.env.USER_COOKIES
   ? JSON.parse(process.env.USER_COOKIES)

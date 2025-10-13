@@ -90,6 +90,6 @@ export function bench(opts: Options) {
   q.materialize();
 
   const end = performance.now();
-  // eslint-disable-next-line no-console
+  // oxlint-disable-next-line no-console
   console.log(`materialize\ttook ${end - start}ms`);
 }

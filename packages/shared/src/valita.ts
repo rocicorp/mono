@@ -32,7 +32,7 @@ function toDisplayAtPath(v: unknown, path: Key[] | undefined): string {
 
   let cur = v;
   for (const p of path) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     cur = (cur as any)[p];
   }
   return toDisplay(cur);
@@ -277,7 +277,6 @@ export function readonlyRecord<T extends v.Type>(
   return v.record(t);
 }
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
 const AbstractType = Object.getPrototypeOf(
   Object.getPrototypeOf(v.string().optional()),
 ).constructor;

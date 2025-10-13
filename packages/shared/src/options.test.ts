@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/naming-convention */
 import {SilentLogger} from '@rocicorp/logger';
 import {stripVTControlCharacters as stripAnsi} from 'node:util';
 import type {PartialDeep} from 'type-fest';

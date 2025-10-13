@@ -42,7 +42,7 @@ window.onload = () => {
     label.append(input, ' ', group);
     form.append(label);
 
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    // oxlint-disable-next-line @typescript-eslint/no-non-null-assertion
     document.querySelector('button')!.onclick = () => runAll(selected, runs);
   });
 };

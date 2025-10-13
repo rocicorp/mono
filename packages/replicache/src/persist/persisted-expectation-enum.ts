@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/naming-convention */
-
 export const Snapshot = 0;
 export const SnapshotAndLocals = 1;
 export const Locals = 2;

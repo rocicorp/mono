@@ -155,7 +155,7 @@ export function ImageUploadArea({
         // 4. Insert markdown into textarea
         insert(markdown);
       } catch (error) {
-        // eslint-disable-next-line no-console -- Error logging in demo app
+        // oxlint-disable-next-line no-console -- Error logging in demo app
         console.error('Error uploading image:', error);
         alert('An error occurred while uploading the image. Please try again.');
       } finally {

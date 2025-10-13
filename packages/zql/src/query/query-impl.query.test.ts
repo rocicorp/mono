@@ -7,10 +7,10 @@ import {relationships} from '../../../zero-schema/src/builder/relationship-build
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {number, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {createSource} from '../ivm/test/source-factory.ts';
+import type {QueryDelegate} from './query-delegate.ts';
 import {newQuery} from './query-impl.ts';
 import {QueryDelegateImpl} from './test/query-delegate.ts';
 import {schema} from './test/test-schemas.ts';
-import type {QueryDelegate} from './query-delegate.ts';
 
 /**
  * Some basic manual tests to get us started.
@@ -1907,7 +1907,7 @@ test('result type unknown then complete', async () => {
 
   // updating of resultType is promised based, so check in a new
   // microtask
-  // eslint-disable-next-line unicorn/no-unnecessary-await -- intentional for test timing
+  // oxlint-disable-next-line unicorn/no-unnecessary-await -- intentional for test timing
   await 1;
 
   expect(rows).toEqual([]);

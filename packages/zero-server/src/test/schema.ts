@@ -72,7 +72,6 @@ export const schema = createSchema({
     table('uuidAndEnum')
       .columns({
         id: string(),
-        // eslint-disable-next-line @typescript-eslint/naming-convention
         reference_id: string(),
         status: enumeration<'active' | 'inactive' | 'pending'>(),
         type: enumeration<'user' | 'system' | 'admin'>(),

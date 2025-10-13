@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* oxlint-disable @typescript-eslint/no-explicit-any */
 import {
   afterAll,
   afterEach,
@@ -26,29 +26,29 @@ vi.mock('../server/anonymous-otel-start.ts', () => ({
 }));
 const mockDB = (() => {}) as unknown as PostgresDB;
 
-import {Syncer} from './syncer.ts';
-import * as jwt from '../auth/jwt.ts';
+import {LogContext} from '@rocicorp/logger';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {type WebSocket} from 'ws';
 import {
   createSilentLogContext,
   TestLogSink,
 } from '../../../shared/src/logging-test-utils.ts';
-import {
-  recordConnectionSuccess,
-  recordConnectionAttempted,
-} from '../server/anonymous-otel-start.ts';
+import {Database} from '../../../zqlite/src/db.ts';
+import * as jwt from '../auth/jwt.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
-import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
-import type {ActivityBasedService} from '../services/service.ts';
+import {
+  recordConnectionAttempted,
+  recordConnectionSuccess,
+} from '../server/anonymous-otel-start.ts';
 import {MutagenService} from '../services/mutagen/mutagen.ts';
 import {PusherService} from '../services/mutagen/pusher.ts';
-import type {WebSocketReceiver} from '../types/websocket-handoff.ts';
-import {type WebSocket} from 'ws';
-import path from 'node:path';
-import os from 'node:os';
-import fs from 'node:fs/promises';
-import {Database} from '../../../zqlite/src/db.ts';
+import type {ActivityBasedService} from '../services/service.ts';
+import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
 import type {PostgresDB} from '../types/pg.ts';
-import {LogContext} from '@rocicorp/logger';
+import type {WebSocketReceiver} from '../types/websocket-handoff.ts';
+import {Syncer} from './syncer.ts';
 
 const lc = createSilentLogContext();
 const tempDir = await fs.mkdtemp(
@@ -440,7 +440,7 @@ afterAll(async () => {
   try {
     await fs.rm(tempDir, {recursive: true, force: true});
   } catch (e) {
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.error(`Failed to clean up temp directory ${tempDir}:`, e);
   }
 
@@ -448,9 +448,7 @@ afterAll(async () => {
 });
 
 class MockWebSocket {
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   static readonly OPEN = 1;
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   static readonly CLOSED = 3;
 
   #listeners: Map<string, ((event: any) => void)[]> = new Map();

@@ -27,7 +27,7 @@ test('stable generation', () => {
   const schema = generateSchema(rng, faker);
 
   const q = generateQuery(schema, {}, rng, faker);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   expect((q as StaticQuery<any, any>).ast).toMatchInlineSnapshot(`
     {
       "limit": 126,

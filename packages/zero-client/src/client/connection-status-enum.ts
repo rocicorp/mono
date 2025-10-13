@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/naming-convention */
-
 export const Disconnected = 'disconnected';
 export const Connecting = 'connecting';
 export const Connected = 'connected';

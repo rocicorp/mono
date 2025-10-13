@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* oxlint-disable @typescript-eslint/no-explicit-any */
 export interface QueryHistoryItem {
   id: string;
   query: string; // The query string passed to run() or full code if no run() call

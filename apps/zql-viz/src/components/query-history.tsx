@@ -1,5 +1,5 @@
-import type {FC} from 'react';
 import {Clock, Play, Trash2} from 'lucide-react';
+import type {FC} from 'react';
 import {type QueryHistoryItem} from '../types.ts';
 
 interface QueryHistoryProps {
@@ -13,13 +13,12 @@ export const QueryHistory: FC<QueryHistoryProps> = ({
   onSelectQuery,
   onClearHistory,
 }) => {
-  const formatTime = (date: Date) => {
-    return new Date(date).toLocaleTimeString('en-US', {
+  const formatTime = (date: Date) =>
+    new Date(date).toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
     });
-  };
 
   return (
     <div className="query-history">

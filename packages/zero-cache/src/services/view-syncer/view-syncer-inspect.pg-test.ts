@@ -361,6 +361,52 @@ describe('view-syncer/service', () => {
     });
   });
 
+  test('analyze-query result includes elapsed time (regression for elapsed/end deprecation)', async () => {
+    const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
+
+    await nextPoke(client);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+    await expectNoPokes(client);
+
+    const inspectId = 'test-analyze-query-elapsed';
+
+    await vs.inspect(SYNC_CONTEXT, [
+      'inspect',
+      {
+        op: 'analyze-query',
+        id: inspectId,
+        ast: ISSUES_QUERY,
+        options: {},
+      },
+    ]);
+
+    const msg = (await client.dequeue()) as InspectDownMessage;
+    expect(msg[0]).toBe('inspect');
+    expect(msg[1]).toMatchObject({
+      id: inspectId,
+      op: 'analyze-query',
+    });
+
+    const result = (
+      msg[1] as Extract<InspectDownMessage[1], {op: 'analyze-query'}>
+    ).value;
+
+    // Verify elapsed is present (new property)
+    expect(result.elapsed).toBeDefined();
+    expect(typeof result.elapsed).toBe('number');
+    expect(result.elapsed).toBeGreaterThanOrEqual(0);
+
+    // Verify elapsed matches end - start
+    expect(result.elapsed).toBe(result.end - result.start);
+
+    // Verify deprecated 'end' is still present for backward compatibility
+    expect(result.end).toBeDefined();
+    expect(result.start).toBeDefined();
+    expect(typeof result.end).toBe('number');
+    expect(typeof result.start).toBe('number');
+  });
+
   test('analyze-query requires AST or custom query name/args', async () => {
     const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, []);
 

@@ -254,11 +254,11 @@ export async function runUntilKilled(
 export async function exitAfter(run: () => Promise<void>) {
   try {
     await run();
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.info(`pid ${pid} exiting normally`);
     process.exit(0);
   } catch (e) {
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.error(`pid ${pid} exiting with error`, e);
     process.exit(-1);
   }

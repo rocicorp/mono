@@ -35,10 +35,10 @@ import type {ZeroLogContext} from './zero-log-context.ts';
 export type CustomMutatorDefs = {
   [namespaceOrKey: string]:
     | {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
         [key: string]: CustomMutatorImpl<any>;
       }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     | CustomMutatorImpl<any>;
 };
 
@@ -50,7 +50,7 @@ export type MutatorResult = {
 export type CustomMutatorImpl<
   S extends Schema,
   TWrappedTransaction = unknown,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   TArgs = any,
 > = (
   tx: Transaction<S, TWrappedTransaction>,
@@ -83,11 +83,10 @@ export type MakeCustomMutatorInterfaces<
       };
 };
 
-export type MakeCustomMutatorInterface<
-  S extends Schema,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  F,
-> = F extends (tx: ClientTransaction<S>, ...args: infer Args) => Promise<void>
+export type MakeCustomMutatorInterface<S extends Schema, F> = F extends (
+  tx: ClientTransaction<S>,
+  ...args: infer Args
+) => Promise<void>
   ? (...args: Args) => MutatorResult
   : never;
 

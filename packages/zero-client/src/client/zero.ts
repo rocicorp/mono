@@ -94,7 +94,7 @@ import {
   type MaterializeOptions,
   type PreloadOptions,
   type Query,
-  type QueryReturn,
+  type QueryRowType,
   type QueryTable,
   type RunOptions,
   delegateSymbol,
@@ -446,7 +446,7 @@ export class Zero<
     let {kvStore = 'idb'} = options as ZeroOptions<S, MD>;
     if (kvStore === 'idb') {
       if (!getBrowserGlobal('indexedDB')) {
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.warn(
           'IndexedDB is not supported in this environment. Falling back to memory storage.',
         );
@@ -677,7 +677,7 @@ export class Zero<
     this.#onClientStateNotFound = onClientStateNotFoundCallback;
     this.#rep.onClientStateNotFound = onClientStateNotFoundCallback;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     const {mutate, mutateBatch} = makeCRUDMutate<S>(schema, rep.mutate) as any;
 
     if (options.mutators) {
@@ -697,7 +697,7 @@ export class Zero<
 
         for (const name of Object.keys(mutatorsOrMutator)) {
           existing[name] = must(
-            rep.mutate[customMutatorKey(namespaceOrKey as string, name)],
+            rep.mutate[customMutatorKey(namespaceOrKey, name)],
           );
         }
       }
@@ -777,7 +777,7 @@ export class Zero<
 
   #expose() {
     // Expose the Zero instance to the global scope.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     const g = globalThis as any;
     if (g.__zero === undefined) {
       g.__zero = this;
@@ -793,7 +793,7 @@ export class Zero<
   }
 
   #unexpose() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     const g = globalThis as any;
     assert(g.__zero !== undefined);
     if (g.__zero instanceof Zero) {
@@ -831,7 +831,7 @@ export class Zero<
   }
 
   preload(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     query: Query<S, keyof S['tables'] & string, any>,
     options?: PreloadOptions | undefined,
   ) {
@@ -841,28 +841,25 @@ export class Zero<
   run<Q>(
     query: Q,
     runOptions?: RunOptions | undefined,
-  ): Promise<HumanReadable<QueryReturn<Q>>> {
-    return (
-      (query as AnyQuery)
-        // eslint-disable-next-line no-unexpected-multiline
-        [delegateSymbol](this.#zeroContext)
-        .run(runOptions) as Promise<HumanReadable<QueryReturn<Q>>>
-    );
+  ): Promise<HumanReadable<QueryRowType<Q>>> {
+    return (query as AnyQuery)
+      [delegateSymbol](this.#zeroContext)
+      .run(runOptions) as Promise<HumanReadable<QueryRowType<Q>>>;
   }
 
   materialize<Q>(
     query: Q,
     options?: MaterializeOptions | undefined,
-  ): TypedView<HumanReadable<QueryReturn<Q>>>;
+  ): TypedView<HumanReadable<QueryRowType<Q>>>;
   materialize<T, Q>(
     query: Q,
-    factory: ViewFactory<S, QueryTable<Q>, QueryReturn<Q>, T>,
+    factory: ViewFactory<S, QueryTable<Q>, QueryRowType<Q>, T>,
     options?: MaterializeOptions | undefined,
   ): T;
   materialize<T, Q>(
     query: Q,
     factoryOrOptions?:
-      | ViewFactory<S, QueryTable<Q>, QueryReturn<Q>, T>
+      | ViewFactory<S, QueryTable<Q>, QueryRowType<Q>, T>
       | MaterializeOptions
       | undefined,
     maybeOptions?: MaterializeOptions | undefined,
@@ -2019,7 +2016,7 @@ export class Zero<
     // https://esbuild.github.io/api/#ignore-annotations
     // /packages/zero/tool/build.ts
 
-    // eslint-disable-next-line no-unused-labels
+    // oxlint-disable-next-line no-unused-labels
     BUNDLE_SIZE: {
       return (this.#inspector ??= new Inspector(
         this.#rep,
