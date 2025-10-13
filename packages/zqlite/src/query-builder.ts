@@ -11,6 +11,7 @@ import type {
 } from '../../zero-schema/src/table-schema.ts';
 import {sql} from './internal/sql.ts';
 import type {Constraint} from '../../zql/src/ivm/constraint.ts';
+import type {Start} from '../../zql/src/ivm/operator.ts';
 
 /**
  * Condition type without correlated subqueries.
@@ -20,6 +21,36 @@ export type NoSubqueryCondition = Exclude<
   Condition,
   {type: 'correlatedSubquery'}
 >;
+
+export function buildSelectQuery(
+  tableName: string,
+  columns: Record<string, SchemaValue>,
+  constraint: Constraint | undefined,
+  filters: NoSubqueryCondition | undefined,
+  order: Ordering,
+  reverse: boolean | undefined,
+  start: Start | undefined,
+) {
+  let query = sql`SELECT ${sql.join(
+    Object.keys(columns).map(c => sql.ident(c)),
+    sql`,`,
+  )} FROM ${sql.ident(tableName)}`;
+  const constraints: SQLQuery[] = constraintsToSQL(constraint, columns);
+
+  if (start) {
+    constraints.push(gatherStartConstraints(start, reverse, order, columns));
+  }
+
+  if (filters) {
+    constraints.push(filtersToSQL(filters));
+  }
+
+  if (constraints.length > 0) {
+    query = sql`${query} WHERE ${sql.join(constraints, sql` AND `)}`;
+  }
+
+  return sql`${query} ${orderByToSQL(order, !!reverse)}`;
+}
 
 export function constraintsToSQL(
   constraint: Constraint | undefined,
@@ -155,4 +186,93 @@ export function toSQLiteType(v: unknown, type: ValueType): unknown {
     case 'json':
       return JSON.stringify(v);
   }
+}
+
+/**
+ * The ordering could be complex such as:
+ * `ORDER BY a ASC, b DESC, c ASC`
+ *
+ * In those cases, we need to encode the constraints as various
+ * `OR` clauses.
+ *
+ * E.g.,
+ *
+ * to get the row after (a = 1, b = 2, c = 3) would be:
+ *
+ * `WHERE a > 1 OR (a = 1 AND b < 2) OR (a = 1 AND b = 2 AND c > 3)`
+ *
+ * - after vs before flips the comparison operators.
+ * - inclusive adds a final `OR` clause for the exact match.
+ */
+function gatherStartConstraints(
+  start: Start,
+  reverse: boolean | undefined,
+  order: Ordering,
+  columnTypes: Record<string, SchemaValue>,
+): SQLQuery {
+  const constraints: SQLQuery[] = [];
+  const {row: from, basis} = start;
+
+  for (let i = 0; i < order.length; i++) {
+    const group: SQLQuery[] = [];
+    const [iField, iDirection] = order[i];
+    for (let j = 0; j <= i; j++) {
+      if (j === i) {
+        const constraintValue = toSQLiteType(
+          from[iField],
+          columnTypes[iField].type,
+        );
+        if (iDirection === 'asc') {
+          if (!reverse) {
+            group.push(
+              sql`(${constraintValue} IS NULL OR ${sql.ident(iField)} > ${constraintValue})`,
+            );
+          } else {
+            reverse satisfies true;
+            group.push(
+              sql`(${sql.ident(iField)} IS NULL OR ${sql.ident(iField)} < ${constraintValue})`,
+            );
+          }
+        } else {
+          iDirection satisfies 'desc';
+          if (!reverse) {
+            group.push(
+              sql`(${sql.ident(iField)} IS NULL OR ${sql.ident(iField)} < ${constraintValue})`,
+            );
+          } else {
+            reverse satisfies true;
+            group.push(
+              sql`(${constraintValue} IS NULL OR ${sql.ident(iField)} > ${constraintValue})`,
+            );
+          }
+        }
+      } else {
+        const [jField] = order[j];
+        group.push(
+          sql`${sql.ident(jField)} IS ${toSQLiteType(
+            from[jField],
+            columnTypes[jField].type,
+          )}`,
+        );
+      }
+    }
+    constraints.push(sql`(${sql.join(group, sql` AND `)})`);
+  }
+
+  if (basis === 'at') {
+    constraints.push(
+      sql`(${sql.join(
+        order.map(
+          s =>
+            sql`${sql.ident(s[0])} IS ${toSQLiteType(
+              from[s[0]],
+              columnTypes[s[0]].type,
+            )}`,
+        ),
+        sql` AND `,
+      )})`,
+    );
+  }
+
+  return sql`(${sql.join(constraints, sql` OR `)})`;
 }
