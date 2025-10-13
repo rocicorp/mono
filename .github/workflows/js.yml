@@ -12,9 +12,32 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Gate jobs - must pass before other jobs run
+  syncpack:
+    name: Sync Package Versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+      - run: npx syncpack@13 list-mismatches
+
+  verify-deps:
+    name: Verify Package Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 23.x
+      - run: npm install --prefix tools/verify-package-deps
+      - run: npm run verify-deps
+
   format:
     name: Prettier
     runs-on: ubuntu-latest
+    needs: [syncpack, verify-deps]
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
@@ -32,6 +55,7 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    needs: [syncpack, verify-deps]
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
@@ -49,6 +73,7 @@ jobs:
   check-types:
     name: Check Types
     runs-on: ubuntu-latest
+    needs: [syncpack, verify-deps]
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
@@ -64,7 +89,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
-    needs: [format, lint, check-types]
+    needs: [syncpack, verify-deps, format, lint, check-types]
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
@@ -85,7 +110,7 @@ jobs:
   test-pg:
     name: Test PG
     runs-on: ubuntu-latest
-    needs: [format, lint, check-types]
+    needs: [syncpack, verify-deps, format, lint, check-types]
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
