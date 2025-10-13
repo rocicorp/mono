@@ -14,7 +14,6 @@ import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
 import type {Row} from '../../../zql/src/query/query.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
-import * as ConnectionState from './connection-state-enum.ts';
 import {
   TransactionImpl,
   type MakeCustomMutatorInterfaces,
@@ -26,6 +25,7 @@ import {MockSocket, zeroForTest} from './test-utils.ts';
 import {createDb} from './test/create-db.ts';
 import {getInternalReplicacheImplForTesting} from './zero.ts';
 import {QueryManager} from './query-manager.ts';
+import {ConnectionStatus} from './connection-status.ts';
 
 type Schema = typeof schema;
 type MutatorTx = Transaction<Schema>;
@@ -463,7 +463,7 @@ describe('server results and keeping read queries', () => {
     });
 
     await z.triggerConnected();
-    await z.waitForConnectionState(ConnectionState.Connected);
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
     const create = z.mutate.issue.create({
       id: '1',
@@ -539,7 +539,7 @@ describe('server results and keeping read queries', () => {
     });
 
     await z.triggerConnected();
-    await z.waitForConnectionState(ConnectionState.Connected);
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
     const q = z.query.issue.limit(1).materialize();
     const create = z.mutate.issue.create({
@@ -675,7 +675,7 @@ describe('server results and keeping read queries', () => {
     });
 
     await z.triggerConnected();
-    await z.waitForConnectionState(ConnectionState.Connected);
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
     const create = z.mutate.issue.create({
       id: '1',
@@ -762,7 +762,7 @@ test('run waiting for complete results throws in custom mutations', async () => 
   });
 
   await z.triggerConnected();
-  await z.waitForConnectionState(ConnectionState.Connected);
+  await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
   await z.mutate.issue.create().client;
 
@@ -787,7 +787,7 @@ test('warns when awaiting the promise directly', async () => {
   });
 
   await z.triggerConnected();
-  await z.waitForConnectionState(ConnectionState.Connected);
+  await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
   await z.mutate.issue.create();
 
@@ -863,7 +863,7 @@ test('unnamed queries do not get registered with the query manager if `enableLeg
   // and spy on addLegacy
 
   await z.triggerConnected();
-  await z.waitForConnectionState(ConnectionState.Connected);
+  await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
   await z.query.issue.where('id', '1').one().run();
 
@@ -879,7 +879,7 @@ test('unnamed queries do get registered with the query manager if `enableLegacyQ
   });
 
   await z.triggerConnected();
-  await z.waitForConnectionState(ConnectionState.Connected);
+  await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
   await z.query.issue.where('id', '1').one().run();
 
