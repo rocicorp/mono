@@ -28,24 +28,66 @@ type PlanState = {
   fanIns: Array<{type: 'FI' | 'UFI'}>;
 };
 
+/**
+ * Central orchestrator for query plan optimization.
+ *
+ * ARCHITECTURE:
+ * This class manages two distinct concerns:
+ *
+ * 1. GRAPH STRUCTURE (immutable after construction):
+ *    - Nodes: Sources, Connections, Joins, FanOut/FanIn, Terminus
+ *    - Edges: How nodes connect to each other
+ *    - Built once by planner-builder.ts, never modified during planning
+ *
+ * 2. PLANNING STATE (mutable during search):
+ *    - Which connections are pinned
+ *    - Which joins are flipped
+ *    - What constraints flow where
+ *    - Mutated during plan() as we search for optimal plan
+ *
+ * LIFECYCLE:
+ * 1. Build: Construct immutable graph structure via planner-builder
+ * 2. Plan: Run plan() which mutates planning state via multi-start greedy search
+ * 3. Read: Extract results via joins[].type, connections[].pinned, etc.
+ * 4. Reset: Call resetPlanningState() to clear mutable state for replanning
+ *
+ * MUTATION MODEL:
+ * The graph structure never changes, but planning state is mutated in-place
+ * for performance. Use capturePlanningSnapshot() and restorePlanningSnapshot()
+ * for backtracking during search.
+ */
 export class PlannerGraph {
-  // Collections of nodes participating in planning/reset lifecycle
+  // ========================================================================
+  // GRAPH STRUCTURE (immutable after construction)
+  // ========================================================================
+
+  // Sources indexed by table name
+  readonly #sources = new Map<string, PlannerSource>();
+
+  // The final output node where constraint propagation starts
+  #terminus: PlannerTerminus | undefined = undefined;
+
+  // ========================================================================
+  // PLANNING STATE (mutable during search)
+  // ========================================================================
+
+  // Collections of nodes with mutable planning state
   joins: PlannerJoin[] = [];
   fanOuts: PlannerFanOut[] = [];
   fanIns: PlannerFanIn[] = [];
   connections: PlannerConnection[] = [];
 
-  // The final output node where constraint propagation starts
-  #terminus: PlannerTerminus | undefined = undefined;
-
-  // Sources indexed by table name
-  readonly #sources = new Map<string, PlannerSource>();
+  // ========================================================================
+  // Graph Construction (structural operations)
+  // ========================================================================
 
   /**
-   * Reset the graph back to an initial state for another planning pass.
-   * Resets only nodes that have runtime-mutable state.
+   * Reset all planning state back to initial values for another planning pass.
+   * Resets only mutable planning state - graph structure is unchanged.
+   *
+   * This allows replanning the same query graph with different strategies.
    */
-  reset() {
+  resetPlanningState() {
     for (const j of this.joins) j.reset();
     for (const fo of this.fanOuts) fo.reset();
     for (const fi of this.fanIns) fi.reset();
@@ -88,6 +130,10 @@ export class PlannerGraph {
   setTerminus(terminus: PlannerTerminus): void {
     this.#terminus = terminus;
   }
+
+  // ========================================================================
+  // Planning Algorithm (state mutation operations)
+  // ========================================================================
 
   /**
    * Get all connections that haven't been pinned yet.
@@ -162,10 +208,6 @@ export class PlannerGraph {
     };
   }
 
-  // ========================================================================
-  // Planning Algorithm
-  // ========================================================================
-
   /**
    * Calculate total cost of the current plan by multiplying connection costs.
    * Uses log/exp to avoid numerical overflow: exp(Σlog(costs)) = Π(costs)
@@ -183,9 +225,14 @@ export class PlannerGraph {
   }
 
   /**
-   * Capture the current plan state for later restoration.
+   * Capture a lightweight snapshot of the current planning state.
+   * Used for backtracking during multi-start greedy search.
+   *
+   * Only captures mutable state (pinned flags, join types), not structure.
+   *
+   * @returns A snapshot that can be restored via restorePlanningSnapshot()
    */
-  savePlan(): PlanState {
+  capturePlanningSnapshot(): PlanState {
     return {
       connections: this.connections.map(c => ({pinned: c.pinned})),
       joins: this.joins.map(j => ({type: j.type, pinned: j.pinned})),
@@ -195,9 +242,12 @@ export class PlannerGraph {
   }
 
   /**
-   * Restore a previously saved plan state.
+   * Restore planning state from a previously captured snapshot.
+   * Used for backtracking when a planning attempt fails.
+   *
+   * @param state - Snapshot created by capturePlanningSnapshot()
    */
-  restorePlan(state: PlanState): void {
+  restorePlanningSnapshot(state: PlanState): void {
     assert(
       this.connections.length === state.connections.length,
       'Plan state mismatch: connections',
@@ -270,7 +320,7 @@ export class PlannerGraph {
     /* eslint-disable no-console */
     for (let i = 0; i < numAttempts; i++) {
       // Reset to initial state
-      this.reset();
+      this.resetPlanningState();
 
       // Get initial costs (no propagation yet)
       let costs = this.estimateCosts();
@@ -305,7 +355,7 @@ export class PlannerGraph {
           let success = false;
           for (const {connection, cost} of costs) {
             // Save state before attempting this connection
-            const stateBeforeAttempt = this.savePlan();
+            const stateBeforeAttempt = this.capturePlanningSnapshot();
 
             try {
               connection.pinned = true; // Pin FIRST
@@ -321,7 +371,7 @@ export class PlannerGraph {
             } catch (e) {
               if (e instanceof UnflippableJoinError) {
                 // Restore to state before this attempt
-                this.restorePlan(stateBeforeAttempt);
+                this.restorePlanningSnapshot(stateBeforeAttempt);
                 // Try next connection
                 continue;
               }
@@ -349,7 +399,7 @@ export class PlannerGraph {
             );
           if (totalCost < bestCost) {
             bestCost = totalCost;
-            bestPlan = this.savePlan();
+            bestPlan = this.capturePlanningSnapshot();
             if (debug) console.error(`  *** New best plan found! ***`);
           }
         }
@@ -367,7 +417,7 @@ export class PlannerGraph {
 
     // Restore best plan
     if (bestPlan) {
-      this.restorePlan(bestPlan);
+      this.restorePlanningSnapshot(bestPlan);
       // After restoring the plan structure, we need to propagate constraints
       // to repopulate the connection constraints based on the restored plan
       this.propagateConstraints();

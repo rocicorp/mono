@@ -4,6 +4,39 @@ SQLite plans single table queries. Our planner plans the joins.
 
 Note: It may eventually plan single table queries as it becomes necessary on the frontend and/or we decide to replace SQLite with a different store.
 
+## Architecture: Structure vs. Planning State
+
+The planner uses a **dual-state design pattern** to separate concerns and enable fast planning:
+
+### Graph Structure (Immutable)
+
+Built once by `planner-builder.ts` and never modified during planning:
+
+- **Nodes**: Sources, Connections, Joins, FanOut/FanIn, Terminus
+- **Edges**: How nodes connect to each other (parent/child relationships)
+- **Configuration**: Cost models, filters, orderings, constraints definitions
+
+Think of this as the "blueprint" of the query - the structural relationships that don't change.
+
+### Planning State (Mutable)
+
+Modified during `PlannerGraph.plan()` as we search for the optimal execution plan:
+
+- **Pinned flags**: Which connections have been locked into the plan
+- **Join types**: Whether joins are 'left' (original) or 'flipped' (reversed)
+- **Accumulated constraints**: What constraints have propagated from parent joins
+
+Think of this as the "current attempt" - the state that changes as we explore different plans.
+
+### Why This Separation?
+
+1. **Performance**: Mutating state in-place is much faster than copying entire graph structures
+2. **Multi-start search**: Can `resetPlanningState()` and try different starting connections
+3. **Backtracking**: Can `capturePlanningSnapshot()` and `restorePlanningSnapshot()` when attempts fail
+4. **Clarity**: Makes it obvious what changes during planning vs. what's fixed structure
+
+This pattern is common in query optimizers (see Postgres, Apache Calcite, etc.) where the search space is large and performance matters.
+
 ## Graph
 
 The planner creates a graph that represents the pipeline. This graph consists only of nodes that are relevant to planning joins:

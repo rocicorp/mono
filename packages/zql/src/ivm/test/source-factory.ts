@@ -6,16 +6,12 @@ import {MemorySource} from '../memory-source.ts';
 import type {Source} from '../source.ts';
 
 export type SourceFactory = (
-  lc: LogContext,
-  logConfig: LogConfig,
   tableName: string,
   columns: Record<string, SchemaValue>,
   primaryKey: PrimaryKey,
 ) => Source;
 
 export const createSource: SourceFactory = (
-  lc: LogContext,
-  logConfig: LogConfig,
   tableName: string,
   columns: Record<string, SchemaValue>,
   primaryKey: PrimaryKey,
@@ -24,7 +20,7 @@ export const createSource: SourceFactory = (
     sourceFactory?: SourceFactory;
   };
   if (sourceFactory) {
-    return sourceFactory(lc, logConfig, tableName, columns, primaryKey);
+    return sourceFactory(tableName, columns, primaryKey);
   }
 
   return new MemorySource(tableName, columns, primaryKey);

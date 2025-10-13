@@ -168,7 +168,7 @@ suite('PlannerGraph', () => {
     expect(totalCost).toBeCloseTo(7200, 0); // 90 × 80 = 7200
   });
 
-  test('reset() resets all nodes to initial state', () => {
+  test('resetPlanningState() resets all nodes to initial state', () => {
     const graph = new PlannerGraph();
     const source = graph.addSource('users', simpleCostModel);
 
@@ -190,7 +190,7 @@ suite('PlannerGraph', () => {
     join.pin();
 
     // Reset
-    graph.reset();
+    graph.resetPlanningState();
 
     // Verify reset
     expect(conn.pinned).toBe(false);
@@ -198,7 +198,7 @@ suite('PlannerGraph', () => {
     expect(join.pinned).toBe(false);
   });
 
-  test('savePlan() and restorePlan() preserve state', () => {
+  test('capturePlanningSnapshot() and restorePlanningSnapshot() preserve state', () => {
     const graph = new PlannerGraph();
     const source = graph.addSource('users', simpleCostModel);
 
@@ -220,15 +220,15 @@ suite('PlannerGraph', () => {
     join.pin();
 
     // Save
-    const saved = graph.savePlan();
+    const saved = graph.capturePlanningSnapshot();
 
     // Modify state
-    graph.reset();
+    graph.resetPlanningState();
     expect(conn.pinned).toBe(false);
     expect(join.type).toBe('left');
 
     // Restore
-    graph.restorePlan(saved);
+    graph.restorePlanningSnapshot(saved);
     expect(conn.pinned).toBe(true);
     expect(join.type).toBe('flipped');
     expect(join.pinned).toBe(true);

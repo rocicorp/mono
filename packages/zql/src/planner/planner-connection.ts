@@ -4,17 +4,21 @@ import type {PlannerConstraint} from './planner-constraint.ts';
 import type {FromType, PlannerNode} from './planner-node.ts';
 
 /**
- * Represents a connection to a source.
+ * Represents a connection to a source (table scan).
  *
- * Connections have:
- * - ordering
- * - filters
- * - constraints
+ * DUAL-STATE PATTERN:
+ * Like all planner nodes, PlannerConnection separates:
+ * 1. IMMUTABLE STRUCTURE: Ordering, filters, cost model (set at construction)
+ * 2. MUTABLE STATE: Pinned status, constraints (mutated during planning)
  *
- * The ordering and filters are used to determine the initial cost of the connection.
+ * COST ESTIMATION:
+ * The ordering and filters determine the initial cost. As planning progresses,
+ * constraints from parent joins refine the cost estimate.
  *
- * Once the planner has decided on connection to be the outer loop of the query plan,
- * this will reveal constraints that can be sent to other connections.
+ * CONSTRAINT FLOW:
+ * When a connection is pinned as the outer loop, it reveals constraints for
+ * connected joins. These constraints propagate through the graph, allowing
+ * other connections to update their cost estimates.
  *
  * Example:
  *
@@ -32,38 +36,39 @@ import type {FromType, PlannerNode} from './planner-node.ts';
  *        |
  * ```
  *
- * `issue` and `assignee` start with no constraints.
- * Once the planner decides to make `issue` the outer loop, it will reveal
- * a constraint on `assignee` of `issue.assignee_id = assignee.id`.
+ * - Initial state: Both connections have no constraints, costs are unconstrained
+ * - If `issue` chosen first: Reveals constraint `assignee_id` for assignee connection
+ * - If `assignee` chosen first: Reveals constraint `assignee_id` for issue connection
+ * - Updated costs guide the next selection
  *
- * If the planner decides to make `assignee` the outer loop, it will reveal
- * a constraint on `issue` of `issue.assignee_id = assignee.id`.
- *
- * Constraints are propagated through the graph, sending them to their connections.
- * Connections can update their cost based on the constraints they have received.
- *
- * The planner will query all connections for their cost and pick the lowest cost connection
- * to be the next outer most loop.
- *
- * This process repeats until no more connections can be chosen. Either because
- * they have been chosen previously or the choices made in the past have pre-determined
- * the rest of the plan.
- *
- * E.g., if we choose `issue` as the outer loop, then `assignee` must be the inner loop
- * since only two connections are involved.
+ * LIFECYCLE:
+ * 1. Construct with immutable structure (ordering, filters, cost model)
+ * 2. Wire to output node during graph construction
+ * 3. Planning mutates pinned status and accumulates constraints
+ * 4. reset() clears mutable state for replanning
  */
 export class PlannerConnection {
   readonly kind = 'connection' as const;
-  pinned: boolean;
+
+  // ========================================================================
+  // IMMUTABLE STRUCTURE (set during construction, never changes)
+  // ========================================================================
   readonly #sort: Ordering;
   readonly #filters: Condition | undefined;
   readonly #model: ConnectionCostModel;
-  #output?: PlannerNode | undefined;
+  #output?: PlannerNode | undefined; // Set once during graph construction
+
+  // ========================================================================
+  // MUTABLE PLANNING STATE (changes during plan search)
+  // ========================================================================
+  pinned: boolean;
 
   /**
-   * Undefined constraints are possible to handle the case where
-   * a FO gets converted to a UFO. If only a single join in the UFO is flipped,
-   * all the other joins will report undefined constraints.
+   * Constraints accumulated from parent joins during planning.
+   * Key is a path through the graph (e.g., "0,1" for branch pattern [0,1]).
+   *
+   * Undefined constraints are possible when a FO converts to UFO and only
+   * a single join in the UFO is flipped - other branches report undefined.
    */
   readonly #constraints: Map<string, PlannerConstraint | undefined>;
 
