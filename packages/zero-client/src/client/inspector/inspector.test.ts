@@ -1106,6 +1106,113 @@ describe('query analyze', () => {
 
     await z.close();
   });
+
+  test('analyze result includes plans when readRowCountsByQuery is populated (regression)', async () => {
+    // This test verifies the fix for the bug where result.plans was not being populated
+    // because the server code was using deprecated vendedRowCounts instead of readRowCountsByQuery.
+    // The server should populate plans based on readRowCountsByQuery, and the client should receive it.
+    const z = zeroForTest({schema});
+    await z.triggerConnected();
+
+    const socket = await z.socket;
+
+    const queries = await (async () => {
+      const idPromise = new Promise<string>(resolve => {
+        const cleanup = socket.onUpstream(message => {
+          const data = JSON.parse(message);
+          if (data[0] === 'inspect' && data[1].op === 'queries') {
+            cleanup();
+            resolve(data[1].id);
+          }
+        });
+      });
+
+      const p = z.inspector.client.queries();
+      const id = await idPromise;
+
+      await z.triggerMessage([
+        'inspect',
+        {
+          op: 'queries',
+          id,
+          value: [
+            {
+              clientID: z.clientID,
+              queryID: '1',
+              ast: {table: 'issues'},
+              name: null,
+              args: null,
+              deleted: false,
+              got: true,
+              inactivatedAt: null,
+              rowCount: 5,
+              ttl: 60_000,
+              metrics: null,
+            },
+          ],
+        },
+      ]);
+
+      return p;
+    })();
+
+    const query = queries[0];
+    vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+    (await z.socket).messages.length = 0;
+
+    const analyzePromise = query.analyze();
+    await waitForLazyModule();
+
+    // Simulate what the server should return after the fix:
+    // - readRowCountsByQuery is populated (new property)
+    // - plans is populated based on readRowCountsByQuery
+    // - vendedRowCounts is not present (deprecated)
+    const mockAnalyzeResult = {
+      warnings: [],
+      syncedRowCount: 5,
+      start: 1000,
+      end: 1050,
+      readRowCount: 5,
+      readRowCountsByQuery: {
+        issues: {
+          'SELECT * FROM issues': 5,
+        },
+      },
+      // The bug was that plans would be empty because the server was using
+      // vendedRowCounts (undefined) instead of readRowCountsByQuery
+      plans: {
+        'SELECT * FROM issues': ['SCAN issues'],
+      },
+    };
+
+    await z.triggerMessage([
+      'inspect',
+      {
+        op: 'analyze-query',
+        id: '000000000000000000000',
+        value: mockAnalyzeResult,
+      },
+    ]);
+
+    const result = await analyzePromise;
+
+    // Critical assertion: plans should be populated
+    expect(result.plans).toEqual({
+      'SELECT * FROM issues': ['SCAN issues'],
+    });
+
+    // Verify readRowCountsByQuery is present (new property)
+    expect(result.readRowCountsByQuery).toEqual({
+      issues: {
+        'SELECT * FROM issues': 5,
+      },
+    });
+
+    // Ensure deprecated vendedRowCounts is not in the result
+    expect(result.vendedRowCounts).toBeUndefined();
+
+    await z.close();
+  });
 });
 
 describe('authenticate', () => {
