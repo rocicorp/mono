@@ -1,4 +1,6 @@
 import {expect} from 'vitest';
+import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../../shared/src/must.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
@@ -11,21 +13,23 @@ import {Catch} from '../catch.ts';
 import type {Input} from '../operator.ts';
 import type {Source, SourceChange} from '../source.ts';
 import type {Format} from '../view.ts';
+import {createSource} from './source-factory.ts';
 
-export type SourceFactory = (
-  tableName: string,
-  columns: Record<string, SchemaValue>,
-  primaryKey: PrimaryKey,
-) => Source;
+const lc = createSilentLogContext();
 
 function makeSource(
-  sourceFactory: SourceFactory,
   tableName: string,
   rows: readonly Row[],
   columns: Readonly<Record<string, SchemaValue>>,
   primaryKeys: PrimaryKey,
 ): Source {
-  const source = sourceFactory(tableName, columns, primaryKeys);
+  const source = createSource(
+    lc,
+    testLogConfig,
+    tableName,
+    columns,
+    primaryKeys,
+  );
   for (const row of rows) {
     source.push({type: 'add', row});
   }
@@ -53,18 +57,12 @@ export type PushTest = {
   fetchOnPush?: boolean | undefined;
 };
 
-export function runPushTest(t: PushTest, sourceFactory: SourceFactory) {
+export function runPushTest(t: PushTest) {
   function innerTest<T>(makeFinalOutput: (j: Input) => T) {
     const sources: Record<string, Source> = Object.fromEntries(
       Object.entries(t.sources).map(([name, {columns, primaryKeys}]) => [
         name,
-        makeSource(
-          sourceFactory,
-          name,
-          t.sourceContents[name] ?? [],
-          columns,
-          primaryKeys,
-        ),
+        makeSource(name, t.sourceContents[name] ?? [], columns, primaryKeys),
       ]),
     );
 

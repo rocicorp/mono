@@ -26,6 +26,7 @@ type PlanState = {
   joins: Array<{type: 'left' | 'flipped'; pinned: boolean}>;
   fanOuts: Array<{type: 'FO' | 'UFO'}>;
   fanIns: Array<{type: 'FI' | 'UFI'}>;
+  connectionConstraints: Array<Map<string, any>>;
 };
 
 /**
@@ -214,10 +215,13 @@ export class PlannerGraph {
    *
    * This is correct for nested loop joins where inner connections execute
    * once per outer connection row, making costs multiplicative not additive.
+   *
+   * Relies on connection-level cost caching to avoid redundant calculations.
    */
   getTotalCost(): number {
     let logSum = 0;
     for (const connection of this.connections) {
+      // Connection.estimateCost() uses its own cache internally
       const cost = connection.estimateCost();
       logSum += Math.log(cost);
     }
@@ -228,7 +232,8 @@ export class PlannerGraph {
    * Capture a lightweight snapshot of the current planning state.
    * Used for backtracking during multi-start greedy search.
    *
-   * Only captures mutable state (pinned flags, join types), not structure.
+   * Captures mutable state including pinned flags, join types, and
+   * constraint maps to avoid needing repropagation on restore.
    *
    * @returns A snapshot that can be restored via restorePlanningSnapshot()
    */
@@ -238,12 +243,16 @@ export class PlannerGraph {
       joins: this.joins.map(j => ({type: j.type, pinned: j.pinned})),
       fanOuts: this.fanOuts.map(fo => ({type: fo.type})),
       fanIns: this.fanIns.map(fi => ({type: fi.type})),
+      connectionConstraints: this.connections.map(c => c.captureConstraints()),
     };
   }
 
   /**
    * Restore planning state from a previously captured snapshot.
    * Used for backtracking when a planning attempt fails.
+   *
+   * Restores pinned flags, join types, and constraint maps, eliminating
+   * the need for repropagation.
    *
    * @param state - Snapshot created by capturePlanningSnapshot()
    */
@@ -264,9 +273,14 @@ export class PlannerGraph {
       this.fanIns.length === state.fanIns.length,
       'Plan state mismatch: fanIns',
     );
+    assert(
+      this.connections.length === state.connectionConstraints.length,
+      'Plan state mismatch: connectionConstraints',
+    );
 
     for (let i = 0; i < this.connections.length; i++) {
       this.connections[i].pinned = state.connections[i].pinned;
+      this.connections[i].restoreConstraints(state.connectionConstraints[i]);
     }
 
     // Need to restore joins by calling flip() or reset() to get to correct state
@@ -353,6 +367,7 @@ export class PlannerGraph {
 
           // Try connections in order until one works
           let success = false;
+          let pickedCost = 0;
           for (const {connection, cost} of costs) {
             // Save state before attempting this connection
             const stateBeforeAttempt = this.capturePlanningSnapshot();
@@ -360,12 +375,7 @@ export class PlannerGraph {
             try {
               connection.pinned = true; // Pin FIRST
               pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
-              this.propagateConstraints(); // Then propagate
-              if (debug) {
-                console.error(
-                  `  Step ${step}: Picked connection with cost ${cost}`,
-                );
-              }
+              pickedCost = cost;
               success = true;
               break; // Success, exit the inner loop
             } catch (e) {
@@ -386,6 +396,15 @@ export class PlannerGraph {
                 `  Step ${step}: No connection could be pinned - plan failed`,
               );
             break;
+          }
+
+          // Only propagate after successful connection selection
+          this.propagateConstraints();
+
+          if (debug) {
+            console.error(
+              `  Step ${step}: Picked connection with cost ${pickedCost}`,
+            );
           }
           step++;
         }
@@ -418,8 +437,9 @@ export class PlannerGraph {
     // Restore best plan
     if (bestPlan) {
       this.restorePlanningSnapshot(bestPlan);
-      // After restoring the plan structure, we need to propagate constraints
-      // to repopulate the connection constraints based on the restored plan
+      // Propagate constraints to ensure all derived state is consistent.
+      // While we restore constraint maps from the snapshot, propagation
+      // ensures FanOut/FanIn states and any derived values are correct.
       this.propagateConstraints();
     }
   }

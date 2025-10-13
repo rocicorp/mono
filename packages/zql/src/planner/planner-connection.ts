@@ -72,6 +72,13 @@ export class PlannerConnection {
    */
   readonly #constraints: Map<string, PlannerConstraint | undefined>;
 
+  /**
+   * Cached cost result to avoid redundant cost model calls.
+   * Invalidated when constraints change.
+   */
+  #cachedCost: number | undefined = undefined;
+  #costDirty = true;
+
   constructor(
     model: ConnectionCostModel,
     sort: Ordering,
@@ -114,6 +121,9 @@ export class PlannerConnection {
   ): void {
     const key = path.join(',');
     this.#constraints.set(key, c);
+    // Constraints changed, invalidate cost cache
+    this.#costDirty = true;
+
     if (this.pinned) {
       assert(
         from === 'pinned',
@@ -128,20 +138,57 @@ export class PlannerConnection {
   }
 
   estimateCost(): number {
-    if (this.#constraints.size === 0) {
-      return this.#model(this.#sort, this.#filters, undefined);
+    // Return cached cost if still valid
+    if (!this.#costDirty && this.#cachedCost !== undefined) {
+      return this.#cachedCost;
     }
 
+    // Calculate fresh cost
     let total = 0;
-    for (const c of this.#constraints.values()) {
-      total += this.#model(this.#sort, this.#filters, c);
+    if (this.#constraints.size === 0) {
+      total = this.#model(this.#sort, this.#filters, undefined);
+    } else {
+      for (const c of this.#constraints.values()) {
+        total += this.#model(this.#sort, this.#filters, c);
+      }
     }
+
+    // Cache result and mark as clean
+    this.#cachedCost = total;
+    this.#costDirty = false;
+
     return total;
   }
 
   reset() {
     this.#constraints.clear();
     this.pinned = false;
+    // Clear cost cache
+    this.#cachedCost = undefined;
+    this.#costDirty = true;
+  }
+
+  /**
+   * Capture constraint state for snapshotting.
+   * Used by PlannerGraph to save/restore planning state.
+   */
+  captureConstraints(): Map<string, PlannerConstraint | undefined> {
+    return new Map(this.#constraints);
+  }
+
+  /**
+   * Restore constraint state from a snapshot.
+   * Used by PlannerGraph to restore planning state.
+   */
+  restoreConstraints(
+    constraints: Map<string, PlannerConstraint | undefined>,
+  ): void {
+    this.#constraints.clear();
+    for (const [key, value] of constraints) {
+      this.#constraints.set(key, value);
+    }
+    // Constraints changed, invalidate cost cache
+    this.#costDirty = true;
   }
 }
 
