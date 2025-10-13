@@ -488,7 +488,6 @@ describe('analyzeQuery', () => {
     const plans = realExplainQueries(readRowCountsByQuery, db);
 
     // Verify plans were generated
-    expect(plans).toBeDefined();
     expect(Object.keys(plans)).toHaveLength(2);
     expect(plans).toHaveProperty('SELECT * FROM users');
     expect(plans).toHaveProperty('SELECT * FROM users WHERE email = ?');
