@@ -1,24 +1,24 @@
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import type {TableSchema} from '../../zero-schema/src/table-schema.ts';
-import type {
-  SchemaCRUD,
-  SchemaQuery,
-  TableCRUD,
-  TransactionBase,
-  DBTransaction,
-} from '../../zql/src/mutate/custom.ts';
+import {assert} from '../../shared/src/asserts.ts';
 import {
   formatPgInternalConvert,
   sql,
   sqlConvertColumnArg,
 } from '../../z2s/src/sql.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {
   ServerColumnSchema,
   ServerSchema,
   ServerTableSchema,
 } from '../../zero-schema/src/server-schema.ts';
+import type {TableSchema} from '../../zero-schema/src/table-schema.ts';
+import type {
+  DBTransaction,
+  SchemaCRUD,
+  SchemaQuery,
+  TableCRUD,
+  TransactionBase,
+} from '../../zql/src/mutate/custom.ts';
 import {getServerSchema} from './schema.ts';
-import {assert} from '../../shared/src/asserts.ts';
 
 interface ServerTransaction<S extends Schema, TWrappedTransaction>
   extends TransactionBase<S> {
@@ -35,7 +35,7 @@ export type CustomMutatorDefs<TDBTransaction> = {
     | CustomMutatorImpl<TDBTransaction>;
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 export type CustomMutatorImpl<TDBTransaction, TArgs = any> = (
   tx: TDBTransaction,
   args: TArgs,

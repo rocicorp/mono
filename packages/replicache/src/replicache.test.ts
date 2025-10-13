@@ -37,7 +37,6 @@ import type {MutatorDefs, Poke} from './types.ts';
 import {withRead} from './with-transactions.ts';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
 import {
@@ -317,7 +316,7 @@ test('name', async () => {
 test('register with error', async () => {
   const rep = await replicacheForTesting('regerr', {
     mutators: {
-      // eslint-disable-next-line require-await
+      // oxlint-disable-next-line require-await
       err: async (_: WriteTransaction, args: number) => {
         throw args;
       },
@@ -1694,10 +1693,10 @@ test('pull and index update', async () => {
   });
 });
 
-async function populateDataUsingPull<
-  // eslint-disable-next-line @typescript-eslint/ban-types
-  MD extends MutatorDefs = {},
->(rep: ReplicacheTest<MD>, data: Record<string, ReadonlyJSONValue>) {
+async function populateDataUsingPull<MD extends MutatorDefs = {}>(
+  rep: ReplicacheTest<MD>,
+  data: Record<string, ReadonlyJSONValue>,
+) {
   const {clientID} = rep;
   fetchMock.postOnce(rep.pullURL, {
     cookie: '',
@@ -2051,7 +2050,7 @@ test('mutation timestamps are immutable', async () => {
         await tx.set('foo', 'bar');
       },
     },
-    // eslint-disable-next-line require-await
+    // oxlint-disable-next-line require-await
     pusher: async req => {
       pending = req.mutations;
       return {
@@ -2449,7 +2448,7 @@ test('set with undefined key', async () => {
 
   expect(await set([1, undefined, 2])).instanceOf(TypeError);
 
-  // eslint-disable-next-line no-sparse-arrays
+  // oxlint-disable-next-line no-sparse-arrays
   expect(await set([1, , 2])).instanceOf(TypeError);
 });
 

@@ -36,12 +36,10 @@ import type {WriteTransaction} from './transactions.ts';
 import type {BeginPullResult, MutatorDefs} from './types.ts';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
 
 export class ReplicacheTest<
-  // eslint-disable-next-line @typescript-eslint/ban-types
   MD extends MutatorDefs = {},
 > extends Replicache<MD> {
   readonly #impl: ReplicacheImpl<MD>;
@@ -167,10 +165,7 @@ type ReplicacheTestOptions<MD extends MutatorDefs> = Omit<
   licenseKey?: string | undefined;
 };
 
-export async function replicacheForTesting<
-  // eslint-disable-next-line @typescript-eslint/ban-types
-  MD extends MutatorDefs = {},
->(
+export async function replicacheForTesting<MD extends MutatorDefs = {}>(
   name: string,
   options: ReplicacheTestOptions<MD> = {},
   implOptions: ReplicacheImplOptions = {},

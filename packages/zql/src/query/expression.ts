@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* oxlint-disable @typescript-eslint/no-explicit-any */
 import {must} from '../../../shared/src/must.ts';
 import {
   toStaticParam,

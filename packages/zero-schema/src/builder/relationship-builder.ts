@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* oxlint-disable @typescript-eslint/no-explicit-any */
 import type {Relationship, TableSchema} from '../table-schema.ts';
 import type {TableBuilderWithColumns} from './table-builder.ts';
 

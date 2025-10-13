@@ -1470,7 +1470,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         return {
           client: result,
           server: trackingData.serverPromise,
-          // eslint-disable-next-line no-thenable
+          // oxlint-disable-next-line no-thenable
           then: (onFulfilled, onRejected) => {
             this.#lc.warn?.(
               'Awaiting the mutator result directly is being deprecated.' +
@@ -1611,6 +1611,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
 
   recoverMutations(): Promise<boolean> | void {
     if (!process.env.DISABLE_MUTATION_RECOVERY) {
+      // oxlint-disable-next-line no-non-null-assertion
       const result = this.#mutationRecovery!.recoverMutations(
         this.#ready,
         this.perdag,

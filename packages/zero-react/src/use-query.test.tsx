@@ -1,3 +1,5 @@
+import {Suspense} from 'react';
+import {createRoot, type Root} from 'react-dom/client';
 import {
   afterEach,
   beforeEach,
@@ -7,20 +9,18 @@ import {
   vi,
   type Mock,
 } from 'vitest';
-import {Suspense} from 'react';
-import {createRoot, type Root} from 'react-dom/client';
+import type {Zero} from '../../zero-client/src/client/zero.ts';
+import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {type AbstractQuery} from '../../zql/src/query/query-impl.ts';
 import type {ResultType} from '../../zql/src/query/typed-view.ts';
 import {
   getAllViewsSizeForTesting,
-  ViewStore,
   useSuspenseQuery,
+  ViewStore,
   type QueryResultDetails,
 } from './use-query.tsx';
 import {ZeroProvider} from './zero-provider.tsx';
-import type {Zero} from '../../zero-client/src/client/zero.ts';
-import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 
 function newMockQuery(
   query: string,
@@ -1112,7 +1112,7 @@ describe('useSuspenseQuery', () => {
 
       // Verify that refetch is not available when not in error state
       expect(capturedDetails?.type).toBe('complete');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       expect((capturedDetails as any).refetch).toBeUndefined();
     });
   });

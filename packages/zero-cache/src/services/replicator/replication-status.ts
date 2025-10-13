@@ -145,11 +145,9 @@ function getReplicatedIndexes(db: Database): ReplicatedIndex[] {
 }
 
 function getReplicaSize(db: Database) {
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   const [{page_count: pageCount}] = db.pragma<{page_count: number}>(
     'page_count',
   );
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   const [{page_size: pageSize}] = db.pragma<{page_size: number}>('page_size');
   return pageCount * pageSize;
 }

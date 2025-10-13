@@ -1,13 +1,13 @@
-/* eslint-disable no-console */
+/* oxlint-disable no-console */
 import {
-  type LogLevel,
-  type LogSink,
   type Context,
   LogContext,
+  type LogLevel,
+  type LogSink,
 } from '@rocicorp/logger';
-import {stringify} from './bigint-json.ts';
 import chalk from 'chalk';
 import {pid} from 'node:process';
+import {stringify} from './bigint-json.ts';
 
 export type LogConfig = {
   level: LogLevel;

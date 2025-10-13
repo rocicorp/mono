@@ -12,9 +12,9 @@ export class ProcessScheduler {
   readonly #requestIdle: typeof defaultRequestIdle;
   #scheduledResolver: Resolver<void> | undefined = undefined;
   #runResolver: Resolver<void> | undefined = undefined;
-  // eslint-disable-next-line no-unused-private-class-members -- False positive, this is used in #run
+  // oxlint-disable-next-line no-unused-private-class-members -- False positive, this is used in #run
   #runPromise = Promise.resolve();
-  // eslint-disable-next-line no-unused-private-class-members -- False positive, this is used in #run
+  // oxlint-disable-next-line no-unused-private-class-members -- False positive, this is used in #run
   #throttlePromise = Promise.resolve();
 
   /**
@@ -73,8 +73,7 @@ export class ProcessScheduler {
       // Prevent errors thrown by process from cancelling scheduled runs.
       // this._runPromise is also awaited below and errors are explicitly
       // propagated to promises returned from schedule.
-      // eslint-disable-next-line no-empty
-    } catch (_e) {}
+    } catch {}
     await this.#throttlePromise;
     if (!this.#scheduledResolver) {
       return;

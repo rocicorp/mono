@@ -54,7 +54,7 @@ export type MutatorDefs = {
   [key: string]: (
     tx: WriteTransaction,
     // Not sure how to not use any here...
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     args?: any,
   ) => MutatorReturn;
 };

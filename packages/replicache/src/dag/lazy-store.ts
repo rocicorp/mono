@@ -281,7 +281,6 @@ export class LazyRead implements Read {
           ?.then(read => read.release())
           // If creation of the read failed there is nothing to release.
           // Catch to avoid `Uncaught (in promise)` errors being reported.
-          // eslint-disable-next-line @typescript-eslint/no-empty-function
           .catch(_ => {});
       }
       this.#closed = true;

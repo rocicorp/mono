@@ -26,7 +26,6 @@ import type {HTTPRequestInfo} from '../http-request-info.ts';
 import type {
   Puller,
   PullerResult,
-  PullerResultV1,
   PullResponseOKV1Internal,
   PullResponseV1,
 } from '../puller.ts';
@@ -112,12 +111,12 @@ export async function beginPullV1(
     schemaVersion,
   };
 
-  const {response, httpRequestInfo} = (await callPuller(
+  const {response, httpRequestInfo} = await callPuller(
     lc,
     puller,
     pullReq,
     requestID,
-  )) as PullerResultV1;
+  );
 
   // If Puller did not get a pull response we still want to return the HTTP
   // request info.

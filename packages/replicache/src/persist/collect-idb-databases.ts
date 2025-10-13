@@ -88,7 +88,7 @@ export async function collectIDBDatabases(
 ): Promise<void> {
   const databases = await idbDatabasesStore.getDatabases();
 
-  const dbs = Object.values(databases) as IndexedDBDatabase[];
+  const dbs = Object.values(databases);
   const collectResults = await Promise.all(
     dbs.map(
       async db =>

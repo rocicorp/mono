@@ -242,7 +242,7 @@ suite('fast-check', () => {
             continue;
           }
           const vs = [...set.values()];
-          const v = vs[Math.floor(Math.random() * vs.length)]!;
+          const v = vs[Math.floor(Math.random() * vs.length)];
           orderedSet.delete(v);
           set.delete(v);
           break;

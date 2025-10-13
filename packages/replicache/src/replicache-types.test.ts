@@ -1,4 +1,4 @@
-/* eslint-disable require-await */
+/* oxlint-disable require-await */
 
 import {test} from 'vitest';
 import {assert} from '../../shared/src/asserts.ts';
@@ -275,17 +275,17 @@ test.skip('mut [type checking only]', async () => {
     },
   });
 
-  void (rep.mutate.a() as Promise<number>);
-  void (rep.mutate.b(4) as Promise<string>);
+  void (rep.mutate.a() satisfies Promise<number>);
+  void (rep.mutate.b(4) satisfies Promise<string>);
 
-  void (rep.mutate.c() as Promise<void>);
-  void (rep.mutate.d(2) as Promise<void>);
+  void (rep.mutate.c() satisfies Promise<void>);
+  void (rep.mutate.d(2) satisfies Promise<void>);
 
-  void (rep.mutate.e() as Promise<number>);
-  void (rep.mutate.f(4) as Promise<string>);
+  void (rep.mutate.e() satisfies Promise<number>);
+  void (rep.mutate.f(4) satisfies Promise<string>);
 
-  void (rep.mutate.g() as Promise<void>);
-  void (rep.mutate.h(2) as Promise<void>);
+  void (rep.mutate.g() satisfies Promise<void>);
+  void (rep.mutate.h(2) satisfies Promise<void>);
 
   // @ts-expect-error Expected 1 arguments, but got 0.ts(2554)
   await rep.mutate.b();
@@ -364,8 +364,8 @@ test.skip('scan without index [type checking only]', async () => {
   });
 
   await rep.query(async tx => {
-    (await tx.scan().keys().toArray()) as string[];
-    (await tx.scan({}).keys().toArray()) as string[];
+    await tx.scan().keys().toArray();
+    await tx.scan({}).keys().toArray();
 
     let indexKeys: string[] = await tx.scan({}).keys().toArray();
     indexKeys = await tx.scan({prefix: 'a'}).keys().toArray();

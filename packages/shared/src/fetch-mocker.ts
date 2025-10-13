@@ -27,7 +27,7 @@ function defaultErrorResponse(code: number, message?: string): Response {
 }
 
 export interface SpyOn {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   spyOn(obj: object, methodName: string): any;
 }
 

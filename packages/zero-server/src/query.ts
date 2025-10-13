@@ -31,7 +31,7 @@ export function makeSchemaQuery<S extends Schema>(
     get(
       target: Record<
         string,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
         Omit<Query<S, string, any>, 'materialize' | 'preload'>
       >,
       prop: string,

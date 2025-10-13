@@ -448,7 +448,7 @@ test('accessors', async () => {
   expect(local.valueHash).to.equal(valueHash);
 
   const fakeRead = {
-    // eslint-disable-next-line require-await
+    // oxlint-disable-next-line require-await
     async mustGetChunk() {
       // This test does not read from the dag and if it does, lets just fail.
       throw new Error('Method not implemented.');
@@ -517,7 +517,7 @@ test('getMutationID across commits with different clients', async () => {
   await b.addLocal(clientID);
   await b.addLocal(clientID2);
 
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+  // oxlint-disable-next-line @typescript-eslint/no-non-null-assertion
   const local = b.chain.at(-1)!;
   await withRead(store, async dagRead => {
     expect(await local.getMutationID(clientID, dagRead)).to.equal(2);

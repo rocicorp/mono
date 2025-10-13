@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/naming-convention */
-
 /**
  * There is a new client group due to a another tab loading new code which
  * cannot sync locally with this tab until it updates to the new code. This tab

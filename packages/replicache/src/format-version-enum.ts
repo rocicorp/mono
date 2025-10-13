@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/naming-convention */
-
 export const SDD = 4;
 export const DD31 = 5;
 // V6 added refreshHashes and persistHash to Client to fix ChunkNotFound errors

@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+/* oxlint-disable no-console */
 // Convert mitata JSON output (without samples) to Bencher Metric Format (BMF)
 
 // BMF - Bencher Metric Format
@@ -6,9 +6,7 @@ type BMFMetric = {
   [key: string]: {
     throughput: {
       value: number;
-      // eslint-disable-next-line @typescript-eslint/naming-convention
       lower_value?: number;
-      // eslint-disable-next-line @typescript-eslint/naming-convention
       upper_value?: number;
     };
   };
@@ -63,9 +61,7 @@ function convertMitataJsonToBMF(mitataOutput: MitataJsonOutput): BMFMetric {
       bmf[name] = {
         throughput: {
           value: 1e9 / stats.avg,
-          // eslint-disable-next-line @typescript-eslint/naming-convention
           lower_value: 1e9 / stats.max, // max latency = min throughput
-          // eslint-disable-next-line @typescript-eslint/naming-convention
           upper_value: 1e9 / stats.min, // min latency = max throughput
         },
       };
@@ -128,7 +124,7 @@ async function main() {
     const bmfOutput = convertMitataJsonToBMF(mitataOutput);
     process.stdout.write(JSON.stringify(bmfOutput, null, 2));
   } catch (error) {
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.error('Error converting mitata JSON to BMF:', error);
     process.exit(1);
   }

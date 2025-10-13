@@ -58,12 +58,11 @@ export function assertPullResponseV1(v: unknown): asserts v is PullResponseV1 {
   if (isClientStateNotFoundResponse(v) || isVersionNotSupportedResponse(v)) {
     return;
   }
-  const v2 = v as Record<string, unknown>;
-  if (v2.cookie !== undefined) {
-    assertCookie(v2.cookie);
+  if (v.cookie !== undefined) {
+    assertCookie(v.cookie);
   }
-  assertLastMutationIDChanges(v2.lastMutationIDChanges);
-  assertPatchOperations(v2.patch);
+  assertLastMutationIDChanges(v.lastMutationIDChanges);
+  assertPatchOperations(v.patch);
 }
 
 function assertLastMutationIDChanges(

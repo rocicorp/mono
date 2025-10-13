@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/naming-convention */
-
 export const TimedOut = 0;
 export const Success = 1;
 

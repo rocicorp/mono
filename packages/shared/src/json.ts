@@ -73,7 +73,7 @@ export function deepEqual(
 
   // a cannot be undefined here because either a and b are undefined or their
   // types are different.
-  // eslint-disable-next-line  @typescript-eslint/no-non-null-assertion
+  // oxlint-disable-next-line  @typescript-eslint/no-non-null-assertion
   a = a!;
 
   // 'object'

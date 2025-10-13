@@ -54,7 +54,7 @@ export function mapResultToClientNames<T, S extends Schema>(
   const clientToServerMapper = clientToServer(schema.tables);
 
   function mapResult(result: unknown, schema: Schema, rootTable: string) {
-    // eslint-disable-next-line eqeqeq
+    // oxlint-disable-next-line eqeqeq
     if (result == null) {
       return result;
     }

@@ -93,7 +93,7 @@ beforeEach(() => {
   );
 
   rejectionHandler = event => {
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.error('Test rejection:', event.reason);
   };
 
@@ -106,7 +106,7 @@ afterEach(() => {
 });
 
 test('expose and unexpose', async () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   const g = globalThis as any;
   expect(g.__zero).toBeUndefined();
   const z1 = zeroForTest();

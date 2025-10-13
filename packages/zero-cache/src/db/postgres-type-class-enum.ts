@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/naming-convention */
-
 // Values of the `typtype` column in https://www.postgresql.org/docs/17/catalog-pg-type.html#CATALOG-PG-TYPE
 
 export const Base = 'b';

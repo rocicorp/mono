@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+/* oxlint-disable no-console */
 import {PostgreSqlContainer} from '@testcontainers/postgresql';
 import postgres from 'postgres';
 import {
@@ -211,7 +211,7 @@ export const pgContainerTest = baseTest.extend<{pgConnectionString: string}>({
   pgConnectionString: [
     // vitest requires that the first argument inside a fixture use
     // object destructuring.
-    // eslint-disable-next-line no-empty-pattern
+    // oxlint-disable-next-line no-empty-pattern
     async ({}, use) => {
       const container = await new PostgreSqlContainer(mustInject('pgImage'))
         .withCommand([
@@ -242,7 +242,7 @@ export const test = baseTest.extend<PgTest>({
   testDBs: [
     // vitest requires that the first argument inside a fixture use
     // object destructuring.
-    // eslint-disable-next-line no-empty-pattern
+    // oxlint-disable-next-line no-empty-pattern
     async ({}, use) => {
       const testDBs = new TestDBs(mustInject('pgConnectionString'));
       try {

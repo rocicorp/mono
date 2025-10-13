@@ -143,7 +143,6 @@ function valuesFrom<K>(
     return iterator<K>(() => ({done: true, value: undefined}));
   }
 
-  // eslint-disable-next-line prefer-const
   let [nodeQueue, nodeIndex, leaf] = info;
   let i =
     lowestKey === undefined
@@ -198,7 +197,6 @@ function valuesFromReversed<K>(
     if (highestKey === undefined)
       return iterator<K>(() => ({done: true, value: undefined})); // collection is empty
   }
-  // eslint-disable-next-line prefer-const
   let [nodeQueue, nodeIndex, leaf] =
     findPath(highestKey, root, comparator) ||
     findPath(maxKey, root, comparator)!;
@@ -326,7 +324,7 @@ class BNode<K> {
       }
       // This leaf node is full and must split
       const newRightSibling = this.splitOffRightSide();
-      // eslint-disable-next-line @typescript-eslint/no-this-alias
+      // oxlint-disable-next-line @typescript-eslint/no-this-alias
       let target: BNode<K> = this;
       if (i > this.keys.length) {
         i -= this.keys.length;
@@ -485,7 +483,7 @@ class BNodeInternal<K> extends BNode<K> {
     }
     // no, we must split also
     const newRightSibling = this.splitOffRightSide();
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    // oxlint-disable-next-line @typescript-eslint/no-this-alias
     let target: BNodeInternal<K> = this;
     if (cmp(result.maxKey(), this.maxKey()) > 0) {
       target = newRightSibling;
@@ -642,6 +640,6 @@ function indexOf<K>(
   return mid ^ failXor;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 const emptyLeaf = new BNode<any>([]);
 emptyLeaf.isShared = true;
