@@ -304,7 +304,7 @@ export abstract class AbstractQuery<
         },
         this.customQueryID,
         this.#currentJunction,
-      );
+      ) as AnyQuery;
     }
 
     if (isTwoHop(related)) {
@@ -382,7 +382,7 @@ export abstract class AbstractQuery<
         },
         this.customQueryID,
         this.#currentJunction,
-      );
+      ) as AnyQuery;
     }
 
     throw new Error(`Invalid relationship ${relationship}`);
