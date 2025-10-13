@@ -48,6 +48,7 @@ export async function runAst(
     syncedRowCount: 0,
     start: 0,
     end: 0,
+    elapsed: 0,
     afterPermissions: undefined,
     readRows: undefined,
     readRowCountsByQuery: {},
@@ -117,6 +118,7 @@ export async function runAst(
   }
   result.start = start;
   result.end = end;
+  result.elapsed = end - start;
 
   // Always include the count of synced and vended rows.
   result.syncedRowCount = syncedRowCount;

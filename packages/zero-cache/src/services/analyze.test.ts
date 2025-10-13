@@ -507,4 +507,53 @@ describe('analyzeQuery', () => {
       ),
     ).toBe(true);
   });
+
+  test('result includes elapsed time (regression for elapsed/end deprecation)', async () => {
+    const mockResult: AnalyzeQueryResult = {
+      warnings: [],
+      syncedRowCount: 5,
+      start: 1000,
+      end: 1050,
+      elapsed: 50,
+      readRowCountsByQuery: {
+        users: {
+          'SELECT * FROM users': 5,
+        },
+      },
+    };
+
+    vi.mocked(runAst).mockResolvedValue(mockResult);
+    vi.mocked(explainQueries).mockReturnValue({});
+
+    const result = await analyzeQuery(lc, mockConfig, simpleAST);
+
+    // Verify elapsed is present (new property)
+    expect(result.elapsed).toBe(50);
+
+    // Verify elapsed matches end - start
+    expect(result.elapsed).toBe(result.end - result.start);
+
+    // Verify deprecated 'end' is still present for backward compatibility
+    expect(result.end).toBe(1050);
+    expect(result.start).toBe(1000);
+  });
+
+  test('elapsed is calculated correctly when present', async () => {
+    const mockResult: AnalyzeQueryResult = {
+      warnings: [],
+      syncedRowCount: 10,
+      start: 2000,
+      end: 2150,
+      elapsed: 150,
+      readRowCountsByQuery: {},
+    };
+
+    vi.mocked(runAst).mockResolvedValue(mockResult);
+    vi.mocked(explainQueries).mockReturnValue({});
+
+    const result = await analyzeQuery(lc, mockConfig, simpleAST);
+
+    expect(result.elapsed).toBe(150);
+    expect(result.elapsed).toBe(result.end - result.start);
+  });
 });
