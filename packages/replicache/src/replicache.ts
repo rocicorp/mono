@@ -37,7 +37,6 @@ export function restoreMakeImplForTest() {
   makeImpl = defaultMakeImpl;
 }
 
-// eslint-disable-next-line @typescript-eslint/ban-types
 export class Replicache<MD extends MutatorDefs = {}> {
   readonly #impl: ReplicacheImpl<MD>;
 

@@ -1,9 +1,10 @@
-import React, {useSyncExternalStore} from 'react';
 import {resolver} from '@rocicorp/resolver';
+import React, {useSyncExternalStore} from 'react';
 import {deepClone} from '../../shared/src/deep-clone.ts';
 import type {Immutable} from '../../shared/src/immutable.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
+import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {AbstractQuery} from '../../zql/src/query/query-impl.ts';
@@ -11,7 +12,6 @@ import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 import {useZero} from './zero-provider.tsx';
-import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 
 export type QueryResultDetails = Readonly<
   | {
@@ -71,9 +71,7 @@ export type UseSuspenseQueryOptions = UseQueryOptions & {
   suspendUntil?: 'complete' | 'partial';
 };
 
-// eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
-const reactUse = (React as unknown as {use?: (p: Promise<unknown>) => void})
-  .use;
+const reactUse = (React as {use?: (p: Promise<unknown>) => void}).use;
 const suspend: (p: Promise<unknown>) => void = reactUse
   ? reactUse
   : p => {
@@ -268,7 +266,7 @@ function makeError(
 
 declare const TESTING: boolean;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 type ViewWrapperAny = ViewWrapper<any, any, any>;
 
 const allViews = new WeakMap<ViewStore, Map<string, ViewWrapperAny>>();

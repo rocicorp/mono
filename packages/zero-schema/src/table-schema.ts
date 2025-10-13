@@ -46,7 +46,7 @@ declare const base: unique symbol;
 declare const brand: unique symbol;
 
 export type IsOpaque<T> = T extends {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   readonly [brand]: any;
 }
   ? true

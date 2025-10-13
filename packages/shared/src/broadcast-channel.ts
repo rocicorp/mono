@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* oxlint-disable @typescript-eslint/no-explicit-any */
 
 class NoopBroadcastChannel implements BroadcastChannel {
   readonly name: string;

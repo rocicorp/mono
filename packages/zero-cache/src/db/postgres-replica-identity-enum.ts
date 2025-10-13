@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/naming-convention */
-
 // Values of the `relreplident` column in https://www.postgresql.org/docs/current/catalog-pg-class.html
 
 export const Default = 'd';

@@ -287,6 +287,7 @@ export function buildListQuery(args: ListQueryArgs) {
   const {open, creator, assignee, labels, textFilter} = listContext;
   q = q.where(({and, cmp, exists, or}) =>
     and(
+      // oxlint-disable-next-line eqeqeq
       open != null ? cmp('open', open) : undefined,
       creator
         ? exists('creator', q => q.where('login', creator), {flip: true})

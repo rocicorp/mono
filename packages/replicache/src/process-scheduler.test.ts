@@ -22,7 +22,7 @@ describe('ProcessScheduler', () => {
 
   test('runs process on idle with specified idleTimeoutMs', async () => {
     let testProcessCallCount = 0;
-    // eslint-disable-next-line require-await
+    // oxlint-disable-next-line require-await
     const testProcess = async () => {
       testProcessCallCount++;
     };
@@ -54,7 +54,7 @@ describe('ProcessScheduler', () => {
   test('rejects if process rejects', async () => {
     let testProcessCallCount = 0;
     let testProcessError;
-    // eslint-disable-next-line require-await
+    // oxlint-disable-next-line require-await
     const testProcess = async () => {
       testProcessCallCount++;
       testProcessError = new Error('testProcess error');
@@ -94,7 +94,7 @@ describe('ProcessScheduler', () => {
   test('rejects if process rejects', async () => {
     let testProcessCallCount = 0;
     let testProcessError;
-    // eslint-disable-next-line require-await
+    // oxlint-disable-next-line require-await
     const testProcess = async () => {
       testProcessCallCount++;
       testProcessError = new Error('testProcess error');
@@ -417,7 +417,7 @@ describe('ProcessScheduler', () => {
 
   test('rejects with AbortError if AbortSignal is already aborted', async () => {
     let testProcessCallCount = 0;
-    // eslint-disable-next-line require-await
+    // oxlint-disable-next-line require-await
     const testProcess = async () => {
       testProcessCallCount++;
     };

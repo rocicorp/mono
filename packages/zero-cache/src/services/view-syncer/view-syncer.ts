@@ -217,7 +217,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #authData: TokenData | undefined;
 
   // Not sure why lint can't see that this is used?
-  // eslint-disable-next-line no-unused-private-class-members
+  // oxlint-disable-next-line no-unused-private-class-members
   #httpCookie: string | undefined;
 
   #expiredQueriesTimer: ReturnType<SetTimeout> | 0 = 0;
@@ -464,7 +464,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return true;
   }
 
-  // eslint-disable-next-line no-unused-private-class-members -- False positive, used in #scheduleShutdown
+  // oxlint-disable-next-line no-unused-private-class-members -- False positive, used in #scheduleShutdown
   #shutdownTimer: NodeJS.Timeout | null = null;
 
   #scheduleShutdown(delayMs = 0) {
@@ -1459,7 +1459,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const pipelines = this.#pipelines;
       const hydrations = this.#hydrations;
       const hydrationTime = this.#hydrationTime;
-      // eslint-disable-next-line @typescript-eslint/no-this-alias
+      // oxlint-disable-next-line @typescript-eslint/no-this-alias
       const self = this;
 
       // yield at the very beginning so that the first time slice
@@ -1808,7 +1808,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return this.#runInLockForClient(context, msg, this.#handleInspect);
   }
 
-  // eslint-disable-next-line require-await
+  // oxlint-disable-next-line require-await
   #handleInspect = async (
     lc: LogContext,
     clientID: string,

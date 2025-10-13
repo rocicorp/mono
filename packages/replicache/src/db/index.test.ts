@@ -24,7 +24,7 @@ import {
 
 type IndexOperation = Enum<typeof IndexOperation>;
 
-test('test index key', () => {
+test('index key', () => {
   const testValid = (secondary: string, primary: string) => {
     // Ensure the encoded value is what we expect.
     const encoded = encodeIndexKey([secondary, primary]);

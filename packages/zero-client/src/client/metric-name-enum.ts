@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/naming-convention */
-
 export const TimeToConnectMs = 'time_to_connect_ms';
 export const LastConnectError = 'last_connect_error';
 export const TimeToConnectMsV2 = 'time_to_connect_ms_v2';

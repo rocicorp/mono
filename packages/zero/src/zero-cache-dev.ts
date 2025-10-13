@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-/* eslint-disable no-console */
+
+import '../../shared/src/dotenv.ts';
 
 import {resolver} from '@rocicorp/resolver';
 import {watch} from 'chokidar';
 import {spawn, type ChildProcess} from 'node:child_process';
-import '../../shared/src/dotenv.ts';
 import {createLogContext} from '../../shared/src/logging.ts';
 import {parseOptionsAdvanced} from '../../shared/src/options.ts';
 import {
@@ -118,7 +118,6 @@ async function main() {
         ['ZERO_UPSTREAM_MAX_CONNS']: '6',
 
         // Default NODE_ENV to development mode.
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
         // @ts-ignore NODE_ENV is not always set. Please ignore error.
         ['NODE_ENV']: 'development',
 

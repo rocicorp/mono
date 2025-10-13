@@ -1,5 +1,6 @@
-import {resolver, type Resolver} from '@rocicorp/resolver';
 import '../../../../shared/src/dotenv.ts';
+
+import {resolver, type Resolver} from '@rocicorp/resolver';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import {normalizeZeroConfig} from '../../config/normalize.ts';
 import {getServerVersion, getZeroConfig} from '../../config/zero-config.ts';

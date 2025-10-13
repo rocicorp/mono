@@ -1,5 +1,4 @@
 // Forked from https://github.com/kibae/pg-logical-replication/blob/c55abddc62eadd61bd38922037ecb7a1469fa8c3/src/output-plugins/pgoutput/binary-reader.ts
-/* eslint-disable */
 
 // should not use { fatal: true } because ErrorResponse can use invalid utf8 chars
 const textDecoder = new TextDecoder();

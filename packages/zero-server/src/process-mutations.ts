@@ -1,4 +1,8 @@
+import type {LogContext, LogLevel} from '@rocicorp/logger';
+import {assert} from '../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import * as v from '../../shared/src/valita.ts';
+import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
 import {
   pushBodySchema,
   pushParamsSchema,
@@ -8,12 +12,8 @@ import {
   type PushBody,
   type PushResponse,
 } from '../../zero-protocol/src/push.ts';
-import * as v from '../../shared/src/valita.ts';
-import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
-import {createLogContext} from './logging.ts';
-import type {LogContext, LogLevel} from '@rocicorp/logger';
-import {assert} from '../../shared/src/asserts.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
+import {createLogContext} from './logging.ts';
 
 export interface TransactionProviderHooks {
   updateClientMutationID: () => Promise<{lastMutationID: number | bigint}>;
@@ -315,10 +315,10 @@ function makeAppErrorResponse(m: Mutation, e: unknown): MutationResponse {
 }
 
 export function getMutation(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   mutators: CustomMutatorDefs<any>,
   name: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
 ): CustomMutatorImpl<any, any> {
   let path: string[];
   if (name.includes('|')) {
@@ -327,7 +327,7 @@ export function getMutation(
     path = name.split('.');
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   let mutator: any;
   if (path.length === 1) {
     mutator = mutators[path[0]];

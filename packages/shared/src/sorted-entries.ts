@@ -1,6 +1,6 @@
 import {stringCompare} from './string-compare.ts';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 export function sortedEntries<T extends Record<string, any>>(
   object: T,
 ): [keyof T & string, T[keyof T]][] {

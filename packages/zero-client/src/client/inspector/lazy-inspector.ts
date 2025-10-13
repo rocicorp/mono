@@ -207,7 +207,7 @@ async function getBTree(dagRead: Read, clientID: string): Promise<BTreeRead> {
   return dbRead.map;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 type MapEntry<T extends ReadonlyMap<any, any>> =
   T extends ReadonlyMap<infer K, infer V> ? readonly [K, V] : never;
 

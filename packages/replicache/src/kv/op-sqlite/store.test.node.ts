@@ -30,7 +30,7 @@ vi.mock('@op-engineering/op-sqlite', () => {
       const db = sqlite3(filename);
 
       return {
-        // eslint-disable-next-line require-await
+        // oxlint-disable-next-line require-await
         executeRaw: async (sql: string, params: string[] = []) => {
           const stmt = db.prepare(sql);
           const isSelectQuery = /^\s*select/i.test(sql);

@@ -91,7 +91,6 @@ function useQueryWithZeroProvider<
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
 ) {
   const isZeroSignal = typeof zeroOrZeroSignal === 'function';
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   const MockZeroProvider = (props: {children: JSX.Element}) => (
     <ZeroProvider zero={isZeroSignal ? zeroOrZeroSignal() : zeroOrZeroSignal}>
       {props.children}
@@ -319,7 +318,6 @@ test('useQuery query deps change, reconcile minimizes reactive updates', async (
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
   resetLogs();
 
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
   setQuery(tableQuery.where(({or, cmp}) => or(cmp('a', 1), cmp('a', 10))));
   expect(row0Log).toEqual([]);
   expect(row1Log).toEqual([]);
@@ -334,7 +332,6 @@ test('useQuery query deps change, reconcile minimizes reactive updates', async (
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
   resetLogs();
 
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
   setQuery(tableQuery.where(({or, cmp}) => or(cmp('a', 1), cmp('a', 2))));
   expect(row0Log).toEqual([]);
   expect(row1Log).toEqual([
@@ -477,7 +474,6 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
   resetLogs();
 
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
   setQuery(
     issueQuery
       .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i10')))
@@ -524,7 +520,6 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
   resetLogs();
 
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
   setQuery(
     issueQuery
       .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i2')))
@@ -574,7 +569,6 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   expect(resultDetailsLog).toEqual([{type: 'complete'}]);
   resetLogs();
 
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
   setQuery(
     issueQuery
       .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i2')))
@@ -619,7 +613,6 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
 
   resetLogs();
 
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
   setQuery(
     issueQuery
       .where(({or, cmp}) => or(cmp('id', 'i1'), cmp('id', 'i2')))

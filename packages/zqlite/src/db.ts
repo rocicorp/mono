@@ -36,9 +36,9 @@ export class Database {
       this.#db = new SQLite3Database(path, options);
       this.#threshold = slowQueryThreshold;
 
-      const [{page_size: pageSize}] =
-        //eslint-disable-next-line @typescript-eslint/naming-convention
-        this.pragma<{page_size: number}>('page_size');
+      const [{page_size: pageSize}] = this.pragma<{page_size: number}>(
+        'page_size',
+      );
       this.#pageSize = pageSize;
     } catch (cause) {
       throw new DatabaseInitError(String(cause), {cause});
@@ -72,9 +72,9 @@ export class Database {
   }
 
   compact(freeableBytesThreshold: number) {
-    const [{freelist_count: freelistCount}] =
-      //eslint-disable-next-line @typescript-eslint/naming-convention
-      this.pragma<{freelist_count: number}>('freelist_count');
+    const [{freelist_count: freelistCount}] = this.pragma<{
+      freelist_count: number;
+    }>('freelist_count');
 
     const freeable = this.#bytes(freelistCount);
     if (freeable < freeableBytesThreshold) {
@@ -83,9 +83,9 @@ export class Database {
       );
       return;
     }
-    const [{auto_vacuum: autoVacuumMode}] =
-      //eslint-disable-next-line @typescript-eslint/naming-convention
-      this.pragma<{auto_vacuum: number}>('auto_vacuum');
+    const [{auto_vacuum: autoVacuumMode}] = this.pragma<{auto_vacuum: number}>(
+      'auto_vacuum',
+    );
     if (autoVacuumMode !== AUTO_VACUUM_INCREMENTAL) {
       this.#lc.warn?.(
         `Cannot compact ${mb(freeable)} MB of ` +
@@ -94,15 +94,15 @@ export class Database {
       return;
     }
     const start = Date.now();
-    const [{page_count: pageCountBefore}] =
-      //eslint-disable-next-line @typescript-eslint/naming-convention
-      this.pragma<{page_count: number}>('page_count');
+    const [{page_count: pageCountBefore}] = this.pragma<{page_count: number}>(
+      'page_count',
+    );
 
     this.pragma('incremental_vacuum');
 
-    const [{page_count: pageCountAfter}] =
-      //eslint-disable-next-line @typescript-eslint/naming-convention
-      this.pragma<{page_count: number}>('page_count');
+    const [{page_count: pageCountAfter}] = this.pragma<{page_count: number}>(
+      'page_count',
+    );
 
     this.#lc.info?.(
       `Compacted ${this.#db.name} from ` +
@@ -289,13 +289,13 @@ class LoggingIterableIterator<T> implements IterableIterator<T> {
 
   return(): IteratorResult<T> {
     this.#log();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     return this.#it.return?.() as any;
   }
 
   throw(e: unknown): IteratorResult<T> {
     this.#log();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     return this.#it.throw?.(e) as any;
   }
 }

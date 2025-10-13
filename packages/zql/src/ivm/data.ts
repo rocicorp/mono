@@ -103,7 +103,7 @@ export function makeComparator(
  * semantic for your application.
  */
 export function valuesEqual(a: Value, b: Value): boolean {
-  // eslint-disable-next-line eqeqeq
+  // oxlint-disable-next-line eqeqeq
   if (a == null || b == null) {
     return false;
   }

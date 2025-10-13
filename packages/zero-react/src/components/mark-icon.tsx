@@ -1,6 +1,5 @@
 import type {FC, SVGProps} from 'react';
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
 export const MarkIcon: FC<SVGProps<SVGSVGElement>> = props => (
   <svg
     width="18"

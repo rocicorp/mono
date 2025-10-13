@@ -56,7 +56,7 @@ export function parse(
   return customParse(str, reviver, numberParser);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 function customSerializer(_: string, v: any, type: string) {
   if (type === 'bigint') return v.toString();
 }
@@ -80,7 +80,6 @@ export function stringify(
   return customStringify(obj, replacer, indent, customSerializer);
 }
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
 export const BigIntJSON = {
   parse,
   stringify,

@@ -660,7 +660,7 @@ describe('refresh', () => {
       });
     }
 
-    // eslint-disable-next-line no-unused-vars -- Used in function parameter default
+    // oxlint-disable-next-line no-unused-vars -- Used in function parameter default
     let timestampCounter = 0;
 
     function makeLocalMutation({

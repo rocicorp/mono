@@ -179,7 +179,7 @@ function resolveField(
   }
 
   if (Array.isArray(field)) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     return field.reduce((acc, f) => (acc as any)?.[f], anchor) ?? null;
   }
 
@@ -633,7 +633,7 @@ export function assertOrderingIncludesPK(
   ordering: Ordering,
   pk: PrimaryKey,
 ): void {
-  // eslint-disable-next-line unicorn/prefer-set-has -- Array is more appropriate here for small collections
+  // oxlint-disable-next-line unicorn/prefer-set-has -- Array is more appropriate here for small collections
   const orderingFields = ordering.map(([field]) => field);
   const missingFields = pk.filter(pkField => !orderingFields.includes(pkField));
 
