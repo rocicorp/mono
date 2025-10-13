@@ -30,6 +30,12 @@ type PlanState = {
 };
 
 /**
+ * Maximum number of different starting connections to try during multi-start search.
+ * Higher values explore more of the search space but take longer.
+ */
+const MAX_PLANNING_ATTEMPTS = 6;
+
+/**
  * Central orchestrator for query plan optimization.
  *
  * ARCHITECTURE:
@@ -190,6 +196,7 @@ export class PlannerGraph {
 
   /**
    * Get a summary of the current planning state for debugging.
+   * Uses single-pass iteration for efficiency.
    */
   getPlanSummary(): {
     totalConnections: number;
@@ -199,13 +206,25 @@ export class PlannerGraph {
     pinnedJoins: number;
     flippedJoins: number;
   } {
+    let pinnedConnections = 0;
+    for (const c of this.connections) {
+      if (c.pinned) pinnedConnections++;
+    }
+
+    let pinnedJoins = 0;
+    let flippedJoins = 0;
+    for (const j of this.joins) {
+      if (j.pinned) pinnedJoins++;
+      if (j.type === 'flipped') flippedJoins++;
+    }
+
     return {
       totalConnections: this.connections.length,
-      pinnedConnections: this.connections.filter(c => c.pinned).length,
-      unpinnedConnections: this.connections.filter(c => !c.pinned).length,
+      pinnedConnections,
+      unpinnedConnections: this.connections.length - pinnedConnections,
       totalJoins: this.joins.length,
-      pinnedJoins: this.joins.filter(j => j.pinned).length,
-      flippedJoins: this.joins.filter(j => j.type === 'flipped').length,
+      pinnedJoins,
+      flippedJoins,
     };
   }
 
@@ -257,6 +276,16 @@ export class PlannerGraph {
    * @param state - Snapshot created by capturePlanningSnapshot()
    */
   restorePlanningSnapshot(state: PlanState): void {
+    this.#validateSnapshotShape(state);
+    this.#restoreConnections(state);
+    this.#restoreJoins(state);
+    this.#restoreFanNodes(state);
+  }
+
+  /**
+   * Validate that snapshot shape matches current graph structure.
+   */
+  #validateSnapshotShape(state: PlanState): void {
     assert(
       this.connections.length === state.connections.length,
       'Plan state mismatch: connections',
@@ -277,13 +306,22 @@ export class PlannerGraph {
       this.connections.length === state.connectionConstraints.length,
       'Plan state mismatch: connectionConstraints',
     );
+  }
 
+  /**
+   * Restore connection pinned flags and constraint maps.
+   */
+  #restoreConnections(state: PlanState): void {
     for (let i = 0; i < this.connections.length; i++) {
       this.connections[i].pinned = state.connections[i].pinned;
       this.connections[i].restoreConstraints(state.connectionConstraints[i]);
     }
+  }
 
-    // Need to restore joins by calling flip() or reset() to get to correct state
+  /**
+   * Restore join types and pinned flags.
+   */
+  #restoreJoins(state: PlanState): void {
     for (let i = 0; i < this.joins.length; i++) {
       const join = this.joins[i];
       const targetState = state.joins[i];
@@ -299,7 +337,12 @@ export class PlannerGraph {
         join.pin();
       }
     }
+  }
 
+  /**
+   * Restore FanOut and FanIn types.
+   */
+  #restoreFanNodes(state: PlanState): void {
     for (let i = 0; i < this.fanOuts.length; i++) {
       const fo = this.fanOuts[i];
       const targetType = state.fanOuts[i].type;
@@ -320,14 +363,17 @@ export class PlannerGraph {
   /**
    * Main planning algorithm using multi-start greedy search.
    *
-   * Tries up to min(connections.length, 6) different starting connections.
+   * Tries up to min(connections.length, MAX_PLANNING_ATTEMPTS) different starting connections.
    * For iteration i, picks costs[i].connection as the root, then continues
    * with greedy selection of lowest-cost connections.
    *
    * Returns the best plan found across all attempts.
    */
   plan(debug = false): void {
-    const numAttempts = Math.min(this.connections.length, 6);
+    const numAttempts = Math.min(
+      this.connections.length,
+      MAX_PLANNING_ATTEMPTS,
+    );
     let bestCost = Infinity;
     let bestPlan: PlanState | undefined = undefined;
 
@@ -445,39 +491,45 @@ export class PlannerGraph {
   }
 }
 
-export function pinAndMaybeFlipJoins(connection: PlannerConnection): void {
-  function traverse(from: PlannerNode, node: PlannerNode) {
-    switch (node.kind) {
-      case 'join':
-        if (node.pinned) {
-          // Already pinned, nothing to do
-          // downstream must also be pinned so stop traversal
-          return;
-        }
+/**
+ * Traverse from a connection through the graph, pinning and flipping joins as needed.
+ *
+ * When a connection is selected, we traverse downstream and:
+ * - Pin all joins on the path
+ * - Flip joins where the connection is the child input
+ *
+ * This ensures the selected connection runs in the outer loop.
+ */
+function traverseAndPin(from: PlannerNode, node: PlannerNode): void {
+  switch (node.kind) {
+    case 'join':
+      if (node.pinned) {
+        // Already pinned, nothing to do
+        // downstream must also be pinned so stop traversal
+        return;
+      }
 
-        node.maybeFlip(from);
-        node.pin();
-        traverse(node, node.output);
-        return;
-      case 'fan-out':
-        for (const output of node.outputs) {
-          // fan-out will always be the parent input to its outputs
-          // so it will never cause a flip
-          // but it will pin them.
-          // We do not technically have to pin all outputs
-          //
-          traverse(node, output);
-        }
-        return;
-      case 'fan-in':
-        traverse(node, node.output);
-        return;
-      case 'terminus':
-        return;
-      case 'connection':
-        throw new Error('a connection cannot flow to another connection');
-    }
+      node.maybeFlip(from);
+      node.pin();
+      traverseAndPin(node, node.output);
+      return;
+    case 'fan-out':
+      for (const output of node.outputs) {
+        // fan-out will always be the parent input to its outputs
+        // so it will never cause a flip but it will pin them
+        traverseAndPin(node, output);
+      }
+      return;
+    case 'fan-in':
+      traverseAndPin(node, node.output);
+      return;
+    case 'terminus':
+      return;
+    case 'connection':
+      throw new Error('a connection cannot flow to another connection');
   }
+}
 
-  traverse(connection, connection.output);
+export function pinAndMaybeFlipJoins(connection: PlannerConnection): void {
+  traverseAndPin(connection, connection.output);
 }

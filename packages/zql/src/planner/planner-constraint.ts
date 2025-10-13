@@ -15,9 +15,7 @@ export function mergeConstraints(
   a: PlannerConstraint | undefined,
   b: PlannerConstraint | undefined,
 ): PlannerConstraint | undefined {
-  if (!a && !b) return undefined;
-  const merged: PlannerConstraint = {};
-  if (a) Object.assign(merged, a);
-  if (b) Object.assign(merged, b);
-  return merged;
+  if (!a) return b;
+  if (!b) return a;
+  return {...a, ...b};
 }

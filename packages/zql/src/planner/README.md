@@ -221,6 +221,6 @@ Costs are updated to reflect the new constraints.
 
 ---
 
-We do not support flipping `not exists` so exists within a `not` are not allowed to be flipped.
+## NOT EXISTS Handling
 
-- not exists will be considered non-flippable. So its child inputs will be considered non-selectable? Its a sub-tree tho...
+We do not support flipping `not exists` - these joins are marked as non-flippable during graph construction. This is because flipping a NOT EXISTS would change the semantics of the query (converting an anti-join to a semi-join).
