@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1760348486156,
+  "lastUpdate": 1760386971852,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -53937,6 +53937,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/79636603c32a8ee8b6a3c1d431eabceff197b1fa"
         },
         "date": 1760348474213,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302365,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54477,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111453,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31872,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": false,
+          "id": "b14ea8c4213a57df8abd11fb4de99e3a92d9ceb4",
+          "message": "chore: No need to npm install in CI for syncpack (#5002)",
+          "timestamp": "2025-10-13T20:11:49Z",
+          "tree_id": "93ae8a05da80b62d564ffd7c02517c1233943bef",
+          "url": "https://github.com/rocicorp/mono/commit/b14ea8c4213a57df8abd11fb4de99e3a92d9ceb4"
+        },
+        "date": 1760386959504,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
