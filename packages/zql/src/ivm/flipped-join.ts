@@ -3,6 +3,7 @@ import {binarySearch} from '../../../shared/src/binary-search.ts';
 import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
+import type {Value} from '../../../zero-protocol/src/data.ts';
 import type {Change} from './change.ts';
 import {constraintsAreCompatible, type Constraint} from './constraint.ts';
 import type {Node} from './data.ts';
@@ -113,7 +114,24 @@ export class FlippedJoin implements Input {
   // algorithm should be used:  For each child node, fetch all parent nodes
   // eagerly and then sort using quicksort.
   *fetch(req: FetchRequest): Stream<Node> {
-    const childNodes = [...this.#child.fetch({})];
+    // Translate constraints for the parent on parts of the join key to
+    // constraints for the child.
+    const childConstraint: Record<string, Value> = {};
+    let hasChildConstraint = false;
+    if (req.constraint) {
+      for (const [key, value] of Object.entries(req.constraint)) {
+        const index = this.#parentKey.indexOf(key);
+        if (index !== -1) {
+          hasChildConstraint = true;
+          childConstraint[this.#childKey[index]] = value;
+        }
+      }
+    }
+    const childNodes = [
+      ...this.#child.fetch(
+        hasChildConstraint ? {constraint: childConstraint} : {},
+      ),
+    ];
     // FlippedJoin's split-push change overlay logic is largely
     // the same as Join's with the exception of remove.  For remove,
     // the change is undone here, and then re-applied to parents with order
