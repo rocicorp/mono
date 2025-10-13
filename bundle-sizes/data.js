@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1760201398270,
+  "lastUpdate": 1760348486156,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -53913,6 +53913,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 31900,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": false,
+          "id": "79636603c32a8ee8b6a3c1d431eabceff197b1fa",
+          "message": "chore: Enable more lint rules and fix issues (#4996)\n\nMost import was that the \"jest/no-focused-tests\" had not survived the\ntransition to oxlintr.\n\nAlso, remove all unused directives.\n\nReplace all eslint-disable with oxlint-disable.",
+          "timestamp": "2025-10-13T09:29:53Z",
+          "tree_id": "ccab8b543a726ce08113d0323b060252cdece354",
+          "url": "https://github.com/rocicorp/mono/commit/79636603c32a8ee8b6a3c1d431eabceff197b1fa"
+        },
+        "date": 1760348474213,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302365,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54477,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111453,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31872,
             "unit": "bytes"
           }
         ]
