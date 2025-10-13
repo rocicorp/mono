@@ -19,7 +19,9 @@ export const analyzeQueryResultSchema = v.object({
   syncedRows: v.record(v.array(rowSchema)).optional(),
   syncedRowCount: v.number(),
   start: v.number(),
+  /** @deprecated Use start + elapsed instead */
   end: v.number(),
+  elapsed: v.number().optional(),
   afterPermissions: v.string().optional(),
   /** @deprecated Use readRowCountsByQuery */
   vendedRowCounts: rowCountsBySourceSchema.optional(),
