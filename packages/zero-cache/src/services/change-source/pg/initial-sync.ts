@@ -324,7 +324,6 @@ function startTableCopyWorkers(
   return tableCopiers;
 }
 
-/* eslint-disable @typescript-eslint/naming-convention */
 // Row returned by `CREATE_REPLICATION_SLOT`
 type ReplicationSlot = {
   slot_name: string;
@@ -332,7 +331,6 @@ type ReplicationSlot = {
   snapshot_name: string;
   output_plugin: string;
 };
-/* eslint-enable @typescript-eslint/naming-convention */
 
 // Note: The replication connection does not support the extended query protocol,
 //       so all commands must be sent using sql.unsafe(). This is technically safe

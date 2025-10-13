@@ -126,7 +126,6 @@ async function getLastMutationIDChanges(
   clientGroupID: string,
   fromVersion: number,
 ) {
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   const rows = await t.manyOrNone<{id: string; last_mutation_id: number}>(
     `select id, last_mutation_id
     from replicache_client

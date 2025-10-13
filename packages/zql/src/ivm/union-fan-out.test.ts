@@ -2,14 +2,14 @@ import {expect, test, vi} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Catch} from './catch.ts';
-import {UnionFanOut} from './union-fan-out.ts';
 import {createSource} from './test/source-factory.ts';
+import {UnionFanOut} from './union-fan-out.ts';
 
 const lc = createSilentLogContext();
 const mockFanIn = {
   fanOutStartedPushing() {},
   fanOutDonePushing() {},
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
 } as any;
 
 test('push broadcasts change to all outputs', () => {

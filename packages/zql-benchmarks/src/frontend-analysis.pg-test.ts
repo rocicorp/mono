@@ -1,12 +1,12 @@
-/* eslint-disable no-console */
+/* oxlint-disable no-console */
 import {B, do_not_optimize, type trial} from 'mitata';
-import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
-import {bootstrap} from '../../zql-integration-tests/src/helpers/runner.ts';
-import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
 import {expect, test} from 'vitest';
+import type {JSONValue} from '../../shared/src/json.ts';
 import {must} from '../../shared/src/must.ts';
 import type {Row} from '../../zero-protocol/src/data.ts';
-import type {JSONValue} from '../../shared/src/json.ts';
+import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
+import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
+import {bootstrap} from '../../zql-integration-tests/src/helpers/runner.ts';
 
 const pgContent = await getChinook();
 

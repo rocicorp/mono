@@ -31,13 +31,13 @@ test('deepClone', () => {
   cyclicObject.cycle = cyclicObject;
   expect(() => deepClone(cyclicObject)).toThrow('Cyclic object');
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   const cyclicArray: any = {a: 42, cycle: [null]};
   cyclicArray.cycle[0] = cyclicArray;
   expect(() => deepClone(cyclicArray)).toThrow('Cyclic object');
 
   const sym = Symbol();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   expect(() => deepClone(sym as any)).toThrow('Invalid type: symbol');
 });
 

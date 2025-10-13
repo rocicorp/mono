@@ -1,8 +1,11 @@
 import {type Faker} from '@faker-js/faker';
+import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {ServerSchema} from '../../../../zero-schema/src/server-schema.ts';
 import type {Schema} from '../../../../zero-types/src/schema.ts';
+import {getDataForType} from '../../../../zql-integration-tests/src/helpers/data-gen.ts';
+import {NotImplementedError} from '../../error.ts';
 import {ast} from '../query-impl.ts';
 import {staticQuery} from '../static-query.ts';
-import type {Row} from '../../../../zero-protocol/src/data.ts';
 import {
   randomValueForType,
   selectRandom,
@@ -10,9 +13,6 @@ import {
   type AnyQuery,
   type Rng,
 } from './util.ts';
-import {NotImplementedError} from '../../error.ts';
-import type {ServerSchema} from '../../../../zero-schema/src/server-schema.ts';
-import {getDataForType} from '../../../../zql-integration-tests/src/helpers/data-gen.ts';
 export type Dataset = {
   [table: string]: Row[];
 };
@@ -177,7 +177,7 @@ function augmentQuery(
                 name: columnName,
               })
             : randomValueForType(rng, faker, column.type, column.optional);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       query = query.where(columnName as any, operator, value);
       generations.push(query);
     }

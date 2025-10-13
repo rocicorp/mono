@@ -355,7 +355,7 @@ beforeEach<PgTest>(async ({testDBs}) => {
 function procMutation(
   tableName: string,
   op: 'insert' | 'upsert' | 'update' | 'delete',
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   value: any,
   uid: string | undefined = undefined,
 ) {

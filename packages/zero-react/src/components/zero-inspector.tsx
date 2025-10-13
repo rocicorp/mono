@@ -4,7 +4,6 @@ import type {Zero} from '../../../zero-client/src/client/zero.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {MarkIcon} from './mark-icon.tsx';
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
 const Inspector = lazy(() => import('./inspector.tsx'));
 
 export function ZeroInspector<
@@ -15,7 +14,7 @@ export function ZeroInspector<
   return show ? (
     <Suspense fallback={<div>Loading Inspector...</div>}>
       <Inspector
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
         zero={zero as any}
         onClose={() => setShow(false)}
       />

@@ -34,19 +34,19 @@ vi.stubGlobal('setTimeout', (fn: () => void) => {
 });
 
 describe('Anonymous Telemetry Integration Tests', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   let mockExporter: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   let mockMetricReader: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   let mockMeterProvider: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   let mockMeter: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   let mockHistogram: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   let mockObservableGauge: any;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   let mockObservableCounter: any;
   let originalEnv: NodeJS.ProcessEnv;
 
@@ -584,7 +584,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
       // Find the callback associated with the active users gauge
       const dauCallback = mockObservableGauge.addCallback.mock.calls
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
         .find((call: any) =>
           call[0].toString().includes('activeUsersGetter'),
         )?.[0];
@@ -613,7 +613,7 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
       // Test that the rows synced counter callback works correctly
       const rowsSyncedCallback = mockObservableCounter.addCallback.mock.calls
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
         .find((call: any) =>
           call[0].toString().includes('totalRowsSynced'),
         )?.[0];
@@ -658,13 +658,13 @@ describe('Anonymous Telemetry Integration Tests', () => {
 
       // Trigger the counter callbacks to simulate the periodic export
       const mutationsCallback = mockObservableCounter.addCallback.mock.calls
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
         .find((call: any) =>
           call[0].toString().includes('totalMutations'),
         )?.[0];
 
       const rowsCallback = mockObservableCounter.addCallback.mock.calls
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
         .find((call: any) =>
           call[0].toString().includes('totalRowsSynced'),
         )?.[0];

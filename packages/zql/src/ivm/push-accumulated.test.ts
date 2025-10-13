@@ -1,15 +1,15 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import {expect, test, describe, beforeEach} from 'vitest';
-import {
-  pushAccumulatedChanges,
-  mergeRelationships,
-  makeAddEmptyRelationships,
-  mergeEmpty,
-} from './push-accumulated.js';
+/* oxlint-disable @typescript-eslint/no-explicit-any */
+import {beforeEach, describe, expect, test} from 'vitest';
+import {identity} from '../../../shared/src/sentinels.ts';
 import type {Change} from './change.js';
 import type {InputBase, Output} from './operator.js';
+import {
+  makeAddEmptyRelationships,
+  mergeEmpty,
+  mergeRelationships,
+  pushAccumulatedChanges,
+} from './push-accumulated.js';
 import type {SourceSchema} from './schema.js';
-import {identity} from '../../../shared/src/sentinels.ts';
 
 const mockPusher: InputBase = {
   getSchema: () => mockSchema as any,

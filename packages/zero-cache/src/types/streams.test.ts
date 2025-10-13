@@ -344,7 +344,7 @@ describe('streams with internal acks', () => {
     producer.push({from: 1, to: 2, str: 'bar'});
     producer.push({from: 2, to: 3, str: 'baz'});
 
-    // eslint-disable-next-line no-unused-vars -- Used in switch statement increment
+    // oxlint-disable-next-line no-unused-vars -- Used in switch statement increment
     let i = 0;
     const consumer = await startReceiver();
     for await (const msg of consumer) {

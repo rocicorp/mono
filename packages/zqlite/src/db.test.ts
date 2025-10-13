@@ -158,7 +158,6 @@ test('compaction', () => {
   db.exec(`CREATE TABLE foo(val text);`);
 
   function pageCount() {
-    //eslint-disable-next-line @typescript-eslint/naming-convention
     const [{page_count: n}] = db.pragma<{page_count: number}>('page_count');
     return n;
   }

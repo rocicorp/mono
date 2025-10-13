@@ -26,7 +26,6 @@ type TmcwData = {
       coordinates: [number, number][];
     };
     properties: {
-      /* eslint-disable @typescript-eslint/naming-convention */
       rwdb_rr_id: number;
       mult_track: number;
       electric: number;
@@ -39,7 +38,6 @@ type TmcwData = {
       natlscale: number;
       part: string;
       continent: string;
-      /* eslint-enable @typescript-eslint/naming-convention */
     };
   }[];
 };
