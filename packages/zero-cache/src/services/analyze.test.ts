@@ -3,7 +3,9 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import type {AnalyzeQueryResult} from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {explainQueries} from '../../../zqlite/src/explain-queries.ts';
+import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
+import {mustGetTableSpec} from '../db/lite-tables.ts';
 import {analyzeQuery} from './analyze.ts';
 import {runAst} from './run-ast.ts';
 
@@ -72,7 +74,7 @@ describe('analyzeQuery', () => {
       syncedRowCount: 5,
       start: 1000,
       end: 1050,
-      vendedRowCounts: {
+      readRowCountsByQuery: {
         users: {
           'SELECT * FROM users': 5,
         },
@@ -111,7 +113,7 @@ describe('analyzeQuery', () => {
     );
 
     expect(explainQueries).toHaveBeenCalledWith(
-      mockResult.vendedRowCounts,
+      mockResult.readRowCountsByQuery,
       expect.any(Object),
     );
 
@@ -127,7 +129,7 @@ describe('analyzeQuery', () => {
       syncedRowCount: 3,
       start: 2000,
       end: 2100,
-      vendedRowCounts: {},
+      readRowCountsByQuery: {},
     };
 
     vi.mocked(runAst).mockResolvedValue(mockResult);
@@ -172,7 +174,7 @@ describe('analyzeQuery', () => {
       syncedRowCount: 10,
       start: 1500,
       end: 1600,
-      vendedRowCounts: {
+      readRowCountsByQuery: {
         users: {
           'SELECT * FROM users WHERE active = ? ORDER BY name LIMIT ?': 10,
         },
@@ -192,13 +194,13 @@ describe('analyzeQuery', () => {
     expect(result.syncedRowCount).toBe(10);
   });
 
-  test('handles query with no vended row counts', async () => {
+  test('handles query with no read row counts by query', async () => {
     const mockResult: AnalyzeQueryResult = {
       warnings: [],
       syncedRowCount: 0,
       start: 1000,
       end: 1010,
-      vendedRowCounts: undefined,
+      readRowCountsByQuery: undefined,
     };
 
     vi.mocked(runAst).mockResolvedValue(mockResult);
@@ -210,18 +212,13 @@ describe('analyzeQuery', () => {
     expect(result.plans).toEqual({});
   });
 
-  test('handles empty vended row counts', async () => {
-    const {runAst} = await import('./run-ast.ts');
-    const {explainQueries} = await import(
-      '../../../zqlite/src/explain-queries.ts'
-    );
-
+  test('handles empty read row counts by query', async () => {
     const mockResult: AnalyzeQueryResult = {
       warnings: [],
       syncedRowCount: 0,
       start: 1000,
       end: 1010,
-      vendedRowCounts: {},
+      readRowCountsByQuery: {},
     };
 
     vi.mocked(runAst).mockResolvedValue(mockResult);
@@ -234,8 +231,6 @@ describe('analyzeQuery', () => {
   });
 
   test('propagates errors from runAst', async () => {
-    const {runAst} = await import('./run-ast.ts');
-
     const error = new Error('Query analysis failed');
     vi.mocked(runAst).mockRejectedValue(error);
 
@@ -245,10 +240,6 @@ describe('analyzeQuery', () => {
   });
 
   test('creates proper host delegate with getSource function', async () => {
-    const {runAst} = await import('./run-ast.ts');
-    const {mustGetTableSpec} = await import('../db/lite-tables.ts');
-    const {TableSource} = await import('../../../zqlite/src/table-source.ts');
-
     const mockTableSpec = {
       tableSpec: {primaryKey: ['id']},
       zqlSpec: {},
@@ -297,13 +288,6 @@ describe('analyzeQuery', () => {
   });
 
   test('caches table sources in host delegate', async () => {
-    const {runAst} = await import('./run-ast.ts');
-    const {explainQueries} = await import(
-      '../../../zqlite/src/explain-queries.ts'
-    );
-    const {mustGetTableSpec} = await import('../db/lite-tables.ts');
-    const {TableSource} = await import('../../../zqlite/src/table-source.ts');
-
     const mockTableSpec = {
       tableSpec: {primaryKey: ['id']},
       zqlSpec: {},
@@ -345,8 +329,6 @@ describe('analyzeQuery', () => {
   });
 
   test('passes through all analyze options correctly', async () => {
-    const {runAst} = await import('./run-ast.ts');
-
     const options = {
       syncedRows: false,
       vendedRows: true,
@@ -367,5 +349,162 @@ describe('analyzeQuery', () => {
       true,
       expect.objectContaining(options),
     );
+  });
+
+  test('uses readRowCountsByQuery not deprecated vendedRowCounts for explain queries', async () => {
+    const mockResult: AnalyzeQueryResult = {
+      warnings: [],
+      syncedRowCount: 5,
+      start: 1000,
+      end: 1050,
+      // Only set the new property, not the deprecated one
+      readRowCountsByQuery: {
+        users: {
+          'SELECT * FROM users': 5,
+        },
+      },
+      // Deprecated property should not be used even if present
+      vendedRowCounts: {
+        users: {
+          'SELECT * FROM users': 99,
+        },
+      },
+    };
+
+    const mockPlans = {
+      'SELECT * FROM users': ['SCAN users'],
+    };
+
+    vi.mocked(runAst).mockResolvedValue(mockResult);
+    vi.mocked(explainQueries).mockReturnValue(mockPlans);
+
+    await analyzeQuery(lc, mockConfig, simpleAST);
+
+    // Verify explainQueries is called with readRowCountsByQuery, not vendedRowCounts
+    expect(explainQueries).toHaveBeenCalledWith(
+      mockResult.readRowCountsByQuery,
+      expect.any(Object),
+    );
+
+    // Verify it's NOT called with the deprecated property
+    expect(explainQueries).not.toHaveBeenCalledWith(
+      mockResult.vendedRowCounts,
+      expect.any(Object),
+    );
+  });
+
+  test('plans are populated when readRowCountsByQuery is set (regression test)', async () => {
+    // This test simulates the actual bug: vendedRowCounts was deprecated and no longer set,
+    // but the code was using it. When readRowCountsByQuery is undefined, explainQueries
+    // would be called with undefined/empty object, resulting in no plans.
+    const mockResult: AnalyzeQueryResult = {
+      warnings: [],
+      syncedRowCount: 10,
+      start: 1000,
+      end: 1050,
+      readRowCountsByQuery: {
+        issues: {
+          'SELECT * FROM issues WHERE id = ?': 10,
+        },
+      },
+      // vendedRowCounts is undefined (as it would be from runAst after deprecation)
+      vendedRowCounts: undefined,
+    };
+
+    const expectedPlans = {
+      'SELECT * FROM issues WHERE id = ?': [
+        'SCAN issues',
+        'USING INDEX idx_issues_id',
+      ],
+    };
+
+    vi.mocked(runAst).mockResolvedValue(mockResult);
+    vi.mocked(explainQueries).mockReturnValue(expectedPlans);
+
+    const result = await analyzeQuery(lc, mockConfig, simpleAST);
+
+    // Critical assertion: explainQueries must be called with readRowCountsByQuery
+    // If it were called with vendedRowCounts (undefined), we'd get no plans
+    expect(explainQueries).toHaveBeenCalledWith(
+      mockResult.readRowCountsByQuery,
+      expect.any(Object),
+    );
+
+    // Verify plans are actually populated in the result
+    expect(result.plans).toEqual(expectedPlans);
+    expect(Object.keys(result.plans ?? {})).toHaveLength(1);
+  });
+
+  test('plans default to empty object when readRowCountsByQuery is undefined', async () => {
+    // Edge case: when readRowCountsByQuery is undefined, we should default to {}
+    const mockResult: AnalyzeQueryResult = {
+      warnings: [],
+      syncedRowCount: 0,
+      start: 1000,
+      end: 1010,
+      readRowCountsByQuery: undefined,
+    };
+
+    vi.mocked(runAst).mockResolvedValue(mockResult);
+    vi.mocked(explainQueries).mockReturnValue({});
+
+    const result = await analyzeQuery(lc, mockConfig, simpleAST);
+
+    // Should call explainQueries with empty object (due to ?? {} in the code)
+    expect(explainQueries).toHaveBeenCalledWith({}, expect.any(Object));
+    expect(result.plans).toEqual({});
+  });
+
+  test('real integration: explainQueries produces actual plans from readRowCountsByQuery', async () => {
+    // This test bypasses the mock for explainQueries to verify real plan generation
+    const {explainQueries: realExplainQueries} = await vi.importActual<
+      typeof import('../../../zqlite/src/explain-queries.ts')
+    >('../../../zqlite/src/explain-queries.ts');
+    const {Database: RealDatabase} = await vi.importActual<
+      typeof import('../../../zqlite/src/db.ts')
+    >('../../../zqlite/src/db.ts');
+
+    using db = new RealDatabase(lc, ':memory:');
+
+    // Create a test table with an index
+    db.exec(`
+      CREATE TABLE users (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        email TEXT UNIQUE
+      );
+      CREATE INDEX idx_users_email ON users(email);
+    `);
+
+    // Create readRowCountsByQuery data
+    const readRowCountsByQuery = {
+      users: {
+        'SELECT * FROM users': 10,
+        'SELECT * FROM users WHERE email = ?': 1,
+      },
+    };
+
+    // Call the real explainQueries function
+    const plans = realExplainQueries(readRowCountsByQuery, db);
+
+    // Verify plans were generated
+    expect(Object.keys(plans)).toHaveLength(2);
+    expect(plans).toHaveProperty('SELECT * FROM users');
+    expect(plans).toHaveProperty('SELECT * FROM users WHERE email = ?');
+
+    // Verify plans contain actual SQLite EXPLAIN QUERY PLAN output
+    const fullScanPlan = plans['SELECT * FROM users'];
+    expect(fullScanPlan.length).toBeGreaterThan(0);
+    // SQLite plans should mention SCAN
+    expect(fullScanPlan.some(line => line.includes('SCAN'))).toBe(true);
+
+    const indexQueryPlan = plans['SELECT * FROM users WHERE email = ?'];
+    expect(indexQueryPlan.length).toBeGreaterThan(0);
+    // This query should use an index (SEARCH) or do a SCAN
+    expect(
+      indexQueryPlan.some(
+        line => line.includes('SCAN') || line.includes('SEARCH'),
+      ),
+    ).toBe(true);
   });
 });
