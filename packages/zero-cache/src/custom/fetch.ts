@@ -89,58 +89,33 @@ export async function fetchFromAPIServer(
 }
 
 /**
- * Returns true if:
- * 1. the url is an exact match with one of the allowedUrls
- * 2. an "allowedUrl" has a wildcard for a subdomain, e.g. "https://*.example.com" and the url matches that pattern
+ * Returns true if the url matches one of the allowedUrls, where each allowedUrl is a regex pattern string.
  *
- * Valid wildcard patterns:
- * - "https://*.example.com" matches "https://api.example.com" and "https://www.example.com"
- * - "https://*.example.com" does not match "https://example.com" (no subdomain)
- * - "https://*.example.com" does not match "https://api.example.com/path" (no trailing path)
- * - "https://*.*.example.com" matches "https://api.v1.example.com" and "https://www.v2.example.com"
- * - "https://*.*.example.com" does not match "https://api.example.com" (only one subdomain)
+ * Query parameters are ignored when matching.
+ *
+ * Example regex patterns:
+ * - "^https://api\\.example\\.com/endpoint$" - Exact match for a specific URL
+ * - "^https://[^.]+\\.example\\.com/endpoint$" - Matches any single subdomain (e.g., "https://api.example.com/endpoint")
+ * - "^https://[^.]+\\.[^.]+\\.example\\.com/endpoint$" - Matches two subdomains (e.g., "https://api.v1.example.com/endpoint")
+ * - "^https://(api|www)\\.example\\.com/" - Matches specific subdomains
+ * - "^https://api\\.v\\d+\\.example\\.com/" - Matches versioned subdomains (e.g., "https://api.v1.example.com", "https://api.v2.example.com")
  */
 export function urlMatch(url: string, allowedUrls: string[]): boolean {
-  assert(url.includes('*') === false, 'URL to fetch may not include `*`');
   // ignore query parameters in the URL
   url = url.split('?')[0];
 
-  for (let allowedUrl of allowedUrls) {
-    // ignore query parameters in the allowed URL
-    allowedUrl = allowedUrl.split('?')[0];
-    if (url === allowedUrl) {
-      return true; // exact match
-    }
-
-    const parts = allowedUrl.split('*');
-
-    if (parts.length === 1) {
-      continue; // no wildcard, already checked above
-    }
-
-    let currentStr = url;
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      if (!currentStr.startsWith(part)) {
-        break;
-      }
-
-      currentStr = currentStr.slice(part.length);
-      if (currentStr === '' && i < parts.length - 1) {
-        // if we reach the end of the string but still have more parts to match, it's not a match
-        break;
-      } else if (currentStr === '' && i === parts.length - 1) {
-        // if we reach the end of the string and this is the last part, it's a match
+  for (const allowedUrl of allowedUrls) {
+    try {
+      // Create a regex from the allowed URL pattern
+      const regex = new RegExp(allowedUrl);
+      if (regex.test(url)) {
         return true;
       }
-
-      // consume the rest of the string up to a .
-      const nextDotIndex = currentStr.indexOf('.');
-      if (nextDotIndex === -1) {
-        // no dot? then the wildcard rules don't apply, so we can stop checking
-        break;
-      }
-      currentStr = currentStr.slice(nextDotIndex);
+    } catch (e) {
+      // If the regex is invalid, log and skip it
+      throw new Error(
+        `Invalid regex pattern in allowedUrls: "${allowedUrl}". Error: ${e instanceof Error ? e.message : String(e)}`,
+      );
     }
   }
   return false;
