@@ -1,12 +1,14 @@
-import {vi, test, expect} from 'vitest';
 import {renderHook} from '@solidjs/testing-library';
-import {useZero, ZeroProvider} from './use-zero.ts';
 import {createSignal, type JSX} from 'solid-js';
-import type {Schema, Zero} from '../../zero/src/zero.ts';
+import {expect, test, vi} from 'vitest';
+import type {Zero} from '../../zero-client/src/client/zero.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import {useZero, ZeroProvider} from './use-zero.ts';
 
-vi.mock('../../zero/src/zero.ts', async importOriginal => ({
-  ...(await importOriginal<typeof import('../../zero/src/zero.ts')>()),
-  // eslint-disable-next-line @typescript-eslint/naming-convention
+vi.mock('../../zero-client/src/client/zero.ts', async importOriginal => ({
+  ...(await importOriginal<
+    typeof import('../../zero-client/src/client/zero.ts')
+  >()),
   Zero: class {
     closed = false;
 
@@ -26,7 +28,6 @@ class FakeZero {
 
 test('if zero options change ZeroProvider closes previous instance if it created it', () => {
   const [server, setServer] = createSignal('foo');
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   const MockZeroProvider = (props: {children: JSX.Element}) => (
     <ZeroProvider
       server={server()}
@@ -55,7 +56,6 @@ test('if zero options change ZeroProvider closes previous instance if it created
 test('if Zero instance changes, ZeroProvider does not close Zero instance it did not create', () => {
   const fakeZero0 = new FakeZero() as unknown as Zero<Schema>;
   const [zero, setZero] = createSignal<Zero<Schema, undefined>>(fakeZero0);
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   const MockZeroProvider = (props: {children: JSX.Element}) => (
     <ZeroProvider zero={zero()}>{props.children}</ZeroProvider>
   );
@@ -81,7 +81,6 @@ test('if Zero instance changes, ZeroProvider does not close Zero instance it did
 
 test('ZeroProvider does not recreate zero if just children change', () => {
   const [wrapInDiv, setWrapInDiv] = createSignal(false);
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   const MockZeroProvider = (props: {children: JSX.Element}) => (
     <ZeroProvider
       server={'foo'}
@@ -113,7 +112,6 @@ test('if zero options change but are === to prev, instance ZeroProvider does not
     tables: {},
     relationships: {},
   });
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   const MockZeroProvider = (props: {children: JSX.Element}) => (
     <ZeroProvider server={server()} userID={'u'} schema={schema()}>
       {props.children}

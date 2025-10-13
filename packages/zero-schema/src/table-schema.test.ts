@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/ban-types */
 import {expectTypeOf, test} from 'vitest';
 import {relationships} from './builder/relationship-builder.ts';
 import {createSchema} from './builder/schema-builder.ts';

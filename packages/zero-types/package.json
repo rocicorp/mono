@@ -1,0 +1,19 @@
+{
+  "name": "zero-types",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check-types": "tsc",
+    "check-types:watch": "tsc --watch",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "oxlint --type-aware src/"
+  },
+  "devDependencies": {
+    "@rocicorp/prettier-config": "^0.3.0",
+    "shared": "0.0.0",
+    "typescript": "~5.8.2"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}

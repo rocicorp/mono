@@ -93,7 +93,7 @@ describe('notify', () => {
       dbTransaction: {
         wrappedTransaction: sql,
       },
-      // eslint-disable-next-line no-explicit-any
+      // oxlint-disable-next-line no-explicit-any
     }) as any;
 
   describe('gatherRecipients', () => {

@@ -1,14 +1,16 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* oxlint-disable @typescript-eslint/no-explicit-any */
 import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {type AST, type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
-import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
-  LastInTuple,
   SchemaValueToTSType,
   SchemaValueWithCustomType,
+} from '../../../zero-types/src/schema-value.ts';
+import type {
+  LastInTuple,
   TableSchema,
-} from '../../../zero-schema/src/table-schema.ts';
+  Schema as ZeroSchema,
+} from '../../../zero-types/src/schema.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {CustomQueryID} from './named.ts';

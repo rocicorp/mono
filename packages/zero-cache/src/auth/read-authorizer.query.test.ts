@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/naming-convention */
-/* eslint-disable arrow-body-style */
+/* oxlint-disable arrow-body-style */
 import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
@@ -297,7 +296,6 @@ const schema = createSchema({
 
 type Schema = typeof schema;
 
-// eslint-disable-next-line arrow-body-style
 const permissions = must(
   await definePermissions<AuthData, typeof schema>(schema, () => {
     const isCommentCreator = (
@@ -348,7 +346,7 @@ const permissions = must(
       authData: AuthData,
       {cmpLit}: ExpressionBuilder<ZeroSchema, string>,
     ) => cmpLit(authData.role, '=', 'admin');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     type TODO = any;
     const isAdminThroughNestedData = (
       authData: AuthData,
@@ -1537,7 +1535,7 @@ describe('read permissions against nested paths', () => {
 });
 
 // maps over nodes, drops all information from `row` except the id
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 function toIdsOnly(nodes: CaughtNode[]): any[] {
   return nodes.map(node => {
     return {

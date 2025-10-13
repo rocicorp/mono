@@ -21,14 +21,17 @@ import {navigate, useHistoryState} from 'wouter/use-browser-location';
 import {findLastIndex} from '../../../../../packages/shared/src/find-last-index.ts';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {difference} from '../../../../../packages/shared/src/set-utils.ts';
+import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
+import type {NotificationType} from '../../../shared/mutators.ts';
+import {queries, type ListContextParams} from '../../../shared/queries.ts';
 import {
   type CommentRow,
   type IssueRow,
   type UserRow,
 } from '../../../shared/schema.ts';
+import circle from '../../assets/icons/circle.svg';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
-import circle from '../../assets/icons/circle.svg';
 import {commentQuery} from '../../comment-query.ts';
 import {AvatarImage} from '../../components/avatar-image.tsx';
 import {Button} from '../../components/button.tsx';
@@ -61,13 +64,10 @@ import {LRUCache} from '../../lru-cache.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {CACHE_NAV} from '../../query-cache-policy.ts';
 import {links, type ZbugsHistoryState} from '../../routes.ts';
+import {preload} from '../../zero-preload.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
-import {queries, type ListContextParams} from '../../../shared/queries.ts';
-import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
-import {preload} from '../../zero-preload.ts';
-import type {NotificationType} from '../../../shared/mutators.ts';
 
 const {emojiChange, issueDetail, issueListV2} = queries;
 
@@ -734,22 +734,20 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   );
 }
 
-const MyToastContainer = memo(({position}: {position: 'top' | 'bottom'}) => {
-  return (
-    <ToastContainer
-      hideProgressBar={true}
-      theme="dark"
-      containerId={position}
-      newestOnTop={position === 'bottom'}
-      closeButton={false}
-      position={`${position}-center`}
-      closeOnClick={true}
-      limit={3}
-      // Auto close is broken. So we will manage it ourselves.
-      autoClose={false}
-    />
-  );
-});
+const MyToastContainer = memo(({position}: {position: 'top' | 'bottom'}) => (
+  <ToastContainer
+    hideProgressBar={true}
+    theme="dark"
+    containerId={position}
+    newestOnTop={position === 'bottom'}
+    closeButton={false}
+    position={`${position}-center`}
+    closeOnClick={true}
+    limit={3}
+    // Auto close is broken. So we will manage it ourselves.
+    autoClose={false}
+  />
+));
 
 // This cache is stored outside the state so that it can be used between renders.
 const commentSizeCache = new LRUCache<string, number>(2000);

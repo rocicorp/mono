@@ -5,8 +5,8 @@ import {
   type Condition,
   type Parameter,
 } from '../../zero-protocol/src/ast.ts';
+import {defaultFormat} from '../../zero-types/src/format.ts';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
-import {defaultFormat, staticParam} from '../../zql/src/query/query-impl.ts';
 import type {Query} from '../../zql/src/query/query.ts';
 import {StaticQuery} from '../../zql/src/query/static-query.ts';
 import type {Schema} from './builder/schema-builder.ts';
@@ -314,3 +314,14 @@ function baseTracker(anchor: Anchor) {
 
 export const authDataRef = baseTracker('authData');
 export const preMutationRowRef = baseTracker('preMutationRow');
+export function staticParam(
+  anchorClass: 'authData' | 'preMutationRow',
+  field: string | string[],
+): Parameter {
+  return {
+    type: 'static',
+    anchor: anchorClass,
+    // for backwards compatibility
+    field: field.length === 1 ? field[0] : field,
+  };
+}

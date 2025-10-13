@@ -33,13 +33,13 @@ export default async function () {
     await page.goto('https://zbugs.vercel.app/?keepalive=1');
     await page.locator('input[name="_vercel_password"]').type('zql');
 
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.info('entered password');
 
     await page.locator('button.submit').click();
     await page.waitForSelector('.issue-list .row');
 
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.info('got through');
 
     const delay = 0.2;
@@ -48,7 +48,7 @@ export default async function () {
       // We disconnect the socket after a certain amount of time in the
       // background, so bring to foreground periodically.
       await page.bringToFront();
-      // eslint-disable-next-line no-console
+      // oxlint-disable-next-line no-console
       console.log('bringing to front');
 
       await sleep(delay);

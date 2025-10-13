@@ -37,7 +37,7 @@ export class CustomKeySet<V> {
 
   forEach(
     callbackfn: (value: V, value2: V, set: CustomKeySet<V>) => void,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     thisArg?: any,
   ): void {
     this.#map.forEach(value => {

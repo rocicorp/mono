@@ -27,7 +27,6 @@ test('protocol versions', () => {
   const current = {
     changeStreamMessageSchema,
     changeSourceUpstreamSchema,
-    // eslint-disable-next-line @typescript-eslint/naming-convention
     CHANGE_SOURCE_PATH,
   };
 

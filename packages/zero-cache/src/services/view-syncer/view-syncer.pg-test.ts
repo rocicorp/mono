@@ -26,6 +26,7 @@ import type {
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
+import {type ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {type PgTest, test} from '../../test/db.ts';
@@ -40,7 +41,6 @@ import {updateReplicationWatermark} from '../replicator/schema/replication-state
 import {type FakeReplicator} from '../replicator/test-utils.ts';
 import {CVRStore} from './cvr-store.ts';
 import {CVRQueryDrivenUpdater} from './cvr.ts';
-import {type ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
 import {DrainCoordinator} from './drain-coordinator.ts';
 import {ttlClockFromNumber} from './ttl-clock.ts';
 import {
@@ -103,6 +103,7 @@ describe('view-syncer/service', () => {
     // Sanity check that the system time is the mocked time.
     expect(vi.getRealSystemTime()).not.toBe(vi.getMockedSystemTime());
     vi.setSystemTime(Date.now() + delta);
+    // oxlint-disable-next-line no-non-null-assertion
     const fn = setTimeoutFn.mock.lastCall![0];
     fn();
   }

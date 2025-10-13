@@ -190,12 +190,12 @@ async function* scanIterator<Options extends ScanOptions, Value>(
     if (exclusive) {
       exclusive = true;
       if (isIndexScan) {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        // oxlint-disable-next-line @typescript-eslint/no-non-null-assertion
         if (shouldSkipIndexScan(key as IndexKey, options.start!.key)) {
           continue;
         }
       } else {
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        // oxlint-disable-next-line @typescript-eslint/no-non-null-assertion
         if (shouldSkipNonIndexScan(key as string, options.start!.key)) {
           continue;
         }

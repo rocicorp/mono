@@ -59,14 +59,14 @@ export function getServer(
 ): HTTPString | null {
   const WS = getBrowserGlobal('WebSocket');
   if (!WS) {
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.warn(
       'Zero started in an unsupported environment, no data will be synced.',
     );
     return null;
   }
   if (server === undefined || server === null) {
-    // eslint-disable-next-line no-console
+    // oxlint-disable-next-line no-console
     console.warn(
       'Zero starting up with no server URL. No data will be synced.',
     );

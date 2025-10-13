@@ -1,4 +1,3 @@
-/* eslint-disable no-irregular-whitespace */
 import {Readable, Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import {beforeEach, describe, expect} from 'vitest';

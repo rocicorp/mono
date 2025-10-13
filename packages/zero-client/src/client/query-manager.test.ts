@@ -28,12 +28,12 @@ import * as v from '../../../shared/src/valita.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
 import {upPutOpSchema} from '../../../zero-protocol/src/queries-patch.ts';
+import {hashOfNameAndArgs} from '../../../zero-protocol/src/query-hash.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import {MAX_TTL_MS, type TTL} from '../../../zql/src/query/ttl.ts';
 import {toGotQueriesKey} from './keys.ts';
 import {MutationTracker} from './mutation-tracker.ts';
 import {QueryManager} from './query-manager.ts';
-import {hashOfNameAndArgs} from '../../../zero-protocol/src/query-hash.ts';
 
 const slowMaterializeThreshold = Infinity; // Disable slow materialization logs for tests.
 
@@ -594,7 +594,7 @@ test('remove, max recent queries size 2', () => {
   ]);
 });
 
-test('test add/remove/add/remove changes lru order max recent queries size 2', () => {
+test('add/remove/add/remove changes lru order max recent queries size 2', () => {
   const send = vi.fn<(arg: ChangeDesiredQueriesMessage) => void>();
   const maxRecentQueriesSize = 2;
   const mutationTracker = new MutationTracker(lc, ackMutations);

@@ -11,11 +11,8 @@ export async function callDefaultFetch<Body>(
 ): Promise<readonly [Response | undefined, HTTPRequestInfo]> {
   const init = {
     headers: {
-      // eslint-disable-next-line @typescript-eslint/naming-convention
       'Content-type': 'application/json',
-      // eslint-disable-next-line @typescript-eslint/naming-convention
       'Authorization': auth,
-      // eslint-disable-next-line @typescript-eslint/naming-convention
       'X-Replicache-RequestID': requestID,
     },
     body: JSON.stringify(requestBody),

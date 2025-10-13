@@ -6,6 +6,7 @@ import type {Read} from './db/read.ts';
 import type {Write} from './db/write.ts';
 import {deepFreeze} from './frozen-json.ts';
 import type {IndexDefinition} from './index-defs.ts';
+import type {ZeroTxData} from './replicache-options.ts';
 import type {ScanResult} from './scan-iterator.ts';
 import {ScanResultImpl, fromKeyForIndexScanInternal} from './scan-iterator.ts';
 import {
@@ -19,7 +20,6 @@ import {
 import type {ScanSubscriptionInfo} from './subscriptions.ts';
 import type {ClientID} from './sync/ids.ts';
 import {rejectIfClosed, throwIfClosed} from './transaction-closed-error.ts';
-import type {ZeroTxData} from './replicache-options.ts';
 
 export type TransactionEnvironment = 'client' | 'server';
 export type TransactionLocation = TransactionEnvironment;
@@ -140,13 +140,13 @@ export class ReadTransactionImpl implements ReadTransaction {
     );
   }
 
-  // eslint-disable-next-line require-await
+  // oxlint-disable-next-line require-await
   async has(key: string): Promise<boolean> {
     throwIfClosed(this.dbtx);
     return this.dbtx.has(key);
   }
 
-  // eslint-disable-next-line require-await
+  // oxlint-disable-next-line require-await
   async isEmpty(): Promise<boolean> {
     throwIfClosed(this.dbtx);
     return this.dbtx.isEmpty();

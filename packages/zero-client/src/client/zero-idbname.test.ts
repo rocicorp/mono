@@ -1,8 +1,8 @@
 import {expect, test} from 'vitest';
 import {h64} from '../../../shared/src/hash.ts';
-import {Zero} from './zero.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import {Zero} from './zero.ts';
 
 const schema = createSchema({
   tables: [
@@ -19,7 +19,7 @@ const userID = 'test-user';
 const storageKey = 'test-storage';
 
 test('idbName generation with URL configuration', async () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   const testCases: any[] = [
     {
       name: 'basic mutate and query URLs',

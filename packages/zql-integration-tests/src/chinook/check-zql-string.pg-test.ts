@@ -1,12 +1,12 @@
+import {test} from 'vitest';
+import {defaultFormat} from '../../../zql/src/ivm/default-format.ts';
+import {StaticQuery} from '../../../zql/src/query/static-query.ts';
+import type {AnyStaticQuery} from '../../../zql/src/query/test/util.ts';
+import '../helpers/comparePg.ts';
 import {bootstrap, runAndCompare} from '../helpers/runner.ts';
+import {staticToRunnable} from '../helpers/static.ts';
 import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
-import {test} from 'vitest';
-import '../helpers/comparePg.ts';
-import {defaultFormat} from '../../../zql/src/query/query-impl.ts';
-import type {AnyStaticQuery} from '../../../zql/src/query/test/util.ts';
-import {StaticQuery} from '../../../zql/src/query/static-query.ts';
-import {staticToRunnable} from '../helpers/static.ts';
 
 const QUERY_STRING = `track
   .whereExists('invoiceLines', q =>

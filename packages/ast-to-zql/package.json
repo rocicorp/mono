@@ -20,8 +20,7 @@
     "shared": "0.0.0",
     "zero-cache": "0.0.0",
     "zero-protocol": "0.0.0",
-    "zero-schema": "0.0.0",
-    "zql": "0.0.0"
+    "zero-schema": "0.0.0"
   },
   "prettier": "@rocicorp/prettier-config"
 }

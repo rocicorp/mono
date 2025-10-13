@@ -11,7 +11,6 @@ import {
 } from './test-util.ts';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
 import {assert, assertNotUndefined} from '../../shared/src/asserts.ts';
@@ -44,10 +43,9 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-async function deleteClientGroupForTesting<
-  // eslint-disable-next-line @typescript-eslint/ban-types
-  MD extends MutatorDefs = {},
->(rep: ReplicacheTest<MD>) {
+async function deleteClientGroupForTesting<MD extends MutatorDefs = {}>(
+  rep: ReplicacheTest<MD>,
+) {
   const clientGroupID = await rep.clientGroupID;
   assert(clientGroupID);
   await withWriteNoImplicitCommit(rep.perdag, async tx => {

@@ -1,19 +1,19 @@
-import type {FC} from 'react';
-import {useMemo} from 'react';
 import {
-  ReactFlow,
   Background,
   Controls,
-  type Node,
   type Edge,
-  MarkerType,
   Handle,
+  MarkerType,
+  type Node,
   Position,
-  useNodesState,
-  useEdgesState,
+  ReactFlow,
   ReactFlowProvider,
+  useEdgesState,
+  useNodesState,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import type {FC} from 'react';
+import {useMemo} from 'react';
 import type {Graph} from '../types.ts';
 
 interface DataFlowGraphProps {
@@ -143,6 +143,7 @@ const calculateLayout = (nodes: Graph['nodes'], edges: Graph['edges']) => {
     if (!adjList.has(edge.source)) {
       adjList.set(edge.source, []);
     }
+    // oxlint-disable-next-line no-non-null-assertion
     adjList.get(edge.source)!.push(edge.dest);
   });
 
@@ -157,6 +158,7 @@ const calculateLayout = (nodes: Graph['nodes'], edges: Graph['edges']) => {
   });
 
   while (queue.length > 0) {
+    // oxlint-disable-next-line no-non-null-assertion
     const {nodeId, level} = queue.shift()!;
     const children = adjList.get(nodeId) || [];
 
@@ -191,6 +193,7 @@ const calculateLayout = (nodes: Graph['nodes'], edges: Graph['edges']) => {
     const startX = -totalWidth / 2;
 
     nodeIds.forEach((nodeId, index) => {
+      // oxlint-disable-next-line no-non-null-assertion
       const node = nodes.find(n => n.id === nodeId)!;
       const x = startX + index * nodeWidth + nodeWidth / 2;
 
@@ -215,23 +218,25 @@ const DataFlowGraphInner: FC<DataFlowGraphProps> = ({graph}) => {
     return calculateLayout(graph.nodes, graph.edges);
   }, [graph]);
 
-  const flowEdges = useMemo(() => {
-    return graph.edges.map(
-      edge =>
-        ({
-          id: `${edge.source}-${edge.dest}`,
-          source: edge.source.toString(),
-          target: edge.dest.toString(),
-          type: 'smoothstep',
-          animated: false,
-          style: {stroke: '#64748B', strokeWidth: 2},
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            color: '#64748B',
-          },
-        }) as Edge,
-    );
-  }, [graph.edges]);
+  const flowEdges = useMemo(
+    () =>
+      graph.edges.map(
+        edge =>
+          ({
+            id: `${edge.source}-${edge.dest}`,
+            source: edge.source.toString(),
+            target: edge.dest.toString(),
+            type: 'smoothstep',
+            animated: false,
+            style: {stroke: '#64748B', strokeWidth: 2},
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              color: '#64748B',
+            },
+          }) as Edge,
+      ),
+    [graph.edges],
+  );
 
   const [nodes, , onNodesChange] = useNodesState(layoutNodes);
   const [edges, , onEdgesChange] = useEdgesState(flowEdges);
@@ -272,10 +277,8 @@ const DataFlowGraphInner: FC<DataFlowGraphProps> = ({graph}) => {
   );
 };
 
-export const DataFlowGraph: FC<DataFlowGraphProps> = ({graph}) => {
-  return (
-    <ReactFlowProvider>
-      <DataFlowGraphInner graph={graph} />
-    </ReactFlowProvider>
-  );
-};
+export const DataFlowGraph: FC<DataFlowGraphProps> = ({graph}) => (
+  <ReactFlowProvider>
+    <DataFlowGraphInner graph={graph} />
+  </ReactFlowProvider>
+);

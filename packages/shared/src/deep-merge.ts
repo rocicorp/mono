@@ -1,6 +1,5 @@
 type IsPlainObject<T> = T extends object
-  ? // eslint-disable-next-line @typescript-eslint/ban-types, @typescript-eslint/no-explicit-any
-    T extends Function | any[]
+  ? T extends Function | unknown[]
     ? false
     : true
   : false;

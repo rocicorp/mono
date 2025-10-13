@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/naming-convention */
 import {beforeEach, expect, test} from 'vitest';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
@@ -10,6 +9,7 @@ import {
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
+import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import {
   any,
   compile,
@@ -22,7 +22,6 @@ import {
   simple,
   type Spec,
 } from './compiler.ts';
-import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import {formatPgInternalConvert} from './sql.ts';
 
 // Tests the output of basic primitives.

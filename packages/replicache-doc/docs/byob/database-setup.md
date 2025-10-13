@@ -20,7 +20,7 @@ For this demo, we'll use [pg-mem](https://github.com/oguimbal/pg-mem) — an in-
 Create a new file `server/src/db.ts` with this code:
 
 ```ts
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// oxlint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck
 import {newDb} from 'pg-mem';
 import pgp, {IDatabase, ITask} from 'pg-promise';
@@ -40,11 +40,11 @@ function getDB() {
   if (!global.__db) {
     global.__db = initDB();
   }
-  // eslint-disable-next-line @typescript-eslint/ban-types
+  // oxlint-disable-next-line @typescript-eslint/ban-types
   return global.__db as IDatabase<{}>;
 }
 
-// eslint-disable-next-line @typescript-eslint/ban-types
+// oxlint-disable-next-line @typescript-eslint/ban-types
 export type Transaction = ITask<{}>;
 type TransactionCallback<R> = (t: Transaction) => Promise<R>;
 

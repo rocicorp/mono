@@ -1,26 +1,26 @@
-/* eslint-disable no-console */
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import {useState, useCallback, useEffect} from 'react';
+/* oxlint-disable no-console */
+/* oxlint-disable @typescript-eslint/no-explicit-any */
+import {useCallback, useEffect, useState} from 'react';
 import {Panel, PanelGroup, PanelResizeHandle} from 'react-resizable-panels';
-import {QueryEditor} from './components/query-editor.tsx';
-import {ResultsViewer} from './components/results-viewer.tsx';
-import {QueryHistory} from './components/query-history.tsx';
+import * as ts from 'typescript';
+import './App.css';
 import {CredentialsModal} from './components/credentials-modal.tsx';
-import {VerticalNav} from './components/vertical-nav.tsx';
+import {QueryEditor} from './components/query-editor.tsx';
+import {QueryHistory} from './components/query-history.tsx';
+import {ResultsViewer} from './components/results-viewer.tsx';
 import {ServerStatusModal} from './components/server-status-modal.tsx';
+import {VerticalNav} from './components/vertical-nav.tsx';
 import {
   type QueryHistoryItem,
   type RemoteRunResult,
   type Result,
 } from './types.ts';
-import './App.css';
-// eslint-disable-next-line no-restricted-imports
+// oxlint-disable-next-line no-restricted-imports
 import * as zero from '../../../packages/zero-client/src/mod.ts';
-import {VizDelegate} from './query-delegate.ts';
-import * as ts from 'typescript';
-import {clientToServer} from '../../../packages/zero-schema/src/name-mapper.ts';
 import {mapAST} from '../../../packages/zero-protocol/src/ast.ts';
+import {clientToServer} from '../../../packages/zero-schema/src/name-mapper.ts';
 import {delegateSymbol} from '../../../packages/zql/src/query/query.ts';
+import {VizDelegate} from './query-delegate.ts';
 
 type AnyQuery = zero.Query<any, any, any>;
 const DEFAULT_QUERY = `const {
@@ -221,7 +221,6 @@ function App() {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              // eslint-disable-next-line @typescript-eslint/naming-convention
               'Authorization': `Basic ${credentials}`,
             },
             body: JSON.stringify({

@@ -1,10 +1,10 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import {expect, test, describe, vi} from 'vitest';
+/* oxlint-disable @typescript-eslint/no-explicit-any */
+import {describe, expect, test, vi} from 'vitest';
+import type {Node} from './data.js';
+import type {FetchRequest, Operator} from './operator.js';
+import type {SourceSchema} from './schema.js';
 import {UnionFanIn} from './union-fan-in.js';
 import type {UnionFanOut} from './union-fan-out.js';
-import type {Operator, FetchRequest} from './operator.js';
-import type {SourceSchema} from './schema.js';
-import type {Node} from './data.js';
 
 const mockSchema: SourceSchema = {
   tableName: 'test',
