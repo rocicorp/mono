@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1760471104430,
+  "lastUpdate": 1760476886237,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54025,6 +54025,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/0ecc7debbabcfc1fb4fe313fa149139d91e3c1e7"
         },
         "date": 1760471091835,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302365,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54477,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111453,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31872,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "44df74dd7c96b860ba5be9b0a9504c8b8920adf3",
+          "message": "chore: npm audit fix (#5013)\n\nRemoves some vulnerabilities",
+          "timestamp": "2025-10-14T21:11:29Z",
+          "tree_id": "3389f75763132666302e2ce7d30958eb313ed394",
+          "url": "https://github.com/rocicorp/mono/commit/44df74dd7c96b860ba5be9b0a9504c8b8920adf3"
+        },
+        "date": 1760476873078,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
