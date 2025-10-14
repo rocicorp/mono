@@ -13,7 +13,7 @@ describe('SQLite cost model', () => {
     // CREATE TABLE foo (a, b, c);
     db.exec('CREATE TABLE foo (a PRIMARY KEY, b, c)');
 
-    // Insert 3 rows
+    // Insert 2,000 rows
     const stmt = db.prepare('INSERT INTO foo (a, b, c) VALUES (?, ?, ?)');
     for (let i = 0; i < 2_000; i++) {
       stmt.run(i * 3 + 1, i * 3 + 2, i * 3 + 3);
@@ -37,6 +37,7 @@ describe('SQLite cost model', () => {
     // SELECT * FROM foo ORDER BY a
     // Ordered by primary key, so no sort needed - expected cost is just the table scan (~2000 rows)
     const scanCost = costModel('foo', [['a', 'asc']], undefined, undefined);
+    // Expected: (SQLite estimate) = 1920
     expect(scanCost).toBe(1920);
   });
 
