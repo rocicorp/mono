@@ -4,6 +4,7 @@ import classNames from 'classnames';
 import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -165,9 +166,10 @@ export function ListPage({onReady}: {onReady: () => void}) {
     [login.loginState?.decoded, listContextParams, z.userID],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setEstimatedTotal(0);
     setTotal(undefined);
+    listRef.current?.scrollTo(0, 0);
     setAnchor(TOP_ANCHOR);
   }, [baseQ]);
 
@@ -336,7 +338,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
             <Link
               key={label.id}
               className="pill label"
-              href={`/?label=${label.name}`}
+              href={`?label=${label.name}`}
             >
               {label.name}
             </Link>
@@ -484,9 +486,10 @@ export function ListPage({onReady}: {onReady: () => void}) {
           ) : (
             <span className="list-view-title">{title}</span>
           )}
-          {issuesResult.type === 'complete' || issues.length > 0 ? (
+          {issuesResult.type === 'complete' || total || estimatedTotal ? (
             <span className="issue-count">
-              {total ?? `${estimatedTotal - (estimatedTotal % 50)}+`}
+              {total ??
+                `${estimatedTotal < 50 ? estimatedTotal : estimatedTotal - (estimatedTotal % 50)}+`}
             </span>
           ) : null}
         </h1>
