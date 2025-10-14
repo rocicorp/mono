@@ -1,17 +1,19 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* oxlint-disable @typescript-eslint/no-explicit-any */
+
 import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
-import type {
-  AST,
-  CompoundKey,
-  Condition,
-  Ordering,
-  Parameter,
-  SimpleOperator,
-  System,
+import {
+  SUBQ_PREFIX,
+  type AST,
+  type CompoundKey,
+  type Condition,
+  type Ordering,
+  type Parameter,
+  type SimpleOperator,
+  type System,
 } from '../../../zero-protocol/src/ast.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {Row as IVMRow} from '../../../zero-protocol/src/data.ts';
@@ -19,15 +21,11 @@ import {
   hashOfAST,
   hashOfNameAndArgs,
 } from '../../../zero-protocol/src/query-hash.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {
-  isOneHop,
-  isTwoHop,
-  type TableSchema,
-} from '../../../zero-schema/src/table-schema.ts';
+import type {Schema, TableSchema} from '../../../zero-types/src/schema.ts';
 import {buildPipeline} from '../builder/builder.ts';
 import {NotImplementedError} from '../error.ts';
 import {ArrayView} from '../ivm/array-view.ts';
+import {defaultFormat} from '../ivm/default-format.ts';
 import type {Input} from '../ivm/operator.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import {assertNoNotExists} from './assert-no-not-exists.ts';
@@ -135,12 +133,6 @@ export function staticParam(
   };
 }
 
-export const SUBQ_PREFIX = 'zsubq_';
-
-export const defaultFormat = {singular: false, relationships: {}} as const;
-
-// export const newQuerySymbol = Symbol();
-
 export abstract class AbstractQuery<
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
@@ -216,7 +208,7 @@ export abstract class AbstractQuery<
       this.format,
       {
         name,
-        args: args as ReadonlyArray<ReadonlyJSONValue>,
+        args,
       },
       this.#currentJunction,
     );
@@ -1065,4 +1057,12 @@ function arrayViewFactory<
 
 function isCompoundKey(field: readonly string[]): field is CompoundKey {
   return Array.isArray(field) && field.length >= 1;
+}
+
+function isOneHop<T>(r: readonly T[]): r is readonly [T] {
+  return r.length === 1;
+}
+
+function isTwoHop<T>(r: readonly T[]): r is readonly [T, T] {
+  return r.length === 2;
 }

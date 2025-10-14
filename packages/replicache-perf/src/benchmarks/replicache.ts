@@ -245,7 +245,7 @@ export function benchmarkRebase(opts: {
         pullInterval: null,
         pushDelay: 9999,
         mutators: {putMap},
-        // eslint-disable-next-line require-await
+        // oxlint-disable-next-line require-await
         puller: async () => ({
           response: {
             cookie: 1,
@@ -356,7 +356,7 @@ async function setupPersistedData(
       name: replicacheName,
       indexes,
       pullInterval: null,
-      // eslint-disable-next-line require-await
+      // oxlint-disable-next-line require-await
       puller: async () => ({
         response: {
           cookie: 1,
@@ -421,7 +421,7 @@ export function benchmarkStartupUsingBasicReadsFromPersistedData(opts: {
         }
       });
       bencher.stop();
-      // eslint-disable-next-line no-console
+      // oxlint-disable-next-line no-console
       console.log(getCount);
     },
   };
@@ -470,7 +470,7 @@ export function benchmarkStartupUsingScanFromPersistedData(opts: {
           // use the value to be confident we're not optimizing away.
           count += Object.keys(value as TestDataObject).length;
         }
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.log(count);
       });
       bencher.stop();
@@ -512,7 +512,7 @@ export function benchmarkReadTransaction(opts: {
         }
       });
       bench.stop();
-      // eslint-disable-next-line no-console
+      // oxlint-disable-next-line no-console
       console.log(getCount, hasCount);
     },
   };
@@ -542,7 +542,7 @@ export function benchmarkScan(opts: {numKeys: number}): Benchmark {
           // use the value to be confident we're not optimizing away.
           count += (value as ArrayLike<unknown>).length;
         }
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.log(count);
       });
     },

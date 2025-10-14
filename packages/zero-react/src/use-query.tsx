@@ -71,8 +71,7 @@ export type UseSuspenseQueryOptions = UseQueryOptions & {
   suspendUntil?: 'complete' | 'partial';
 };
 
-const reactUse = (React as unknown as {use?: (p: Promise<unknown>) => void})
-  .use;
+const reactUse = (React as {use?: (p: Promise<unknown>) => void}).use;
 const suspend: (p: Promise<unknown>) => void = reactUse
   ? reactUse
   : p => {
@@ -264,7 +263,7 @@ function makeError(
 
 declare const TESTING: boolean;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 type ViewWrapperAny = ViewWrapper<any, any, any, any, any>;
 
 const allViews = new WeakMap<ViewStore, Map<string, ViewWrapperAny>>();

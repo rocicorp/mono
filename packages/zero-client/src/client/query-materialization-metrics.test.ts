@@ -320,6 +320,7 @@ describe('query materialization metrics', () => {
         additionalChecks?.();
         expect(gotCallback).toBeDefined();
 
+        // oxlint-disable-next-line no-non-null-assertion
         gotCallback!(true);
 
         expect(addMetricSpy).toHaveBeenCalledWith(

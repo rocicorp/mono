@@ -36,10 +36,10 @@ const DB_NAME = 'collate-test';
 let pg: PostgresDB;
 let nodePostgres: Client;
 let sqlite: Database;
-let queryDelegate: QueryDelegate;
-let memoryQueryDelegate: QueryDelegate;
+let queryDelegate: QueryDelegate<unknown>;
+let memoryQueryDelegate: QueryDelegate<unknown>;
 
-export const createTableSQL = /*sql*/ `
+const createTableSQL = /*sql*/ `
 CREATE TYPE size AS ENUM('s', 'm', 'l', 'xl'); 
 
 CREATE TABLE "item" (
@@ -156,7 +156,9 @@ beforeAll(async () => {
     ) as Schema['tables']['item'][],
   ];
   expect(
-    itemLiteRows.map(row => fromSQLiteTypes(schema.tables.item.columns, row)),
+    itemLiteRows.map(row =>
+      fromSQLiteTypes(schema.tables.item.columns, row, 'item'),
+    ),
   ).toEqual(testData.item);
 
   const {host, port, user, pass} = pg.options;

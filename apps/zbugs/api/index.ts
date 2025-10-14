@@ -1,4 +1,7 @@
 // https://vercel.com/templates/other/fastify-serverless-function
+
+import '../../../packages/shared/src/dotenv.ts';
+
 import cookie from '@fastify/cookie';
 import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
 import {Octokit} from '@octokit/core';
@@ -54,6 +57,7 @@ fastify.register(oauthPlugin, {
   startRedirectPath: '/api/login/github',
   callbackUri: req =>
     `${req.protocol}://${req.hostname}${
+      // oxlint-disable-next-line eqeqeq
       req.port != null ? ':' + req.port : ''
     }/api/login/github/callback${
       (req.query as QueryParams).redirect

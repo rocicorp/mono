@@ -8,7 +8,7 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import * as ConnectionState from './connection-state-enum.ts';
+import {ConnectionStatus} from './connection-status.ts';
 import {MockSocket, tickAFewTimes, zeroForTest} from './test-utils.ts';
 
 const startTime = 1678829450000;
@@ -77,7 +77,7 @@ test('a mutation after a rate limit error causes limited mutations to be resent'
   await tickAFewTimes(vi, 0);
   expect(mockSocket.messages).to.have.lengthOf(1);
   expect(mockSocket.closed).toBe(false);
-  expect(z.connectionState).eq(ConnectionState.Connected);
+  expect(z.connectionStatus).eq(ConnectionStatus.Connected);
 
   // reset messages
   mockSocket.messages.length = 0;

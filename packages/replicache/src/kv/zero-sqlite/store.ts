@@ -37,7 +37,7 @@ class ZeroSQLitePreparedStatement implements PreparedStatement {
     this.#statement = statement;
   }
 
-  // eslint-disable-next-line require-await
+  // oxlint-disable-next-line require-await
   async firstValue(params: string[]): Promise<unknown | undefined> {
     const result = this.#statement.all(...params);
     if (result === undefined || result.length === 0) {
@@ -46,7 +46,7 @@ class ZeroSQLitePreparedStatement implements PreparedStatement {
     return Object.values(result[0] as Record<string, unknown>)[0];
   }
 
-  // eslint-disable-next-line require-await
+  // oxlint-disable-next-line require-await
   async exec(params: string[]): Promise<void> {
     this.#statement.run(params);
   }

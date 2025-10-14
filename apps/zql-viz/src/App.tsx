@@ -1,5 +1,6 @@
-/* eslint-disable no-console */
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* oxlint-disable no-console */
+/* oxlint-disable @typescript-eslint/no-explicit-any */
+
 import {useCallback, useEffect, useState} from 'react';
 import {Panel, PanelGroup, PanelResizeHandle} from 'react-resizable-panels';
 import * as ts from 'typescript';
@@ -15,7 +16,7 @@ import {
   type RemoteRunResult,
   type Result,
 } from './types.ts';
-// eslint-disable-next-line no-restricted-imports
+// oxlint-disable-next-line no-restricted-imports
 import * as zero from '../../../packages/zero-client/src/mod.ts';
 import {mapAST} from '../../../packages/zero-protocol/src/ast.ts';
 import {clientToServer} from '../../../packages/zero-schema/src/name-mapper.ts';
@@ -220,7 +221,6 @@ function App() {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              // eslint-disable-next-line @typescript-eslint/naming-convention
               'Authorization': `Basic ${credentials}`,
             },
             body: JSON.stringify({

@@ -1,13 +1,13 @@
 import type {SQLQuery} from '@databases/sql';
 import {last, zip} from '../../shared/src/arrays.ts';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
-import {hasOwn} from '../../shared/src/has-own.ts';
-import {type JSONValue} from '../../shared/src/json.ts';
-import {must} from '../../shared/src/must.ts';
 import {
   parse as parseBigIntJson,
   type JSONValue as BigIntJSONValue,
 } from '../../shared/src/bigint-json.ts';
+import {hasOwn} from '../../shared/src/has-own.ts';
+import {type JSONValue} from '../../shared/src/json.ts';
+import {must} from '../../shared/src/must.ts';
 import {pgToZqlStringTypeMap} from '../../zero-cache/src/types/pg.ts';
 import type {
   AST,
@@ -25,11 +25,11 @@ import {
   clientToServer,
   type NameMapper,
 } from '../../zero-schema/src/name-mapper.ts';
-import type {Format} from '../../zql/src/ivm/view.ts';
 import type {
   ServerColumnSchema,
   ServerSchema,
 } from '../../zero-schema/src/server-schema.ts';
+import type {Format} from '../../zql/src/ivm/view.ts';
 import {
   sql,
   sqlConvertColumnArg,
@@ -635,7 +635,7 @@ function getServerColumn(spec: ServerSpec, table: Table, zqlColumn: string) {
   ];
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 export function extractZqlResult(pgResult: Array<any>): JSONValue {
   const bigIntJson: BigIntJSONValue = parseBigIntJson(
     pgResult[0][ZQL_RESULT_KEY],

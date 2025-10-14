@@ -134,10 +134,10 @@ test('legacy mutators disabled - table mutators do not exist', () => {
 
   // Type test: DBMutator should be empty when enableLegacyMutators is false
   type TestDBMutator = DBMutator<typeof schema>;
-  expectTypeOf<TestDBMutator>().toEqualTypeOf<{}>(); // eslint-disable-line @typescript-eslint/ban-types
+  expectTypeOf<TestDBMutator>().toEqualTypeOf<{}>();
 
   // Verify table mutators do not exist when legacy mutators disabled
-  expectTypeOf(z.mutate).toEqualTypeOf<{}>(); // eslint-disable-line @typescript-eslint/ban-types
+  expectTypeOf(z.mutate).toEqualTypeOf<{}>();
 
   // @ts-expect-error - issues table should not exist when legacy mutators disabled
   z.mutate.issues;
@@ -188,12 +188,11 @@ test('CRUD and custom mutators work together with enableLegacyMutators: true', a
           tx: Transaction<typeof schema>,
           {id}: {id: string},
         ) => {
-          // eslint-disable-line @typescript-eslint/no-explicit-any
           await tx.mutate.issues.update({id, status: 'closed'});
         },
         // Another custom mutator
         createAndClose: async (
-          tx: any, // eslint-disable-line @typescript-eslint/no-explicit-any
+          tx: any, // oxlint-disable-line @typescript-eslint/no-explicit-any
           {id, title}: {id: string; title: string},
         ) => {
           await tx.mutate.issues.insert({id, title, status: 'open'});
@@ -241,7 +240,6 @@ test('Custom mutators still work when enableLegacyMutators: false', async () => 
           _tx: Transaction<typeof schema>,
           {id, title}: {id: string; title: string},
         ) => {
-          // eslint-disable-line @typescript-eslint/no-explicit-any
           // In real usage, this would use server-side implementation
           void id;
           void title;

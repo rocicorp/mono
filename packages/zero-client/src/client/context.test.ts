@@ -135,6 +135,7 @@ test('processChanges', () => {
     assertValidRunOptions,
   );
   const out = new Catch(
+    // oxlint-disable-next-line no-non-null-assertion
     context.getSource('t1')!.connect([
       ['name', 'desc'],
       ['id', 'desc'],
@@ -206,6 +207,7 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
     assertValidRunOptions,
   );
   const out = new Catch(
+    // oxlint-disable-next-line no-non-null-assertion
     context.getSource('t1')!.connect([
       ['name', 'desc'],
       ['id', 'desc'],

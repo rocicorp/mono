@@ -355,7 +355,7 @@ const permissions = must(
       authData: AuthData,
       {cmpLit}: ExpressionBuilder<ZeroSchema, string>,
     ) => cmpLit(authData.role, '=', 'admin');
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     type TODO = any;
     const isAdminThroughNestedData = (
       authData: AuthData,
@@ -1558,18 +1558,16 @@ describe('read permissions against nested paths', () => {
 });
 
 // maps over nodes, drops all information from `row` except the id
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 function toIdsOnly(nodes: CaughtNode[]): any[] {
-  return nodes.map(node => {
-    return {
-      id: node.row.id,
-      ...Object.fromEntries(
-        Object.entries(node.relationships)
-          .filter(([k]) => !k.startsWith('zsubq_'))
-          .map(([k, v]) => [k, toIdsOnly(Array.isArray(v) ? v : [...v])]),
-      ),
-    };
-  });
+  return nodes.map(node => ({
+    id: node.row.id,
+    ...Object.fromEntries(
+      Object.entries(node.relationships)
+        .filter(([k]) => !k.startsWith('zsubq_'))
+        .map(([k, v]) => [k, toIdsOnly(Array.isArray(v) ? v : [...v])]),
+    ),
+  }));
 }
 
 // TODO (mlaw): test that `exists` does not provide an oracle

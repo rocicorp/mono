@@ -104,7 +104,8 @@ import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
 import {ActiveClientsManager} from './active-clients-manager.ts';
-import * as ConnectionState from './connection-state-enum.ts';
+import {ConnectionManager, type ConnectionState} from './connection-manager.ts';
+import {ConnectionStatus} from './connection-status.ts';
 import {ZeroContext} from './context.ts';
 import {
   type BatchMutator,
@@ -162,7 +163,6 @@ import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
 
-type ConnectionState = Enum<typeof ConnectionState>;
 type PingResult = Enum<typeof PingResult>;
 
 export type NoRelations = Record<string, never>;
@@ -369,7 +369,7 @@ export class Zero<
   #socket: WebSocket | undefined = undefined;
   #socketResolver = resolver<WebSocket>();
 
-  #connectionStateChangeResolver = resolver<ConnectionState>();
+  #connectionStateChangeResolver = resolver<ConnectionStatus>();
 
   /**
    * This resolver is only used for rejections. It is awaited in the connected
@@ -383,21 +383,20 @@ export class Zero<
   readonly #visibilityWatcher;
 
   // We use an accessor pair to allow the subclass to override the setter.
-  #connectionState: ConnectionState = ConnectionState.Disconnected;
+  readonly #connectionManager = new ConnectionManager();
   readonly #activeClientsManager: Promise<ActiveClientsManager>;
   #inspector: Inspector | undefined;
 
-  #setConnectionState(state: ConnectionState) {
-    if (state === this.#connectionState) {
+  #setConnectionStatus(status: ConnectionStatus) {
+    if (!this.#connectionManager.setStatus(status)) {
       return;
     }
 
-    this.#connectionState = state;
-    this.#connectionStateChangeResolver.resolve(state);
-    this.#connectionStateChangeResolver = resolver<ConnectionState>();
+    this.#connectionStateChangeResolver.resolve(status);
+    this.#connectionStateChangeResolver = resolver<ConnectionStatus>();
 
     if (TESTING) {
-      asTestZero(this)[onSetConnectionStateSymbol]?.(state);
+      asTestZero(this)[onSetConnectionStateSymbol]?.(status);
     }
   }
 
@@ -450,7 +449,7 @@ export class Zero<
     let {kvStore = 'idb'} = options as ZeroOptions<S, MD>;
     if (kvStore === 'idb') {
       if (!getBrowserGlobal('indexedDB')) {
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.warn(
           'IndexedDB is not supported in this environment. Falling back to memory storage.',
         );
@@ -681,7 +680,7 @@ export class Zero<
     this.#onClientStateNotFound = onClientStateNotFoundCallback;
     this.#rep.onClientStateNotFound = onClientStateNotFoundCallback;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     const {mutate, mutateBatch} = makeCRUDMutate<S>(schema, rep.mutate) as any;
 
     if (options.mutators) {
@@ -701,7 +700,7 @@ export class Zero<
 
         for (const name of Object.keys(mutatorsOrMutator)) {
           existing[name] = must(
-            rep.mutate[customMutatorKey(namespaceOrKey as string, name)],
+            rep.mutate[customMutatorKey(namespaceOrKey, name)],
           );
         }
       }
@@ -782,7 +781,7 @@ export class Zero<
 
   #expose() {
     // Expose the Zero instance to the global scope.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     const g = globalThis as any;
     if (g.__zero === undefined) {
       g.__zero = this;
@@ -798,7 +797,7 @@ export class Zero<
   }
 
   #unexpose() {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     const g = globalThis as any;
     assert(g.__zero !== undefined);
     if (g.__zero instanceof Zero) {
@@ -813,7 +812,10 @@ export class Zero<
   }
 
   #send(msg: Upstream): void {
-    if (this.#socket && this.#connectionState === ConnectionState.Connected) {
+    if (
+      this.#socket &&
+      this.#connectionManager.is(ConnectionStatus.Connected)
+    ) {
       send(this.#socket, msg);
     }
   }
@@ -981,7 +983,7 @@ export class Zero<
 
     this.#onlineManager.cleanup();
 
-    if (this.#connectionState !== ConnectionState.Disconnected) {
+    if (!this.#connectionManager.is(ConnectionStatus.Disconnected)) {
       this.#disconnect(
         lc,
         {
@@ -1260,7 +1262,7 @@ export class Zero<
 
     maybeSendDeletedClients();
 
-    this.#setConnectionState(ConnectionState.Connected);
+    this.#setConnectionStatus(ConnectionStatus.Connected);
     this.#connectResolver.resolve();
   }
 
@@ -1269,8 +1271,8 @@ export class Zero<
    * request to the server.
    *
    * {@link #connect} will throw an assertion error if the
-   * {@link #connectionState} is not {@link ConnectionState.Disconnected}.
-   * Callers MUST check the connection state before calling this method and log
+   * {@link #connectionManager} status is not {@link ConnectionState.Disconnected}.
+   * Callers MUST check the connection status before calling this method and log
    * an error as needed.
    *
    * The function will resolve once the socket is connected. If you need to know
@@ -1287,13 +1289,13 @@ export class Zero<
     assert(this.#server);
 
     // All the callers check this state already.
-    assert(this.#connectionState === ConnectionState.Disconnected);
+    assert(this.#connectionManager.is(ConnectionStatus.Disconnected));
 
     const wsid = nanoid();
     lc = addWebSocketIDToLogContext(wsid, lc);
     lc.info?.('Connecting...', {navigatorOnline: navigator?.onLine});
 
-    this.#setConnectionState(ConnectionState.Connecting);
+    this.#setConnectionStatus(ConnectionStatus.Connecting);
 
     // connect() called but connect start time is defined. This should not
     // happen.
@@ -1385,7 +1387,7 @@ export class Zero<
     reason: DisconnectReason,
     closeCode?: CloseCode,
   ): void {
-    if (this.#connectionState === ConnectionState.Connecting) {
+    if (this.#connectionManager.is(ConnectionStatus.Connecting)) {
       this.#connectErrorCount++;
     }
     lc.info?.('disconnecting', {
@@ -1398,12 +1400,12 @@ export class Zero<
         ? Date.now() - this.#connectedAt
         : 0,
       messageCount: this.#messageCount,
-      connectionState: this.#connectionState,
+      connectionState: this.#connectionManager.state,
       connectErrorCount: this.#connectErrorCount,
     });
 
-    switch (this.#connectionState) {
-      case ConnectionState.Connected: {
+    switch (this.#connectionManager.state.name) {
+      case ConnectionStatus.Connected: {
         if (this.#connectStart !== undefined) {
           lc.error?.(
             'disconnect() called while connected but connect start time is defined.',
@@ -1413,7 +1415,7 @@ export class Zero<
 
         break;
       }
-      case ConnectionState.Connecting: {
+      case ConnectionStatus.Connecting: {
         this.#metrics.lastConnectError.set(getLastConnectErrorValue(reason));
         this.#metrics.timeToConnectMs.set(DID_NOT_CONNECT_VALUE);
         this.#metrics.setConnectError(reason);
@@ -1434,7 +1436,7 @@ export class Zero<
 
         break;
       }
-      case ConnectionState.Disconnected:
+      case ConnectionStatus.Disconnected:
         lc.error?.('disconnect() called while disconnected');
         break;
     }
@@ -1442,7 +1444,7 @@ export class Zero<
     this.#socketResolver = resolver();
     lc.debug?.('Creating new connect resolver');
     this.#connectResolver = resolver();
-    this.#setConnectionState(ConnectionState.Disconnected);
+    this.#setConnectionStatus(ConnectionStatus.Disconnected);
     this.#messageCount = 0;
     this.#connectStart = undefined; // don't reset this._totalToConnectStart
     this.#connectedAt = 0;
@@ -1479,13 +1481,13 @@ export class Zero<
     const lc = this.#lc;
     lc.info?.(
       'poke error, disconnecting?',
-      this.#connectionState !== ConnectionState.Disconnected,
+      !this.#connectionManager.is(ConnectionStatus.Disconnected),
     );
 
     // It is theoretically possible that we get disconnected during the
     // async poke above. Only disconnect if we are not already
     // disconnected.
-    if (this.#connectionState !== ConnectionState.Disconnected) {
+    if (!this.#connectionManager.is(ConnectionStatus.Disconnected)) {
       this.#disconnect(lc, {
         client: 'UnexpectedBaseCookie',
       });
@@ -1627,8 +1629,8 @@ export class Zero<
       backoffMs = RUN_LOOP_INTERVAL_MS;
 
       try {
-        switch (this.#connectionState) {
-          case ConnectionState.Disconnected: {
+        switch (this.#connectionManager.state.name) {
+          case ConnectionStatus.Disconnected: {
             if (this.#visibilityWatcher.visibilityState === 'hidden') {
               this.#metrics.setDisconnectedWaitingForVisible();
               // reset this._totalToConnectStart since this client
@@ -1666,14 +1668,14 @@ export class Zero<
             break;
           }
 
-          case ConnectionState.Connecting:
+          case ConnectionStatus.Connecting:
             // Can't get here because Disconnected waits for Connected or
             // rejection.
             lc.error?.('unreachable');
             gotError = true;
             break;
 
-          case ConnectionState.Connected: {
+          case ConnectionStatus.Connected: {
             // When connected we wait for whatever happens first out of:
             // - After PING_INTERVAL_MS we send a ping
             // - We get disconnected
@@ -1729,7 +1731,7 @@ export class Zero<
           }
         }
       } catch (ex) {
-        if (this.#connectionState !== ConnectionState.Connected) {
+        if (!this.#connectionManager.is(ConnectionStatus.Connected)) {
           const level = isAuthError(ex) ? 'warn' : 'error';
           const kind = isServerError(ex) ? ex.kind : 'Unknown Error';
           lc[level]?.('Failed to connect', ex, kind, {
@@ -1741,7 +1743,7 @@ export class Zero<
         lc.debug?.(
           'Got an exception in the run loop',
           'state:',
-          this.#connectionState,
+          this.#connectionManager.state,
           'exception:',
           ex,
         );
@@ -1803,7 +1805,7 @@ export class Zero<
           'Sleeping',
           backoffMs,
           'ms before reconnecting due to error, state:',
-          this.#connectionState,
+          this.#connectionManager.state,
         );
         await sleep(backoffMs);
         // cfGetCheckController.abort();
@@ -2024,7 +2026,7 @@ export class Zero<
     // https://esbuild.github.io/api/#ignore-annotations
     // /packages/zero/tool/build.ts
 
-    // eslint-disable-next-line no-unused-labels
+    // oxlint-disable-next-line no-unused-labels
     BUNDLE_SIZE: {
       return (this.#inspector ??= new Inspector(
         this.#rep,

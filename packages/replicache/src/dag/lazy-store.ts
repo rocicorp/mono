@@ -1,9 +1,9 @@
 import {RWLock} from '@rocicorp/lock';
 import {joinIterables} from '../../../shared/src/iterables.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import {getSizeOfValue} from '../../../shared/src/size-of-value.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import type {Hash} from '../hash.ts';
-import {getSizeOfValue} from '../size-of-value.ts';
 import {Chunk, type ChunkHasher, type Refs, createChunk} from './chunk.ts';
 import {
   type HeadChange,
@@ -281,7 +281,6 @@ export class LazyRead implements Read {
           ?.then(read => read.release())
           // If creation of the read failed there is nothing to release.
           // Catch to avoid `Uncaught (in promise)` errors being reported.
-          // eslint-disable-next-line @typescript-eslint/no-empty-function
           .catch(_ => {});
       }
       this.#closed = true;

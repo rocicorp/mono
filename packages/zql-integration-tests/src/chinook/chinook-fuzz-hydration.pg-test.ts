@@ -1,9 +1,10 @@
-/* eslint-disable no-console */
+/* oxlint-disable no-console */
 
 import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {expect, test} from 'vitest';
 import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../../ast-to-zql/src/format.ts';
+import {ast} from '../../../zql/src/query/query-impl.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {QueryDelegateImpl} from '../../../zql/src/query/test/query-delegate.ts';
@@ -35,7 +36,7 @@ test('sentinel', () => {
 });
 
 if (REPRO_SEED) {
-  // eslint-disable-next-line no-only-tests/no-only-tests
+  // oxlint-disable-next-line no-focused-tests
   test.only('repro', async () => {
     const tc = createCase(REPRO_SEED);
     const {query} = tc;

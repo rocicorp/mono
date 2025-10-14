@@ -19,7 +19,6 @@ import type {WriteTransaction} from './transactions.ts';
 import type {UpdateNeededReason} from './types.ts';
 
 // fetch-mock has invalid d.ts file so we removed that on npm install.
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-expect-error
 import fetchMock from 'fetch-mock/esm/client';
 
@@ -339,7 +338,7 @@ test('Client Group not found on server', async () => {
     },
   );
 
-  // eslint-disable-next-line require-await
+  // oxlint-disable-next-line require-await
   const puller: Puller = async () => ({
     response: {error: 'ClientStateNotFound'},
     httpRequestInfo: {
@@ -375,7 +374,7 @@ test('Version not supported on server', async () => {
       resolve();
     }));
 
-    // eslint-disable-next-line require-await
+    // oxlint-disable-next-line require-await
     const puller: Puller = async () => ({
       response,
       httpRequestInfo: {

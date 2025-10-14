@@ -1,14 +1,14 @@
-import type {FC} from 'react';
-import {useState} from 'react';
 import {
   AlertCircle,
   BarChart3,
+  Code,
+  Database,
   GitBranch,
   List,
-  Code,
   TreePine,
-  Database,
 } from 'lucide-react';
+import type {FC} from 'react';
+import {useState} from 'react';
 import type {Result} from '../types.ts';
 import {DataFlowGraph} from './data-flow-graph.tsx';
 
@@ -155,40 +155,50 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
         return result?.remoteRunResult?.plans ? (
           <div className="results-content">
             <div className="tables-container">
-              {Object.entries(result.remoteRunResult.plans).map(([queryName, planSteps]) => (
-                <div key={queryName} className="table-section">
-                  <h3 className="table-title">Query Plan</h3>
-                  <div className="table-info">
-                    <span className="row-count scrollable" title={queryName}>
-                      {queryName}
-                    </span>
-                  </div>
-                  <div className="query-plan-content">
-                    {planSteps.map((step, index) => {
-                      const renderStep = (text: string) => {
-                        // Split by words and apply color coding
-                        return text.split(/(\b(?:SCAN|SEARCH)\b)/g).map((part, partIndex) => {
-                          if (part === 'SCAN') {
-                            return <span key={partIndex} className="plan-scan">{part}</span>;
-                          } else if (part === 'SEARCH') {
-                            return <span key={partIndex} className="plan-search">{part}</span>;
-                          }
-                          return part;
-                        });
-                      };
-
-                      return (
-                        <div key={index} className="plan-step">
-                          <div className="plan-step-number">{index + 1}</div>
-                          <div className="plan-step-text">
-                            {renderStep(step)}
+              {Object.entries(result.remoteRunResult.plans).map(
+                ([queryName, planSteps]) => (
+                  <div key={queryName} className="table-section">
+                    <h3 className="table-title">Query Plan</h3>
+                    <div className="table-info">
+                      <span className="row-count scrollable" title={queryName}>
+                        {queryName}
+                      </span>
+                    </div>
+                    <div className="query-plan-content">
+                      {planSteps.map((step, index) => {
+                        const renderStep = (text: string) =>
+                          // Split by words and apply color coding
+                          text
+                            .split(/(\b(?:SCAN|SEARCH)\b)/g)
+                            .map((part, partIndex) => {
+                              if (part === 'SCAN') {
+                                return (
+                                  <span key={partIndex} className="plan-scan">
+                                    {part}
+                                  </span>
+                                );
+                              } else if (part === 'SEARCH') {
+                                return (
+                                  <span key={partIndex} className="plan-search">
+                                    {part}
+                                  </span>
+                                );
+                              }
+                              return part;
+                            });
+                        return (
+                          <div key={index} className="plan-step">
+                            <div className="plan-step-number">{index + 1}</div>
+                            <div className="plan-step-text">
+                              {renderStep(step)}
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                ),
+              )}
             </div>
           </div>
         ) : (

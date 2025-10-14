@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* oxlint-disable @typescript-eslint/no-explicit-any */
 import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
 import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {
@@ -7,10 +7,12 @@ import type {
 } from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   LastInTuple,
-  SchemaValueToTSType,
-  SchemaValueWithCustomType,
   TableSchema,
 } from '../../../zero-schema/src/table-schema.ts';
+import type {
+  SchemaValueToTSType,
+  SchemaValueWithCustomType,
+} from '../../../zero-types/src/schema-value.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {TTL} from './ttl.ts';
 
@@ -42,6 +44,8 @@ type ArraySelectors<E extends TableSchema> = {
 
 export type QueryReturn<Q> =
   Q extends Query<any, any, infer R, any> ? R : never;
+
+export type QueryTable<Q> = Q extends Query<any, infer T, any> ? T : never;
 
 export type ExistsOptions = {flip: boolean};
 
@@ -104,16 +108,36 @@ export type PullRow<TTable extends string, TSchema extends ZeroSchema> = {
   >;
 } & {};
 
-export type Row<T extends TableSchema | Query<ZeroSchema, string, any>> =
-  T extends TableSchema
-    ? {
-        readonly [K in keyof T['columns']]: SchemaValueToTSType<
-          T['columns'][K]
-        >;
-      }
-    : T extends Query<ZeroSchema, string, infer TReturn>
-      ? TReturn
-      : never;
+export type Row<
+  T extends
+    | TableSchema
+    | Query<ZeroSchema, string, any>
+    | ((...args: any) => Query<ZeroSchema, string, any>),
+> = T extends TableSchema
+  ? {
+      readonly [K in keyof T['columns']]: SchemaValueToTSType<T['columns'][K]>;
+    }
+  : T extends
+        | Query<ZeroSchema, string, any>
+        | ((...args: any) => Query<ZeroSchema, string, any>)
+    ? QueryRowType<T>
+    : never;
+
+export type QueryRowType<Q> = Q extends (
+  ...args: any
+) => Query<any, any, infer R>
+  ? R
+  : Q extends Query<any, any, infer R>
+    ? R
+    : never;
+
+export type ZeRow<Q> = QueryRowType<Q>;
+
+export type QueryResultType<Q> = Q extends
+  | Query<ZeroSchema, string, any>
+  | ((...args: any) => Query<ZeroSchema, string, any>)
+  ? HumanReadable<QueryRowType<Q>>
+  : never;
 
 /**
  * Core query interface containing the fundamental query building methods.

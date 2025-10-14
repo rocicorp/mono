@@ -327,7 +327,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     let rowQuery = staticQuery(this.#schema, op.tableName);
 
     op.primaryKey.forEach(pk => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       rowQuery = rowQuery.where(pk, '=', op.value[pk] as any);
     });
 

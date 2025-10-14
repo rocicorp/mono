@@ -1,16 +1,16 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* oxlint-disable @typescript-eslint/no-explicit-any */
 import {describe, test} from 'vitest';
+import {must} from '../../../shared/src/must.ts';
+import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {PullRow} from '../../../zql/src/query/query.ts';
+import type {AnyQuery} from '../../../zql/src/query/test/util.ts';
 import {createVitests} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
-import type {AnyQuery} from '../../../zql/src/query/test/util.ts';
-import {must} from '../../../shared/src/must.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
-import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
-import type {PullRow} from '../../../zql/src/query/query.ts';
 
 // Junction edges do not correctly handle limits in ZQL
-// eslint-disable-next-line unicorn/prefer-set-has -- Keep as array for consistency with existing code
+// oxlint-disable-next-line unicorn/prefer-set-has -- Keep as array for consistency with existing code
 const brokenRelationshipLimits = ['tracks', 'customer', 'playlists'];
 
 const pgContent = await getChinook();

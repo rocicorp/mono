@@ -29,12 +29,13 @@ import {getServerSchema} from '../../../zero-server/src/schema.ts';
 import {Transaction} from '../../../zero-server/src/test/util.ts';
 import type {Change} from '../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../zql/src/ivm/data.ts';
+import {defaultFormat} from '../../../zql/src/ivm/default-format.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
 import type {SourceChange} from '../../../zql/src/ivm/source.ts';
 import type {DBTransaction} from '../../../zql/src/mutate/custom.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {defaultFormat, QueryImpl} from '../../../zql/src/query/query-impl.ts';
+import {ast, QueryImpl} from '../../../zql/src/query/query-impl.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../zql/src/query/test/query-delegate.ts';
 import {Database} from '../../../zqlite/src/db.ts';
@@ -111,7 +112,7 @@ async function makeDatabases<TSchema extends Schema>(
       const crud = makeSchemaCRUD(schema)(new Transaction(tx), serverSchema);
 
       for (const [table, rows] of Object.entries(testData(serverSchema))) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
         await Promise.all(rows.map(row => crud[table].insert(row as any)));
       }
     });
@@ -290,7 +291,7 @@ export async function createVitests<TSchema extends Schema>(
   }: Options<TSchema>,
   ...testSpecs: (readonly {
     name: string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     createQuery: (q: Queries<TSchema>) => Query<TSchema, string, any>;
     manualVerification?: unknown;
   }[])[]
@@ -721,8 +722,9 @@ async function checkPush(
   await checkEditToMatch(zqlSchema, delegates, editedRows, queries);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyQuery = Query<any, any, any, any>;
+
 function gatherRows(
   zqlSchema: Schema,
   q: AnyQuery,

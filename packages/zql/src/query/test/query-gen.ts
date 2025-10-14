@@ -173,7 +173,7 @@ function augmentQuery(
                 name: columnName,
               })
             : randomValueForType(rng, faker, column.type, column.optional);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       query = query.where(columnName as any, operator, value);
       generations.push(query);
     }

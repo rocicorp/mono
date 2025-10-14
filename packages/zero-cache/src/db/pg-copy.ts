@@ -17,7 +17,6 @@ export class TextTransform extends Transform {
     super({objectMode: true});
   }
 
-  // eslint-disable-next-line @typescript-eslint/naming-convention
   _transform(
     chunk: Buffer,
     _encoding: BufferEncoding,

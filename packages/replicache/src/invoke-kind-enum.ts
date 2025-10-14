@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/naming-convention */
-
 export const InitialRun = 0;
 export const Regular = 1;
 

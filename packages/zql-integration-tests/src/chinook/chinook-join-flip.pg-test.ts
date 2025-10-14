@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import {describe, test} from 'vitest';
 import {createVitests} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';

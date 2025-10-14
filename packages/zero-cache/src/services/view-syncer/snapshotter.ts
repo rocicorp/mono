@@ -245,7 +245,6 @@ class Snapshot {
     const conn = new Database(lc, dbFile);
     conn.pragma('synchronous = OFF'); // Applied changes are ephemeral; COMMIT is never called.
     const [{journal_mode: mode}] = conn.pragma('journal_mode') as [
-      // eslint-disable-next-line @typescript-eslint/naming-convention
       {journal_mode: string},
     ];
     // The Snapshotter operates on the replica file with BEGIN CONCURRENT,
@@ -307,7 +306,7 @@ class Snapshot {
     );
     cached.statement.safeIntegers(true);
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       return cached.statement.get<any>(Object.values(key));
     } finally {
       this.db.statementCache.return(cached);

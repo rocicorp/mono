@@ -146,7 +146,7 @@ test('building a schema', async () => {
           | undefined;
       }
     | undefined
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   >({} as any);
 
   // recruiter is a singular relationship

@@ -14,7 +14,7 @@ export const links = {
     id: string;
     shortID?: number | null;
   }) {
-    // eslint-disable-next-line eqeqeq -- Checking for both null and undefined
+    // oxlint-disable-next-line eqeqeq -- Checking for both null and undefined
     return shortID != null
       ? `/p/${projectName.toLowerCase()}/issue/${shortID}`
       : `/p/${projectName.toLowerCase()}/issue/${id}`;

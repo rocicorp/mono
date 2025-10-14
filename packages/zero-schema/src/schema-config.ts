@@ -46,9 +46,9 @@ export const schemaSchema = v.readonlyObject({
   enableLegacyMutators: v.boolean().optional(),
 });
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line @typescript-eslint/no-explicit-any
 export function isSchemaConfig(value: any): value is SchemaConfig {
-  // eslint-disable-next-line eqeqeq
+  // oxlint-disable-next-line eqeqeq
   return value != null && 'schema' in value && 'permissions' in value;
 }
 

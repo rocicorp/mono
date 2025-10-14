@@ -1,5 +1,4 @@
 import {deleteDB, type IDBPDatabase, openDB} from 'idb/with-async-ittr';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore Invalid module when using node16 module resolution.
 import xbytes from 'xbytes';
 import type {Bencher, Benchmark} from '../benchmark.ts';
@@ -54,7 +53,7 @@ function benchmarkIDBReadGetAll(opts: {
 
         bench.stop();
         // Use the values to ensure they aren't optimized away.
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.log(`Read ${values.length} values`);
       } finally {
         db.close();
@@ -113,7 +112,7 @@ function benchmarkIDBReadGetAllGetAllKeys(opts: {
 
         bench.stop();
         // Use the values to ensure they aren't optimized away.
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.log(`Read ${values.length} values and ${keys.length} keys`);
       } finally {
         db.close();
@@ -171,7 +170,7 @@ function benchmarkIDBReadGet(opts: {
 
         bench.stop();
         // Use the values to ensure they aren't optimized away.
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.log(`Read ${values.length} values`);
       } finally {
         db.close();
@@ -298,7 +297,7 @@ function benchmarkIDBReadGetWithInlineKeys(opts: {
 
         bench.stop();
         // Use the values to ensure they aren't optimized away.
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.log(`Read ${vals.length} values`);
       } finally {
         db.close();
@@ -356,7 +355,7 @@ function benchmarkIDBReadGetAllWithInlineKey(opts: {
 
         bench.stop();
         // Use the values to ensure they aren't optimized away.
-        // eslint-disable-next-line no-console
+        // oxlint-disable-next-line no-console
         console.log(`Read ${values.length} values`);
       } finally {
         db.close();

@@ -1,10 +1,11 @@
+import '../../shared/src/dotenv.ts';
+
 import chalk from 'chalk';
 import fs from 'node:fs';
 import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../ast-to-zql/src/format.ts';
 import {logLevel, logOptions} from '../../otel/src/log-options.ts';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
-import '../../shared/src/dotenv.ts';
 import {colorConsole, createLogContext} from '../../shared/src/logging.ts';
 import {must} from '../../shared/src/must.ts';
 import {parseOptions} from '../../shared/src/options.ts';

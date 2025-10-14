@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* oxlint-disable @typescript-eslint/no-explicit-any */
 import Editor, {type Monaco} from '@monaco-editor/react';
 import {Play} from 'lucide-react';
 import type {editor} from 'monaco-editor';

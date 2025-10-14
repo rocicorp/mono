@@ -11,11 +11,11 @@ import {makeComparator} from '../../zql/src/ivm/data.ts';
 import {Database} from './db.ts';
 import {format} from './internal/sql.ts';
 import {
-  filtersToSQL,
   fromSQLiteTypes,
   TableSource,
   UnsupportedValueError,
 } from './table-source.ts';
+import {filtersToSQL} from './query-builder.ts';
 
 const columns = {
   id: {type: 'string'},
@@ -738,7 +738,7 @@ test('getByKey', () => {
       id: '5',
       a: (BigInt(Number.MAX_SAFE_INTEGER) + 1n) as unknown as Value,
     }),
-  ).toBeUndefined;
+  ).toBeUndefined();
 });
 
 describe('optional filters to sql', () => {

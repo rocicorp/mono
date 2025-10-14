@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
-    "@rocicorp/zero": "0.24.2025100900",
+    "@rocicorp/zero": "0.24.2025101200",
     "@xyflow/react": "^12.8.2",
     "lucide-react": "^0.539.0",
     "monaco-editor": "^0.52.2",
@@ -23,6 +23,7 @@
     "@types/react-dom": "18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "~5.8.2",
-    "vite": "6.2.1"
+    "vite": "6.2.1",
+    "zql": "0.0.0"
   }
 }

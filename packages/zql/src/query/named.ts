@@ -1,11 +1,11 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* oxlint-disable @typescript-eslint/no-explicit-any */
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {SchemaQuery} from '../mutate/custom.ts';
 import type {NamedQueryFunction} from './define-query.ts';
 import {newQuery} from './query-impl.ts';
 import {asQueryInternals} from './query-internals.ts';
-import {type HumanReadable, type Query, type QueryReturn} from './query.ts';
+import {type Query} from './query.ts';
 
 export type QueryFn<
   TContext,
@@ -27,9 +27,6 @@ export type SyncedQuery<
   parse: ParseFn<TArg> | undefined;
   takesContext: TTakesContext;
 };
-
-export type QueryFnReturn<TQuery extends QueryFn<any, any, any, any>> =
-  HumanReadable<QueryReturn<ReturnType<TQuery>>>;
 
 function normalizeParser<T extends ReadonlyJSONValue[]>(
   parser: ParseFn<T> | HasParseFn<T> | undefined,

@@ -132,7 +132,7 @@ describe('change-streamer/storer', () => {
         {watermark: '06', pos: 2n},
       ]);
 
-      // Should be rejected as an invalid watermark.
+      // TODO: Consider rejecting as an invalid watermark?
       expect(await storer.purgeRecordsBefore('04')).toBe(3);
       expect(
         await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
@@ -152,15 +152,29 @@ describe('change-streamer/storer', () => {
       ]);
     });
 
-    test('abort', async () => {
-      expect(await storer.abort()).toBeNull();
+    test('non-owner purge prevented', async () => {
+      await db`UPDATE "xero_5/cdc"."replicationState" SET owner = 'different-task-id'`;
 
-      storer.store([
-        '0a',
-        ['begin', messages.begin(), {commitWatermark: '0a'}],
+      expect(await storer.purgeRecordsBefore('06')).toBe(0);
+      expect(
+        await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
+      ).toEqual([
+        {watermark: '03', pos: 0n},
+        {watermark: '03', pos: 1n},
+        {watermark: '03', pos: 2n},
+        {watermark: '06', pos: 0n},
+        {watermark: '06', pos: 1n},
+        {watermark: '06', pos: 2n},
       ]);
-      storer.store(['0a', ['data', messages.insert('issues', {id: 'foo'})]]);
-      expect(await storer.abort()).toBe('0a');
+    });
+
+    test('abort', async () => {
+      storer.store([
+        '0b',
+        ['begin', messages.begin(), {commitWatermark: '0b'}],
+      ]);
+      storer.store(['0b', ['data', messages.insert('issues', {id: 'foo'})]]);
+      storer.abort();
 
       storer.store([
         '0a',

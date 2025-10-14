@@ -34,6 +34,8 @@ npm run lint              # oxlint with type-awareness
 npm run format            # Prettier formatting
 ```
 
+**Always run `lint`, `format` and `check-types` after every change**
+
 ### Package-Level Commands
 
 Each package supports: `test`, `check-types`, `lint`, `format`, `build`

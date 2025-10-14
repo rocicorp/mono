@@ -732,22 +732,20 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   );
 }
 
-const MyToastContainer = memo(({position}: {position: 'top' | 'bottom'}) => {
-  return (
-    <ToastContainer
-      hideProgressBar={true}
-      theme="dark"
-      containerId={position}
-      newestOnTop={position === 'bottom'}
-      closeButton={false}
-      position={`${position}-center`}
-      closeOnClick={true}
-      limit={3}
-      // Auto close is broken. So we will manage it ourselves.
-      autoClose={false}
-    />
-  );
-});
+const MyToastContainer = memo(({position}: {position: 'top' | 'bottom'}) => (
+  <ToastContainer
+    hideProgressBar={true}
+    theme="dark"
+    containerId={position}
+    newestOnTop={position === 'bottom'}
+    closeButton={false}
+    position={`${position}-center`}
+    closeOnClick={true}
+    limit={3}
+    // Auto close is broken. So we will manage it ourselves.
+    autoClose={false}
+  />
+));
 
 // This cache is stored outside the state so that it can be used between renders.
 const commentSizeCache = new LRUCache<string, number>(2000);

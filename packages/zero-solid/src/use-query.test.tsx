@@ -60,7 +60,7 @@ afterEach(() => vi.resetAllMocks());
 
 function newMockZero<MD extends CustomMutatorDefs, Context>(
   clientID: string,
-  queryDelegate: QueryDelegate,
+  queryDelegate: QueryDelegate<Context>,
 ): Zero<Schema, MD, Context> {
   function m<TTable extends keyof Schema['tables'] & string, TReturn, T>(
     query: Query<Schema, TTable, TReturn, Context>,
@@ -70,13 +70,11 @@ function newMockZero<MD extends CustomMutatorDefs, Context>(
       | undefined,
     maybeOptions?: MaterializeOptions | undefined,
   ) {
-    return materialize(
-      query,
-      queryDelegate,
-      'ctx' as Context,
-      factoryOrOptions,
-      maybeOptions,
-    );
+    const factory =
+      typeof factoryOrOptions === 'function' ? factoryOrOptions : undefined;
+    const options =
+      typeof factoryOrOptions === 'function' ? maybeOptions : factoryOrOptions;
+    return materialize(query, queryDelegate, factory, options);
   }
   return {
     clientID,

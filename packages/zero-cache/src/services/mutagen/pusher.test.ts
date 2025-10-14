@@ -1,15 +1,15 @@
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
+import {resolver} from '@rocicorp/resolver';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
-import {combinePushes, PusherService} from './pusher.ts';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import type {
   Mutation,
   PushBody,
   PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {resolver} from '@rocicorp/resolver';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
+import {combinePushes, PusherService} from './pusher.ts';
 
 const config = {
   app: {
@@ -340,7 +340,6 @@ describe('pusher service', () => {
     expect(fetch.mock.calls[0][1]?.headers).toEqual({
       'Content-Type': 'application/json',
       'X-Api-Key': 'api-key',
-      // eslint-disable-next-line @typescript-eslint/naming-convention
       'Authorization': 'Bearer jwt',
     });
 

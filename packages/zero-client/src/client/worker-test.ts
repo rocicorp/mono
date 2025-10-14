@@ -11,7 +11,6 @@ import {
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {MockSocket, zeroForTest} from './test-utils.ts';
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
 const {WebSocket} = globalThis;
 
 onmessage = async (e: MessageEvent) => {

@@ -9,25 +9,26 @@ import {useLogin} from './hooks/use-login.tsx';
 export function ZeroInit({children}: {children: ReactNode}) {
   const login = useLogin();
 
-  const props = useMemo(() => {
-    return {
-      schema,
-      server: import.meta.env.VITE_PUBLIC_SERVER,
-      userID: login.loginState?.decoded?.sub ?? 'anon',
-      mutators: createMutators(login.loginState?.decoded),
-      logLevel: 'info' as const,
-      auth: (error?: 'invalid-token') => {
-        if (error === 'invalid-token') {
-          login.logout();
-          return undefined;
-        }
-        return login.loginState?.encoded;
-      },
-      mutateURL: `${window.location.origin}/api/mutate`,
-      getQueriesURL: `${window.location.origin}/api/get-queries`,
-      context: login.loginState?.decoded,
-    } satisfies ZeroOptions<Schema, CustomMutatorDefs, AuthData | undefined>;
-  }, [login]);
+  const props = useMemo(
+    () =>
+      ({
+        schema,
+        server: import.meta.env.VITE_PUBLIC_SERVER,
+        userID: login.loginState?.decoded?.sub ?? 'anon',
+        mutators: createMutators(login.loginState?.decoded),
+        logLevel: 'info' as const,
+        auth: (error?: 'invalid-token') => {
+          if (error === 'invalid-token') {
+            login.logout();
+            return undefined;
+          }
+          return login.loginState?.encoded;
+        },
+        mutateURL: `${window.location.origin}/api/mutate`,
+        getQueriesURL: `${window.location.origin}/api/get-queries`,
+      }) satisfies ZeroOptions<Schema, CustomMutatorDefs, AuthData | undefined>,
+    [login],
+  );
 
   return <ZeroProvider {...props}>{children}</ZeroProvider>;
 }

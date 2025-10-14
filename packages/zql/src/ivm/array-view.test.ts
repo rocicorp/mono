@@ -44,7 +44,6 @@ test('basics', () => {
   const unlisten = view.addListener(entries => {
     ++callCount;
     assertArray(entries);
-    // eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore - stuck with `infinite depth` errors
     data = [...entries] as ReadonlyJSONValue[];
   });
