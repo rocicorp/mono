@@ -67,7 +67,7 @@ jobs:
     needs: [format, lint, check-types]
     strategy:
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
