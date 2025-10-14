@@ -2,11 +2,15 @@ import type {LogContext} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import type postgres from 'postgres';
 import {assert} from '../../../shared/src/asserts.ts';
+import {stringify} from '../../../shared/src/bigint-json.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {Queue} from '../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
-import {stringify} from '../../../shared/src/bigint-json.ts';
-import type {PostgresDB, PostgresTransaction} from '../types/pg.ts';
+import {
+  disableStatementTimeout,
+  type PostgresDB,
+  type PostgresTransaction,
+} from '../types/pg.ts';
 import * as Mode from './mode-enum.ts';
 
 type Mode = Enum<typeof Mode>;
@@ -179,6 +183,7 @@ export class TransactionPool {
     const worker = async (tx: PostgresTransaction) => {
       try {
         lc.debug?.('started transaction');
+        disableStatementTimeout(tx);
 
         let last: Promise<void> = promiseVoid;
 

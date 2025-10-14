@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
-import type {PostgresDB} from '../../types/pg.ts';
+import {disableStatementTimeout, type PostgresDB} from '../../types/pg.ts';
 import {cvrSchema, type ShardID} from '../../types/shards.ts';
 import {RunningState} from '../running-state.ts';
 import type {Service} from '../service.ts';
@@ -91,6 +91,8 @@ export class CVRPurger implements Service {
     maxCVRs: number,
   ): Promise<{purged: number; remaining: number}> {
     return this.#db.begin(async sql => {
+      disableStatementTimeout(sql);
+
       const threshold = Date.now() - this.#inactivityThresholdMs;
       // Implementation note: `FOR UPDATE` will prevent a syncer from
       // concurrently updating the CVR, since the update also performs

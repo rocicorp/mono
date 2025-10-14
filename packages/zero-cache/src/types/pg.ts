@@ -259,10 +259,10 @@ export type PostgresTransaction = postgres.TransactionSql<{
 export function pgClient(
   lc: LogContext,
   connectionURI: string,
-  options: postgres.Options<{
+  options?: postgres.Options<{
     bigint: PostgresType<bigint>;
     json: PostgresType<JSONValue>;
-  }> = {},
+  }>,
   jsonAsString?: 'json-as-string',
 ): PostgresDB {
   const onnotice = (n: Notice) => {
@@ -299,31 +299,6 @@ export function pgClient(
   // Set connections to expire between 5 and 10 minutes to free up state on PG.
   const maxLifetimeSeconds = randInt(5 * 60, 10 * 60);
 
-  // By default, disable any db-level `statement_timeout`, which is explicitly
-  // discouraged in the Postgres documentation, as application defaults are
-  // typically unsuitable for zero-cache operations.
-  //
-  // However, honor any explicit timeout specified in env.PGSTATEMENT_TIMEOUT
-  // so that users can override this if desired.
-  options.connection = {
-    ...options.connection,
-    // The connection options are passed as-is to postgres in the
-    // StartupMessage:
-    // https://github.com/porsager/postgres/blob/32feb259a3c9abffab761bd1758b3168d9e0cebc/deno/src/connection.js#L986
-    //
-    // so the type defined in
-    // https://github.com/porsager/postgres/blob/32feb259a3c9abffab761bd1758b3168d9e0cebc/types/index.d.ts#L335
-    //
-    // is more restrictive than it needs to be; Postgres will accept
-    // strings like "5min" or "0s".
-    //
-    // In particular, setting the value to the number 0 will result in
-    // the setting potentially being overridden by a user-level
-    // statement_timeout. Setting it to "0s", on the other hand, will override
-    // user and db level settings as desired.
-    ['statement_timeout']: (process.env['PGSTATEMENT_TIMEOUT'] ??
-      '0s') as unknown as number,
-  };
   return postgres(connectionURI, {
     ...postgresTypeConfig(jsonAsString),
     onnotice,
@@ -331,6 +306,21 @@ export function pgClient(
     ssl,
     ...options,
   });
+}
+
+/**
+ * Disables any statement_timeout for the current transaction. By default,
+ * Postgres does not impose a statement timeout, but some users and providers
+ * set one at the database level (even though it is explicitly discouraged by
+ * the Postgres documentation).
+ *
+ * Zero logic in particular often does not fit into the category of general
+ * application logic; for potentially long-running operations like migrations
+ * and background cleanup, the statement timeout should be disabled to prevent
+ * these operations from timing out.
+ */
+export function disableStatementTimeout(sql: PostgresTransaction) {
+  void sql`SET LOCAL statement_timeout = 0;`.execute();
 }
 
 export const typeNameByOID: Record<number, string> = Object.freeze(

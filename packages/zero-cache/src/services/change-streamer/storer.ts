@@ -9,7 +9,7 @@ import {Queue} from '../../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
-import type {PostgresDB} from '../../types/pg.ts';
+import {disableStatementTimeout, type PostgresDB} from '../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../types/shards.ts';
 import {type Commit} from '../change-source/protocol/current/downstream.ts';
 import type {StatusMessage} from '../change-source/protocol/current/status.ts';
@@ -160,6 +160,8 @@ export class Storer implements Service {
 
   purgeRecordsBefore(watermark: string): Promise<number> {
     return this.#db.begin(Mode.SERIALIZABLE, async sql => {
+      disableStatementTimeout(sql);
+
       // Check ownership before performing the purge. The server is expected to
       // exit immediately when an ownership change is detected, but checking
       // explicitly guards against race conditions.
