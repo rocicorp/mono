@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1760386971852,
+  "lastUpdate": 1760471104430,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -53981,6 +53981,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/b14ea8c4213a57df8abd11fb4de99e3a92d9ceb4"
         },
         "date": 1760386959504,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302365,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54477,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111453,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31872,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "matt.wonlaw@gmail.com",
+            "name": "Matt Wonlaw",
+            "username": "tantaman"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "0ecc7debbabcfc1fb4fe313fa149139d91e3c1e7",
+          "message": "chore(planner): add sqlite cost model (#5009)\n\nUses sqlite3_stmt_scanstatus to pull the cost of a query against a\nconneciton.\n\nFor a query, scanstatus outputs the loops that are run to satisfy the\nquery.\n\nEach loop has:\n1. selectid\n2. parentid\n3. est\n\n- selectid is the \"id\" of the loop. The lower the id the earlier that\nloop runs.\n- parentid tells us if the loop is nested in another loop\n- est is the number of rows a loop will emit each time it is run\n\nGetting the cost for parent->child loops is pretty clear:\n`parent_row_est * child_row_est`\n\nAlthough I believe it is impossible for us to get child loops for the\nsingle table queries we currently create against a connection.\n\nSibling costs are a bit confusing. Sibling costs come up when many loops\nhave no parent or the same parent.\n\nExample:\n\n```sql\nSELECT * FROM foo ORDER BY non_indexed_col;\n```\n\nThis will create a plan like:\n\n```\nexplain query plan select * from foo order by non_indexed_col;\nQUERY PLAN\n|--SCAN foo\n`--USE TEMP B-TREE FOR ORDER BY\n```\n\nThe `use temp b-tree for order by` is a sibling to the scan. Its `est`\nis also always 1 but it processes every row sent to it by `foo`. To deal\nwith this we multiply the total number of rows output by the prior\nsibling with the next sibling's cost (which is always 1).\n\nSo if `SCAN FOO` -> `300`\nThen `USE TEMP B-Tree...` -> `300`\nAnd total cost -> `600`\n\nWorking through this oddity here:\nhttps://sqlite.org/forum/forumpost/42825238d1",
+          "timestamp": "2025-10-14T15:43:19-04:00",
+          "tree_id": "3ed253e18a18dce4b49abf9bbeaf1655cc9ad428",
+          "url": "https://github.com/rocicorp/mono/commit/0ecc7debbabcfc1fb4fe313fa149139d91e3c1e7"
+        },
+        "date": 1760471091835,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
