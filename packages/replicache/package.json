@@ -44,7 +44,7 @@
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
     "compare-utf8": "^0.1.1",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.25.10",
     "expo-sqlite": "^15.2.14",
     "fetch-mock": "^9.11.0",
     "playwright": "^1.53.2",
