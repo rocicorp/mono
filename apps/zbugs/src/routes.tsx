@@ -36,7 +36,7 @@ export const routes = {
   home: '/',
   list: '/p/:projectName',
   deprecatedIssue: '/issue/:id', // redirected to projectIssue once project is fetched
-  issue: 'p/:projectName/issue/:id',
+  issue: '/p/:projectName/issue/:id',
 } as const;
 
 interface ListContextAndSetter {
