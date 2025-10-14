@@ -244,77 +244,79 @@ describe('fetchFromAPIServer', () => {
 });
 
 describe('urlMatch', () => {
+  const lc = createSilentLogContext();
+
   test('should return true for matching URLs with regex patterns', () => {
     // Exact match pattern
     expect(
-      urlMatch('https://api.example.com/endpoint', [
+      urlMatch(lc, 'https://api.example.com/endpoint', [
         '^https://api\\.example\\.com/endpoint$',
       ]),
     ).toBe(true);
 
     // Pattern matching any single subdomain
     expect(
-      urlMatch('https://api.example.com/endpoint', [
+      urlMatch(lc, 'https://api.example.com/endpoint', [
         '^https://[^.]+\\.example\\.com/endpoint$',
       ]),
     ).toBe(true);
 
     expect(
-      urlMatch('https://www.example.com/endpoint', [
+      urlMatch(lc, 'https://www.example.com/endpoint', [
         '^https://[^.]+\\.example\\.com/endpoint$',
       ]),
     ).toBe(true);
 
     // Pattern matching two subdomains
     expect(
-      urlMatch('https://api.v1.example.com/endpoint', [
+      urlMatch(lc, 'https://api.v1.example.com/endpoint', [
         '^https://[^.]+\\.[^.]+\\.example\\.com/endpoint$',
       ]),
     ).toBe(true);
 
     // Query parameters are ignored
     expect(
-      urlMatch('https://api.example.com/endpoint?existing=param', [
+      urlMatch(lc, 'https://api.example.com/endpoint?existing=param', [
         '^https://api\\.example\\.com/endpoint$',
       ]),
     ).toBe(true);
 
     // Multiple query parameters
     expect(
-      urlMatch('https://api.example.com/endpoint?foo=bar&baz=qux', [
+      urlMatch(lc, 'https://api.example.com/endpoint?foo=bar&baz=qux', [
         '^https://api\\.example\\.com/endpoint$',
       ]),
     ).toBe(true);
 
     // Pattern with alternation for specific subdomains
     expect(
-      urlMatch('https://api.example.com/endpoint', [
+      urlMatch(lc, 'https://api.example.com/endpoint', [
         '^https://(api|www)\\.example\\.com/endpoint$',
       ]),
     ).toBe(true);
 
     expect(
-      urlMatch('https://www.example.com/endpoint', [
+      urlMatch(lc, 'https://www.example.com/endpoint', [
         '^https://(api|www)\\.example\\.com/endpoint$',
       ]),
     ).toBe(true);
 
     // Pattern with versioned subdomains
     expect(
-      urlMatch('https://api.v1.example.com/endpoint', [
+      urlMatch(lc, 'https://api.v1.example.com/endpoint', [
         '^https://api\\.v\\d+\\.example\\.com/endpoint$',
       ]),
     ).toBe(true);
 
     expect(
-      urlMatch('https://api.v99.example.com/endpoint', [
+      urlMatch(lc, 'https://api.v99.example.com/endpoint', [
         '^https://api\\.v\\d+\\.example\\.com/endpoint$',
       ]),
     ).toBe(true);
 
     // Partial path matching (without $ anchor)
     expect(
-      urlMatch('https://api.example.com/endpoint/subpath', [
+      urlMatch(lc, 'https://api.example.com/endpoint/subpath', [
         '^https://api\\.example\\.com/endpoint',
       ]),
     ).toBe(true);
@@ -323,75 +325,75 @@ describe('urlMatch', () => {
   test('should return false for non-matching URLs', () => {
     // Different path
     expect(
-      urlMatch('https://api.example.com/other-endpoint', [
+      urlMatch(lc, 'https://api.example.com/other-endpoint', [
         '^https://api\\.example\\.com/endpoint$',
       ]),
     ).toBe(false);
 
     // Different domain
     expect(
-      urlMatch('https://another-domain.com/endpoint', [
+      urlMatch(lc, 'https://another-domain.com/endpoint', [
         '^https://api\\.example\\.com/endpoint$',
       ]),
     ).toBe(false);
 
     // No subdomain when pattern requires one
     expect(
-      urlMatch('https://example.com/endpoint', [
+      urlMatch(lc, 'https://example.com/endpoint', [
         '^https://[^.]+\\.example\\.com/endpoint$',
       ]),
     ).toBe(false);
 
     // Extra path when pattern ends with $
     expect(
-      urlMatch('https://api.example.com/endpoint/path', [
+      urlMatch(lc, 'https://api.example.com/endpoint/path', [
         '^https://[^.]+\\.example\\.com/endpoint$',
       ]),
     ).toBe(false);
 
     // Wrong number of subdomains
     expect(
-      urlMatch('https://api.example.com/endpoint', [
+      urlMatch(lc, 'https://api.example.com/endpoint', [
         '^https://[^.]+\\.[^.]+\\.example\\.com/endpoint$',
       ]),
     ).toBe(false);
 
     // Specific subdomain doesn't match
     expect(
-      urlMatch('https://dev.example.com/endpoint', [
+      urlMatch(lc, 'https://dev.example.com/endpoint', [
         '^https://(api|www)\\.example\\.com/endpoint$',
       ]),
     ).toBe(false);
 
     // Non-numeric version
     expect(
-      urlMatch('https://api.vX.example.com/endpoint', [
+      urlMatch(lc, 'https://api.vX.example.com/endpoint', [
         '^https://api\\.v\\d+\\.example\\.com/endpoint$',
       ]),
     ).toBe(false);
   });
 
   test('should handle empty allowed URLs array', () => {
-    expect(urlMatch('https://api.example.com/endpoint', [])).toBe(false);
+    expect(urlMatch(lc, 'https://api.example.com/endpoint', [])).toBe(false);
   });
 
   test('should handle multiple patterns and match the first valid one', () => {
     expect(
-      urlMatch('https://api1.example.com/endpoint', [
+      urlMatch(lc, 'https://api1.example.com/endpoint', [
         '^https://api1\\.example\\.com/endpoint$',
         '^https://api2\\.example\\.com/endpoint$',
       ]),
     ).toBe(true);
 
     expect(
-      urlMatch('https://api2.example.com/endpoint', [
+      urlMatch(lc, 'https://api2.example.com/endpoint', [
         '^https://api1\\.example\\.com/endpoint$',
         '^https://api2\\.example\\.com/endpoint$',
       ]),
     ).toBe(true);
 
     expect(
-      urlMatch('https://api3.example.com/endpoint', [
+      urlMatch(lc, 'https://api3.example.com/endpoint', [
         '^https://api1\\.example\\.com/endpoint$',
         '^https://api2\\.example\\.com/endpoint$',
       ]),
@@ -401,12 +403,12 @@ describe('urlMatch', () => {
   test('should throw error for invalid regex patterns', () => {
     // Invalid regex with unclosed bracket
     expect(() =>
-      urlMatch('https://api.example.com/endpoint', ['^https://[api']),
+      urlMatch(lc, 'https://api.example.com/endpoint', ['^https://[api']),
     ).toThrow('Invalid regex pattern in allowedUrls');
 
     // Invalid regex with unclosed parenthesis
     expect(() =>
-      urlMatch('https://api.example.com/endpoint', ['^https://(api|www']),
+      urlMatch(lc, 'https://api.example.com/endpoint', ['^https://(api|www']),
     ).toThrow('Invalid regex pattern in allowedUrls');
   });
 });

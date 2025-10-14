@@ -10,6 +10,9 @@ const reservedParams = ['schema', 'appID'];
 // Cache for compiled regex patterns to avoid recompilation on every urlMatch call
 const regexCache = new Map<string, RegExp>();
 
+// Track patterns we've already warned about to avoid log spam
+const warnedPatterns = new Set<string>();
+
 export type HeaderOptions = {
   apiKey?: string | undefined;
   token?: string | undefined;
@@ -29,7 +32,7 @@ export async function fetchFromAPIServer(
     allowedUrls,
   });
 
-  if (!urlMatch(url, allowedUrls)) {
+  if (!urlMatch(lc, url, allowedUrls)) {
     throw new Error(
       `URL "${url}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
     );
@@ -104,13 +107,37 @@ export async function fetchFromAPIServer(
  * - "^https://(api|www)\\.example\\.com/" - Matches specific subdomains
  * - "^https://api\\.v\\d+\\.example\\.com/" - Matches versioned subdomains (e.g., "https://api.v1.example.com", "https://api.v2.example.com")
  */
-export function urlMatch(url: string, allowedUrls: string[]): boolean {
+export function urlMatch(
+  lc: LogContext,
+  url: string,
+  allowedUrls: string[],
+): boolean {
   // ignore query parameters and hash in the URL using proper URL parsing
   const urlObj = new URL(url);
   const urlWithoutQuery = urlObj.origin + urlObj.pathname;
 
   for (const allowedUrl of allowedUrls) {
     try {
+      // Warn about unanchored patterns (security risk)
+      if (!warnedPatterns.has(allowedUrl)) {
+        const startsWithAnchor = allowedUrl.startsWith('^');
+        const endsWithAnchor = allowedUrl.endsWith('$');
+
+        if (!startsWithAnchor || !endsWithAnchor) {
+          lc.warn?.(
+            'Unanchored regex pattern detected in allowedUrls - this is a security risk',
+            {
+              pattern: allowedUrl,
+              missingStartAnchor: !startsWithAnchor,
+              missingEndAnchor: !endsWithAnchor,
+              recommendation:
+                'Use ^ at the start and $ at the end to prevent matching unintended URLs',
+            },
+          );
+          warnedPatterns.add(allowedUrl);
+        }
+      }
+
       // Get or create cached regex pattern
       let regex = regexCache.get(allowedUrl);
       if (!regex) {
