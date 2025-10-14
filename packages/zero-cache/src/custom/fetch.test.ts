@@ -10,7 +10,12 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorForClient} from '../types/error-for-client.ts';
 import type {ShardID} from '../types/shards.ts';
-import {fetchFromAPIServer, urlMatch} from './fetch.ts';
+import {
+  compileUrlPatterns,
+  fetchFromAPIServer,
+  urlMatch,
+  checkRegexAnchoring,
+} from './fetch.ts';
 
 // Mock the global fetch function
 const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
@@ -24,6 +29,9 @@ describe('fetchFromAPIServer', () => {
   const lc = createSilentLogContext();
 
   const baseUrl = 'https://api.example.com/endpoint';
+  const allowedPatterns = compileUrlPatterns(lc, [
+    '^https://api\\.example\\.com/endpoint$',
+  ]);
   const headerOptions = {
     apiKey: 'test-api-key',
     token: 'test-token',
@@ -43,7 +51,7 @@ describe('fetchFromAPIServer', () => {
     await fetchFromAPIServer(
       lc,
       baseUrl,
-      [baseUrl],
+      allowedPatterns,
       mockShard,
       headerOptions,
       body,
@@ -70,7 +78,7 @@ describe('fetchFromAPIServer', () => {
     await fetchFromAPIServer(
       lc,
       baseUrl,
-      [baseUrl],
+      allowedPatterns,
       mockShard,
       {apiKey: 'my-key'},
       body,
@@ -93,7 +101,7 @@ describe('fetchFromAPIServer', () => {
     await fetchFromAPIServer(
       lc,
       baseUrl,
-      [baseUrl],
+      allowedPatterns,
       mockShard,
       {token: 'my-token'},
       body,
@@ -113,7 +121,7 @@ describe('fetchFromAPIServer', () => {
     const mockResponse = new Response('{}', {status: 200});
     mockFetch.mockResolvedValue(mockResponse);
 
-    await fetchFromAPIServer(lc, baseUrl, [baseUrl], mockShard, {}, body);
+    await fetchFromAPIServer(lc, baseUrl, allowedPatterns, mockShard, {}, body);
 
     const callArgs = mockFetch.mock.calls[0];
     const headers = callArgs[1]?.headers as Record<string, string>;
@@ -127,7 +135,7 @@ describe('fetchFromAPIServer', () => {
     const mockResponse = new Response('{}', {status: 200});
     mockFetch.mockResolvedValue(mockResponse);
 
-    await fetchFromAPIServer(lc, baseUrl, [baseUrl], mockShard, {}, body);
+    await fetchFromAPIServer(lc, baseUrl, allowedPatterns, mockShard, {}, body);
 
     const calledUrl = mockFetch.mock.calls[0][0] as string;
     const url = new URL(calledUrl);
@@ -140,7 +148,14 @@ describe('fetchFromAPIServer', () => {
     const urlWithReserved = 'https://api.example.com/endpoint?schema=reserved';
 
     await expect(
-      fetchFromAPIServer(lc, urlWithReserved, [baseUrl], mockShard, {}, body),
+      fetchFromAPIServer(
+        lc,
+        urlWithReserved,
+        allowedPatterns,
+        mockShard,
+        {},
+        body,
+      ),
     ).rejects.toThrow(
       'The push URL cannot contain the reserved query param "schema"',
     );
@@ -150,7 +165,14 @@ describe('fetchFromAPIServer', () => {
     const urlWithReserved = 'https://api.example.com/endpoint?appID=reserved';
 
     await expect(
-      fetchFromAPIServer(lc, urlWithReserved, [baseUrl], mockShard, {}, body),
+      fetchFromAPIServer(
+        lc,
+        urlWithReserved,
+        allowedPatterns,
+        mockShard,
+        {},
+        body,
+      ),
     ).rejects.toThrow(
       'The push URL cannot contain the reserved query param "appID"',
     );
@@ -165,7 +187,7 @@ describe('fetchFromAPIServer', () => {
     const result = await fetchFromAPIServer(
       lc,
       baseUrl,
-      [baseUrl],
+      allowedPatterns,
       mockShard,
       {},
       body,
@@ -182,7 +204,7 @@ describe('fetchFromAPIServer', () => {
     mockFetch.mockResolvedValueOnce(mockResponse1);
 
     await expect(
-      fetchFromAPIServer(lc, baseUrl, [baseUrl], mockShard, {}, body),
+      fetchFromAPIServer(lc, baseUrl, allowedPatterns, mockShard, {}, body),
     ).rejects.toThrow(ErrorForClient);
 
     // Second call - test the error details
@@ -190,7 +212,14 @@ describe('fetchFromAPIServer', () => {
     mockFetch.mockResolvedValueOnce(mockResponse2);
 
     try {
-      await fetchFromAPIServer(lc, baseUrl, [baseUrl], mockShard, {}, body);
+      await fetchFromAPIServer(
+        lc,
+        baseUrl,
+        allowedPatterns,
+        mockShard,
+        {},
+        body,
+      );
     } catch (error) {
       expect(error).toBeInstanceOf(ErrorForClient);
       const errorForClient = error as ErrorForClient;
@@ -206,7 +235,7 @@ describe('fetchFromAPIServer', () => {
     const result = await fetchFromAPIServer(
       lc,
       baseUrl,
-      [baseUrl],
+      allowedPatterns,
       mockShard,
       {},
       body,
@@ -228,7 +257,7 @@ describe('fetchFromAPIServer', () => {
     await fetchFromAPIServer(
       lc,
       baseUrl,
-      [baseUrl],
+      allowedPatterns,
       mockShard,
       {},
       complexBody,
@@ -243,172 +272,91 @@ describe('fetchFromAPIServer', () => {
   });
 });
 
+describe('checkRegexAnchoring', () => {
+  test('should detect properly anchored patterns', () => {
+    const result = checkRegexAnchoring(
+      '^https://api\\.example\\.com/endpoint$',
+    );
+    expect(result).toEqual({
+      isAnchored: true,
+      missingStartAnchor: false,
+      missingEndAnchor: false,
+    });
+  });
+
+  test('should detect missing start anchor', () => {
+    const result = checkRegexAnchoring('https://api\\.example\\.com/endpoint$');
+    expect(result).toEqual({
+      isAnchored: false,
+      missingStartAnchor: true,
+      missingEndAnchor: false,
+    });
+  });
+
+  test('should detect missing end anchor', () => {
+    const result = checkRegexAnchoring('^https://api\\.example\\.com/endpoint');
+    expect(result).toEqual({
+      isAnchored: false,
+      missingStartAnchor: false,
+      missingEndAnchor: true,
+    });
+  });
+
+  test('should detect missing both anchors', () => {
+    const result = checkRegexAnchoring('https://api\\.example\\.com/endpoint');
+    expect(result).toEqual({
+      isAnchored: false,
+      missingStartAnchor: true,
+      missingEndAnchor: true,
+    });
+  });
+});
+
 describe('urlMatch', () => {
-  const lc = createSilentLogContext();
-
-  test('should return true for matching URLs with regex patterns', () => {
-    // Exact match pattern
+  test('should return true for matching URLs', () => {
+    // Exact match
     expect(
-      urlMatch(lc, 'https://api.example.com/endpoint', [
-        '^https://api\\.example\\.com/endpoint$',
-      ]),
-    ).toBe(true);
-
-    // Pattern matching any single subdomain
-    expect(
-      urlMatch(lc, 'https://api.example.com/endpoint', [
-        '^https://[^.]+\\.example\\.com/endpoint$',
-      ]),
-    ).toBe(true);
-
-    expect(
-      urlMatch(lc, 'https://www.example.com/endpoint', [
-        '^https://[^.]+\\.example\\.com/endpoint$',
-      ]),
-    ).toBe(true);
-
-    // Pattern matching two subdomains
-    expect(
-      urlMatch(lc, 'https://api.v1.example.com/endpoint', [
-        '^https://[^.]+\\.[^.]+\\.example\\.com/endpoint$',
+      urlMatch('https://api.example.com/endpoint', [
+        /^https:\/\/api\.example\.com\/endpoint$/,
       ]),
     ).toBe(true);
 
     // Query parameters are ignored
     expect(
-      urlMatch(lc, 'https://api.example.com/endpoint?existing=param', [
-        '^https://api\\.example\\.com/endpoint$',
+      urlMatch('https://api.example.com/endpoint?foo=bar', [
+        /^https:\/\/api\.example\.com\/endpoint$/,
       ]),
     ).toBe(true);
 
-    // Multiple query parameters
+    // Hash fragments are ignored
     expect(
-      urlMatch(lc, 'https://api.example.com/endpoint?foo=bar&baz=qux', [
-        '^https://api\\.example\\.com/endpoint$',
+      urlMatch('https://api.example.com/endpoint#section', [
+        /^https:\/\/api\.example\.com\/endpoint$/,
       ]),
     ).toBe(true);
 
-    // Pattern with alternation for specific subdomains
+    // Multiple patterns
     expect(
-      urlMatch(lc, 'https://api.example.com/endpoint', [
-        '^https://(api|www)\\.example\\.com/endpoint$',
-      ]),
-    ).toBe(true);
-
-    expect(
-      urlMatch(lc, 'https://www.example.com/endpoint', [
-        '^https://(api|www)\\.example\\.com/endpoint$',
-      ]),
-    ).toBe(true);
-
-    // Pattern with versioned subdomains
-    expect(
-      urlMatch(lc, 'https://api.v1.example.com/endpoint', [
-        '^https://api\\.v\\d+\\.example\\.com/endpoint$',
-      ]),
-    ).toBe(true);
-
-    expect(
-      urlMatch(lc, 'https://api.v99.example.com/endpoint', [
-        '^https://api\\.v\\d+\\.example\\.com/endpoint$',
-      ]),
-    ).toBe(true);
-
-    // Partial path matching (without $ anchor)
-    expect(
-      urlMatch(lc, 'https://api.example.com/endpoint/subpath', [
-        '^https://api\\.example\\.com/endpoint',
+      urlMatch('https://api2.example.com/endpoint', [
+        /^https:\/\/api1\.example\.com\/endpoint$/,
+        /^https:\/\/api2\.example\.com\/endpoint$/,
       ]),
     ).toBe(true);
   });
 
   test('should return false for non-matching URLs', () => {
-    // Different path
     expect(
-      urlMatch(lc, 'https://api.example.com/other-endpoint', [
-        '^https://api\\.example\\.com/endpoint$',
+      urlMatch('https://api.example.com/other', [
+        /^https:\/\/api\.example\.com\/endpoint$/,
       ]),
     ).toBe(false);
 
-    // Different domain
     expect(
-      urlMatch(lc, 'https://another-domain.com/endpoint', [
-        '^https://api\\.example\\.com/endpoint$',
+      urlMatch('https://evil.com/endpoint', [
+        /^https:\/\/api\.example\.com\/endpoint$/,
       ]),
     ).toBe(false);
 
-    // No subdomain when pattern requires one
-    expect(
-      urlMatch(lc, 'https://example.com/endpoint', [
-        '^https://[^.]+\\.example\\.com/endpoint$',
-      ]),
-    ).toBe(false);
-
-    // Extra path when pattern ends with $
-    expect(
-      urlMatch(lc, 'https://api.example.com/endpoint/path', [
-        '^https://[^.]+\\.example\\.com/endpoint$',
-      ]),
-    ).toBe(false);
-
-    // Wrong number of subdomains
-    expect(
-      urlMatch(lc, 'https://api.example.com/endpoint', [
-        '^https://[^.]+\\.[^.]+\\.example\\.com/endpoint$',
-      ]),
-    ).toBe(false);
-
-    // Specific subdomain doesn't match
-    expect(
-      urlMatch(lc, 'https://dev.example.com/endpoint', [
-        '^https://(api|www)\\.example\\.com/endpoint$',
-      ]),
-    ).toBe(false);
-
-    // Non-numeric version
-    expect(
-      urlMatch(lc, 'https://api.vX.example.com/endpoint', [
-        '^https://api\\.v\\d+\\.example\\.com/endpoint$',
-      ]),
-    ).toBe(false);
-  });
-
-  test('should handle empty allowed URLs array', () => {
-    expect(urlMatch(lc, 'https://api.example.com/endpoint', [])).toBe(false);
-  });
-
-  test('should handle multiple patterns and match the first valid one', () => {
-    expect(
-      urlMatch(lc, 'https://api1.example.com/endpoint', [
-        '^https://api1\\.example\\.com/endpoint$',
-        '^https://api2\\.example\\.com/endpoint$',
-      ]),
-    ).toBe(true);
-
-    expect(
-      urlMatch(lc, 'https://api2.example.com/endpoint', [
-        '^https://api1\\.example\\.com/endpoint$',
-        '^https://api2\\.example\\.com/endpoint$',
-      ]),
-    ).toBe(true);
-
-    expect(
-      urlMatch(lc, 'https://api3.example.com/endpoint', [
-        '^https://api1\\.example\\.com/endpoint$',
-        '^https://api2\\.example\\.com/endpoint$',
-      ]),
-    ).toBe(false);
-  });
-
-  test('should throw error for invalid regex patterns', () => {
-    // Invalid regex with unclosed bracket
-    expect(() =>
-      urlMatch(lc, 'https://api.example.com/endpoint', ['^https://[api']),
-    ).toThrow('Invalid regex pattern in allowedUrls');
-
-    // Invalid regex with unclosed parenthesis
-    expect(() =>
-      urlMatch(lc, 'https://api.example.com/endpoint', ['^https://(api|www']),
-    ).toThrow('Invalid regex pattern in allowedUrls');
+    expect(urlMatch('https://api.example.com/endpoint', [])).toBe(false);
   });
 });

@@ -7,11 +7,64 @@ import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 
 const reservedParams = ['schema', 'appID'];
 
-// Cache for compiled regex patterns to avoid recompilation on every urlMatch call
-const regexCache = new Map<string, RegExp>();
+/**
+ * Checks if a regex pattern is properly anchored with ^ and $.
+ * Returns information about missing anchors.
+ */
+export function checkRegexAnchoring(pattern: string): {
+  isAnchored: boolean;
+  missingStartAnchor: boolean;
+  missingEndAnchor: boolean;
+} {
+  const startsWithAnchor = pattern.startsWith('^');
+  const endsWithAnchor = pattern.endsWith('$');
 
-// Track patterns we've already warned about to avoid log spam
-const warnedPatterns = new Set<string>();
+  return {
+    isAnchored: startsWithAnchor && endsWithAnchor,
+    missingStartAnchor: !startsWithAnchor,
+    missingEndAnchor: !endsWithAnchor,
+  };
+}
+
+/**
+ * Compiles and validates URL regex patterns from configuration.
+ * Logs warnings for unanchored patterns (security risk).
+ *
+ * @throws Error if any pattern is an invalid regex
+ */
+export function compileUrlPatterns(
+  lc: LogContext,
+  patterns: string[],
+): RegExp[] {
+  const compiled: RegExp[] = [];
+
+  for (const pattern of patterns) {
+    // Check anchoring before compilation
+    const anchoring = checkRegexAnchoring(pattern);
+    if (!anchoring.isAnchored) {
+      lc.warn?.(
+        'Unanchored regex pattern detected in URL configuration - this is a security risk',
+        {
+          pattern,
+          missingStartAnchor: anchoring.missingStartAnchor,
+          missingEndAnchor: anchoring.missingEndAnchor,
+          recommendation:
+            'Use ^ at the start and $ at the end to prevent matching unintended URLs',
+        },
+      );
+    }
+
+    try {
+      compiled.push(new RegExp(pattern));
+    } catch (e) {
+      throw new Error(
+        `Invalid regex pattern in URL configuration: "${pattern}". Error: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
+  return compiled;
+}
 
 export type HeaderOptions = {
   apiKey?: string | undefined;
@@ -22,17 +75,16 @@ export type HeaderOptions = {
 export async function fetchFromAPIServer(
   lc: LogContext,
   url: string,
-  allowedUrls: string[],
+  allowedUrlPatterns: RegExp[],
   shard: ShardID,
   headerOptions: HeaderOptions,
   body: ReadonlyJSONValue,
 ) {
   lc.info?.('fetchFromAPIServer called', {
     url,
-    allowedUrls,
   });
 
-  if (!urlMatch(lc, url, allowedUrls)) {
+  if (!urlMatch(url, allowedUrlPatterns)) {
     throw new Error(
       `URL "${url}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
     );
@@ -96,9 +148,9 @@ export async function fetchFromAPIServer(
 }
 
 /**
- * Returns true if the url matches one of the allowedUrls, where each allowedUrl is a regex pattern string.
+ * Returns true if the url matches one of the allowedUrlPatterns.
  *
- * Query parameters are ignored when matching.
+ * Query parameters and hash fragments are ignored when matching.
  *
  * Example regex patterns:
  * - "^https://api\\.example\\.com/endpoint$" - Exact match for a specific URL
@@ -107,51 +159,14 @@ export async function fetchFromAPIServer(
  * - "^https://(api|www)\\.example\\.com/" - Matches specific subdomains
  * - "^https://api\\.v\\d+\\.example\\.com/" - Matches versioned subdomains (e.g., "https://api.v1.example.com", "https://api.v2.example.com")
  */
-export function urlMatch(
-  lc: LogContext,
-  url: string,
-  allowedUrls: string[],
-): boolean {
+export function urlMatch(url: string, allowedUrlPatterns: RegExp[]): boolean {
   // ignore query parameters and hash in the URL using proper URL parsing
   const urlObj = new URL(url);
   const urlWithoutQuery = urlObj.origin + urlObj.pathname;
 
-  for (const allowedUrl of allowedUrls) {
-    try {
-      // Warn about unanchored patterns (security risk)
-      if (!warnedPatterns.has(allowedUrl)) {
-        const startsWithAnchor = allowedUrl.startsWith('^');
-        const endsWithAnchor = allowedUrl.endsWith('$');
-
-        if (!startsWithAnchor || !endsWithAnchor) {
-          lc.warn?.(
-            'Unanchored regex pattern detected in allowedUrls - this is a security risk',
-            {
-              pattern: allowedUrl,
-              missingStartAnchor: !startsWithAnchor,
-              missingEndAnchor: !endsWithAnchor,
-              recommendation:
-                'Use ^ at the start and $ at the end to prevent matching unintended URLs',
-            },
-          );
-          warnedPatterns.add(allowedUrl);
-        }
-      }
-
-      // Get or create cached regex pattern
-      let regex = regexCache.get(allowedUrl);
-      if (!regex) {
-        regex = new RegExp(allowedUrl);
-        regexCache.set(allowedUrl, regex);
-      }
-      if (regex.test(urlWithoutQuery)) {
-        return true;
-      }
-    } catch (e) {
-      // If the regex is invalid, log and skip it
-      throw new Error(
-        `Invalid regex pattern in allowedUrls: "${allowedUrl}". Error: ${e instanceof Error ? e.message : String(e)}`,
-      );
+  for (const pattern of allowedUrlPatterns) {
+    if (pattern.test(urlWithoutQuery)) {
+      return true;
     }
   }
   return false;
