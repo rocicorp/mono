@@ -10,7 +10,11 @@ import {
   getOrCreateCounter,
   getOrCreateHistogram,
 } from '../../observability/metrics.ts';
-import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
+import {
+  disableStatementTimeout,
+  type PostgresDB,
+  type PostgresTransaction,
+} from '../../types/pg.ts';
 import {rowIDString} from '../../types/row-key.ts';
 import {cvrSchema, type ShardID} from '../../types/shards.ts';
 import {checkVersion, type CVRFlushStats} from './cvr-store.ts';
@@ -226,6 +230,8 @@ export class RowRecordCache {
         const start = performance.now();
 
         const {rows, rowsVersion} = await this.#db.begin(tx => {
+          disableStatementTimeout(tx);
+
           // Note: This code block is synchronous, guaranteeing that the
           // #pendingRowsVersion is consistent with the #pending rows.
           const rows = this.#pending.size;
