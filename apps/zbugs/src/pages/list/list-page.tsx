@@ -217,13 +217,14 @@ export function ListPage({onReady}: {onReady: () => void}) {
   }
 
   const [location] = useLocation();
-  const listContext: ListContext = useMemo(() => {
-    return {
+  const listContext: ListContext = useMemo(
+    () => ({
       href: `${location}?${search}`,
       title,
       params: listContextParams,
-    };
-  }, [location, search, title, listContextParams]);
+    }),
+    [location, search, title, listContextParams],
+  );
 
   const {setListContext} = useListContext();
   useEffect(() => {
