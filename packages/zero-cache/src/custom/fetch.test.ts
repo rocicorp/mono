@@ -10,12 +10,7 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorForClient} from '../types/error-for-client.ts';
 import type {ShardID} from '../types/shards.ts';
-import {
-  compileUrlPatterns,
-  fetchFromAPIServer,
-  urlMatch,
-  checkRegexAnchoring,
-} from './fetch.ts';
+import {compileUrlPatterns, fetchFromAPIServer, urlMatch} from './fetch.ts';
 
 // Mock the global fetch function
 const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
@@ -272,43 +267,66 @@ describe('fetchFromAPIServer', () => {
   });
 });
 
-describe('checkRegexAnchoring', () => {
-  test('should detect properly anchored patterns', () => {
-    const result = checkRegexAnchoring(
+describe('compileUrlPatterns', () => {
+  test('should keep already anchored patterns unchanged', () => {
+    const lc = createSilentLogContext();
+    const patterns = compileUrlPatterns(lc, [
       '^https://api\\.example\\.com/endpoint$',
+    ]);
+    expect(patterns).toHaveLength(1);
+    expect(patterns[0].test('https://api.example.com/endpoint')).toBe(true);
+    expect(patterns[0].test('https://api.example.com/endpoint/extra')).toBe(
+      false,
     );
-    expect(result).toEqual({
-      isAnchored: true,
-      missingStartAnchor: false,
-      missingEndAnchor: false,
-    });
+    expect(patterns[0].test('prefix/https://api.example.com/endpoint')).toBe(
+      false,
+    );
   });
 
-  test('should detect missing start anchor', () => {
-    const result = checkRegexAnchoring('https://api\\.example\\.com/endpoint$');
-    expect(result).toEqual({
-      isAnchored: false,
-      missingStartAnchor: true,
-      missingEndAnchor: false,
-    });
+  test('should auto-anchor pattern missing start anchor', () => {
+    const lc = createSilentLogContext();
+    const patterns = compileUrlPatterns(lc, [
+      'https://api\\.example\\.com/endpoint$',
+    ]);
+    expect(patterns).toHaveLength(1);
+    expect(patterns[0].test('https://api.example.com/endpoint')).toBe(true);
+    expect(patterns[0].test('prefix/https://api.example.com/endpoint')).toBe(
+      false,
+    );
   });
 
-  test('should detect missing end anchor', () => {
-    const result = checkRegexAnchoring('^https://api\\.example\\.com/endpoint');
-    expect(result).toEqual({
-      isAnchored: false,
-      missingStartAnchor: false,
-      missingEndAnchor: true,
-    });
+  test('should auto-anchor pattern missing end anchor', () => {
+    const lc = createSilentLogContext();
+    const patterns = compileUrlPatterns(lc, [
+      '^https://api\\.example\\.com/endpoint',
+    ]);
+    expect(patterns).toHaveLength(1);
+    expect(patterns[0].test('https://api.example.com/endpoint')).toBe(true);
+    expect(patterns[0].test('https://api.example.com/endpoint/extra')).toBe(
+      false,
+    );
   });
 
-  test('should detect missing both anchors', () => {
-    const result = checkRegexAnchoring('https://api\\.example\\.com/endpoint');
-    expect(result).toEqual({
-      isAnchored: false,
-      missingStartAnchor: true,
-      missingEndAnchor: true,
-    });
+  test('should auto-anchor pattern missing both anchors', () => {
+    const lc = createSilentLogContext();
+    const patterns = compileUrlPatterns(lc, [
+      'https://api\\.example\\.com/endpoint',
+    ]);
+    expect(patterns).toHaveLength(1);
+    expect(patterns[0].test('https://api.example.com/endpoint')).toBe(true);
+    expect(patterns[0].test('https://api.example.com/endpoint/extra')).toBe(
+      false,
+    );
+    expect(patterns[0].test('prefix/https://api.example.com/endpoint')).toBe(
+      false,
+    );
+  });
+
+  test('should throw error for invalid regex pattern', () => {
+    const lc = createSilentLogContext();
+    expect(() => compileUrlPatterns(lc, ['[invalid regex'])).toThrow(
+      /Invalid regex pattern in URL configuration/,
+    );
   });
 });
 

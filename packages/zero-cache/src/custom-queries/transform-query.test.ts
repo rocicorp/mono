@@ -159,7 +159,7 @@ describe('CustomQueryTransformer', () => {
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
       lc,
       pullUrl,
-      expect.any(Array), // URL patterns (now RegExp[])
+      [/^https:\/\/api\.example\.com\/pull$/],
       mockShard,
       headerOptions,
       [
@@ -394,7 +394,7 @@ describe('CustomQueryTransformer', () => {
     expect(mockFetchFromAPIServer).toHaveBeenLastCalledWith(
       lc,
       'https://api.example.com/pull',
-      expect.any(Array), // URL patterns
+      [/^https:\/\/api\.example\.com\/pull$/],
       mockShard,
       headerOptions,
       ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
@@ -410,7 +410,7 @@ describe('CustomQueryTransformer', () => {
     expect(mockFetchFromAPIServer).toHaveBeenLastCalledWith(
       lc,
       pullUrl,
-      expect.any(Array), // URL patterns
+      [/^https:\/\/api\.example\.com\/pull$/],
       mockShard,
       headerOptions,
       [
@@ -455,7 +455,7 @@ describe('CustomQueryTransformer', () => {
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
       lc,
       pullUrl,
-      expect.any(Array), // URL patterns
+      [/^https:\/\/api\.example\.com\/pull$/],
       mockShard,
       headerOptions, // Cookies should not be forwarded
       ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
@@ -495,7 +495,7 @@ describe('CustomQueryTransformer', () => {
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
       lc,
       pullUrl,
-      expect.any(Array), // URL patterns
+      [/^https:\/\/api\.example\.com\/pull$/],
       mockShard,
       {...headerOptions, cookie: 'test-cookie'}, // Cookies should be forwarded
       ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
@@ -629,7 +629,7 @@ describe('CustomQueryTransformer', () => {
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
       lc,
       customUrl,
-      expect.any(Array), // URL patterns
+      [/^https:\/\/api\.example\.com\/pull$/],
       mockShard,
       headerOptions,
       ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
@@ -663,7 +663,7 @@ describe('CustomQueryTransformer', () => {
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
       lc,
       pullUrl,
-      expect.any(Array), // URL patterns
+      [/^https:\/\/api\.example\.com\/pull$/],
       mockShard,
       headerOptions,
       ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
@@ -710,7 +710,7 @@ describe('CustomQueryTransformer', () => {
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
       lc,
       disallowedUrl,
-      expect.any(Array), // URL patterns
+      [/^https:\/\/api\.example\.com\/pull$/],
       mockShard,
       headerOptions,
       ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
@@ -746,7 +746,7 @@ describe('CustomQueryTransformer', () => {
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
       lc,
       pullUrl,
-      expect.any(Array), // URL patterns
+      [/^https:\/\/api\.example\.com\/pull$/],
       mockShard,
       headerOptions,
       ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
@@ -788,7 +788,7 @@ describe('CustomQueryTransformer', () => {
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
       lc,
       pullUrl,
-      expect.any(Array), // URL patterns
+      [/^https:\/\/api\.example\.com\/pull$/],
       mockShard,
       headerOptions,
       ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],

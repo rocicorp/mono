@@ -8,27 +8,8 @@ import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 const reservedParams = ['schema', 'appID'];
 
 /**
- * Checks if a regex pattern is properly anchored with ^ and $.
- * Returns information about missing anchors.
- */
-export function checkRegexAnchoring(pattern: string): {
-  isAnchored: boolean;
-  missingStartAnchor: boolean;
-  missingEndAnchor: boolean;
-} {
-  const startsWithAnchor = pattern.startsWith('^');
-  const endsWithAnchor = pattern.endsWith('$');
-
-  return {
-    isAnchored: startsWithAnchor && endsWithAnchor,
-    missingStartAnchor: !startsWithAnchor,
-    missingEndAnchor: !endsWithAnchor,
-  };
-}
-
-/**
  * Compiles and validates URL regex patterns from configuration.
- * Logs warnings for unanchored patterns (security risk).
+ * Automatically anchors patterns with ^ and $ if not already present for security.
  *
  * @throws Error if any pattern is an invalid regex
  */
@@ -39,23 +20,26 @@ export function compileUrlPatterns(
   const compiled: RegExp[] = [];
 
   for (const pattern of patterns) {
-    // Check anchoring before compilation
-    const anchoring = checkRegexAnchoring(pattern);
-    if (!anchoring.isAnchored) {
-      lc.warn?.(
-        'Unanchored regex pattern detected in URL configuration - this is a security risk',
-        {
-          pattern,
-          missingStartAnchor: anchoring.missingStartAnchor,
-          missingEndAnchor: anchoring.missingEndAnchor,
-          recommendation:
-            'Use ^ at the start and $ at the end to prevent matching unintended URLs',
-        },
-      );
+    let anchoredPattern = pattern;
+    const needsStartAnchor = !pattern.startsWith('^');
+    const needsEndAnchor = !pattern.endsWith('$');
+
+    if (needsStartAnchor || needsEndAnchor) {
+      if (needsStartAnchor) {
+        anchoredPattern = '^' + anchoredPattern;
+      }
+      if (needsEndAnchor) {
+        anchoredPattern = anchoredPattern + '$';
+      }
+
+      lc.info?.('Auto-anchored regex pattern for security', {
+        original: pattern,
+        anchored: anchoredPattern,
+      });
     }
 
     try {
-      compiled.push(new RegExp(pattern));
+      compiled.push(new RegExp(anchoredPattern));
     } catch (e) {
       throw new Error(
         `Invalid regex pattern in URL configuration: "${pattern}". Error: ${e instanceof Error ? e.message : String(e)}`,
