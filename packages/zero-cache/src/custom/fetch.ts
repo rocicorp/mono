@@ -146,7 +146,13 @@ export async function fetchFromAPIServer(
 export function urlMatch(url: string, allowedUrlPatterns: RegExp[]): boolean {
   // ignore query parameters and hash in the URL using proper URL parsing
   const urlObj = new URL(url);
-  const urlWithoutQuery = urlObj.origin + urlObj.pathname;
+  let urlWithoutQuery = urlObj.origin + urlObj.pathname;
+
+  // Normalize: remove trailing slash if it's just the root path
+  // This ensures 'http://example.com' and 'http://example.com/' are treated as equivalent
+  if (urlWithoutQuery.endsWith('/')) {
+    urlWithoutQuery = urlWithoutQuery.slice(0, -1);
+  }
 
   for (const pattern of allowedUrlPatterns) {
     if (pattern.test(urlWithoutQuery)) {
