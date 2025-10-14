@@ -92,7 +92,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const listContext = zbugsHistoryState?.zbugsListContext;
 
   const [issue, issueResult] = useQuery(
-    issueDetail(login.loginState?.decoded, idField, id, z.userID),
+    issueDetail({idField, id, userID: z.userID}),
     CACHE_NAV,
   );
   useEffect(() => {
@@ -112,7 +112,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   useEffect(() => {
     if (issueResult.type === 'complete') {
       recordPageLoad('issue-page');
-      preload(login.loginState?.decoded, z);
+      preload(z);
     }
   }, [issueResult.type, login.loginState?.decoded, z]);
 
@@ -209,14 +209,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   };
 
   const [[next]] = useQuery(
-    issueListV2(
-      login.loginState?.decoded,
-      listContextParams,
-      z.userID,
-      1,
+    issueListV2({
+      listContext: listContextParams,
+      userID: z.userID,
+      limit: 1,
       start,
-      'forward',
-    ),
+      dir: 'forward',
+    }),
     prevNextOptions,
   );
   useKeypress('j', () => {
@@ -229,14 +228,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   });
 
   const [[prev]] = useQuery(
-    issueListV2(
-      login.loginState?.decoded,
-      listContextParams,
-      z.userID,
-      1,
+    issueListV2({
+      listContext: listContextParams,
+      userID: z.userID,
+      limit: 1,
       start,
-      'backward',
-    ),
+      dir: 'backward',
+    }),
     prevNextOptions,
   );
   useKeypress('k', () => {

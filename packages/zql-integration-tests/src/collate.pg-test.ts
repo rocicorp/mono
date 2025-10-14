@@ -16,7 +16,8 @@ import {
 import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
-import {completedAST, newQuery} from '../../zql/src/query/query-impl.ts';
+import {newQuery} from '../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import {type Query} from '../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../zql/src/query/test/query-delegate.ts';
 import {Database} from '../../zqlite/src/db.ts';
@@ -35,10 +36,10 @@ const DB_NAME = 'collate-test';
 let pg: PostgresDB;
 let nodePostgres: Client;
 let sqlite: Database;
-let queryDelegate: QueryDelegate;
-let memoryQueryDelegate: QueryDelegate;
+let queryDelegate: QueryDelegate<unknown>;
+let memoryQueryDelegate: QueryDelegate<unknown>;
 
-export const createTableSQL = /*sql*/ `
+const createTableSQL = /*sql*/ `
 CREATE TYPE size AS ENUM('s', 'm', 'l', 'xl'); 
 
 CREATE TABLE "item" (
@@ -345,7 +346,7 @@ async function runAsSQL(
   q: Query<Schema, 'item'>,
   runPgQuery: (query: string, args: unknown[]) => Promise<unknown[]>,
 ) {
-  const c = compile(serverSchema, schema, completedAST(q));
+  const c = compile(serverSchema, schema, asQueryInternals(q).completedAST);
   const sqlQuery = formatPgInternalConvert(c);
   return extractZqlResult(
     await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),

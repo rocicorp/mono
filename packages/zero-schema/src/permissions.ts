@@ -7,6 +7,7 @@ import {
 } from '../../zero-protocol/src/ast.ts';
 import {defaultFormat} from '../../zero-types/src/format.ts';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
+import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import type {Query} from '../../zql/src/query/query.ts';
 import {StaticQuery} from '../../zql/src/query/static-query.ts';
 import type {Schema} from './builder/schema-builder.ts';
@@ -105,8 +106,13 @@ export async function definePermissions<TAuthDataShape, TSchema extends Schema>(
     string,
     ExpressionBuilder<Schema, string>
   >;
+  // TODO(arv): Better delegate
+  const delegate = {} as QueryDelegate<unknown>;
+  // Create a StaticQuery for each table in the schema to use its
+  // ExpressionBuilder for compiling permissions.
   for (const name of Object.keys(schema.tables)) {
     expressionBuilders[name] = new StaticQuery(
+      delegate,
       schema,
       name,
       {table: name},

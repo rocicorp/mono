@@ -905,7 +905,7 @@ describe('initConnection', () => {
       }),
     });
 
-    const view = r.query.e.materialize();
+    const view = r.materialize(r.query.e);
     view.addListener(() => {});
 
     const mockSocket = await r.socket;
@@ -1030,7 +1030,7 @@ describe('initConnection', () => {
       deletedClients: [{clientID: 'a'}],
     });
 
-    const view = r.query.e.materialize();
+    const view = r.materialize(r.query.e);
     view.addListener(() => {});
 
     const mockSocket = await r.socket;
@@ -1145,7 +1145,7 @@ describe('initConnection', () => {
     });
 
     expect(mockSocket.messages.length).toEqual(0);
-    const view = r.query.e.materialize();
+    const view = r.materialize(r.query.e);
     view.addListener(() => {});
     await r.triggerConnected();
     expect(mockSocket.messages.length).toEqual(1);
@@ -1222,7 +1222,7 @@ describe('initConnection', () => {
     });
 
     expect(mockSocket.messages.length).toEqual(0);
-    const view = r.query.e.materialize();
+    const view = r.materialize(r.query.e);
     view.addListener(() => {});
     await r.triggerConnected();
     expect(mockSocket.messages.length).toEqual(1);
@@ -1291,7 +1291,7 @@ describe('initConnection', () => {
 
     expect(mockSocket.messages.length).toEqual(0);
 
-    const view = r.query.e.materialize();
+    const view = r.materialize(r.query.e);
     view.addListener(() => {});
 
     await r.triggerConnected();
@@ -1312,13 +1312,13 @@ describe('initConnection', () => {
       }),
     });
 
-    const view1 = r.query.e.materialize();
+    const view1 = r.materialize(r.query.e);
     view1.addListener(() => {});
 
     const mockSocket = await r.socket;
     expect(mockSocket.messages.length).toEqual(0);
 
-    const view2 = r.query.e.materialize();
+    const view2 = r.materialize(r.query.e);
     view2.addListener(() => {});
     await r.triggerConnected();
     // no `changeDesiredQueries` sent since the query was already included in `initConnection`
@@ -1339,7 +1339,7 @@ describe('initConnection', () => {
       }),
     });
 
-    const view1 = r.query.e.materialize();
+    const view1 = r.materialize(r.query.e);
     const removeListener = view1.addListener(() => {});
 
     const mockSocket = await r.socket;
@@ -1904,7 +1904,7 @@ test('smokeTest', async () => {
     });
 
     const calls: Array<Array<unknown>> = [];
-    const view = r.query.issues.materialize();
+    const view = r.materialize(r.query.issues);
     const unsubscribe = view.addListener(c => {
       calls.push([...c]);
     });
@@ -3010,8 +3010,8 @@ test('kvStore option', async () => {
     // Use persist as a way to ensure we have read the data out of IDB.
     await r.persist();
 
-    const idIsAView = r.query.e.where('id', '=', 'a').materialize();
-    const allDataView = r.query.e.materialize();
+    const idIsAView = r.materialize(r.query.e.where('id', '=', 'a'));
+    const allDataView = r.materialize(r.query.e);
     expect(allDataView.data).deep.equal(expectedValue);
 
     await r.mutate.e.insert({id: 'a', value: 1});
@@ -3191,7 +3191,7 @@ describe('CRUD', () => {
     const z = makeZero();
 
     const createIssue = z.mutate.issue.insert;
-    const view = z.query.issue.materialize();
+    const view = z.materialize(z.query.issue);
     await createIssue({id: 'a', title: 'A'});
     expect(view.data).toEqual([{id: 'a', title: 'A', [refCountSymbol]: 1}]);
 
@@ -3225,7 +3225,7 @@ describe('CRUD', () => {
   test('set', async () => {
     const z = makeZero();
 
-    const view = z.query.comment.materialize();
+    const view = z.materialize(z.query.comment);
     await z.mutate.comment.insert({id: 'a', issueID: '1', text: 'A text'});
     expect(view.data).toEqual([
       {
@@ -3331,7 +3331,7 @@ describe('CRUD', () => {
 
   test('update', async () => {
     const z = makeZero();
-    const view = z.query.comment.materialize();
+    const view = z.materialize(z.query.comment);
     await z.mutate.comment.insert({id: 'a', issueID: '1', text: 'A text'});
     expect(view.data).toEqual([
       {
@@ -3405,7 +3405,7 @@ describe('CRUD', () => {
 
   test('compoundPK', async () => {
     const z = makeZero();
-    const view = z.query.compoundPKTest.materialize();
+    const view = z.materialize(z.query.compoundPKTest);
     await z.mutate.compoundPKTest.insert({id1: 'a', id2: 'a', text: 'a'});
     expect(view.data).toEqual([
       {id1: 'a', id2: 'a', text: 'a', [refCountSymbol]: 1},
@@ -3486,7 +3486,7 @@ describe('CRUD with compound primary key', () => {
     const z = makeZero();
 
     const createIssue: (issue: Issue) => Promise<void> = z.mutate.issue.insert;
-    const view = z.query.issue.materialize();
+    const view = z.materialize(z.query.issue);
     await createIssue({ids: 'a', idn: 1, title: 'A'});
     expect(view.data).toEqual([
       {ids: 'a', idn: 1, title: 'A', [refCountSymbol]: 1},
@@ -3502,7 +3502,7 @@ describe('CRUD with compound primary key', () => {
   test('set', async () => {
     const z = makeZero();
 
-    const view = z.query.comment.materialize();
+    const view = z.materialize(z.query.comment);
     await z.mutate.comment.insert({
       ids: 'a',
       idn: 1,
@@ -3579,7 +3579,7 @@ describe('CRUD with compound primary key', () => {
 
   test('update', async () => {
     const z = makeZero();
-    const view = z.query.comment.materialize();
+    const view = z.materialize(z.query.comment);
     await z.mutate.comment.insert({
       ids: 'a',
       idn: 1,
@@ -3670,8 +3670,8 @@ test('mutate is a function for batching', async () => {
       ],
     }),
   });
-  const issueView = z.query.issue.materialize();
-  const commentView = z.query.comment.materialize();
+  const issueView = z.materialize(z.query.issue);
+  const commentView = z.materialize(z.query.comment);
 
   const x = await z.mutateBatch(async m => {
     expect(
@@ -3820,7 +3820,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
       ],
     }),
   });
-  const issueView = z.query.issue.materialize();
+  const issueView = z.materialize(z.query.issue);
 
   await z.mutateBatch(async m => {
     // This works even with the nested await because what batch is doing is

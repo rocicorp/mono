@@ -9,6 +9,7 @@ import {
 import {afterEach, expect, test, vi} from 'vitest';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
+import {zeroDelegates} from '../../zero-client/src/client/bindings.ts';
 import {
   createSchema,
   number,
@@ -16,6 +17,7 @@ import {
   string,
   table,
   Zero,
+  type CustomMutatorDefs,
   type Query,
   type Schema,
   type TTL,
@@ -25,11 +27,7 @@ import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import {idSymbol, refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {materialize, newQuery} from '../../zql/src/query/query-impl.ts';
-import type {
-  MaterializeOptions,
-  QueryRowType,
-  QueryTable,
-} from '../../zql/src/query/query.ts';
+import type {MaterializeOptions} from '../../zql/src/query/query.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
 import {useQuery, type UseQueryOptions} from './use-query.ts';
 import {ZeroProvider} from './use-zero.ts';
@@ -61,32 +59,44 @@ function setupTestEnvironment() {
 
 afterEach(() => vi.resetAllMocks());
 
-function newMockZero(
+function newMockZero<MD extends CustomMutatorDefs, Context>(
   clientID: string,
-  queryDelegate: QueryDelegate,
-): Zero<Schema> {
-  function m<T, Q>(
-    query: Q,
+  queryDelegate: QueryDelegate<Context>,
+  context: Context,
+): Zero<Schema, MD, Context> {
+  function m<TTable extends keyof Schema['tables'] & string, TReturn, T>(
+    query: Query<Schema, TTable, TReturn, Context>,
     factoryOrOptions?:
-      | ViewFactory<Schema, QueryTable<Q>, QueryRowType<Q>, T>
+      | ViewFactory<Schema, TTable, TReturn, Context, T>
       | MaterializeOptions
       | undefined,
     maybeOptions?: MaterializeOptions | undefined,
   ) {
-    return materialize(query, queryDelegate, factoryOrOptions, maybeOptions);
+    const factory =
+      typeof factoryOrOptions === 'function' ? factoryOrOptions : undefined;
+    const options =
+      typeof factoryOrOptions === 'function' ? maybeOptions : factoryOrOptions;
+    return materialize(query, queryDelegate, factory, options);
   }
-  return {
+  const zero = {
     clientID,
     materialize: m,
-  } as unknown as Zero<Schema>;
+    context,
+  } as unknown as Zero<Schema, MD, Context>;
+  zeroDelegates.set(zero, queryDelegate);
+  return zero;
 }
 
 function useQueryWithZeroProvider<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
+  MD extends CustomMutatorDefs,
+  TContext,
 >(
-  zeroOrZeroSignal: Zero<Schema> | Accessor<Zero<Schema>>,
+  zeroOrZeroSignal:
+    | Zero<Schema, MD, TContext>
+    | Accessor<Zero<Schema, MD, TContext>>,
   querySignal: () => Query<TSchema, TTable, TReturn>,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
 ) {

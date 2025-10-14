@@ -2,8 +2,10 @@
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {SchemaQuery} from '../mutate/custom.ts';
+import type {NamedQueryFunction} from './define-query.ts';
 import {newQuery} from './query-impl.ts';
-import type {Query} from './query.ts';
+import {asQueryInternals} from './query-internals.ts';
+import {type Query} from './query.ts';
 
 export type QueryFn<
   TContext,
@@ -38,6 +40,9 @@ function normalizeParser<T extends ReadonlyJSONValue[]>(
   return undefined;
 }
 
+/**
+ * @deprecated Use {@linkcode defineQuery} instead.
+ */
 export function syncedQuery<
   TName extends string,
   TArg extends ReadonlyJSONValue[],
@@ -55,6 +60,9 @@ export function syncedQuery<
   return ret;
 }
 
+/**
+ * @deprecated Use {@linkcode defineQuery} instead.
+ */
 export function syncedQueryWithContext<
   TName extends string,
   TContext,
@@ -81,28 +89,48 @@ function syncedQueryImpl<
 >(name: TName, fn: any, takesContext: boolean) {
   return (context: TContext, args: TArg) => {
     const q = takesContext ? fn(context, ...args) : fn(...args);
-    return q.nameAndArgs(name, args) as TReturnQuery;
+    return asQueryInternals(q).nameAndArgs(name, args) as TReturnQuery;
   };
 }
 
-export function withValidation<T extends SyncedQuery<any, any, any, any, any>>(
-  fn: T,
-): T extends SyncedQuery<infer N, infer C, any, any, infer R>
-  ? SyncedQuery<N, C, true, ReadonlyJSONValue[], R>
-  : never {
-  if (!fn.parse) {
-    throw new Error('ret does not have a parse function defined');
-  }
-  const ret: any = (context: unknown, ...args: unknown[]) => {
-    const f = fn as any;
-    const parsed = f.parse(args);
-    return f.takesContext ? f(context, ...parsed) : f(...parsed);
-  };
-  ret.queryName = fn.queryName;
-  ret.parse = fn.parse;
-  ret.takesContext = true;
+export function withValidation<F extends SyncedQuery<any, any, any, any, any>>(
+  fn: F,
+): F extends SyncedQuery<infer N, infer C, any, infer A, infer R>
+  ? SyncedQuery<N, C, true, A, R>
+  : never;
 
-  return ret;
+export function withValidation<
+  F extends NamedQueryFunction<any, any, any, any, any, any, any>,
+>(fn: F): F;
+
+export function withValidation<
+  F extends
+    | SyncedQuery<any, any, any, any, any>
+    | NamedQueryFunction<any, any, any, any, any, any, any>,
+>(
+  fn: F,
+): F extends SyncedQuery<infer N, infer C, any, infer A, infer R>
+  ? SyncedQuery<N, C, true, A, R>
+  : F {
+  // If we have a parse function this is a SyncedQuery
+  if ('parse' in fn) {
+    const {parse} = fn;
+    if (!parse) {
+      throw new Error('ret does not have a parse function defined');
+    }
+    const ret: any = (context: unknown, ...args: unknown[]) => {
+      const parsed = parse(args);
+      return fn.takesContext ? fn(context, ...parsed) : (fn as any)(...parsed);
+    };
+    ret.queryName = fn.queryName;
+    ret.parse = fn.parse;
+    ret.takesContext = true;
+
+    return ret;
+  }
+
+  // Otherwise this is a NamedQueryFunction which always validates.
+  return fn as any;
 }
 
 export type ParseFn<T extends ReadonlyJSONValue[]> = (args: unknown[]) => T;
@@ -121,15 +149,19 @@ export type CustomQueryID = {
 /**
  * Returns a set of query builders for the given schema.
  */
-export function createBuilder<S extends Schema>(s: S): SchemaQuery<S> {
-  return makeQueryBuilders(s) as SchemaQuery<S>;
+export function createBuilder<S extends Schema, TContext>(
+  s: S,
+): SchemaQuery<S, TContext> {
+  return makeQueryBuilders(s) as SchemaQuery<S, TContext>;
 }
 
 /**
  * This produces the query builders for a given schema.
  * For use in Zero on the server to process custom queries.
  */
-function makeQueryBuilders<S extends Schema>(schema: S): SchemaQuery<S> {
+function makeQueryBuilders<S extends Schema, TContext>(
+  schema: S,
+): SchemaQuery<S, TContext> {
   return new Proxy(
     {},
     {

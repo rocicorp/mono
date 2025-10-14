@@ -9,6 +9,7 @@ import {
   vi,
   type Mock,
 } from 'vitest';
+import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
@@ -35,13 +36,15 @@ function newMockQuery(
   return ret;
 }
 
-function newMockZero(clientID: string): Zero<Schema> {
+function newMockZero<MD extends CustomMutatorDefs, Context>(
+  clientID: string,
+): Zero<Schema, MD, Context> {
   const view = newView();
 
   return {
     clientID,
     materialize: vi.fn().mockImplementation(() => view),
-  } as unknown as Zero<Schema>;
+  } as unknown as Zero<Schema, MD, Context>;
 }
 
 function newView() {

@@ -1,22 +1,28 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
 import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {type AST, type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
+import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
+import type {
+  Schema,
+  Schema as ZeroSchema,
+} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {
+  LastInTuple,
+  TableSchema,
+} from '../../../zero-schema/src/table-schema.ts';
 import type {
   SchemaValueToTSType,
   SchemaValueWithCustomType,
 } from '../../../zero-types/src/schema-value.ts';
-import type {
-  LastInTuple,
-  TableSchema,
-  Schema as ZeroSchema,
-} from '../../../zero-types/src/schema.ts';
-import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
-import type {CustomQueryID} from './named.ts';
-import type {QueryDelegate} from './query-delegate.ts';
 import type {TTL} from './ttl.ts';
-import type {TypedView} from './typed-view.ts';
+
+/**
+ * Branded type to indicate that a query does not require context.
+ * This is used in conditional types to distinguish between queries that require
+ * context (named queries) and those that don't (regular queries).
+ */
+export const NoContext = Symbol('NoContext');
+export type NoContext = typeof NoContext;
 
 type Selector<E extends TableSchema> = keyof E['columns'];
 export type NoCompoundTypeSelector<T extends TableSchema> = Exclude<
@@ -36,8 +42,10 @@ type ArraySelectors<E extends TableSchema> = {
     : never;
 }[keyof E['columns']];
 
+export type QueryReturn<Q> =
+  Q extends Query<any, any, infer R, any> ? R : never;
+
 export type QueryTable<Q> = Q extends Query<any, infer T, any> ? T : never;
-export const delegateSymbol = Symbol('delegate');
 
 export type ExistsOptions = {flip: boolean};
 
@@ -132,75 +140,18 @@ export type QueryResultType<Q> = Q extends
   : never;
 
 /**
- * A hybrid query that runs on both client and server.
- * Results are returned immediately from the client followed by authoritative
- * results from the server.
- *
- * Queries are transactional in that all queries update at once when a new transaction
- * has been committed on the client or server. No query results will reflect stale state.
- *
- * A query can be:
- * - {@linkcode materialize | materialize}
- * - awaited (`then`/{@linkcode run})
- * - {@linkcode preload | preloaded}
- *
- * The normal way to use a query would be through your UI framework's bindings (e.g., useQuery(q))
- * or within a custom mutator.
- *
- * `materialize` and `run/then` are provided for more advanced use cases.
- * Remember that any `view` returned by `materialize` must be destroyed.
- *
- * A query can be run as a 1-shot query by awaiting it. E.g.,
- *
- * ```ts
- * const result = await z.query.issue.limit(10);
- * ```
- *
- * For more information on how to use queries, see the documentation:
- * https://zero.rocicorp.dev/docs/reading-data
+ * Core query interface containing the fundamental query building methods.
+ * This interface defines the methods for filtering, ordering, and structuring queries.
  *
  * @typeParam TSchema The database schema type extending ZeroSchema
  * @typeParam TTable The name of the table being queried, must be a key of TSchema['tables']
  * @typeParam TReturn The return type of the query, defaults to PullRow<TTable, TSchema>
  */
-export interface Query<
+export interface CoreQuery<
   TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
-  TReturn = PullRow<TTable, TSchema>,
+  TReturn,
 > {
-  /**
-   * Format is used to specify the shape of the query results. This is used by
-   * {@linkcode one} and it also describes the shape when using
-   * {@linkcode related}.
-   */
-  readonly format: Format;
-
-  /**
-   * A string that uniquely identifies this query. This can be used to determine
-   * if two queries are the same.
-   *
-   * The hash of a custom query, on the client, is the hash of its AST.
-   * The hash of a custom query, on the server, is the hash of its name and args.
-   *
-   * The first allows many client-side queries to be pinned to the same backend query.
-   * The second ensures we do not invoke a named query on the backend more than once for the same `name:arg` pairing.
-   *
-   * If the query.hash was of `name:args` then `useQuery` would de-dupe
-   * queries with divergent ASTs.
-   *
-   * QueryManager will hash based on `name:args` since it is speaking with
-   * the server which tracks queries by `name:args`.
-   */
-  hash(): string;
-  readonly ast: AST;
-  readonly customQueryID: CustomQueryID | undefined;
-
-  nameAndArgs(
-    name: string,
-    args: ReadonlyArray<ReadonlyJSONValue>,
-  ): Query<TSchema, TTable, TReturn>;
-  [delegateSymbol](delegate: QueryDelegate): Query<TSchema, TTable, TReturn>;
-
   /**
    * Related is used to add a related query to the current query. This is used
    * for subqueries and joins. These relationships are defined in the
@@ -236,7 +187,7 @@ export interface Query<
    */
   related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
-  ): Query<
+  ): CoreQuery<
     TSchema,
     TTable,
     AddSubreturn<
@@ -247,22 +198,22 @@ export interface Query<
   >;
   related<
     TRelationship extends AvailableRelationships<TTable, TSchema>,
-    TSub extends Query<TSchema, string, any>,
+    TSub extends CoreQuery<TSchema, string, any>,
   >(
     relationship: TRelationship,
     cb: (
-      q: Query<
+      q: CoreQuery<
         TSchema,
         DestTableName<TTable, TSchema, TRelationship>,
         DestRow<TTable, TSchema, TRelationship>
       >,
     ) => TSub,
-  ): Query<
+  ): CoreQuery<
     TSchema,
     TTable,
     AddSubreturn<
       TReturn,
-      TSub extends Query<TSchema, string, infer TSubReturn>
+      TSub extends CoreQuery<TSchema, string, infer TSubReturn>
         ? TSubReturn
         : never,
       TRelationship
@@ -295,7 +246,7 @@ export interface Query<
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
       | ParameterReference,
-  ): Query<TSchema, TTable, TReturn>;
+  ): CoreQuery<TSchema, TTable, TReturn>;
   /**
    * Represents a condition to filter the query results.
    *
@@ -319,7 +270,7 @@ export interface Query<
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
       | ParameterReference,
-  ): Query<TSchema, TTable, TReturn>;
+  ): CoreQuery<TSchema, TTable, TReturn>;
 
   /**
    * Represents a condition to filter the query results.
@@ -336,19 +287,23 @@ export interface Query<
    */
   where(
     expressionFactory: ExpressionFactory<TSchema, TTable>,
-  ): Query<TSchema, TTable, TReturn>;
+  ): CoreQuery<TSchema, TTable, TReturn>;
 
   whereExists(
     relationship: AvailableRelationships<TTable, TSchema>,
-    options?: ExistsOptions | undefined,
-  ): Query<TSchema, TTable, TReturn>;
+    options?: ExistsOptions,
+  ): CoreQuery<TSchema, TTable, TReturn>;
   whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb: (
-      q: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
-    ) => Query<TSchema, string>,
-    options?: ExistsOptions | undefined,
-  ): Query<TSchema, TTable, TReturn>;
+      q: CoreQuery<
+        TSchema,
+        DestTableName<TTable, TSchema, TRelationship>,
+        unknown
+      >,
+    ) => CoreQuery<TSchema, string, unknown>,
+    options?: ExistsOptions,
+  ): CoreQuery<TSchema, TTable, TReturn>;
 
   /**
    * Skips the rows of the query until row matches the given row. If opts is
@@ -365,8 +320,8 @@ export interface Query<
    */
   start(
     row: Partial<PullRow<TTable, TSchema>>,
-    opts?: {inclusive: boolean} | undefined,
-  ): Query<TSchema, TTable, TReturn>;
+    opts?: {inclusive: boolean},
+  ): CoreQuery<TSchema, TTable, TReturn>;
 
   /**
    * Limits the number of rows returned by the query.
@@ -374,7 +329,7 @@ export interface Query<
    *
    * @returns A new query instance with the applied limit.
    */
-  limit(limit: number): Query<TSchema, TTable, TReturn>;
+  limit(limit: number): CoreQuery<TSchema, TTable, TReturn>;
 
   /**
    * Orders the results by a specified column. If multiple orderings are
@@ -389,7 +344,7 @@ export interface Query<
   orderBy<TSelector extends Selector<PullTableSchema<TTable, TSchema>>>(
     field: TSelector,
     direction: 'asc' | 'desc',
-  ): Query<TSchema, TTable, TReturn>;
+  ): CoreQuery<TSchema, TTable, TReturn>;
 
   /**
    * Limits the number of rows returned by the query to a single row and then
@@ -401,80 +356,212 @@ export interface Query<
    *
    * @returns A new query instance with the applied limit to one row.
    */
-  one(): Query<TSchema, TTable, TReturn | undefined>;
+  one(): CoreQuery<TSchema, TTable, TReturn | undefined>;
+}
 
-  /**
-   * Creates a materialized view of the query. This is a view that will be kept
-   * in memory and updated as the query results change.
-   *
-   * Most of the time you will want to use the `useQuery` hook or the
-   * `run`/`then` method to get the results of a query. This method is only
-   * needed if you want to access to lower level APIs of the view.
-   *
-   * @param ttl Time To Live. This is the amount of time to keep the rows
-   *            associated with this query after `TypedView.destroy`
-   *            has been called.
-   */
-  materialize(ttl?: TTL): TypedView<HumanReadable<TReturn>>;
-  /**
-   * Creates a custom materialized view using a provided factory function. This
-   * allows framework-specific bindings (like SolidJS, Vue, etc.) to create
-   * optimized views.
-   *
-   * @param factory A function that creates a custom view implementation
-   * @param ttl Optional Time To Live for the view's data after destruction
-   * @returns A custom view instance of type {@linkcode T}
-   *
-   * @example
-   * ```ts
-   * const view = query.materialize(createSolidViewFactory, '1m');
-   * ```
-   */
-  materialize<T>(
-    factory: ViewFactory<TSchema, TTable, TReturn, T>,
-    ttl?: TTL,
-  ): T;
+/**
+ * A hybrid query that runs on both client and server.
+ * Results are returned immediately from the client followed by authoritative
+ * results from the server.
+ *
+ * Queries are transactional in that all queries update at once when a new transaction
+ * has been committed on the client or server. No query results will reflect stale state.
+ *
+ * A query can be:
+ * - {@linkcode materialize | materialize}
+ * - awaited (`then`/{@linkcode run})
+ * - {@linkcode preload | preloaded}
+ *
+ * The normal way to use a query would be through your UI framework's bindings (e.g., useQuery(q))
+ * or within a custom mutator.
+ *
+ * `materialize` and `run/then` are provided for more advanced use cases.
+ * Remember that any `view` returned by `materialize` must be destroyed.
+ *
+ * A query can be run as a 1-shot query by awaiting it. E.g.,
+ *
+ * ```ts
+ * const result = await z.query.issue.limit(10);
+ * ```
+ *
+ * For more information on how to use queries, see the documentation:
+ * https://zero.rocicorp.dev/docs/reading-data
+ *
+ * @typeParam TSchema The database schema type extending ZeroSchema
+ * @typeParam TTable The name of the table being queried, must be a key of TSchema['tables']
+ * @typeParam TReturn The return type of the query, defaults to PullRow<TTable, TSchema>
+ * @typeParam TContext The context type required for named queries, defaults to NoContext
+ */
+export interface Query<
+  TSchema extends ZeroSchema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn = PullRow<TTable, TSchema>,
+  TContext = NoContext,
+> extends CoreQuery<TSchema, TTable, TReturn> {
+  // Override CoreQuery methods to return Query instead of CoreQuery for proper chaining
+  related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
+    relationship: TRelationship,
+  ): Query<
+    TSchema,
+    TTable,
+    AddSubreturn<
+      TReturn,
+      DestRow<TTable, TSchema, TRelationship>,
+      TRelationship
+    >,
+    TContext
+  >;
+  related<
+    TRelationship extends AvailableRelationships<TTable, TSchema>,
+    TSub extends Query<TSchema, string, any>,
+  >(
+    relationship: TRelationship,
+    cb: (
+      q: Query<
+        TSchema,
+        DestTableName<TTable, TSchema, TRelationship>,
+        DestRow<TTable, TSchema, TRelationship>
+      >,
+    ) => TSub,
+  ): Query<
+    TSchema,
+    TTable,
+    AddSubreturn<
+      TReturn,
+      TSub extends Query<TSchema, string, infer TSubReturn>
+        ? TSubReturn
+        : never,
+      TRelationship
+    >,
+    TContext
+  >;
 
-  /**
-   * Executes the query and returns the result once. The `options` parameter
-   * specifies whether to wait for complete results or return immediately,
-   * and the time to live for the query.
-   *
-   * - `{type: 'unknown'}`: Returns a snapshot of the data immediately.
-   * - `{type: 'complete'}`: Waits for the latest, complete results from the server.
-   *
-   * By default, `run` uses `{type: 'unknown'}` to avoid waiting for the server.
-   *
-   * `Query` implements `PromiseLike`, and calling `then` on it will invoke `run`
-   * with the default behavior (`unknown`).
-   *
-   * @param options Options to control the result type.
-   * @param options.type The type of result to return.
-   * @param options.ttl Time To Live. This is the amount of time to keep the rows
-   *                  associated with this query after the returned promise has
-   *                  resolved.
-   * @returns A promise resolving to the query result.
-   *
-   * @example
-   * ```js
-   * const result = await query.run({type: 'complete', ttl: '1m'});
-   * ```
-   */
-  run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
+  where<
+    TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
+    TOperator extends SimpleOperator,
+  >(
+    field: TSelector,
+    op: TOperator,
+    value:
+      | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
+      | ParameterReference,
+  ): Query<TSchema, TTable, TReturn, TContext>;
+  where<
+    TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
+  >(
+    field: TSelector,
+    value:
+      | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
+      | ParameterReference,
+  ): Query<TSchema, TTable, TReturn, TContext>;
+  where(
+    expressionFactory: ExpressionFactory<TSchema, TTable>,
+  ): Query<TSchema, TTable, TReturn, TContext>;
 
-  /**
-   * Preload loads the data into the clients cache without keeping it in memory.
-   * This is useful for preloading data that will be used later.
-   *
-   * @param options Options for preloading the query.
-   * @param options.ttl Time To Live. This is the amount of time to keep the rows
-   *                  associated with this query after {@linkcode cleanup} has
-   *                  been called.
-   */
-  preload(options?: PreloadOptions): {
-    cleanup: () => void;
-    complete: Promise<void>;
-  };
+  whereExists(
+    relationship: AvailableRelationships<TTable, TSchema>,
+    options?: ExistsOptions,
+  ): Query<TSchema, TTable, TReturn, TContext>;
+  whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
+    relationship: TRelationship,
+    cb: (
+      q: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
+    ) => Query<TSchema, string>,
+    options?: ExistsOptions,
+  ): Query<TSchema, TTable, TReturn, TContext>;
+
+  start(
+    row: Partial<PullRow<TTable, TSchema>>,
+    opts?: {inclusive: boolean},
+  ): Query<TSchema, TTable, TReturn, TContext>;
+
+  limit(limit: number): Query<TSchema, TTable, TReturn, TContext>;
+
+  orderBy<TSelector extends Selector<PullTableSchema<TTable, TSchema>>>(
+    field: TSelector,
+    direction: 'asc' | 'desc',
+  ): Query<TSchema, TTable, TReturn, TContext>;
+
+  one(): Query<TSchema, TTable, TReturn | undefined, TContext>;
+
+  // /**
+  //  * Creates a materialized view of the query. This is a view that will be kept
+  //  * in memory and updated as the query results change.
+  //  *
+  //  * Most of the time you will want to use the `useQuery` hook or the
+  //  * `run`/`then` method to get the results of a query. This method is only
+  //  * needed if you want to access to lower level APIs of the view.
+  //  *
+  //  * @param options Options for materializing the query
+  //  * @param options.ttl Time To Live. This is the amount of time to keep the rows
+  //  *            associated with this query after `TypedView.destroy`
+  //  *            has been called.
+  //  * @param options.ctx Context required for named queries
+  //  */
+  // materialize(options?: MaterializeOptions): TypedView<HumanReadable<TReturn>>;
+  // /**
+  //  * Creates a custom materialized view using a provided factory function. This
+  //  * allows framework-specific bindings (like SolidJS, Vue, etc.) to create
+  //  * optimized views.
+  //  *
+  //  * @param factory A function that creates a custom view implementation
+  //  * @param options Options for materializing the query
+  //  * @param options.ttl Optional Time To Live for the view's data after destruction
+  //  * @param options.ctx Context required for named queries
+  //  * @returns A custom view instance of type {@linkcode T}
+  //  *
+  //  * @example
+  //  * ```ts
+  //  * const view = query.materialize(createSolidViewFactory, {ttl: '1m'});
+  //  * ```
+  //  */
+  // materialize<T>(
+  //   factory: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
+  //   options?: MaterializeOptions,
+  // ): T;
+
+  // /**
+  //  * Executes the query and returns the result once. The `options` parameter
+  //  * specifies whether to wait for complete results or return immediately,
+  //  * and the time to live for the query.
+  //  *
+  //  * - `{type: 'unknown'}`: Returns a snapshot of the data immediately.
+  //  * - `{type: 'complete'}`: Waits for the latest, complete results from the server.
+  //  *
+  //  * By default, `run` uses `{type: 'unknown'}` to avoid waiting for the server.
+  //  *
+  //  * `Query` implements `PromiseLike`, and calling `then` on it will invoke `run`
+  //  * with the default behavior (`unknown`).
+  //  *
+  //  * @param options Options to control the result type.
+  //  * @param options.type The type of result to return.
+  //  * @param options.ttl Time To Live. This is the amount of time to keep the rows
+  //  *                  associated with this query after the returned promise has
+  //  *                  resolved.
+  //  * @param options.ctx Context required for named queries
+  //  * @returns A promise resolving to the query result.
+  //  *
+  //  * @example
+  //  * ```js
+  //  * const result = await query.run({type: 'complete', ttl: '1m'});
+  //  * ```
+  //  */
+  // run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
+
+  // /**
+  //  * Preload loads the data into the clients cache without keeping it in memory.
+  //  * This is useful for preloading data that will be used later.
+  //  *
+  //  * @param options Options for preloading the query.
+  //  * @param options.ttl Time To Live. This is the amount of time to keep the rows
+  //  *                  associated with this query after {@linkcode cleanup} has
+  //  *                  been called.
+  //  * @param options.ctx Context required for named queries
+  //  */
+  // preload(options?: PreloadOptions): {
+  //   cleanup: () => void;
+  //   complete: Promise<void>;
+  // };
 }
 
 export type PreloadOptions = {
@@ -518,7 +605,7 @@ export type HumanReadableRecursive<T> = undefined extends T
  */
 export type RunOptions = {
   type: 'unknown' | 'complete';
-  ttl?: TTL;
+  ttl?: TTL | undefined;
 };
 
 export const DEFAULT_RUN_OPTIONS_UNKNOWN = {
@@ -528,3 +615,5 @@ export const DEFAULT_RUN_OPTIONS_UNKNOWN = {
 export const DEFAULT_RUN_OPTIONS_COMPLETE = {
   type: 'complete',
 } as const;
+
+export type AnyQuery = Query<Schema, string, any, any>;

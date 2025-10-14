@@ -18,6 +18,7 @@ import type {IncomingHttpHeaders} from 'http';
 import {jwtVerify, SignJWT, type JWK} from 'jose';
 import {nanoid} from 'nanoid';
 import postgres from 'postgres';
+import '../../../packages/shared/src/dotenv.ts';
 import {must} from '../../../packages/shared/src/must.ts';
 import {getQuery} from '../server/get-query.ts';
 import {createServerMutators} from '../server/server-mutators.ts';
@@ -215,7 +216,7 @@ async function getQueriesHandler(
   await withAuth(request, reply, async authData => {
     reply.send(
       await handleGetQueriesRequest(
-        (name, args) => ({query: getQuery(authData, name, args)}),
+        (name, args) => getQuery(authData, name, args),
         schema,
         request.body,
       ),

@@ -1,14 +1,14 @@
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {type AnyQuery} from '../../../zql/src/query/query-impl.ts';
+import type {MaybePromise} from '../../../shared/src/types.ts';
 import * as v from '../../../shared/src/valita.ts';
+import {mapAST} from '../../../zero-protocol/src/ast.ts';
 import {
   transformRequestMessageSchema,
   type TransformResponseMessage,
 } from '../../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
-import {mapAST} from '../../../zero-protocol/src/ast.ts';
-import type {MaybePromise} from '../../../shared/src/types.ts';
+import {type AnyQuery} from '../../../zql/src/query/query-impl.ts';
 
 /**
  * Invokes the callback `cb` for each query in the request or JSON body.
@@ -22,7 +22,7 @@ export async function handleGetQueriesRequest<S extends Schema>(
   cb: (
     name: string,
     args: readonly ReadonlyJSONValue[],
-  ) => MaybePromise<{query: AnyQuery}>,
+  ) => MaybePromise<AnyQuery>,
   schema: S,
   requestOrJsonBody: Request | ReadonlyJSONValue,
 ): Promise<TransformResponseMessage> {
@@ -38,8 +38,7 @@ export async function handleGetQueriesRequest<S extends Schema>(
   const parsed = v.parse(body, transformRequestMessageSchema);
   const responses = await Promise.all(
     parsed[1].map(async req => {
-      const {query} = await cb(req.name, req.args);
-
+      const query = await cb(req.name, req.args);
       return {
         id: req.id,
         name: req.name,

@@ -36,8 +36,19 @@ import {
 } from '../../zql/src/builder/debug-delegate.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
-import {completedAST, newQuery} from '../../zql/src/query/query-impl.ts';
-import {type PullRow, type Query} from '../../zql/src/query/query.ts';
+import {
+  materializeImpl,
+  newQuery,
+  preloadImpl,
+  runImpl,
+} from '../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
+import {
+  type AnyQuery,
+  type MaterializeOptions,
+  type PullRow,
+  type Query,
+} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
 import {explainQueries} from './explain-queries.ts';
@@ -198,7 +209,7 @@ const sources = new Map<string, TableSource>();
 const clientToServerMapper = clientToServer(schema.tables);
 const debug = new Debug();
 const tableSpecs = computeZqlSpecs(lc, db);
-const host: QueryDelegate = {
+const host: QueryDelegate<unknown> = {
   debug,
   getSource: (serverTableName: string) => {
     let source = sources.get(serverTableName);
@@ -247,6 +258,20 @@ const host: QueryDelegate = {
   assertValidRunOptions() {},
   defaultQueryComplete: true,
   addMetric() {},
+  // oxlint-disable-next-line no-explicit-any
+  materialize(query: AnyQuery, factory: any, options: MaterializeOptions) {
+    // oxlint-disable-next-line no-explicit-any
+    return materializeImpl(query, this, factory, options) as any;
+  },
+  run(query, options) {
+    return runImpl(query, this, options);
+  },
+  preload(query, options) {
+    return preloadImpl(query, this, options);
+  },
+  withContext(q) {
+    return asQueryInternals(q);
+  },
 };
 
 let result: AnalyzeQueryResult;
@@ -283,9 +308,9 @@ function runQuery(queryString: string): Promise<AnalyzeQueryResult> {
   };
 
   const f = new Function('z', `return z.query.${queryString};`);
-  const q: Query<Schema, string, PullRow<string, Schema>> = f(z);
+  const q: Query<Schema, string, PullRow<string, Schema>, unknown> = f(z);
 
-  const ast = completedAST(q);
+  const ast = asQueryInternals(q).completedAST;
   return runAst(lc, ast, false, {
     applyPermissions: config.applyPermissions,
     authData: config.authData,

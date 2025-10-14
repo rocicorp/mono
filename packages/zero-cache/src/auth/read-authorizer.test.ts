@@ -1,3 +1,4 @@
+import type {AST} from 'prettier';
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -9,7 +10,8 @@ import {
   definePermissions,
 } from '../../../zero-schema/src/permissions.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
-import {ast} from '../../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {staticQuery} from '../../../zql/src/query/static-query.ts';
 import {transformQuery} from './read-authorizer.ts';
 
@@ -1829,3 +1831,7 @@ describe('admin readable', () => {
     `);
   });
 });
+
+function ast(query: AnyQuery): AST {
+  return asQueryInternals(query).ast;
+}
