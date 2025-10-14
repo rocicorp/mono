@@ -105,8 +105,9 @@ export async function fetchFromAPIServer(
  * - "^https://api\\.v\\d+\\.example\\.com/" - Matches versioned subdomains (e.g., "https://api.v1.example.com", "https://api.v2.example.com")
  */
 export function urlMatch(url: string, allowedUrls: string[]): boolean {
-  // ignore query parameters in the URL
-  url = url.split('?')[0];
+  // ignore query parameters and hash in the URL using proper URL parsing
+  const urlObj = new URL(url);
+  const urlWithoutQuery = urlObj.origin + urlObj.pathname;
 
   for (const allowedUrl of allowedUrls) {
     try {
@@ -116,7 +117,7 @@ export function urlMatch(url: string, allowedUrls: string[]): boolean {
         regex = new RegExp(allowedUrl);
         regexCache.set(allowedUrl, regex);
       }
-      if (regex.test(url)) {
+      if (regex.test(urlWithoutQuery)) {
         return true;
       }
     } catch (e) {
