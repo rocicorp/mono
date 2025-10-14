@@ -6,6 +6,10 @@ import {ErrorForClient} from '../types/error-for-client.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 
 const reservedParams = ['schema', 'appID'];
+
+// Cache for compiled regex patterns to avoid recompilation on every urlMatch call
+const regexCache = new Map<string, RegExp>();
+
 export type HeaderOptions = {
   apiKey?: string | undefined;
   token?: string | undefined;
@@ -106,8 +110,12 @@ export function urlMatch(url: string, allowedUrls: string[]): boolean {
 
   for (const allowedUrl of allowedUrls) {
     try {
-      // Create a regex from the allowed URL pattern
-      const regex = new RegExp(allowedUrl);
+      // Get or create cached regex pattern
+      let regex = regexCache.get(allowedUrl);
+      if (!regex) {
+        regex = new RegExp(allowedUrl);
+        regexCache.set(allowedUrl, regex);
+      }
       if (regex.test(url)) {
         return true;
       }
