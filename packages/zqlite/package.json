@@ -27,14 +27,15 @@
     "typescript": "~5.8.2",
     "zero-protocol": "0.0.0",
     "zero-schema": "0.0.0",
-    "zql": "0.0.0"
+    "zql": "0.0.0",
+    "zero-types": "0.0.0"
   },
   "prettier": "@rocicorp/prettier-config",
   "dependencies": {
     "@databases/escape-identifier": "^1.0.3",
     "@databases/sql": "^3.3.0",
     "@rocicorp/logger": "^5.4.0",
-    "@rocicorp/zero-sqlite3": "^1.0.9",
+    "@rocicorp/zero-sqlite3": "^1.0.11",
     "zql": "0.0.0"
   }
 }

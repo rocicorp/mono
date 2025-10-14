@@ -20,9 +20,7 @@ import {
 } from '../../zql/src/builder/filter.ts';
 import {makeComparator, type Node} from '../../zql/src/ivm/data.ts';
 import {
-  constraintsToSQL,
-  filtersToSQL,
-  orderByToSQL,
+  buildSelectQuery,
   toSQLiteType,
   type NoSubqueryCondition,
 } from './query-builder.ts';
@@ -33,7 +31,7 @@ import {
   type Connection,
   type Overlay,
 } from '../../zql/src/ivm/memory-source.ts';
-import type {FetchRequest, Start} from '../../zql/src/ivm/operator.ts';
+import type {FetchRequest} from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
 import type {
   Source,
@@ -475,25 +473,15 @@ export class TableSource implements Source {
     filters: NoSubqueryCondition | undefined,
     order: Ordering,
   ): SQLQuery {
-    const {constraint, start, reverse} = request;
-    let query = sql`SELECT ${this.#allColumns} FROM ${sql.ident(this.#table)}`;
-    const constraints: SQLQuery[] = constraintsToSQL(constraint, this.#columns);
-
-    if (start) {
-      constraints.push(
-        gatherStartConstraints(start, reverse, order, this.#columns),
-      );
-    }
-
-    if (filters) {
-      constraints.push(filtersToSQL(filters));
-    }
-
-    if (constraints.length > 0) {
-      query = sql`${query} WHERE ${sql.join(constraints, sql` AND `)}`;
-    }
-
-    return sql`${query} ${orderByToSQL(order, !!reverse)}`;
+    return buildSelectQuery(
+      this.#table,
+      this.#columns,
+      request.constraint,
+      filters,
+      order,
+      request.reverse,
+      request.start,
+    );
   }
 
   #selectPrimaryKeyFor(sort: Ordering) {
@@ -513,95 +501,6 @@ export class TableSource implements Source {
         `(non-null) unique index on the "${this.#table}" table?`,
     );
   }
-}
-
-/**
- * The ordering could be complex such as:
- * `ORDER BY a ASC, b DESC, c ASC`
- *
- * In those cases, we need to encode the constraints as various
- * `OR` clauses.
- *
- * E.g.,
- *
- * to get the row after (a = 1, b = 2, c = 3) would be:
- *
- * `WHERE a > 1 OR (a = 1 AND b < 2) OR (a = 1 AND b = 2 AND c > 3)`
- *
- * - after vs before flips the comparison operators.
- * - inclusive adds a final `OR` clause for the exact match.
- */
-function gatherStartConstraints(
-  start: Start,
-  reverse: boolean | undefined,
-  order: Ordering,
-  columnTypes: Record<string, SchemaValue>,
-): SQLQuery {
-  const constraints: SQLQuery[] = [];
-  const {row: from, basis} = start;
-
-  for (let i = 0; i < order.length; i++) {
-    const group: SQLQuery[] = [];
-    const [iField, iDirection] = order[i];
-    for (let j = 0; j <= i; j++) {
-      if (j === i) {
-        const constraintValue = toSQLiteType(
-          from[iField],
-          columnTypes[iField].type,
-        );
-        if (iDirection === 'asc') {
-          if (!reverse) {
-            group.push(
-              sql`(${constraintValue} IS NULL OR ${sql.ident(iField)} > ${constraintValue})`,
-            );
-          } else {
-            reverse satisfies true;
-            group.push(
-              sql`(${sql.ident(iField)} IS NULL OR ${sql.ident(iField)} < ${constraintValue})`,
-            );
-          }
-        } else {
-          iDirection satisfies 'desc';
-          if (!reverse) {
-            group.push(
-              sql`(${sql.ident(iField)} IS NULL OR ${sql.ident(iField)} < ${constraintValue})`,
-            );
-          } else {
-            reverse satisfies true;
-            group.push(
-              sql`(${constraintValue} IS NULL OR ${sql.ident(iField)} > ${constraintValue})`,
-            );
-          }
-        }
-      } else {
-        const [jField] = order[j];
-        group.push(
-          sql`${sql.ident(jField)} IS ${toSQLiteType(
-            from[jField],
-            columnTypes[jField].type,
-          )}`,
-        );
-      }
-    }
-    constraints.push(sql`(${sql.join(group, sql` AND `)})`);
-  }
-
-  if (basis === 'at') {
-    constraints.push(
-      sql`(${sql.join(
-        order.map(
-          s =>
-            sql`${sql.ident(s[0])} IS ${toSQLiteType(
-              from[s[0]],
-              columnTypes[s[0]].type,
-            )}`,
-        ),
-        sql` AND `,
-      )})`,
-    );
-  }
-
-  return sql`(${sql.join(constraints, sql` OR `)})`;
 }
 
 function getUniqueIndexes(
