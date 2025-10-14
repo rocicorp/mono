@@ -110,8 +110,6 @@ export class ZeroContext implements QueryDelegate<unknown> {
     return (
       query as unknown as WithContext<TSchema, TTable, TReturn, unknown>
     ).withContext(this.#context);
-
-    throw new Error('Method not implemented.');
   }
 
   applyFiltersAnyway?: boolean | undefined;

@@ -396,7 +396,7 @@ export class Zero<
     this.#connectionStateChangeResolver = resolver<ConnectionStatus>();
 
     if (TESTING) {
-      asTestZero(this)[onSetConnectionStateSymbol]?.(status);
+      asTestZero(this)[onSetConnectionStateSymbol]?.({name: status});
     }
   }
 
@@ -773,7 +773,7 @@ export class Zero<
         logOptions: this.#logOptions,
         connectStart: () => this.#connectStart,
         socketResolver: () => this.#socketResolver,
-        connectionState: () => this.#connectionState,
+        connectionState: () => this.#connectionManager.state,
         queryDelegate: () => this.#zeroContext,
       };
     }

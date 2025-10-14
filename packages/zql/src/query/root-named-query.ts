@@ -41,7 +41,7 @@ export class RootNamedQuery<
   readonly #input: TInput;
   readonly #func: Func<TSchema, TTable, TReturn, TContext, TOutput>;
   readonly #validator: StandardSchemaV1<TInput, TOutput> | undefined;
-  #q: Query<TSchema, TTable, TReturn, TContext> | undefined;
+  #cachedQuery: Query<TSchema, TTable, TReturn, TContext> | undefined;
 
   constructor(
     name: TName,
@@ -56,8 +56,8 @@ export class RootNamedQuery<
   }
 
   withContext(ctx: TContext): Query<TSchema, TTable, TReturn, TContext> {
-    if (this.#q) {
-      return this.#q;
+    if (this.#cachedQuery) {
+      return this.#cachedQuery;
     }
 
     // This is a root query - call the function with the context
@@ -84,11 +84,13 @@ export class RootNamedQuery<
 
     // TODO: Refactor to deal with the name and args at a different abstraction
     // layer.
-    this.#q = asQueryInternals(this.#func({ctx, args: output})).nameAndArgs(
+    this.#cachedQuery = asQueryInternals(
+      this.#func({ctx, args: output}),
+    ).nameAndArgs(
       this.#name,
       this.#input === undefined ? [] : [this.#input as ReadonlyJSONValue],
     );
-    return this.#q;
+    return this.#cachedQuery;
   }
 
   #withChain<TNewReturn>(

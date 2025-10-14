@@ -133,7 +133,6 @@ export type {
   ParseFn,
   Parser,
   QueryFn,
-  QueryFnReturn,
   SyncedQuery,
 } from '../../zql/src/query/named.ts';
 export type {QueryInternals} from '../../zql/src/query/query-internals.ts';
@@ -143,10 +142,10 @@ export type {
   HumanReadable,
   PullRow,
   Query,
-  Row,
-  RunOptions,
   QueryResultType,
   QueryRowType,
+  Row,
+  RunOptions,
   ZeRow,
 } from '../../zql/src/query/query.ts';
 export {RootNamedQuery} from '../../zql/src/query/root-named-query.ts';

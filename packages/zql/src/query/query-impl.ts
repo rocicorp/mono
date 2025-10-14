@@ -730,10 +730,6 @@ export function materializeImpl<
 >(
   query: Query<TSchema, TTable, TReturn, TContext>,
   delegate: QueryDelegate<TContext>,
-  // ast: AST,
-  // format: Format,
-  // customQueryID: CustomQueryID | undefined,
-  // queryHash: string,
   factory: ViewFactory<
     TSchema,
     TTable,
