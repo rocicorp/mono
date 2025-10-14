@@ -3,7 +3,11 @@ import type postgres from 'postgres';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';
-import type {PostgresDB, PostgresTransaction} from '../types/pg.ts';
+import {
+  disableStatementTimeout,
+  type PostgresDB,
+  type PostgresTransaction,
+} from '../types/pg.ts';
 
 type Operations = (log: LogContext, tx: PostgresTransaction) => Promise<void>;
 
@@ -112,6 +116,8 @@ export async function runSchemaMigrations(
           void log.flush(); // Flush logs before each migration to help debug crash-y migrations.
 
           versions = await db.begin(async tx => {
+            disableStatementTimeout(tx);
+
             // Fetch meta from within the transaction to make the migration atomic.
             let versions = await ensureVersionHistory(tx, schemaName);
             if (versions.dataVersion < dest) {
