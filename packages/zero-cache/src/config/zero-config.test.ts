@@ -47,10 +47,14 @@ test('zero-cache --help', () => {
                                                                    DEPRECATED. Use mutate-url instead.                                                               
                                                                    The URL of the API server to which zero-cache will push mutations.                                
                                                                                                                                                                      
-                                                                   * is allowed if you would like to allow the client to specify a subdomain to use.                 
-                                                                   e.g., *.example.com/api/mutate                                                                    
-                                                                   You can specify multiple URLs as well which the client can choose from.                           
-                                                                   e.g., ["https://api1.example.com/mutate", "https://api2.example.com/mutate"]                      
+                                                                   Each URL is treated as a regex pattern for matching. This allows flexible URL matching.           
+                                                                   Examples:                                                                                         
+                                                                     - "^https://api\\.example\\.com/mutate$" (exact match)                                            
+                                                                     - "^https://[^.]+\\.example\\.com/mutate$" (any subdomain like api.example.com)                   
+                                                                     - "^https://api\\.v\\d+\\.example\\.com/" (versioned subdomains like api.v1.example.com)            
+                                                                                                                                                                     
+                                                                   You can specify multiple patterns to allow different URLs:                                        
+                                                                     e.g., ["^https://api1\\.example\\.com/mutate$", "^https://api2\\.example\\.com/mutate$"]            
                                                                                                                                                                      
      --push-api-key string                                         optional                                                                                          
        ZERO_PUSH_API_KEY env                                                                                                                                         
@@ -67,10 +71,14 @@ test('zero-cache --help', () => {
                                                                                                                                                                      
                                                                    The URL of the API server to which zero-cache will push mutations.                                
                                                                                                                                                                      
-                                                                   * is allowed if you would like to allow the client to specify a subdomain to use.                 
-                                                                   e.g., *.example.com/api/mutate                                                                    
-                                                                   You can specify multiple URLs as well which the client can choose from.                           
-                                                                   e.g., ["https://api1.example.com/mutate", "https://api2.example.com/mutate"]                      
+                                                                   Each URL is treated as a regex pattern for matching. This allows flexible URL matching.           
+                                                                   Examples:                                                                                         
+                                                                     - "^https://api\\.example\\.com/mutate$" (exact match)                                            
+                                                                     - "^https://[^.]+\\.example\\.com/mutate$" (any subdomain like api.example.com)                   
+                                                                     - "^https://api\\.v\\d+\\.example\\.com/" (versioned subdomains like api.v1.example.com)            
+                                                                                                                                                                     
+                                                                   You can specify multiple patterns to allow different URLs:                                        
+                                                                     e.g., ["^https://api1\\.example\\.com/mutate$", "^https://api2\\.example\\.com/mutate$"]            
                                                                                                                                                                      
      --mutate-api-key string                                       optional                                                                                          
        ZERO_MUTATE_API_KEY env                                                                                                                                       
@@ -87,10 +95,14 @@ test('zero-cache --help', () => {
                                                                                                                                                                      
                                                                    The URL of the API server to which zero-cache will send synced queries.                           
                                                                                                                                                                      
-                                                                   * is allowed if you would like to allow the client to specify a subdomain to use.                 
-                                                                   e.g., *.example.com/api/mutate                                                                    
-                                                                   You can specify multiple URLs as well which the client can choose from.                           
-                                                                   e.g., ["https://api1.example.com/mutate", "https://api2.example.com/mutate"]                      
+                                                                   Each URL is treated as a regex pattern for matching. This allows flexible URL matching.           
+                                                                   Examples:                                                                                         
+                                                                     - "^https://api\\.example\\.com/mutate$" (exact match)                                            
+                                                                     - "^https://[^.]+\\.example\\.com/mutate$" (any subdomain like api.example.com)                   
+                                                                     - "^https://api\\.v\\d+\\.example\\.com/" (versioned subdomains like api.v1.example.com)            
+                                                                                                                                                                     
+                                                                   You can specify multiple patterns to allow different URLs:                                        
+                                                                     e.g., ["^https://api1\\.example\\.com/mutate$", "^https://api2\\.example\\.com/mutate$"]            
                                                                                                                                                                      
      --get-queries-api-key string                                  optional                                                                                          
        ZERO_GET_QUERIES_API_KEY env                                                                                                                                  
