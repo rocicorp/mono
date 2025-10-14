@@ -9,6 +9,7 @@ import {
 import {afterEach, expect, test, vi} from 'vitest';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
+import {zeroDelegates} from '../../zero-client/src/client/bindings.ts';
 import {
   createSchema,
   number,
@@ -61,6 +62,7 @@ afterEach(() => vi.resetAllMocks());
 function newMockZero<MD extends CustomMutatorDefs, Context>(
   clientID: string,
   queryDelegate: QueryDelegate<Context>,
+  context: Context,
 ): Zero<Schema, MD, Context> {
   function m<TTable extends keyof Schema['tables'] & string, TReturn, T>(
     query: Query<Schema, TTable, TReturn, Context>,
@@ -76,10 +78,13 @@ function newMockZero<MD extends CustomMutatorDefs, Context>(
       typeof factoryOrOptions === 'function' ? maybeOptions : factoryOrOptions;
     return materialize(query, queryDelegate, factory, options);
   }
-  return {
+  const zero = {
     clientID,
     materialize: m,
+    context,
   } as unknown as Zero<Schema, MD, Context>;
+  zeroDelegates.set(zero, queryDelegate);
+  return zero;
 }
 
 function useQueryWithZeroProvider<

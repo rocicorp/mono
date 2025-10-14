@@ -41,6 +41,7 @@ import type {GotCallback, QueryDelegate} from './query-delegate.ts';
 import {
   asQueryInternals,
   queryInternalsTag,
+  withContextTag,
   type QueryInternals,
 } from './query-internals.ts';
 import {
@@ -144,6 +145,7 @@ export abstract class AbstractQuery<
     QueryInternals<TSchema, TTable, TReturn, TContext>
 {
   readonly [queryInternalsTag] = true;
+  readonly [withContextTag] = true;
 
   readonly #schema: TSchema;
   protected readonly _delegate: QueryDelegate<TContext> | undefined;
@@ -728,7 +730,9 @@ export function materializeImpl<
   TContext,
   T,
 >(
-  query: Query<TSchema, TTable, TReturn, TContext>,
+  query:
+    | Query<TSchema, TTable, TReturn, TContext>
+    | QueryInternals<TSchema, TTable, TReturn, TContext>,
   delegate: QueryDelegate<TContext>,
   factory: ViewFactory<
     TSchema,
@@ -741,7 +745,14 @@ export function materializeImpl<
 ): T {
   let ttl: TTL = options?.ttl ?? DEFAULT_TTL_MS;
 
-  const qi = delegate.withContext(query);
+  // If query is already a resolved QueryInternals, use it directly.
+  // Otherwise, resolve it via delegate.withContext().
+  const qi =
+    queryInternalsTag in query
+      ? (query as QueryInternals<TSchema, TTable, TReturn, TContext>)
+      : delegate.withContext(
+          query as Query<TSchema, TTable, TReturn, TContext>,
+        );
 
   const ast = qi.completedAST;
   const format = qi.format;

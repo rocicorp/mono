@@ -7,6 +7,7 @@ import type {CustomQueryID} from './named.ts';
 import type {NoContext, Query} from './query.ts';
 
 export const queryInternalsTag = Symbol('QueryInternals');
+export const withContextTag = Symbol('WithContext');
 
 /**
  * Internal interface for query implementation details.
@@ -77,6 +78,84 @@ export function asQueryInternals<
 ): QueryInternals<TSchema, TTable, TReturn, TContext> {
   assert(queryInternalsTag in query);
   return query as unknown as QueryInternals<TSchema, TTable, TReturn, TContext>;
+}
+
+/**
+ * Helper function to convert QueryInternals back to Query interface.
+ * This is useful when you have QueryInternals but need to pass it to
+ * APIs that expect Query. All concrete query implementations have both
+ * interfaces, so this is a safe cast.
+ *
+ * @internal
+ */
+export function asQuery<
+  TSchema extends ZeroSchema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+  TContext,
+>(
+  queryInternals: QueryInternals<TSchema, TTable, TReturn, TContext>,
+): Query<TSchema, TTable, TReturn, TContext> {
+  assert(queryInternalsTag in queryInternals);
+  return queryInternals as unknown as Query<TSchema, TTable, TReturn, TContext>;
+}
+
+/**
+ * Helper function to resolve a query with context.
+ * This is used by binding libraries (React, Solid, etc.) to inject context
+ * into queries without exposing the QueryDelegate interface.
+ *
+ * This function calls the `withContext` method on queries that support it
+ * (such as ChainedQuery and RootNamedQuery) and returns the resolved query
+ * as a QueryInternals, which provides access to internal query details
+ * needed for materialization.
+ *
+ * @internal
+ */
+export function queryWithContext<
+  TSchema extends ZeroSchema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+  TContext,
+>(
+  query: Query<TSchema, TTable, TReturn, TContext>,
+  ctx: TContext,
+): QueryInternals<TSchema, TTable, TReturn, TContext> {
+  assert(withContextTag in query);
+  const withCtx = query as unknown as {
+    withContext(ctx: TContext): Query<TSchema, TTable, TReturn, TContext>;
+  };
+  // The returned query implements both Query and QueryInternals
+  return withCtx.withContext(ctx) as unknown as QueryInternals<
+    TSchema,
+    TTable,
+    TReturn,
+    TContext
+  >;
+}
+
+/**
+ * Helper function to get QueryInternals from a Query, resolving context if needed.
+ * This is the recommended way for binding libraries to access query internals.
+ *
+ * For queries that require context (named queries), this resolves them first.
+ * For regular queries, this directly returns the internals.
+ *
+ * @internal
+ */
+export function getQueryInternals<
+  TSchema extends ZeroSchema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+  TContext,
+>(
+  query: Query<TSchema, TTable, TReturn, TContext>,
+  ctx: TContext,
+): QueryInternals<TSchema, TTable, TReturn, TContext> {
+  if (withContextTag in query) {
+    return queryWithContext(query, ctx);
+  }
+  return asQueryInternals(query);
 }
 
 // eslint-disable-next-line no-explicit-any

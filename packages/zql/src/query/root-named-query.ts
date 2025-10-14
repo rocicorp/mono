@@ -6,7 +6,7 @@ import {ChainedQuery} from './chained-query.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {CustomQueryID} from './named.ts';
 import type {AnyChainQuery, Func} from './new/types.ts';
-import {asQueryInternals} from './query-internals.ts';
+import {asQueryInternals, withContextTag} from './query-internals.ts';
 import type {AnyQuery} from './query.ts';
 import {
   type AvailableRelationships,
@@ -37,6 +37,8 @@ export class RootNamedQuery<
   TInput,
 > implements Query<TSchema, TTable, TReturn, TContext>
 {
+  readonly [withContextTag] = true;
+
   readonly #name: TName;
   readonly #input: TInput;
   readonly #func: Func<TSchema, TTable, TReturn, TContext, TOutput>;

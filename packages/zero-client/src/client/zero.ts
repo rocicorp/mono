@@ -104,6 +104,7 @@ import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
 import {ActiveClientsManager} from './active-clients-manager.ts';
+import {zeroDelegates} from './bindings.ts';
 import {ConnectionManager, type ConnectionState} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {ZeroContext} from './context.ts';
@@ -611,6 +612,10 @@ export class Zero<
       this.#addMetric,
       assertValidRunOptions,
     );
+
+    // Register the delegate for bindings to access via WeakMap.
+    // This avoids exposing the delegate as a public API on Zero.
+    zeroDelegates.set(this, this.#zeroContext);
 
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,

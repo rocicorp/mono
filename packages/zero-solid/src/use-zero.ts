@@ -33,7 +33,8 @@ export function createZero<
 export function useZero<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
->(): () => Zero<S, MD> {
+  Context = unknown,
+>(): () => Zero<S, MD, Context> {
   const zero = useContext(ZeroContext);
 
   if (zero === undefined) {
@@ -45,8 +46,9 @@ export function useZero<
 export function createUseZero<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
+  Context = unknown,
 >() {
-  return () => useZero<S, MD>();
+  return () => useZero<S, MD, Context>();
 }
 
 export function ZeroProvider<
