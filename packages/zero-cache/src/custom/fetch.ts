@@ -6,6 +6,50 @@ import {ErrorForClient} from '../types/error-for-client.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 
 const reservedParams = ['schema', 'appID'];
+
+/**
+ * Compiles and validates URL regex patterns from configuration.
+ * Automatically anchors patterns with ^ and $ if not already present for security.
+ *
+ * @throws Error if any pattern is an invalid regex
+ */
+export function compileUrlPatterns(
+  lc: LogContext,
+  patterns: string[],
+): RegExp[] {
+  const compiled: RegExp[] = [];
+
+  for (const pattern of patterns) {
+    let anchoredPattern = pattern;
+    const needsStartAnchor = !pattern.startsWith('^');
+    const needsEndAnchor = !pattern.endsWith('$');
+
+    if (needsStartAnchor || needsEndAnchor) {
+      if (needsStartAnchor) {
+        anchoredPattern = '^' + anchoredPattern;
+      }
+      if (needsEndAnchor) {
+        anchoredPattern = anchoredPattern + '$';
+      }
+
+      lc.info?.('Auto-anchored regex pattern for security', {
+        original: pattern,
+        anchored: anchoredPattern,
+      });
+    }
+
+    try {
+      compiled.push(new RegExp(anchoredPattern));
+    } catch (e) {
+      throw new Error(
+        `Invalid regex pattern in URL configuration: "${pattern}". Error: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
+  return compiled;
+}
+
 export type HeaderOptions = {
   apiKey?: string | undefined;
   token?: string | undefined;
@@ -15,17 +59,16 @@ export type HeaderOptions = {
 export async function fetchFromAPIServer(
   lc: LogContext,
   url: string,
-  allowedUrls: string[],
+  allowedUrlPatterns: RegExp[],
   shard: ShardID,
   headerOptions: HeaderOptions,
   body: ReadonlyJSONValue,
 ) {
   lc.info?.('fetchFromAPIServer called', {
     url,
-    allowedUrls,
   });
 
-  if (!urlMatch(url, allowedUrls)) {
+  if (!urlMatch(url, allowedUrlPatterns)) {
     throw new Error(
       `URL "${url}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
     );
@@ -89,58 +132,31 @@ export async function fetchFromAPIServer(
 }
 
 /**
- * Returns true if:
- * 1. the url is an exact match with one of the allowedUrls
- * 2. an "allowedUrl" has a wildcard for a subdomain, e.g. "https://*.example.com" and the url matches that pattern
+ * Returns true if the url matches one of the allowedUrlPatterns.
  *
- * Valid wildcard patterns:
- * - "https://*.example.com" matches "https://api.example.com" and "https://www.example.com"
- * - "https://*.example.com" does not match "https://example.com" (no subdomain)
- * - "https://*.example.com" does not match "https://api.example.com/path" (no trailing path)
- * - "https://*.*.example.com" matches "https://api.v1.example.com" and "https://www.v2.example.com"
- * - "https://*.*.example.com" does not match "https://api.example.com" (only one subdomain)
+ * Query parameters and hash fragments are ignored when matching.
+ *
+ * Example regex patterns:
+ * - "^https://api\\.example\\.com/endpoint$" - Exact match for a specific URL
+ * - "^https://[^.]+\\.example\\.com/endpoint$" - Matches any single subdomain (e.g., "https://api.example.com/endpoint")
+ * - "^https://[^.]+\\.[^.]+\\.example\\.com/endpoint$" - Matches two subdomains (e.g., "https://api.v1.example.com/endpoint")
+ * - "^https://(api|www)\\.example\\.com/" - Matches specific subdomains
+ * - "^https://api\\.v\\d+\\.example\\.com/" - Matches versioned subdomains (e.g., "https://api.v1.example.com", "https://api.v2.example.com")
  */
-export function urlMatch(url: string, allowedUrls: string[]): boolean {
-  assert(url.includes('*') === false, 'URL to fetch may not include `*`');
-  // ignore query parameters in the URL
-  url = url.split('?')[0];
+export function urlMatch(url: string, allowedUrlPatterns: RegExp[]): boolean {
+  // ignore query parameters and hash in the URL using proper URL parsing
+  const urlObj = new URL(url);
+  let urlWithoutQuery = urlObj.origin + urlObj.pathname;
 
-  for (let allowedUrl of allowedUrls) {
-    // ignore query parameters in the allowed URL
-    allowedUrl = allowedUrl.split('?')[0];
-    if (url === allowedUrl) {
-      return true; // exact match
-    }
+  // Normalize: remove trailing slash
+  // This ensures 'http://example.com' and 'http://example.com/' are treated as equivalent
+  if (urlWithoutQuery.endsWith('/')) {
+    urlWithoutQuery = urlWithoutQuery.slice(0, -1);
+  }
 
-    const parts = allowedUrl.split('*');
-
-    if (parts.length === 1) {
-      continue; // no wildcard, already checked above
-    }
-
-    let currentStr = url;
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      if (!currentStr.startsWith(part)) {
-        break;
-      }
-
-      currentStr = currentStr.slice(part.length);
-      if (currentStr === '' && i < parts.length - 1) {
-        // if we reach the end of the string but still have more parts to match, it's not a match
-        break;
-      } else if (currentStr === '' && i === parts.length - 1) {
-        // if we reach the end of the string and this is the last part, it's a match
-        return true;
-      }
-
-      // consume the rest of the string up to a .
-      const nextDotIndex = currentStr.indexOf('.');
-      if (nextDotIndex === -1) {
-        // no dot? then the wildcard rules don't apply, so we can stop checking
-        break;
-      }
-      currentStr = currentStr.slice(nextDotIndex);
+  for (const pattern of allowedUrlPatterns) {
+    if (pattern.test(urlWithoutQuery)) {
+      return true;
     }
   }
   return false;
