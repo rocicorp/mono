@@ -15,8 +15,9 @@ import {ZQLDatabase} from '../zql-database.ts';
 
 export type DrizzleDatabase<
   TQueryResult extends PgQueryResultHKT = PgQueryResultHKT,
+  TSchema extends Record<string, unknown> = Record<string, unknown>,
   TClient = unknown,
-> = PgDatabase<TQueryResult, Record<string, unknown>> & {
+> = PgDatabase<TQueryResult, TSchema> & {
   $client: TClient;
 };
 
@@ -26,30 +27,23 @@ export type DrizzleDatabase<
  * @remarks Use with `ServerTransaction` as `ServerTransaction<Schema, DrizzleTransaction<typeof drizzleDb>>`.
  */
 export type DrizzleTransaction<
-  TDbOrSchema extends
-    | DrizzleDatabase<TQueryResult, TClient>
-    | Record<string, unknown>,
-  TQueryResult extends PgQueryResultHKT = PgQueryResultHKT,
-  TClient = unknown,
+  TDbOrSchema extends DrizzleDatabase | Record<string, unknown>,
   TSchema extends Record<string, unknown> = TDbOrSchema extends PgDatabase<
-    TQueryResult,
-    infer TSchema
+    PgQueryResultHKT,
+    infer TInferredSchema
   >
-    ? TSchema
+    ? TInferredSchema
     : TDbOrSchema,
-> = PgTransaction<TQueryResult, TSchema, ExtractTablesWithRelations<TSchema>>;
+> = PgTransaction<
+  PgQueryResultHKT,
+  TSchema,
+  ExtractTablesWithRelations<TSchema>
+>;
 
 export class DrizzleConnection<
-  TDrizzle extends DrizzleDatabase<TQueryResult, TClient> & {
-    $client: TClient;
-  },
-  TQueryResult extends PgQueryResultHKT = PgQueryResultHKT,
-  TClient = unknown,
-  TTransaction extends DrizzleTransaction<
-    TDrizzle,
-    TQueryResult,
-    TClient
-  > = DrizzleTransaction<TDrizzle, TQueryResult, TClient>,
+  TDrizzle extends DrizzleDatabase,
+  TTransaction extends
+    DrizzleTransaction<TDrizzle> = DrizzleTransaction<TDrizzle>,
 > implements DBConnection<TTransaction>
 {
   readonly #drizzle: TDrizzle;
@@ -72,16 +66,7 @@ export class DrizzleConnection<
 }
 
 class DrizzleInternalTransaction<
-  TDrizzle extends DrizzleDatabase<TQueryResult, TClient> & {
-    $client: TClient;
-  },
-  TQueryResult extends PgQueryResultHKT = PgQueryResultHKT,
-  TClient = unknown,
-  TTransaction extends DrizzleTransaction<
-    TDrizzle,
-    TQueryResult,
-    TClient
-  > = DrizzleTransaction<TDrizzle, TQueryResult, TClient>,
+  TTransaction extends DrizzleTransaction<DrizzleDatabase>,
 > implements DBTransaction<TTransaction>
 {
   readonly wrappedTransaction: TTransaction;
@@ -185,12 +170,12 @@ export function toIterableRows(result: unknown): Iterable<Row> {
  * }
  * ```
  */
-export function zeroDrizzle<
-  S extends Schema,
-  TDrizzle extends PgDatabase<PgQueryResultHKT, Record<string, unknown>> & {
-    $client: TClient;
-  },
-  TClient = unknown,
->(schema: S, client: TDrizzle) {
-  return new ZQLDatabase(new DrizzleConnection<TDrizzle>(client), schema);
+export function zeroDrizzle<S extends Schema, TDrizzle extends DrizzleDatabase>(
+  schema: S,
+  client: TDrizzle,
+): ZQLDatabase<S, DrizzleTransaction<TDrizzle>> {
+  return new ZQLDatabase(
+    new DrizzleConnection<TDrizzle, DrizzleTransaction<TDrizzle>>(client),
+    schema,
+  );
 }
