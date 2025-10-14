@@ -14,7 +14,7 @@ import {
   type PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
-import {fetchFromAPIServer} from '../../custom/fetch.ts';
+import {fetchFromAPIServer, compileUrlPatterns} from '../../custom/fetch.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {recordMutation} from '../../server/anonymous-otel-start.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
@@ -180,6 +180,7 @@ type PusherEntryOrStop = PusherEntry | 'stop';
  */
 class PushWorker {
   readonly #pushURLs: string[];
+  readonly #pushURLPatterns: RegExp[];
   readonly #apiKey: string | undefined;
   readonly #queue: Queue<PusherEntryOrStop>;
   readonly #lc: LogContext;
@@ -212,9 +213,10 @@ class PushWorker {
     queue: Queue<PusherEntryOrStop>,
   ) {
     this.#pushURLs = pushURL;
+    this.#lc = lc.withContext('component', 'pusher');
+    this.#pushURLPatterns = compileUrlPatterns(this.#lc, pushURL);
     this.#apiKey = apiKey;
     this.#queue = queue;
-    this.#lc = lc.withContext('component', 'pusher');
     this.#config = config;
     this.#clients = new Map();
   }
@@ -407,7 +409,7 @@ class PushWorker {
       const response = await fetchFromAPIServer(
         this.#lc,
         url,
-        this.#pushURLs,
+        this.#pushURLPatterns,
         {
           appID: this.#config.app.id,
           shardNum: this.#config.shard.num,
