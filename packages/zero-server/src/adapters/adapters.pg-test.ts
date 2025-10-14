@@ -403,6 +403,32 @@ describe('drizzle and node-postgres', () => {
       await exerciseMutations(zql, expect);
     }
   });
+
+  test('type portability - inferred types should not reference internal drizzle paths', () => {
+    function getZQL() {
+      return zeroDrizzle(schema, client);
+    }
+
+    const zql = getZQL();
+
+    type TxType = DrizzleTransaction<typeof client>;
+
+    expectTypeOf<
+      Awaited<
+        ReturnType<
+          Awaited<ReturnType<TxType['query']['user']['findFirst']>['execute']>
+        >
+      >
+    >().toMatchTypeOf<
+      | {
+          id: `user_${string}`;
+          name: string | null;
+          status: UserStatus;
+        }
+      | undefined
+    >();
+    expectTypeOf(zql).toMatchTypeOf<ZQLDatabase<typeof schema, TxType>>();
+  });
 });
 
 describe('drizzle and postgres-js', () => {
@@ -510,5 +536,31 @@ describe('drizzle and postgres-js', () => {
   test('mutations', async ({expect}) => {
     const zql = zeroDrizzle(schema, client);
     await exerciseMutations(zql, expect);
+  });
+
+  test('type portability', () => {
+    function getZQL() {
+      return zeroDrizzle(schema, client);
+    }
+
+    const zql = getZQL();
+
+    type TxType = DrizzleTransaction<typeof client>;
+
+    expectTypeOf<
+      Awaited<
+        ReturnType<
+          Awaited<ReturnType<TxType['query']['user']['findFirst']>['execute']>
+        >
+      >
+    >().toMatchTypeOf<
+      | {
+          id: `user_${string}`;
+          name: string | null;
+          status: UserStatus;
+        }
+      | undefined
+    >();
+    expectTypeOf(zql).toMatchTypeOf<ZQLDatabase<typeof schema, TxType>>();
   });
 });
