@@ -148,7 +148,7 @@ export function urlMatch(url: string, allowedUrlPatterns: RegExp[]): boolean {
   const urlObj = new URL(url);
   let urlWithoutQuery = urlObj.origin + urlObj.pathname;
 
-  // Normalize: remove trailing slash if it's just the root path
+  // Normalize: remove trailing slash
   // This ensures 'http://example.com' and 'http://example.com/' are treated as equivalent
   if (urlWithoutQuery.endsWith('/')) {
     urlWithoutQuery = urlWithoutQuery.slice(0, -1);

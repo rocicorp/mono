@@ -47,14 +47,37 @@ test('zero-cache --help', () => {
                                                                    DEPRECATED. Use mutate-url instead.                                                               
                                                                    The URL of the API server to which zero-cache will push mutations.                                
                                                                                                                                                                      
-                                                                   Each URL is treated as a regex pattern for matching. This allows flexible URL matching.           
-                                                                   Examples:                                                                                         
-                                                                     - "^https://api\\.example\\.com/mutate$" (exact match)                                            
-                                                                     - "^https://[^.]+\\.example\\.com/mutate$" (any subdomain like api.example.com)                   
-                                                                     - "^https://api\\.v\\d+\\.example\\.com/" (versioned subdomains like api.v1.example.com)            
+                                                                   IMPORTANT: URLs are treated as regular expression patterns, not literal strings.                  
                                                                                                                                                                      
-                                                                   You can specify multiple patterns to allow different URLs:                                        
-                                                                     e.g., ["^https://api1\\.example\\.com/mutate$", "^https://api2\\.example\\.com/mutate$"]            
+                                                                   Anchoring (automatic):                                                                            
+                                                                     Patterns are automatically anchored with ^ and $ for security if not present.                   
+                                                                     This prevents partial matches. Both of these are equivalent:                                    
+                                                                       - "https://api\\.example\\.com/mutate"                                                          
+                                                                       - "^https://api\\.example\\.com/mutate$"                                                        
+                                                                                                                                                                     
+                                                                   Escaping special characters (CRITICAL):                                                           
+                                                                     Regex special characters MUST be escaped, especially dots (.)!                                  
+                                                                     WRONG: "https://my.domain.com/mutate"                                                           
+                                                                       ↳ Dots match ANY character! This unsafely matches "https://myXdomainYcom/mutate"              
+                                                                     RIGHT: "https://my\\.domain\\.com/mutate"                                                         
+                                                                       ↳ Escaped dots match only literal dots                                                        
+                                                                                                                                                                     
+                                                                   Pattern examples:                                                                                 
+                                                                     Exact URL match:                                                                                
+                                                                       "https://api\\.example\\.com/mutate"                                                            
+                                                                     Any single subdomain (api, www, etc.):                                                          
+                                                                       "https://[^.]+\\.example\\.com/mutate"                                                          
+                                                                     Two subdomain levels (api.v1, www.staging, etc.):                                               
+                                                                       "https://[^.]+\\.[^.]+\\.example\\.com/mutate"                                                   
+                                                                     Specific subdomains only:                                                                       
+                                                                       "https://(api|www)\\.example\\.com/mutate"                                                      
+                                                                     Versioned subdomains (api.v1, api.v2, etc.):                                                    
+                                                                       "https://api\\.v\\d+\\.example\\.com/mutate"                                                      
+                                                                                                                                                                     
+                                                                   Multiple patterns:                                                                                
+                                                                     ["https://api1\\.example\\.com/mutate", "https://api2\\.example\\.com/mutate"]                      
+                                                                                                                                                                     
+                                                                   Note: Query parameters and URL fragments (#) are ignored during matching.                         
                                                                                                                                                                      
      --push-api-key string                                         optional                                                                                          
        ZERO_PUSH_API_KEY env                                                                                                                                         
@@ -71,14 +94,37 @@ test('zero-cache --help', () => {
                                                                                                                                                                      
                                                                    The URL of the API server to which zero-cache will push mutations.                                
                                                                                                                                                                      
-                                                                   Each URL is treated as a regex pattern for matching. This allows flexible URL matching.           
-                                                                   Examples:                                                                                         
-                                                                     - "^https://api\\.example\\.com/mutate$" (exact match)                                            
-                                                                     - "^https://[^.]+\\.example\\.com/mutate$" (any subdomain like api.example.com)                   
-                                                                     - "^https://api\\.v\\d+\\.example\\.com/" (versioned subdomains like api.v1.example.com)            
+                                                                   IMPORTANT: URLs are treated as regular expression patterns, not literal strings.                  
                                                                                                                                                                      
-                                                                   You can specify multiple patterns to allow different URLs:                                        
-                                                                     e.g., ["^https://api1\\.example\\.com/mutate$", "^https://api2\\.example\\.com/mutate$"]            
+                                                                   Anchoring (automatic):                                                                            
+                                                                     Patterns are automatically anchored with ^ and $ for security if not present.                   
+                                                                     This prevents partial matches. Both of these are equivalent:                                    
+                                                                       - "https://api\\.example\\.com/mutate"                                                          
+                                                                       - "^https://api\\.example\\.com/mutate$"                                                        
+                                                                                                                                                                     
+                                                                   Escaping special characters (CRITICAL):                                                           
+                                                                     Regex special characters MUST be escaped, especially dots (.)!                                  
+                                                                     WRONG: "https://my.domain.com/mutate"                                                           
+                                                                       ↳ Dots match ANY character! This unsafely matches "https://myXdomainYcom/mutate"              
+                                                                     RIGHT: "https://my\\.domain\\.com/mutate"                                                         
+                                                                       ↳ Escaped dots match only literal dots                                                        
+                                                                                                                                                                     
+                                                                   Pattern examples:                                                                                 
+                                                                     Exact URL match:                                                                                
+                                                                       "https://api\\.example\\.com/mutate"                                                            
+                                                                     Any single subdomain (api, www, etc.):                                                          
+                                                                       "https://[^.]+\\.example\\.com/mutate"                                                          
+                                                                     Two subdomain levels (api.v1, www.staging, etc.):                                               
+                                                                       "https://[^.]+\\.[^.]+\\.example\\.com/mutate"                                                   
+                                                                     Specific subdomains only:                                                                       
+                                                                       "https://(api|www)\\.example\\.com/mutate"                                                      
+                                                                     Versioned subdomains (api.v1, api.v2, etc.):                                                    
+                                                                       "https://api\\.v\\d+\\.example\\.com/mutate"                                                      
+                                                                                                                                                                     
+                                                                   Multiple patterns:                                                                                
+                                                                     ["https://api1\\.example\\.com/mutate", "https://api2\\.example\\.com/mutate"]                      
+                                                                                                                                                                     
+                                                                   Note: Query parameters and URL fragments (#) are ignored during matching.                         
                                                                                                                                                                      
      --mutate-api-key string                                       optional                                                                                          
        ZERO_MUTATE_API_KEY env                                                                                                                                       
@@ -95,14 +141,37 @@ test('zero-cache --help', () => {
                                                                                                                                                                      
                                                                    The URL of the API server to which zero-cache will send synced queries.                           
                                                                                                                                                                      
-                                                                   Each URL is treated as a regex pattern for matching. This allows flexible URL matching.           
-                                                                   Examples:                                                                                         
-                                                                     - "^https://api\\.example\\.com/mutate$" (exact match)                                            
-                                                                     - "^https://[^.]+\\.example\\.com/mutate$" (any subdomain like api.example.com)                   
-                                                                     - "^https://api\\.v\\d+\\.example\\.com/" (versioned subdomains like api.v1.example.com)            
+                                                                   IMPORTANT: URLs are treated as regular expression patterns, not literal strings.                  
                                                                                                                                                                      
-                                                                   You can specify multiple patterns to allow different URLs:                                        
-                                                                     e.g., ["^https://api1\\.example\\.com/mutate$", "^https://api2\\.example\\.com/mutate$"]            
+                                                                   Anchoring (automatic):                                                                            
+                                                                     Patterns are automatically anchored with ^ and $ for security if not present.                   
+                                                                     This prevents partial matches. Both of these are equivalent:                                    
+                                                                       - "https://api\\.example\\.com/mutate"                                                          
+                                                                       - "^https://api\\.example\\.com/mutate$"                                                        
+                                                                                                                                                                     
+                                                                   Escaping special characters (CRITICAL):                                                           
+                                                                     Regex special characters MUST be escaped, especially dots (.)!                                  
+                                                                     WRONG: "https://my.domain.com/mutate"                                                           
+                                                                       ↳ Dots match ANY character! This unsafely matches "https://myXdomainYcom/mutate"              
+                                                                     RIGHT: "https://my\\.domain\\.com/mutate"                                                         
+                                                                       ↳ Escaped dots match only literal dots                                                        
+                                                                                                                                                                     
+                                                                   Pattern examples:                                                                                 
+                                                                     Exact URL match:                                                                                
+                                                                       "https://api\\.example\\.com/mutate"                                                            
+                                                                     Any single subdomain (api, www, etc.):                                                          
+                                                                       "https://[^.]+\\.example\\.com/mutate"                                                          
+                                                                     Two subdomain levels (api.v1, www.staging, etc.):                                               
+                                                                       "https://[^.]+\\.[^.]+\\.example\\.com/mutate"                                                   
+                                                                     Specific subdomains only:                                                                       
+                                                                       "https://(api|www)\\.example\\.com/mutate"                                                      
+                                                                     Versioned subdomains (api.v1, api.v2, etc.):                                                    
+                                                                       "https://api\\.v\\d+\\.example\\.com/mutate"                                                      
+                                                                                                                                                                     
+                                                                   Multiple patterns:                                                                                
+                                                                     ["https://api1\\.example\\.com/mutate", "https://api2\\.example\\.com/mutate"]                      
+                                                                                                                                                                     
+                                                                   Note: Query parameters and URL fragments (#) are ignored during matching.                         
                                                                                                                                                                      
      --get-queries-api-key string                                  optional                                                                                          
        ZERO_GET_QUERIES_API_KEY env                                                                                                                                  
