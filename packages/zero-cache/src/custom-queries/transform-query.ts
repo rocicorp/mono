@@ -7,7 +7,11 @@ import {
   type TransformRequestBody,
   type TransformRequestMessage,
 } from '../../../zero-protocol/src/custom-queries.ts';
-import {fetchFromAPIServer, type HeaderOptions} from '../custom/fetch.ts';
+import {
+  fetchFromAPIServer,
+  compileUrlPatterns,
+  type HeaderOptions,
+} from '../custom/fetch.ts';
 import type {ShardID} from '../types/shards.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
@@ -42,6 +46,7 @@ export class CustomQueryTransformer {
     url: string[];
     forwardCookies: boolean;
   };
+  readonly #urlPatterns: RegExp[];
   readonly #lc: LogContext;
 
   constructor(
@@ -55,6 +60,7 @@ export class CustomQueryTransformer {
     this.#config = config;
     this.#shard = shard;
     this.#lc = lc;
+    this.#urlPatterns = compileUrlPatterns(lc, config.url);
     this.#cache = new TimedCache(5000); // 5 seconds cache TTL
   }
 
@@ -101,7 +107,7 @@ export class CustomQueryTransformer {
             this.#config.url[0],
             'A ZERO_GET_QUERIES_URL must be configured for custom queries',
           ),
-        this.#config.url,
+        this.#urlPatterns,
         this.#shard,
         headerOptions,
         ['transform', request] satisfies TransformRequestMessage,
