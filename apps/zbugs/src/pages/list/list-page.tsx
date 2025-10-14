@@ -12,7 +12,7 @@ import React, {
   type KeyboardEvent,
 } from 'react';
 import {useDebouncedCallback} from 'use-debounce';
-import {useParams, useSearch} from 'wouter';
+import {useLocation, useParams, useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {queries, type ListContext} from '../../../shared/queries.ts';
@@ -216,19 +216,19 @@ export function ListPage({onReady}: {onReady: () => void}) {
     title = status.slice(0, 1).toUpperCase() + status.slice(1) + ' Issues';
   }
 
-  const listContext: ListContext = useMemo(
-    () => ({
-      href: window.location.href,
+  const [location] = useLocation();
+  const listContext: ListContext = useMemo(() => {
+    return {
+      href: `${location}?${search}`,
       title,
       params: listContextParams,
-    }),
-    [window.location.href, title, listContextParams],
-  );
+    };
+  }, [location, search, title, listContextParams]);
 
   const {setListContext} = useListContext();
   useEffect(() => {
     setListContext(listContext);
-  });
+  }, [listContext]);
 
   const onDeleteFilter = (e: React.MouseEvent) => {
     const target = e.currentTarget;

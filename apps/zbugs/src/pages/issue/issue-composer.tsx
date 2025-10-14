@@ -74,6 +74,9 @@ export function IssueComposer({
   }, [description]);
 
   const handleSubmit = () => {
+    if (!project) {
+      return;
+    }
     const id = nanoid();
 
     z.mutate.issue.create({
@@ -85,7 +88,7 @@ export function IssueComposer({
       modified: Date.now(),
     });
     reset();
-    onDismiss({id, projectName: project?.id ?? projectName});
+    onDismiss({id, projectName: project?.name ?? projectName});
   };
 
   const reset = () => {
@@ -93,7 +96,7 @@ export function IssueComposer({
     setDescription('');
   };
 
-  const canSave = () => title.trim().length > 0;
+  const canSave = () => title.trim().length > 0 && project !== undefined;
 
   const isDirty = useCallback(
     () => title.trim().length > 0 || description.trim().length > 0,
