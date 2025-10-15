@@ -57,20 +57,26 @@ test('zero-cache --help', () => {
                                                                                                                                                                      
                                                                    Escaping special characters (CRITICAL):                                                           
                                                                      Regex special characters MUST be escaped, especially dots (.)!                                  
+                                                                                                                                                                     
                                                                      WRONG: "https://my.domain.com/mutate"                                                           
                                                                        ↳ Dots match ANY character! This unsafely matches "https://myXdomainYcom/mutate"              
+                                                                                                                                                                     
                                                                      RIGHT: "https://my\\.domain\\.com/mutate"                                                         
                                                                        ↳ Escaped dots match only literal dots                                                        
                                                                                                                                                                      
                                                                    Pattern examples:                                                                                 
                                                                      Exact URL match:                                                                                
                                                                        "https://api\\.example\\.com/mutate"                                                            
+                                                                                                                                                                     
                                                                      Any single subdomain (api, www, etc.):                                                          
                                                                        "https://[^.]+\\.example\\.com/mutate"                                                          
+                                                                                                                                                                     
                                                                      Two subdomain levels (api.v1, www.staging, etc.):                                               
                                                                        "https://[^.]+\\.[^.]+\\.example\\.com/mutate"                                                   
+                                                                                                                                                                     
                                                                      Specific subdomains only:                                                                       
                                                                        "https://(api|www)\\.example\\.com/mutate"                                                      
+                                                                                                                                                                     
                                                                      Versioned subdomains (api.v1, api.v2, etc.):                                                    
                                                                        "https://api\\.v\\d+\\.example\\.com/mutate"                                                      
                                                                                                                                                                      
@@ -104,20 +110,26 @@ test('zero-cache --help', () => {
                                                                                                                                                                      
                                                                    Escaping special characters (CRITICAL):                                                           
                                                                      Regex special characters MUST be escaped, especially dots (.)!                                  
+                                                                                                                                                                     
                                                                      WRONG: "https://my.domain.com/mutate"                                                           
                                                                        ↳ Dots match ANY character! This unsafely matches "https://myXdomainYcom/mutate"              
+                                                                                                                                                                     
                                                                      RIGHT: "https://my\\.domain\\.com/mutate"                                                         
                                                                        ↳ Escaped dots match only literal dots                                                        
                                                                                                                                                                      
                                                                    Pattern examples:                                                                                 
                                                                      Exact URL match:                                                                                
                                                                        "https://api\\.example\\.com/mutate"                                                            
+                                                                                                                                                                     
                                                                      Any single subdomain (api, www, etc.):                                                          
                                                                        "https://[^.]+\\.example\\.com/mutate"                                                          
+                                                                                                                                                                     
                                                                      Two subdomain levels (api.v1, www.staging, etc.):                                               
                                                                        "https://[^.]+\\.[^.]+\\.example\\.com/mutate"                                                   
+                                                                                                                                                                     
                                                                      Specific subdomains only:                                                                       
                                                                        "https://(api|www)\\.example\\.com/mutate"                                                      
+                                                                                                                                                                     
                                                                      Versioned subdomains (api.v1, api.v2, etc.):                                                    
                                                                        "https://api\\.v\\d+\\.example\\.com/mutate"                                                      
                                                                                                                                                                      
@@ -151,20 +163,26 @@ test('zero-cache --help', () => {
                                                                                                                                                                      
                                                                    Escaping special characters (CRITICAL):                                                           
                                                                      Regex special characters MUST be escaped, especially dots (.)!                                  
+                                                                                                                                                                     
                                                                      WRONG: "https://my.domain.com/mutate"                                                           
                                                                        ↳ Dots match ANY character! This unsafely matches "https://myXdomainYcom/mutate"              
+                                                                                                                                                                     
                                                                      RIGHT: "https://my\\.domain\\.com/mutate"                                                         
                                                                        ↳ Escaped dots match only literal dots                                                        
                                                                                                                                                                      
                                                                    Pattern examples:                                                                                 
                                                                      Exact URL match:                                                                                
                                                                        "https://api\\.example\\.com/mutate"                                                            
+                                                                                                                                                                     
                                                                      Any single subdomain (api, www, etc.):                                                          
                                                                        "https://[^.]+\\.example\\.com/mutate"                                                          
+                                                                                                                                                                     
                                                                      Two subdomain levels (api.v1, www.staging, etc.):                                               
                                                                        "https://[^.]+\\.[^.]+\\.example\\.com/mutate"                                                   
+                                                                                                                                                                     
                                                                      Specific subdomains only:                                                                       
                                                                        "https://(api|www)\\.example\\.com/mutate"                                                      
+                                                                                                                                                                     
                                                                      Versioned subdomains (api.v1, api.v2, etc.):                                                    
                                                                        "https://api\\.v\\d+\\.example\\.com/mutate"                                                      
                                                                                                                                                                      
