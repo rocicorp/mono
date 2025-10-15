@@ -25,7 +25,7 @@ describe('fetchFromAPIServer', () => {
 
   const baseUrl = 'https://api.example.com/endpoint';
   const allowedPatterns = compileUrlPatterns(lc, [
-    '^https://api\\.example\\.com/endpoint$',
+    'https://api.example.com/endpoint',
   ]);
   const headerOptions = {
     apiKey: 'test-api-key',
@@ -268,111 +268,101 @@ describe('fetchFromAPIServer', () => {
 });
 
 describe('compileUrlPatterns', () => {
-  test('should keep already anchored patterns unchanged', () => {
+  test('should compile exact URL patterns', () => {
     const lc = createSilentLogContext();
     const patterns = compileUrlPatterns(lc, [
-      '^https://api\\.example\\.com/endpoint$',
+      'https://api.example.com/endpoint',
     ]);
     expect(patterns).toHaveLength(1);
     expect(patterns[0].test('https://api.example.com/endpoint')).toBe(true);
     expect(patterns[0].test('https://api.example.com/endpoint/extra')).toBe(
       false,
     );
-    expect(patterns[0].test('prefix/https://api.example.com/endpoint')).toBe(
-      false,
-    );
+    expect(patterns[0].test('https://other.example.com/endpoint')).toBe(false);
   });
 
-  test('should auto-anchor pattern missing start anchor', () => {
+  test('should compile wildcard subdomain patterns', () => {
     const lc = createSilentLogContext();
-    const patterns = compileUrlPatterns(lc, [
-      'https://api\\.example\\.com/endpoint$',
-    ]);
+    const patterns = compileUrlPatterns(lc, ['https://*.example.com/endpoint']);
     expect(patterns).toHaveLength(1);
     expect(patterns[0].test('https://api.example.com/endpoint')).toBe(true);
-    expect(patterns[0].test('prefix/https://api.example.com/endpoint')).toBe(
-      false,
-    );
+    expect(patterns[0].test('https://www.example.com/endpoint')).toBe(true);
+    expect(patterns[0].test('https://example.com/endpoint')).toBe(false);
   });
 
-  test('should auto-anchor pattern missing end anchor', () => {
+  test('should compile path wildcard patterns', () => {
     const lc = createSilentLogContext();
-    const patterns = compileUrlPatterns(lc, [
-      '^https://api\\.example\\.com/endpoint',
-    ]);
+    const patterns = compileUrlPatterns(lc, ['https://api.example.com/*']);
     expect(patterns).toHaveLength(1);
     expect(patterns[0].test('https://api.example.com/endpoint')).toBe(true);
-    expect(patterns[0].test('https://api.example.com/endpoint/extra')).toBe(
-      false,
-    );
+    expect(patterns[0].test('https://api.example.com/other')).toBe(true);
+    expect(patterns[0].test('https://www.example.com/endpoint')).toBe(false);
   });
 
-  test('should auto-anchor pattern missing both anchors', () => {
+  test('should throw error for invalid URLPattern', () => {
     const lc = createSilentLogContext();
-    const patterns = compileUrlPatterns(lc, [
-      'https://api\\.example\\.com/endpoint',
-    ]);
-    expect(patterns).toHaveLength(1);
-    expect(patterns[0].test('https://api.example.com/endpoint')).toBe(true);
-    expect(patterns[0].test('https://api.example.com/endpoint/extra')).toBe(
-      false,
-    );
-    expect(patterns[0].test('prefix/https://api.example.com/endpoint')).toBe(
-      false,
-    );
-  });
-
-  test('should throw error for invalid regex pattern', () => {
-    const lc = createSilentLogContext();
-    expect(() => compileUrlPatterns(lc, ['[invalid regex'])).toThrow(
-      /Invalid regex pattern in URL configuration/,
+    // URLPattern is quite permissive, but malformed inputs should still throw
+    expect(() => compileUrlPatterns(lc, [':::invalid'])).toThrow(
+      /Invalid URLPattern in URL configuration/,
     );
   });
 });
 
 describe('urlMatch', () => {
   test('should return true for matching URLs', () => {
+    const lc = createSilentLogContext();
+
     // Exact match
     expect(
-      urlMatch('https://api.example.com/endpoint', [
-        /^https:\/\/api\.example\.com\/endpoint$/,
-      ]),
+      urlMatch(
+        'https://api.example.com/endpoint',
+        compileUrlPatterns(lc, ['https://api.example.com/endpoint']),
+      ),
     ).toBe(true);
 
     // Query parameters are ignored
     expect(
-      urlMatch('https://api.example.com/endpoint?foo=bar', [
-        /^https:\/\/api\.example\.com\/endpoint$/,
-      ]),
+      urlMatch(
+        'https://api.example.com/endpoint?foo=bar',
+        compileUrlPatterns(lc, ['https://api.example.com/endpoint']),
+      ),
     ).toBe(true);
 
     // Hash fragments are ignored
     expect(
-      urlMatch('https://api.example.com/endpoint#section', [
-        /^https:\/\/api\.example\.com\/endpoint$/,
-      ]),
+      urlMatch(
+        'https://api.example.com/endpoint#section',
+        compileUrlPatterns(lc, ['https://api.example.com/endpoint']),
+      ),
     ).toBe(true);
 
     // Multiple patterns
     expect(
-      urlMatch('https://api2.example.com/endpoint', [
-        /^https:\/\/api1\.example\.com\/endpoint$/,
-        /^https:\/\/api2\.example\.com\/endpoint$/,
-      ]),
+      urlMatch(
+        'https://api2.example.com/endpoint',
+        compileUrlPatterns(lc, [
+          'https://api1.example.com/endpoint',
+          'https://api2.example.com/endpoint',
+        ]),
+      ),
     ).toBe(true);
   });
 
   test('should return false for non-matching URLs', () => {
+    const lc = createSilentLogContext();
+
     expect(
-      urlMatch('https://api.example.com/other', [
-        /^https:\/\/api\.example\.com\/endpoint$/,
-      ]),
+      urlMatch(
+        'https://api.example.com/other',
+        compileUrlPatterns(lc, ['https://api.example.com/endpoint']),
+      ),
     ).toBe(false);
 
     expect(
-      urlMatch('https://evil.com/endpoint', [
-        /^https:\/\/api\.example\.com\/endpoint$/,
-      ]),
+      urlMatch(
+        'https://evil.com/endpoint',
+        compileUrlPatterns(lc, ['https://api.example.com/endpoint']),
+      ),
     ).toBe(false);
 
     expect(urlMatch('https://api.example.com/endpoint', [])).toBe(false);

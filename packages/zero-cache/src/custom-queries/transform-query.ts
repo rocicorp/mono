@@ -46,7 +46,7 @@ export class CustomQueryTransformer {
     url: string[];
     forwardCookies: boolean;
   };
-  readonly #urlPatterns: RegExp[];
+  readonly #urlPatterns: URLPattern[];
   readonly #lc: LogContext;
 
   constructor(

@@ -180,7 +180,7 @@ type PusherEntryOrStop = PusherEntry | 'stop';
  */
 class PushWorker {
   readonly #pushURLs: string[];
-  readonly #pushURLPatterns: RegExp[];
+  readonly #pushURLPatterns: URLPattern[];
   readonly #apiKey: string | undefined;
   readonly #queue: Queue<PusherEntryOrStop>;
   readonly #lc: LogContext;
