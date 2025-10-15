@@ -132,7 +132,6 @@ import {IVMSourceBranch} from './ivm-branch.ts';
 import {type LogOptions, createLogOptions} from './log-options.ts';
 import {
   DID_NOT_CONNECT_VALUE,
-  type DisconnectReason,
   MetricManager,
   REPORT_INTERVAL_MS,
   type Series,
@@ -150,11 +149,14 @@ import {
   resetBackoff,
 } from './reload-error-handler.ts';
 import {
+  ClientError,
   ServerError,
   isAuthError,
   isBackoffError,
+  isClientError,
   isServerError,
-} from './server-error.ts';
+  type ZeroError,
+} from './error.ts';
 import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {ZeroLogContext} from './zero-log-context.ts';
@@ -162,6 +164,7 @@ import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {ConnectionStatus} from './connection-status.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
 
 type PingResult = Enum<typeof PingResult>;
 
@@ -976,9 +979,10 @@ export class Zero<
       if (!this.#connectionManager.is(ConnectionStatus.Disconnected)) {
         this.#disconnect(
           lc,
-          {
-            client: 'ClientClosed',
-          },
+          new ClientError({
+            kind: ClientErrorKind.ClientClosed,
+            message: 'Zero instance closed by user',
+          }),
           CLOSE_CODE_NORMAL,
         );
       }
@@ -1108,9 +1112,13 @@ export class Zero<
       });
     }
 
-    const closeKind = wasClean ? 'CleanClose' : 'AbruptClose';
-    this.#connectResolver.reject(new CloseError(closeKind));
-    this.#disconnect(lc, {client: closeKind});
+    const closeError = new ClientError(
+      wasClean
+        ? {kind: ClientErrorKind.CleanClose, message: 'Clean close'}
+        : {kind: ClientErrorKind.AbruptClose, message: 'Abrupt close'},
+    );
+    this.#connectResolver.reject(closeError);
+    this.#disconnect(lc, closeError);
   };
 
   // An error on the connection is fatal for the connection.
@@ -1136,7 +1144,7 @@ export class Zero<
     this.#rejectMessageError?.reject(error);
     lc.debug?.('Rejecting connect resolver due to error', error);
     this.#connectResolver.reject(error);
-    this.#disconnect(lc, {server: kind});
+    this.#disconnect(lc, error);
 
     if (kind === ErrorKind.VersionNotSupported) {
       this.#onUpdateNeeded({type: kind, message});
@@ -1324,10 +1332,12 @@ export class Zero<
     // Reject connect after a timeout.
     const timeoutID = setTimeout(() => {
       lc.debug?.('Rejecting connect resolver due to timeout');
-      this.#connectResolver.reject(new TimedOutError('Connect'));
-      this.#disconnect(lc, {
-        client: 'ConnectTimeout',
+      const timeoutError = new ClientError({
+        kind: ClientErrorKind.ConnectTimeout,
+        message: 'Connect timed out',
       });
+      this.#connectResolver.reject(timeoutError);
+      this.#disconnect(lc, timeoutError);
     }, CONNECT_TIMEOUT_MS);
     const abortHandler = () => {
       clearTimeout(timeoutID);
@@ -1386,7 +1396,7 @@ export class Zero<
 
   #disconnect(
     lc: ZeroLogContext,
-    reason: DisconnectReason,
+    reason: ZeroError,
     closeCode?: CloseCode,
   ): void {
     if (this.#connectionManager.is(ConnectionStatus.Connecting)) {
@@ -1394,7 +1404,7 @@ export class Zero<
     }
     lc.info?.('disconnecting', {
       navigatorOnline: navigator?.onLine,
-      reason,
+      reason: reason.kind,
       connectStart: this.#connectStart,
       totalToConnectStart: this.#totalToConnectStart,
       connectedAt: this.#connectedAt,
@@ -1462,20 +1472,14 @@ export class Zero<
 
     // we handle a client-side connection timeout by staying in the connecting state
     const isStillConnecting =
-      'client' in reason
-        ? reason.client === 'ConnectTimeout' || reason.client === 'Hidden'
-        : false;
+      reason instanceof ClientError &&
+      (reason.kind === ClientErrorKind.ConnectTimeout ||
+        reason.kind === ClientErrorKind.Hidden);
 
     if (isStillConnecting) {
-      this.#connectionManager.connecting(
-        'client' in reason
-          ? reason.client
-          : 'server' in reason
-            ? reason.server
-            : undefined,
-      );
+      this.#connectionManager.connecting(reason);
     } else {
-      this.#connectionManager.disconnected();
+      this.#connectionManager.disconnected(reason);
     }
   }
 
@@ -1510,9 +1514,13 @@ export class Zero<
     // async poke above. Only disconnect if we are not already
     // disconnected.
     if (!this.#connectionManager.is(ConnectionStatus.Disconnected)) {
-      this.#disconnect(lc, {
-        client: 'UnexpectedBaseCookie',
-      });
+      this.#disconnect(
+        lc,
+        new ClientError({
+          kind: ClientErrorKind.UnexpectedBaseCookie,
+          message: 'Unexpected base cookie',
+        }),
+      );
     }
   }
 
@@ -1624,7 +1632,12 @@ export class Zero<
 
     if (this.#server === null) {
       this.#lc.info?.('No socket origin provided, not starting connect loop.');
-      this.#connectionManager.disconnected();
+      this.#connectionManager.disconnected(
+        new ClientError({
+          kind: ClientErrorKind.NoSocketOrigin,
+          message: 'No server socket origin provided',
+        }),
+      );
       return;
     }
 
@@ -1737,9 +1750,13 @@ export class Zero<
                 break;
               }
               case HIDDEN:
-                this.#disconnect(lc, {
-                  client: 'Hidden',
-                });
+                this.#disconnect(
+                  lc,
+                  new ClientError({
+                    kind: ClientErrorKind.Hidden,
+                    message: 'The tab was hidden',
+                  }),
+                );
                 this.#setOnline(false);
                 break;
             }
@@ -1785,8 +1802,10 @@ export class Zero<
 
         if (
           isServerError(ex) ||
-          ex instanceof TimedOutError ||
-          ex instanceof CloseError
+          (isClientError(ex) &&
+            (ex.kind === ClientErrorKind.ConnectTimeout ||
+              ex.kind === ClientErrorKind.AbruptClose ||
+              ex.kind === ClientErrorKind.CleanClose))
         ) {
           gotError = true;
         }
@@ -1967,9 +1986,13 @@ export class Zero<
     const delta = performance.now() - t0;
     if (!connected) {
       lc.info?.('ping failed in', delta, 'ms - disconnecting');
-      this.#disconnect(lc, {
-        client: 'PingTimeout',
-      });
+      this.#disconnect(
+        lc,
+        new ClientError({
+          kind: ClientErrorKind.PingTimeout,
+          message: 'Ping timed out',
+        }),
+      );
       return PingResult.TimedOut;
     }
 
@@ -2267,14 +2290,6 @@ function addWebSocketIDToLogContext(
 function promiseRace(ps: Promise<unknown>[]): Promise<number> {
   return Promise.race(ps.map((p, i) => p.then(() => i)));
 }
-
-class TimedOutError extends Error {
-  constructor(m: string) {
-    super(`${m} timed out`);
-  }
-}
-
-class CloseError extends Error {}
 
 function assertValidRunOptions(_options?: RunOptions | undefined): void {}
 
