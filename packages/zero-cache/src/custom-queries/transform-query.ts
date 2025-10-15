@@ -1,4 +1,3 @@
-/// <reference path="../types/urlpattern.d.ts" />
 import type {LogContext} from '@rocicorp/logger';
 import type {TransformedAndHashed} from '../auth/read-authorizer.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';

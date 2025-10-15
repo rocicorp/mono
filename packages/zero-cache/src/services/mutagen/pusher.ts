@@ -1,4 +1,3 @@
-/// <reference path="../../types/urlpattern.d.ts" />
 import type {LogContext} from '@rocicorp/logger';
 import {groupBy} from '../../../../shared/src/arrays.ts';
 import {assert} from '../../../../shared/src/asserts.ts';

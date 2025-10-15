@@ -1,4 +1,4 @@
-/// <reference path="../types/urlpattern.d.ts" />
+import 'urlpattern-polyfill';
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {upstreamSchema, type ShardID} from '../types/shards.ts';
