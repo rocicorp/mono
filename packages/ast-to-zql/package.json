@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "@faker-js/faker": "^9.6.0",
-    "@rocicorp/prettier-config": "^0.3.0",
+    "@rocicorp/prettier-config": "^0.4.0",
     "shared": "0.0.0",
     "zero-cache": "0.0.0",
     "zero-protocol": "0.0.0",
