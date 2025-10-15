@@ -5,6 +5,11 @@ import {
   createFanOut,
   expectedCost,
 } from './test/helpers.ts';
+import type {PlannerNode} from './planner-node.ts';
+
+const unpinned = {
+  pinned: false,
+} as PlannerNode;
 
 suite('PlannerFanOut', () => {
   test('initial state is FO type', () => {
@@ -38,7 +43,7 @@ suite('PlannerFanOut', () => {
   test('propagateConstraints() forwards to input', () => {
     const {input, fanOut} = createFanOut();
 
-    fanOut.propagateConstraints([0], CONSTRAINTS.userId, 'unpinned');
+    fanOut.propagateConstraints([0], CONSTRAINTS.userId, unpinned);
 
     expect(input.estimateCost()).toBe(expectedCost(1));
   });
