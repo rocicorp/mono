@@ -4,6 +4,7 @@ import {nanoid} from '../util/nanoid.ts';
 // import {type VitestUtils} from 'vitest';
 import type {Store} from '../../../replicache/src/dag/store.ts';
 import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
@@ -30,6 +31,7 @@ import type {
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {PullRow, Query} from '../../../zql/src/query/query.ts';
+import * as ConnectionState from './connection-state-enum.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {LogOptions} from './log-options.ts';
 import type {ZeroOptions} from './options.ts';
@@ -41,7 +43,8 @@ import {
   onSetConnectionStateSymbol,
   type TestingContext,
 } from './zero.ts';
-import {ConnectionStatus} from './connection-status.ts';
+
+type ConnectionState = Enum<typeof ConnectionState>;
 
 // Do not use an import statement here because vitest will then load that file
 // which does not work in a worker context.
@@ -98,18 +101,29 @@ export class TestZero<
 > extends Zero<S, MD> {
   pokeIDCounter = 0;
 
-  #connectionStatusResolvers: Set<{
-    state: ConnectionStatus;
-    resolve: (state: ConnectionStatus) => void;
+  #connectionStateResolvers: Set<{
+    state: ConnectionState;
+    resolve: (state: ConnectionState) => void;
   }> = new Set();
 
   get perdag(): Store {
     return getInternalReplicacheImplForTesting(this).perdag;
   }
 
-  get connectionStatus(): ConnectionStatus {
+  get connectionState() {
     assert(TESTING);
-    return this[exposedToTestingSymbol].connectionState().name;
+    return this[exposedToTestingSymbol].connectionState();
+  }
+
+  get connectionStateAsString(): string {
+    switch (this.connectionState) {
+      case ConnectionState.Disconnected:
+        return 'Disconnected';
+      case ConnectionState.Connecting:
+        return 'Connecting';
+      case ConnectionState.Connected:
+        return 'Connected';
+    }
   }
 
   get connectingStart() {
@@ -117,11 +131,11 @@ export class TestZero<
   }
 
   // Testing only hook
-  [onSetConnectionStateSymbol](newState: ConnectionStatus) {
-    for (const entry of this.#connectionStatusResolvers) {
+  [onSetConnectionStateSymbol](newState: ConnectionState) {
+    for (const entry of this.#connectionStateResolvers) {
       const {state, resolve} = entry;
       if (state === newState) {
-        this.#connectionStatusResolvers.delete(entry);
+        this.#connectionStateResolvers.delete(entry);
         resolve(newState);
       }
     }
@@ -142,12 +156,12 @@ export class TestZero<
     return logSink;
   }
 
-  waitForConnectionStatus(state: ConnectionStatus) {
-    if (this.connectionStatus === state) {
+  waitForConnectionState(state: ConnectionState) {
+    if (this.connectionState === state) {
       return Promise.resolve(state);
     }
-    const {promise, resolve} = resolver<ConnectionStatus>();
-    this.#connectionStatusResolvers.add({state, resolve});
+    const {promise, resolve} = resolver<ConnectionState>();
+    this.#connectionStateResolvers.add({state, resolve});
     return promise;
   }
 
@@ -167,7 +181,7 @@ export class TestZero<
   async triggerConnected(): Promise<void> {
     const msg: ConnectedMessage = ['connected', {wsid: 'wsidx'}];
     await this.triggerMessage(msg);
-    await this.waitForConnectionStatus(ConnectionStatus.Connected);
+    await this.waitForConnectionState(ConnectionState.Connected);
   }
 
   triggerPong(): Promise<void> {
