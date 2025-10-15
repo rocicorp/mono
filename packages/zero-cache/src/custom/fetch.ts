@@ -1,3 +1,4 @@
+import 'urlpattern-polyfill';
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {upstreamSchema, type ShardID} from '../types/shards.ts';
@@ -8,46 +9,22 @@ import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 const reservedParams = ['schema', 'appID'];
 
 /**
- * Compiles and validates URL regex patterns from configuration.
- * Automatically anchors patterns with ^ and $ if not already present for security.
+ * Compiles and validates a URLPattern from configuration.
  *
- * @throws Error if any pattern is an invalid regex
+ * Patterns must be full URLs (e.g., "https://api.example.com/endpoint").
+ * URLPattern automatically sets search and hash to wildcard ('*'),
+ * which means query parameters and fragments are ignored during matching.
+ *
+ * @throws Error if the pattern is an invalid URLPattern
  */
-export function compileUrlPatterns(
-  lc: LogContext,
-  patterns: string[],
-): RegExp[] {
-  const compiled: RegExp[] = [];
-
-  for (const pattern of patterns) {
-    let anchoredPattern = pattern;
-    const needsStartAnchor = !pattern.startsWith('^');
-    const needsEndAnchor = !pattern.endsWith('$');
-
-    if (needsStartAnchor || needsEndAnchor) {
-      if (needsStartAnchor) {
-        anchoredPattern = '^' + anchoredPattern;
-      }
-      if (needsEndAnchor) {
-        anchoredPattern = anchoredPattern + '$';
-      }
-
-      lc.info?.('Auto-anchored regex pattern for security', {
-        original: pattern,
-        anchored: anchoredPattern,
-      });
-    }
-
-    try {
-      compiled.push(new RegExp(anchoredPattern));
-    } catch (e) {
-      throw new Error(
-        `Invalid regex pattern in URL configuration: "${pattern}". Error: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
+export function compileUrlPattern(pattern: string): URLPattern {
+  try {
+    return new URLPattern(pattern);
+  } catch (e) {
+    throw new Error(
+      `Invalid URLPattern in URL configuration: "${pattern}". Error: ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
-
-  return compiled;
 }
 
 export type HeaderOptions = {
@@ -59,7 +36,7 @@ export type HeaderOptions = {
 export async function fetchFromAPIServer(
   lc: LogContext,
   url: string,
-  allowedUrlPatterns: RegExp[],
+  allowedUrlPatterns: URLPattern[],
   shard: ShardID,
   headerOptions: HeaderOptions,
   body: ReadonlyJSONValue,
@@ -134,28 +111,22 @@ export async function fetchFromAPIServer(
 /**
  * Returns true if the url matches one of the allowedUrlPatterns.
  *
- * Query parameters and hash fragments are ignored when matching.
+ * URLPattern automatically ignores query parameters and hash fragments during matching
+ * because it sets search and hash to wildcard ('*') by default.
  *
- * Example regex patterns:
- * - "^https://api\\.example\\.com/endpoint$" - Exact match for a specific URL
- * - "^https://[^.]+\\.example\\.com/endpoint$" - Matches any single subdomain (e.g., "https://api.example.com/endpoint")
- * - "^https://[^.]+\\.[^.]+\\.example\\.com/endpoint$" - Matches two subdomains (e.g., "https://api.v1.example.com/endpoint")
- * - "^https://(api|www)\\.example\\.com/" - Matches specific subdomains
- * - "^https://api\\.v\\d+\\.example\\.com/" - Matches versioned subdomains (e.g., "https://api.v1.example.com", "https://api.v2.example.com")
+ * Example URLPattern patterns:
+ * - "https://api.example.com/endpoint" - Exact match for a specific URL
+ * - "https://*.example.com/endpoint" - Matches any single subdomain (e.g., "https://api.example.com/endpoint")
+ * - "https://*.*.example.com/endpoint" - Matches two subdomains (e.g., "https://api.v1.example.com/endpoint")
+ * - "https://api.example.com/*" - Matches any path under /
+ * - "https://api.example.com/:version/endpoint" - Matches with named parameter (e.g., "https://api.example.com/v1/endpoint")
  */
-export function urlMatch(url: string, allowedUrlPatterns: RegExp[]): boolean {
-  // ignore query parameters and hash in the URL using proper URL parsing
-  const urlObj = new URL(url);
-  let urlWithoutQuery = urlObj.origin + urlObj.pathname;
-
-  // Normalize: remove trailing slash
-  // This ensures 'http://example.com' and 'http://example.com/' are treated as equivalent
-  if (urlWithoutQuery.endsWith('/')) {
-    urlWithoutQuery = urlWithoutQuery.slice(0, -1);
-  }
-
+export function urlMatch(
+  url: string,
+  allowedUrlPatterns: URLPattern[],
+): boolean {
   for (const pattern of allowedUrlPatterns) {
-    if (pattern.test(urlWithoutQuery)) {
+    if (pattern.test(url)) {
       return true;
     }
   }

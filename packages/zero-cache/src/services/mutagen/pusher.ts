@@ -14,7 +14,7 @@ import {
   type PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
-import {fetchFromAPIServer, compileUrlPatterns} from '../../custom/fetch.ts';
+import {fetchFromAPIServer, compileUrlPattern} from '../../custom/fetch.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {recordMutation} from '../../server/anonymous-otel-start.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
@@ -180,7 +180,7 @@ type PusherEntryOrStop = PusherEntry | 'stop';
  */
 class PushWorker {
   readonly #pushURLs: string[];
-  readonly #pushURLPatterns: RegExp[];
+  readonly #pushURLPatterns: URLPattern[];
   readonly #apiKey: string | undefined;
   readonly #queue: Queue<PusherEntryOrStop>;
   readonly #lc: LogContext;
@@ -214,7 +214,7 @@ class PushWorker {
   ) {
     this.#pushURLs = pushURL;
     this.#lc = lc.withContext('component', 'pusher');
-    this.#pushURLPatterns = compileUrlPatterns(this.#lc, pushURL);
+    this.#pushURLPatterns = pushURL.map(compileUrlPattern);
     this.#apiKey = apiKey;
     this.#queue = queue;
     this.#config = config;

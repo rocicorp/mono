@@ -9,7 +9,7 @@ import {
 } from '../../../zero-protocol/src/custom-queries.ts';
 import {
   fetchFromAPIServer,
-  compileUrlPatterns,
+  compileUrlPattern,
   type HeaderOptions,
 } from '../custom/fetch.ts';
 import type {ShardID} from '../types/shards.ts';
@@ -46,7 +46,7 @@ export class CustomQueryTransformer {
     url: string[];
     forwardCookies: boolean;
   };
-  readonly #urlPatterns: RegExp[];
+  readonly #urlPatterns: URLPattern[];
   readonly #lc: LogContext;
 
   constructor(
@@ -60,7 +60,7 @@ export class CustomQueryTransformer {
     this.#config = config;
     this.#shard = shard;
     this.#lc = lc;
-    this.#urlPatterns = compileUrlPatterns(lc, config.url);
+    this.#urlPatterns = config.url.map(compileUrlPattern);
     this.#cache = new TimedCache(5000); // 5 seconds cache TTL
   }
 

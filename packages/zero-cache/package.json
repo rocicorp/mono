@@ -55,6 +55,7 @@
     "postgres": "^3.4.4",
     "tsx": "^4.19.1",
     "url-pattern": "^1.0.3",
+    "urlpattern-polyfill": "^10.1.0",
     "ws": "^8.18.1",
     "zero-protocol": "0.0.0",
     "zql": "0.0.0",
