@@ -794,4 +794,43 @@ describe('CustomQueryTransformer', () => {
       ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
     );
   });
+
+  test('should throw error when fallback URL is a regex pattern', async () => {
+    const regexPatternUrl = '/http://(api|staging)\\.example\\.com/pull/';
+
+    // Mock the assertion to fail
+    mockFetchFromAPIServer.mockRejectedValue(
+      new Error(
+        'Cannot use regex pattern as default URL for ZERO_GET_QUERIES_URL',
+      ),
+    );
+
+    const transformer = new CustomQueryTransformer(
+      lc,
+      {
+        url: [regexPatternUrl], // Regex pattern as first URL
+        forwardCookies: false,
+      },
+      mockShard,
+    );
+
+    // Call without userQueryURL to trigger fallback
+    const result = await transformer.transform(
+      headerOptions,
+      [mockQueries[0]],
+      undefined, // No user URL, should fall back to config
+    );
+
+    // Verify it returns an error response
+    expect(result).toEqual([
+      {
+        error: 'zero',
+        details: expect.stringContaining(
+          'Cannot use regex pattern as default URL for ZERO_GET_QUERIES_URL',
+        ),
+        id: 'query1',
+        name: 'getUserById',
+      },
+    ]);
+  });
 });

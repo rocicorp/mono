@@ -14,7 +14,11 @@ import {
   type PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
-import {fetchFromAPIServer, compileUrlPatterns} from '../../custom/fetch.ts';
+import {
+  fetchFromAPIServer,
+  compileUrlPatterns,
+  assertNotRegexPattern,
+} from '../../custom/fetch.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {recordMutation} from '../../server/anonymous-otel-start.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
@@ -393,19 +397,21 @@ class PushWorker {
     // Record custom mutations for telemetry
     recordMutation('custom', entry.push.mutations.length);
 
-    const url =
-      this.#userPushURL ??
-      must(this.#pushURLs[0], 'ZERO_MUTATE_URL is not set');
-
-    this.#lc.debug?.(
-      'pushing to',
-      url,
-      'with',
-      entry.push.mutations.length,
-      'mutations',
-    );
-
     try {
+      const fallbackURL = must(this.#pushURLs[0], 'ZERO_MUTATE_URL is not set');
+      if (this.#userPushURL === undefined) {
+        // Only validate if we're actually using the fallback URL
+        assertNotRegexPattern(fallbackURL, 'ZERO_MUTATE_URL');
+      }
+      const url = this.#userPushURL ?? fallbackURL;
+
+      this.#lc.debug?.(
+        'pushing to',
+        url,
+        'with',
+        entry.push.mutations.length,
+        'mutations',
+      );
       const response = await fetchFromAPIServer(
         this.#lc,
         url,

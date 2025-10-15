@@ -10,7 +10,13 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorForClient} from '../types/error-for-client.ts';
 import type {ShardID} from '../types/shards.ts';
-import {compileUrlPatterns, fetchFromAPIServer, urlMatch} from './fetch.ts';
+import {
+  compileUrlPatterns,
+  fetchFromAPIServer,
+  urlMatch,
+  isRegexPattern,
+  assertNotRegexPattern,
+} from './fetch.ts';
 
 // Mock the global fetch function
 const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
@@ -490,5 +496,55 @@ describe('urlMatch', () => {
     ).toBe(false);
 
     expect(urlMatch('https://api.example.com/endpoint', [])).toBe(false);
+  });
+});
+
+describe('isRegexPattern', () => {
+  test('should return true for regex patterns', () => {
+    expect(isRegexPattern('/http://api\\.example\\.com/')).toBe(true);
+    expect(isRegexPattern('/^https://.*/')).toBe(true);
+    expect(isRegexPattern('/(api|staging)/')).toBe(true);
+  });
+
+  test('should return false for literal strings', () => {
+    expect(isRegexPattern('http://api.example.com')).toBe(false);
+    expect(isRegexPattern('https://localhost:5173')).toBe(false);
+    expect(isRegexPattern('/incomplete')).toBe(false);
+    expect(isRegexPattern('incomplete/')).toBe(false);
+  });
+
+  test('should return false for empty slashes', () => {
+    expect(isRegexPattern('//')).toBe(false); // length is 2, not > 2
+  });
+});
+
+describe('assertNotRegexPattern', () => {
+  test('should not throw for literal URLs', () => {
+    expect(() =>
+      assertNotRegexPattern('http://api.example.com', 'ZERO_MUTATE_URL'),
+    ).not.toThrow();
+    expect(() =>
+      assertNotRegexPattern('https://localhost:5173', 'ZERO_GET_QUERIES_URL'),
+    ).not.toThrow();
+  });
+
+  test('should throw for regex patterns', () => {
+    expect(() =>
+      assertNotRegexPattern('/http://(api|staging)\\.com/', 'ZERO_MUTATE_URL'),
+    ).toThrow(
+      'Cannot use regex pattern as default URL for ZERO_MUTATE_URL. Regex patterns (wrapped in /.../) are for validation only.',
+    );
+
+    expect(() =>
+      assertNotRegexPattern('/^https://.*/', 'ZERO_GET_QUERIES_URL'),
+    ).toThrow(
+      'Cannot use regex pattern as default URL for ZERO_GET_QUERIES_URL',
+    );
+  });
+
+  test('should include helpful error message', () => {
+    expect(() => assertNotRegexPattern('/pattern/', 'ZERO_MUTATE_URL')).toThrow(
+      'Please either: (1) provide a URL via the client connection, or (2) configure a literal URL (not wrapped in /.../) as the first entry in ZERO_MUTATE_URL',
+    );
   });
 });

@@ -661,6 +661,48 @@ describe('initConnection', () => {
     await pusher.stop();
   });
 
+  test('throws error when fallback URL is a regex pattern', async () => {
+    const pusher = new PusherService(
+      mockDB,
+      config,
+      {
+        url: ['/http://(api|staging)\\.example\\.com/'], // Regex pattern as first URL
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
+      lc,
+      'cgid',
+    );
+    void pusher.run();
+    const stream = pusher.initConnection(clientID, wsID, undefined); // No user URL provided
+
+    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
+
+    // Wait for the push to be processed
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    const messages: unknown[] = [];
+    for await (const msg of stream) {
+      messages.push(msg);
+      break;
+    }
+
+    expect(messages).toEqual([
+      [
+        'pushResponse',
+        {
+          error: 'zeroPusher',
+          details: expect.stringContaining(
+            'Cannot use regex pattern as default URL for ZERO_MUTATE_URL',
+          ),
+          mutationIDs: [{clientID, id: 1}],
+        },
+      ],
+    ]);
+
+    await pusher.stop();
+  });
+
   test('rejects disallowed custom URL', async () => {
     const pusher = new PusherService(
       mockDB,

@@ -15,6 +15,30 @@ function escapeRegex(str: string): string {
 }
 
 /**
+ * Checks if a string is a regex pattern (wrapped in forward slashes).
+ */
+export function isRegexPattern(str: string): boolean {
+  return str.startsWith('/') && str.endsWith('/') && str.length > 2;
+}
+
+/**
+ * Validates that a URL is not a regex pattern and throws if it is.
+ * Regex patterns are meant for validation only, not for making HTTP requests.
+ *
+ * @param url - The URL to validate
+ * @param envVarName - The environment variable name for error messages
+ * @throws Error if the URL is a regex pattern
+ */
+export function assertNotRegexPattern(url: string, envVarName: string): void {
+  if (isRegexPattern(url)) {
+    throw new Error(
+      `Cannot use regex pattern as default URL for ${envVarName}. Regex patterns (wrapped in /.../) are for validation only. ` +
+        `Please either: (1) provide a URL via the client connection, or (2) configure a literal URL (not wrapped in /.../) as the first entry in ${envVarName}.`,
+    );
+  }
+}
+
+/**
  * Compiles and validates URL patterns from configuration.
  * Supports both regex patterns (wrapped in /) and string literals.
  * Automatically anchors patterns with ^ and $ if not already present for security.

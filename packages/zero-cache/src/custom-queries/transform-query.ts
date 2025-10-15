@@ -10,6 +10,7 @@ import {
 import {
   fetchFromAPIServer,
   compileUrlPatterns,
+  assertNotRegexPattern,
   type HeaderOptions,
 } from '../custom/fetch.ts';
 import type {ShardID} from '../types/shards.ts';
@@ -100,13 +101,18 @@ export class CustomQueryTransformer {
 
     let response: Response | undefined;
     try {
+      const fallbackURL = must(
+        this.#config.url[0],
+        'A ZERO_GET_QUERIES_URL must be configured for custom queries',
+      );
+      if (userQueryURL === undefined) {
+        // Only validate if we're actually using the fallback URL
+        assertNotRegexPattern(fallbackURL, 'ZERO_GET_QUERIES_URL');
+      }
+      const url = userQueryURL ?? fallbackURL;
       response = await fetchFromAPIServer(
         this.#lc,
-        userQueryURL ??
-          must(
-            this.#config.url[0],
-            'A ZERO_GET_QUERIES_URL must be configured for custom queries',
-          ),
+        url,
         this.#urlPatterns,
         this.#shard,
         headerOptions,
