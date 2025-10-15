@@ -66,12 +66,20 @@ export const queries = {
       ),
   ),
 
-  issuePreload: syncedQueryWithContext(
-    'issuePreload',
-    idValidator,
-    (auth: AuthData | undefined, userID) =>
+  issuePreloadV2: syncedQueryWithContext(
+    'issuePreloadV2',
+    z.tuple([
+      z.object({
+        userID: z.string(),
+        projectName: z.string(),
+      }),
+    ]),
+    (auth: AuthData | undefined, {userID, projectName}) =>
       applyIssuePermissions(
         builder.issue
+          .whereExists('project', p => p.where('name', projectName), {
+            flip: true,
+          })
           .related('labels')
           .related('viewState', q => q.where('userID', userID))
           .related('creator')
@@ -198,6 +206,31 @@ export const queries = {
   ),
 
   // The below queries are DEPRECATED
+  issuePreload: syncedQueryWithContext(
+    'issuePreload',
+    idValidator,
+    (auth: AuthData | undefined, userID) =>
+      applyIssuePermissions(
+        builder.issue
+          .related('labels')
+          .related('viewState', q => q.where('userID', userID))
+          .related('creator')
+          .related('assignee')
+          .related('emoji', emoji => emoji.related('creator'))
+          .related('comments', comments =>
+            comments
+              .related('creator')
+              .related('emoji', emoji => emoji.related('creator'))
+              .limit(10)
+              .orderBy('created', 'desc'),
+          )
+          .orderBy('modified', 'desc')
+          .orderBy('id', 'desc')
+          .limit(1000),
+        auth?.role,
+      ),
+  ),
+
   prevNext: syncedQueryWithContext(
     'prevNext',
     z.tuple([

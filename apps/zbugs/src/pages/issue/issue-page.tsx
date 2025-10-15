@@ -117,7 +117,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   useEffect(() => {
     if (issueResult.type === 'complete') {
       recordPageLoad('issue-page');
-      preload(login.loginState?.decoded, z);
+      preload(login.loginState?.decoded, projectName, z);
     }
   }, [issueResult.type, login.loginState?.decoded, z]);
 
