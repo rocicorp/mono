@@ -9,6 +9,10 @@ export interface PlannerConstraint {
   [column: string]: undefined;
 }
 
+/**
+ * Multiple flipped joins will contribute extra constraints to a parent join.
+ * These need to be merged.
+ */
 export function mergeConstraints(
   a: PlannerConstraint | undefined,
   b: PlannerConstraint | undefined,

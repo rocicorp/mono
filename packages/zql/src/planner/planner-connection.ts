@@ -6,16 +6,16 @@ import type {FromType, PlannerNode} from './planner-node.ts';
 /**
  * Represents a connection to a source (table scan).
  *
- * DUAL-STATE PATTERN:
+ * # Dual State Pattern
  * Like all planner nodes, PlannerConnection separates:
- * 1. IMMUTABLE STRUCTURE: Ordering, filters, cost model (set at construction)
- * 2. MUTABLE STATE: Pinned status, constraints (mutated during planning)
+ * 1. immutable structure: Ordering, filters, cost model (set at construction)
+ * 2. mutable state: Pinned status, constraints (mutated during planning)
  *
- * COST ESTIMATION:
+ * # Cost Estimation
  * The ordering and filters determine the initial cost. As planning progresses,
  * constraints from parent joins refine the cost estimate.
  *
- * CONSTRAINT FLOW:
+ * # Constraint Flow
  * When a connection is pinned as the outer loop, it reveals constraints for
  * connected joins. These constraints propagate through the graph, allowing
  * other connections to update their cost estimates.
@@ -41,7 +41,7 @@ import type {FromType, PlannerNode} from './planner-node.ts';
  * - If `assignee` chosen first: Reveals constraint `assignee_id` for issue connection
  * - Updated costs guide the next selection
  *
- * LIFECYCLE:
+ * # Lifecycle
  * 1. Construct with immutable structure (ordering, filters, cost model)
  * 2. Wire to output node during graph construction
  * 3. Planning mutates pinned status and accumulates constraints

@@ -1,34 +1,32 @@
 import {assert} from '../../../shared/src/asserts.ts';
-import {planIdSymbol} from '../../../zero-protocol/src/ast.ts';
 import {
   mergeConstraints,
   type PlannerConstraint,
 } from './planner-constraint.ts';
-import {UnflippableJoinError} from './planner-graph.ts';
 import type {FromType, PlannerNode} from './planner-node.ts';
 
 /**
  * Represents a join between two data streams (parent and child).
  *
- * DUAL-STATE PATTERN:
+ * # Dual-State Pattern
  * Like all planner nodes, PlannerJoin separates:
  * 1. IMMUTABLE STRUCTURE: Parent/child nodes, constraints, flippability
  * 2. MUTABLE STATE: Join type (left/flipped), pinned status
  *
- * JOIN FLIPPING:
+ * # Join Flipping
  * A join can be in two states:
- * - 'left': Parent is outer loop, child is inner (semi-join)
- * - 'flipped': Child is outer loop, parent is inner (reverse semi-join)
+ * - 'left': Parent is outer loop, child is inner
+ * - 'flipped': Child is outer loop, parent is inner
  *
  * Flipping is the key optimization: choosing which table scans first.
  * NOT EXISTS joins cannot be flipped (#flippable = false).
  *
- * CONSTRAINT PROPAGATION:
+ * # Constraint Propagation
  * - Left join: Sends childConstraint to child, forwards received constraints to parent
  * - Flipped join: Sends undefined to child, merges parentConstraint with received to parent
  * - Unpinned join: Only forwards constraints to parent (doesn't constrain child yet)
  *
- * LIFECYCLE:
+ * # Lifecycle
  * 1. Construct with immutable structure (parent, child, constraints, flippability)
  * 2. Wire to output node during graph construction
  * 3. Planning calls maybeFlip() based on connection selection order
@@ -46,7 +44,7 @@ export class PlannerJoin {
   readonly #parentConstraint: PlannerConstraint;
   readonly #childConstraint: PlannerConstraint;
   readonly #flippable: boolean;
-  readonly [planIdSymbol]?: number | undefined;
+  readonly planId: number;
   #output?: PlannerNode | undefined; // Set once during graph construction
 
   // ========================================================================
@@ -61,7 +59,7 @@ export class PlannerJoin {
     parentConstraint: PlannerConstraint,
     childConstraint: PlannerConstraint,
     flippable: boolean,
-    planId?: number | undefined,
+    planId: number,
   ) {
     this.#type = 'left';
     this.#pinned = false;
@@ -70,7 +68,7 @@ export class PlannerJoin {
     this.#childConstraint = childConstraint;
     this.#parentConstraint = parentConstraint;
     this.#flippable = flippable;
-    this[planIdSymbol] = planId;
+    this.planId = planId;
   }
 
   setOutput(node: PlannerNode): void {
@@ -116,10 +114,6 @@ export class PlannerJoin {
 
   get pinned(): boolean {
     return this.#pinned;
-  }
-
-  get planId(): number | undefined {
-    return this[planIdSymbol];
   }
 
   propagateConstraints(
@@ -176,5 +170,12 @@ export class PlannerJoin {
   reset(): void {
     this.#type = 'left';
     this.#pinned = false;
+  }
+}
+
+export class UnflippableJoinError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'UnflippableJoinError';
   }
 }
