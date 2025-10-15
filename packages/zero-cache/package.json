@@ -62,7 +62,7 @@
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",
-    "@rocicorp/zero-events": "0.0.1",
+    "@rocicorp/zero-events": "0.0.2",
     "@testcontainers/postgresql": "^10.9.0",
     "@types/node": "^22.10.5",
     "@types/pg-format": "^1.0.5",
