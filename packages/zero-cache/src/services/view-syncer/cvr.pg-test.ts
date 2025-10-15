@@ -145,11 +145,11 @@ describe('view-syncer/cvr', () => {
 
   async function getAllState(db: PostgresDB): Promise<DBState> {
     const [instances, clients, queries, desires, rows] = await Promise.all([
-      db`SELECT * FROM ${db('dapp_3/cvr.instances')}`,
-      db`SELECT * FROM ${db('dapp_3/cvr.clients')}`,
-      db`SELECT * FROM ${db('dapp_3/cvr.queries')}`,
-      db`SELECT * FROM ${db('dapp_3/cvr.desires')}`,
-      db`SELECT * FROM ${db('dapp_3/cvr.rows')}`,
+      db`SELECT * FROM ${db('dapp_3/cvr.instances')} ORDER BY "clientGroupID"`,
+      db`SELECT * FROM ${db('dapp_3/cvr.clients')} ORDER BY "clientGroupID", "clientID"`,
+      db`SELECT * FROM ${db('dapp_3/cvr.queries')} ORDER BY "clientGroupID", "queryHash"`,
+      db`SELECT * FROM ${db('dapp_3/cvr.desires')} ORDER BY "clientGroupID", "clientID", "queryHash"`,
+      db`SELECT * FROM ${db('dapp_3/cvr.rows')} ORDER BY "clientGroupID", "schema", "table", "rowKey"`,
     ]);
 
     desires.forEach(row => {
@@ -6184,19 +6184,19 @@ describe('view-syncer/cvr', () => {
           },
           {
             "clientGroupID": "abc123",
-            "clientID": "client-c",
-            "deleted": null,
-            "inactivatedAt": null,
-            "patchVersion": "1a9:01",
+            "clientID": "client-b",
+            "deleted": true,
+            "inactivatedAt": 1709683200000,
+            "patchVersion": "1aa:01",
             "queryHash": "oneHash",
             "ttl": "00:05:00",
           },
           {
             "clientGroupID": "abc123",
-            "clientID": "client-b",
-            "deleted": true,
-            "inactivatedAt": 1709683200000,
-            "patchVersion": "1aa:01",
+            "clientID": "client-c",
+            "deleted": null,
+            "inactivatedAt": null,
+            "patchVersion": "1a9:01",
             "queryHash": "oneHash",
             "ttl": "00:05:00",
           },
@@ -6483,12 +6483,12 @@ describe('view-syncer/cvr', () => {
             "clientID": "client-a",
           },
           {
-            "clientGroupID": "def456",
-            "clientID": "client-b",
-          },
-          {
             "clientGroupID": "abc123",
             "clientID": "client-c",
+          },
+          {
+            "clientGroupID": "def456",
+            "clientID": "client-b",
           },
         ],
         "desires": Result [
@@ -6502,8 +6502,8 @@ describe('view-syncer/cvr', () => {
             "ttl": "00:05:00",
           },
           {
-            "clientGroupID": "def456",
-            "clientID": "client-b",
+            "clientGroupID": "abc123",
+            "clientID": "client-c",
             "deleted": null,
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
@@ -6511,8 +6511,8 @@ describe('view-syncer/cvr', () => {
             "ttl": "00:05:00",
           },
           {
-            "clientGroupID": "abc123",
-            "clientID": "client-c",
+            "clientGroupID": "def456",
+            "clientID": "client-b",
             "deleted": null,
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
@@ -6522,21 +6522,21 @@ describe('view-syncer/cvr', () => {
         ],
         "instances": Result [
           {
-            "clientGroupID": "def456",
-            "clientSchema": null,
-            "grantedAt": null,
-            "lastActive": 1713830400000,
-            "owner": null,
-            "replicaVersion": "120",
-            "ttlClock": 1713830400000,
-            "version": "1aa",
-          },
-          {
             "clientGroupID": "abc123",
             "clientSchema": null,
             "grantedAt": 1709251200000,
             "lastActive": 1713830400000,
             "owner": "my-task",
+            "replicaVersion": "120",
+            "ttlClock": 1713830400000,
+            "version": "1aa",
+          },
+          {
+            "clientGroupID": "def456",
+            "clientSchema": null,
+            "grantedAt": null,
+            "lastActive": 1713830400000,
+            "owner": null,
             "replicaVersion": "120",
             "ttlClock": 1713830400000,
             "version": "1aa",
@@ -6640,12 +6640,12 @@ describe('view-syncer/cvr', () => {
             "clientID": "client-a",
           },
           {
-            "clientGroupID": "def456",
-            "clientID": "client-b",
-          },
-          {
             "clientGroupID": "abc123",
             "clientID": "client-c",
+          },
+          {
+            "clientGroupID": "def456",
+            "clientID": "client-b",
           },
         ],
         "desires": Result [
@@ -6659,8 +6659,8 @@ describe('view-syncer/cvr', () => {
             "ttl": "00:05:00",
           },
           {
-            "clientGroupID": "def456",
-            "clientID": "client-b",
+            "clientGroupID": "abc123",
+            "clientID": "client-c",
             "deleted": null,
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
@@ -6668,8 +6668,8 @@ describe('view-syncer/cvr', () => {
             "ttl": "00:05:00",
           },
           {
-            "clientGroupID": "abc123",
-            "clientID": "client-c",
+            "clientGroupID": "def456",
+            "clientID": "client-b",
             "deleted": null,
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
@@ -6679,21 +6679,21 @@ describe('view-syncer/cvr', () => {
         ],
         "instances": Result [
           {
-            "clientGroupID": "def456",
-            "clientSchema": null,
-            "grantedAt": null,
-            "lastActive": 1713830400000,
-            "owner": null,
-            "replicaVersion": "120",
-            "ttlClock": 1713830400000,
-            "version": "1aa",
-          },
-          {
             "clientGroupID": "abc123",
             "clientSchema": null,
             "grantedAt": 1709251200000,
             "lastActive": 1713830400000,
             "owner": "my-task",
+            "replicaVersion": "120",
+            "ttlClock": 1713830400000,
+            "version": "1aa",
+          },
+          {
+            "clientGroupID": "def456",
+            "clientSchema": null,
+            "grantedAt": null,
+            "lastActive": 1713830400000,
+            "owner": null,
             "replicaVersion": "120",
             "ttlClock": 1713830400000,
             "version": "1aa",
