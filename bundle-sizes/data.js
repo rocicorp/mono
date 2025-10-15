@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1760538621379,
+  "lastUpdate": 1760540432055,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54113,6 +54113,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/4792eee6e499fc9d398ead1f51f516fd139810d2"
         },
         "date": 1760538609440,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302365,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54477,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111453,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31872,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e7edf1593551f1744a78bcc4b09f431de22807e1",
+          "message": "chore: Upgrade to @rocicorp/prettier-config 0.4.0 (#5018)\n\nThis is because some dep was forcing us to use prettier 3.2.6 which was\ncausing issues with formatting.\n\nWe should really pin the version at some layer.",
+          "timestamp": "2025-10-15T16:59:09+02:00",
+          "tree_id": "3448b26bbcca68cf0068ee0f888835a6daa54bac",
+          "url": "https://github.com/rocicorp/mono/commit/e7edf1593551f1744a78bcc4b09f431de22807e1"
+        },
+        "date": 1760540419766,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
