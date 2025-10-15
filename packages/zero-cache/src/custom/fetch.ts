@@ -8,8 +8,20 @@ import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 const reservedParams = ['schema', 'appID'];
 
 /**
- * Compiles and validates URL regex patterns from configuration.
+ * Escapes special regex characters in a string to treat it as a literal.
+ */
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Compiles and validates URL patterns from configuration.
+ * Supports both regex patterns (wrapped in /) and string literals.
  * Automatically anchors patterns with ^ and $ if not already present for security.
+ *
+ * Pattern syntax:
+ * - Regex: /pattern/ - e.g., /http:\/\/(www|api)\.example\.com\/mutate/
+ * - Literal: plain string - e.g., http://localhost:5173/api/mutate
  *
  * @throws Error if any pattern is an invalid regex
  */
@@ -20,9 +32,29 @@ export function compileUrlPatterns(
   const compiled: RegExp[] = [];
 
   for (const pattern of patterns) {
-    let anchoredPattern = pattern;
-    const needsStartAnchor = !pattern.startsWith('^');
-    const needsEndAnchor = !pattern.endsWith('$');
+    let regexPattern: string;
+    let isExplicitRegex = false;
+
+    // Check if pattern is wrapped in forward slashes (regex syntax)
+    if (
+      pattern.startsWith('/') &&
+      pattern.endsWith('/') &&
+      pattern.length > 2
+    ) {
+      // Extract regex pattern (remove surrounding slashes)
+      regexPattern = pattern.slice(1, -1);
+      isExplicitRegex = true;
+      lc.debug?.('Detected regex pattern', {pattern, extracted: regexPattern});
+    } else {
+      // Treat as string literal - escape all regex special characters
+      regexPattern = escapeRegex(pattern);
+      lc.debug?.('Treating as literal URL', {pattern, escaped: regexPattern});
+    }
+
+    // Auto-anchor if not already anchored (for security)
+    let anchoredPattern = regexPattern;
+    const needsStartAnchor = !regexPattern.startsWith('^');
+    const needsEndAnchor = !regexPattern.endsWith('$');
 
     if (needsStartAnchor || needsEndAnchor) {
       if (needsStartAnchor) {
@@ -32,17 +64,22 @@ export function compileUrlPatterns(
         anchoredPattern = anchoredPattern + '$';
       }
 
-      lc.info?.('Auto-anchored regex pattern for security', {
-        original: pattern,
-        anchored: anchoredPattern,
-      });
+      lc.info?.(
+        isExplicitRegex
+          ? 'Auto-anchored regex pattern for security'
+          : 'Auto-anchored literal URL pattern for security',
+        {
+          original: pattern,
+          anchored: anchoredPattern,
+        },
+      );
     }
 
     try {
       compiled.push(new RegExp(anchoredPattern));
     } catch (e) {
       throw new Error(
-        `Invalid regex pattern in URL configuration: "${pattern}". Error: ${e instanceof Error ? e.message : String(e)}`,
+        `Invalid ${isExplicitRegex ? 'regex' : 'URL'} pattern in URL configuration: "${pattern}". Error: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
   }

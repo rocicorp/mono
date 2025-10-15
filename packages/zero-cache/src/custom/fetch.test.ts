@@ -25,7 +25,7 @@ describe('fetchFromAPIServer', () => {
 
   const baseUrl = 'https://api.example.com/endpoint';
   const allowedPatterns = compileUrlPatterns(lc, [
-    '^https://api\\.example\\.com/endpoint$',
+    'https://api.example.com/endpoint',
   ]);
   const headerOptions = {
     apiKey: 'test-api-key',
@@ -271,7 +271,7 @@ describe('compileUrlPatterns', () => {
   test('should keep already anchored patterns unchanged', () => {
     const lc = createSilentLogContext();
     const patterns = compileUrlPatterns(lc, [
-      '^https://api\\.example\\.com/endpoint$',
+      '/^https://api\\.example\\.com/endpoint$/',
     ]);
     expect(patterns).toHaveLength(1);
     expect(patterns[0].test('https://api.example.com/endpoint')).toBe(true);
@@ -286,7 +286,7 @@ describe('compileUrlPatterns', () => {
   test('should auto-anchor pattern missing start anchor', () => {
     const lc = createSilentLogContext();
     const patterns = compileUrlPatterns(lc, [
-      'https://api\\.example\\.com/endpoint$',
+      '/https://api\\.example\\.com/endpoint$/',
     ]);
     expect(patterns).toHaveLength(1);
     expect(patterns[0].test('https://api.example.com/endpoint')).toBe(true);
@@ -298,7 +298,7 @@ describe('compileUrlPatterns', () => {
   test('should auto-anchor pattern missing end anchor', () => {
     const lc = createSilentLogContext();
     const patterns = compileUrlPatterns(lc, [
-      '^https://api\\.example\\.com/endpoint',
+      '/^https://api\\.example\\.com/endpoint/',
     ]);
     expect(patterns).toHaveLength(1);
     expect(patterns[0].test('https://api.example.com/endpoint')).toBe(true);
@@ -310,7 +310,7 @@ describe('compileUrlPatterns', () => {
   test('should auto-anchor pattern missing both anchors', () => {
     const lc = createSilentLogContext();
     const patterns = compileUrlPatterns(lc, [
-      'https://api\\.example\\.com/endpoint',
+      '/https://api\\.example\\.com/endpoint/',
     ]);
     expect(patterns).toHaveLength(1);
     expect(patterns[0].test('https://api.example.com/endpoint')).toBe(true);
@@ -322,11 +322,125 @@ describe('compileUrlPatterns', () => {
     );
   });
 
-  test('should throw error for invalid regex pattern', () => {
+  test('should throw error for invalid literal pattern', () => {
     const lc = createSilentLogContext();
-    expect(() => compileUrlPatterns(lc, ['[invalid regex'])).toThrow(
+    // Literal patterns themselves don't throw - they just get escaped
+    // But if someone tries to use an invalid regex in /.../ syntax, that should throw
+    expect(() => compileUrlPatterns(lc, ['/[invalid regex/'])).toThrow(
       /Invalid regex pattern in URL configuration/,
     );
+  });
+
+  test('should detect and compile regex patterns wrapped in slashes', () => {
+    const lc = createSilentLogContext();
+    const patterns = compileUrlPatterns(lc, [
+      '/http://(www|api)\\.example\\.com/mutate/',
+    ]);
+    expect(patterns).toHaveLength(1);
+
+    // Should match both www and api subdomains
+    expect(patterns[0].test('http://www.example.com/mutate')).toBe(true);
+    expect(patterns[0].test('http://api.example.com/mutate')).toBe(true);
+
+    // Should not match other subdomains
+    expect(patterns[0].test('http://other.example.com/mutate')).toBe(false);
+  });
+
+  test('should treat non-slash-wrapped patterns as string literals', () => {
+    const lc = createSilentLogContext();
+    const patterns = compileUrlPatterns(lc, ['http://api.example.com/mutate']);
+    expect(patterns).toHaveLength(1);
+
+    // Should match the exact URL
+    expect(patterns[0].test('http://api.example.com/mutate')).toBe(true);
+
+    // Should NOT match variations because special chars are escaped
+    expect(patterns[0].test('http://apiXexampleYcom/mutate')).toBe(false);
+    expect(patterns[0].test('http://api-example.com/mutate')).toBe(false);
+  });
+
+  test('should handle mixed literal and regex patterns', () => {
+    const lc = createSilentLogContext();
+    const patterns = compileUrlPatterns(lc, [
+      '/http://(staging|prod)\\.example\\.com/mutate/',
+      'http://localhost:5173/api/mutate',
+    ]);
+    expect(patterns).toHaveLength(2);
+
+    // First pattern (regex) should match staging or prod
+    expect(patterns[0].test('http://staging.example.com/mutate')).toBe(true);
+    expect(patterns[0].test('http://prod.example.com/mutate')).toBe(true);
+    expect(patterns[0].test('http://localhost:5173/api/mutate')).toBe(false);
+
+    // Second pattern (literal) should match localhost exactly
+    expect(patterns[1].test('http://localhost:5173/api/mutate')).toBe(true);
+    expect(patterns[1].test('http://staging.example.com/mutate')).toBe(false);
+  });
+
+  test('should auto-anchor regex patterns for security', () => {
+    const lc = createSilentLogContext();
+    const patterns = compileUrlPatterns(lc, ['/https://api\\.example\\.com/']);
+    expect(patterns).toHaveLength(1);
+
+    // Should match exact URL
+    expect(patterns[0].test('https://api.example.com')).toBe(true);
+
+    // Should NOT match with prefix or suffix due to auto-anchoring
+    expect(patterns[0].test('https://api.example.com/extra')).toBe(false);
+    expect(patterns[0].test('prefix/https://api.example.com')).toBe(false);
+  });
+
+  test('should auto-anchor literal patterns for security', () => {
+    const lc = createSilentLogContext();
+    const patterns = compileUrlPatterns(lc, [
+      'https://api.example.com/endpoint',
+    ]);
+    expect(patterns).toHaveLength(1);
+
+    // Should match exact URL
+    expect(patterns[0].test('https://api.example.com/endpoint')).toBe(true);
+
+    // Should NOT match with extra path segments
+    expect(patterns[0].test('https://api.example.com/endpoint/extra')).toBe(
+      false,
+    );
+  });
+
+  test('should escape special regex characters in literal patterns', () => {
+    const lc = createSilentLogContext();
+    // URL with dots, colons, slashes - all should be treated literally
+    const patterns = compileUrlPatterns(lc, [
+      'https://api.example.com:8080/path',
+    ]);
+    expect(patterns).toHaveLength(1);
+
+    // Should match the exact URL
+    expect(patterns[0].test('https://api.example.com:8080/path')).toBe(true);
+
+    // Dots should be literal, not wildcards
+    expect(patterns[0].test('https://apiXexampleYcom:8080/path')).toBe(false);
+  });
+
+  test('should handle regex with anchors already present', () => {
+    const lc = createSilentLogContext();
+    const patterns = compileUrlPatterns(lc, [
+      '/^https://api\\.example\\.com$/',
+    ]);
+    expect(patterns).toHaveLength(1);
+
+    expect(patterns[0].test('https://api.example.com')).toBe(true);
+    expect(patterns[0].test('https://api.example.com/extra')).toBe(false);
+  });
+
+  test('should handle empty slashes as literal string', () => {
+    const lc = createSilentLogContext();
+    // A pattern like "//" should be treated as a literal "/" because the content is empty
+    // Actually, this edge case: pattern "//" has length 2, not > 2, so it won't be detected as regex
+    const patterns = compileUrlPatterns(lc, ['//']);
+    expect(patterns).toHaveLength(1);
+
+    // Should be treated as literal "//" with special chars escaped
+    expect(patterns[0].test('//')).toBe(true);
   });
 });
 

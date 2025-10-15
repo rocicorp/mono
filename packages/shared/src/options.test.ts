@@ -6,6 +6,7 @@ import {
   envSchema,
   parseOptions,
   parseOptionsAdvanced,
+  splitRespectingSlashDelimiters,
   type Config,
   type Options,
 } from './options.ts';
@@ -1127,4 +1128,118 @@ test('deprecated options are hidden in help by default', () => {
   // Deprecated flags should be hidden (regardless of explicit hidden property)
   expect(helpOutput).not.toContain('--deprecated-but-not-explicitly-hidden');
   expect(helpOutput).not.toContain('--explicitly-hidden-deprecated');
+});
+
+test('splitRespectingSlashDelimiters - basic regex pattern with commas', () => {
+  const result = splitRespectingSlashDelimiters(
+    '/http://(api,staging)\\.example\\.com/mutate/',
+  );
+  expect(result).toEqual(['/http://(api,staging)\\.example\\.com/mutate/']);
+});
+
+test('splitRespectingSlashDelimiters - regex pattern followed by literal', () => {
+  const result = splitRespectingSlashDelimiters(
+    '/http://(api,staging)\\.example\\.com/mutate/,http://localhost:5173/api/mutate',
+  );
+  expect(result).toEqual([
+    '/http://(api,staging)\\.example\\.com/mutate/',
+    'http://localhost:5173/api/mutate',
+  ]);
+});
+
+test('splitRespectingSlashDelimiters - literal followed by regex', () => {
+  const result = splitRespectingSlashDelimiters(
+    'http://localhost:5173/api/mutate,/http://(api,staging)\\.example\\.com/mutate/',
+  );
+  expect(result).toEqual([
+    'http://localhost:5173/api/mutate',
+    '/http://(api,staging)\\.example\\.com/mutate/',
+  ]);
+});
+
+test('splitRespectingSlashDelimiters - multiple regex patterns', () => {
+  const result = splitRespectingSlashDelimiters(
+    '/http://(api,staging)\\.example\\.com/,/https://(www,prod)\\.example\\.com/',
+  );
+  expect(result).toEqual([
+    '/http://(api,staging)\\.example\\.com/',
+    '/https://(www,prod)\\.example\\.com/',
+  ]);
+});
+
+test('splitRespectingSlashDelimiters - plain comma-separated literals', () => {
+  const result = splitRespectingSlashDelimiters(
+    'http://api1.example.com,http://api2.example.com,http://api3.example.com',
+  );
+  expect(result).toEqual([
+    'http://api1.example.com',
+    'http://api2.example.com',
+    'http://api3.example.com',
+  ]);
+});
+
+test('splitRespectingSlashDelimiters - mixed literals and regex', () => {
+  const result = splitRespectingSlashDelimiters(
+    'http://literal1.com,/regex(a,b)/,http://literal2.com',
+  );
+  expect(result).toEqual([
+    'http://literal1.com',
+    '/regex(a,b)/',
+    'http://literal2.com',
+  ]);
+});
+
+test('splitRespectingSlashDelimiters - regex with internal slashes', () => {
+  const result = splitRespectingSlashDelimiters(
+    '/https://api\\.example\\.com/v1/path/,http://localhost/',
+  );
+  expect(result).toEqual([
+    '/https://api\\.example\\.com/v1/path/',
+    'http://localhost/',
+  ]);
+});
+
+test('splitRespectingSlashDelimiters - empty string', () => {
+  const result = splitRespectingSlashDelimiters('');
+  expect(result).toEqual([]);
+});
+
+test('splitRespectingSlashDelimiters - single literal', () => {
+  const result = splitRespectingSlashDelimiters('http://api.example.com');
+  expect(result).toEqual(['http://api.example.com']);
+});
+
+test('splitRespectingSlashDelimiters - single regex', () => {
+  const result = splitRespectingSlashDelimiters('/http://(a,b)\\.com/');
+  expect(result).toEqual(['/http://(a,b)\\.com/']);
+});
+
+test('splitRespectingSlashDelimiters - trailing comma', () => {
+  const result = splitRespectingSlashDelimiters(
+    'http://api.com,http://localhost,',
+  );
+  expect(result).toEqual(['http://api.com', 'http://localhost']);
+});
+
+test('regex-supporting option with commas in env var', () => {
+  const regexOptions = {
+    urls: {
+      type: v.array(v.string()).optional(() => []),
+      regexSupport: true,
+    },
+  };
+
+  const result = parseOptions(regexOptions, {
+    argv: [],
+    envNamePrefix: 'TEST_',
+    env: {
+      TEST_URLS:
+        '/http://(api,staging)\\.example\\.com/mutate/,http://localhost:5173/api/mutate',
+    },
+  });
+
+  expect(result.urls).toEqual([
+    '/http://(api,staging)\\.example\\.com/mutate/',
+    'http://localhost:5173/api/mutate',
+  ]);
 });

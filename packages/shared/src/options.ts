@@ -48,6 +48,13 @@ export type WrappedOptionType = {
    * Deprecated options are hidden by default.
    */
   hidden?: boolean;
+
+  /**
+   * Indicates that this option supports regex patterns delimited by forward slashes.
+   * When true, comma-splitting will respect /pattern/ boundaries to allow commas
+   * inside regex patterns. Example: "/http://(api,staging)\.com/,http://localhost/"
+   */
+  regexSupport?: boolean;
 };
 
 export type Option = OptionType | WrappedOptionType;
@@ -282,6 +289,57 @@ function getRequiredOrDefault(type: OptionType) {
   };
 }
 
+/**
+ * Splits a comma-separated string while respecting regex pattern boundaries.
+ * Regex patterns are delimited by forward slashes: /pattern/
+ *
+ * A terminal slash is detected by:
+ * - A slash followed by a comma: /pattern/,
+ * - A slash at the end of the string: /pattern/$
+ *
+ * @example
+ * splitRespectingSlashDelimiters("/http://(api,staging)\\.com/,http://localhost/")
+ * // Returns: ["/http://(api,staging)\\.com/", "http://localhost/"]
+ */
+export function splitRespectingSlashDelimiters(input: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inRegex = false;
+
+  for (let i = 0; i < input.length; i++) {
+    const char = input[i];
+    const next = input[i + 1];
+
+    if (char === '/' && !inRegex && current.length === 0) {
+      // Start of regex pattern (slash at the beginning of a new item)
+      inRegex = true;
+      current += char;
+    } else if (
+      char === '/' &&
+      inRegex &&
+      (next === ',' || next === undefined)
+    ) {
+      // End of regex pattern (terminal slash followed by comma or end-of-string)
+      current += char;
+      inRegex = false;
+    } else if (char === ',' && !inRegex) {
+      // Split point (comma outside of regex pattern)
+      if (current) {
+        result.push(current);
+      }
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+
+  if (current) {
+    result.push(current);
+  }
+
+  return result;
+}
+
 export type ParseOptions = {
   /** Defaults to process.argv.slice(2) */
   argv?: string[];
@@ -333,7 +391,7 @@ export function parseOptionsAdvanced<T extends Options>(
   } = opts;
   // The main logic for converting a valita Type spec to an Option (i.e. flag) spec.
   function addOption(field: string, option: WrappedOptionType, group?: string) {
-    const {type, desc = [], deprecated, alias, hidden} = option;
+    const {type, desc = [], deprecated, alias, hidden, regexSupport} = option;
 
     // The group name is prepended to the flag name.
     const flag = group ? toKebabCase(`${group}-${field}`) : toKebabCase(field);
@@ -375,8 +433,11 @@ export function parseOptionsAdvanced<T extends Options>(
 
     if (processEnv[env]) {
       if (multiple) {
-        // Technically not water-tight; assumes values for the string[] flag don't contain commas.
-        envArgv.push(`--${flag}`, ...processEnv[env].split(','));
+        // Use special splitting for regex-supporting flags to handle commas inside /pattern/ delimiters
+        const values = regexSupport
+          ? splitRespectingSlashDelimiters(processEnv[env])
+          : processEnv[env].split(',');
+        envArgv.push(`--${flag}`, ...values);
       } else {
         envArgv.push(`--${flag}`, processEnv[env]);
       }
