@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1760540432055,
+  "lastUpdate": 1760541685362,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54157,6 +54157,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/e7edf1593551f1744a78bcc4b09f431de22807e1"
         },
         "date": 1760540419766,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302365,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54477,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111453,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31872,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "10f9a6a7094788becdb14d5c1ec818edb6561ec8",
+          "message": "chore(zero): Split the sqlite code into own exports (#4991)\n\nWe now have 4 sqlite kv store related exports\n\n- `@rocicorp/zero/sqlite` - Exports utility functions for creating new\nsqlite based stores.\n- `@rocicorp/zero/expo-sqlite` - Exports an implementation of the kv\nstore using `expo-sqlite`.\n- `@rocicorp/zero/op-sqlite` - Exports an implementation of the kv store\nusing `@op-engineering/op-sqlite`.\n- `@rocicorp/zero/react-native` - Deprecated, use\n`@rocicorp/zero/expo-sqlite` instead.",
+          "timestamp": "2025-10-15T15:12:12Z",
+          "tree_id": "44e14fc2a90ae0f6721f328dce4778936a50edb9",
+          "url": "https://github.com/rocicorp/mono/commit/10f9a6a7094788becdb14d5c1ec818edb6561ec8"
+        },
+        "date": 1760541671585,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
