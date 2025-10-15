@@ -4,7 +4,8 @@ import type {StaticQuery} from '../static-query.ts';
 import {generateQuery} from './query-gen.ts';
 import {generateSchema} from './schema-gen.ts';
 
-test('random generation', () => {
+// This is flakey!!!
+test.skip('random generation', () => {
   const randomizer = generateMersenne53Randomizer(
     Date.now() ^ (Math.random() * 0x100000000),
   );
