@@ -7,7 +7,7 @@
  * The CloudEvent `type` field can thus be used to filter events and/or parse
  * their corresponding subtypes.
  */
-export type ZeroEvent = {
+export interface ZeroEvent {
   /**
    * Identifies the event type across all components.
    *
@@ -24,4 +24,4 @@ export type ZeroEvent = {
    * field of the outer event object.
    */
   time: string;
-};
+}
