@@ -1,4 +1,4 @@
-import {links} from '../routes.ts';
+import {links} from '../routes.tsx';
 import {Modal, ModalActions, ModalText} from './modal.tsx';
 
 export interface Props {

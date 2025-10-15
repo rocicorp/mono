@@ -1,5 +1,5 @@
 set -e
-BASE_URL="https://rocinante-dev.s3.us-east-1.amazonaws.com/gigabugsWProject"
+BASE_URL="https://rocinante-dev.s3.us-east-1.amazonaws.com/gigabugs_v2"
 FILES=(
     "user_000.csv"
     "project_000.csv"
@@ -13,13 +13,6 @@ FILES=(
     "comment_006.csv"
     "comment_007.csv"
     "issueLabel_000.csv"
-    "issueLabel_001.csv"
-    "issueLabel_002.csv"
-    "issueLabel_003.csv"
-    "issueLabel_004.csv"
-    "issueLabel_005.csv"
-    "issueLabel_006.csv"
-    "issueLabel_007.csv"
     "issue_000.csv"
     "issue_001.csv"
     "issue_002.csv"

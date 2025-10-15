@@ -20,7 +20,8 @@
   width: 100%;
   padding: 0.8175rem;
   padding-left: 3.0675rem;
-  border-radius: 0.5rem;
+  padding-right: 2.5rem;
+  border-radius: var(--ui-button-radius);
   transition: color 0.3s ease;
   border: 1px solid var(--color-button-outline);
 
@@ -59,14 +60,12 @@
 
 .selectedIcon {
   position: absolute;
-  left: 0.875rem;
+  left: 0.8175rem;
   top: 50%;
   transform: translateY(-50%);
-  width: 1rem;
-  height: 1rem;
-  pointer-events: none;
   width: 1.4rem;
   height: 1.4rem;
+  pointer-events: none;
 }
 
 .toggleButton {
@@ -91,6 +90,8 @@
   transition: opacity 0.3s ease;
   height: 0.875rem;
   width: 0.875rem;
+  color: white;
+  fill: white;
 }
 
 .optionsList {
@@ -100,8 +101,9 @@
   max-height: 15rem;
   overflow-y: auto;
   background-color: var(--color-nav-selected);
-  border-radius: 0.5rem;
+  border-radius: var(--ui-button-radius);
   top: 0;
+  border: 1px solid var(--color-button-outline);
 }
 
 .optionsList.editable {

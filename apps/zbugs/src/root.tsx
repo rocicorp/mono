@@ -7,7 +7,7 @@ import {useSoftNav} from './hooks/use-softnav.ts';
 import {ErrorPage} from './pages/error/error-page.tsx';
 import {IssuePage, IssueRedirect} from './pages/issue/issue-page.tsx';
 import {ListPage} from './pages/list/list-page.tsx';
-import {routes} from './routes.ts';
+import {links, ListContextProvider, routes} from './routes.tsx';
 import {ZERO_PROJECT_NAME} from '../shared/schema.ts';
 
 export function Root() {
@@ -19,7 +19,7 @@ export function Root() {
   useSoftNav();
 
   return (
-    <>
+    <ListContextProvider>
       <div
         className="app-container flex p-8"
         style={{visibility: contentReady ? 'visible' : 'hidden'}}
@@ -31,7 +31,7 @@ export function Root() {
           <Switch>
             <Route path={routes.home}>
               <Redirect
-                to={`/p/${ZERO_PROJECT_NAME.toLocaleLowerCase()}${window.location.search}`}
+                to={`${links.list({projectName: ZERO_PROJECT_NAME.toLocaleLowerCase()})}${window.location.search}`}
                 replace
               />
             </Route>
@@ -60,6 +60,6 @@ export function Root() {
           setShowOnboarding(false);
         }}
       />
-    </>
+    </ListContextProvider>
   );
 }

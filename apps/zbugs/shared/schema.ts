@@ -79,7 +79,7 @@ const issueLabel = table('issueLabel')
     labelID: string(),
     projectID: string(),
   })
-  .primaryKey('issueID', 'labelID');
+  .primaryKey('labelID', 'issueID');
 
 const emoji = table('emoji')
   .columns({

@@ -46,7 +46,14 @@ export function constraintMatchesPrimaryKey(
   constraint: Constraint,
   primary: PrimaryKey,
 ): boolean {
-  const constraintKeys = Object.keys(constraint);
+  return keyMatchesPrimaryKey(Object.keys(constraint), primary);
+}
+
+export function keyMatchesPrimaryKey(
+  key: Iterable<string>,
+  primary: PrimaryKey,
+): boolean {
+  const constraintKeys = [...key];
 
   if (constraintKeys.length !== primary.length) {
     return false;
