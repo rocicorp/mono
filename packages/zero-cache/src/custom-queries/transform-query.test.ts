@@ -9,7 +9,7 @@ import {
 } from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {CustomQueryTransformer} from './transform-query.ts';
-import {fetchFromAPIServer, compileUrlPatterns} from '../custom/fetch.ts';
+import {fetchFromAPIServer, compileUrlPattern} from '../custom/fetch.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
 import type {ShardID} from '../types/shards.ts';
 import type {
@@ -25,8 +25,8 @@ vi.mock('../custom/fetch.ts');
 const mockFetchFromAPIServer = fetchFromAPIServer as MockedFunction<
   typeof fetchFromAPIServer
 >;
-const mockCompileUrlPatterns = compileUrlPatterns as MockedFunction<
-  typeof compileUrlPatterns
+const mockCompileUrlPattern = compileUrlPattern as MockedFunction<
+  typeof compileUrlPattern
 >;
 
 describe('CustomQueryTransformer', () => {
@@ -130,9 +130,9 @@ describe('CustomQueryTransformer', () => {
 
   beforeEach(() => {
     mockFetchFromAPIServer.mockReset();
-    mockCompileUrlPatterns.mockReturnValue([
+    mockCompileUrlPattern.mockReturnValue(
       new URLPattern('https://api.example.com/pull'),
-    ]);
+    );
     vi.clearAllTimers();
     vi.useFakeTimers();
   });

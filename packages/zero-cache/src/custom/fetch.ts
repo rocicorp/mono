@@ -9,28 +9,22 @@ import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 const reservedParams = ['schema', 'appID'];
 
 /**
- * Compiles and validates URLPattern objects from configuration.
+ * Compiles and validates a URLPattern from configuration.
  *
  * Patterns must be full URLs (e.g., "https://api.example.com/endpoint").
  * URLPattern automatically sets search and hash to wildcard ('*'),
  * which means query parameters and fragments are ignored during matching.
  *
- * @throws Error if any pattern is an invalid URLPattern
+ * @throws Error if the pattern is an invalid URLPattern
  */
-export function compileUrlPatterns(patterns: string[]): URLPattern[] {
-  const compiled: URLPattern[] = [];
-
-  for (const pattern of patterns) {
-    try {
-      compiled.push(new URLPattern(pattern));
-    } catch (e) {
-      throw new Error(
-        `Invalid URLPattern in URL configuration: "${pattern}". Error: ${e instanceof Error ? e.message : String(e)}`,
-      );
-    }
+export function compileUrlPattern(pattern: string): URLPattern {
+  try {
+    return new URLPattern(pattern);
+  } catch (e) {
+    throw new Error(
+      `Invalid URLPattern in URL configuration: "${pattern}". Error: ${e instanceof Error ? e.message : String(e)}`,
+    );
   }
-
-  return compiled;
 }
 
 export type HeaderOptions = {
