@@ -5,10 +5,12 @@
  *
  * E.g., we know that `issue.assignee_id` will be constrained to typeof issue.assignee_id.
  */
-export interface PlannerConstraint {
-  [column: string]: undefined;
-}
+export type PlannerConstraint = Record<string, undefined>;
 
+/**
+ * Multiple flipped joins will contribute extra constraints to a parent join.
+ * These need to be merged.
+ */
 export function mergeConstraints(
   a: PlannerConstraint | undefined,
   b: PlannerConstraint | undefined,
