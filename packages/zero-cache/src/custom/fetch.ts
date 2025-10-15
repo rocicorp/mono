@@ -11,6 +11,10 @@ const reservedParams = ['schema', 'appID'];
 /**
  * Compiles and validates URLPattern objects from configuration.
  *
+ * Patterns must be full URLs (e.g., "https://api.example.com/endpoint").
+ * URLPattern automatically sets search and hash to wildcard ('*'),
+ * which means query parameters and fragments are ignored during matching.
+ *
  * @throws Error if any pattern is an invalid URLPattern
  */
 export function compileUrlPatterns(patterns: string[]): URLPattern[] {
@@ -18,9 +22,7 @@ export function compileUrlPatterns(patterns: string[]): URLPattern[] {
 
   for (const pattern of patterns) {
     try {
-      compiled.push(
-        new URLPattern({pathname: '*', ...parseUrlPattern(pattern)}),
-      );
+      compiled.push(new URLPattern(pattern));
     } catch (e) {
       throw new Error(
         `Invalid URLPattern in URL configuration: "${pattern}". Error: ${e instanceof Error ? e.message : String(e)}`,
@@ -29,32 +31,6 @@ export function compileUrlPatterns(patterns: string[]): URLPattern[] {
   }
 
   return compiled;
-}
-
-/**
- * Parses a URL pattern string into URLPattern init object.
- * Supports both full URLs and path-only patterns.
- */
-function parseUrlPattern(pattern: string): URLPatternInit {
-  // If pattern looks like a full URL (has protocol), parse it
-  if (pattern.includes('://')) {
-    try {
-      const url = new URL(pattern);
-      return {
-        protocol: url.protocol.slice(0, -1), // Remove trailing ':'
-        hostname: url.hostname,
-        pathname: url.pathname === '/' ? '*' : url.pathname,
-        search: '*',
-        hash: '*',
-      };
-    } catch {
-      // If URL parsing fails, treat as pattern string
-      return {pathname: pattern};
-    }
-  }
-
-  // Otherwise treat as a pathname pattern
-  return {pathname: pattern};
 }
 
 export type HeaderOptions = {
@@ -141,7 +117,8 @@ export async function fetchFromAPIServer(
 /**
  * Returns true if the url matches one of the allowedUrlPatterns.
  *
- * Query parameters and hash fragments are automatically ignored by URLPattern matching.
+ * URLPattern automatically ignores query parameters and hash fragments during matching
+ * because it sets search and hash to wildcard ('*') by default.
  *
  * Example URLPattern patterns:
  * - "https://api.example.com/endpoint" - Exact match for a specific URL

@@ -2,7 +2,7 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "lib": ["es2022", "dom"],
-    "types": ["node", "@types/node"]
+    "types": ["node"]
   },
   "include": ["src", "bench", "tool"]
 }
