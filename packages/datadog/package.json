@@ -6,7 +6,7 @@
   "devDependencies": {
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.4.0",
-    "@rocicorp/prettier-config": "^0.3.0",
+    "@rocicorp/prettier-config": "^0.4.0",
     "@vitest/runner": "3.2.4",
     "shared": "0.0.0",
     "typescript": "~5.8.2",

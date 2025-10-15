@@ -16,7 +16,7 @@
   "devDependencies": {
     "@faker-js/faker": "^9.6.0",
     "@rocicorp/logger": "^5.4.0",
-    "@rocicorp/prettier-config": "^0.3.0",
+    "@rocicorp/prettier-config": "^0.4.0",
     "@rocicorp/rails": "^0.10.0",
     "fast-check": "^3.18.0",
     "nanoid": "^5.1.2",

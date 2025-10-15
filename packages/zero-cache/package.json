@@ -61,7 +61,7 @@
     "zqlite": "0.0.0"
   },
   "devDependencies": {
-    "@rocicorp/prettier-config": "^0.3.0",
+    "@rocicorp/prettier-config": "^0.4.0",
     "@rocicorp/zero-events": "0.0.1",
     "@testcontainers/postgresql": "^10.9.0",
     "@types/node": "^22.10.5",

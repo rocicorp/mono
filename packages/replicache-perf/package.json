@@ -12,7 +12,7 @@
   },
   "type": "module",
   "dependencies": {
-    "@rocicorp/prettier-config": "^0.3.0",
+    "@rocicorp/prettier-config": "^0.4.0",
     "@types/command-line-args": "^5.2.3",
     "@types/command-line-usage": "^5.0.2",
     "command-line-args": "^6.0.1",
