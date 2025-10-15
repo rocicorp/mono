@@ -1,23 +1,11 @@
 import {expect, suite, test} from 'vitest';
-import {PlannerSource} from './planner-source.ts';
 import {PlannerJoin, UnflippableJoinError} from './planner-join.ts';
-import {simpleCostModel} from './test/helpers.ts';
+import {CONSTRAINTS, createJoin, expectedCost} from './test/helpers.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 
 suite('PlannerJoin', () => {
   test('initial state is left join, unpinned', () => {
-    const parentSource = new PlannerSource('users', simpleCostModel);
-    const childSource = new PlannerSource('posts', simpleCostModel);
-    const parent = parentSource.connect([['id', 'asc']], undefined);
-    const child = childSource.connect([['id', 'asc']], undefined);
-
-    const join = new PlannerJoin(
-      parent,
-      child,
-      {userId: undefined},
-      {id: undefined},
-      true,
-    );
+    const {join} = createJoin();
 
     expect(join.kind).toBe('join');
     expect(join.type).toBe('left');
@@ -25,143 +13,55 @@ suite('PlannerJoin', () => {
   });
 
   test('can be pinned', () => {
-    const parentSource = new PlannerSource('users', simpleCostModel);
-    const childSource = new PlannerSource('posts', simpleCostModel);
-    const parent = parentSource.connect([['id', 'asc']], undefined);
-    const child = childSource.connect([['id', 'asc']], undefined);
-
-    const join = new PlannerJoin(
-      parent,
-      child,
-      {userId: undefined},
-      {id: undefined},
-      true,
-    );
+    const {join} = createJoin();
 
     join.pin();
     expect(join.pinned).toBe(true);
   });
 
   test('can be flipped when flippable', () => {
-    const parentSource = new PlannerSource('users', simpleCostModel);
-    const childSource = new PlannerSource('posts', simpleCostModel);
-    const parent = parentSource.connect([['id', 'asc']], undefined);
-    const child = childSource.connect([['id', 'asc']], undefined);
-
-    const join = new PlannerJoin(
-      parent,
-      child,
-      {userId: undefined},
-      {id: undefined},
-      true, // flippable
-    );
+    const {join} = createJoin();
 
     join.flip();
     expect(join.type).toBe('flipped');
   });
 
   test('cannot flip when not flippable (NOT EXISTS)', () => {
-    const parentSource = new PlannerSource('users', simpleCostModel);
-    const childSource = new PlannerSource('posts', simpleCostModel);
-    const parent = parentSource.connect([['id', 'asc']], undefined);
-    const child = childSource.connect([['id', 'asc']], undefined);
-
-    const join = new PlannerJoin(
-      parent,
-      child,
-      {userId: undefined},
-      {id: undefined},
-      false, // NOT flippable (e.g., NOT EXISTS)
-    );
+    const {join} = createJoin({flippable: false});
 
     expect(() => join.flip()).toThrow(UnflippableJoinError);
   });
 
   test('cannot flip when pinned', () => {
-    const parentSource = new PlannerSource('users', simpleCostModel);
-    const childSource = new PlannerSource('posts', simpleCostModel);
-    const parent = parentSource.connect([['id', 'asc']], undefined);
-    const child = childSource.connect([['id', 'asc']], undefined);
-
-    const join = new PlannerJoin(
-      parent,
-      child,
-      {userId: undefined},
-      {id: undefined},
-      true,
-    );
+    const {join} = createJoin();
 
     join.pin();
     expect(() => join.flip()).toThrow('Cannot flip a pinned join');
   });
 
   test('cannot flip when already flipped', () => {
-    const parentSource = new PlannerSource('users', simpleCostModel);
-    const childSource = new PlannerSource('posts', simpleCostModel);
-    const parent = parentSource.connect([['id', 'asc']], undefined);
-    const child = childSource.connect([['id', 'asc']], undefined);
-
-    const join = new PlannerJoin(
-      parent,
-      child,
-      {userId: undefined},
-      {id: undefined},
-      true,
-    );
+    const {join} = createJoin();
 
     join.flip();
     expect(() => join.flip()).toThrow('Can only flip a left join');
   });
 
   test('maybeFlip() flips when input is child', () => {
-    const parentSource = new PlannerSource('users', simpleCostModel);
-    const childSource = new PlannerSource('posts', simpleCostModel);
-    const parent = parentSource.connect([['id', 'asc']], undefined);
-    const child = childSource.connect([['id', 'asc']], undefined);
-
-    const join = new PlannerJoin(
-      parent,
-      child,
-      {userId: undefined},
-      {id: undefined},
-      true,
-    );
+    const {child, join} = createJoin();
 
     join.maybeFlip(child);
     expect(join.type).toBe('flipped');
   });
 
   test('maybeFlip() does not flip when input is parent', () => {
-    const parentSource = new PlannerSource('users', simpleCostModel);
-    const childSource = new PlannerSource('posts', simpleCostModel);
-    const parent = parentSource.connect([['id', 'asc']], undefined);
-    const child = childSource.connect([['id', 'asc']], undefined);
-
-    const join = new PlannerJoin(
-      parent,
-      child,
-      {userId: undefined},
-      {id: undefined},
-      true,
-    );
+    const {parent, join} = createJoin();
 
     join.maybeFlip(parent);
     expect(join.type).toBe('left');
   });
 
   test('reset() clears pinned and flipped state', () => {
-    const parentSource = new PlannerSource('users', simpleCostModel);
-    const childSource = new PlannerSource('posts', simpleCostModel);
-    const parent = parentSource.connect([['id', 'asc']], undefined);
-    const child = childSource.connect([['id', 'asc']], undefined);
-
-    const join = new PlannerJoin(
-      parent,
-      child,
-      {userId: undefined},
-      {id: undefined},
-      true,
-    );
+    const {join} = createJoin();
 
     join.flip();
     join.pin();
@@ -174,65 +74,29 @@ suite('PlannerJoin', () => {
   });
 
   test('propagateConstraints() on pinned left join sends constraints to child', () => {
-    const parentSource = new PlannerSource('users', simpleCostModel);
-    const childSource = new PlannerSource('posts', simpleCostModel);
-    const parent = parentSource.connect([['id', 'asc']], undefined);
-    const child = childSource.connect([['id', 'asc']], undefined);
-
-    const join = new PlannerJoin(
-      parent,
-      child,
-      {userId: undefined},
-      {id: undefined},
-      true,
-    );
+    const {child, join} = createJoin();
 
     join.pin();
     join.propagateConstraints([0], undefined, 'pinned');
 
-    // Child should receive childConstraint
-    const childCost = child.estimateCost();
-    // simpleCostModel: 100 - 10 (1 constraint) = 90
-    expect(childCost).toBe(90);
+    expect(child.estimateCost()).toBe(expectedCost(1));
   });
 
   test('propagateConstraints() on pinned flipped join sends undefined to child', () => {
-    const parentSource = new PlannerSource('users', simpleCostModel);
-    const childSource = new PlannerSource('posts', simpleCostModel);
-    const parent = parentSource.connect([['id', 'asc']], undefined);
-    const child = childSource.connect([['id', 'asc']], undefined);
-
-    const join = new PlannerJoin(
-      parent,
-      child,
-      {userId: undefined},
-      {id: undefined},
-      true,
-    );
+    const {child, join} = createJoin();
 
     join.flip();
     join.pin();
     join.propagateConstraints([0], undefined, 'pinned');
 
-    // Child should receive undefined constraint
-    const childCost = child.estimateCost();
-    // simpleCostModel: 100 - 0 (no constraints) = 100
-    expect(childCost).toBe(100);
+    expect(child.estimateCost()).toBe(expectedCost(0));
   });
 
   test('propagateConstraints() on pinned flipped join merges constraints for parent', () => {
-    const parentSource = new PlannerSource('users', simpleCostModel);
-    const childSource = new PlannerSource('posts', simpleCostModel);
-    const parent = parentSource.connect([['id', 'asc']], undefined);
-    const child = childSource.connect([['id', 'asc']], undefined);
-
-    const join = new PlannerJoin(
-      parent,
-      child,
-      {userId: undefined},
-      {postId: undefined},
-      true,
-    );
+    const {parent, join} = createJoin({
+      parentConstraint: CONSTRAINTS.userId,
+      childConstraint: CONSTRAINTS.postId,
+    });
 
     join.flip();
     join.pin();
@@ -240,42 +104,24 @@ suite('PlannerJoin', () => {
     const outputConstraint: PlannerConstraint = {name: undefined};
     join.propagateConstraints([0], outputConstraint, 'pinned');
 
-    // Parent should receive merged constraints (outputConstraint + parentConstraint)
-    const parentCost = parent.estimateCost();
-    // simpleCostModel: 100 - 20 (2 constraints: userId, name) = 80
-    expect(parentCost).toBe(80);
+    expect(parent.estimateCost()).toBe(expectedCost(2));
   });
 
   test('stores plan ID when provided', () => {
-    const parentSource = new PlannerSource('users', simpleCostModel);
-    const childSource = new PlannerSource('posts', simpleCostModel);
-    const parent = parentSource.connect([['id', 'asc']], undefined);
-    const child = childSource.connect([['id', 'asc']], undefined);
-
-    const join = new PlannerJoin(
-      parent,
-      child,
-      {userId: undefined},
-      {id: undefined},
-      true,
-      42, // plan ID
-    );
+    const {join} = createJoin({planId: 42});
 
     expect(join.planId).toBe(42);
   });
 
   test('plan ID is undefined when not provided', () => {
-    const parentSource = new PlannerSource('users', simpleCostModel);
-    const childSource = new PlannerSource('posts', simpleCostModel);
-    const parent = parentSource.connect([['id', 'asc']], undefined);
-    const child = childSource.connect([['id', 'asc']], undefined);
-
+    const {parent, child} = createJoin();
     const join = new PlannerJoin(
       parent,
       child,
-      {userId: undefined},
-      {id: undefined},
+      CONSTRAINTS.userId,
+      CONSTRAINTS.id,
       true,
+      undefined as unknown as number,
     );
 
     expect(join.planId).toBeUndefined();

@@ -1,30 +1,21 @@
 import {expect, suite, test} from 'vitest';
-import {PlannerSource} from './planner-source.ts';
-import {PlannerFanIn} from './planner-fan-in.ts';
-import {simpleCostModel} from './test/helpers.ts';
+import {
+  CONSTRAINTS,
+  createConnection,
+  createFanIn,
+  expectedCost,
+} from './test/helpers.ts';
 
 suite('PlannerFanIn', () => {
   test('initial state is FI type', () => {
-    const source1 = new PlannerSource('users', simpleCostModel);
-    const input1 = source1.connect([['id', 'asc']], undefined);
-
-    const source2 = new PlannerSource('posts', simpleCostModel);
-    const input2 = source2.connect([['id', 'asc']], undefined);
-
-    const fanIn = new PlannerFanIn([input1, input2]);
+    const {fanIn} = createFanIn();
 
     expect(fanIn.kind).toBe('fan-in');
     expect(fanIn.type).toBe('FI');
   });
 
   test('can be converted to UFI', () => {
-    const source1 = new PlannerSource('users', simpleCostModel);
-    const input1 = source1.connect([['id', 'asc']], undefined);
-
-    const source2 = new PlannerSource('posts', simpleCostModel);
-    const input2 = source2.connect([['id', 'asc']], undefined);
-
-    const fanIn = new PlannerFanIn([input1, input2]);
+    const {fanIn} = createFanIn();
     expect(fanIn.type).toBe('FI');
 
     fanIn.convertToUFI();
@@ -32,13 +23,7 @@ suite('PlannerFanIn', () => {
   });
 
   test('reset() restores FI type', () => {
-    const source1 = new PlannerSource('users', simpleCostModel);
-    const input1 = source1.connect([['id', 'asc']], undefined);
-
-    const source2 = new PlannerSource('posts', simpleCostModel);
-    const input2 = source2.connect([['id', 'asc']], undefined);
-
-    const fanIn = new PlannerFanIn([input1, input2]);
+    const {fanIn} = createFanIn();
     fanIn.convertToUFI();
     expect(fanIn.type).toBe('UFI');
 
@@ -47,65 +32,29 @@ suite('PlannerFanIn', () => {
   });
 
   test('propagateConstraints() with FI type sends same branch pattern to all inputs', () => {
-    const source1 = new PlannerSource('users', simpleCostModel);
-    const input1 = source1.connect([['id', 'asc']], undefined);
+    const {inputs, fanIn} = createFanIn();
 
-    const source2 = new PlannerSource('posts', simpleCostModel);
-    const input2 = source2.connect([['id', 'asc']], undefined);
+    fanIn.propagateConstraints([], CONSTRAINTS.userId, 'unpinned');
 
-    const fanIn = new PlannerFanIn([input1, input2]);
-
-    // FI type: all inputs get same branch pattern [0] (prepended to [])
-    fanIn.propagateConstraints([], {userId: undefined}, 'unpinned');
-
-    // Both inputs should receive the same constraint
-    const cost1 = input1.estimateCost();
-    const cost2 = input2.estimateCost();
-
-    // simpleCostModel: 100 - 10 (1 constraint) = 90
-    expect(cost1).toBe(90);
-    expect(cost2).toBe(90);
+    expect(inputs[0].estimateCost()).toBe(expectedCost(1));
+    expect(inputs[1].estimateCost()).toBe(expectedCost(1));
   });
 
   test('propagateConstraints() with UFI type sends unique branch patterns to each input', () => {
-    const source1 = new PlannerSource('users', simpleCostModel);
-    const input1 = source1.connect([['id', 'asc']], undefined);
-
-    const source2 = new PlannerSource('posts', simpleCostModel);
-    const input2 = source2.connect([['id', 'asc']], undefined);
-
-    const source3 = new PlannerSource('comments', simpleCostModel);
-    const input3 = source3.connect([['id', 'asc']], undefined);
-
-    const fanIn = new PlannerFanIn([input1, input2, input3]);
+    const {inputs, fanIn} = createFanIn(3);
     fanIn.convertToUFI();
 
-    // UFI type: each input gets unique branch pattern [0], [1], [2]
-    fanIn.propagateConstraints([], {userId: undefined}, 'unpinned');
+    fanIn.propagateConstraints([], CONSTRAINTS.userId, 'unpinned');
 
-    // Each input should receive the constraint with unique branch patterns
-    // UFI creates separate cost entries per branch
-    const cost1 = input1.estimateCost();
-    const cost2 = input2.estimateCost();
-    const cost3 = input3.estimateCost();
-
-    // simpleCostModel: 100 - 10 (1 constraint) = 90 per branch
-    expect(cost1).toBe(90);
-    expect(cost2).toBe(90);
-    expect(cost3).toBe(90);
+    expect(inputs[0].estimateCost()).toBe(expectedCost(1));
+    expect(inputs[1].estimateCost()).toBe(expectedCost(1));
+    expect(inputs[2].estimateCost()).toBe(expectedCost(1));
   });
 
   test('can set and get output', () => {
-    const source1 = new PlannerSource('users', simpleCostModel);
-    const input1 = source1.connect([['id', 'asc']], undefined);
+    const {fanIn} = createFanIn();
+    const output = createConnection('comments');
 
-    const source2 = new PlannerSource('posts', simpleCostModel);
-    const input2 = source2.connect([['id', 'asc']], undefined);
-
-    const outputSource = new PlannerSource('comments', simpleCostModel);
-    const output = outputSource.connect([['id', 'asc']], undefined);
-
-    const fanIn = new PlannerFanIn([input1, input2]);
     fanIn.setOutput(output);
 
     expect(fanIn.output).toBe(output);

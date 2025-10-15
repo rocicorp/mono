@@ -1,70 +1,55 @@
 import {expect, suite, test} from 'vitest';
-import {PlannerSource} from './planner-source.ts';
-import {simpleCostModel} from './test/helpers.ts';
-import type {PlannerConstraint} from './planner-constraint.ts';
+import {
+  BASE_COST,
+  CONSTRAINTS,
+  createConnection,
+  expectedCost,
+} from './test/helpers.ts';
 
 suite('PlannerConnection', () => {
   test('initial state is unpinned', () => {
-    const source = new PlannerSource('users', simpleCostModel);
-    const connection = source.connect([['id', 'asc']], undefined);
+    const connection = createConnection();
 
     expect(connection.pinned).toBe(false);
   });
 
   test('estimateCost() with no constraints returns base cost', () => {
-    const source = new PlannerSource('users', simpleCostModel);
-    const connection = source.connect([['id', 'asc']], undefined);
+    const connection = createConnection();
 
-    const cost = connection.estimateCost();
-    // simpleCostModel: base 100, no constraints
-    expect(cost).toBe(100);
+    expect(connection.estimateCost()).toBe(BASE_COST);
   });
 
   test('estimateCost() with constraints reduces cost', () => {
-    const source = new PlannerSource('users', simpleCostModel);
-    const connection = source.connect([['id', 'asc']], undefined);
+    const connection = createConnection();
 
-    const constraint: PlannerConstraint = {userId: undefined};
-    connection.propagateConstraints([0], constraint, 'unpinned');
+    connection.propagateConstraints([0], CONSTRAINTS.userId, 'unpinned');
 
-    const cost = connection.estimateCost();
-    // simpleCostModel: 100 - 10 (1 constraint) = 90
-    expect(cost).toBe(90);
+    expect(connection.estimateCost()).toBe(expectedCost(1));
   });
 
   test('multiple constraints reduce cost further', () => {
-    const source = new PlannerSource('users', simpleCostModel);
-    const connection = source.connect([['id', 'asc']], undefined);
+    const connection = createConnection();
 
-    const constraint: PlannerConstraint = {
-      userId: undefined,
-      postId: undefined,
-    };
-    connection.propagateConstraints([0], constraint, 'unpinned');
+    connection.propagateConstraints(
+      [0],
+      {userId: undefined, postId: undefined},
+      'unpinned',
+    );
 
-    const cost = connection.estimateCost();
-    // simpleCostModel: 100 - 20 (2 constraints) = 80
-    expect(cost).toBe(80);
+    expect(connection.estimateCost()).toBe(expectedCost(2));
   });
 
   test('multiple branch patterns sum costs', () => {
-    const source = new PlannerSource('users', simpleCostModel);
-    const connection = source.connect([['id', 'asc']], undefined);
+    const connection = createConnection();
 
-    // Each branch pattern calls estimateCost once
-    // Path [0] with constraint {userId: undefined}
-    connection.propagateConstraints([0], {userId: undefined}, 'unpinned');
-    // Path [1] with constraint {postId: undefined}
-    connection.propagateConstraints([1], {postId: undefined}, 'unpinned');
+    connection.propagateConstraints([0], CONSTRAINTS.userId, 'unpinned');
+    connection.propagateConstraints([1], CONSTRAINTS.postId, 'unpinned');
 
-    const cost = connection.estimateCost();
-    // simpleCostModel: (100 - 10) + (100 - 10) = 180
-    expect(cost).toBe(180);
+    expect(connection.estimateCost()).toBe(expectedCost(1) + expectedCost(1));
   });
 
   test('reset() clears pinned state', () => {
-    const source = new PlannerSource('users', simpleCostModel);
-    const connection = source.connect([['id', 'asc']], undefined);
+    const connection = createConnection();
 
     connection.pinned = true;
     expect(connection.pinned).toBe(true);
@@ -74,18 +59,13 @@ suite('PlannerConnection', () => {
   });
 
   test('reset() clears propagated constraints', () => {
-    const source = new PlannerSource('users', simpleCostModel);
-    const connection = source.connect([['id', 'asc']], undefined);
+    const connection = createConnection();
 
-    const constraint: PlannerConstraint = {userId: undefined};
-    connection.propagateConstraints([0], constraint, 'unpinned');
-
-    let cost = connection.estimateCost();
-    expect(cost).toBe(90); // Cost reduced due to constraint
+    connection.propagateConstraints([0], CONSTRAINTS.userId, 'unpinned');
+    expect(connection.estimateCost()).toBe(expectedCost(1));
 
     connection.reset();
 
-    cost = connection.estimateCost();
-    expect(cost).toBe(100); // Cost back to base after reset
+    expect(connection.estimateCost()).toBe(BASE_COST);
   });
 });

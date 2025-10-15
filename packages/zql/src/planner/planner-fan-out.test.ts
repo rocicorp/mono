@@ -1,30 +1,24 @@
 import {expect, suite, test} from 'vitest';
-import {PlannerSource} from './planner-source.ts';
-import {PlannerFanOut} from './planner-fan-out.ts';
-import {simpleCostModel} from './test/helpers.ts';
+import {
+  CONSTRAINTS,
+  createConnection,
+  createFanOut,
+  expectedCost,
+} from './test/helpers.ts';
 
 suite('PlannerFanOut', () => {
   test('initial state is FO type', () => {
-    const source = new PlannerSource('users', simpleCostModel);
-    const input = source.connect([['id', 'asc']], undefined);
-
-    const fanOut = new PlannerFanOut(input);
+    const {fanOut} = createFanOut();
 
     expect(fanOut.kind).toBe('fan-out');
     expect(fanOut.type).toBe('FO');
   });
 
   test('can add outputs', () => {
-    const source = new PlannerSource('users', simpleCostModel);
-    const input = source.connect([['id', 'asc']], undefined);
+    const {fanOut} = createFanOut();
+    const output1 = createConnection('posts');
+    const output2 = createConnection('comments');
 
-    const source1 = new PlannerSource('posts', simpleCostModel);
-    const output1 = source1.connect([['id', 'asc']], undefined);
-
-    const source2 = new PlannerSource('comments', simpleCostModel);
-    const output2 = source2.connect([['id', 'asc']], undefined);
-
-    const fanOut = new PlannerFanOut(input);
     fanOut.addOutput(output1);
     fanOut.addOutput(output2);
 
@@ -34,10 +28,7 @@ suite('PlannerFanOut', () => {
   });
 
   test('can be converted to UFO', () => {
-    const source = new PlannerSource('users', simpleCostModel);
-    const input = source.connect([['id', 'asc']], undefined);
-
-    const fanOut = new PlannerFanOut(input);
+    const {fanOut} = createFanOut();
     expect(fanOut.type).toBe('FO');
 
     fanOut.convertToUFO();
@@ -45,24 +36,15 @@ suite('PlannerFanOut', () => {
   });
 
   test('propagateConstraints() forwards to input', () => {
-    const source = new PlannerSource('users', simpleCostModel);
-    const input = source.connect([['id', 'asc']], undefined);
+    const {input, fanOut} = createFanOut();
 
-    const fanOut = new PlannerFanOut(input);
+    fanOut.propagateConstraints([0], CONSTRAINTS.userId, 'unpinned');
 
-    fanOut.propagateConstraints([0], {userId: undefined}, 'unpinned');
-
-    // Input should receive the constraint
-    const cost = input.estimateCost();
-    // simpleCostModel: 100 - 10 (1 constraint) = 90
-    expect(cost).toBe(90);
+    expect(input.estimateCost()).toBe(expectedCost(1));
   });
 
   test('reset() restores FO type', () => {
-    const source = new PlannerSource('users', simpleCostModel);
-    const input = source.connect([['id', 'asc']], undefined);
-
-    const fanOut = new PlannerFanOut(input);
+    const {fanOut} = createFanOut();
     fanOut.convertToUFO();
     expect(fanOut.type).toBe('UFO');
 
