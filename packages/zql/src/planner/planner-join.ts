@@ -3,7 +3,7 @@ import {
   mergeConstraints,
   type PlannerConstraint,
 } from './planner-constraint.ts';
-import type {FromType, PlannerNode} from './planner-node.ts';
+import type {ConstraintPropagationType, PlannerNode} from './planner-node.ts';
 
 /**
  * Represents a join between two data streams (parent and child).
@@ -29,7 +29,7 @@ import type {FromType, PlannerNode} from './planner-node.ts';
  * # Lifecycle
  * 1. Construct with immutable structure (parent, child, constraints, flippability)
  * 2. Wire to output node during graph construction
- * 3. Planning calls maybeFlip() based on connection selection order
+ * 3. Planning calls flipIfNeeded() based on connection selection order
  * 4. pin() locks the join type once chosen
  * 5. reset() clears mutable state (type → 'left', pinned → false)
  */
@@ -80,7 +80,7 @@ export class PlannerJoin {
     return this.#output;
   }
 
-  maybeFlip(input: PlannerNode): void {
+  flipIfNeeded(input: PlannerNode): void {
     assert(this.#pinned === false, 'Cannot flip a pinned join');
     if (input === this.#child) {
       this.flip();
@@ -119,11 +119,11 @@ export class PlannerJoin {
   propagateConstraints(
     branchPattern: number[],
     constraint: PlannerConstraint | undefined,
-    from: FromType,
+    from: ConstraintPropagationType,
   ): void {
     if (this.#pinned) {
       assert(
-        from === 'pinned',
+        from === 'pinned' || from === 'terminus',
         'It should be impossible for a pinned join to receive constraints from a non-pinned node',
       );
     }

@@ -1,6 +1,6 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
-import type {FromType, PlannerNode} from './planner-node.ts';
+import type {ConstraintPropagationType, PlannerNode} from './planner-node.ts';
 
 /**
  * A PlannerFanIn node can either be a normal FanIn or UnionFanIn.
@@ -53,7 +53,7 @@ export class PlannerFanIn {
   propagateConstraints(
     branchPattern: number[],
     constraint: PlannerConstraint | undefined,
-    from: FromType,
+    from: ConstraintPropagationType,
   ): void {
     if (this.#type === 'FI') {
       const updatedPattern = [0, ...branchPattern];

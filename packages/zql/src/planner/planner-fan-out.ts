@@ -1,5 +1,5 @@
 import type {PlannerConstraint} from './planner-constraint.ts';
-import type {FromType, PlannerNode} from './planner-node.ts';
+import type {ConstraintPropagationType, PlannerNode} from './planner-node.ts';
 
 export class PlannerFanOut {
   readonly kind = 'fan-out' as const;
@@ -27,7 +27,7 @@ export class PlannerFanOut {
   propagateConstraints(
     branchPattern: number[],
     constraint: PlannerConstraint | undefined,
-    from: FromType,
+    from: ConstraintPropagationType,
   ): void {
     // Check if the input is pinned and adjust the 'from' value accordingly
     const inputFrom =

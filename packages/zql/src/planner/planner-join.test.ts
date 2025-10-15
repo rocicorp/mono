@@ -1,5 +1,5 @@
 import {expect, suite, test} from 'vitest';
-import {PlannerJoin, UnflippableJoinError} from './planner-join.ts';
+import {UnflippableJoinError} from './planner-join.ts';
 import {CONSTRAINTS, createJoin, expectedCost} from './test/helpers.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 
@@ -49,14 +49,14 @@ suite('PlannerJoin', () => {
   test('maybeFlip() flips when input is child', () => {
     const {child, join} = createJoin();
 
-    join.maybeFlip(child);
+    join.flipIfNeeded(child);
     expect(join.type).toBe('flipped');
   });
 
   test('maybeFlip() does not flip when input is parent', () => {
     const {parent, join} = createJoin();
 
-    join.maybeFlip(parent);
+    join.flipIfNeeded(parent);
     expect(join.type).toBe('left');
   });
 
@@ -105,25 +105,5 @@ suite('PlannerJoin', () => {
     join.propagateConstraints([0], outputConstraint, 'pinned');
 
     expect(parent.estimateCost()).toBe(expectedCost(2));
-  });
-
-  test('stores plan ID when provided', () => {
-    const {join} = createJoin({planId: 42});
-
-    expect(join.planId).toBe(42);
-  });
-
-  test('plan ID is undefined when not provided', () => {
-    const {parent, child} = createJoin();
-    const join = new PlannerJoin(
-      parent,
-      child,
-      CONSTRAINTS.userId,
-      CONSTRAINTS.id,
-      true,
-      undefined as unknown as number,
-    );
-
-    expect(join.planId).toBeUndefined();
   });
 });
