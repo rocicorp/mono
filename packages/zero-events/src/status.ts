@@ -18,7 +18,7 @@ export const ZERO_STATUS_EVENT_PREFIX = 'zero/events/status/';
  * needing to understand subtype-specific fields.
  */
 export interface StatusEvent extends ZeroEvent {
-  type: `zero/events/status/${string}`;
+  type: `${typeof ZERO_STATUS_EVENT_PREFIX}${string}`;
 
   /**
    * The component of the zero-cache to which the event pertains,
@@ -82,7 +82,7 @@ export const REPLICATION_STATUS_EVENT_V1_TYPE =
   'zero/events/status/replication/v1';
 
 export interface ReplicationStatusEvent extends StatusEvent {
-  type: 'zero/events/status/replication/v1';
+  type: typeof REPLICATION_STATUS_EVENT_V1_TYPE;
   component: 'replication';
   stage: ReplicationStage;
   state: ReplicationState;
