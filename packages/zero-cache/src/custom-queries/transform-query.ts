@@ -1,3 +1,4 @@
+/// <reference path="../types/urlpattern.d.ts" />
 import type {LogContext} from '@rocicorp/logger';
 import type {TransformedAndHashed} from '../auth/read-authorizer.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
@@ -60,7 +61,7 @@ export class CustomQueryTransformer {
     this.#config = config;
     this.#shard = shard;
     this.#lc = lc;
-    this.#urlPatterns = compileUrlPatterns(lc, config.url);
+    this.#urlPatterns = compileUrlPatterns(config.url);
     this.#cache = new TimedCache(5000); // 5 seconds cache TTL
   }
 

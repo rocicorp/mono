@@ -1,3 +1,4 @@
+/// <reference path="../types/urlpattern.d.ts" />
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {upstreamSchema, type ShardID} from '../types/shards.ts';
@@ -12,10 +13,7 @@ const reservedParams = ['schema', 'appID'];
  *
  * @throws Error if any pattern is an invalid URLPattern
  */
-export function compileUrlPatterns(
-  _lc: LogContext,
-  patterns: string[],
-): URLPattern[] {
+export function compileUrlPatterns(patterns: string[]): URLPattern[] {
   const compiled: URLPattern[] = [];
 
   for (const pattern of patterns) {

@@ -1,3 +1,4 @@
+/// <reference path="../../types/urlpattern.d.ts" />
 import type {LogContext} from '@rocicorp/logger';
 import {groupBy} from '../../../../shared/src/arrays.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
@@ -214,7 +215,7 @@ class PushWorker {
   ) {
     this.#pushURLs = pushURL;
     this.#lc = lc.withContext('component', 'pusher');
-    this.#pushURLPatterns = compileUrlPatterns(this.#lc, pushURL);
+    this.#pushURLPatterns = compileUrlPatterns(pushURL);
     this.#apiKey = apiKey;
     this.#queue = queue;
     this.#config = config;
