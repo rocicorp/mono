@@ -637,18 +637,18 @@ describe('view-syncer/cvr', () => {
     expect(reloaded).toEqual(updated);
 
     // Let the takeover write that's fired during load to reach PG.
-    await sleep(100);
-
-    await expectState(cvrDb, {
-      ...initialState,
-      instances: [
-        {
-          ...initialState.instances[0],
-          owner: 'my-task',
-          grantedAt: 1709251200000,
-        },
-      ],
-    });
+    await vi.waitFor(() =>
+      expectState(cvrDb, {
+        ...initialState,
+        instances: [
+          {
+            ...initialState.instances[0],
+            owner: 'my-task',
+            grantedAt: 1709251200000,
+          },
+        ],
+      }),
+    );
   });
 
   test('detects concurrent modification', async () => {
@@ -5304,16 +5304,19 @@ describe('view-syncer/cvr', () => {
     const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
     expect(reloaded).toEqual(cvr);
 
-    await expectState(cvrDb, {
-      ...initialState,
-      instances: [
-        {
-          ...initialState.instances[0],
-          owner: 'my-task',
-          grantedAt: 1709251200000,
-        },
-      ],
-    });
+    // Relies on an async homing signal (with no explicit flush, so use waitFor)
+    await vi.waitFor(() =>
+      expectState(cvrDb, {
+        ...initialState,
+        instances: [
+          {
+            ...initialState.instances[0],
+            owner: 'my-task',
+            grantedAt: 1709251200000,
+          },
+        ],
+      }),
+    );
   });
 
   describe('markDesiredQueryAsInactive', () => {
