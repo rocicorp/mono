@@ -16,6 +16,6 @@ export class PlannerSource {
   }
 
   connect(sort: Ordering, filters: Condition | undefined): PlannerConnection {
-    return new PlannerConnection(this.#model, sort, filters);
+    return new PlannerConnection(this.name, this.#model, sort, filters);
   }
 }

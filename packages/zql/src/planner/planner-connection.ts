@@ -56,6 +56,7 @@ export class PlannerConnection {
   readonly #sort: Ordering;
   readonly #filters: Condition | undefined;
   readonly #model: ConnectionCostModel;
+  readonly table: string;
   #output?: PlannerNode | undefined; // Set once during graph construction
 
   // ========================================================================
@@ -80,11 +81,13 @@ export class PlannerConnection {
   #costDirty = true;
 
   constructor(
+    table: string,
     model: ConnectionCostModel,
     sort: Ordering,
     filters: Condition | undefined,
   ) {
     this.pinned = false;
+    this.table = table;
     this.#sort = sort;
     this.#filters = filters;
     this.#model = model;
@@ -146,10 +149,10 @@ export class PlannerConnection {
     // Calculate fresh cost
     let total = 0;
     if (this.#constraints.size === 0) {
-      total = this.#model(this.#sort, this.#filters, undefined);
+      total = this.#model(this.table, this.#sort, this.#filters, undefined);
     } else {
       for (const c of this.#constraints.values()) {
-        total += this.#model(this.#sort, this.#filters, c);
+        total += this.#model(this.table, this.#sort, this.#filters, c);
       }
     }
 
@@ -193,6 +196,7 @@ export class PlannerConnection {
 }
 
 export type ConnectionCostModel = (
+  table: string,
   sort: Ordering,
   filters: Condition | undefined,
   constraint: PlannerConstraint | undefined,

@@ -42,6 +42,7 @@ export const CONSTRAINTS = {
  * Ignores sort and filters for simplicity.
  */
 export const simpleCostModel: ConnectionCostModel = (
+  _table: string,
   _sort: Ordering,
   _filters: Condition | undefined,
   constraint: PlannerConstraint | undefined,
