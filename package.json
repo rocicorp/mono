@@ -27,7 +27,7 @@
     "verify-deps:fix": "cd tools/verify-package-deps && npm run verify:fix"
   },
   "devDependencies": {
-    "@rocicorp/prettier-config": "^0.3.0",
+    "@rocicorp/prettier-config": "^0.4.0",
     "@vitest/coverage-v8": "3.2.4",
     "@vitest/runner": "3.2.4",
     "oxlint": "^1.22.0",

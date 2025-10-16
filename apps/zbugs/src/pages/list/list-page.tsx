@@ -4,6 +4,7 @@ import classNames from 'classnames';
 import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -11,7 +12,7 @@ import React, {
   type KeyboardEvent,
 } from 'react';
 import {useDebouncedCallback} from 'use-debounce';
-import {useParams, useSearch} from 'wouter';
+import {useLocation, useParams, useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {queries, type ListContext} from '../../../shared/queries.ts';
@@ -29,6 +30,7 @@ import {useZero} from '../../hooks/use-zero.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
+import {useListContext} from '../../routes.tsx';
 import {preload} from '../../zero-preload.ts';
 
 let firstRowRendered = false;
@@ -78,7 +80,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const labels = useMemo(() => qs.getAll('label'), [qs]);
 
   // Cannot drive entirely by URL params because we need to debounce the changes
-  // while typing ito input box.
+  // while typing into input box.
   const textFilterQuery = qs.get('q');
   const [textFilter, setTextFilter] = useState(textFilterQuery);
   useEffect(() => {
@@ -150,7 +152,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   // For detecting if the base query, i.e. ignoring pagination parameters, has
   // changed.
-
   const baseQ = useMemo(
     () =>
       queries.issueListV2({
@@ -169,6 +170,9 @@ export function ListPage({onReady}: {onReady: () => void}) {
     setAnchor(TOP_ANCHOR);
   }, [baseQ]);
 
+  const [totalsForBaseQ, setTotalsForBaseQ] = useState<unknown | undefined>(
+    undefined,
+  );
   const [estimatedTotal, setEstimatedTotal] = useState(0);
   const [total, setTotal] = useState<number | undefined>(undefined);
 
@@ -185,23 +189,44 @@ export function ListPage({onReady}: {onReady: () => void}) {
     }
   }, [issues.length, issuesResult.type, onReady]);
 
-  useEffect(() => {
+  // useLayoutEffect to avoid a render at the old scroll position which
+  // will cause pages to get to that position to start to be loaded.
+  useLayoutEffect(() => {
+    listRef.current?.scrollTo(0, 0);
+    setAnchor(TOP_ANCHOR);
+  }, [baseQ]);
+
+  // useLayoutEffect to avoid a 1 frame render of the old counts
+  useLayoutEffect(() => {
+    const eTotal = anchor.index + issues.length;
+    if (baseQ !== totalsForBaseQ) {
+      setEstimatedTotal(eTotal);
+      setTotal(undefined);
+      setTotalsForBaseQ(baseQ);
+    }
     if (anchor.direction !== 'forward') {
       return;
     }
-    const eTotal = anchor.index + issues.length;
     if (eTotal > estimatedTotal) {
       setEstimatedTotal(eTotal);
     }
     if (issuesResult.type === 'complete' && issues.length < pageSize) {
       setTotal(eTotal);
     }
-  }, [anchor, issuesResult.type, issues, estimatedTotal, pageSize]);
+  }, [
+    baseQ,
+    totalsForBaseQ,
+    anchor,
+    issuesResult.type,
+    issues,
+    estimatedTotal,
+    pageSize,
+  ]);
 
   useEffect(() => {
     if (issuesResult.type === 'complete') {
       recordPageLoad('list-page');
-      preload(z);
+      preload(projectName, z);
     }
   }, [login.loginState?.decoded, issuesResult.type, z]);
 
@@ -212,30 +237,28 @@ export function ListPage({onReady}: {onReady: () => void}) {
     title = status.slice(0, 1).toUpperCase() + status.slice(1) + ' Issues';
   }
 
-  const listContext: ListContext = {
-    href: window.location.href,
-    title,
-    params: {
-      open,
-      assignee,
-      creator,
-      labels,
-      textFilter: textFilter ?? null,
-      sortField,
-      sortDirection,
-    },
-  };
+  const [location] = useLocation();
+  const listContext: ListContext = useMemo(
+    () => ({
+      href: `${location}?${search}`,
+      title,
+      params: listContextParams,
+    }),
+    [location, search, title, listContextParams],
+  );
+
+  const {setListContext} = useListContext();
+  useEffect(() => {
+    setListContext(listContext);
+  }, [listContext]);
 
   const onDeleteFilter = (e: React.MouseEvent) => {
     const target = e.currentTarget;
     const key = target.getAttribute('data-key');
     const value = target.getAttribute('data-value');
-    const entries = [...new URLSearchParams(qs).entries()];
-    const index = entries.findIndex(([k, v]) => k === key && v === value);
-    if (index !== -1) {
-      entries.splice(index, 1);
+    if (key && value) {
+      navigate(removeParam(qs, key, value));
     }
-    navigate('?' + new URLSearchParams(entries).toString());
   };
 
   const onFilter = useCallback(
@@ -283,9 +306,9 @@ export function ListPage({onReady}: {onReady: () => void}) {
   };
 
   const clearAndHideSearch = () => {
-    setTextFilter('');
-    updateTextFilterQueryString('');
+    setTextFilter(null);
     setForceSearchMode(false);
+    navigate(removeParam(qs, 'q'));
   };
 
   const Row = ({index, style}: {index: number; style: CSSProperties}) => {
@@ -334,7 +357,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
             <Link
               key={label.id}
               className="pill label"
-              href={`/?label=${label.name}`}
+              href={`?label=${label.name}`}
             >
               {label.name}
             </Link>
@@ -431,9 +454,13 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const searchBox = useRef<HTMLHeadingElement>(null);
   const startSearchButton = useRef<HTMLButtonElement>(null);
   useKeypress('/', () => setForceSearchMode(true));
-  useClickOutside([searchBox, startSearchButton], () =>
-    setForceSearchMode(false),
-  );
+  useClickOutside([searchBox, startSearchButton], () => {
+    if (Boolean(textFilter)) {
+      setForceSearchMode(false);
+    } else {
+      clearAndHideSearch();
+    }
+  });
   const handleSearchKeyUp = (e: KeyboardEvent) => {
     if (e.key === 'Escape') {
       clearAndHideSearch();
@@ -482,9 +509,10 @@ export function ListPage({onReady}: {onReady: () => void}) {
           ) : (
             <span className="list-view-title">{title}</span>
           )}
-          {issuesResult.type === 'complete' || issues.length > 0 ? (
+          {issuesResult.type === 'complete' || total || estimatedTotal ? (
             <span className="issue-count">
-              {total ?? `${estimatedTotal - (estimatedTotal % 50)}+`}
+              {total ??
+                `${estimatedTotal < 50 ? estimatedTotal : estimatedTotal - (estimatedTotal % 50)}+`}
             </span>
           ) : null}
         </h1>
@@ -572,3 +600,13 @@ const addParam = (
   newParams[mode === 'exclusive' ? 'set' : 'append'](key, value);
   return '?' + newParams.toString();
 };
+
+function removeParam(
+  qs: URLSearchParams,
+  key: string,
+  value?: string | undefined,
+) {
+  const searchParams = new URLSearchParams(qs);
+  searchParams.delete(key, value);
+  return '?' + searchParams.toString();
+}

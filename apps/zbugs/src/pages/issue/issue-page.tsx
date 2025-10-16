@@ -63,7 +63,7 @@ import {
 import {LRUCache} from '../../lru-cache.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {CACHE_NAV} from '../../query-cache-policy.ts';
-import {links, type ZbugsHistoryState} from '../../routes.ts';
+import {links, useListContext, type ZbugsHistoryState} from '../../routes.tsx';
 import {preload} from '../../zero-preload.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
@@ -91,6 +91,11 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
   const listContext = zbugsHistoryState?.zbugsListContext;
 
+  const {setListContext} = useListContext();
+  useEffect(() => {
+    setListContext(listContext);
+  }, [listContext]);
+
   const [issue, issueResult] = useQuery(
     issueDetail({idField, id, userID: z.userID}),
     CACHE_NAV,
@@ -112,7 +117,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   useEffect(() => {
     if (issueResult.type === 'complete') {
       recordPageLoad('issue-page');
-      preload(z);
+      preload(projectName, z);
     }
   }, [issueResult.type, login.loginState?.decoded, z]);
 
@@ -541,6 +546,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
           <div className="sidebar-item">
             <p className="issue-detail-label">Assignee</p>
             <UserPicker
+              projectName={projectName}
               disabled={!canEdit}
               selected={{login: displayed.assignee?.login}}
               placeholder="Assign to..."

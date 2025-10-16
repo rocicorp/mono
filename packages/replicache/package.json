@@ -20,8 +20,8 @@
     "bench:watch": "vitest bench --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
-    "check-types": "tsc && tsc --project tool/tsconfig.json",
-    "check-types:watch": "tsc --watch",
+    "check-types": "tsc -p tsconfig.json -p tsconfig.build.json -p tool/tsconfig.json",
+    "check-types:watch": "tsc -p tsconfig.json -p tsconfig.build.json -p tool/tsconfig.json --watch",
     "lint": "oxlint --type-aware src/",
     "build": "rm -rf out && tsc -p tsconfig.build.json && npx tsx tool/build.ts",
     "build-bundle-sizes": "rm -rf out && npx tsx tool/build.ts --bundle-sizes",
@@ -36,16 +36,16 @@
     "@rocicorp/resolver": "^1.0.2"
   },
   "devDependencies": {
-    "@op-engineering/op-sqlite": "^15.0.1",
-    "@rocicorp/prettier-config": "^0.3.0",
-    "@rocicorp/zero-sqlite3": "^1.0.9",
+    "@op-engineering/op-sqlite": ">=15",
+    "@rocicorp/prettier-config": "^0.4.0",
+    "@rocicorp/zero-sqlite3": "^1.0.11",
     "@types/command-line-usage": "^5.0.2",
     "@vitest/runner": "3.2.4",
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
     "compare-utf8": "^0.1.1",
-    "esbuild": "^0.25.0",
-    "expo-sqlite": "^15.2.14",
+    "esbuild": "^0.25.10",
+    "expo-sqlite": ">=15",
     "fetch-mock": "^9.11.0",
     "playwright": "^1.53.2",
     "shared": "0.0.0",
@@ -53,9 +53,9 @@
     "vitest": "3.2.4"
   },
   "peerDependencies": {
-    "expo-sqlite": "^15.2.14",
-    "@op-engineering/op-sqlite": "^15.0.1",
-    "@rocicorp/zero-sqlite3": "^1.0.9"
+    "@op-engineering/op-sqlite": ">=15",
+    "@rocicorp/zero-sqlite3": "^1.0.11",
+    "expo-sqlite": ">=15"
   },
   "peerDependenciesMeta": {
     "expo-sqlite": {

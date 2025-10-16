@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "check-types": "tsc && tsc -p tsconfig.node.json",
-    "check-types:watch": "tsc --watch",
+    "check-types": "tsc -p tsconfig.json -p tsconfig.node.json",
+    "check-types:watch": "tsc -p tsconfig.json -p tsconfig.node.json --watch",
     "db-up": "cd docker && docker compose up",
     "db-down": "cd docker && docker compose down",
     "db-migrate": "drizzle-kit migrate",
@@ -66,7 +66,7 @@
     "zod": "^4.1.11"
   },
   "devDependencies": {
-    "@rocicorp/prettier-config": "^0.3.0",
+    "@rocicorp/prettier-config": "^0.4.0",
     "@tailwindcss/forms": "^0.5.0",
     "@types/js-cookie": "^3.0.6",
     "@types/k6": "^0.53.2",

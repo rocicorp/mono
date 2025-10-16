@@ -1,3 +1,4 @@
+import 'urlpattern-polyfill';
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {upstreamSchema, type ShardID} from '../types/shards.ts';
@@ -6,6 +7,26 @@ import {ErrorForClient} from '../types/error-for-client.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 
 const reservedParams = ['schema', 'appID'];
+
+/**
+ * Compiles and validates a URLPattern from configuration.
+ *
+ * Patterns must be full URLs (e.g., "https://api.example.com/endpoint").
+ * URLPattern automatically sets search and hash to wildcard ('*'),
+ * which means query parameters and fragments are ignored during matching.
+ *
+ * @throws Error if the pattern is an invalid URLPattern
+ */
+export function compileUrlPattern(pattern: string): URLPattern {
+  try {
+    return new URLPattern(pattern);
+  } catch (e) {
+    throw new Error(
+      `Invalid URLPattern in URL configuration: "${pattern}". Error: ${e instanceof Error ? e.message : String(e)}`,
+    );
+  }
+}
+
 export type HeaderOptions = {
   apiKey?: string | undefined;
   token?: string | undefined;
@@ -15,17 +36,16 @@ export type HeaderOptions = {
 export async function fetchFromAPIServer(
   lc: LogContext,
   url: string,
-  allowedUrls: string[],
+  allowedUrlPatterns: URLPattern[],
   shard: ShardID,
   headerOptions: HeaderOptions,
   body: ReadonlyJSONValue,
 ) {
   lc.info?.('fetchFromAPIServer called', {
     url,
-    allowedUrls,
   });
 
-  if (!urlMatch(url, allowedUrls)) {
+  if (!urlMatch(url, allowedUrlPatterns)) {
     throw new Error(
       `URL "${url}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
     );
@@ -89,58 +109,25 @@ export async function fetchFromAPIServer(
 }
 
 /**
- * Returns true if:
- * 1. the url is an exact match with one of the allowedUrls
- * 2. an "allowedUrl" has a wildcard for a subdomain, e.g. "https://*.example.com" and the url matches that pattern
+ * Returns true if the url matches one of the allowedUrlPatterns.
  *
- * Valid wildcard patterns:
- * - "https://*.example.com" matches "https://api.example.com" and "https://www.example.com"
- * - "https://*.example.com" does not match "https://example.com" (no subdomain)
- * - "https://*.example.com" does not match "https://api.example.com/path" (no trailing path)
- * - "https://*.*.example.com" matches "https://api.v1.example.com" and "https://www.v2.example.com"
- * - "https://*.*.example.com" does not match "https://api.example.com" (only one subdomain)
+ * URLPattern automatically ignores query parameters and hash fragments during matching
+ * because it sets search and hash to wildcard ('*') by default.
+ *
+ * Example URLPattern patterns:
+ * - "https://api.example.com/endpoint" - Exact match for a specific URL
+ * - "https://*.example.com/endpoint" - Matches any single subdomain (e.g., "https://api.example.com/endpoint")
+ * - "https://*.*.example.com/endpoint" - Matches two subdomains (e.g., "https://api.v1.example.com/endpoint")
+ * - "https://api.example.com/*" - Matches any path under /
+ * - "https://api.example.com/:version/endpoint" - Matches with named parameter (e.g., "https://api.example.com/v1/endpoint")
  */
-export function urlMatch(url: string, allowedUrls: string[]): boolean {
-  assert(url.includes('*') === false, 'URL to fetch may not include `*`');
-  // ignore query parameters in the URL
-  url = url.split('?')[0];
-
-  for (let allowedUrl of allowedUrls) {
-    // ignore query parameters in the allowed URL
-    allowedUrl = allowedUrl.split('?')[0];
-    if (url === allowedUrl) {
-      return true; // exact match
-    }
-
-    const parts = allowedUrl.split('*');
-
-    if (parts.length === 1) {
-      continue; // no wildcard, already checked above
-    }
-
-    let currentStr = url;
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      if (!currentStr.startsWith(part)) {
-        break;
-      }
-
-      currentStr = currentStr.slice(part.length);
-      if (currentStr === '' && i < parts.length - 1) {
-        // if we reach the end of the string but still have more parts to match, it's not a match
-        break;
-      } else if (currentStr === '' && i === parts.length - 1) {
-        // if we reach the end of the string and this is the last part, it's a match
-        return true;
-      }
-
-      // consume the rest of the string up to a .
-      const nextDotIndex = currentStr.indexOf('.');
-      if (nextDotIndex === -1) {
-        // no dot? then the wildcard rules don't apply, so we can stop checking
-        break;
-      }
-      currentStr = currentStr.slice(nextDotIndex);
+export function urlMatch(
+  url: string,
+  allowedUrlPatterns: URLPattern[],
+): boolean {
+  for (const pattern of allowedUrlPatterns) {
+    if (pattern.test(url)) {
+      return true;
     }
   }
   return false;

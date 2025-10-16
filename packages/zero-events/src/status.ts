@@ -1,5 +1,5 @@
 import type {ZeroEvent} from './index.ts';
-import type {Extend, JSONObject} from './util.ts';
+import type {JSONObject} from './json.ts';
 
 export type Status = 'OK' | 'ERROR';
 
@@ -17,39 +17,36 @@ export const ZERO_STATUS_EVENT_PREFIX = 'zero/events/status/';
  * "zero/events/status/*" and display general status information without
  * needing to understand subtype-specific fields.
  */
-export type StatusEvent = Extend<
-  ZeroEvent,
-  {
-    type: `zero/events/status/${string}`;
+export interface StatusEvent extends ZeroEvent {
+  type: `${typeof ZERO_STATUS_EVENT_PREFIX}${string}`;
 
-    /**
-     * The component of the zero-cache to which the event pertains,
-     * e.g. "replication".
-     */
-    component: string;
+  /**
+   * The component of the zero-cache to which the event pertains,
+   * e.g. "replication".
+   */
+  component: string;
 
-    /** Whether the component is healthy. */
-    status: Status;
+  /** Whether the component is healthy. */
+  status: Status;
 
-    /**
-     * The stage describing the component's current state. This is meant to be
-     * both machine and human readable (e.g. a single work serving as a well-known
-     * constant).
-     */
-    stage: string;
+  /**
+   * The stage describing the component's current state. This is meant to be
+   * both machine and human readable (e.g. a single work serving as a well-known
+   * constant).
+   */
+  stage: string;
 
-    /**
-     * An optional, human readable description.
-     */
-    description?: string | undefined;
+  /**
+   * An optional, human readable description.
+   */
+  description?: string | undefined;
 
-    /** Structured data describing the state of the component. */
-    state?: JSONObject | undefined;
+  /** Structured data describing the state of the component. */
+  state?: JSONObject | undefined;
 
-    /** Error details should be supplied for an 'ERROR' status message. */
-    errorDetails?: JSONObject | undefined;
-  }
->;
+  /** Error details should be supplied for an 'ERROR' status message. */
+  errorDetails?: JSONObject | undefined;
+}
 
 export type ReplicatedColumn = {
   column: string;
@@ -84,12 +81,9 @@ export type ReplicationStage = 'Initializing' | 'Indexing' | 'Replicating';
 export const REPLICATION_STATUS_EVENT_V1_TYPE =
   'zero/events/status/replication/v1';
 
-export type ReplicationStatusEvent = Extend<
-  StatusEvent,
-  {
-    type: 'zero/events/status/replication/v1';
-    component: 'replication';
-    stage: ReplicationStage;
-    state: ReplicationState;
-  }
->;
+export interface ReplicationStatusEvent extends StatusEvent {
+  type: typeof REPLICATION_STATUS_EVENT_V1_TYPE;
+  component: 'replication';
+  stage: ReplicationStage;
+  state: ReplicationState;
+}

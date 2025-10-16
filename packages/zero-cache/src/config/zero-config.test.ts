@@ -47,10 +47,38 @@ test('zero-cache --help', () => {
                                                                    DEPRECATED. Use mutate-url instead.                                                               
                                                                    The URL of the API server to which zero-cache will push mutations.                                
                                                                                                                                                                      
-                                                                   * is allowed if you would like to allow the client to specify a subdomain to use.                 
-                                                                   e.g., *.example.com/api/mutate                                                                    
-                                                                   You can specify multiple URLs as well which the client can choose from.                           
-                                                                   e.g., ["https://api1.example.com/mutate", "https://api2.example.com/mutate"]                      
+                                                                   IMPORTANT: URLs are matched using URLPattern, a standard Web API.                                 
+                                                                                                                                                                     
+                                                                   Pattern Syntax:                                                                                   
+                                                                     URLPattern uses a simple and intuitive syntax similar to Express routes.                        
+                                                                     Wildcards and named parameters make it easy to match multiple URLs.                             
+                                                                                                                                                                     
+                                                                   Basic Examples:                                                                                   
+                                                                     Exact URL match:                                                                                
+                                                                       "https://api.example.com/mutate"                                                              
+                                                                     Any subdomain using wildcard:                                                                   
+                                                                       "https://*.example.com/mutate"                                                                
+                                                                     Multiple subdomain levels:                                                                      
+                                                                       "https://*.*.example.com/mutate"                                                              
+                                                                     Any path under a domain:                                                                        
+                                                                       "https://api.example.com/*"                                                                   
+                                                                     Named path parameters:                                                                          
+                                                                       "https://api.example.com/:version/mutate"                                                     
+                                                                       ↳ Matches "https://api.example.com/v1/mutate", "https://api.example.com/v2/mutate", etc.      
+                                                                                                                                                                     
+                                                                   Advanced Patterns:                                                                                
+                                                                     Optional path segments:                                                                         
+                                                                       "https://api.example.com/:path?"                                                              
+                                                                     Regex in segments (for specific patterns):                                                      
+                                                                       "https://api.example.com/:version(v\\d+)/mutate"                                               
+                                                                       ↳ Matches only "v" followed by digits                                                         
+                                                                                                                                                                     
+                                                                   Multiple patterns:                                                                                
+                                                                     ["https://api1.example.com/mutate", "https://api2.example.com/mutate"]                          
+                                                                                                                                                                     
+                                                                   Note: Query parameters and URL fragments (#) are automatically ignored during matching.           
+                                                                                                                                                                     
+                                                                   For full URLPattern syntax, see: https://developer.mozilla.org/en-US/docs/Web/API/URLPattern      
                                                                                                                                                                      
      --push-api-key string                                         optional                                                                                          
        ZERO_PUSH_API_KEY env                                                                                                                                         
@@ -67,10 +95,38 @@ test('zero-cache --help', () => {
                                                                                                                                                                      
                                                                    The URL of the API server to which zero-cache will push mutations.                                
                                                                                                                                                                      
-                                                                   * is allowed if you would like to allow the client to specify a subdomain to use.                 
-                                                                   e.g., *.example.com/api/mutate                                                                    
-                                                                   You can specify multiple URLs as well which the client can choose from.                           
-                                                                   e.g., ["https://api1.example.com/mutate", "https://api2.example.com/mutate"]                      
+                                                                   IMPORTANT: URLs are matched using URLPattern, a standard Web API.                                 
+                                                                                                                                                                     
+                                                                   Pattern Syntax:                                                                                   
+                                                                     URLPattern uses a simple and intuitive syntax similar to Express routes.                        
+                                                                     Wildcards and named parameters make it easy to match multiple URLs.                             
+                                                                                                                                                                     
+                                                                   Basic Examples:                                                                                   
+                                                                     Exact URL match:                                                                                
+                                                                       "https://api.example.com/mutate"                                                              
+                                                                     Any subdomain using wildcard:                                                                   
+                                                                       "https://*.example.com/mutate"                                                                
+                                                                     Multiple subdomain levels:                                                                      
+                                                                       "https://*.*.example.com/mutate"                                                              
+                                                                     Any path under a domain:                                                                        
+                                                                       "https://api.example.com/*"                                                                   
+                                                                     Named path parameters:                                                                          
+                                                                       "https://api.example.com/:version/mutate"                                                     
+                                                                       ↳ Matches "https://api.example.com/v1/mutate", "https://api.example.com/v2/mutate", etc.      
+                                                                                                                                                                     
+                                                                   Advanced Patterns:                                                                                
+                                                                     Optional path segments:                                                                         
+                                                                       "https://api.example.com/:path?"                                                              
+                                                                     Regex in segments (for specific patterns):                                                      
+                                                                       "https://api.example.com/:version(v\\d+)/mutate"                                               
+                                                                       ↳ Matches only "v" followed by digits                                                         
+                                                                                                                                                                     
+                                                                   Multiple patterns:                                                                                
+                                                                     ["https://api1.example.com/mutate", "https://api2.example.com/mutate"]                          
+                                                                                                                                                                     
+                                                                   Note: Query parameters and URL fragments (#) are automatically ignored during matching.           
+                                                                                                                                                                     
+                                                                   For full URLPattern syntax, see: https://developer.mozilla.org/en-US/docs/Web/API/URLPattern      
                                                                                                                                                                      
      --mutate-api-key string                                       optional                                                                                          
        ZERO_MUTATE_API_KEY env                                                                                                                                       
@@ -87,10 +143,38 @@ test('zero-cache --help', () => {
                                                                                                                                                                      
                                                                    The URL of the API server to which zero-cache will send synced queries.                           
                                                                                                                                                                      
-                                                                   * is allowed if you would like to allow the client to specify a subdomain to use.                 
-                                                                   e.g., *.example.com/api/mutate                                                                    
-                                                                   You can specify multiple URLs as well which the client can choose from.                           
-                                                                   e.g., ["https://api1.example.com/mutate", "https://api2.example.com/mutate"]                      
+                                                                   IMPORTANT: URLs are matched using URLPattern, a standard Web API.                                 
+                                                                                                                                                                     
+                                                                   Pattern Syntax:                                                                                   
+                                                                     URLPattern uses a simple and intuitive syntax similar to Express routes.                        
+                                                                     Wildcards and named parameters make it easy to match multiple URLs.                             
+                                                                                                                                                                     
+                                                                   Basic Examples:                                                                                   
+                                                                     Exact URL match:                                                                                
+                                                                       "https://api.example.com/mutate"                                                              
+                                                                     Any subdomain using wildcard:                                                                   
+                                                                       "https://*.example.com/mutate"                                                                
+                                                                     Multiple subdomain levels:                                                                      
+                                                                       "https://*.*.example.com/mutate"                                                              
+                                                                     Any path under a domain:                                                                        
+                                                                       "https://api.example.com/*"                                                                   
+                                                                     Named path parameters:                                                                          
+                                                                       "https://api.example.com/:version/mutate"                                                     
+                                                                       ↳ Matches "https://api.example.com/v1/mutate", "https://api.example.com/v2/mutate", etc.      
+                                                                                                                                                                     
+                                                                   Advanced Patterns:                                                                                
+                                                                     Optional path segments:                                                                         
+                                                                       "https://api.example.com/:path?"                                                              
+                                                                     Regex in segments (for specific patterns):                                                      
+                                                                       "https://api.example.com/:version(v\\d+)/mutate"                                               
+                                                                       ↳ Matches only "v" followed by digits                                                         
+                                                                                                                                                                     
+                                                                   Multiple patterns:                                                                                
+                                                                     ["https://api1.example.com/mutate", "https://api2.example.com/mutate"]                          
+                                                                                                                                                                     
+                                                                   Note: Query parameters and URL fragments (#) are automatically ignored during matching.           
+                                                                                                                                                                     
+                                                                   For full URLPattern syntax, see: https://developer.mozilla.org/en-US/docs/Web/API/URLPattern      
                                                                                                                                                                      
      --get-queries-api-key string                                  optional                                                                                          
        ZERO_GET_QUERIES_API_KEY env                                                                                                                                  

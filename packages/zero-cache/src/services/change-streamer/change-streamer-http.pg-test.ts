@@ -48,7 +48,7 @@ describe('change-streamer/http', () => {
 
     changeDB = await testDBs.create('change_streamer_http_client');
     await changeDB.begin(tx => setupCDCTables(lc, tx, SHARD_ID));
-    await changeDB/*sql*/ `
+    await changeDB /*sql*/ `
       INSERT INTO ${changeDB(cdcSchema(SHARD_ID))}."replicationState"
         ${changeDB({lastWatermark: '123'})}
     `;
@@ -107,7 +107,7 @@ describe('change-streamer/http', () => {
   });
 
   async function setChangeStreamerAddress(addr: string) {
-    await changeDB/*sql*/ `
+    await changeDB /*sql*/ `
       UPDATE ${changeDB(cdcSchema(SHARD_ID))}."replicationState"
         SET "ownerAddress" = ${addr}
     `;

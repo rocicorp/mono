@@ -9,18 +9,20 @@ import {avatarURLWithSize} from '../avatar-url-with-size.ts';
 import {Combobox} from './combobox.tsx';
 
 type Props = {
+  projectName: string;
   onSelect?: ((user: User | undefined) => void) | undefined;
   selected?: {login?: string | undefined} | undefined;
   disabled?: boolean | undefined;
   unselectedLabel?: string | undefined;
   placeholder?: string | undefined;
   allowNone?: boolean | undefined;
-  filter?: 'crew' | 'creators' | undefined;
+  filter?: 'crew' | 'creators' | 'assignees' | undefined;
 };
 
 type User = Row<Schema['tables']['user']>;
 
 export function UserPicker({
+  projectName,
   onSelect,
   selected,
   disabled = false,
@@ -30,10 +32,11 @@ export function UserPicker({
   filter,
 }: Props) {
   const [unsortedUsers] = useQuery(
-    queries.userPicker({
-      disabled,
-      login: selected?.login ?? null,
-      filter: filter ?? null,
+    queries.userPickerV2({
+      projectName,
+      disabled: !!disabled,
+      login: selected?.login,
+      filter,
     }),
   );
   // TODO: Support case-insensitive sorting in ZQL.

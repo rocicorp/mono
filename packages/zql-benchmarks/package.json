@@ -20,7 +20,7 @@
     "test-types:watch": "vitest watch --typecheck.only --no-browser.enabled"
   },
   "devDependencies": {
-    "@rocicorp/prettier-config": "^0.3.0",
+    "@rocicorp/prettier-config": "^0.4.0",
     "@types/tmp": "^0.2.6",
     "shared": "0.0.0",
     "typescript": "~5.8.2",

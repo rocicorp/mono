@@ -75,7 +75,12 @@ async function getExternal(includePeerDeps: boolean): Promise<string[]> {
   return [...externalSet].sort();
 }
 
-const extraExternals = ['node:*', 'expo*', ...builtinModules];
+const extraExternals = [
+  'node:*',
+  'expo*',
+  '@op-engineering/*',
+  ...builtinModules,
+];
 
 await verifyDependencies(await getExternal(false));
 
@@ -88,6 +93,16 @@ async function verifyDependencies(external: Iterable<string>) {
   const expectedDeps = new Set(external);
   for (const dep of extraExternals) {
     expectedDeps.delete(dep);
+
+    // dep can be a pattern like node:* so we need to loop through and remove
+    // any that match
+    if (dep.endsWith('*')) {
+      for (const e of expectedDeps) {
+        if (e.startsWith(dep.slice(0, -1))) {
+          expectedDeps.delete(e);
+        }
+      }
+    }
   }
 
   const {dependencies} = JSON.parse(packageJSON);
@@ -113,6 +128,8 @@ async function buildZeroClient() {
         'solid': basePath('src/solid.ts'),
         'react-native': basePath('src/react-native.ts'),
         'sqlite': basePath('src/sqlite.ts'),
+        'expo-sqlite': basePath('src/expo-sqlite.ts'),
+        'op-sqlite': basePath('src/op-sqlite.ts'),
       };
   const result = await esbuild.build({
     ...sharedOptions(minify, metafile),

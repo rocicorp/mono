@@ -17,13 +17,13 @@
     "@rocicorp/resolver": "^1.0.2"
   },
   "devDependencies": {
-    "@rocicorp/prettier-config": "^0.3.0",
-    "expo-sqlite": "^15.2.14",
+    "@rocicorp/prettier-config": "^0.4.0",
+    "expo-sqlite": ">=15",
     "replicache": "15.2.1",
     "shared": "0.0.0"
   },
   "peerDependencies": {
-    "expo-sqlite": "^15.2.14"
+    "expo-sqlite": ">=15"
   },
   "prettier": "@rocicorp/prettier-config"
 }

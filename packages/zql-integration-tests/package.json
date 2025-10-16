@@ -18,7 +18,7 @@
     "test-types:watch": "vitest watch --typecheck.only --no-browser.enabled"
   },
   "devDependencies": {
-    "@rocicorp/prettier-config": "^0.3.0",
+    "@rocicorp/prettier-config": "^0.4.0",
     "@types/tmp": "^0.2.6",
     "otel": "0.0.0",
     "shared": "0.0.0",

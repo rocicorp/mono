@@ -1,0 +1,54 @@
+import {expect, suite, test} from 'vitest';
+import {
+  CONSTRAINTS,
+  createConnection,
+  createFanOut,
+  expectedCost,
+} from './test/helpers.ts';
+
+suite('PlannerFanOut', () => {
+  test('initial state is FO type', () => {
+    const {fanOut} = createFanOut();
+
+    expect(fanOut.kind).toBe('fan-out');
+    expect(fanOut.type).toBe('FO');
+  });
+
+  test('can add outputs', () => {
+    const {fanOut} = createFanOut();
+    const output1 = createConnection('posts');
+    const output2 = createConnection('comments');
+
+    fanOut.addOutput(output1);
+    fanOut.addOutput(output2);
+
+    expect(fanOut.outputs).toHaveLength(2);
+    expect(fanOut.outputs[0]).toBe(output1);
+    expect(fanOut.outputs[1]).toBe(output2);
+  });
+
+  test('can be converted to UFO', () => {
+    const {fanOut} = createFanOut();
+    expect(fanOut.type).toBe('FO');
+
+    fanOut.convertToUFO();
+    expect(fanOut.type).toBe('UFO');
+  });
+
+  test('propagateConstraints() forwards to input', () => {
+    const {input, fanOut} = createFanOut();
+
+    fanOut.propagateConstraints([0], CONSTRAINTS.userId, 'unpinned');
+
+    expect(input.estimateCost()).toBe(expectedCost(1));
+  });
+
+  test('reset() restores FO type', () => {
+    const {fanOut} = createFanOut();
+    fanOut.convertToUFO();
+    expect(fanOut.type).toBe('UFO');
+
+    fanOut.reset();
+    expect(fanOut.type).toBe('FO');
+  });
+});

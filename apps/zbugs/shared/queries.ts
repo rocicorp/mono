@@ -105,12 +105,18 @@ export const queries = {
       ),
   ),
 
-  issuePreload: defineAuthQuery(
-    'issuePreload',
-    idValidator,
-    ({args: userID, ctx: auth}) =>
+  issuePreloadV2: defineAuthQuery(
+    'issuePreloadV2',
+    z.object({
+      userID: z.string(),
+      projectName: z.string(),
+    }),
+    ({args: {userID, projectName}, ctx: auth}) =>
       applyIssuePermissions(
         builder.issue
+          .whereExists('project', p => p.where('name', projectName), {
+            flip: true,
+          })
           .related('labels')
           .related('viewState', q => q.where('userID', userID))
           .related('creator')
@@ -122,7 +128,10 @@ export const queries = {
               .related('emoji', emoji => emoji.related('creator'))
               .limit(10)
               .orderBy('created', 'desc'),
-          ),
+          )
+          .orderBy('modified', 'desc')
+          .orderBy('id', 'desc')
+          .limit(1000),
         auth?.role,
       ),
   ),
@@ -137,17 +146,18 @@ export const queries = {
         .one(),
   ),
 
-  userPicker: defineQuery(
-    'userPicker',
+  userPickerV2: defineQuery(
+    'usersForProject',
     {
       validator: z.object({
         disabled: z.boolean(),
-        login: z.nullable(z.string()),
-        filter: z.nullable(z.enum(['crew', 'creators'])),
+        login: z.optional(z.string()),
+        projectName: z.string(),
+        filter: z.optional(z.enum(['crew', 'creators', 'assignees'])),
       }),
     },
 
-    ({args: {disabled, login, filter}}) => {
+    ({args: {disabled, login, projectName, filter}}) => {
       let q = builder.user;
       if (disabled && login) {
         q = q.where('login', login);
@@ -157,7 +167,21 @@ export const queries = {
             and(cmp('role', 'crew'), not(cmp('login', 'LIKE', 'rocibot%'))),
           );
         } else if (filter === 'creators') {
-          q = q.whereExists('createdIssues');
+          q = q.whereExists('createdIssues', i =>
+            i.whereExists(
+              'project',
+              p => p.where('lowerCaseName', projectName.toLocaleLowerCase()),
+              {flip: true},
+            ),
+          );
+        } else if (filter === 'assignees') {
+          q = q.whereExists('assignedIssues', i =>
+            i.whereExists(
+              'project',
+              p => p.where('lowerCaseName', projectName.toLocaleLowerCase()),
+              {flip: true},
+            ),
+          );
         } else {
           throw new Error(`Unknown filter: ${filter}`);
         }
@@ -225,6 +249,32 @@ export const queries = {
   ),
 
   // The below queries are DEPRECATED
+
+  issuePreload: defineAuthQuery(
+    'issuePreload',
+    idValidator,
+    ({ctx: auth, args: userID}) =>
+      applyIssuePermissions(
+        builder.issue
+          .related('labels')
+          .related('viewState', q => q.where('userID', userID))
+          .related('creator')
+          .related('assignee')
+          .related('emoji', emoji => emoji.related('creator'))
+          .related('comments', comments =>
+            comments
+              .related('creator')
+              .related('emoji', emoji => emoji.related('creator'))
+              .limit(10)
+              .orderBy('created', 'desc'),
+          )
+          .orderBy('modified', 'desc')
+          .orderBy('id', 'desc')
+          .limit(1000),
+        auth?.role,
+      ),
+  ),
+
   prevNext: defineAuthQuery(
     'prevNext',
     z.object({

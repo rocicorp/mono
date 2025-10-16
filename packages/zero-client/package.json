@@ -21,12 +21,12 @@
     "@rocicorp/resolver": "^1.0.2"
   },
   "devDependencies": {
-    "@rocicorp/prettier-config": "^0.3.0",
+    "@rocicorp/prettier-config": "^0.4.0",
     "@standard-schema/spec": "^1.0.0",
     "@vitest/ui": "^3.2.4",
     "ast-to-zql": "0.0.0",
     "datadog": "0.0.0",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.25.10",
     "playwright": "^1.53.2",
     "replicache": "15.2.1",
     "shared": "0.0.0",

@@ -3,7 +3,7 @@ import {ident} from 'pg-format';
 import postgres, {type PendingQuery, type Row} from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {equals} from '../../../../../shared/src/set-utils.ts';
-import type {PostgresDB} from '../../../types/pg.ts';
+import {disableStatementTimeout, type PostgresDB} from '../../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../../types/shards.ts';
 import type {Change} from '../../change-source/protocol/current/data.ts';
 import type {SubscriptionState} from '../../replicator/schema/replication-state.ts';
@@ -65,7 +65,7 @@ export async function discoverChangeStreamerAddress(
   shard: ShardID,
   sql: PostgresDB,
 ): Promise<string | null> {
-  const result = await sql<{ownerAddress: string | null}[]>/*sql*/ `
+  const result = await sql<{ownerAddress: string | null}[]> /*sql*/ `
     SELECT "ownerAddress" FROM ${sql(cdcSchema(shard))}."replicationState"`;
   return result[0].ownerAddress;
 }
@@ -132,6 +132,8 @@ export async function ensureReplicationConfig(
   const schema = cdcSchema(shard);
 
   await db.begin(async sql => {
+    disableStatementTimeout(sql);
+
     const stmts: PendingQuery<Row[]>[] = [];
     const results = await sql<
       {
@@ -139,7 +141,7 @@ export async function ensureReplicationConfig(
         publications: string[];
         resetRequired: boolean | null;
       }[]
-    >/*sql*/ `
+    > /*sql*/ `
     SELECT "replicaVersion", "publications", "resetRequired" 
       FROM ${sql(schema)}."replicationConfig"`;
 

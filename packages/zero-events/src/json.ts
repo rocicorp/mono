@@ -22,12 +22,3 @@ export type JSONValue =
  * ```
  */
 export type JSONObject = {[key: string]: JSONValue | undefined};
-
-/**
- * Extend is a type utility that asserts that the second type, when
- * concatenated with the first type, is still assignable to the
- * first type.
- */
-export type Extend<T, U> = Omit<T, keyof U> & U extends T
-  ? Omit<T, keyof U> & U
-  : never;
