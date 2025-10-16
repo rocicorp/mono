@@ -2,14 +2,12 @@ import {beforeAll, describe, expect, test} from 'vitest';
 import {bootstrap} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
-import {planQuery} from '../../../zql/src/planner/planner-builder.ts';
 import {createSQLiteCostModel} from '../../../zqlite/src/sqlite-cost-model.ts';
-import {mapAST} from '../../../zero-protocol/src/ast.ts';
 import {
   clientToServer,
   NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
-import type {AnyQuery} from '../../../zql/src/query/query-impl.ts';
+import {makeGetPlanAST, pick} from '../helpers/planner.ts';
 
 const pgContent = await getChinook();
 
@@ -21,9 +19,12 @@ const {dbs, queries} = await bootstrap({
 
 let costModel: ReturnType<typeof createSQLiteCostModel>;
 let mapper: NameMapper;
+let getPlanAST: ReturnType<typeof makeGetPlanAST>;
 describe('Chinook planner tests', () => {
   beforeAll(() => {
     dbs.sqlite.exec('ANALYZE;');
+
+    getPlanAST = makeGetPlanAST(mapper, costModel);
 
     costModel = createSQLiteCostModel(
       dbs.sqlite,
@@ -97,17 +98,3 @@ describe('Chinook planner tests', () => {
     expect(pick(ast, ['where', 'conditions', 1, 'flip'])).toBe(false);
   });
 });
-
-function getPlanAST(q: AnyQuery) {
-  return planQuery(mapAST(q.ast, mapper), costModel);
-}
-
-// oxlint-disable-next-line no-explicit-any
-function pick(node: any, path: (string | number)[]) {
-  let cur = node;
-  for (const p of path) {
-    cur = cur[p];
-    if (cur === undefined) return undefined;
-  }
-  return cur;
-}
