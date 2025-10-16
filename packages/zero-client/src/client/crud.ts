@@ -298,16 +298,10 @@ export async function upsertImpl(
     schema.tables[arg.tableName].primaryKey,
     arg.value,
   );
-  const val = defaultOptionalFieldsToNull(
-    schema.tables[arg.tableName],
-    arg.value,
-  );
-  await tx.set(key, val);
-  if (ivmBranch) {
-    must(ivmBranch.getSource(arg.tableName)).push({
-      type: 'set',
-      row: arg.value,
-    });
+  if (await tx.has(key)) {
+    await updateImpl(tx, {...arg, op: 'update'}, schema, ivmBranch);
+  } else {
+    await insertImpl(tx, {...arg, op: 'insert'}, schema, ivmBranch);
   }
 }
 
