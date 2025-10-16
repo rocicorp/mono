@@ -972,7 +972,7 @@ export class Zero<
    * longer query or mutate data with it, and its query views stop updating.
    */
   get closed(): boolean {
-    return this.#rep.closed;
+    return this.#connectionManager.is(ConnectionStatus.Closed);
   }
 
   /**
@@ -984,25 +984,37 @@ export class Zero<
   async close(): Promise<void> {
     const lc = this.#lc.withContext('close');
 
-    lc.debug?.('Closing Zero instance. Stack:', new Error().stack);
+    try {
+      if (this.closed) {
+        lc.debug?.('close() called on already closed instance');
+        return;
+      }
 
-    this.#onlineManager.cleanup();
+      lc.debug?.('Closing Zero instance. Stack:', new Error().stack);
 
-    if (!this.#connectionManager.is(ConnectionStatus.Disconnected)) {
-      this.#disconnect(
-        lc,
-        {
-          client: 'ClientClosed',
-        },
-        CLOSE_CODE_NORMAL,
-      );
+      this.#onlineManager.cleanup();
+
+      if (!this.#connectionManager.is(ConnectionStatus.Disconnected)) {
+        this.#disconnect(
+          lc,
+          {
+            client: 'ClientClosed',
+          },
+          CLOSE_CODE_NORMAL,
+        );
+      }
+      lc.debug?.('Aborting closeAbortController due to close()');
+      this.#closeAbortController.abort();
+      this.#metrics.stop();
+      const ret = await this.#rep.close();
+      this.#unexpose();
+      return ret;
+    } catch (e) {
+      lc.error?.('Error closing Zero instance', e);
+      throw e;
+    } finally {
+      this.#setConnectionStatus(ConnectionStatus.Closed);
     }
-    lc.debug?.('Aborting closeAbortController due to close()');
-    this.#closeAbortController.abort();
-    this.#metrics.stop();
-    const ret = await this.#rep.close();
-    this.#unexpose();
-    return ret;
   }
 
   #onMessage = (e: MessageEvent<string>) => {
@@ -1444,6 +1456,9 @@ export class Zero<
       case ConnectionStatus.Disconnected:
         lc.error?.('disconnect() called while disconnected');
         break;
+      case ConnectionStatus.Closed:
+        lc.error?.('disconnect() called while closed');
+        return;
     }
 
     this.#socketResolver = resolver();
@@ -1733,7 +1748,12 @@ export class Zero<
             }
 
             this.#rejectMessageError = undefined;
+            break;
           }
+
+          case ConnectionStatus.Closed:
+            this.#rejectMessageError = undefined;
+            break;
         }
       } catch (ex) {
         if (!this.#connectionManager.is(ConnectionStatus.Connected)) {
