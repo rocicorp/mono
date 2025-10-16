@@ -860,7 +860,7 @@ test('run', async () => {
   `);
 });
 
-// These tests would normally go into `chinook.pg-test` but for some reason
+// These tests would normally go into `chinook.pg.test` but for some reason
 // these tests passed when run in the chinook harness. Need to figure that out next,
 // especially given chinook flexes the push (add/remove/edit) paths.
 describe('pk lookup optimization', () => {
@@ -1599,7 +1599,7 @@ test('where exists', () => {
   expect(materialized.data).toEqual([]);
 });
 
-// More comprehensive tests of flipped exists are in `chinook-join-flip.pg-test`
+// More comprehensive tests of flipped exists are in `chinook-join-flip.pg.test`
 test("flipped exists, or'ed", () => {
   const queryDelegate: QueryDelegate<unknown> = new QueryDelegateImpl();
   const commentSource = must(queryDelegate.getSource('comment'));

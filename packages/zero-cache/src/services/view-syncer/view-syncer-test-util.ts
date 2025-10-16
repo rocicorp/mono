@@ -712,7 +712,7 @@ export async function setup(
       new Snapshotter(lc, replicaDbFile.path, SHARD),
       SHARD,
       operatorStorage,
-      'view-syncer.pg-test.ts',
+      'view-syncer.pg.test.ts',
       inspectorDelegate,
     ),
     stateChanges,

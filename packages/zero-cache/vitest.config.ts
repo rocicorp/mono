@@ -15,8 +15,8 @@ export function configForVersion(version: number, url: string) {
       name: `${name}/pg-${version}`,
       browser: {enabled: false},
       silent: 'passed-only',
-      include: ['src/**/*.pg-test.?(c|m)[jt]s?(x)'],
-      exclude: ['src/**/*.test.?(c|m)[jt]s?(x)'],
+      include: ['src/**/*.pg.test.?(c|m)[jt]s?(x)'],
+      exclude: [],
       globalSetup: [`../zero-cache/test/pg-${version}.ts`],
       coverage: {
         enabled: !ci, // Don't run coverage in continuous integration.
@@ -35,7 +35,7 @@ export function configForNoPg(url: string) {
     test: {
       name: `${name}/no-pg`,
       include: ['src/**/*.test.?(c|m)[jt]s?(x)'],
-
+      exclude: ['src/**/*.pg.test.?(c|m)[jt]s?(x)'],
       browser: {enabled: false},
       silent: 'passed-only',
       coverage: {
@@ -61,8 +61,8 @@ export function configForCustomPg(url: string) {
           name: `${name}/custom-pg`,
           browser: {enabled: false},
           silent: 'passed-only',
-          include: ['src/**/*.pg-test.?(c|m)[jt]s?(x)'],
-          exclude: ['src/**/*.test.?(c|m)[jt]s?(x)'],
+          include: ['src/**/*.pg.test.?(c|m)[jt]s?(x)'],
+          exclude: [],
           provide: {
             // Referenced by ./src/test/db.ts
             pgConnectionString: process.env['CUSTOM_PG'],
