@@ -10,6 +10,9 @@ export type ConnectionState =
     }
   | {
       name: ConnectionStatus.Connected;
+    }
+  | {
+      name: ConnectionStatus.Closed;
     };
 
 export class ConnectionManager extends Subscribable<ConnectionState> {
@@ -25,6 +28,11 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
    * Updates the connection status. Returns true if the status changed.
    */
   setStatus(status: ConnectionStatus): boolean {
+    // cannot transition from closed to any other status
+    if (this.#state.name === ConnectionStatus.Closed) {
+      return false;
+    }
+
     if (status === this.#state.name) {
       return false;
     }

@@ -3079,6 +3079,8 @@ test('Zero close should stop timeout', async () => {
 
   await r.waitForConnectionStatus(ConnectionStatus.Connecting);
   await r.close();
+  await r.waitForConnectionStatus(ConnectionStatus.Closed);
+  expect(r.closed).toBe(true);
   await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS);
   expectLogMessages(r).not.contain(connectTimeoutMessage);
 });
@@ -3091,6 +3093,8 @@ test('Zero close should stop timeout, close delayed', async () => {
   await r.waitForConnectionStatus(ConnectionStatus.Connecting);
   await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS / 2);
   await r.close();
+  await r.waitForConnectionStatus(ConnectionStatus.Closed);
+  expect(r.closed).toBe(true);
   await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS / 2);
   expectLogMessages(r).not.contain(connectTimeoutMessage);
 });
@@ -3871,6 +3875,9 @@ test('Logging stack on close', async () => {
   mockSocket.messages.length = 0;
 
   await z.close();
+  await z.waitForConnectionStatus(ConnectionStatus.Closed);
+  expect(z.closed).toBe(true);
+  expect(z.connectionStatus).toBe(ConnectionStatus.Closed);
 
   expect(z.testLogSink.messages).toEqual(
     expect.arrayContaining([

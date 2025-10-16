@@ -51,4 +51,51 @@ describe('ConnectionManager', () => {
     expect(manager.setStatus(ConnectionStatus.Connecting)).toBe(false);
     expect(listener).not.toHaveBeenCalled();
   });
+
+  test('setStatus to closed notifies once and prevents further transitions', () => {
+    const manager = new ConnectionManager();
+    const listener = vi.fn();
+    manager.subscribe(listener);
+
+    expect(manager.setStatus(ConnectionStatus.Closed)).toBe(true);
+    expect(manager.state).toEqual({name: ConnectionStatus.Closed});
+    expect(manager.is(ConnectionStatus.Closed)).toBe(true);
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenLastCalledWith({name: ConnectionStatus.Closed});
+
+    listener.mockClear();
+
+    expect(manager.setStatus(ConnectionStatus.Connected)).toBe(false);
+    expect(manager.state).toEqual({name: ConnectionStatus.Closed});
+    expect(listener).not.toHaveBeenCalled();
+
+    expect(manager.setStatus(ConnectionStatus.Closed)).toBe(false);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  test('subscribe returns unsubscribe that stops future notifications', () => {
+    const manager = new ConnectionManager();
+    const listener = vi.fn();
+
+    const unsubscribe = manager.subscribe(listener);
+
+    manager.setStatus(ConnectionStatus.Connecting);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+
+    manager.setStatus(ConnectionStatus.Connected);
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  test('cleanup removes listeners', () => {
+    const manager = new ConnectionManager();
+    const listener = vi.fn();
+    manager.subscribe(listener);
+
+    manager.cleanup();
+
+    manager.setStatus(ConnectionStatus.Connected);
+    expect(listener).not.toHaveBeenCalled();
+  });
 });
