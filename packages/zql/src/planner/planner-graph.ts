@@ -424,7 +424,7 @@ export class PlannerGraph {
             console.error(
               `  Attempt ${i + 1}: Complete! Total cost: ${totalCost}`,
             );
-          // console.log('cost', totalCost, this.getPlanSummary());
+          console.log('cost', totalCost, this.getPlanSummary());
           if (totalCost < bestCost) {
             bestCost = totalCost;
             bestPlan = this.capturePlanningSnapshot();
