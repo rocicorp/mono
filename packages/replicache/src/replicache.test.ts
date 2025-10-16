@@ -2063,7 +2063,7 @@ test('mutation timestamps are immutable', async () => {
   // Create a mutation and verify it has been assigned current time.
   await rep.mutate.foo(null);
   await rep.push({now: true});
-  expect(pending).deep.toBe([
+  expect(pending).toEqual([
     {
       clientID: rep.clientID,
       id: 1,
@@ -2102,7 +2102,7 @@ test('mutation timestamps are immutable', async () => {
 
   // Check that mutation timestamp did not change
   await rep.push({now: true});
-  expect(pending).deep.toBe([
+  expect(pending).toEqual([
     {
       clientID: rep.clientID,
       id: 1,

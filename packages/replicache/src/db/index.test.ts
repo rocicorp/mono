@@ -165,7 +165,7 @@ test('get index keys', () => {
 
 test('json pointer', () => {
   const t = (v: JSONValue, p: string, res: JSONValue | undefined) => {
-    expect(evaluateJSONPointer(deepFreeze(v), p)).deep.toBe(res);
+    expect(evaluateJSONPointer(deepFreeze(v), p)).toEqual(res);
   };
 
   for (const v of [null, 42, true, false, [], {}, 'foo']) {

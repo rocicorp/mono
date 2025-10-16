@@ -510,7 +510,7 @@ describe('findMatchingClient', () => {
     await withRead(perdag, async read => {
       const mutatorNames: string[] = [];
       const indexes = {};
-      expect(await findMatchingClient(read, mutatorNames, indexes)).deep.toBe({
+      expect(await findMatchingClient(read, mutatorNames, indexes)).toEqual({
         type: FIND_MATCHING_CLIENT_TYPE_NEW,
       });
     });
@@ -556,7 +556,7 @@ describe('findMatchingClient', () => {
         type: FIND_MATCHING_CLIENT_TYPE_FORK,
         snapshot: b.chain[0] as Commit<SnapshotMetaDD31>,
       };
-      expect(res).deep.toBe(expected);
+      expect(res).toEqual(expected);
     });
   }
 
@@ -642,7 +642,7 @@ describe('findMatchingClient', () => {
         clientGroupID,
         headHash,
       };
-      expect(res).deep.toBe(expected);
+      expect(res).toEqual(expected);
     });
   }
 

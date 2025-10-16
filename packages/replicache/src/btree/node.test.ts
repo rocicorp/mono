@@ -1636,7 +1636,7 @@ describe('btree node', () => {
 
       await putPromise;
 
-      expect(await Promise.all(ps)).deep.toBe([
+      expect(await Promise.all(ps)).toEqual([
         'lll2',
         'lll2',
         'lll2',

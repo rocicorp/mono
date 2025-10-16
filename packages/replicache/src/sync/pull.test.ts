@@ -1331,7 +1331,7 @@ describe('handlePullResponseDD31', () => {
           const map = new BTreeRead(dagRead, formatVersion, head.valueHash);
           expect(
             Object.fromEntries(await asyncIterableToArray(map.entries())),
-          ).deep.toBe(expectedMap);
+          ).toEqual(expectedMap);
         }
         if (expectedIndex) {
           expect(head.indexes.length).toBe(1);
@@ -1343,7 +1343,7 @@ describe('handlePullResponseDD31', () => {
           );
           expect(
             Object.fromEntries(await asyncIterableToArray(map.entries())),
-          ).deep.toBe(expectedIndex[1]);
+          ).toEqual(expectedIndex[1]);
         }
       });
     }

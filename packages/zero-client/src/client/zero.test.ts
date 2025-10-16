@@ -118,18 +118,18 @@ test('expose and unexpose', async () => {
   const z2 = zeroForTest();
   expect(g.__zero).toBe(z2);
   const z3 = zeroForTest();
-  expect(g.__zero).deep.toBe({
+  expect(g.__zero).toEqual({
     [z2.clientID]: z2,
     [z3.clientID]: z3,
   });
   const z4 = zeroForTest();
-  expect(g.__zero).deep.toBe({
+  expect(g.__zero).toEqual({
     [z2.clientID]: z2,
     [z3.clientID]: z3,
     [z4.clientID]: z4,
   });
   await z2.close();
-  expect(g.__zero).deep.toBe({
+  expect(g.__zero).toEqual({
     [z3.clientID]: z3,
     [z4.clientID]: z4,
   });
@@ -2083,7 +2083,7 @@ test('Authentication', async () => {
     // Ping/pong should happen every 5 seconds.
     await tickAFewTimes(vi, PING_INTERVAL_MS);
     const socket = await r.socket;
-    expect(socket.messages[0]).deep.toBe(JSON.stringify(['ping', {}]));
+    expect(socket.messages[0]).toEqual(JSON.stringify(['ping', {}]));
     expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
     await r.triggerPong();
     expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
@@ -2209,7 +2209,7 @@ test('Ping pong', async () => {
   expect((await r.socket).messages).empty;
   await vi.advanceTimersByTimeAsync(1);
 
-  expect((await r.socket).messages).deep.toBe([JSON.stringify(['ping', {}])]);
+  expect((await r.socket).messages).toEqual([JSON.stringify(['ping', {}])]);
   await vi.advanceTimersByTimeAsync(PING_TIMEOUT_MS - 1);
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
   await vi.advanceTimersByTimeAsync(1);
@@ -2226,7 +2226,7 @@ test('Ping timeout', async () => {
   await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS - 1);
   expect((await r.socket).messages).empty;
   await vi.advanceTimersByTimeAsync(1);
-  expect((await r.socket).messages).deep.toBe([JSON.stringify(['ping', {}])]);
+  expect((await r.socket).messages).toEqual([JSON.stringify(['ping', {}])]);
   await vi.advanceTimersByTimeAsync(PING_TIMEOUT_MS - 1);
   await r.triggerPong();
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
@@ -2814,7 +2814,7 @@ test(ErrorKind.InvalidConnectionRequest, async () => {
   expect(err.message).toBe('InvalidConnectionRequest: test');
 
   const data = msg[2].at(-1);
-  expect(data).deep.toBe({
+  expect(data).toEqual({
     lmid: 0,
     baseCookie: null,
   });
@@ -3012,11 +3012,11 @@ test('kvStore option', async () => {
 
     const idIsAView = r.query.e.where('id', '=', 'a').materialize();
     const allDataView = r.query.e.materialize();
-    expect(allDataView.data).deep.toBe(expectedValue);
+    expect(allDataView.data).toEqual(expectedValue);
 
     await r.mutate.e.insert({id: 'a', value: 1});
 
-    expect(idIsAView.data).deep.toBe([
+    expect(idIsAView.data).toEqual([
       {id: 'a', value: 1, [refCountSymbol]: 1},
     ]);
     // Wait for persist to finish

@@ -389,7 +389,7 @@ test('Version not supported on server', async () => {
     await promise;
 
     expect(onUpdateNeededStub).toHaveBeenCalledTimes(1);
-    expect(onUpdateNeededStub.mock.calls[0]).deep.toBe([reason]);
+    expect(onUpdateNeededStub.mock.calls[0]).toEqual([reason]);
   };
 
   await t({error: 'VersionNotSupported'}, {type: 'VersionNotSupported'});
