@@ -836,9 +836,8 @@ describe('persistDD31', () => {
     } catch (e) {
       err = e;
     }
-    expect(err)
-      .to.be.an.instanceof(ClientStateNotFoundError)
-      .property('id', clients[0].clientID);
+    expect(err).toBeInstanceOf(ClientStateNotFoundError);
+    expect(err).toHaveProperty('id', clients[0].clientID);
   });
 });
 

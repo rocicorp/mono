@@ -215,9 +215,8 @@ describe('write', () => {
           err = e;
         }
         if (expectError) {
-          expect(err)
-            .to.be.instanceof(Error)
-            .with.property('message', expectError);
+          expect(err).toBeInstanceOf(Error);
+          expect(err).toHaveProperty('message', expectError);
         } else {
           expect(err, 'No error expected').toBeUndefined();
         }
@@ -460,8 +459,7 @@ async function testChunkNotFoundError(methodName: 'read' | 'write') {
     } catch (e) {
       err = e;
     }
-    expect(err)
-      .to.be.instanceof(ChunkNotFoundError)
-      .with.property('hash', fakeHash('cacaca'));
+    expect(err).toBeInstanceOf(ChunkNotFoundError);
+    expect(err).toHaveProperty('hash', fakeHash('cacaca'));
   });
 }
