@@ -618,7 +618,7 @@ test('closed tx', async () => {
   let wtx: WriteTransaction | undefined;
 
   await rep.mutate.mut();
-  expect(wtx).to.not.be.undefined;
+  expect(wtx).not.toBeUndefined();
   await expectAsyncFuncToThrow(() => wtx?.set('z', 1), TransactionClosedError);
   await expectAsyncFuncToThrow(() => wtx?.del('w'), TransactionClosedError);
 });

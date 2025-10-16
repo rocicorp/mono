@@ -130,7 +130,7 @@ test('pull', async () => {
   );
   beginPullResult = await rep.beginPull();
   ({syncHead} = beginPullResult);
-  expect(syncHead).to.not.be.undefined;
+  expect(syncHead).not.toBeUndefined();
   expect(syncHead).not.toBe(emptyHash);
 
   expect(rep.lastMutationID).toBe(3);

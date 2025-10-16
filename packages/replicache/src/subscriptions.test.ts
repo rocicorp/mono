@@ -6,17 +6,20 @@ import {
 
 test('scanInfoMatchesKey', () => {
   expect(scanInfoMatchesKey({options: {}}, '', 'a')).toBe(true);
-  expect(scanInfoMatchesKey({options: {indexName: 'idx'}}, 'idx', 'a')).to.be
-    .true;
-  expect(scanInfoMatchesKey({options: {indexName: 'idx'}}, '', 'a')).to.be
-    .false;
+  expect(scanInfoMatchesKey({options: {indexName: 'idx'}}, 'idx', 'a')).toBe(
+    true,
+  );
+  expect(scanInfoMatchesKey({options: {indexName: 'idx'}}, '', 'a')).toBe(
+    false,
+  );
   expect(scanInfoMatchesKey({options: {}}, 'idx', 'a')).toBe(false);
 
   expect(scanInfoMatchesKey({options: {prefix: 'p'}}, '', 'a')).toBe(false);
 
   expect(scanInfoMatchesKey({options: {startKey: 'sk'}}, '', 'a')).toBe(false);
-  expect(scanInfoMatchesKey({options: {startKey: 'sk'}}, '', 'skate')).to.be
-    .true;
+  expect(scanInfoMatchesKey({options: {startKey: 'sk'}}, '', 'skate')).toBe(
+    true,
+  );
   expect(scanInfoMatchesKey({options: {startKey: 'a'}}, '', 'b')).toBe(true);
 
   expect(
