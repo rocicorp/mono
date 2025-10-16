@@ -37,7 +37,7 @@ async function expectClientGroups(
 ) {
   await withRead(dagStore, async (read: Read) => {
     const readClientGroupMap = await getClientGroups(read);
-    expect(Object.fromEntries(readClientGroupMap)).to.deep.equal(clientGroups);
+    expect(Object.fromEntries(readClientGroupMap)).toEqual(clientGroups);
   });
 }
 
@@ -115,7 +115,7 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
 
   await withRead(dagStore, async (read: Read) => {
     const readClientGroupMap = await getClientGroups(read);
-    expect(readClientGroupMap).to.deep.equal(clientGroupMap);
+    expect(readClientGroupMap).toEqual(clientGroupMap);
   });
 
   await vi.advanceTimersByTimeAsync(FIVE_MINS_IN_MS);
@@ -284,7 +284,7 @@ test('initClientGroupGC starts 5 min interval that collects client groups that a
 
   await withRead(dagStore, async (read: Read) => {
     const readClientGroupMap = await getClientGroups(read);
-    expect(readClientGroupMap).to.deep.equal(clientGroupMap);
+    expect(readClientGroupMap).toEqual(clientGroupMap);
   });
 
   await vi.advanceTimersByTimeAsync(FIVE_MINS_IN_MS);

@@ -35,7 +35,7 @@ describe('dag with no memory-only hashes gathers nothing', () => {
       for (const commit of pb.chain) {
         const visitor = new GatherMemoryOnlyVisitor(dagRead);
         await visitor.visit(commit.chunk.hash);
-        expect(visitor.gatheredChunks).to.be.empty;
+        expect(visitor.gatheredChunks).toHaveLength(0);
       }
     });
 
@@ -44,7 +44,7 @@ describe('dag with no memory-only hashes gathers nothing', () => {
     await withRead(memdag, async dagRead => {
       const visitor = new GatherMemoryOnlyVisitor(dagRead);
       await visitor.visit(pb.headHash);
-      expect(visitor.gatheredChunks).to.be.empty;
+      expect(visitor.gatheredChunks).toHaveLength(0);
     });
   };
 
@@ -69,7 +69,7 @@ describe('dag with only memory-only hashes gathers everything', () => {
       await withRead(memdag, async dagRead => {
         const visitor = new GatherMemoryOnlyVisitor(dagRead);
         await visitor.visit(mb.headHash);
-        expect(memdag.getMemOnlyChunksSnapshot()).to.deep.equal(
+        expect(memdag.getMemOnlyChunksSnapshot()).toEqual(
           Object.fromEntries(visitor.gatheredChunks),
         );
       });
@@ -133,7 +133,7 @@ describe('dag with some persisted hashes and some memory-only hashes on top', ()
         baseSnapshotHash: fakeHash(1),
         clientID,
       };
-      expect(Object.fromEntries(visitor.gatheredChunks)).to.deep.equal({
+      expect(Object.fromEntries(visitor.gatheredChunks)).toEqual({
         [fakeHash(4)]: {
           data: [
             0,
@@ -201,7 +201,7 @@ describe('dag with some permanent hashes and some memory-only hashes on top w in
     await withRead(memdag, async dagRead => {
       const visitor = new GatherMemoryOnlyVisitor(dagRead);
       await visitor.visit(mb.headHash);
-      expect(Object.fromEntries(visitor.gatheredChunks)).to.deep.equal(
+      expect(Object.fromEntries(visitor.gatheredChunks)).toEqual(
         formatVersion >= FormatVersion.DD31
           ? {
               [fakeHash(8)]: {

@@ -44,7 +44,7 @@ describe('basics w/ commit', () => {
       await w.put(lc, 'foo', 'bar');
       // Assert we can read the same value from within this transaction.;
       const val = await w.get('foo');
-      expect(val).to.deep.equal('bar');
+      expect(val).toEqual('bar');
       await w.commit(DEFAULT_HEAD_NAME);
     });
 
@@ -61,7 +61,7 @@ describe('basics w/ commit', () => {
         formatVersion,
       );
       const val = await w.get('foo');
-      expect(val).to.deep.equal('bar');
+      expect(val).toEqual('bar');
     });
 
     // Del.
@@ -79,7 +79,7 @@ describe('basics w/ commit', () => {
       await w.del(lc, 'foo');
       // Assert it is gone while still within this transaction.
       const val = await w.get('foo');
-      expect(val).to.be.undefined;
+      expect(val).toBeUndefined();
       await w.commit(DEFAULT_HEAD_NAME);
     });
 
@@ -96,7 +96,7 @@ describe('basics w/ commit', () => {
         formatVersion,
       );
       const val = await w.get(`foo`);
-      expect(val).to.be.undefined;
+      expect(val).toBeUndefined();
     });
   };
 
@@ -131,7 +131,7 @@ describe('basics w/ putCommit', () => {
       await w.put(lc, 'foo', 'bar');
       // Assert we can read the same value from within this transaction.;
       const val = await w.get('foo');
-      expect(val).to.deep.equal('bar');
+      expect(val).toEqual('bar');
       const commit = await w.putCommit();
       await dagWrite.setHead('test', commit.chunk.hash);
       await dagWrite.commit();
@@ -151,7 +151,7 @@ describe('basics w/ putCommit', () => {
         formatVersion,
       );
       const val = await w.get('foo');
-      expect(val).to.deep.equal('bar');
+      expect(val).toEqual('bar');
     });
 
     // Del.
@@ -169,7 +169,7 @@ describe('basics w/ putCommit', () => {
       await w.del(lc, 'foo');
       // Assert it is gone while still within this transaction.
       const val = await w.get('foo');
-      expect(val).to.be.undefined;
+      expect(val).toBeUndefined();
       const commit = await w.putCommit();
       await dagWrite.setHead('test', commit.chunk.hash);
       await dagWrite.commit();
@@ -189,7 +189,7 @@ describe('basics w/ putCommit', () => {
         formatVersion,
       );
       const val = await w.get(`foo`);
-      expect(val).to.be.undefined;
+      expect(val).toBeUndefined();
     });
   };
   test('dd31', () => t(FormatVersion.Latest));
@@ -241,22 +241,22 @@ test('clear', async () => {
     await w.put(lc, 'hot', 'dog');
 
     const keys = await asyncIterableToArray(w.map.keys());
-    expect(keys).to.have.lengthOf(2);
+    expect(keys).toHaveLength(2);
     let index = w.indexes.get('idx');
     assertNotUndefined(index);
     {
       const keys = await asyncIterableToArray(index.map.keys());
-      expect(keys).to.have.lengthOf(2);
+      expect(keys).toHaveLength(2);
     }
 
     await w.clear();
     const keys2 = await asyncIterableToArray(w.map.keys());
-    expect(keys2).to.have.lengthOf(0);
+    expect(keys2).toHaveLength(0);
     index = w.indexes.get('idx');
     assertNotUndefined(index);
     {
       const keys = await asyncIterableToArray(index.map.keys());
-      expect(keys).to.have.lengthOf(0);
+      expect(keys).toHaveLength(0);
     }
 
     await w.commit(DEFAULT_HEAD_NAME);
@@ -267,12 +267,12 @@ test('clear', async () => {
     const r = new BTreeRead(dagRead, formatVersion, c.valueHash);
     const indexes = readIndexesForRead(c, dagRead, formatVersion);
     const keys = await asyncIterableToArray(r.keys());
-    expect(keys).to.have.lengthOf(0);
+    expect(keys).toHaveLength(0);
     const index = indexes.get('idx');
     assertNotUndefined(index);
     {
       const keys = await asyncIterableToArray(index.map.keys());
-      expect(keys).to.have.lengthOf(0);
+      expect(keys).toHaveLength(0);
     }
   });
 });

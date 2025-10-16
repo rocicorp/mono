@@ -69,7 +69,7 @@ function expectRefCountUpdates(
   const expectedHashes = Object.fromEntries(
     Object.entries(expected).map(([k, v]) => [fakeHash(k), v]),
   );
-  expect(Object.fromEntries(actual)).to.deep.equal(expectedHashes);
+  expect(Object.fromEntries(actual)).toEqual(expectedHashes);
 }
 
 test('computeRefCountUpdates includes entry for every putChunk', async () => {

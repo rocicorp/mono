@@ -33,17 +33,15 @@ test('pending mutation', async () => {
 
   const {clientID} = rep;
 
-  expect(await rep.experimentalPendingMutations()).to.deep.equal([]);
+  expect(await rep.experimentalPendingMutations()).toEqual([]);
 
   await rep.mutate.addData({a: 1, b: 2});
   const addABMutation = {id: 1, name: 'addData', args: {a: 1, b: 2}, clientID};
-  expect(await rep.experimentalPendingMutations()).to.deep.equal([
-    addABMutation,
-  ]);
+  expect(await rep.experimentalPendingMutations()).toEqual([addABMutation]);
 
   const delBMutation = {id: 2, name: 'del', args: 'b', clientID};
   await rep.mutate.del('b');
-  expect(await rep.experimentalPendingMutations()).to.deep.equal([
+  expect(await rep.experimentalPendingMutations()).toEqual([
     addABMutation,
     delBMutation,
   ]);
@@ -54,15 +52,13 @@ test('pending mutation', async () => {
   await tickAFewTimes(vi, 100);
   await rep.mutate.addData({a: 3});
   const addAMutation = {id: 3, name: 'addData', args: {a: 3}, clientID};
-  expect(await rep.experimentalPendingMutations()).to.deep.equal([
-    addAMutation,
-  ]);
+  expect(await rep.experimentalPendingMutations()).toEqual([addAMutation]);
 
   fetchMock.reset();
   fetchMock.post(rep.pullURL, makePullResponseV1(clientID, 3, undefined, 2));
   rep.pullIgnorePromise();
   await tickAFewTimes(vi, 100);
-  expect(await rep.experimentalPendingMutations()).to.deep.equal([]);
+  expect(await rep.experimentalPendingMutations()).toEqual([]);
 });
 
 test('Test at a lower level', async () => {
@@ -79,7 +75,7 @@ test('Test at a lower level', async () => {
   await b.addLocal(clientID);
 
   await withRead(store, async dagRead => {
-    expect(await pendingMutationsForAPI(dagRead)).to.deep.equal([
+    expect(await pendingMutationsForAPI(dagRead)).toEqual([
       {id: 11, name: 'mutator_name_2', args: [2], clientID},
       {id: 12, name: 'mutator_name_3', args: [3], clientID},
       {id: 13, name: 'mutator_name_4', args: [4], clientID},
@@ -104,7 +100,7 @@ test('multiple clients', async () => {
   await b.addLocal(clientID2);
 
   await withRead(store, async dagRead => {
-    expect(await pendingMutationsForAPI(dagRead)).to.deep.equal([
+    expect(await pendingMutationsForAPI(dagRead)).toEqual([
       {id: 11, name: 'mutator_name_2', args: [2], clientID: clientID1},
       {id: 21, name: 'mutator_name_3', args: [3], clientID: clientID2},
       {id: 12, name: 'mutator_name_4', args: [4], clientID: clientID1},

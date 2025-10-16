@@ -30,7 +30,7 @@ test('Firefox private browsing', async () => {
     await tx.put('foo', 'bar');
   });
   await withRead(store, async tx => {
-    expect(await tx.get('foo')).to.equal('bar');
+    expect(await tx.get('foo')).toBe('bar');
   });
 });
 
@@ -63,7 +63,7 @@ test('race condition', async () => {
   await p2;
 
   expect(logFake).toBeCalledTimes(1);
-  expect(logFake.mock.calls[0]).to.deep.equal([
+  expect(logFake.mock.calls[0]).toEqual([
     'info',
     {my: 'context'},
     'Switching to MemStore because of Firefox private browsing error',

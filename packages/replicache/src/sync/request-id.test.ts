@@ -5,12 +5,12 @@ test('newRequestID()', () => {
   {
     const re = /client-[0-9a-f]+-0$/;
     const got = newRequestID('client');
-    expect(got).to.match(re);
+    expect(got).toMatch(re);
   }
   {
     const re = /client-[0-9a-f]+-1$/;
     const got = newRequestID('client');
-    expect(got).to.match(re);
+    expect(got).toMatch(re);
   }
 });
 

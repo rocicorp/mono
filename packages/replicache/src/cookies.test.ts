@@ -3,8 +3,8 @@ import {compareCookies, type Cookie} from './cookies.ts';
 
 test('compareCookies', () => {
   const t = (a: Cookie, b: Cookie, expected: number) => {
-    expect(compareCookies(a, b)).to.equal(expected, `${a} < ${b}`);
-    expect(compareCookies(b, a)).to.equal(-expected);
+    expect(compareCookies(a, b)).toBe(expected, `${a} < ${b}`);
+    expect(compareCookies(b, a)).toBe(-expected);
   };
 
   t(null, null, 0);

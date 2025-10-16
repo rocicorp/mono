@@ -118,18 +118,18 @@ test('expose and unexpose', async () => {
   const z2 = zeroForTest();
   expect(g.__zero).toBe(z2);
   const z3 = zeroForTest();
-  expect(g.__zero).deep.equal({
+  expect(g.__zero).deep.toBe({
     [z2.clientID]: z2,
     [z3.clientID]: z3,
   });
   const z4 = zeroForTest();
-  expect(g.__zero).deep.equal({
+  expect(g.__zero).deep.toBe({
     [z2.clientID]: z2,
     [z3.clientID]: z3,
     [z4.clientID]: z4,
   });
   await z2.close();
-  expect(g.__zero).deep.equal({
+  expect(g.__zero).deep.toBe({
     [z3.clientID]: z3,
     [z4.clientID]: z4,
   });
@@ -438,7 +438,7 @@ test('disconnects if ping fails', async () => {
   // Wait PING_INTERVAL_MS which will trigger a ping
   // Pings timeout after PING_TIMEOUT_MS so reply before that.
   await tickAFewTimes(vi, PING_INTERVAL_MS);
-  expect((await r.socket).messages).to.deep.equal(['["ping",{}]']);
+  expect((await r.socket).messages).toEqual(['["ping",{}]']);
 
   await r.triggerPong();
   await tickAFewTimes(vi);
@@ -524,8 +524,8 @@ describe('createSocket', () => {
         {activeClients},
         1048 * 8,
       );
-      expect(`${mockSocket.url}`).equal(expectedURL);
-      expect(mockSocket.protocol).equal(
+      expect(`${mockSocket.url}`).toBe(expectedURL);
+      expect(mockSocket.protocol).toBe(
         encodeSecProtocols(
           [
             'initConnection',
@@ -563,8 +563,8 @@ describe('createSocket', () => {
         {activeClients},
         0, // do not put any extra information into headers
       );
-      expect(`${mockSocket.url}`).equal(expectedURL);
-      expect(mockSocket2.protocol).equal(encodeSecProtocols(undefined, auth));
+      expect(`${mockSocket.url}`).toBe(expectedURL);
+      expect(mockSocket2.protocol).toBe(encodeSecProtocols(undefined, auth));
       // if we did not encode queries into the sec-protocol header, we should not have a queriesPatch
       expect(queriesPatch2).toBeUndefined();
       expect(deletedClients2?.clientIDs).toEqual(['old-deleted-client']);
@@ -1404,14 +1404,14 @@ test('pusher sends one mutation per push message', async () => {
 
       await r.pusher(pushReq, requestID);
 
-      expect(mockSocket.messages).to.have.lengthOf(expectedPushMessages);
+      expect(mockSocket.messages).toHaveLength(expectedPushMessages);
       for (let i = 1; i < mockSocket.messages.length; i++) {
         const raw = mockSocket.messages[i];
         const msg = valita.parse(JSON.parse(raw), pushMessageSchema);
         expect(msg[1].clientGroupID).toBe(
           clientGroupID ?? (await r.clientGroupID),
         );
-        expect(msg[1].mutations).to.have.lengthOf(1);
+        expect(msg[1].mutations).toHaveLength(1);
         expect(msg[1].requestID).toBe(requestID);
       }
     }
@@ -1657,7 +1657,7 @@ test('pusher maps CRUD mutation names', async () => {
 
       await r.pusher(pushReq, 'test-request-id');
 
-      expect(mockSocket.messages).to.have.lengthOf(1);
+      expect(mockSocket.messages).toHaveLength(1);
       for (let i = 0; i < mockSocket.messages.length; i++) {
         const raw = mockSocket.messages[i];
         const msg = valita.parse(JSON.parse(raw), pushMessageSchema);
@@ -1750,7 +1750,7 @@ test('pusher adjusts mutation timestamps to be unix timestamps', async () => {
 
   await r.pusher(pushReq, requestID);
 
-  expect(mockSocket.messages).to.have.lengthOf(mutations.length);
+  expect(mockSocket.messages).toHaveLength(mutations.length);
   const push0 = valita.parse(
     JSON.parse(mockSocket.messages[0]),
     pushMessageSchema,
@@ -1782,7 +1782,7 @@ test('puller with mutation recovery pull, success response', async () => {
 
   await tickAFewTimes(vi);
   expect(mockSocket.messages.length).toBe(1);
-  expect(JSON.parse(mockSocket.messages[0])).to.deep.equal([
+  expect(JSON.parse(mockSocket.messages[0])).toEqual([
     'pull',
     {
       clientGroupID: 'test-client-group-id',
@@ -1799,7 +1799,7 @@ test('puller with mutation recovery pull, success response', async () => {
 
   const result = await resultPromise;
 
-  expect(result).to.deep.equal({
+  expect(result).toEqual({
     response: {
       cookie: '2',
       lastMutationIDChanges: {cid1: 1},
@@ -1831,7 +1831,7 @@ test('puller with mutation recovery pull, response timeout', async () => {
 
   await tickAFewTimes(vi);
   expect(mockSocket.messages.length).toBe(1);
-  expect(JSON.parse(mockSocket.messages[0])).to.deep.equal([
+  expect(JSON.parse(mockSocket.messages[0])).toEqual([
     'pull',
     {
       clientGroupID: 'test-client-group-id',
@@ -1863,7 +1863,7 @@ test('puller with normal non-mutation recovery pull', async () => {
 
   const result = await r.puller(pullReq, 'test-request-id');
   expect(fetch).not.toBeCalled();
-  expect(result).to.deep.equal({
+  expect(result).toEqual({
     httpRequestInfo: {
       errorMessage: '',
       httpStatusCode: 200,
@@ -1973,7 +1973,7 @@ test('smokeTest', async () => {
 //     fetchStub.calledWithMatch(
 //       sinon.match(new RegExp('^https://example.com/api/metrics/v0/report?.*')),
 //     ),
-//   ).to.be.true;
+//   ).toBe(true);
 // });
 
 // test('Metrics not reported when enableAnalytics is false', async () => {
@@ -1991,7 +1991,7 @@ test('smokeTest', async () => {
 //     fetchStub.calledWithMatch(
 //       sinon.match(new RegExp('^https://example.com/api/metrics/v0/report?.*')),
 //     ),
-//   ).to.be.false;
+//   ).toBe(false);
 // });
 
 // test('Metrics not reported when server indicates local development', async () => {
@@ -2009,7 +2009,7 @@ test('smokeTest', async () => {
 //     fetchStub.calledWithMatch(
 //       sinon.match(new RegExp('^https://example.com/api/metrics/v0/report?.*')),
 //     ),
-//   ).to.be.false;
+//   ).toBe(false);
 // });
 
 test('Authentication', async () => {
@@ -2035,14 +2035,14 @@ test('Authentication', async () => {
     expectedAuthToken: string,
     expectedTimeOfCall: number,
   ) => {
-    expect(decodeSecProtocols((await r.socket).protocol).authToken).equal(
+    expect(decodeSecProtocols((await r.socket).protocol).authToken).toBe(
       expectedAuthToken,
     );
     await r.triggerError(ErrorKind.Unauthorized, 'auth error ' + authCounter);
-    expect(r.connectionStatus).equal(ConnectionStatus.Disconnected);
+    expect(r.connectionStatus).toBe(ConnectionStatus.Disconnected);
     await vi.advanceTimersByTimeAsync(tickMS);
     expect(log).length(1);
-    expect(log[0]).equal(expectedTimeOfCall);
+    expect(log[0]).toBe(expectedTimeOfCall);
     log.length = 0;
   };
 
@@ -2070,7 +2070,7 @@ test('Authentication', async () => {
   {
     await r.waitForConnectionStatus(ConnectionStatus.Connecting);
     socket = await r.socket;
-    expect(decodeSecProtocols(socket.protocol).authToken).equal(
+    expect(decodeSecProtocols(socket.protocol).authToken).toBe(
       'new-auth-token-8',
     );
     await r.triggerConnected();
@@ -2083,14 +2083,14 @@ test('Authentication', async () => {
     // Ping/pong should happen every 5 seconds.
     await tickAFewTimes(vi, PING_INTERVAL_MS);
     const socket = await r.socket;
-    expect(socket.messages[0]).deep.equal(JSON.stringify(['ping', {}]));
-    expect(r.connectionStatus).equal(ConnectionStatus.Connected);
+    expect(socket.messages[0]).deep.toBe(JSON.stringify(['ping', {}]));
+    expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
     await r.triggerPong();
-    expect(r.connectionStatus).equal(ConnectionStatus.Connected);
+    expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
     // getAuth should not be called again.
     expect(log).empty;
     // Socket is kept as long as we are connected.
-    expect(await r.socket).equal(socket);
+    expect(await r.socket).toBe(socket);
   }
 });
 
@@ -2112,13 +2112,13 @@ test('throttles reauth on rapid auth errors', async () => {
   await vi.advanceTimersByTimeAsync(0);
   expect(authCallTimes).length(1);
   const initialAuthTime = authCallTimes.shift();
-  expect(initialAuthTime).equal(startTime);
+  expect(initialAuthTime).toBe(startTime);
 
   await r.triggerError(ErrorKind.Unauthorized, 'first auth error');
   await r.waitForConnectionStatus(ConnectionStatus.Disconnected);
   await vi.advanceTimersByTimeAsync(0);
   expect(authCallTimes).length(1);
-  expect(authCallTimes[0]).equal(startTime);
+  expect(authCallTimes[0]).toBe(startTime);
 
   await r.waitForConnectionStatus(ConnectionStatus.Connecting);
   await r.triggerConnected();
@@ -2134,7 +2134,7 @@ test('throttles reauth on rapid auth errors', async () => {
 
   await vi.advanceTimersByTimeAsync(1);
   expect(authCallTimes).length(2);
-  expect(authCallTimes[1]).equal(startTime + RUN_LOOP_INTERVAL_MS);
+  expect(authCallTimes[1]).toBe(startTime + RUN_LOOP_INTERVAL_MS);
 });
 
 test(ErrorKind.AuthInvalidated, async () => {
@@ -2148,7 +2148,7 @@ test(ErrorKind.AuthInvalidated, async () => {
   });
 
   await r.triggerConnected();
-  expect(decodeSecProtocols((await r.socket).protocol).authToken).equal(
+  expect(decodeSecProtocols((await r.socket).protocol).authToken).toBe(
     'auth-token-1',
   );
 
@@ -2156,7 +2156,7 @@ test(ErrorKind.AuthInvalidated, async () => {
   await r.waitForConnectionStatus(ConnectionStatus.Disconnected);
 
   await r.waitForConnectionStatus(ConnectionStatus.Connecting);
-  expect(decodeSecProtocols((await r.socket).protocol).authToken).equal(
+  expect(decodeSecProtocols((await r.socket).protocol).authToken).toBe(
     'auth-token-2',
   );
 });
@@ -2209,7 +2209,7 @@ test('Ping pong', async () => {
   expect((await r.socket).messages).empty;
   await vi.advanceTimersByTimeAsync(1);
 
-  expect((await r.socket).messages).deep.equal([JSON.stringify(['ping', {}])]);
+  expect((await r.socket).messages).deep.toBe([JSON.stringify(['ping', {}])]);
   await vi.advanceTimersByTimeAsync(PING_TIMEOUT_MS - 1);
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
   await vi.advanceTimersByTimeAsync(1);
@@ -2226,7 +2226,7 @@ test('Ping timeout', async () => {
   await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS - 1);
   expect((await r.socket).messages).empty;
   await vi.advanceTimersByTimeAsync(1);
-  expect((await r.socket).messages).deep.equal([JSON.stringify(['ping', {}])]);
+  expect((await r.socket).messages).deep.toBe([JSON.stringify(['ping', {}])]);
   await vi.advanceTimersByTimeAsync(PING_TIMEOUT_MS - 1);
   await r.triggerPong();
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
@@ -2322,7 +2322,7 @@ test('Logs errors in connect', async () => {
       level === 'error' && args.find(arg => /bad-message/.test(String(arg))),
   );
 
-  expect(index).to.not.equal(-1);
+  expect(index).not.toBe(-1);
 });
 
 test('New connection logs', async () => {
@@ -2360,8 +2360,8 @@ test('New connection logs', async () => {
           (arg as {messageCount: number}).messageCount === 2,
       ),
   );
-  expect(connectIndex).to.not.equal(-1);
-  expect(disconnectIndex).to.not.equal(-1);
+  expect(connectIndex).not.toBe(-1);
+  expect(disconnectIndex).not.toBe(-1);
 });
 
 async function testWaitsForConnection(
@@ -2382,14 +2382,14 @@ async function testWaitsForConnection(
   await tickAFewTimes(vi);
 
   // Rejections that happened in previous connect should not reject pusher.
-  expect(log).to.deep.equal([]);
+  expect(log).toEqual([]);
 
   await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS);
   expect(r.connectionStatus).toBe(ConnectionStatus.Connecting);
 
   await r.triggerError(ErrorKind.InvalidMessage, 'Bad message');
   await tickAFewTimes(vi);
-  expect(log).to.deep.equal(['rejected']);
+  expect(log).toEqual(['rejected']);
 }
 
 test('pusher waits for connection', async () => {
@@ -2807,14 +2807,14 @@ test(ErrorKind.InvalidConnectionRequest, async () => {
   const msg = r.testLogSink.messages.at(-1);
   assert(msg);
 
-  expect(msg[0]).equal('error');
+  expect(msg[0]).toBe('error');
 
   const err = msg[2][1];
   assert(err instanceof ServerError);
-  expect(err.message).equal('InvalidConnectionRequest: test');
+  expect(err.message).toBe('InvalidConnectionRequest: test');
 
   const data = msg[2].at(-1);
-  expect(data).deep.equal({
+  expect(data).deep.toBe({
     lmid: 0,
     baseCookie: null,
   });
@@ -3012,11 +3012,11 @@ test('kvStore option', async () => {
 
     const idIsAView = r.query.e.where('id', '=', 'a').materialize();
     const allDataView = r.query.e.materialize();
-    expect(allDataView.data).deep.equal(expectedValue);
+    expect(allDataView.data).deep.toBe(expectedValue);
 
     await r.mutate.e.insert({id: 'a', value: 1});
 
-    expect(idIsAView.data).deep.equal([
+    expect(idIsAView.data).deep.toBe([
       {id: 'a', value: 1, [refCountSymbol]: 1},
     ]);
     // Wait for persist to finish
@@ -3048,7 +3048,7 @@ test('Close during connect should sleep', async () => {
 
   await r.waitForConnectionStatus(ConnectionStatus.Connected);
   await vi.advanceTimersByTimeAsync(0);
-  expect(r.online).equal(true);
+  expect(r.online).toBe(true);
 
   (await r.socket).close();
   await r.waitForConnectionStatus(ConnectionStatus.Disconnected);
@@ -3057,7 +3057,7 @@ test('Close during connect should sleep', async () => {
   (await r.socket).close();
   await r.waitForConnectionStatus(ConnectionStatus.Disconnected);
   await vi.advanceTimersByTimeAsync(0);
-  expect(r.online).equal(false);
+  expect(r.online).toBe(false);
   const hasSleeping = r.testLogSink.messages.some(m =>
     m[2].some(v => v === 'Sleeping'),
   );
@@ -3069,7 +3069,7 @@ test('Close during connect should sleep', async () => {
   await r.triggerConnected();
   await r.waitForConnectionStatus(ConnectionStatus.Connected);
   await vi.advanceTimersByTimeAsync(0);
-  expect(r.online).equal(true);
+  expect(r.online).toBe(true);
 });
 
 test('Zero close should stop timeout', async () => {
@@ -3123,7 +3123,7 @@ test('ensure we get the same query object back', () => {
   const commentQuery2 = z.query.comment;
   expect(commentQuery1).toBe(commentQuery2);
 
-  expect(issueQuery1).to.not.equal(commentQuery1);
+  expect(issueQuery1).not.toBe(commentQuery1);
 });
 
 test('the type of collection should be inferred from options with parse', () => {

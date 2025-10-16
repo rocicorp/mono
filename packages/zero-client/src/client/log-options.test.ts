@@ -58,8 +58,8 @@ function testEnableAnalyticsFalse(server: HTTPString | null) {
       fakeCreateDatadogLogSink,
     );
     expect(fakeCreateDatadogLogSink).not.toBeCalled();
-    expect(logLevel).to.equal('info');
-    expect(logSink).to.equal(consoleLogSink);
+    expect(logLevel).toBe('info');
+    expect(logSink).toBe(consoleLogSink);
   });
 }
 
@@ -82,13 +82,13 @@ function testLogLevels(
       fakeCreateDatadogLogSink,
     );
     expect(fakeCreateDatadogLogSink).toHaveBeenCalledOnce();
-    expect(fakeCreateDatadogLogSink.mock.calls[0][0].service).to.equal(
+    expect(fakeCreateDatadogLogSink.mock.calls[0][0].service).toBe(
       expectedServiceLabel,
     );
-    expect(
-      fakeCreateDatadogLogSink.mock.calls[0][0].baseURL?.toString(),
-    ).to.equal(expectedBaseURLString);
-    expect(logLevel).to.equal('debug');
+    expect(fakeCreateDatadogLogSink.mock.calls[0][0].baseURL?.toString()).toBe(
+      expectedBaseURLString,
+    );
+    expect(logLevel).toBe('debug');
 
     logSink.log('debug', {foo: 'bar'}, 'hello');
     logSink.log('info', {foo: 'bar'}, 'world');
@@ -96,29 +96,29 @@ function testLogLevels(
 
     // debug not logged
     expect(datadogLogSinkSpy.log).toBeCalledTimes(2);
-    expect(datadogLogSinkSpy.log.mock.calls[0]).to.deep.equal([
+    expect(datadogLogSinkSpy.log.mock.calls[0]).toEqual([
       'info',
       {foo: 'bar'},
       'world',
     ]);
-    expect(datadogLogSinkSpy.log.mock.calls[1]).to.deep.equal([
+    expect(datadogLogSinkSpy.log.mock.calls[1]).toEqual([
       'error',
       {foo: 'bar'},
       'goodbye',
     ]);
 
     expect(consoleLogSinkSpy.log).toBeCalledTimes(3);
-    expect(consoleLogSinkSpy.log.mock.calls[0]).to.deep.equal([
+    expect(consoleLogSinkSpy.log.mock.calls[0]).toEqual([
       'debug',
       {foo: 'bar'},
       'hello',
     ]);
-    expect(consoleLogSinkSpy.log.mock.calls[1]).to.deep.equal([
+    expect(consoleLogSinkSpy.log.mock.calls[1]).toEqual([
       'info',
       {foo: 'bar'},
       'world',
     ]);
-    expect(consoleLogSinkSpy.log.mock.calls[2]).to.deep.equal([
+    expect(consoleLogSinkSpy.log.mock.calls[2]).toEqual([
       'error',
       {foo: 'bar'},
       'goodbye',
@@ -139,34 +139,34 @@ function testLogLevels(
       fakeCreateDatadogLogSink,
     );
     expect(fakeCreateDatadogLogSink).toBeCalledTimes(1);
-    expect(fakeCreateDatadogLogSink.mock.calls[0][0].service).to.equal(
+    expect(fakeCreateDatadogLogSink.mock.calls[0][0].service).toBe(
       expectedServiceLabel,
     );
-    expect(logLevel).to.equal('info');
+    expect(logLevel).toBe('info');
 
     logSink.log('debug', {foo: 'bar'}, 'hello');
     logSink.log('info', {foo: 'bar'}, 'world');
     logSink.log('error', {foo: 'bar'}, 'goodbye');
 
     expect(datadogLogSinkSpy.log).toBeCalledTimes(2);
-    expect(datadogLogSinkSpy.log.mock.calls[0]).to.deep.equal([
+    expect(datadogLogSinkSpy.log.mock.calls[0]).toEqual([
       'info',
       {foo: 'bar'},
       'world',
     ]);
-    expect(datadogLogSinkSpy.log.mock.calls[1]).to.deep.equal([
+    expect(datadogLogSinkSpy.log.mock.calls[1]).toEqual([
       'error',
       {foo: 'bar'},
       'goodbye',
     ]);
 
     expect(consoleLogSinkSpy.log).toBeCalledTimes(2);
-    expect(consoleLogSinkSpy.log.mock.calls[0]).to.deep.equal([
+    expect(consoleLogSinkSpy.log.mock.calls[0]).toEqual([
       'info',
       {foo: 'bar'},
       'world',
     ]);
-    expect(consoleLogSinkSpy.log.mock.calls[1]).to.deep.equal([
+    expect(consoleLogSinkSpy.log.mock.calls[1]).toEqual([
       'error',
       {foo: 'bar'},
       'goodbye',
@@ -187,10 +187,10 @@ function testLogLevels(
       fakeCreateDatadogLogSink,
     );
     expect(fakeCreateDatadogLogSink).toBeCalledTimes(1);
-    expect(fakeCreateDatadogLogSink.mock.calls[0][0].service).to.equal(
+    expect(fakeCreateDatadogLogSink.mock.calls[0][0].service).toBe(
       expectedServiceLabel,
     );
-    expect(logLevel).to.equal('info');
+    expect(logLevel).toBe('info');
 
     logSink.log('debug', {foo: 'bar'}, 'hello');
     logSink.log('info', {foo: 'bar'}, 'world');
@@ -198,12 +198,12 @@ function testLogLevels(
 
     // info still logged
     expect(datadogLogSinkSpy.log).toBeCalledTimes(2);
-    expect(datadogLogSinkSpy.log.mock.calls[0]).to.deep.equal([
+    expect(datadogLogSinkSpy.log.mock.calls[0]).toEqual([
       'info',
       {foo: 'bar'},
       'world',
     ]);
-    expect(datadogLogSinkSpy.log.mock.calls[1]).to.deep.equal([
+    expect(datadogLogSinkSpy.log.mock.calls[1]).toEqual([
       'error',
       {foo: 'bar'},
       'goodbye',
@@ -211,7 +211,7 @@ function testLogLevels(
 
     // only error logged
     expect(consoleLogSinkSpy.log).toBeCalledTimes(1);
-    expect(consoleLogSinkSpy.log.mock.calls[0]).to.deep.equal([
+    expect(consoleLogSinkSpy.log.mock.calls[0]).toEqual([
       'error',
       {foo: 'bar'},
       'goodbye',
@@ -261,8 +261,8 @@ suite('when server is null', () => {
       fakeCreateDatadogLogSink,
     );
     expect(fakeCreateDatadogLogSink).toBeCalledTimes(0);
-    expect(logLevel).to.equal('info');
-    expect(logSink).to.equal(consoleLogSink);
+    expect(logLevel).toBe('info');
+    expect(logSink).toBe(consoleLogSink);
   });
   testEnableAnalyticsFalse(server);
 });

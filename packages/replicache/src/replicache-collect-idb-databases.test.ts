@@ -17,14 +17,14 @@ test('collect IDB databases', async () => {
   const rep = await replicacheForTesting('collect-idb-databases-1');
   await rep.close();
 
-  expect(await getDatabases()).to.deep.equal(['collect-idb-databases-1']);
+  expect(await getDatabases()).toEqual(['collect-idb-databases-1']);
 
   await vi.advanceTimersByTimeAsync(ONE_MONTH);
 
   const rep2 = await replicacheForTesting('collect-idb-databases-2');
   await rep2.close();
 
-  expect(await getDatabases()).to.deep.equal([
+  expect(await getDatabases()).toEqual([
     'collect-idb-databases-1',
     'collect-idb-databases-2',
   ]);
@@ -40,7 +40,7 @@ test('collect IDB databases', async () => {
   vi.useRealTimers();
   await sleep(500);
 
-  expect(await getDatabases()).to.deep.equal([
+  expect(await getDatabases()).toEqual([
     'collect-idb-databases-2',
     'collect-idb-databases-3',
   ]);
