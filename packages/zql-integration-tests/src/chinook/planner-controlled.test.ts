@@ -82,6 +82,135 @@ describe('two joins via or', () => {
     expect(pick(planned, ['where', 'conditions', 0, 'flip'])).toBe(true);
     expect(pick(planned, ['where', 'conditions', 1, 'flip'])).toBe(true);
   });
+
+  // TODO: trace planner.
+  test.only('track.exists(album).or.exists(genre): track < invoiceLines > album', () => {
+    const costModel = makeCostModel({
+      track: 10_000,
+      album: 10,
+      invoiceLine: 1_000_000,
+    });
+    const planned = planQuery(
+      builder.track.where(({or, exists}) =>
+        or(exists('album'), exists('invoiceLines')),
+      ).ast,
+      costModel,
+    );
+
+    expect(pick(planned, ['where', 'conditions', 0, 'flip'])).toBe(true);
+    expect(pick(planned, ['where', 'conditions', 1, 'flip'])).toBe(false);
+  });
+});
+
+describe('double nested exists', () => {
+  test('track.exists(album.exists(artist)): track > album > artist', () => {
+    const costModel = makeCostModel({track: 5000, album: 100, artist: 10});
+    const planned = planQuery(
+      builder.track.where(({exists}) =>
+        exists('album', q => q.whereExists('artist')),
+      ).ast,
+      costModel,
+    );
+
+    // Artist should be flipped to root since it's cheapest
+    // The nested structure should be optimized
+    expect(pick(planned, ['where', 'conditions', 0, 'flip'])).toBe(true);
+  });
+
+  test('track.exists(album.exists(artist)): artist > album > track', () => {
+    const costModel = makeCostModel({track: 10, album: 100, artist: 5000});
+    const planned = planQuery(
+      builder.track.where(({exists}) =>
+        exists('album', q => q.whereExists('artist')),
+      ).ast,
+      costModel,
+    );
+
+    // With track being cheapest, no flip needed at top level
+    expect(pick(planned, ['where', 'conditions', 0, 'flip'])).toBe(false);
+  });
+
+  test('track.exists(album.exists(artist)): album > track > artist', () => {
+    const costModel = makeCostModel({track: 100, album: 5000, artist: 10});
+    const planned = planQuery(
+      builder.track.where(({exists}) =>
+        exists('album', q => q.whereExists('artist')),
+      ).ast,
+      costModel,
+    );
+
+    // Complex case: artist is cheapest but nested under album
+    // Should flip the outer exists to optimize access path
+    expect(pick(planned, ['where', 'conditions', 0, 'flip'])).toBe(true);
+  });
+});
+
+describe('triple nested exists', () => {
+  test('invoiceLine.exists(invoice.exists(customer.exists(supportRep))): costs descending', () => {
+    const costModel = makeCostModel({
+      invoiceLine: 10000,
+      invoice: 1000,
+      customer: 100,
+      employee: 10,
+    });
+    const planned = planQuery(
+      builder.invoiceLine.where(({exists}) =>
+        exists('invoice', q =>
+          q.where(({exists: e2}) =>
+            e2('customer', q2 => q2.whereExists('supportRep')),
+          ),
+        ),
+      ).ast,
+      costModel,
+    );
+
+    // Employee (supportRep) is cheapest, should be flipped to root
+    expect(pick(planned, ['where', 'conditions', 0, 'flip'])).toBe(true);
+  });
+
+  test('invoiceLine.exists(invoice.exists(customer.exists(supportRep))): costs ascending', () => {
+    const costModel = makeCostModel({
+      invoiceLine: 10,
+      invoice: 100,
+      customer: 1000,
+      employee: 10000,
+    });
+    const planned = planQuery(
+      builder.invoiceLine.where(({exists}) =>
+        exists('invoice', q =>
+          q.where(({exists: e2}) =>
+            e2('customer', q2 => q2.whereExists('supportRep')),
+          ),
+        ),
+      ).ast,
+      costModel,
+    );
+
+    // InvoiceLine is cheapest, no flip at root level
+    expect(pick(planned, ['where', 'conditions', 0, 'flip'])).toBe(false);
+  });
+
+  test('invoiceLine.exists(invoice.exists(customer.exists(supportRep))): middle is cheapest', () => {
+    const costModel = makeCostModel({
+      invoiceLine: 5000,
+      invoice: 100,
+      customer: 10,
+      employee: 5000,
+    });
+    const planned = planQuery(
+      builder.invoiceLine.where(({exists}) =>
+        exists('invoice', q =>
+          q.where(({exists: e2}) =>
+            e2('customer', q2 => q2.whereExists('supportRep')),
+          ),
+        ),
+      ).ast,
+      costModel,
+    );
+
+    // Customer is cheapest in the middle, should optimize access path
+    expect(pick(planned, ['where', 'conditions', 0, 'flip'])).toBe(true);
+  });
 });
 
 function makeCostModel(costs: Record<string, number>) {
