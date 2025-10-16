@@ -28,16 +28,16 @@ test('initBgIntervalProcess starts interval that executes process with delayMs b
     controller.signal,
   );
 
-  expect(processCallCount).to.equal(0);
+  expect(processCallCount).toBe(0);
   await vi.advanceTimersByTimeAsync(100);
-  expect(processCallCount).to.equal(1);
+  expect(processCallCount).toBe(1);
   await vi.advanceTimersByTimeAsync(100);
-  expect(processCallCount).to.equal(2);
-  await vi.advanceTimersByTimeAsync(100);
-  await vi.advanceTimersByTimeAsync(100);
+  expect(processCallCount).toBe(2);
   await vi.advanceTimersByTimeAsync(100);
   await vi.advanceTimersByTimeAsync(100);
-  expect(processCallCount).to.equal(6);
+  await vi.advanceTimersByTimeAsync(100);
+  await vi.advanceTimersByTimeAsync(100);
+  expect(processCallCount).toBe(6);
 });
 
 test('initBgIntervalProcess starts interval that executes process with delayMs at 100 on even process call count and 50 on odd process call count', async () => {
@@ -60,21 +60,21 @@ test('initBgIntervalProcess starts interval that executes process with delayMs a
     controller.signal,
   );
 
-  expect(processCallCount).to.equal(0);
+  expect(processCallCount).toBe(0);
   await vi.advanceTimersByTimeAsync(100);
-  expect(processCallCount).to.equal(1);
+  expect(processCallCount).toBe(1);
   await vi.advanceTimersByTimeAsync(50);
-  expect(processCallCount).to.equal(2);
+  expect(processCallCount).toBe(2);
   await vi.advanceTimersByTimeAsync(100);
-  expect(processCallCount).to.equal(3);
+  expect(processCallCount).toBe(3);
   await vi.advanceTimersByTimeAsync(50);
-  expect(processCallCount).to.equal(4);
+  expect(processCallCount).toBe(4);
   await vi.advanceTimersByTimeAsync(50);
-  expect(processCallCount).to.equal(4);
+  expect(processCallCount).toBe(4);
   await vi.advanceTimersByTimeAsync(50);
-  expect(processCallCount).to.equal(5);
+  expect(processCallCount).toBe(5);
   await vi.advanceTimersByTimeAsync(100);
-  expect(processCallCount).to.equal(6);
+  expect(processCallCount).toBe(6);
 });
 
 test('calling function returned by initBgIntervalProcess, stops interval', async () => {
@@ -92,14 +92,14 @@ test('calling function returned by initBgIntervalProcess, stops interval', async
     controller.signal,
   );
 
-  expect(processCallCount).to.equal(0);
+  expect(processCallCount).toBe(0);
   await vi.advanceTimersByTimeAsync(100);
-  expect(processCallCount).to.equal(1);
+  expect(processCallCount).toBe(1);
   controller.abort();
   await vi.advanceTimersByTimeAsync(100);
-  expect(processCallCount).to.equal(1);
+  expect(processCallCount).toBe(1);
   await vi.advanceTimersByTimeAsync(400);
-  expect(processCallCount).to.equal(1);
+  expect(processCallCount).toBe(1);
 });
 
 test('error thrown during process (before stop is called) is logged to error', async () => {
@@ -140,17 +140,17 @@ test('error thrown during process (after stop is called) is logged to debug', as
     lc,
     controller.signal,
   );
-  expect(processCallCount).to.equal(0);
+  expect(processCallCount).toBe(0);
   await vi.advanceTimersByTimeAsync(100);
-  expect(processCallCount).to.equal(1);
+  expect(processCallCount).toBe(1);
   controller.abort();
   processResolver.reject('TestErrorAfterStop');
   try {
     await processResolver.promise;
   } catch (e) {
-    expect(e).to.equal('TestErrorAfterStop');
+    expect(e).toBe('TestErrorAfterStop');
   }
-  expect(testLogSink.messages).to.deep.equal([
+  expect(testLogSink.messages).toEqual([
     ['debug', {bgIntervalProcess: 'testProcess'}, ['Starting']],
     ['debug', {bgIntervalProcess: 'testProcess'}, ['Running']],
     [

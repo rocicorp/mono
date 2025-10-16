@@ -33,7 +33,7 @@ describe('read', () => {
 
       await withRead(kv, async kvr => {
         const r = new ReadImpl(kvr, assertHash);
-        expect(await r.hasChunk(hash)).to.equal(expectHas);
+        expect(await r.hasChunk(hash)).toBe(expectHas);
       });
     };
 
@@ -67,11 +67,11 @@ describe('read', () => {
         } else {
           chunkHash = fakeHash('cacaca');
         }
-        expect(await r.getChunk(chunkHash)).to.deep.equal(expected);
+        expect(await r.getChunk(chunkHash)).toEqual(expected);
         if (expected) {
-          expect(await r.getChunk(chunkHash)).to.deep.equal(expected);
+          expect(await r.getChunk(chunkHash)).toEqual(expected);
         } else {
-          expect(await r.getChunk(chunkHash)).to.be.undefined;
+          expect(await r.getChunk(chunkHash)).toBeUndefined();
         }
       });
     };
@@ -100,13 +100,13 @@ describe('write', () => {
         const km = chunkMetaKey(c.hash);
 
         // The chunk data should always be there.
-        expect(await kvw.get(kd)).to.deep.equal(c.data);
+        expect(await kvw.get(kd)).toEqual(c.data);
 
         // The chunk meta should only be there if there were refs.
         if (refs.length === 0) {
-          expect(await kvw.has(km)).to.be.false;
+          expect(await kvw.has(km)).toBe(false);
         } else {
-          expect(await kvw.get(km)).to.deep.equal(c.meta);
+          expect(await kvw.get(km)).toEqual(c.meta);
         }
       });
     };
@@ -126,12 +126,12 @@ describe('write', () => {
   async function assertRefCount(kvr: Read, hash: Hash, count: number) {
     const value = await kvr.get(chunkRefCountKey(hash));
     if (count === 0) {
-      expect(value).to.be.undefined;
+      expect(value).toBeUndefined();
     } else {
       if (value === undefined) {
         throw new Error('value is undefined');
       }
-      expect(value).to.equal(count);
+      expect(value).toBe(count);
     }
   }
 
@@ -143,9 +143,9 @@ describe('write', () => {
         await (hash === undefined ? w.removeHead(name) : w.setHead(name, hash));
         if (hash !== undefined) {
           const h = await kvw.get(headKey(name));
-          expect(h).to.equal(hash);
+          expect(h).toBe(hash);
         } else {
-          expect(await kvw.get(headKey(name))).to.be.undefined;
+          expect(await kvw.get(headKey(name))).toBeUndefined();
         }
         await w.commit();
       });
@@ -216,10 +216,10 @@ describe('write', () => {
         }
         if (expectError) {
           expect(err)
-            .to.be.instanceof(Error)
+            .toBeInstanceOf(Error)
             .with.property('message', expectError);
         } else {
-          expect(err, 'No error expected').to.be.undefined;
+          expect(err, 'No error expected').toBeUndefined();
         }
       });
     };
@@ -259,7 +259,7 @@ describe('write', () => {
         key = chunkDataKey(c.hash);
 
         // The changes should be present inside the tx.
-        expect(await kvw.has(key)).to.be.true;
+        expect(await kvw.has(key)).toBe(true);
 
         if (commit) {
           if (setHead) {
@@ -273,7 +273,7 @@ describe('write', () => {
 
       // The data should only persist if we set the head and commit.
       await withRead(kv, async kvr => {
-        expect(setHead).to.be.equal(await kvr.has(key));
+        expect(setHead).toBe(await kvr.has(key));
       });
     };
     await t(true, false);
@@ -295,8 +295,8 @@ describe('write', () => {
         // Read the changes inside the tx.
         const c2 = await w.getChunk(c.hash);
         const h = await w.getHead(name);
-        expect(c2).to.deep.equal(c);
-        expect(c.hash).to.equal(h);
+        expect(c2).toEqual(c);
+        expect(c.hash).toBe(h);
       });
 
       // Read the changes outside the tx.
@@ -304,8 +304,8 @@ describe('write', () => {
         const r = new ReadImpl(kvr, assertHash);
         const c2 = await r.getChunk(c.hash);
         const h = await r.getHead(name);
-        expect(c2).to.deep.equal(c);
-        expect(c.hash).to.equal(h);
+        expect(c2).toEqual(c);
+        expect(c.hash).toBe(h);
       });
     };
 
@@ -348,8 +348,8 @@ describe('write', () => {
         assert(h);
         const c = await dagRead.getChunk(h);
         assert(c);
-        expect(c.hash).to.equal(h);
-        expect(c.data).to.deep.equal(data);
+        expect(c.hash).toBe(h);
+        expect(c.data).toEqual(data);
       });
     };
 
@@ -368,9 +368,9 @@ describe('write', () => {
   });
 
   async function expectUndefinedForAllChunkKeys(kvRead: Read, hash: Hash) {
-    expect(await kvRead.get(chunkRefCountKey(hash))).to.be.undefined;
-    expect(await kvRead.get(chunkDataKey(hash))).to.be.undefined;
-    expect(await kvRead.get(chunkMetaKey(hash))).to.be.undefined;
+    expect(await kvRead.get(chunkRefCountKey(hash))).toBeUndefined();
+    expect(await kvRead.get(chunkDataKey(hash))).toBeUndefined();
+    expect(await kvRead.get(chunkMetaKey(hash))).toBeUndefined();
   }
 
   test('that we update ref counts and delete chunks (all keys) when their ref count goes to zero', async () => {
@@ -401,11 +401,11 @@ describe('write', () => {
     });
 
     await withRead(dagStore.kvStore, async kvRead => {
-      expect(await kvRead.get(chunkRefCountKey(r.hash))).to.equal(1);
-      expect(await kvRead.get(chunkRefCountKey(a.hash))).to.equal(1);
-      expect(await kvRead.get(chunkRefCountKey(b.hash))).to.equal(1);
-      expect(await kvRead.get(chunkRefCountKey(c.hash))).to.equal(2);
-      expect(await kvRead.get(chunkRefCountKey(d.hash))).to.equal(1);
+      expect(await kvRead.get(chunkRefCountKey(r.hash))).toBe(1);
+      expect(await kvRead.get(chunkRefCountKey(a.hash))).toBe(1);
+      expect(await kvRead.get(chunkRefCountKey(b.hash))).toBe(1);
+      expect(await kvRead.get(chunkRefCountKey(c.hash))).toBe(2);
+      expect(await kvRead.get(chunkRefCountKey(d.hash))).toBe(1);
     });
 
     // E
@@ -425,10 +425,10 @@ describe('write', () => {
       await expectUndefinedForAllChunkKeys(kvRead, a.hash);
       await expectUndefinedForAllChunkKeys(kvRead, b.hash);
       await expectUndefinedForAllChunkKeys(kvRead, c.hash);
-      expect(await kvRead.get(chunkRefCountKey(d.hash))).to.equal(1);
-      expect(await kvRead.get(chunkDataKey(d.hash))).to.equal('d');
-      expect(await kvRead.get(chunkRefCountKey(e.hash))).to.equal(1);
-      expect(await kvRead.get(chunkDataKey(e.hash))).to.equal('e');
+      expect(await kvRead.get(chunkRefCountKey(d.hash))).toBe(1);
+      expect(await kvRead.get(chunkDataKey(d.hash))).toBe('d');
+      expect(await kvRead.get(chunkRefCountKey(e.hash))).toBe(1);
+      expect(await kvRead.get(chunkDataKey(e.hash))).toBe('e');
     });
   });
 
@@ -452,7 +452,7 @@ async function testChunkNotFoundError(methodName: 'read' | 'write') {
 
   await using(store[methodName](), async r => {
     const chunk = await r.mustGetChunk(h);
-    expect(chunk.data).to.deep.equal(data);
+    expect(chunk.data).toEqual(data);
 
     let err;
     try {
@@ -461,7 +461,7 @@ async function testChunkNotFoundError(methodName: 'read' | 'write') {
       err = e;
     }
     expect(err)
-      .to.be.instanceof(ChunkNotFoundError)
+      .toBeInstanceOf(ChunkNotFoundError)
       .with.property('hash', fakeHash('cacaca'));
   });
 }

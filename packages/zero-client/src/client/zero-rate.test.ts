@@ -49,7 +49,7 @@ test('connection stays alive on rate limit error', async () => {
   await z.pusher(pushReq, 'test-request-id');
   await z.triggerError(ErrorKind.MutationRateLimited, 'Rate limit exceeded');
 
-  expect(mockSocket.messages).to.have.lengthOf(1);
+  expect(mockSocket.messages).toHaveLength(1);
   expect(mockSocket.closed).toBe(false);
 });
 
@@ -75,7 +75,7 @@ test('a mutation after a rate limit error causes limited mutations to be resent'
   await z.triggerError(ErrorKind.MutationRateLimited, 'Rate limit exceeded');
 
   await tickAFewTimes(vi, 0);
-  expect(mockSocket.messages).to.have.lengthOf(1);
+  expect(mockSocket.messages).toHaveLength(1);
   expect(mockSocket.closed).toBe(false);
   expect(z.connectionStatus).eq(ConnectionStatus.Connected);
 
@@ -88,7 +88,7 @@ test('a mutation after a rate limit error causes limited mutations to be resent'
   await tickAFewTimes(vi, 0);
 
   // two mutations should be sent in separate push messages
-  expect(mockSocket.messages).to.have.lengthOf(2);
+  expect(mockSocket.messages).toHaveLength(2);
   expect(
     mockSocket.messages.flatMap(m =>
       JSON.parse(m)[1].mutations.map((m: Mutation) => m.id),

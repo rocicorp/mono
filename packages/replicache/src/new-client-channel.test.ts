@@ -47,8 +47,8 @@ describe('initNewClientChannel', () => {
       () => undefined,
       new TestStore(),
     );
-    expect(await channelMessageV0Promise).to.deep.equal([clientGroupID]);
-    expect(await channelMessageV1Promise).to.deep.equal({
+    expect(await channelMessageV0Promise).toEqual([clientGroupID]);
+    expect(await channelMessageV1Promise).toEqual({
       clientGroupID,
       idbName,
     });
@@ -83,7 +83,7 @@ describe('initNewClientChannel', () => {
       channelMessageV1Promise,
       sleep(10).then(() => sentinel),
     ]);
-    expect(res).equal(sentinel);
+    expect(res).toBe(sentinel);
 
     {
       // And test that we get the message if another client group is created
@@ -98,10 +98,8 @@ describe('initNewClientChannel', () => {
         () => undefined,
         new TestStore(),
       );
-      expect(await channelMessageV0Promise).to.deep.equal([
-        anotherClientGroupID,
-      ]);
-      expect(await channelMessageV1Promise).to.deep.equal({
+      expect(await channelMessageV0Promise).toEqual([anotherClientGroupID]);
+      expect(await channelMessageV1Promise).toEqual({
         clientGroupID: anotherClientGroupID,
         idbName,
       });
@@ -130,7 +128,7 @@ describe('initNewClientChannel', () => {
       },
       new TestStore(),
     );
-    expect(client1OnUpdateNeededCallCount).to.equal(0);
+    expect(client1OnUpdateNeededCallCount).toBe(0);
 
     let client2OnUpdateNeededCallCount = 0;
     const channelMessagePromise = getChannelMessagePromise(replicacheName);
@@ -146,8 +144,8 @@ describe('initNewClientChannel', () => {
       new TestStore(),
     );
     await channelMessagePromise;
-    expect(client1OnUpdateNeededCallCount).to.equal(1);
-    expect(client2OnUpdateNeededCallCount).to.equal(0);
+    expect(client1OnUpdateNeededCallCount).toBe(1);
+    expect(client2OnUpdateNeededCallCount).toBe(0);
   });
 
   test('calls onUpdateNeeded when a client with a different clientGroupID and same idbName is received and that newClientGroupID is present in perdag', async () => {
@@ -171,7 +169,7 @@ describe('initNewClientChannel', () => {
       },
       perdag,
     );
-    expect(client1OnUpdateNeededCallCount).to.equal(0);
+    expect(client1OnUpdateNeededCallCount).toBe(0);
 
     await putClientGroup(perdag, clientGroupID2);
     let client2OnUpdateNeededCallCount = 0;
@@ -188,8 +186,8 @@ describe('initNewClientChannel', () => {
       perdag,
     );
     await channelMessagePromise;
-    expect(client1OnUpdateNeededCallCount).to.equal(1);
-    expect(client2OnUpdateNeededCallCount).to.equal(0);
+    expect(client1OnUpdateNeededCallCount).toBe(1);
+    expect(client2OnUpdateNeededCallCount).toBe(0);
   });
 
   test('does not call onUpdateNeeded when a client with a different clientGroupID and same idbName is received and that newClientGroupID is *not* present in perdag', async () => {
@@ -213,7 +211,7 @@ describe('initNewClientChannel', () => {
       },
       perdag,
     );
-    expect(client1OnUpdateNeededCallCount).to.equal(0);
+    expect(client1OnUpdateNeededCallCount).toBe(0);
 
     // don't put clientGroupID2 in perdag
     let client2OnUpdateNeededCallCount = 0;
@@ -231,8 +229,8 @@ describe('initNewClientChannel', () => {
     );
     await channelMessagePromise;
     // 0 because clientGroupID2 is not in perdag
-    expect(client1OnUpdateNeededCallCount).to.equal(0);
-    expect(client2OnUpdateNeededCallCount).to.equal(0);
+    expect(client1OnUpdateNeededCallCount).toBe(0);
+    expect(client2OnUpdateNeededCallCount).toBe(0);
   });
 
   test('does not call onUpdateNeeded when a client with the same clientGroupID and idbName is received', async () => {
@@ -255,7 +253,7 @@ describe('initNewClientChannel', () => {
       },
       new TestStore(),
     );
-    expect(client1OnUpdateNeededCallCount).to.equal(0);
+    expect(client1OnUpdateNeededCallCount).toBe(0);
 
     let client2OnUpdateNeededCallCount = 0;
     const channelMessagePromise = getChannelMessagePromise(replicacheName);
@@ -271,8 +269,8 @@ describe('initNewClientChannel', () => {
       new TestStore(),
     );
     await channelMessagePromise;
-    expect(client1OnUpdateNeededCallCount).to.equal(0);
-    expect(client2OnUpdateNeededCallCount).to.equal(0);
+    expect(client1OnUpdateNeededCallCount).toBe(0);
+    expect(client2OnUpdateNeededCallCount).toBe(0);
   });
 
   test('closes channel when abort is signaled', async () => {
@@ -297,7 +295,7 @@ describe('initNewClientChannel', () => {
       },
       new TestStore(),
     );
-    expect(client1OnUpdateNeededCallCount).to.equal(0);
+    expect(client1OnUpdateNeededCallCount).toBe(0);
     let client2OnUpdateNeededCallCount = 0;
     controller1.abort();
 
@@ -317,8 +315,8 @@ describe('initNewClientChannel', () => {
     await channelMessagePromise;
     // 0 because controller1.abort was called, causing
     // client1's channel to be closed before receiving client2
-    expect(client1OnUpdateNeededCallCount).to.equal(0);
-    expect(client2OnUpdateNeededCallCount).to.equal(0);
+    expect(client1OnUpdateNeededCallCount).toBe(0);
+    expect(client2OnUpdateNeededCallCount).toBe(0);
   });
 });
 
@@ -359,7 +357,7 @@ test('v0 message is not handled', async () => {
     },
     perdag,
   );
-  expect(client1OnUpdateNeededCallCount).to.equal(0);
+  expect(client1OnUpdateNeededCallCount).toBe(0);
 
   const channelMessagePromise = getChannelMessagePromise(
     replicacheName,
@@ -371,5 +369,5 @@ test('v0 message is not handled', async () => {
   channel.postMessage(['client-group-2']);
   await channelMessagePromise;
 
-  expect(client1OnUpdateNeededCallCount).to.equal(0);
+  expect(client1OnUpdateNeededCallCount).toBe(0);
 });

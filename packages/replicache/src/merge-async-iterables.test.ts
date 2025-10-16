@@ -17,25 +17,25 @@ test('mergeAsyncIterables', async () => {
       const iter = makeAsyncIterable(a);
       const iter2 = makeAsyncIterable(b);
       const merged = mergeAsyncIterables(iter, iter2, compare);
-      expect(await asyncIterableToArray(merged)).to.deep.equal(expected);
+      expect(await asyncIterableToArray(merged)).toEqual(expected);
     }
     {
       const iter = a;
       const iter2 = makeAsyncIterable(b);
       const merged = mergeAsyncIterables(iter, iter2, compare);
-      expect(await asyncIterableToArray(merged)).to.deep.equal(expected);
+      expect(await asyncIterableToArray(merged)).toEqual(expected);
     }
     {
       const iter = makeAsyncIterable(a);
       const iter2 = b;
       const merged = mergeAsyncIterables(iter, iter2, compare);
-      expect(await asyncIterableToArray(merged)).to.deep.equal(expected);
+      expect(await asyncIterableToArray(merged)).toEqual(expected);
     }
     {
       const iter = a;
       const iter2 = b;
       const merged = mergeAsyncIterables(iter, iter2, compare);
-      expect(await asyncIterableToArray(merged)).to.deep.equal(expected);
+      expect(await asyncIterableToArray(merged)).toEqual(expected);
     }
   };
 
@@ -105,8 +105,8 @@ test('mergeAsyncIterables with return', async () => {
 
   const merged = mergeAsyncIterables(iterA, iterB, (a, b) => a - b);
   const result = await asyncIterableToArray(merged);
-  expect(result).to.deep.equal([0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4]);
-  expect(log).to.deep.equal([
+  expect(result).toEqual([0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4]);
+  expect(log).toEqual([
     'next:0.5',
     'next:1.5',
     'next:2.5',
@@ -144,6 +144,6 @@ test('mergeAsyncIterables with return and abrupt completion', async () => {
       break;
     }
   }
-  expect(result).to.deep.equal([0.5, 1, 1.5, 2, 2.5]);
-  expect(log).to.deep.equal(['next:0.5', 'next:1.5', 'next:2.5', 'return:3.5']);
+  expect(result).toEqual([0.5, 1, 1.5, 2, 2.5]);
+  expect(log).toEqual(['next:0.5', 'next:1.5', 'next:2.5', 'return:3.5']);
 });

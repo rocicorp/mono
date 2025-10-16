@@ -33,7 +33,7 @@ describe('onUpdateNeeded', () => {
 
     await tickAFewTimes(vi);
 
-    expect(onUpdateNeededReason).to.deep.equal({
+    expect(onUpdateNeededReason).toEqual({
       type: 'NewClientGroup',
     });
   });
@@ -61,7 +61,7 @@ describe('onUpdateNeeded', () => {
       undefined,
       {useUniqueName: false},
     );
-    expect(onUpdateNeededReason).to.deep.equal({
+    expect(onUpdateNeededReason).toEqual({
       type: 'NewClientGroup',
     });
   });
@@ -77,7 +77,7 @@ describe('onUpdateNeeded', () => {
     await replicacheForTesting('not-called-same-client-group', {
       mutators: {test1: () => undefined},
     });
-    expect(onUpdateNeededReason).to.be.undefined;
+    expect(onUpdateNeededReason).toBeUndefined();
   });
 
   test('Not called if new client has different name', async () => {
@@ -91,6 +91,6 @@ describe('onUpdateNeeded', () => {
     await replicacheForTesting('not-called-diff-name-2', {
       mutators: {test1: () => undefined},
     });
-    expect(onUpdateNeededReason).to.be.undefined;
+    expect(onUpdateNeededReason).toBeUndefined();
   });
 });

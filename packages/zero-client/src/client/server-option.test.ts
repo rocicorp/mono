@@ -25,7 +25,7 @@ test('getServer', () => {
   );
 
   const expectError = (server: string, expectedError: string) => {
-    expect(() => getServer(server)).to.throw(expectedError);
+    expect(() => getServer(server)).toThrow(expectedError);
   };
 
   expectError(

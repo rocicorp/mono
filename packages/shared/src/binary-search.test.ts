@@ -2,10 +2,10 @@ import {expect, test} from 'vitest';
 import {binarySearch} from './binary-search.ts';
 
 test('binarySearch', () => {
-  // expect(binarySearch(0, () => -1)).to.equal(0);
+  // expect(binarySearch(0, () => -1)).toBe(0);
 
   const t = (needle: number, haystack: number[], expected: number) => {
-    expect(binarySearch(haystack.length, i => needle - haystack[i])).to.equal(
+    expect(binarySearch(haystack.length, i => needle - haystack[i])).toBe(
       expected,
     );
   };

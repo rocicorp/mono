@@ -28,7 +28,7 @@ test('getClientGroups with no existing ClientGroupMap in dag store', async () =>
   const dagStore = new TestStore();
   await withRead(dagStore, async (read: Read) => {
     const readClientGroupMap = await getClientGroups(read);
-    expect(readClientGroupMap.size).to.equal(0);
+    expect(readClientGroupMap.size).toBe(0);
   });
 });
 
@@ -39,14 +39,14 @@ async function testSetClientGroups(
   const clientGroupMap = makeClientGroupMap(partialClientGroupMap);
   await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     const returnClientGroupMap = await setClientGroups(clientGroupMap, write);
-    expect(returnClientGroupMap).to.deep.equal(clientGroupMap);
+    expect(returnClientGroupMap).toEqual(clientGroupMap);
     const readClientGroupMap = await getClientGroups(write);
-    expect(readClientGroupMap).to.deep.equal(clientGroupMap);
+    expect(readClientGroupMap).toEqual(clientGroupMap);
     await write.commit();
   });
   await withRead(dagStore, async (read: Read) => {
     const readClientGroupMap = await getClientGroups(read);
-    expect(readClientGroupMap).to.deep.equal(clientGroupMap);
+    expect(readClientGroupMap).toEqual(clientGroupMap);
   });
 }
 
@@ -307,15 +307,15 @@ async function testSetClientGroup(
       makeClientGroup(partialClientGroup),
       write,
     );
-    expect(returnClientGroupMap).to.deep.equal(expectedClientGroupMap);
+    expect(returnClientGroupMap).toEqual(expectedClientGroupMap);
     const readClientGroupMap = await getClientGroups(write);
-    expect(readClientGroupMap).to.deep.equal(expectedClientGroupMap);
+    expect(readClientGroupMap).toEqual(expectedClientGroupMap);
     await write.commit();
   });
 
   await withRead(dagStore, async (read: Read) => {
     const readClientGroupMap = await getClientGroups(read);
-    expect(readClientGroupMap).to.deep.equal(expectedClientGroupMap);
+    expect(readClientGroupMap).toEqual(expectedClientGroupMap);
   });
 }
 
@@ -328,14 +328,14 @@ async function testSetClientGroupThrowsError(
   const clientGroupMap1 = makeClientGroupMap(partialClientGroupMap1);
   await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
     const returnClientGroupMap1 = await setClientGroups(clientGroupMap1, write);
-    expect(returnClientGroupMap1).to.deep.equal(clientGroupMap1);
+    expect(returnClientGroupMap1).toEqual(clientGroupMap1);
     const readClientGroupMap1 = await getClientGroups(write);
-    expect(readClientGroupMap1).to.deep.equal(clientGroupMap1);
+    expect(readClientGroupMap1).toEqual(clientGroupMap1);
     await write.commit();
   });
   await withRead(dagStore, async (read: Read) => {
     const readClientGroupMap1 = await getClientGroups(read);
-    expect(readClientGroupMap1).to.deep.equal(readClientGroupMap1);
+    expect(readClientGroupMap1).toEqual(readClientGroupMap1);
   });
 
   await withWriteNoImplicitCommit(dagStore, async (write: Write) => {
@@ -626,15 +626,15 @@ test('deleteClientGroup', async () => {
       'client-group-3',
       write,
     );
-    expect(returnClientGroupMap).to.deep.equal(clientGroupMap1);
+    expect(returnClientGroupMap).toEqual(clientGroupMap1);
     const readClientGroupMap = await getClientGroups(write);
-    expect(readClientGroupMap).to.deep.equal(clientGroupMap1);
+    expect(readClientGroupMap).toEqual(clientGroupMap1);
     await write.commit();
   });
 
   await withRead(dagStore, async (read: Read) => {
     const readClientGroupMap = await getClientGroups(read);
-    expect(readClientGroupMap).to.deep.equal(clientGroupMap1);
+    expect(readClientGroupMap).toEqual(clientGroupMap1);
   });
 
   const expectedClientGroupAfterDeletingClientGroup1 = makeClientGroupMap({
@@ -645,11 +645,11 @@ test('deleteClientGroup', async () => {
       'client-group-1',
       write,
     );
-    expect(Object.fromEntries(returnClientGroupMap)).to.deep.equal(
+    expect(Object.fromEntries(returnClientGroupMap)).toEqual(
       Object.fromEntries(expectedClientGroupAfterDeletingClientGroup1),
     );
     const readClientGroupMap = await getClientGroups(write);
-    expect(readClientGroupMap).to.deep.equal(
+    expect(readClientGroupMap).toEqual(
       expectedClientGroupAfterDeletingClientGroup1,
     );
     await write.commit();
@@ -657,7 +657,7 @@ test('deleteClientGroup', async () => {
 
   await withRead(dagStore, async (read: Read) => {
     const readClientGroupMap = await getClientGroups(read);
-    expect(readClientGroupMap).to.deep.equal(
+    expect(readClientGroupMap).toEqual(
       expectedClientGroupAfterDeletingClientGroup1,
     );
   });
@@ -668,7 +668,7 @@ async function expectRefs(expected: Hash[], dagStore: Store) {
     const clientGroupsHash = await read.getHead('client-groups');
     assertHash(clientGroupsHash);
     const clientGroupsChunk = await read.getChunk(clientGroupsHash);
-    expect(clientGroupsChunk?.meta).to.deep.equal(expected);
+    expect(clientGroupsChunk?.meta).toEqual(expected);
   });
 }
 
@@ -864,7 +864,7 @@ test('getClientGroup', async () => {
 
   await withRead(dagStore, async (read: Read) => {
     const readClientGroup1 = await getClientGroup('client-group-1', read);
-    expect(readClientGroup1).to.deep.equal(clientGroup1);
+    expect(readClientGroup1).toEqual(clientGroup1);
   });
 });
 
@@ -899,7 +899,7 @@ test('clientGroupHasPendingMutations', () => {
         lastServerAckdMutationIDs: {},
       }),
     ),
-  ).to.be.false;
+  ).toBe(false);
   expect(
     clientGroupHasPendingMutations(
       makeClientGroup({
@@ -908,7 +908,7 @@ test('clientGroupHasPendingMutations', () => {
         lastServerAckdMutationIDs: {},
       }),
     ),
-  ).to.be.true;
+  ).toBe(true);
   expect(
     clientGroupHasPendingMutations(
       makeClientGroup({
@@ -917,7 +917,7 @@ test('clientGroupHasPendingMutations', () => {
         lastServerAckdMutationIDs: {client1: 1},
       }),
     ),
-  ).to.be.false;
+  ).toBe(false);
   expect(
     clientGroupHasPendingMutations(
       makeClientGroup({
@@ -926,7 +926,7 @@ test('clientGroupHasPendingMutations', () => {
         lastServerAckdMutationIDs: {},
       }),
     ),
-  ).to.be.false;
+  ).toBe(false);
   expect(
     clientGroupHasPendingMutations(
       makeClientGroup({
@@ -935,7 +935,7 @@ test('clientGroupHasPendingMutations', () => {
         lastServerAckdMutationIDs: {client1: 1, client2: 1},
       }),
     ),
-  ).to.be.true;
+  ).toBe(true);
   expect(
     clientGroupHasPendingMutations(
       makeClientGroup({
@@ -944,7 +944,7 @@ test('clientGroupHasPendingMutations', () => {
         lastServerAckdMutationIDs: {client2: 2},
       }),
     ),
-  ).to.be.false;
+  ).toBe(false);
 });
 
 test('Disable Client Group', async () => {
