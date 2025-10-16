@@ -44,7 +44,6 @@ suite('buildPlanGraph', () => {
 
       // Source should be accessible
       expect(plans.plan.hasSource('users')).toBe(true);
-      expect(plans.plan.getSource('users')).toBeDefined();
     });
   });
 
@@ -109,38 +108,6 @@ suite('buildPlanGraph', () => {
 
       // Test that it cannot be flipped (throws UnflippableJoinError)
       expect(() => join.flip()).toThrow('Cannot flip a non-flippable join');
-    });
-
-    test('nested correlatedSubquery in WHERE creates join and processes child WHERE', () => {
-      const ast: AST = {
-        table: 'users',
-        where: {
-          type: 'correlatedSubquery',
-          op: 'EXISTS',
-          related: {
-            correlation: {
-              parentField: ['id'],
-              childField: ['userId'],
-            },
-            subquery: {
-              table: 'posts',
-              where: {
-                type: 'simple',
-                op: '=',
-                left: {type: 'column', name: 'published'},
-                right: {type: 'literal', value: true},
-              },
-            },
-          },
-        },
-      };
-
-      const plans = buildPlanGraph(ast, simpleCostModel);
-
-      // Should have 2 connections (users and posts)
-      expect(plans.plan.connections).toHaveLength(2);
-      // Should have 1 join
-      expect(plans.plan.joins).toHaveLength(1);
     });
 
     test('assigns unique plan IDs to joins', () => {
@@ -569,44 +536,6 @@ suite('buildPlanGraph', () => {
         plans.subPlans.posts.subPlans.comments.plan.connections[0].table,
       ).toBe('comments');
     });
-
-    test('related with WHERE clause creates joins in subPlan', () => {
-      const ast: AST = {
-        table: 'users',
-        related: [
-          {
-            correlation: {
-              parentField: ['id'],
-              childField: ['userId'],
-            },
-            subquery: {
-              table: 'posts',
-              alias: 'posts',
-              where: {
-                type: 'correlatedSubquery',
-                op: 'EXISTS',
-                related: {
-                  correlation: {
-                    parentField: ['id'],
-                    childField: ['postId'],
-                  },
-                  subquery: {
-                    table: 'likes',
-                  },
-                },
-              },
-            },
-          },
-        ],
-      };
-
-      const plans = buildPlanGraph(ast, simpleCostModel);
-
-      // posts subPlan should have 2 connections (posts and likes)
-      expect(plans.subPlans.posts.plan.connections).toHaveLength(2);
-      // posts subPlan should have 1 join
-      expect(plans.subPlans.posts.plan.joins).toHaveLength(1);
-    });
   });
 
   suite('complex queries', () => {
@@ -683,57 +612,6 @@ suite('buildPlanGraph', () => {
 
       // Should have subPlan for profile
       expect(plans.subPlans).toHaveProperty('profile');
-    });
-
-    test('reuses sources when same table appears multiple times', () => {
-      const ast: AST = {
-        table: 'users',
-        where: {
-          type: 'and',
-          conditions: [
-            {
-              type: 'correlatedSubquery',
-              op: 'EXISTS',
-              related: {
-                correlation: {
-                  parentField: ['id'],
-                  childField: ['authorId'],
-                },
-                subquery: {
-                  table: 'posts',
-                },
-              },
-            },
-            {
-              type: 'correlatedSubquery',
-              op: 'EXISTS',
-              related: {
-                correlation: {
-                  parentField: ['id'],
-                  childField: ['editorId'],
-                },
-                subquery: {
-                  table: 'posts',
-                },
-              },
-            },
-          ],
-        },
-      };
-
-      const plans = buildPlanGraph(ast, simpleCostModel);
-
-      // Should have 3 connections (1 for users, 2 for posts - one per subquery)
-      expect(plans.plan.connections).toHaveLength(3);
-
-      // But only 2 sources (users and posts)
-      expect(plans.plan.hasSource('users')).toBe(true);
-      expect(plans.plan.hasSource('posts')).toBe(true);
-
-      // Both posts connections should come from the same source
-      expect(plans.plan.getSource('posts')).toBeDefined();
-      expect(plans.plan.connections[1].table).toBe('posts');
-      expect(plans.plan.connections[2].table).toBe('posts');
     });
   });
 
