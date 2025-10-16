@@ -140,7 +140,7 @@
       "default": "./out/react.js"
     },
     "./react-native": {
-      "types": "./out/zero-react-native/src/mod.d.ts",
+      "types": "./out/zero/src/react-native.d.ts",
       "default": "./out/react-native.js"
     },
     "./server": {
