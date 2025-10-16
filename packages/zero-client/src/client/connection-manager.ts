@@ -1,3 +1,4 @@
+import {type Resolver, resolver} from '@rocicorp/resolver';
 import {Subscribable} from '../../../shared/src/subscribable.ts';
 import {ConnectionStatus} from './connection-status.ts';
 
@@ -60,6 +61,11 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
    */
   #timeoutCheckIntervalMs: number;
 
+  /**
+   * Resolver used to signal waiting callers when the state changes.
+   */
+  #stateChangeResolver: Resolver<void> = resolver();
+
   constructor(options: ConnectionManagerOptions) {
     super();
 
@@ -74,7 +80,7 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
       disconnectAt: now + this.#disconnectTimeoutMs,
     };
     this.#connectingStartedAt = now;
-    this.#startTimeoutInterval();
+    this.#maybeStartTimeoutInterval();
   }
 
   get state(): ConnectionState {
@@ -97,21 +103,31 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
     return this.#state.name !== ConnectionStatus.Closed;
   }
 
+  waitForStateChange(): Promise<void> {
+    return this.#nextStatePromise();
+  }
+
   /**
    * Transition to connecting state.
    *
    * This starts the 5-minute timeout timer, but if we've entered disconnected state,
    * we stay there and continue retrying.
+   *
+   * @returns An object containing a promise that resolves on the next state change.
    */
-  connecting(reason?: string | undefined): void {
+  connecting(reason?: string | undefined): {
+    nextStatePromise: Promise<void>;
+  } {
     // cannot transition from closed to any other status
     if (this.#state.name === ConnectionStatus.Closed) {
-      return;
+      return {nextStatePromise: this.#nextStatePromise()};
     }
 
-    // if we're already in disconnected state, no-op
+    // we cannot intentionally transition from disconnected to connecting
+    // disconnected can transition to connected on successful connection
+    // or a terminal state
     if (this.#state.name === ConnectionStatus.Disconnected) {
-      return;
+      return {nextStatePromise: this.#nextStatePromise()};
     }
 
     const now = Date.now();
@@ -123,9 +139,9 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
         attempt: this.#state.attempt + 1,
         reason,
       };
-      this.notify(this.#state);
-      this.#startTimeoutInterval();
-      return;
+      const nextStatePromise = this.#publishStateAndGetPromise();
+      this.#maybeStartTimeoutInterval();
+      return {nextStatePromise};
     }
 
     // Starting a new connecting session
@@ -143,33 +159,37 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
       disconnectAt,
       reason,
     };
-    this.notify(this.#state);
-    this.#startTimeoutInterval();
+    const nextStatePromise = this.#publishStateAndGetPromise();
+    this.#maybeStartTimeoutInterval();
+    return {nextStatePromise};
   }
 
   /**
    * Transition to connected state.
    * This resets the connecting timeout timer.
+   *
+   * @returns An object containing a promise that resolves on the next state change.
    */
-  connected(): void {
+  connected(): {nextStatePromise: Promise<void>} {
     // cannot transition from closed to any other status
     if (this.#state.name === ConnectionStatus.Closed) {
-      return;
+      return {nextStatePromise: this.#nextStatePromise()};
     }
 
     // Already connected, no-op
     if (this.#state.name === ConnectionStatus.Connected) {
-      return;
+      return {nextStatePromise: this.#nextStatePromise()};
     }
 
     // Reset the timeout timer on successful connection
     this.#connectingStartedAt = undefined;
-    this.#stopTimeoutInterval();
+    this.#maybeStopTimeoutInterval();
 
     this.#state = {
       name: ConnectionStatus.Connected,
     };
-    this.notify(this.#state);
+    const nextStatePromise = this.#publishStateAndGetPromise();
+    return {nextStatePromise};
   }
 
   /**
@@ -177,16 +197,20 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
    * This is called when the 5-minute timeout expires, or when we're intentionally
    * disconnecting due to an error (this will eventually be a separate state, error).
    * The run loop will continue trying to reconnect.
+   *
+   * @returns An object containing a promise that resolves on the next state change.
    */
-  disconnected(): void {
+  disconnected(): {
+    nextStatePromise: Promise<void>;
+  } {
     // cannot transition from closed to any other status
     if (this.#state.name === ConnectionStatus.Closed) {
-      return;
+      return {nextStatePromise: this.#nextStatePromise()};
     }
 
     // Already disconnected, no-op
     if (this.#state.name === ConnectionStatus.Disconnected) {
-      return;
+      return {nextStatePromise: this.#nextStatePromise()};
     }
 
     // When transitioning from connected to disconnected, we've lost a connection
@@ -197,38 +221,66 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
     // When transitioning from connecting to disconnected (e.g., due to timeout),
     // we keep the start time to maintain the context that we've been trying for a while.
 
-    this.#stopTimeoutInterval();
+    this.#maybeStopTimeoutInterval();
 
     this.#state = {
       name: ConnectionStatus.Disconnected,
     };
-    this.notify(this.#state);
+    const nextStatePromise = this.#publishStateAndGetPromise();
+    return {nextStatePromise};
   }
 
   /**
    * Transition to closed state.
    * This is terminal - no further transitions are allowed.
+   *
+   * @returns An object containing a promise that resolves on the next state change.
    */
-  closed(): void {
+  closed(): {nextStatePromise: Promise<void>} {
     // Already closed, no-op
     if (this.#state.name === ConnectionStatus.Closed) {
-      return;
+      return {nextStatePromise: this.#nextStatePromise()};
     }
 
     this.#connectingStartedAt = undefined;
-    this.#stopTimeoutInterval();
+    this.#maybeStopTimeoutInterval();
 
     this.#state = {
       name: ConnectionStatus.Closed,
     };
+    const nextStatePromise = this.#publishStateAndGetPromise();
+    return {nextStatePromise};
+  }
+
+  override cleanup = (): void => {
+    this._listeners.clear();
+    this.#resolveNextStateWaiters();
+  };
+
+  #resolveNextStateWaiters(): void {
+    this.#stateChangeResolver.resolve();
+    this.#stateChangeResolver = resolver();
+  }
+
+  #publishState(): void {
     this.notify(this.#state);
+    this.#resolveNextStateWaiters();
+  }
+
+  #nextStatePromise(): Promise<void> {
+    return this.#stateChangeResolver.promise;
+  }
+
+  #publishStateAndGetPromise(): Promise<void> {
+    this.#publishState();
+    return this.#nextStatePromise();
   }
 
   /**
    * Check if we should transition from connecting to disconnected due to timeout.
    * Returns true if the transition happened.
    */
-  checkTimeout(): boolean {
+  #checkTimeout(): boolean {
     if (this.#state.name !== ConnectionStatus.Connecting) {
       return false;
     }
@@ -242,16 +294,16 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
     return false;
   }
 
-  #startTimeoutInterval(): void {
+  #maybeStartTimeoutInterval(): void {
     if (this.#timeoutInterval !== undefined) {
       return;
     }
     this.#timeoutInterval = setInterval(() => {
-      this.checkTimeout();
+      this.#checkTimeout();
     }, this.#timeoutCheckIntervalMs);
   }
 
-  #stopTimeoutInterval(): void {
+  #maybeStopTimeoutInterval(): void {
     if (this.#timeoutInterval === undefined) {
       return;
     }

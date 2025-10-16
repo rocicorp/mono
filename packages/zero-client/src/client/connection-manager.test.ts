@@ -28,7 +28,7 @@ describe('ConnectionManager', () => {
         disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
       });
 
-      expect(manager.state).toMatchObject({
+      expect(manager.state).toEqual({
         name: ConnectionStatus.Connecting,
         attempt: 0,
         disconnectAt: 1_000 + DEFAULT_TIMEOUT_MS,
@@ -59,7 +59,7 @@ describe('ConnectionManager', () => {
       vi.setSystemTime(6_000);
       manager.connecting('retry');
 
-      expect(manager.state).toMatchObject({
+      expect(manager.state).toEqual({
         name: ConnectionStatus.Connecting,
         attempt: 1,
         disconnectAt: 2_500 + DEFAULT_TIMEOUT_MS,
@@ -77,7 +77,7 @@ describe('ConnectionManager', () => {
       vi.setSystemTime(42_000);
       manager.connecting();
 
-      expect(manager.state).toMatchObject({
+      expect(manager.state).toEqual({
         name: ConnectionStatus.Connecting,
         attempt: 1,
         disconnectAt: 42_000 + DEFAULT_TIMEOUT_MS,
@@ -106,12 +106,11 @@ describe('ConnectionManager', () => {
         disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
       });
 
-      vi.setSystemTime(DEFAULT_TIMEOUT_MS);
-      expect(manager.checkTimeout()).toBe(true);
+      vi.advanceTimersByTime(DEFAULT_TIMEOUT_MS + 100);
       expect(manager.is(ConnectionStatus.Disconnected)).toBe(true);
 
       const listener = subscribe(manager);
-      vi.setSystemTime(DEFAULT_TIMEOUT_MS + 1_000);
+      vi.advanceTimersByTime(500);
       manager.connecting();
 
       expect(manager.is(ConnectionStatus.Disconnected)).toBe(true);
@@ -176,7 +175,7 @@ describe('ConnectionManager', () => {
       vi.setSystemTime(60_000);
       manager.connecting();
 
-      expect(manager.state).toMatchObject({
+      expect(manager.state).toEqual({
         name: ConnectionStatus.Connecting,
         attempt: 1,
         disconnectAt: 60_000 + DEFAULT_TIMEOUT_MS,
@@ -324,41 +323,6 @@ describe('ConnectionManager', () => {
   });
 
   describe('checkTimeout', () => {
-    test('returns false when not in connecting state', () => {
-      const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
-      });
-
-      expect(manager.checkTimeout()).toBe(false);
-
-      manager.connected();
-      expect(manager.checkTimeout()).toBe(false);
-
-      manager.disconnected();
-      expect(manager.checkTimeout()).toBe(false);
-
-      manager.closed();
-      expect(manager.checkTimeout()).toBe(false);
-    });
-
-    test('disconnects once the deadline is reached', () => {
-      const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
-      });
-      const listener = subscribe(manager);
-
-      vi.setSystemTime(DEFAULT_TIMEOUT_MS - 1);
-      expect(manager.checkTimeout()).toBe(false);
-
-      listener.mockClear();
-      vi.setSystemTime(DEFAULT_TIMEOUT_MS);
-      expect(manager.checkTimeout()).toBe(true);
-      expect(manager.state).toEqual({name: ConnectionStatus.Disconnected});
-      expect(listener).toHaveBeenCalledWith({
-        name: ConnectionStatus.Disconnected,
-      });
-    });
-
     test('automatically disconnects once the interval detects timeout', () => {
       const manager = new ConnectionManager({
         disconnectTimeoutMs: 1_000,
@@ -377,6 +341,41 @@ describe('ConnectionManager', () => {
       expect(listener).toHaveBeenCalledWith({
         name: ConnectionStatus.Disconnected,
       });
+    });
+
+    test('uses the configured timeout check interval', () => {
+      const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
+
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: 5_000,
+        timeoutCheckIntervalMs: 2_500,
+      });
+
+      try {
+        expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+        expect(setIntervalSpy).toHaveBeenCalledWith(
+          expect.any(Function),
+          2_500,
+        );
+      } finally {
+        manager.closed();
+        setIntervalSpy.mockRestore();
+      }
+    });
+
+    test('stops checking timeouts after disconnecting', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: 1_000,
+        timeoutCheckIntervalMs: 100,
+      });
+      const listener = subscribe(manager);
+
+      manager.disconnected();
+      listener.mockClear();
+
+      vi.advanceTimersByTime(1_000);
+
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 
@@ -409,7 +408,7 @@ describe('ConnectionManager', () => {
       });
       const listener = subscribe(manager);
 
-      expect(manager.state).toMatchObject({
+      expect(manager.state).toEqual({
         name: ConnectionStatus.Connecting,
         attempt: 0,
         disconnectAt: 1_000 + DEFAULT_TIMEOUT_MS,
@@ -441,6 +440,91 @@ describe('ConnectionManager', () => {
       expect(listener).toHaveBeenNthCalledWith(3, {
         name: ConnectionStatus.Connected,
       });
+    });
+  });
+
+  describe('state change promises', () => {
+    test('waitForStateChange resolves on next transition', async () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+
+      const waitForChange = manager.waitForStateChange();
+      manager.connected();
+
+      await expect(waitForChange).resolves.toBeUndefined();
+    });
+
+    test('transition nextStatePromise resolves after subsequent state change', async () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+
+      // Move to connected first so connecting() starts a fresh session
+      manager.connected();
+      const {nextStatePromise} = manager.connecting();
+      manager.connected();
+
+      await expect(nextStatePromise).resolves.toBeUndefined();
+    });
+
+    test('transition nextStatePromise resolves on closed', async () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+
+      const {nextStatePromise} = manager.connected();
+      manager.closed();
+
+      await expect(nextStatePromise).resolves.toBeUndefined();
+    });
+
+    test('waitForStateChange reuses promise until resolved, then creates a new one', async () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+
+      const first = manager.waitForStateChange();
+      const second = manager.waitForStateChange();
+      expect(second).toBe(first);
+
+      let firstResolved = false;
+      void first.then(() => {
+        firstResolved = true;
+      });
+      await Promise.resolve();
+      expect(firstResolved).toBe(false);
+
+      manager.connected();
+      await expect(first).resolves.toBeUndefined();
+
+      const third = manager.waitForStateChange();
+      expect(third).not.toBe(first);
+
+      manager.disconnected();
+      await expect(third).resolves.toBeUndefined();
+    });
+
+    test('error nextStatePromise resolves when transitioning from connected to connecting', async () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+
+      const {nextStatePromise} = manager.connected();
+      manager.connecting();
+
+      await expect(nextStatePromise).resolves.toBeUndefined();
+    });
+
+    test('cleanup resolves pending waiters', async () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+
+      const waitPromise = manager.waitForStateChange();
+      manager.cleanup();
+
+      await expect(waitPromise).resolves.toBeUndefined();
     });
   });
 });

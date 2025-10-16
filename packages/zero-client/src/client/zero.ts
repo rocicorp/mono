@@ -103,7 +103,7 @@ import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
 import {ActiveClientsManager} from './active-clients-manager.ts';
-import {ConnectionManager, type ConnectionState} from './connection-manager.ts';
+import {ConnectionManager} from './connection-manager.ts';
 import {ZeroContext} from './context.ts';
 import {
   type BatchMutator,
@@ -386,18 +386,6 @@ export class Zero<
   readonly #connectionManager: ConnectionManager;
   readonly #activeClientsManager: Promise<ActiveClientsManager>;
   #inspector: Inspector | undefined;
-
-  /**
-   * Returns a promise that resolves when the connection state changes.
-   */
-  #waitForConnectionStateChange(): Promise<ConnectionState> {
-    return new Promise(resolve => {
-      const unsubscribe = this.#connectionManager.subscribe(state => {
-        unsubscribe();
-        resolve(state);
-      });
-    });
-  }
 
   #connectStart: number | undefined = undefined;
   // Set on connect attempt if currently undefined.
@@ -1728,7 +1716,7 @@ export class Zero<
               pingTimeoutPromise,
               pingTimeoutAborted,
               this.#visibilityWatcher.waitForHidden(),
-              this.#waitForConnectionStateChange(),
+              this.#connectionManager.waitForStateChange(),
               this.#rejectMessageError.promise,
             ]);
 

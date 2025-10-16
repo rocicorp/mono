@@ -2202,9 +2202,6 @@ test('No backoff on errors', async () => {
     await vi.advanceTimersByTimeAsync(delta - 1);
     expect(r.connectionStatus).toBe(ConnectionStatus.Disconnected);
     await vi.advanceTimersByTimeAsync(1);
-    for (let i = 0; i < 5; i++) {
-      await vi.advanceTimersByTimeAsync(0);
-    }
     const nextSocket = await nextSocketPromise;
     // ConnectionManager may keep the public status as Disconnected while a new socket is prepared,
     // so detect the retry by waiting for a fresh socket instead of expecting a Connecting state.
@@ -2284,13 +2281,14 @@ test('Connect timeout', async () => {
   await r.waitForConnectionStatus(ConnectionStatus.Connecting);
   let currentSocket = await r.socket;
 
-  expect(connectionStates.length).toEqual(1);
-  expect(connectionStates[0]).toEqual({
-    name: ConnectionStatus.Connecting,
-    attempt: 1,
-    disconnectAt: DEFAULT_DISCONNECT_TIMEOUT_MS + startTime,
-    reason: undefined,
-  });
+  expect(connectionStates).toEqual([
+    {
+      name: ConnectionStatus.Connecting,
+      attempt: 1,
+      disconnectAt: DEFAULT_DISCONNECT_TIMEOUT_MS + startTime,
+      reason: undefined,
+    },
+  ]);
 
   const step = async (sleepMS: number) => {
     // Need to drain the microtask queue without changing the clock because we are
