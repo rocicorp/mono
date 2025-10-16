@@ -464,6 +464,10 @@ export class PipelineDriver {
       const start = performance.now();
       let type;
       try {
+        const source = this.#tables.get(table);
+        if (!source) {
+          continue;
+        }
         if (prevValue && nextValue) {
           // Rows are ultimately referred to by the union key (in #streamNodes())
           // so an update is represented as an `edit` if and only if the
@@ -476,6 +480,13 @@ export class PipelineDriver {
               getRowKey(unionKey, nextValue as Row) as JSONValue,
             )
           ) {
+            const conflicts = source.getUniqueConflicts(nextValue as Row);
+            for (const conflict of conflicts) {
+              yield* this.#push(table, {
+                type: 'remove',
+                row: conflict,
+              });
+            }
             type = 'edit';
             yield* this.#push(table, {
               type: 'edit',
@@ -492,6 +503,13 @@ export class PipelineDriver {
           yield* this.#push(table, {type: 'remove', row: prevValue as Row});
         }
         if (nextValue) {
+          const conflicts = source.getUniqueConflicts(nextValue as Row);
+          for (const conflict of conflicts) {
+            yield* this.#push(table, {
+              type: 'remove',
+              row: conflict,
+            });
+          }
           type = 'add';
           yield* this.#push(table, {type: 'add', row: nextValue as Row});
         }
