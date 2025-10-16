@@ -213,7 +213,7 @@ describe('view-syncer/cvr-store', () => {
 
   // ⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
   // Serialized Error: { logLevel: 'warn', errorBody: { kind: 'ClientNotFound', message: 'max attempts exceeded waiting for CVR@04 to catch up from 03' } }
-  // This error originated in "packages/zero-cache/src/services/view-syncer/cvr-store.pg-test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
+  // This error originated in "packages/zero-cache/src/services/view-syncer/cvr-store.pg.test.ts" test file. It doesn't mean the error was thrown inside the file itself, but while it was running.
   // The latest test that might've caused the error is "wait for row catchup". It might mean one of the following:
   // - The error was thrown, while Vitest was running this test.
   // - If the error occurred after the test had been completed, this was the last documented test before it was thrown.

@@ -30,13 +30,10 @@ export function configForVersion(version: number, url: string) {
       browser: {enabled: false},
       silent: 'passed-only',
       include: [
-        'src/**/*.pg-test.?(c|m)[jt]s?(x)',
-        'server/**/*.pg-test.?(c|m)[jt]s?(x)',
+        'src/**/*.pg.test.?(c|m)[jt]s?(x)',
+        'server/**/*.pg.test.?(c|m)[jt]s?(x)',
       ],
-      exclude: [
-        'src/**/*.test.?(c|m)[jt]s?(x)',
-        'server/**/*.test.?(c|m)[jt]s?(x)',
-      ],
+      exclude: [],
       globalSetup: ['../../packages/zero-cache/test/pg-16.ts'],
       coverage: {
         enabled: !ci,
@@ -59,8 +56,8 @@ export function configForNoPg(url: string) {
         'server/**/*.test.?(c|m)[jt]s?(x)',
       ],
       exclude: [
-        'src/**/*.pg-test.?(c|m)[jt]s?(x)',
-        'server/**/*.pg-test.?(c|m)[jt]s?(x)',
+        'src/**/*.pg.test.?(c|m)[jt]s?(x)',
+        'server/**/*.pg.test.?(c|m)[jt]s?(x)',
       ],
       coverage: {
         enabled: !ci,

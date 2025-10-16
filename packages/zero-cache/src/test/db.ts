@@ -23,7 +23,7 @@ declare module 'vitest' {
 function mustInject<K extends keyof ProvidedContext>(key: K) {
   return must(
     inject(key),
-    'test file must have suffix ".pg-test.ts" to setup postgres container',
+    'test file must have suffix ".pg.test.ts" to setup postgres container',
   );
 }
 
