@@ -3295,12 +3295,12 @@ describe('CRUD', () => {
       [refCountSymbol]: 1,
     });
 
-    // Setting with undefined/null/missing overwrites field to default/null.
+    // Setting with undefined/null/missing leaves existing values as-is
     await setComment({id: 'a', issueID: '11'});
     expect(view.data[0]).toEqual({
       id: 'a',
       issueID: '11',
-      text: null,
+      text: 'AA text',
       [refCountSymbol]: 1,
     });
 
@@ -3316,7 +3316,7 @@ describe('CRUD', () => {
     expect(view.data[0]).toEqual({
       id: 'a',
       issueID: '11',
-      text: null,
+      text: 'foo',
       [refCountSymbol]: 1,
     });
 
