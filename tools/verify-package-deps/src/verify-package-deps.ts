@@ -44,7 +44,6 @@ async function findTypeScriptFiles(dir: string): Promise<string[]> {
         if (
           entry.name.endsWith('.ts') &&
           !entry.name.includes('.test.') &&
-          !entry.name.includes('.pg-test.') &&
           !entry.name.includes('.spec.') &&
           !entry.name.endsWith('.d.ts')
         ) {
