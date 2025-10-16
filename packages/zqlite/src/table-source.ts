@@ -77,7 +77,7 @@ export class TableSource implements Source {
   readonly #columns: Record<string, SchemaValue>;
   // Maps sorted columns JSON string (e.g. '["a","b"]) to Set of columns.
   readonly #uniqueIndexes: Map<string, Set<string>>;
-  readonly #uniqueIndexesSanPrimaryKey: string[][];
+  readonly #uniqueIndexesSortedKeys: string[][];
   readonly #primaryKey: PrimaryKey;
   readonly #logConfig: LogConfig;
   readonly #lc: LogContext;
@@ -97,13 +97,13 @@ export class TableSource implements Source {
     this.#table = tableName;
     this.#columns = columns;
     this.#primaryKey = primaryKey;
-    const [uniqueIndexes, uniqueIndexesSanPrimaryKey] = getUniqueIndexes(
+    const [uniqueIndexes, uniqueIndexesSortedKeys] = getUniqueIndexes(
       db,
       tableName,
       primaryKey,
     );
     this.#uniqueIndexes = uniqueIndexes;
-    this.#uniqueIndexesSanPrimaryKey = uniqueIndexesSanPrimaryKey;
+    this.#uniqueIndexesSortedKeys = uniqueIndexesSortedKeys;
 
     this.#stmts = this.#getStatementsFor(db);
   }
@@ -187,9 +187,9 @@ export class TableSource implements Source {
         compile(
           sql`SELECT * FROM ${sql.ident(this.#table)} WHERE ${sql.join(
             [
-              ...this.#uniqueIndexesSanPrimaryKey.map(columns =>
+              ...this.#uniqueIndexesSortedKeys.map(key =>
                 sql.join(
-                  columns.map(k => sql`${sql.ident(k)}=?`),
+                  key.map(k => sql`${sql.ident(k)}=?`),
                   ' AND ',
                 ),
               ),
@@ -267,8 +267,8 @@ export class TableSource implements Source {
 
   getUniqueConflicts(row: Row): Row[] {
     return this.#stmts.getUniqueConflicts.all<Row>(
-      this.#uniqueIndexesSanPrimaryKey.flatMap(columns =>
-        toSQLiteTypes(columns, row, this.#columns),
+      this.#uniqueIndexesSortedKeys.flatMap(key =>
+        toSQLiteTypes(key, row, this.#columns),
       ),
     );
   }
@@ -562,13 +562,10 @@ function getUniqueIndexes(
     uniqueIndexes.has(primaryKeyKey),
     `primary key ${primaryKey} does not have a UNIQUE index`,
   );
-  const uniqueIndexesSanPrimaryKey = [];
-  for (const [key, columns] of uniqueIndexes) {
-    if (key !== primaryKeyKey) {
-      uniqueIndexesSanPrimaryKey.push([...columns].sort());
-    }
-  }
-  return [uniqueIndexes, uniqueIndexesSanPrimaryKey];
+  const uniqueIndexesSortedKeys = [
+    ...uniqueIndexes.values().map(keySet => [...keySet].sort()),
+  ];
+  return [uniqueIndexes, uniqueIndexesSortedKeys];
 }
 
 export function toSQLiteTypes(
