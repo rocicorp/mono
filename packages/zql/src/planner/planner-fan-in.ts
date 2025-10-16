@@ -50,6 +50,14 @@ export class PlannerFanIn {
     this.#type = 'UFI';
   }
 
+  estimateCost(): number {
+    let totalCost = 0;
+    for (const input of this.#inputs) {
+      totalCost += input.estimateCost();
+    }
+    return totalCost;
+  }
+
   propagateConstraints(
     branchPattern: number[],
     constraint: PlannerConstraint | undefined,

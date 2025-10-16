@@ -69,25 +69,20 @@ describe('two joins via and', () => {
   });
 });
 
-// TODO:
-// I need to re-do how we compute costs over the graph.
-// 1. ANDs should be added
-// 2. ORs should be added with UFO multiplying cost of parent input
-// 3. Joins multiplies parent * child
-// describe('two joins via or', () => {
-//   test.only('track.exists(album).or.exists(genre): track > album > genre', () => {
-//     const costModel = makeCostModel({track: 500000, album: 10, genre: 10});
-//     const planned = planQuery(
-//       builder.track.where(({or, exists}) =>
-//         or(exists('album'), exists('genre')),
-//       ).ast,
-//       costModel,
-//     );
+describe('two joins via or', () => {
+  test('track.exists(album).or.exists(genre): track > album > genre', () => {
+    const costModel = makeCostModel({track: 500000, album: 10, genre: 10});
+    const planned = planQuery(
+      builder.track.where(({or, exists}) =>
+        or(exists('album'), exists('genre')),
+      ).ast,
+      costModel,
+    );
 
-//     // TODO: I would expect `album` and `genre` to be flipped. We must have some bug in `or` planning?
-//     console.log(JSON.stringify(planned, null, 2));
-//   });
-// });
+    expect(pick(planned, ['where', 'conditions', 0, 'flip'])).toBe(true);
+    expect(pick(planned, ['where', 'conditions', 1, 'flip'])).toBe(true);
+  });
+});
 
 function makeCostModel(costs: Record<string, number>) {
   return (

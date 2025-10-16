@@ -7,6 +7,7 @@ import type {PlannerTerminus} from './planner-terminus.ts';
 import type {PlannerNode} from './planner-node.ts';
 import {PlannerSource, type ConnectionCostModel} from './planner-source.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
+import {must} from '../../../shared/src/must.ts';
 
 /**
  * Captured state of a plan for comparison and restoration.
@@ -200,13 +201,7 @@ export class PlannerGraph {
    * Relies on connection-level cost caching to avoid redundant calculations.
    */
   getTotalCost(): number {
-    let logSum = 0;
-    for (const connection of this.connections) {
-      // Connection.estimateCost() uses its own cache internally
-      const cost = connection.estimateCost();
-      logSum += Math.log(cost);
-    }
-    return Math.exp(logSum);
+    return must(this.#terminus).estimateCost();
   }
 
   /**
@@ -424,7 +419,7 @@ export class PlannerGraph {
             console.error(
               `  Attempt ${i + 1}: Complete! Total cost: ${totalCost}`,
             );
-          console.log('cost', totalCost, this.getPlanSummary());
+          // console.log('cost', totalCost, this.getPlanSummary());
           if (totalCost < bestCost) {
             bestCost = totalCost;
             bestPlan = this.capturePlanningSnapshot();

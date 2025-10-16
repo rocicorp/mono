@@ -171,6 +171,12 @@ export class PlannerJoin {
     this.#type = 'left';
     this.#pinned = false;
   }
+
+  estimateCost(): number {
+    const parentCost = this.#parent.estimateCost();
+    const childCost = this.#child.estimateCost();
+    return parentCost * childCost;
+  }
 }
 
 export class UnflippableJoinError extends Error {

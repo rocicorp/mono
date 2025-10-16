@@ -38,6 +38,10 @@ export class PlannerFanOut {
     this.#input.propagateConstraints(branchPattern, constraint, inputFrom);
   }
 
+  estimateCost(): number {
+    return this.#input.estimateCost();
+  }
+
   convertToUFO(): void {
     this.#type = 'UFO';
   }
