@@ -562,9 +562,10 @@ function getUniqueIndexes(
     uniqueIndexes.has(primaryKeyKey),
     `primary key ${primaryKey} does not have a UNIQUE index`,
   );
-  const uniqueIndexesSortedKeys = [
-    ...uniqueIndexes.values().map(keySet => [...keySet].sort()),
-  ];
+  const uniqueIndexesSortedKeys = [];
+  for (const columnsSet of uniqueIndexes.values()) {
+    uniqueIndexesSortedKeys.push([...columnsSet].sort());
+  }
   return [uniqueIndexes, uniqueIndexesSortedKeys];
 }
 
