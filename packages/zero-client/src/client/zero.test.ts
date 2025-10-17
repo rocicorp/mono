@@ -2076,7 +2076,7 @@ test('Authentication', async () => {
     await r.triggerConnected();
     await r.waitForConnectionStatus(ConnectionStatus.Connected);
     // getAuth should not be called again.
-    expect(log).empty;
+    expect(log).toHaveLength(0);
   }
 
   {
@@ -2088,7 +2088,7 @@ test('Authentication', async () => {
     await r.triggerPong();
     expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
     // getAuth should not be called again.
-    expect(log).empty;
+    expect(log).toHaveLength(0);
     // Socket is kept as long as we are connected.
     expect(await r.socket).toBe(socket);
   }
@@ -2206,7 +2206,7 @@ test('Ping pong', async () => {
   (await r.socket).messages.length = 0;
 
   await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS - 1);
-  expect((await r.socket).messages).empty;
+  expect((await r.socket).messages).toHaveLength(0);
   await vi.advanceTimersByTimeAsync(1);
 
   expect((await r.socket).messages).toEqual([JSON.stringify(['ping', {}])]);
@@ -2224,7 +2224,7 @@ test('Ping timeout', async () => {
   (await r.socket).messages.length = 0;
 
   await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS - 1);
-  expect((await r.socket).messages).empty;
+  expect((await r.socket).messages).toHaveLength(0);
   await vi.advanceTimersByTimeAsync(1);
   expect((await r.socket).messages).toEqual([JSON.stringify(['ping', {}])]);
   await vi.advanceTimersByTimeAsync(PING_TIMEOUT_MS - 1);
