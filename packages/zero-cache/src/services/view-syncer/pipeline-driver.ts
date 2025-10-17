@@ -465,11 +465,14 @@ export class PipelineDriver {
       const start = performance.now();
       let type;
       try {
-        const tableSpec = must(this.#tableSpecs.get(table)).tableSpec;
-        const source = must(this.#tables.get(table));
+        const tableSpec = mustGetTableSpec(this.#tableSpecs, table).tableSpec;
+        const tableSource = must(
+          this.#tables.get(table),
+          `missing table source ${table}`,
+        );
         let existing: [RowKey, Row] | undefined = undefined;
         if (nextValue) {
-          const conflicts = source.getUniqueConflicts(nextValue as Row);
+          const conflicts = tableSource.getUniqueConflicts(nextValue as Row);
           for (const conflict of conflicts) {
             const conflictPrimaryKey = getRowKey(
               tableSpec.primaryKey,
@@ -483,7 +486,7 @@ export class PipelineDriver {
             ) {
               existing = [conflictPrimaryKey, conflict];
             } else {
-              yield* this.#push(table, {
+              yield* this.#push(tableSource, {
                 type: 'remove',
                 row: conflict,
               });
@@ -491,12 +494,13 @@ export class PipelineDriver {
             }
           }
         }
+        console.log(removedConflicts);
         let nextValueProcessed = false;
         let prevValueProcessed = false;
         if (existing) {
           const [existingPrimaryKey, existingRow] = existing;
           type = 'edit';
-          yield* this.#push(table, {
+          yield* this.#push(tableSource, {
             type: 'edit',
             row: nextValue as Row,
             oldRow: existingRow,
@@ -508,19 +512,24 @@ export class PipelineDriver {
             getRowKey(tableSpec.primaryKey, prevValue as Row) as JSONValue,
           );
         }
-        if (prevValue) {
+        if (prevValue && !prevValueProcessed) {
           type = 'remove';
           const wasPreviouslyRemovedDueToConflict = removedConflicts.delete(
             JSON.stringify(getRowKey(tableSpec.primaryKey, prevValue as Row)),
           );
           if (!wasPreviouslyRemovedDueToConflict) {
-            yield* this.#push(table, {type: 'remove', row: prevValue as Row});
+            yield* this.#push(tableSource, {
+              type: 'remove',
+              row: prevValue as Row,
+            });
+          } else {
+            console.log('wasPreviouslyRemovedDueToConflict', prevValue);
           }
           prevValueProcessed = true;
         }
         if (nextValue && !nextValueProcessed) {
           type = 'add';
-          yield* this.#push(table, {type: 'add', row: nextValue as Row});
+          yield* this.#push(tableSource, {type: 'add', row: nextValue as Row});
           nextValueProcessed = true;
         }
         assert(nextValueProcessed || !nextValue);
@@ -535,6 +544,8 @@ export class PipelineDriver {
         type,
       });
     }
+
+    assert(removedConflicts.size === 0);
 
     // Set the new snapshot on all TableSources.
     const {curr} = diff;
@@ -573,9 +584,7 @@ export class PipelineDriver {
     return this.#storage.createStorage();
   }
 
-  *#push(table: string, change: SourceChange): Iterable<RowChange> {
-    const source = must(this.#tables.get(table));
-
+  *#push(source: TableSource, change: SourceChange): Iterable<RowChange> {
     this.#startAccumulating();
     for (const _ of source.genPush(change)) {
       yield* this.#stopAccumulating().stream();
