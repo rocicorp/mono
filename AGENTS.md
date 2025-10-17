@@ -137,7 +137,7 @@ Zero is a streaming database:
 
 - **PostgreSQL**: Source of truth for data
 - **SQLite**: Server-side replica managed by `zero-cache`
-- **Replicache**: Client-side replica managed by `zero-client` and `replicache`, in IndexedDB by default
+- **Replicache**: Client-side store managed by `zero-client` and `replicache`, in IndexedDB by default
 
 ### Schema Migrations
 
