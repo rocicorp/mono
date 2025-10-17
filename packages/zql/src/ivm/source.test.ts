@@ -1,4 +1,4 @@
-import {describe, expect, suite, test} from 'vitest';
+import {expect, suite, test} from 'vitest';
 import type {
   Condition,
   SimpleOperator,
