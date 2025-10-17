@@ -3015,9 +3015,7 @@ test('kvStore option', async () => {
 
     await r.mutate.e.insert({id: 'a', value: 1});
 
-    expect(idIsAView.data).toEqual([
-      {id: 'a', value: 1, [refCountSymbol]: 1},
-    ]);
+    expect(idIsAView.data).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
     // Wait for persist to finish
     await r.persist();
 

@@ -401,10 +401,9 @@ test('cache evicts in lru fashion, basic test of just reads', async () => {
     );
   });
 
-  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-    testValue2Chunk.hash,
-    testValue3Chunk.hash,
-  ].sort());
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+  );
 });
 
 test('cache eviction suspension, basic test of just reads', async () => {
@@ -425,18 +424,15 @@ test('cache eviction suspension, basic test of just reads', async () => {
         testValue3Chunk.data,
       );
     });
-    expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-      testValue1Chunk.hash,
-      testValue2Chunk.hash,
-      testValue3Chunk.hash,
-    ].sort());
+    expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+      [testValue1Chunk.hash, testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+    );
   });
 
   // testValue1Chunk now evicted
-  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-    testValue2Chunk.hash,
-    testValue3Chunk.hash,
-  ].sort());
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+  );
 });
 
 test('source store values are reloaded if evicted from cache', async () => {
@@ -457,10 +453,9 @@ test('source store values are reloaded if evicted from cache', async () => {
     );
   });
 
-  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-    testValue2Chunk.hash,
-    testValue3Chunk.hash,
-  ].sort());
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+  );
 
   await withRead(lazyStore, async read => {
     expect((await read.getChunk(testValue1Chunk.hash))?.data).toBe(
@@ -468,10 +463,9 @@ test('source store values are reloaded if evicted from cache', async () => {
     );
   });
 
-  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-    testValue1Chunk.hash,
-    testValue3Chunk.hash,
-  ].sort());
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue1Chunk.hash, testValue3Chunk.hash].sort(),
+  );
 });
 
 test('cache evicts in lru fashion, slightly more complex test with repeats of just reads', async () => {
@@ -495,10 +489,9 @@ test('cache evicts in lru fashion, slightly more complex test with repeats of ju
     );
   });
 
-  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-    testValue1Chunk.hash,
-    testValue3Chunk.hash,
-  ].sort());
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue1Chunk.hash, testValue3Chunk.hash].sort(),
+  );
 });
 
 test('cache evicts in lru fashion, basic test of evict on write', async () => {
@@ -520,10 +513,9 @@ test('cache evicts in lru fashion, basic test of evict on write', async () => {
     await write.getChunk(testValue3Chunk.hash);
   });
 
-  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-    testValue2Chunk.hash,
-    testValue3Chunk.hash,
-  ].sort());
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+  );
 });
 
 test('cache eviction suspension, basic test of evict on write', async () => {
@@ -545,18 +537,15 @@ test('cache eviction suspension, basic test of evict on write', async () => {
       // would evict testValue1Chunk, but doesn't because evicts are suspended
       await write.getChunk(testValue3Chunk.hash);
     });
-    expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-      testValue1Chunk.hash,
-      testValue2Chunk.hash,
-      testValue3Chunk.hash,
-    ].sort());
+    expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+      [testValue1Chunk.hash, testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+    );
   });
 
   // now testValue1Chunk is evicted
-  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-    testValue2Chunk.hash,
-    testValue3Chunk.hash,
-  ].sort());
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+  );
 });
 
 test('cache will evict multiple chunks to make room for newly read chunk', async () => {
@@ -606,10 +595,9 @@ test('cache will evict multiple chunks to make room for newly read chunk', async
     );
   });
 
-  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-    testValue3Chunk.hash,
-    testValue4Chunk.hash,
-  ].sort());
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue3Chunk.hash, testValue4Chunk.hash].sort(),
+  );
 });
 
 test('cache will evict multiple chunks to make room for newly cached chunk on Write.commit', async () => {
@@ -660,10 +648,9 @@ test('cache will evict multiple chunks to make room for newly cached chunk on Wr
     await write.getChunk(testValue4Chunk.hash);
   });
 
-  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-    testValue3Chunk.hash,
-    testValue4Chunk.hash,
-  ].sort());
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue3Chunk.hash, testValue4Chunk.hash].sort(),
+  );
 });
 
 test('cache will evict all cached values to make room for new chunk', async () => {
@@ -713,9 +700,9 @@ test('cache will evict all cached values to make room for new chunk', async () =
     );
   });
 
-  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-    testValue4Chunk.hash,
-  ].sort());
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue4Chunk.hash].sort(),
+  );
 });
 
 test(
@@ -775,11 +762,9 @@ test(
       );
     });
 
-    expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-      testValue1Chunk.hash,
-      testValue2Chunk.hash,
-      testValue3Chunk.hash,
-    ].sort());
+    expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+      [testValue1Chunk.hash, testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+    );
   },
 );
 
@@ -852,10 +837,9 @@ test(
       await write.getChunk(testValue5Chunk.hash);
     });
 
-    expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-      testValue2Chunk.hash,
-      testValue3Chunk.hash,
-    ].sort());
+    expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+      [testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+    );
   },
 );
 
@@ -944,10 +928,9 @@ test('cache eviction does not change ref counts or remove refs', async () => {
     [testValue4Chunk.hash]: [testValue2Chunk.hash, testValue3Chunk.hash],
   });
 
-  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-    testValue1Chunk.hash,
-    testValue3Chunk.hash,
-  ].sort());
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue1Chunk.hash, testValue3Chunk.hash].sort(),
+  );
 
   // Delete chunks from lazy store
   await withWrite(lazyStore, async write => {
@@ -1010,10 +993,9 @@ test('memory-only chunks are not evicted when cache size is exceeded', async () 
     expect((await read.getChunk(testValue3Chunk.hash))?.data).toBe(testValue3);
   });
 
-  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-    testValue2Chunk.hash,
-    testValue3Chunk.hash,
-  ].sort());
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+  );
 
   await withRead(lazyStore, async read => {
     // memory-only chunks were not evicted
@@ -1369,13 +1351,9 @@ test(
     await withRead(lazyStore, async read => {
       expect((await read.getChunk(tempR1.hash))?.data).toBe(tempR1.data);
     });
-    expect([...await lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-      r.hash,
-      a.hash,
-      b.hash,
-      c.hash,
-      d.hash,
-    ].sort());
+    expect(
+      [...(await lazyStore.getCachedSourceChunksSnapshot())].sort(),
+    ).toEqual([r.hash, a.hash, b.hash, c.hash, d.hash].sort());
 
     const tempR2 = await lazyStore.withSuspendedSourceCacheEvictsAndDeletes(
       async () => {
@@ -1409,13 +1387,9 @@ test(
           expect(await read.getChunk(tempR1.hash)).toBeUndefined();
           expect((await read.getChunk(tempR2.hash))?.data).toBe(tempR2.data);
         });
-        expect([...await lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-          r.hash,
-          a.hash,
-          b.hash,
-          c.hash,
-          d.hash,
-        ].sort());
+        expect(
+          [...(await lazyStore.getCachedSourceChunksSnapshot())].sort(),
+        ).toEqual([r.hash, a.hash, b.hash, c.hash, d.hash].sort());
 
         // C
         // |
@@ -1442,13 +1416,9 @@ test(
           expect(await read.getChunk(tempR1.hash)).toBeUndefined();
           expect(await read.getChunk(tempR2.hash)).toBeUndefined();
         });
-        expect([...await lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-          r.hash,
-          a.hash,
-          b.hash,
-          c.hash,
-          d.hash,
-        ].sort());
+        expect(
+          [...(await lazyStore.getCachedSourceChunksSnapshot())].sort(),
+        ).toEqual([r.hash, a.hash, b.hash, c.hash, d.hash].sort());
         return tempR2;
       },
     );
@@ -1465,10 +1435,9 @@ test(
       expect(await read.getChunk(tempR1.hash)).toBeUndefined();
       expect(await read.getChunk(tempR2.hash)).toBeUndefined();
     });
-    expect([...await lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([
-      c.hash,
-      d.hash,
-    ].sort());
+    expect(
+      [...(await lazyStore.getCachedSourceChunksSnapshot())].sort(),
+    ).toEqual([c.hash, d.hash].sort());
   },
 );
 
@@ -1590,13 +1559,17 @@ test('the refs of chunks being cached for a *second* time are not counted on com
     false,
   );
 
-  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([b.hash].sort());
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [b.hash].sort(),
+  );
 
   await withRead(lazyStore, async read => {
     // B is evicted
     await read.getChunk(a.hash);
   });
-  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([a.hash].sort());
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [a.hash].sort(),
+  );
 
   expect(lazyStore.getRefCountsSnapshot()).toEqual({
     [c.hash]: 1,
@@ -1608,7 +1581,9 @@ test('the refs of chunks being cached for a *second* time are not counted on com
     // recache B, A is evicted
     await write.getChunk(b.hash);
   });
-  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([b.hash].sort());
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [b.hash].sort(),
+  );
 
   // B's refs are not recounted
   expect(lazyStore.getRefCountsSnapshot()).toEqual({
