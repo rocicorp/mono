@@ -30,6 +30,7 @@ import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible
 import {h64} from '../../../shared/src/hash.ts';
 import {must} from '../../../shared/src/must.ts';
 import {navigator} from '../../../shared/src/navigator.ts';
+import {promiseRace} from '../../../shared/src/promise-race.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import {Subscribable} from '../../../shared/src/subscribable.ts';
@@ -1930,7 +1931,7 @@ export class Zero<
           };
         }
         default:
-          unreachable();
+          unreachable(raceResult);
       }
     } finally {
       pullResponseResolver.reject('timed out');
@@ -2281,13 +2282,6 @@ function addWebSocketIDToLogContext(
   lc: ZeroLogContext,
 ): ZeroLogContext {
   return lc.withContext('wsid', wsid);
-}
-
-/**
- * Like Promise.race but returns the index of the first promise that resolved.
- */
-function promiseRace(ps: Promise<unknown>[]): Promise<number> {
-  return Promise.race(ps.map((p, i) => p.then(() => i)));
 }
 
 class TimedOutError extends Error {
