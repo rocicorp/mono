@@ -27,29 +27,17 @@ type PlanState = {
 const MAX_PLANNING_ATTEMPTS = 6;
 
 export class PlannerGraph {
-  // ========================================================================
-  // GRAPH STRUCTURE (immutable after construction)
-  // ========================================================================
-
   // Sources indexed by table name
   readonly #sources = new Map<string, PlannerSource>();
 
   // The final output node where constraint propagation starts
   #terminus: PlannerTerminus | undefined = undefined;
 
-  // ========================================================================
-  // PLANNING STATE (mutable during search)
-  // ========================================================================
-
   // Collections of nodes with mutable planning state
   joins: PlannerJoin[] = [];
   fanOuts: PlannerFanOut[] = [];
   fanIns: PlannerFanIn[] = [];
   connections: PlannerConnection[] = [];
-
-  // ========================================================================
-  // Graph Construction (structural operations)
-  // ========================================================================
 
   /**
    * Reset all planning state back to initial values for another planning pass.
@@ -101,10 +89,6 @@ export class PlannerGraph {
     this.#terminus = terminus;
   }
 
-  // ========================================================================
-  // Planning Algorithm (state mutation operations)
-  // ========================================================================
-
   /**
    * Get all connections that haven't been pinned yet.
    * These are candidates for selection in the next planning iteration.
@@ -149,10 +133,6 @@ export class PlannerGraph {
     );
     this.#terminus.propagateConstraints();
   }
-
-  // ========================================================================
-  // Inspection & Debug
-  // ========================================================================
 
   /**
    * Check if all connections have been pinned (planning is complete).
