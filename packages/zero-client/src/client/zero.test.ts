@@ -3078,6 +3078,8 @@ test('Zero close should stop timeout', async () => {
 
   await r.waitForConnectionStatus(ConnectionStatus.Connecting);
   await r.close();
+  await r.waitForConnectionStatus(ConnectionStatus.Closed);
+  expect(r.closed).toBe(true);
   await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS);
   expectLogMessages(r).not.contain(connectTimeoutMessage);
 });
@@ -3090,6 +3092,8 @@ test('Zero close should stop timeout, close delayed', async () => {
   await r.waitForConnectionStatus(ConnectionStatus.Connecting);
   await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS / 2);
   await r.close();
+  await r.waitForConnectionStatus(ConnectionStatus.Closed);
+  expect(r.closed).toBe(true);
   await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS / 2);
   expectLogMessages(r).not.contain(connectTimeoutMessage);
 });
@@ -3294,12 +3298,12 @@ describe('CRUD', () => {
       [refCountSymbol]: 1,
     });
 
-    // Setting with undefined/null/missing overwrites field to default/null.
+    // Setting with undefined/null/missing leaves existing values as-is
     await setComment({id: 'a', issueID: '11'});
     expect(view.data[0]).toEqual({
       id: 'a',
       issueID: '11',
-      text: null,
+      text: 'AA text',
       [refCountSymbol]: 1,
     });
 
@@ -3315,7 +3319,7 @@ describe('CRUD', () => {
     expect(view.data[0]).toEqual({
       id: 'a',
       issueID: '11',
-      text: null,
+      text: 'foo',
       [refCountSymbol]: 1,
     });
 
@@ -3870,6 +3874,9 @@ test('Logging stack on close', async () => {
   mockSocket.messages.length = 0;
 
   await z.close();
+  await z.waitForConnectionStatus(ConnectionStatus.Closed);
+  expect(z.closed).toBe(true);
+  expect(z.connectionStatus).toBe(ConnectionStatus.Closed);
 
   expect(z.testLogSink.messages).toEqual(
     expect.arrayContaining([
