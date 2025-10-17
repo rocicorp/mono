@@ -365,7 +365,7 @@ export class TableSource implements Source {
     }
   }
 
-  *genPush(change: SourceChange | SourceChangeSet) {
+  *genPush(change: SourceChange | SourceChangeSet, disableExistsCheck = false) {
     const exists = (row: Row) =>
       this.#stmts.checkExists.get<{exists: number} | undefined>(
         ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
@@ -374,9 +374,11 @@ export class TableSource implements Source {
     const writeChange = (c: SourceChange) => this.#writeChange(c);
 
     if (change.type === 'set') {
-      const existing = this.#stmts.getExisting.get<Row | undefined>(
-        ...toSQLiteTypes(this.#primaryKey, change.row, this.#columns),
-      );
+      const existing = disableExistsCheck
+        ? undefined
+        : this.#stmts.getExisting.get<Row | undefined>(
+            ...toSQLiteTypes(this.#primaryKey, change.row, this.#columns),
+          );
       if (existing !== undefined) {
         change = {
           type: 'edit',
