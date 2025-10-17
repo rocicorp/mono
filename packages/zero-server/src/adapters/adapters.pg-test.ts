@@ -3,17 +3,18 @@ import {drizzle as drizzleNodePg} from 'drizzle-orm/node-postgres';
 import {pgTable, text} from 'drizzle-orm/pg-core';
 import {drizzle as drizzlePostgresJs} from 'drizzle-orm/postgres-js';
 import {Client, Pool, type PoolClient} from 'pg';
-import {afterEach, beforeEach, describe, expectTypeOf, test} from 'vitest';
 import type {ExpectStatic} from 'vitest';
+import {afterEach, beforeEach, describe, expectTypeOf, test} from 'vitest';
 import {getConnectionURI, testDBs} from '../../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
 import {nanoid} from '../../../zero-client/src/util/nanoid.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import type {Query} from '../../../zql/src/query/query.ts';
+import type {ZQLDatabase} from '../zql-database.ts';
+import {zeroDrizzle, type DrizzleTransaction} from './drizzle.ts';
 import {zeroNodePg} from './pg.ts';
 import {zeroPostgresJS} from './postgresjs.ts';
-import {zeroDrizzle, type DrizzleTransaction} from './drizzle.ts';
-import type {ZQLDatabase} from '../zql-database.ts';
 
 let postgresJsClient: PostgresDB;
 
@@ -94,7 +95,7 @@ const mockTransactionInput = {
 } as const;
 
 async function exerciseMutations<WrappedTransaction>(
-  zql: ZQLDatabase<typeof schema, WrappedTransaction>,
+  zql: ZQLDatabase<typeof schema, WrappedTransaction, unknown>,
   expect: ExpectStatic,
 ) {
   const baseUser = getRandomUser();
@@ -105,7 +106,7 @@ async function exerciseMutations<WrappedTransaction>(
   await zql.transaction(async tx => {
     await tx.mutate.user.insert(baseUser);
 
-    const inserted = await tx.query.user.where('id', '=', baseUser.id).run();
+    const inserted = await tx.run(tx.query.user.where('id', '=', baseUser.id));
     expect(inserted).toHaveLength(1);
     expect(inserted[0]?.status).toBe(baseUser.status);
     expect(inserted[0]?.name).toBe(baseUser.name);
@@ -116,7 +117,9 @@ async function exerciseMutations<WrappedTransaction>(
       status: alternateStatus,
     });
 
-    const afterUpsert = await tx.query.user.where('id', '=', baseUser.id).run();
+    const afterUpsert = await tx.run(
+      tx.query.user.where('id', '=', baseUser.id),
+    );
     expect(afterUpsert[0]?.name).toBe(updatedName);
     expect(afterUpsert[0]?.status).toBe(alternateStatus);
 
@@ -125,9 +128,9 @@ async function exerciseMutations<WrappedTransaction>(
       status: baseUser.status,
     });
 
-    const afterPartialUpsert = await tx.query.user
-      .where('id', '=', baseUser.id)
-      .run();
+    const afterPartialUpsert = await tx.run(
+      tx.query.user.where('id', '=', baseUser.id),
+    );
     expect(afterPartialUpsert[0]?.name).toBe(updatedName);
     expect(afterPartialUpsert[0]?.status).toBe(baseUser.status);
 
@@ -137,13 +140,17 @@ async function exerciseMutations<WrappedTransaction>(
       status: alternateStatus,
     });
 
-    const afterUpdate = await tx.query.user.where('id', '=', baseUser.id).run();
+    const afterUpdate = await tx.run(
+      tx.query.user.where('id', '=', baseUser.id),
+    );
     expect(afterUpdate[0]?.name).toBe(updatedName);
     expect(afterUpdate[0]?.status).toBe(alternateStatus);
 
     await tx.mutate.user.delete({id: baseUser.id});
 
-    const afterDelete = await tx.query.user.where('id', '=', baseUser.id).run();
+    const afterDelete = await tx.run(
+      tx.query.user.where('id', '=', baseUser.id),
+    );
     expect(afterDelete).toHaveLength(0);
 
     const namelessInsert = {
@@ -152,9 +159,10 @@ async function exerciseMutations<WrappedTransaction>(
     };
     await tx.mutate.user.insert(namelessInsert);
 
-    const namelessRow = await tx.query.user
-      .where('id', '=', namelessInsert.id)
-      .run();
+    const namelessRow = await tx.run(
+      tx.query.user.where('id', '=', namelessInsert.id),
+    );
+
     expect(namelessRow).toHaveLength(1);
     expect(namelessRow[0]?.name ?? null).toBeNull();
 
@@ -163,17 +171,17 @@ async function exerciseMutations<WrappedTransaction>(
       status: 'active' as UserStatus,
     });
 
-    const namelessAfterUpsert = await tx.query.user
-      .where('id', '=', namelessInsert.id)
-      .run();
+    const namelessAfterUpsert = await tx.run(
+      tx.query.user.where('id', '=', namelessInsert.id),
+    );
     expect(namelessAfterUpsert[0]?.name ?? null).toBeNull();
     expect(namelessAfterUpsert[0]?.status).toBe('active');
 
     await tx.mutate.user.delete({id: namelessInsert.id});
 
-    const cleanupCheck = await tx.query.user
-      .where('id', '=', namelessInsert.id)
-      .run();
+    const cleanupCheck = await tx.run(
+      tx.query.user.where('id', '=', namelessInsert.id),
+    );
     expect(cleanupCheck).toHaveLength(0);
   }, mockTransactionInput);
 }
@@ -192,15 +200,15 @@ describe('node-postgres', () => {
         [newUser.id, newUser.name, newUser.status],
       );
 
-      const zql = zeroNodePg(schema, client);
+      const zql = zeroNodePg(schema, client, 'context');
 
-      const zqlQuery = await zql.transaction(async tx => {
-        const result = await tx.query.user.where('id', '=', newUser.id);
+      const zqlQuery = await zql.transaction(tx => {
+        const result = tx.query.user.where('id', '=', newUser.id);
 
-        return result;
+        return Promise.resolve(result);
       }, mockTransactionInput);
 
-      const resultZQL = await zqlQuery.run();
+      const resultZQL = await zql.transaction(tx => tx.run(zqlQuery));
 
       const resultClientQuery = await zql.transaction(async tx => {
         const result = await tx.dbTransaction.query(
@@ -213,7 +221,7 @@ describe('node-postgres', () => {
       expect(resultZQL[0]?.name).toEqual(newUser.name);
       expect(resultZQL[0]?.id).toEqual(newUser.id);
 
-      for await (const row of resultClientQuery) {
+      for (const row of resultClientQuery) {
         expect(row.name).toBe(newUser.name);
         expect(row.id).toBe(newUser.id);
       }
@@ -224,7 +232,7 @@ describe('node-postgres', () => {
     const clients = [nodePgClient, nodePgPoolClient, nodePgPool];
 
     for (const client of clients) {
-      const zql = zeroNodePg(schema, client);
+      const zql = zeroNodePg(schema, client, 'context');
       await exerciseMutations(zql, expect);
     }
   });
@@ -238,14 +246,14 @@ describe('postgres-js', () => {
       INSERT INTO "user" (id, name, status) VALUES (${newUser.id}, ${newUser.name}, ${newUser.status})
     `;
 
-    const zql = zeroPostgresJS(schema, postgresJsClient);
+    const zql = zeroPostgresJS(schema, postgresJsClient, 'context');
 
-    const zqlQuery = await zql.transaction(async tx => {
-      const result = await tx.query.user.where('id', '=', newUser.id);
-      return result;
+    const zqlQuery = await zql.transaction(tx => {
+      const result = tx.query.user.where('id', '=', newUser.id);
+      return Promise.resolve(result);
     }, mockTransactionInput);
 
-    const resultZQL = await zqlQuery.run();
+    const resultZQL = await zql.transaction(tx => tx.run(zqlQuery));
 
     const resultClientQuery = await zql.transaction(async tx => {
       const result = await tx.dbTransaction.query(
@@ -258,14 +266,14 @@ describe('postgres-js', () => {
     expect(resultZQL[0]?.name).toEqual(newUser.name);
     expect(resultZQL[0]?.id).toEqual(newUser.id);
 
-    for await (const row of resultClientQuery) {
+    for (const row of resultClientQuery) {
       expect(row.name).toBe(newUser.name);
       expect(row.id).toBe(newUser.id);
     }
   });
 
   test('mutations', async ({expect}) => {
-    const zql = zeroPostgresJS(schema, postgresJsClient);
+    const zql = zeroPostgresJS(schema, postgresJsClient, 'context');
     await exerciseMutations(zql, expect);
   });
 });
@@ -358,13 +366,14 @@ describe('drizzle and node-postgres', () => {
 
       await client.insert(drizzleSchema.user).values(newUser);
 
-      const zql = zeroDrizzle(schema, client);
+      const zql = zeroDrizzle(schema, client, 'context');
 
-      const zqlQuery = await zql.transaction(async tx => {
-        const result = await tx.query.user.where('id', '=', newUser.id);
-        return result;
+      const zqlQuery = await zql.transaction(tx => {
+        const result = tx.query.user.where('id', '=', newUser.id);
+        return Promise.resolve(result);
       }, mockTransactionInput);
-      const resultZQL = await zqlQuery.run();
+
+      const resultZQL = await zql.transaction(tx => tx.run(zqlQuery));
 
       const resultClientQuery = await zql.transaction(async tx => {
         const result = await tx.dbTransaction.query(
@@ -385,7 +394,7 @@ describe('drizzle and node-postgres', () => {
       expect(resultZQL[0]?.name).toEqual(newUser.name);
       expect(resultZQL[0]?.id).toEqual(newUser.id);
 
-      for await (const row of resultClientQuery) {
+      for (const row of resultClientQuery) {
         expect(row.name).toBe(newUser.name);
         expect(row.id).toBe(newUser.id);
       }
@@ -399,14 +408,14 @@ describe('drizzle and node-postgres', () => {
     const clients = [pool, client, poolClient];
 
     for (const drizzleClient of clients) {
-      const zql = zeroDrizzle(schema, drizzleClient);
+      const zql = zeroDrizzle(schema, drizzleClient, 'context');
       await exerciseMutations(zql, expect);
     }
   });
 
   test('type portability - inferred types should not reference internal drizzle paths', () => {
     function getZQL() {
-      return zeroDrizzle(schema, client);
+      return zeroDrizzle(schema, client, 'context');
     }
 
     const zql = getZQL();
@@ -427,7 +436,9 @@ describe('drizzle and node-postgres', () => {
         }
       | undefined
     >();
-    expectTypeOf(zql).toMatchTypeOf<ZQLDatabase<typeof schema, TxType>>();
+    expectTypeOf(zql).toMatchTypeOf<
+      ZQLDatabase<typeof schema, TxType, unknown>
+    >();
   });
 });
 
@@ -445,14 +456,18 @@ describe('drizzle and postgres-js', () => {
 
     await client.insert(drizzleSchema.user).values(newUser);
 
-    const zql = zeroDrizzle(schema, client);
+    type Auth = {userID: string};
+    const auth: Auth = {userID: 'user1'};
+    const zql = zeroDrizzle(schema, client, auth);
 
-    const tx = await zql.transaction(async tx => {
-      const result = await tx.query.user.where('id', '=', newUser.id);
-      return result;
+    const q = await zql.transaction(tx => {
+      const result = tx.query.user.where('id', '=', newUser.id);
+      return Promise.resolve(result);
     }, mockTransactionInput);
 
-    const result = await tx.run();
+    q satisfies Query<typeof schema, 'user', unknown, Auth>;
+
+    const result = await zql.run(q);
 
     expect(result[0]?.name).toEqual(newUser.name);
     expect(result[0]?.id).toEqual(newUser.id);
@@ -497,13 +512,12 @@ describe('drizzle and postgres-js', () => {
 
     await client.insert(drizzleSchema.user).values(newUser);
 
-    const zql = zeroDrizzle(schema, client);
+    const zql = zeroDrizzle(schema, client, 'context');
 
-    const zqlQuery = await zql.transaction(async tx => {
-      const result = await tx.query.user.where('id', '=', newUser.id);
+    const resultZQL = await zql.transaction(async tx => {
+      const result = await tx.run(tx.query.user.where('id', '=', newUser.id));
       return result;
     }, mockTransactionInput);
-    const resultZQL = await zqlQuery.run();
 
     const resultClientQuery = await zql.transaction(async tx => {
       const result = await tx.dbTransaction.query(
@@ -524,7 +538,7 @@ describe('drizzle and postgres-js', () => {
     expect(resultZQL[0]?.name).toEqual(newUser.name);
     expect(resultZQL[0]?.id).toEqual(newUser.id);
 
-    for await (const row of resultClientQuery) {
+    for (const row of resultClientQuery) {
       expect(row.name).toBe(newUser.name);
       expect(row.id).toBe(newUser.id);
     }
@@ -534,13 +548,13 @@ describe('drizzle and postgres-js', () => {
   });
 
   test('mutations', async ({expect}) => {
-    const zql = zeroDrizzle(schema, client);
+    const zql = zeroDrizzle(schema, client, 'context');
     await exerciseMutations(zql, expect);
   });
 
   test('type portability', () => {
     function getZQL() {
-      return zeroDrizzle(schema, client);
+      return zeroDrizzle(schema, client, 'context');
     }
 
     const zql = getZQL();
@@ -561,6 +575,8 @@ describe('drizzle and postgres-js', () => {
         }
       | undefined
     >();
-    expectTypeOf(zql).toMatchTypeOf<ZQLDatabase<typeof schema, TxType>>();
+    expectTypeOf(zql).toMatchTypeOf<
+      ZQLDatabase<typeof schema, TxType, string>
+    >();
   });
 });

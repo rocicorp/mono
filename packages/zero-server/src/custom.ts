@@ -18,6 +18,8 @@ import type {
   TableCRUD,
   TransactionBase,
 } from '../../zql/src/mutate/custom.ts';
+import type {HumanReadable, Query} from '../../zql/src/query/query.ts';
+import {QueryRunner} from './query-runner.ts';
 import {getServerSchema} from './schema.ts';
 
 interface ServerTransaction<S extends Schema, TWrappedTransaction>
@@ -41,29 +43,41 @@ export type CustomMutatorImpl<TDBTransaction, TArgs = any> = (
   args: TArgs,
 ) => Promise<void>;
 
-export class TransactionImpl<S extends Schema, TWrappedTransaction>
-  implements ServerTransaction<S, TWrappedTransaction>
+export class TransactionImpl<
+  TSchema extends Schema,
+  TWrappedTransaction,
+  TContext,
+> implements ServerTransaction<TSchema, TWrappedTransaction>
 {
   readonly location = 'server';
   readonly reason = 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
   readonly clientID: string;
   readonly mutationID: number;
-  readonly mutate: SchemaCRUD<S>;
-  readonly query: SchemaQuery<S>;
+  readonly mutate: SchemaCRUD<TSchema>;
+  readonly query: SchemaQuery<TSchema, TContext>;
+  readonly #queryRunner: QueryRunner<TSchema, TContext>;
 
   constructor(
     dbTransaction: DBTransaction<TWrappedTransaction>,
     clientID: string,
     mutationID: number,
-    mutate: SchemaCRUD<S>,
-    query: SchemaQuery<S>,
+    mutate: SchemaCRUD<TSchema>,
+    query: SchemaQuery<TSchema, TContext>,
+    queryRunner: QueryRunner<TSchema, TContext>,
   ) {
     this.dbTransaction = dbTransaction;
     this.clientID = clientID;
     this.mutationID = mutationID;
     this.mutate = mutate;
     this.query = query;
+    this.#queryRunner = queryRunner;
+  }
+
+  run<TTable extends keyof TSchema['tables'] & string, TReturn>(
+    query: Query<TSchema, TTable, TReturn, TContext>,
+  ): Promise<HumanReadable<TReturn>> {
+    return this.#queryRunner.run(query);
   }
 }
 
@@ -77,6 +91,7 @@ type WithHiddenTxAndSchema = {
 export async function makeServerTransaction<
   S extends Schema,
   TWrappedTransaction,
+  TContext,
 >(
   dbTransaction: DBTransaction<TWrappedTransaction>,
   clientID: string,
@@ -89,15 +104,18 @@ export async function makeServerTransaction<
   query: (
     dbTransaction: DBTransaction<TWrappedTransaction>,
     serverSchema: ServerSchema,
-  ) => SchemaQuery<S>,
+  ) => SchemaQuery<S, TContext>,
+  context: TContext,
 ) {
   const serverSchema = await getServerSchema(dbTransaction, schema);
+  const queryRunner = new QueryRunner(schema, context, dbTransaction);
   return new TransactionImpl(
     dbTransaction,
     clientID,
     mutationID,
     mutate(dbTransaction, serverSchema),
     query(dbTransaction, serverSchema),
+    queryRunner,
   );
 }
 

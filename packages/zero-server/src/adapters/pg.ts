@@ -1,10 +1,10 @@
+import {Client, Pool, type PoolClient} from 'pg';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   DBConnection,
   DBTransaction,
   Row,
 } from '../../../zql/src/mutate/custom.ts';
-import {Client, Pool, type PoolClient} from 'pg';
 import {ZQLDatabase} from '../zql-database.ts';
 
 /**
@@ -90,12 +90,13 @@ export class NodePgTransactionInternal
  * }
  * ```
  */
-export function zeroNodePg<S extends Schema>(
+export function zeroNodePg<S extends Schema, Context>(
   schema: S,
   pg: NodePgTransaction | string,
+  context: Context,
 ) {
   if (typeof pg === 'string') {
     pg = new Pool({connectionString: pg});
   }
-  return new ZQLDatabase(new NodePgConnection(pg), schema);
+  return new ZQLDatabase(new NodePgConnection(pg), schema, context);
 }

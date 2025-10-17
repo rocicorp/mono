@@ -1,9 +1,9 @@
 import {beforeEach, expect, test} from 'vitest';
-import {testDBs} from '../../zero-cache/src/test/db.ts';
 import {
   getClientsTableDefinition,
   getMutationsTableDefinition,
 } from '../../zero-cache/src/services/change-source/pg/schema/shard.ts';
+import {testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {zeroPostgresJS} from './adapters/postgresjs.ts';
 
@@ -25,6 +25,7 @@ test('update client mutation ID', async () => {
       tables: {},
     },
     sql,
+    'context',
   );
 
   await db.transaction(
@@ -54,6 +55,7 @@ test('write mutation result', async () => {
       tables: {},
     },
     sql,
+    'context',
   );
 
   await db.transaction(

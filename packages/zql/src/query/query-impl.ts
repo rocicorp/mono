@@ -21,11 +21,11 @@ import {
   hashOfAST,
   hashOfNameAndArgs,
 } from '../../../zero-protocol/src/query-hash.ts';
+import {defaultFormat} from '../../../zero-types/src/format.ts';
 import type {Schema, TableSchema} from '../../../zero-types/src/schema.ts';
 import {buildPipeline} from '../builder/builder.ts';
 import {NotImplementedError} from '../error.ts';
 import {ArrayView} from '../ivm/array-view.ts';
-import {defaultFormat} from '../ivm/default-format.ts';
 import type {Input} from '../ivm/operator.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import {assertNoNotExists} from './assert-no-not-exists.ts';

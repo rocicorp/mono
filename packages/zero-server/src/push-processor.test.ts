@@ -1,12 +1,12 @@
+import type postgres from 'postgres';
 import {describe, expect, test, vi} from 'vitest';
 import * as v from '../../shared/src/valita.ts';
 import {type PushBody} from '../../zero-protocol/src/push.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import {PostgresJSConnection} from './adapters/postgresjs.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {PushProcessor} from './push-processor.ts';
-import {PostgresJSConnection} from './adapters/postgresjs.ts';
 import {ZQLDatabase} from './zql-database.ts';
-import type postgres from 'postgres';
 describe('PushProcessor', () => {
   const body = {
     pushVersion: 1,
@@ -29,7 +29,11 @@ describe('PushProcessor', () => {
 
   test('should accept Record<string, string> as params', async () => {
     const processor = new PushProcessor(
-      new ZQLDatabase(new PostgresJSConnection(mockPgClient), mockSchema),
+      new ZQLDatabase(
+        new PostgresJSConnection(mockPgClient),
+        mockSchema,
+        'context',
+      ),
     );
 
     const params: Record<string, string> = {
@@ -50,7 +54,11 @@ describe('PushProcessor', () => {
 
   test('should accept URLSearchParams as params', async () => {
     const processor = new PushProcessor(
-      new ZQLDatabase(new PostgresJSConnection(mockPgClient), mockSchema),
+      new ZQLDatabase(
+        new PostgresJSConnection(mockPgClient),
+        mockSchema,
+        'context',
+      ),
     );
 
     const urlParams = new URLSearchParams();
@@ -70,7 +78,11 @@ describe('PushProcessor', () => {
 
   test('should accept Request as a param', async () => {
     const processor = new PushProcessor(
-      new ZQLDatabase(new PostgresJSConnection(mockPgClient), mockSchema),
+      new ZQLDatabase(
+        new PostgresJSConnection(mockPgClient),
+        mockSchema,
+        'context',
+      ),
     );
 
     const req = new Request(
@@ -94,7 +106,11 @@ describe('PushProcessor', () => {
 
   test('invalid params throw', async () => {
     const processor = new PushProcessor(
-      new ZQLDatabase(new PostgresJSConnection(mockPgClient), mockSchema),
+      new ZQLDatabase(
+        new PostgresJSConnection(mockPgClient),
+        mockSchema,
+        'context',
+      ),
     );
 
     const invalidParams: Record<string, string> = {

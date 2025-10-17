@@ -1,3 +1,4 @@
+import postgres from 'postgres';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
@@ -5,7 +6,6 @@ import type {
   DBTransaction,
   Row,
 } from '../../../zql/src/mutate/custom.ts';
-import postgres from 'postgres';
 import {ZQLDatabase} from '../zql-database.ts';
 
 /**
@@ -82,9 +82,10 @@ export class PostgresJsTransactionInternal<T extends Record<string, unknown>>
 export function zeroPostgresJS<
   S extends Schema,
   T extends Record<string, unknown> = Record<string, unknown>,
->(schema: S, pg: postgres.Sql<T> | string) {
+  Context = unknown,
+>(schema: S, pg: postgres.Sql<T> | string, context: Context) {
   if (typeof pg === 'string') {
     pg = postgres(pg) as postgres.Sql<T>;
   }
-  return new ZQLDatabase(new PostgresJSConnection(pg), schema);
+  return new ZQLDatabase(new PostgresJSConnection(pg), schema, context);
 }

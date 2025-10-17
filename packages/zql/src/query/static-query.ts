@@ -1,7 +1,7 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {AST, System} from '../../../zero-protocol/src/ast.ts';
+import {defaultFormat} from '../../../zero-types/src/format.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import {defaultFormat} from '../ivm/default-format.ts';
 import type {Format} from '../ivm/view.ts';
 import {ExpressionBuilder} from './expression.ts';
 import type {CustomQueryID} from './named.ts';

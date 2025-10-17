@@ -62,11 +62,15 @@ const mutators = {
 describe('out of order mutation', () => {
   test('first mutation is out of order', async () => {
     const processor = new PushProcessor(
-      new ZQLDatabase(new PostgresJSConnection(pg), {
-        tables: {},
-        relationships: {},
-        version: 1,
-      }),
+      new ZQLDatabase(
+        new PostgresJSConnection(pg),
+        {
+          tables: {},
+          relationships: {},
+          version: 1,
+        },
+        'context',
+      ),
     );
     const result = await processor.process(mutators, params, makePush(15));
 
@@ -92,11 +96,15 @@ describe('out of order mutation', () => {
 
   test('later mutations are out of order', async () => {
     const processor = new PushProcessor(
-      new ZQLDatabase(new PostgresJSConnection(pg), {
-        tables: {},
-        relationships: {},
-        version: 1,
-      }),
+      new ZQLDatabase(
+        new PostgresJSConnection(pg),
+        {
+          tables: {},
+          relationships: {},
+          version: 1,
+        },
+        'context',
+      ),
     );
 
     expect(await processor.process(mutators, params, makePush(1))).toEqual({
@@ -134,11 +142,15 @@ describe('out of order mutation', () => {
 
 test('first mutation', async () => {
   const processor = new PushProcessor(
-    new ZQLDatabase(new PostgresJSConnection(pg), {
-      tables: {},
-      relationships: {},
-      version: 1,
-    }),
+    new ZQLDatabase(
+      new PostgresJSConnection(pg),
+      {
+        tables: {},
+        relationships: {},
+        version: 1,
+      },
+      'context',
+    ),
   );
 
   expect(await processor.process(mutators, params, makePush(1))).toEqual({
@@ -160,11 +172,15 @@ test('first mutation', async () => {
 
 test('previously seen mutation', async () => {
   const processor = new PushProcessor(
-    new ZQLDatabase(new PostgresJSConnection(pg), {
-      tables: {},
-      relationships: {},
-      version: 1,
-    }),
+    new ZQLDatabase(
+      new PostgresJSConnection(pg),
+      {
+        tables: {},
+        relationships: {},
+        version: 1,
+      },
+      'context',
+    ),
   );
 
   await processor.process(mutators, params, makePush(1));
@@ -193,11 +209,15 @@ test('previously seen mutation', async () => {
 
 test('lmid still moves forward if the mutator implementation throws', async () => {
   const processor = new PushProcessor(
-    new ZQLDatabase(new PostgresJSConnection(pg), {
-      tables: {},
-      relationships: {},
-      version: 1,
-    }),
+    new ZQLDatabase(
+      new PostgresJSConnection(pg),
+      {
+        tables: {},
+        relationships: {},
+        version: 1,
+      },
+      'context',
+    ),
   );
 
   await processor.process(mutators, params, makePush(1));
@@ -237,11 +257,15 @@ test('lmid still moves forward if the mutator implementation throws', async () =
 
 test('processes all mutations, even if all mutations throw app errors', async () => {
   const processor = new PushProcessor(
-    new ZQLDatabase(new PostgresJSConnection(pg), {
-      tables: {},
-      relationships: {},
-      version: 1,
-    }),
+    new ZQLDatabase(
+      new PostgresJSConnection(pg),
+      {
+        tables: {},
+        relationships: {},
+        version: 1,
+      },
+      'context',
+    ),
   );
 
   expect(
@@ -280,11 +304,15 @@ test('processes all mutations, even if all mutations throw app errors', async ()
 
 test('processes all mutations, even if all mutations have been seen before', async () => {
   const processor = new PushProcessor(
-    new ZQLDatabase(new PostgresJSConnection(pg), {
-      tables: {},
-      relationships: {},
-      version: 1,
-    }),
+    new ZQLDatabase(
+      new PostgresJSConnection(pg),
+      {
+        tables: {},
+        relationships: {},
+        version: 1,
+      },
+      'context',
+    ),
   );
 
   // process a bunch of successful mutations first
@@ -376,11 +404,15 @@ test('processes all mutations, even if all mutations have been seen before', asy
 });
 
 test('continues processing if all mutations throw in error mode with "MutationAlreadyProcessedError"', async () => {
-  const db = new ZQLDatabase(new PostgresJSConnection(pg), {
-    tables: {},
-    relationships: {},
-    version: 1,
-  });
+  const db = new ZQLDatabase(
+    new PostgresJSConnection(pg),
+    {
+      tables: {},
+      relationships: {},
+      version: 1,
+    },
+    'context',
+  );
   const c = {c: 0};
   // oxlint-disable-next-line require-await
   db.transaction = async () => {
@@ -420,11 +452,15 @@ test('continues processing if all mutations throw in error mode with "MutationAl
 });
 
 test('bails processing if all mutations throw in error mode with "OutOfOrderMutation"', async () => {
-  const db = new ZQLDatabase(new PostgresJSConnection(pg), {
-    tables: {},
-    relationships: {},
-    version: 1,
-  });
+  const db = new ZQLDatabase(
+    new PostgresJSConnection(pg),
+    {
+      tables: {},
+      relationships: {},
+      version: 1,
+    },
+    'context',
+  );
   const c = {c: 0};
   // oxlint-disable-next-line require-await
   db.transaction = async () => {
@@ -466,11 +502,15 @@ test('bails processing if all mutations throw in error mode with "OutOfOrderMuta
 });
 
 test('bails processing if a mutation throws an unknown error in error mode', async () => {
-  const db = new ZQLDatabase(new PostgresJSConnection(pg), {
-    tables: {},
-    relationships: {},
-    version: 1,
-  });
+  const db = new ZQLDatabase(
+    new PostgresJSConnection(pg),
+    {
+      tables: {},
+      relationships: {},
+      version: 1,
+    },
+    'context',
+  );
   const c = {c: 0};
   // oxlint-disable-next-line require-await
   db.transaction = async () => {
@@ -500,11 +540,15 @@ test('bails processing if a mutation throws an unknown error in error mode', asy
 
 test('stops processing mutations as soon as it hits an out of order mutation', async () => {
   const processor = new PushProcessor(
-    new ZQLDatabase(new PostgresJSConnection(pg), {
-      tables: {},
-      relationships: {},
-      version: 1,
-    }),
+    new ZQLDatabase(
+      new PostgresJSConnection(pg),
+      {
+        tables: {},
+        relationships: {},
+        version: 1,
+      },
+      'context',
+    ),
   );
 
   expect(
@@ -554,11 +598,15 @@ test('stops processing mutations as soon as it hits an out of order mutation', a
 });
 
 test('a mutation throws an app error then an ooo mutation error', async () => {
-  const db = new ZQLDatabase(new PostgresJSConnection(pg), {
-    tables: {},
-    relationships: {},
-    version: 1,
-  });
+  const db = new ZQLDatabase(
+    new PostgresJSConnection(pg),
+    {
+      tables: {},
+      relationships: {},
+      version: 1,
+    },
+    'context',
+  );
   const c = {c: 0};
   // oxlint-disable-next-line require-await
   db.transaction = async () => {
@@ -599,11 +647,15 @@ test('a mutation throws an app error then an ooo mutation error', async () => {
 });
 
 test('mutation throws an app error then an already processed error', async () => {
-  const db = new ZQLDatabase(new PostgresJSConnection(pg), {
-    tables: {},
-    relationships: {},
-    version: 1,
-  });
+  const db = new ZQLDatabase(
+    new PostgresJSConnection(pg),
+    {
+      tables: {},
+      relationships: {},
+      version: 1,
+    },
+    'context',
+  );
   const c = {c: 0};
   // oxlint-disable-next-line require-await
   db.transaction = async () => {
@@ -643,11 +695,15 @@ test('mutation throws an app error then an already processed error', async () =>
 
 test('mutators with and without namespaces', async () => {
   const processor = new PushProcessor(
-    new ZQLDatabase(new PostgresJSConnection(pg), {
-      tables: {},
-      relationships: {},
-      version: 1,
-    }),
+    new ZQLDatabase(
+      new PostgresJSConnection(pg),
+      {
+        tables: {},
+        relationships: {},
+        version: 1,
+      },
+      'context',
+    ),
   );
   const mutators = {
     namespaced: {

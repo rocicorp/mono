@@ -413,14 +413,15 @@ export interface Query<
   >;
   related<
     TRelationship extends AvailableRelationships<TTable, TSchema>,
-    TSub extends Query<TSchema, string, any>,
+    TSub extends Query<TSchema, string, any, TContext>,
   >(
     relationship: TRelationship,
     cb: (
       q: Query<
         TSchema,
         DestTableName<TTable, TSchema, TRelationship>,
-        DestRow<TTable, TSchema, TRelationship>
+        DestRow<TTable, TSchema, TRelationship>,
+        TContext
       >,
     ) => TSub,
   ): Query<
@@ -428,7 +429,7 @@ export interface Query<
     TTable,
     AddSubreturn<
       TReturn,
-      TSub extends Query<TSchema, string, infer TSubReturn>
+      TSub extends Query<TSchema, string, infer TSubReturn, TContext>
         ? TSubReturn
         : never,
       TRelationship
@@ -465,8 +466,13 @@ export interface Query<
   whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb: (
-      q: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
-    ) => Query<TSchema, string>,
+      q: Query<
+        TSchema,
+        DestTableName<TTable, TSchema, TRelationship>,
+        DestRow<TTable, TSchema, TRelationship>,
+        TContext
+      >,
+    ) => Query<TSchema, string, any, TContext>,
     options?: ExistsOptions,
   ): Query<TSchema, TTable, TReturn, TContext>;
 

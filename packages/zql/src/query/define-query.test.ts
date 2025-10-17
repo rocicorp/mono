@@ -178,9 +178,8 @@ describe('defineQuery', () => {
           },
         } as StandardSchemaV1<unknown, string>,
       },
-      ({args}: {ctx: string; args: string}) => {
-        return builder.foo.where('id', '=', args);
-      },
+      ({args}: {ctx: string; args: string}) =>
+        builder.foo.where('id', '=', args),
     );
 
     expect(() => query('invalid').withContext('errorContext')).toThrow(
