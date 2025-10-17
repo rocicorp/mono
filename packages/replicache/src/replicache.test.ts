@@ -49,11 +49,11 @@ initReplicacheTesting();
 test('name is required', () => {
   expect(
     () => new Replicache({} as ReplicacheOptions<Record<string, never>>),
-  ).to.throw(/name.*required/);
+  ).toThrow(/name.*required/);
 });
 
 test('name cannot be empty', () => {
-  expect(() => new Replicache({name: ''})).to.throw(/name.*must be non-empty/);
+  expect(() => new Replicache({name: ''})).toThrow(/name.*must be non-empty/);
 });
 
 test('cookie', async () => {
@@ -61,7 +61,7 @@ test('cookie', async () => {
   const rep = await replicacheForTesting('test2', {
     pullURL,
   });
-  expect(await rep.impl.cookie).to.equal(null);
+  expect(await rep.impl.cookie).toBe(null);
 
   let pullDone = false;
   fetchMock.post(pullURL, () => {
@@ -74,18 +74,18 @@ test('cookie', async () => {
   await tickUntil(vi, () => pullDone);
   await tickAFewTimes(vi);
 
-  expect(await rep.impl.cookie).to.equal('newCookie');
+  expect(await rep.impl.cookie).toBe('newCookie');
   fetchMock.reset();
 });
 
 test('get, has, scan on empty db', async () => {
   const rep = await replicacheForTesting('test2');
   async function t(tx: ReadTransaction) {
-    expect(await tx.get('key')).to.equal(undefined);
-    expect(await tx.has('key')).to.be.false;
+    expect(await tx.get('key')).toBe(undefined);
+    expect(await tx.has('key')).toBe(false);
 
     const scanItems = await asyncIterableToArray(tx.scan());
-    expect(scanItems).to.have.length(0);
+    expect(scanItems).toHaveLength(0);
   }
 
   await rep.query(t);
@@ -100,12 +100,12 @@ test('put, get, has, del inside tx', async () => {
       ) => {
         const {key, value} = args;
         await tx.set(key, value);
-        expect(await tx.has(key)).to.equal(true);
+        expect(await tx.has(key)).toBe(true);
         const v = await tx.get(key);
-        expect(v).to.deep.equal(value);
+        expect(v).toEqual(value);
 
-        expect(await tx.del(key)).to.equal(true);
-        expect(await tx.has(key)).to.be.false;
+        expect(await tx.del(key)).toBe(true);
+        expect(await tx.has(key)).toBe(false);
       },
     },
   });
@@ -133,42 +133,40 @@ async function testScanResult<K, V>(
   entries: [K, V][],
 ) {
   await rep.query(async tx => {
-    expect(
-      await asyncIterableToArray(tx.scan(options).entries()),
-    ).to.deep.equal(entries);
+    expect(await asyncIterableToArray(tx.scan(options).entries())).toEqual(
+      entries,
+    );
   });
   await rep.query(async tx => {
-    expect(await asyncIterableToArray(tx.scan(options))).to.deep.equal(
+    expect(await asyncIterableToArray(tx.scan(options))).toEqual(
       entries.map(([, v]) => v),
     );
   });
   await rep.query(async tx => {
-    expect(await asyncIterableToArray(tx.scan(options).values())).to.deep.equal(
+    expect(await asyncIterableToArray(tx.scan(options).values())).toEqual(
       entries.map(([, v]) => v),
     );
   });
   await rep.query(async tx => {
-    expect(await asyncIterableToArray(tx.scan(options).keys())).to.deep.equal(
+    expect(await asyncIterableToArray(tx.scan(options).keys())).toEqual(
       entries.map(([k]) => k),
     );
   });
 
   await rep.query(async tx => {
-    expect(await tx.scan(options).toArray()).to.deep.equal(
-      entries.map(([, v]) => v),
-    );
+    expect(await tx.scan(options).toArray()).toEqual(entries.map(([, v]) => v));
   });
   // scan().xxx().toArray()
   await rep.query(async tx => {
-    expect(await tx.scan(options).entries().toArray()).to.deep.equal(entries);
+    expect(await tx.scan(options).entries().toArray()).toEqual(entries);
   });
   await rep.query(async tx => {
-    expect(await tx.scan(options).values().toArray()).to.deep.equal(
+    expect(await tx.scan(options).values().toArray()).toEqual(
       entries.map(([, v]) => v),
     );
   });
   await rep.query(async tx => {
-    expect(await tx.scan(options).keys().toArray()).to.deep.equal(
+    expect(await tx.scan(options).keys().toArray()).toEqual(
       entries.map(([k]) => k),
     );
   });
@@ -303,8 +301,8 @@ test('name', async () => {
   await addA({key: 'A'});
   await addB({key: 'B'});
 
-  expect(await repA.query(tx => tx.get('key'))).to.equal('A');
-  expect(await repB.query(tx => tx.get('key'))).to.equal('B');
+  expect(await repA.query(tx => tx.get('key'))).toBe('A');
+  expect(await repB.query(tx => tx.get('key'))).toBe('B');
 
   await repA.close();
   await repB.close();
@@ -329,7 +327,7 @@ test('register with error', async () => {
     await doErr(42);
     unreachable();
   } catch (ex) {
-    expect(ex).to.equal(42);
+    expect(ex).toBe(42);
   }
 });
 
@@ -365,7 +363,7 @@ test('overlapping writes', async () => {
   await vi.advanceTimersByTimeAsync(100);
   let resB = mut({duration: 0, ret: 'b'});
   // race them, a should complete first, indicating that b waited
-  expect(await Promise.race([resA, resB])).to.equal('a');
+  expect(await Promise.race([resA, resB])).toBe('a');
   // wait for the other to finish so that we're starting from null state for next one.
   await Promise.all([resA, resB]);
 
@@ -374,7 +372,7 @@ test('overlapping writes', async () => {
   await vi.advanceTimersByTimeAsync(100);
   resB = rep.query(() => 'b');
   await tickAFewTimes(vi);
-  expect(await Promise.race([resA, resB])).to.equal('a');
+  expect(await Promise.race([resA, resB])).toBe('a');
 
   await tickAFewTimes(vi);
   await resA;
@@ -410,15 +408,15 @@ test('push delay', async () => {
     mutationInfos: [],
   });
 
-  expect(fetchMock.calls()).to.have.length(0);
+  expect(fetchMock.calls()).toHaveLength(0);
 
   await createTodo({id: id1});
 
-  expect(fetchMock.calls()).to.have.length(0);
+  expect(fetchMock.calls()).toHaveLength(0);
 
   await tickAFewTimes(vi);
 
-  expect(fetchMock.calls()).to.have.length(1);
+  expect(fetchMock.calls()).toHaveLength(1);
 });
 
 test('reauth push', async () => {
@@ -530,7 +528,7 @@ test('HTTP status pull', async () => {
     ['pull', requestIDLogContextRegex],
   );
 
-  expect(okCalled).to.equal(true);
+  expect(okCalled).toBe(true);
 });
 
 test('HTTP status push', async () => {
@@ -595,7 +593,7 @@ test('HTTP status push', async () => {
     ['push', requestIDLogContextRegex],
   );
 
-  expect(okCalled).to.equal(true);
+  expect(okCalled).toBe(true);
 });
 
 test('closed tx', async () => {
@@ -620,7 +618,7 @@ test('closed tx', async () => {
   let wtx: WriteTransaction | undefined;
 
   await rep.mutate.mut();
-  expect(wtx).to.not.be.undefined;
+  expect(wtx).not.toBeUndefined();
   await expectAsyncFuncToThrow(() => wtx?.set('z', 1), TransactionClosedError);
   await expectAsyncFuncToThrow(() => wtx?.del('w'), TransactionClosedError);
 });
@@ -629,7 +627,7 @@ test('pullInterval in constructor', async () => {
   const rep = await replicacheForTesting('pullInterval', {
     pullInterval: 12.34,
   });
-  expect(rep.pullInterval).to.equal(12.34);
+  expect(rep.pullInterval).toBe(12.34);
   await rep.close();
 });
 
@@ -1074,17 +1072,17 @@ test('logLevel', async () => {
 
   await rep.query(() => 42);
   expect(info).toHaveBeenCalledTimes(0);
-  expect(debug.mock.calls.length).to.be.greaterThan(0);
+  expect(debug.mock.calls.length).toBeGreaterThan(0);
 
   expect(
     debug.mock.calls.some(args => args[0].startsWith(`name=${rep.name}`)),
-  ).to.equal(true);
+  ).toBe(true);
   expect(
     debug.mock.calls.some(args => args.length > 0 && args[1].endsWith('PULL')),
-  ).to.equal(true);
+  ).toBe(true);
   expect(
     debug.mock.calls.some(args => args.length > 0 && args[1].endsWith('PUSH')),
-  ).to.equal(true);
+  ).toBe(true);
 
   await rep.close();
 });
@@ -1151,8 +1149,8 @@ test('logSinks length 1', async () => {
     logSinks: [logSink],
   });
   await rep.query(() => 42);
-  expect(logCounts.info).to.be.equal(0);
-  expect(logCounts.debug).to.equal(0);
+  expect(logCounts.info).toBe(0);
+  expect(logCounts.debug).toBe(0);
   expectNoLogsToConsole();
   await rep.close();
 
@@ -1162,8 +1160,8 @@ test('logSinks length 1', async () => {
     logSinks: [logSink],
   });
   await rep.query(() => 42);
-  expect(logCounts.info).to.be.equal(0);
-  expect(logCounts.debug).to.be.greaterThan(0);
+  expect(logCounts.info).toBe(0);
+  expect(logCounts.debug).toBeGreaterThan(0);
   expectNoLogsToConsole();
   await rep.close();
 });
@@ -1202,8 +1200,8 @@ test('logSinks length 3', async () => {
   });
   await rep.query(() => 42);
   for (const counts of logCounts) {
-    expect(counts.info).to.be.equal(0);
-    expect(counts.debug).to.equal(0);
+    expect(counts.info).toBe(0);
+    expect(counts.debug).toBe(0);
   }
   expectNoLogsToConsole();
   await rep.close();
@@ -1215,8 +1213,8 @@ test('logSinks length 3', async () => {
   });
   await rep.query(() => 42);
   for (const counts of logCounts) {
-    expect(counts.info).to.be.equal(0);
-    expect(counts.info).to.be.equal(0);
+    expect(counts.info).toBe(0);
+    expect(counts.info).toBe(0);
   }
   expectNoLogsToConsole();
   await rep.close();
@@ -1228,12 +1226,12 @@ test('mem store', async () => {
   });
   const add = rep.mutate.addData;
   await add({a: 42});
-  expect(await rep.query(tx => tx.get('a'))).to.equal(42);
+  expect(await rep.query(tx => tx.get('a'))).toBe(42);
   await rep.close();
 
   // Open again and test that we lost the data
   rep = await replicacheForTesting('mem');
-  expect(await rep.query(tx => tx.get('a'))).to.equal(undefined);
+  expect(await rep.query(tx => tx.get('a'))).toBe(undefined);
 });
 
 test('isEmpty', async () => {
@@ -1242,23 +1240,23 @@ test('isEmpty', async () => {
       addData,
       del: (tx: WriteTransaction, key: string) => tx.del(key),
       mut: async (tx: WriteTransaction) => {
-        expect(await tx.isEmpty()).to.equal(false);
+        expect(await tx.isEmpty()).toBe(false);
 
         await tx.del('c');
-        expect(await tx.isEmpty()).to.equal(false);
+        expect(await tx.isEmpty()).toBe(false);
 
         await tx.del('a');
-        expect(await tx.isEmpty()).to.equal(true);
+        expect(await tx.isEmpty()).toBe(true);
 
         await tx.set('d', 4);
-        expect(await tx.isEmpty()).to.equal(false);
+        expect(await tx.isEmpty()).toBe(false);
       },
     },
   });
   const {addData: add, del, mut} = rep.mutate;
 
   async function t(expected: boolean) {
-    expect(await rep.query(tx => tx.isEmpty())).to.equal(expected);
+    expect(await rep.query(tx => tx.isEmpty())).toBe(expected);
   }
 
   await t(true);
@@ -1288,7 +1286,7 @@ test('mutationID on transaction', async () => {
         for (const [key, value] of Object.entries(data)) {
           await tx.set(key, value);
         }
-        expect(tx.mutationID).to.equal(expectedMutationID++);
+        expect(tx.mutationID).toBe(expectedMutationID++);
       },
     },
   });
@@ -1328,8 +1326,8 @@ test('onSync', async () => {
   await tickAFewTimes(vi, 15);
 
   expect(onSync).toHaveBeenCalledTimes(2);
-  expect(onSync.mock.calls[0][0]).to.be.true;
-  expect(onSync.mock.calls[1][0]).to.be.false;
+  expect(onSync.mock.calls[0][0]).toBe(true);
+  expect(onSync.mock.calls[1][0]).toBe(false);
 
   onSync.mockClear();
   fetchMock.postOnce(pushURL, {});
@@ -1337,16 +1335,16 @@ test('onSync', async () => {
   await tickAFewTimes(vi);
 
   expect(onSync).toHaveBeenCalledTimes(2);
-  expect(onSync.mock.calls[0][0]).to.be.true;
-  expect(onSync.mock.calls[1][0]).to.be.false;
+  expect(onSync.mock.calls[0][0]).toBe(true);
+  expect(onSync.mock.calls[1][0]).toBe(false);
 
   fetchMock.postOnce(pushURL, {});
   onSync.mockClear();
   await add({b: 'b'});
   await tickAFewTimes(vi);
   expect(onSync).toHaveBeenCalledTimes(2);
-  expect(onSync.mock.calls[0][0]).to.be.true;
-  expect(onSync.mock.calls[1][0]).to.be.false;
+  expect(onSync.mock.calls[0][0]).toBe(true);
+  expect(onSync.mock.calls[1][0]).toBe(false);
 
   {
     // Try with reauth
@@ -1371,10 +1369,10 @@ test('onSync', async () => {
     );
 
     expect(onSync).toHaveBeenCalledTimes(4);
-    expect(onSync.mock.calls[0][0]).to.be.true;
-    expect(onSync.mock.calls[1][0]).to.be.false;
-    expect(onSync.mock.calls[2][0]).to.be.true;
-    expect(onSync.mock.calls[3][0]).to.be.false;
+    expect(onSync.mock.calls[0][0]).toBe(true);
+    expect(onSync.mock.calls[1][0]).toBe(false);
+    expect(onSync.mock.calls[2][0]).toBe(true);
+    expect(onSync.mock.calls[3][0]).toBe(false);
   }
 
   rep.onSync = null;
@@ -1407,7 +1405,7 @@ test('push timing', async () => {
     return rv;
   };
 
-  expect(pushCallCount()).to.equal(1);
+  expect(pushCallCount()).toBe(1);
 
   // This will schedule push in pushDelay ms
   await add({a: 1});
@@ -1415,27 +1413,27 @@ test('push timing', async () => {
   await add({c: 3});
   await add({d: 4});
 
-  expect(pushCallCount()).to.equal(0);
+  expect(pushCallCount()).toBe(0);
 
   await vi.advanceTimersByTimeAsync(pushDelay + 10);
 
-  expect(pushCallCount()).to.equal(1);
+  expect(pushCallCount()).toBe(1);
 
   const p1 = add({e: 5});
   const p2 = add({f: 6});
   const p3 = add({g: 7});
 
-  expect(pushCallCount()).to.equal(0);
+  expect(pushCallCount()).toBe(0);
 
   await tickAFewTimes(vi);
   await p1;
-  expect(pushCallCount()).to.equal(1);
+  expect(pushCallCount()).toBe(1);
   await tickAFewTimes(vi);
   await p2;
-  expect(pushCallCount()).to.equal(0);
+  expect(pushCallCount()).toBe(0);
   await tickAFewTimes(vi);
   await p3;
-  expect(pushCallCount()).to.equal(0);
+  expect(pushCallCount()).toBe(0);
 });
 
 test('push and pull concurrently', async () => {
@@ -1498,7 +1496,7 @@ test('push and pull concurrently', async () => {
   await vi.advanceTimersByTimeAsync(10);
 
   // Only one push at a time but we want push and pull to be concurrent.
-  expect(callCounts()).to.deep.equal({
+  expect(callCounts()).toEqual({
     beginPull: 1,
     commit: 1,
     invokePush: 1,
@@ -1506,13 +1504,13 @@ test('push and pull concurrently', async () => {
 
   await tickAFewTimes(vi);
 
-  expect(requests).to.deep.equal([pullURL, pushURL]);
+  expect(requests).toEqual([pullURL, pushURL]);
 
   await tickAFewTimes(vi);
 
-  expect(requests).to.deep.equal([pullURL, pushURL]);
+  expect(requests).toEqual([pullURL, pushURL]);
 
-  expect(callCounts()).to.deep.equal({
+  expect(callCounts()).toEqual({
     beginPull: 0,
     commit: 0,
     invokePush: 0,
@@ -1530,7 +1528,7 @@ test('schemaVersion pull', async () => {
   await tickAFewTimes(vi);
 
   const req = await fetchMock.lastCall().request.json();
-  expect(req.schemaVersion).to.deep.equal(schemaVersion);
+  expect(req.schemaVersion).toEqual(schemaVersion);
 });
 
 test('schemaVersion push', async () => {
@@ -1551,7 +1549,7 @@ test('schemaVersion push', async () => {
   await tickAFewTimes(vi);
 
   const req = await fetchMock.lastCall().request.json();
-  expect(req.schemaVersion).to.deep.equal(schemaVersion);
+  expect(req.schemaVersion).toEqual(schemaVersion);
 });
 
 test('clientID', async () => {
@@ -1559,26 +1557,26 @@ test('clientID', async () => {
 
   let rep = await replicacheForTesting('clientID');
   const {clientID} = rep;
-  expect(clientID).to.match(re);
+  expect(clientID).toMatch(re);
   await rep.close();
 
   const rep2 = await replicacheForTesting('clientID2');
   const clientID2 = rep2.clientID;
-  expect(clientID2).to.match(re);
-  expect(clientID2).to.not.equal(clientID);
+  expect(clientID2).toMatch(re);
+  expect(clientID2).not.toBe(clientID);
 
   rep = await replicacheForTesting('clientID');
   const clientID3 = rep.clientID;
-  expect(clientID3).to.match(re);
+  expect(clientID3).toMatch(re);
   // With SDD we never reuse client IDs.
-  expect(clientID3).to.not.equal(clientID);
+  expect(clientID3).not.toBe(clientID);
 
   const rep4 = new Replicache({
     name: 'clientID4',
     pullInterval: null,
   });
   const clientID4 = rep4.clientID;
-  expect(clientID4).to.match(re);
+  expect(clientID4).toMatch(re);
   await rep4.close();
 });
 
@@ -1587,19 +1585,19 @@ test('profileID', async () => {
 
   const rep = await replicacheForTesting('clientID');
   const profileID = await rep.profileID;
-  expect(profileID).to.not.equal(rep.clientID);
-  expect(profileID).to.match(re);
+  expect(profileID).not.toBe(rep.clientID);
+  expect(profileID).toMatch(re);
   await rep.close();
 
   const rep2 = await replicacheForTesting('clientID2');
   const profileID2 = await rep2.profileID;
-  expect(profileID2).to.equal(profileID);
+  expect(profileID2).toBe(profileID);
 
   const rep3 = new Replicache({
     name: 'clientID3',
   });
   const profileID3 = await rep3.profileID;
-  expect(profileID3).to.equal(profileID);
+  expect(profileID3).toBe(profileID);
   await rep3.close();
 });
 
@@ -1637,7 +1635,7 @@ test('pull and index update', async () => {
     const actualResult = await rep.query(tx =>
       tx.scan({indexName}).entries().toArray(),
     );
-    expect(actualResult).to.deep.equal(opt.expectedResult);
+    expect(actualResult).toEqual(opt.expectedResult);
   }
 
   await testPull({patch: [], expectedResult: []});
@@ -1785,8 +1783,8 @@ test('pull mutate options', {retry: 3}, async () => {
   }
 
   // the first one is often off by a few ms
-  expect(log[0]).to.be.within(1000, 1060);
-  expect(log.slice(1)).to.deep.equal([
+  expect(log[0]).toBeGreaterThanOrEqual(1000, 1060);
+  expect(log.slice(1)).toEqual([
     // 1000, checked above
     1030, 1060, 1090, 1120, 1150, 1650, 2150, 2175, 2200, 2225, 2250, 2275,
     2300, 2325, 2350, 2375, 2400, 2425, 2450, 2475, 2500,
@@ -1814,20 +1812,20 @@ test('online', async () => {
     return {throws: new Error('Simulate fetch error in push')};
   });
 
-  expect(rep.online).to.equal(true);
-  expect(log).to.deep.equal([]);
+  expect(rep.online).toBe(true);
+  expect(log).toEqual([]);
 
   await rep.mutate.addData({a: 0});
 
   await tickAFewTimes(vi);
 
-  expect(rep.online).to.equal(false);
+  expect(rep.online).toBe(false);
   expect(
     consoleDebugStub.mock.calls.some(
       args => args.join('\n').indexOf('Push threw') > -1,
     ),
   );
-  expect(log).to.deep.equal([false]);
+  expect(log).toEqual([false]);
 
   consoleDebugStub.mockClear();
 
@@ -1841,8 +1839,8 @@ test('online', async () => {
       args => args.join('\n').indexOf('Push threw') > -1,
     ),
   );
-  expect(rep.online).to.equal(true);
-  expect(log).to.deep.equal([false, true]);
+  expect(rep.online).toBe(true);
+  expect(log).toEqual([false, true]);
 });
 
 test('overlapping open/close', async () => {
@@ -1898,37 +1896,37 @@ async function testMemStoreWithCounters<MD extends MutatorDefs>(
   // chance to run persist and the refresh triggered by persist before we continue.
   await vi.advanceTimersByTimeAsync(2000);
 
-  expect(store.readCount).to.be.greaterThan(0, 'readCount');
-  expect(store.writeCount).to.be.greaterThan(0, 'writeCount');
-  expect(store.closeCount).to.equal(0, 'closeCount');
+  expect(store.readCount).toBeGreaterThan(0, 'readCount');
+  expect(store.writeCount).toBeGreaterThan(0, 'writeCount');
+  expect(store.closeCount).toBe(0, 'closeCount');
   store.resetCounters();
 
   const b = await rep.query(tx => tx.has('foo'));
-  expect(b).to.be.false;
+  expect(b).toBe(false);
   // When DD31 refresh has pulled enough data into the lazy store
   // to not have to read from the experiment-kv-store
-  expect(store.readCount).to.equal(1, 'readCount');
-  expect(store.writeCount).to.equal(0, 'writeCount');
-  expect(store.closeCount).to.equal(0, 'closeCount');
+  expect(store.readCount).toBe(1, 'readCount');
+  expect(store.writeCount).toBe(0, 'writeCount');
+  expect(store.closeCount).toBe(0, 'closeCount');
   store.resetCounters();
 
   await rep.mutate.addData({foo: 'bar'});
-  expect(store.readCount).to.equal(0, 'readCount');
-  expect(store.writeCount).to.equal(0, 'writeCount');
-  expect(store.closeCount).to.equal(0, 'closeCount');
+  expect(store.readCount).toBe(0, 'readCount');
+  expect(store.writeCount).toBe(0, 'writeCount');
+  expect(store.closeCount).toBe(0, 'closeCount');
   store.resetCounters();
 
   await rep.persist();
 
-  expect(store.readCount).to.equal(1, 'readCount');
-  expect(store.writeCount).to.equal(1, 'writeCount');
-  expect(store.closeCount).to.equal(0, 'closeCount');
+  expect(store.readCount).toBe(1, 'readCount');
+  expect(store.writeCount).toBe(1, 'writeCount');
+  expect(store.closeCount).toBe(0, 'closeCount');
   store.resetCounters();
 
   await rep.close();
-  expect(store.readCount).to.equal(0, 'readCount');
-  expect(store.writeCount).to.equal(0, 'writeCount');
-  expect(store.closeCount).to.equal(1, 'closeCount');
+  expect(store.readCount).toBe(0, 'readCount');
+  expect(store.writeCount).toBe(0, 'writeCount');
+  expect(store.closeCount).toBe(1, 'closeCount');
 }
 
 test('Create KV Store', async () => {
@@ -1959,7 +1957,7 @@ test('Create KV Store', async () => {
     disableAllBackgroundProcesses,
   );
 
-  expect(store).instanceOf(MemStoreWithCounters);
+  expect(store).toBeInstanceOf(MemStoreWithCounters);
   assert(store);
 
   await testMemStoreWithCounters(rep, store);
@@ -2012,13 +2010,13 @@ test('mutate args in mutation throws due to frozen', async () => {
   } catch (e) {
     err = e;
   }
-  expect(err).instanceOf(Error);
+  expect(err).toBeInstanceOf(Error);
 
   // Safari does not have requestIdleTimeout so it waits for a second.
   await vi.advanceTimersByTimeAsync(1000);
 
   const o = findPropertyValue(store.map(), 'mutatorName', 'mutArgs');
-  expect(o).undefined;
+  expect(o).toBeUndefined();
 });
 
 test('client ID is set correctly on transactions', async () => {
@@ -2027,7 +2025,7 @@ test('client ID is set correctly on transactions', async () => {
     {
       mutators: {
         expectClientID(tx: WriteTransaction, expectedClientID: ClientID) {
-          expect(tx.clientID).to.equal(expectedClientID);
+          expect(tx.clientID).toBe(expectedClientID);
         },
       },
     },
@@ -2036,7 +2034,7 @@ test('client ID is set correctly on transactions', async () => {
   const {clientID} = rep;
 
   await rep.query(tx => {
-    expect(tx.clientID).to.equal(clientID);
+    expect(tx.clientID).toBe(clientID);
   });
 
   await rep.mutate.expectClientID(clientID);
@@ -2065,7 +2063,7 @@ test('mutation timestamps are immutable', async () => {
   // Create a mutation and verify it has been assigned current time.
   await rep.mutate.foo(null);
   await rep.push({now: true});
-  expect(pending).deep.equal([
+  expect(pending).toEqual([
     {
       clientID: rep.clientID,
       id: 1,
@@ -2100,11 +2098,11 @@ test('mutation timestamps are immutable', async () => {
 
   // Verify rebase did occur by checking for the new value.
   const val = await rep.query(tx => tx.get('hot'));
-  expect(val).equal('dog');
+  expect(val).toBe('dog');
 
   // Check that mutation timestamp did not change
   await rep.push({now: true});
-  expect(pending).deep.equal([
+  expect(pending).toEqual([
     {
       clientID: rep.clientID,
       id: 1,
@@ -2173,7 +2171,7 @@ describe('check for client not found in visibilitychange', () => {
 
       if (shouldBeCalled) {
         await onClientStateNotFound.resolver.promise;
-        expect(onClientStateNotFound.called).true;
+        expect(onClientStateNotFound.called).toBe(true);
         expectLogContext(
           consoleErrorStub,
           0,
@@ -2181,7 +2179,7 @@ describe('check for client not found in visibilitychange', () => {
           `Client state not found on client, clientID: ${clientID}`,
         );
       } else {
-        expect(onClientStateNotFound.called).false;
+        expect(onClientStateNotFound.called).toBe(false);
       }
 
       await rep.close();
@@ -2206,25 +2204,25 @@ test('disableClientGroup', async () => {
   );
   const clientGroupID = await rep.clientGroupID;
 
-  expect(rep.isClientGroupDisabled).false;
+  expect(rep.isClientGroupDisabled).toBe(false);
   expect(
     (
       await withRead(rep.perdag, dagRead =>
         getClientGroup(clientGroupID, dagRead),
       )
     )?.disabled,
-  ).false;
+  ).toBe(false);
 
   await rep.impl.disableClientGroup();
 
-  expect(rep.isClientGroupDisabled).true;
+  expect(rep.isClientGroupDisabled).toBe(true);
   expect(
     (
       await withRead(rep.perdag, dagRead =>
         getClientGroup(clientGroupID, dagRead),
       )
     )?.disabled,
-  ).true;
+  ).toBe(true);
 });
 
 test('scan in write transaction', async () => {
@@ -2233,7 +2231,7 @@ test('scan in write transaction', async () => {
     mutators: {
       async test(tx: WriteTransaction, v: number) {
         await tx.set('a', v);
-        expect(await tx.scan().toArray()).to.deep.equal([v]);
+        expect(await tx.scan().toArray()).toEqual([v]);
         x++;
       },
     },
@@ -2241,7 +2239,7 @@ test('scan in write transaction', async () => {
 
   await rep.mutate.test(42);
 
-  expect(x).to.equal(1);
+  expect(x).toBe(1);
 });
 
 test('scan mutate', async () => {
@@ -2291,7 +2289,7 @@ test('scan mutate', async () => {
   });
 
   await rep.mutate.test();
-  expect(log).to.deep.equal([
+  expect(log).toEqual([
     ['a', 0],
     ['b', 1],
     ['d', 3],
@@ -2351,7 +2349,7 @@ test('index scan mutate', async () => {
   });
 
   await rep.mutate.test();
-  expect(log).to.deep.equal([
+  expect(log).toEqual([
     [['0', 'a'], {a: '0'}],
     [['1', 'b'], {a: '1'}],
     [['3', 'd'], {a: '3'}],
@@ -2388,18 +2386,18 @@ test('concurrent puts and gets', async () => {
     const ps = keys.map(k => tx.get(k));
     return Promise.all(ps);
   });
-  expect(values).to.deep.equal([1, 2, 3]);
+  expect(values).toEqual([1, 2, 3]);
 
   await rep.mutate.race();
   const v = await rep.query(tx => tx.get('d'));
-  expect(v === 1 || v === 4).to.be.true;
+  expect(v === 1 || v === 4).toBe(true);
 
   const v2 = await rep.query(tx => tx.get('a'));
-  expect(v2).to.equal(4);
+  expect(v2).toBe(4);
 });
 
 test('Invalid name', () => {
-  expect(() => new ReplicacheTest({name: ''})).to.throw(
+  expect(() => new ReplicacheTest({name: ''})).toThrow(
     'name is required and must be non-empty',
   );
   expect(
@@ -2407,14 +2405,14 @@ test('Invalid name', () => {
       new Replicache({
         name: 1 as unknown as string,
       }),
-  ).to.throw('name is required and must be non-empty');
+  ).toThrow('name is required and must be non-empty');
 
   expect(
     () =>
       new ReplicacheTest({
         name: true as unknown as string,
       }),
-  ).to.throw(TypeError);
+  ).toThrow(TypeError);
 });
 
 test('set with undefined key', async () => {
@@ -2441,15 +2439,15 @@ test('set with undefined key', async () => {
     return undefined;
   };
 
-  expect(await set(undefined)).instanceOf(TypeError);
+  expect(await set(undefined)).toBeInstanceOf(TypeError);
 
   // no error
-  expect(await set({a: undefined})).equal(undefined);
+  expect(await set({a: undefined})).toBe(undefined);
 
-  expect(await set([1, undefined, 2])).instanceOf(TypeError);
+  expect(await set([1, undefined, 2])).toBeInstanceOf(TypeError);
 
   // oxlint-disable-next-line no-sparse-arrays
-  expect(await set([1, , 2])).instanceOf(TypeError);
+  expect(await set([1, , 2])).toBeInstanceOf(TypeError);
 });
 
 test('subscribe while closing', async () => {

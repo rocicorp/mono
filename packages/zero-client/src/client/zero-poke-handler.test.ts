@@ -123,7 +123,7 @@ describe('poke handler', () => {
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
     const replicachePoke0 = replicachePokeStub.mock.calls[0][0];
-    expect(replicachePoke0).to.deep.equal({
+    expect(replicachePoke0).toEqual({
       baseCookie: '1',
       pullResponse: {
         cookie: '2',
@@ -242,7 +242,7 @@ describe('poke handler', () => {
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
     const replicachePoke0 = replicachePokeStub.mock.calls[0][0];
-    expect(replicachePoke0).to.deep.equal({
+    expect(replicachePoke0).toEqual({
       baseCookie: '1',
       pullResponse: {
         cookie: '2',
@@ -382,7 +382,7 @@ describe('poke handler', () => {
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
     const replicachePoke0 = replicachePokeStub.mock.calls[0][0];
-    expect(replicachePoke0).to.deep.equal({
+    expect(replicachePoke0).toEqual({
       baseCookie: '1',
       pullResponse: {
         cookie: '3',
@@ -556,7 +556,7 @@ describe('poke handler', () => {
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
     const replicachePoke0 = replicachePokeStub.mock.calls[0][0];
-    expect(replicachePoke0).to.deep.equal({
+    expect(replicachePoke0).toEqual({
       baseCookie: '1',
       pullResponse: {
         cookie: '3',
@@ -676,7 +676,7 @@ describe('poke handler', () => {
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
     const replicachePoke0 = replicachePokeStub.mock.calls[0][0];
-    expect(replicachePoke0).to.deep.equal({
+    expect(replicachePoke0).toEqual({
       baseCookie: '1',
       pullResponse: {
         cookie: '2',
@@ -750,7 +750,7 @@ describe('poke handler', () => {
 
     expect(replicachePokeStub).toHaveBeenCalledTimes(2);
     const replicachePoke1 = replicachePokeStub.mock.calls[1][0];
-    expect(replicachePoke1).to.deep.equal({
+    expect(replicachePoke1).toEqual({
       baseCookie: '2',
       pullResponse: {
         cookie: '3',
@@ -1193,7 +1193,7 @@ describe('poke handler', () => {
         },
       ],
     });
-    expect(lastMutationIDChangeForSelf1).to.be.undefined;
+    expect(lastMutationIDChangeForSelf1).toBeUndefined();
     // error wrong pokeID
     const lastMutationIDChangeForSelf2 = pokeHandler.handlePokePart({
       pokeID: 'poke2',
@@ -1213,12 +1213,12 @@ describe('poke handler', () => {
         },
       ],
     });
-    expect(lastMutationIDChangeForSelf2).to.be.undefined;
+    expect(lastMutationIDChangeForSelf2).toBeUndefined();
   });
 
   test('mergePokes with empty array returns undefined', () => {
     const merged = mergePokes([], schema, serverToClient(schema.tables));
-    expect(merged).to.be.undefined;
+    expect(merged).toBeUndefined();
   });
 
   test('mergePokes with all optionals defined', () => {
@@ -1568,7 +1568,7 @@ describe('poke handler', () => {
         schema,
         serverToClient(schema.tables),
       );
-    }).to.throw();
+    }).toThrow();
   });
 });
 

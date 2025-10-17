@@ -8,13 +8,13 @@ test('round trip', () => {
   const chunkHasher = makeNewFakeHashFunction();
   const t = (hash: Hash, data: ReadonlyJSONValue, refs: Refs) => {
     const c = createChunk(deepFreeze(data), refs, chunkHasher);
-    expect(c.hash).to.equal(hash);
-    expect(c.data).to.deep.equal(data);
-    expect(c.meta).to.deep.equal(refs);
+    expect(c.hash).toBe(hash);
+    expect(c.data).toEqual(data);
+    expect(c.meta).toEqual(refs);
 
     const {meta} = c;
     const c2 = new Chunk(hash, data, meta);
-    expect(c).to.deep.equal(c2);
+    expect(c).toEqual(c2);
   };
 
   t(fakeHash(0), [], []);
@@ -24,11 +24,11 @@ test('round trip', () => {
 
 test('equals', () => {
   const eq = (a: Chunk, b: Chunk) => {
-    expect(a).to.deep.equal(b);
+    expect(a).toEqual(b);
   };
 
   const neq = (a: Chunk, b: Chunk) => {
-    expect(a).to.not.deep.equal(b);
+    expect(a).not.toEqual(b);
   };
 
   const chunkHasher = makeNewFakeHashFunction();

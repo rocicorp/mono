@@ -55,17 +55,17 @@ test('isMemOnlyChunkHash', async () => {
   });
   await withRead(lazyStore, read => {
     // not true for source chunk
-    expect(read.isMemOnlyChunkHash(testValue1SourceChunk.hash)).to.be.false;
+    expect(read.isMemOnlyChunkHash(testValue1SourceChunk.hash)).toBe(false);
   });
   const testValue2MemOnlyChunk = await withWriteNoImplicitCommit(
     lazyStore,
     async write => {
       const chunk = write.createChunk('testValue2', []);
       // not true if chunk not put
-      expect(write.isMemOnlyChunkHash(chunk.hash)).to.be.false;
+      expect(write.isMemOnlyChunkHash(chunk.hash)).toBe(false);
       await write.putChunk(chunk);
       // true inside transaction once chunk put
-      expect(write.isMemOnlyChunkHash(chunk.hash)).to.be.true;
+      expect(write.isMemOnlyChunkHash(chunk.hash)).toBe(true);
       await write.setHead('test', chunk.hash);
       // don't commit
       return chunk;
@@ -73,16 +73,16 @@ test('isMemOnlyChunkHash', async () => {
   );
   await withRead(lazyStore, read => {
     // not true because not committed
-    expect(read.isMemOnlyChunkHash(testValue2MemOnlyChunk.hash)).to.be.false;
+    expect(read.isMemOnlyChunkHash(testValue2MemOnlyChunk.hash)).toBe(false);
   });
 
   const testValue3MemOnlyChunk = await withWrite(lazyStore, async write => {
     const chunk = write.createChunk('testValue3', []);
     // not true if chunk not put
-    expect(write.isMemOnlyChunkHash(chunk.hash)).to.be.false;
+    expect(write.isMemOnlyChunkHash(chunk.hash)).toBe(false);
     await write.putChunk(chunk);
     // true inside transaction once chunk put
-    expect(write.isMemOnlyChunkHash(chunk.hash)).to.be.true;
+    expect(write.isMemOnlyChunkHash(chunk.hash)).toBe(true);
     // don't retain with head
 
     return chunk;
@@ -90,33 +90,33 @@ test('isMemOnlyChunkHash', async () => {
 
   await withRead(lazyStore, read => {
     // not true because not retained with head
-    expect(read.isMemOnlyChunkHash(testValue3MemOnlyChunk.hash)).to.be.false;
+    expect(read.isMemOnlyChunkHash(testValue3MemOnlyChunk.hash)).toBe(false);
   });
 
   const testValue4MemOnlyChunk = await withWrite(lazyStore, async write => {
     const chunk = write.createChunk('testValue4', []);
     // not true if chunk not put
-    expect(write.isMemOnlyChunkHash(chunk.hash)).to.be.false;
+    expect(write.isMemOnlyChunkHash(chunk.hash)).toBe(false);
     await write.putChunk(chunk);
     // true inside transaction once chunk put
-    expect(write.isMemOnlyChunkHash(chunk.hash)).to.be.true;
+    expect(write.isMemOnlyChunkHash(chunk.hash)).toBe(true);
     await write.setHead('test', chunk.hash);
     return chunk;
   });
 
   await withRead(lazyStore, read => {
-    expect(read.isMemOnlyChunkHash(testValue4MemOnlyChunk.hash)).to.be.true;
+    expect(read.isMemOnlyChunkHash(testValue4MemOnlyChunk.hash)).toBe(true);
   });
 
   await withWrite(lazyStore, async write => {
     await write.removeHead('test');
     // true because GC does not happen till commit.
-    expect(write.isMemOnlyChunkHash(testValue4MemOnlyChunk.hash)).to.be.true;
+    expect(write.isMemOnlyChunkHash(testValue4MemOnlyChunk.hash)).toBe(true);
   });
 
   await withRead(lazyStore, read => {
     // false because gc'd
-    expect(read.isMemOnlyChunkHash(testValue4MemOnlyChunk.hash)).to.be.false;
+    expect(read.isMemOnlyChunkHash(testValue4MemOnlyChunk.hash)).toBe(false);
   });
 });
 
@@ -139,9 +139,9 @@ test('chunksPersisted', async () => {
     return chunks;
   });
   await withRead(lazyStore, read => {
-    expect(read.isMemOnlyChunkHash(testValue1MemOnlyChunk.hash)).to.be.true;
-    expect(read.isMemOnlyChunkHash(testValue2MemOnlyChunk.hash)).to.be.true;
-    expect(read.isMemOnlyChunkHash(testValue3MemOnlyChunk.hash)).to.be.true;
+    expect(read.isMemOnlyChunkHash(testValue1MemOnlyChunk.hash)).toBe(true);
+    expect(read.isMemOnlyChunkHash(testValue2MemOnlyChunk.hash)).toBe(true);
+    expect(read.isMemOnlyChunkHash(testValue3MemOnlyChunk.hash)).toBe(true);
   });
 
   await withWrite(lazyStore, write => {
@@ -152,9 +152,9 @@ test('chunksPersisted', async () => {
   });
 
   await withRead(lazyStore, read => {
-    expect(read.isMemOnlyChunkHash(testValue1MemOnlyChunk.hash)).to.be.false;
-    expect(read.isMemOnlyChunkHash(testValue2MemOnlyChunk.hash)).to.be.true;
-    expect(read.isMemOnlyChunkHash(testValue3MemOnlyChunk.hash)).to.be.false;
+    expect(read.isMemOnlyChunkHash(testValue1MemOnlyChunk.hash)).toBe(false);
+    expect(read.isMemOnlyChunkHash(testValue2MemOnlyChunk.hash)).toBe(true);
+    expect(read.isMemOnlyChunkHash(testValue3MemOnlyChunk.hash)).toBe(false);
   });
 });
 
@@ -176,7 +176,7 @@ test('source read is not closed when provided', async () => {
   await withRead(sourceStore, async sourceRead => {
     releaseSpy = vi.spyOn(sourceRead, 'release');
     await using(lazyStore.read(sourceRead), async read => {
-      expect((await read.getChunk(testValue1Hash))?.data).to.equal(testValue1);
+      expect((await read.getChunk(testValue1Hash))?.data).toBe(testValue1);
     });
     expect(releaseSpy).not.toBeCalled();
   });
@@ -200,17 +200,17 @@ test(
     });
 
     await withRead(lazyStore, async read => {
-      expect((await read.getChunk(testValue1Hash))?.data).to.equal(testValue1);
+      expect((await read.getChunk(testValue1Hash))?.data).toBe(testValue1);
     });
     await withWrite(sourceStore, async write => {
       await write.removeHead('testHeadSource');
     });
     await withRead(sourceStore, async read => {
-      expect(await read.getChunk(testValue1Hash)).to.be.undefined;
+      expect(await read.getChunk(testValue1Hash)).toBeUndefined();
     });
     await withRead(lazyStore, async read => {
       // value of testValue1Hash is cached
-      expect((await read.getChunk(testValue1Hash))?.data).to.equal(testValue1);
+      expect((await read.getChunk(testValue1Hash))?.data).toBe(testValue1);
     });
   },
 );
@@ -228,17 +228,17 @@ test(
       return testValue1Chunk.hash;
     });
     await withRead(lazyStore, async read => {
-      expect((await read.getChunk(testValue1Hash))?.data).to.equal(testValue1);
+      expect((await read.getChunk(testValue1Hash))?.data).toBe(testValue1);
     });
     await withWrite(sourceStore, async write => {
       await write.removeHead('testHeadSource');
     });
     await withRead(sourceStore, async read => {
-      expect(await read.getChunk(testValue1Hash)).to.be.undefined;
+      expect(await read.getChunk(testValue1Hash)).toBeUndefined();
     });
     await withRead(lazyStore, async read => {
       // value of testValue1Hash is not cached
-      expect(await read.getChunk(testValue1Hash)).to.be.undefined;
+      expect(await read.getChunk(testValue1Hash)).toBeUndefined();
     });
   },
 );
@@ -248,7 +248,7 @@ test('heads are *not* loaded from source store', async () => {
   const testValue1 = 'testValue1';
   const testValue1Hash = chunkHasher();
   await withRead(lazyStore, async read => {
-    expect(await read.getChunk(testValue1Hash)).to.be.undefined;
+    expect(await read.getChunk(testValue1Hash)).toBeUndefined();
   });
   await withWrite(sourceStore, async write => {
     const testValue1Chunk = write.createChunk(testValue1, []);
@@ -256,31 +256,31 @@ test('heads are *not* loaded from source store', async () => {
     await write.setHead('testHeadSource', testValue1Chunk.hash);
   });
   await withRead(lazyStore, async read => {
-    expect(await read.getHead('testHeadSource')).to.be.undefined;
+    expect(await read.getHead('testHeadSource')).toBeUndefined();
   });
 });
 
 test('setHead stores head in memory but does not write through to source store', async () => {
   const {sourceStore, lazyStore} = createLazyStoreForTest();
   await withRead(lazyStore, async read => {
-    expect(await read.getHead('testHead1')).to.be.undefined;
+    expect(await read.getHead('testHead1')).toBeUndefined();
   });
   const fakeHash1 = fakeHash('face');
   await withWrite(lazyStore, async write => {
     await write.setHead('testHead1', fakeHash1);
   });
   await withRead(lazyStore, async read => {
-    expect(await read.getHead('testHead1')).to.equal(fakeHash1);
+    expect(await read.getHead('testHead1')).toBe(fakeHash1);
   });
   await withRead(sourceStore, async read => {
-    expect(await read.getHead('testHead1')).to.be.undefined;
+    expect(await read.getHead('testHead1')).toBeUndefined();
   });
 });
 
 test('removeHead removes head from memory but does not write through to source store', async () => {
   const {sourceStore, chunkHasher, lazyStore} = createLazyStoreForTest();
   await withRead(lazyStore, async read => {
-    expect(await read.getHead('testHead1')).to.be.undefined;
+    expect(await read.getHead('testHead1')).toBeUndefined();
   });
   const fakeHash1 = fakeHash('face');
   await withWrite(lazyStore, async write => {
@@ -291,19 +291,19 @@ test('removeHead removes head from memory but does not write through to source s
     await write.setHead('testHead1', testValue1Hash);
   });
   await withRead(lazyStore, async read => {
-    expect(await read.getHead('testHead1')).to.equal(fakeHash1);
+    expect(await read.getHead('testHead1')).toBe(fakeHash1);
   });
   await withRead(sourceStore, async read => {
-    expect(await read.getHead('testHead1')).to.equal(testValue1Hash);
+    expect(await read.getHead('testHead1')).toBe(testValue1Hash);
   });
   await withWrite(lazyStore, async write => {
     await write.removeHead('testHead1');
   });
   await withRead(lazyStore, async read => {
-    expect(await read.getHead('testHead1')).to.be.undefined;
+    expect(await read.getHead('testHead1')).toBeUndefined();
   });
   await withRead(sourceStore, async read => {
-    expect(await read.getHead('testHead1')).to.equal(testValue1Hash);
+    expect(await read.getHead('testHead1')).toBe(testValue1Hash);
   });
 });
 
@@ -322,12 +322,10 @@ test('putChunk with memory-only hashes updates memory but does not write through
     return testValue1Chunk;
   });
   await withRead(lazyStore, async read => {
-    expect((await read.getChunk(testValue1Chunk.hash))?.data).to.equal(
-      testValue1,
-    );
+    expect((await read.getChunk(testValue1Chunk.hash))?.data).toBe(testValue1);
   });
   await withRead(sourceStore, async read => {
-    expect(await read.getChunk(testValue1Chunk.hash)).to.be.undefined;
+    expect(await read.getChunk(testValue1Chunk.hash)).toBeUndefined();
   });
 });
 
@@ -341,16 +339,16 @@ test('writes are visible within same write transaction but not other transaction
       await write.putChunk(chunk);
       await write.setHead('testHeadLazy', chunk.hash);
       // visible within this write transaction
-      expect((await write.getChunk(chunk.hash))?.data).to.equal(testValue1);
-      expect(await write.getHead('testHeadLazy')).to.equal(chunk.hash);
+      expect((await write.getChunk(chunk.hash))?.data).toBe(testValue1);
+      expect(await write.getHead('testHeadLazy')).toBe(chunk.hash);
       // do not commit
       return chunk;
     },
   );
   await withRead(lazyStore, async read => {
     // was never committed, so not visible in another transaction
-    expect(await read.getChunk(testValue1Chunk.hash)).to.be.undefined;
-    expect(await read.getHead('testHeadLazy')).to.be.undefined;
+    expect(await read.getChunk(testValue1Chunk.hash)).toBeUndefined();
+    expect(await read.getHead('testHeadLazy')).toBeUndefined();
   });
 });
 
@@ -391,22 +389,21 @@ test('cache evicts in lru fashion, basic test of just reads', async () => {
     await setupTestChunks(sourceStore, lazyStore);
 
   await withRead(lazyStore, async read => {
-    expect((await read.getChunk(testValue1Chunk.hash))?.data).to.equal(
+    expect((await read.getChunk(testValue1Chunk.hash))?.data).toBe(
       testValue1Chunk.data,
     );
-    expect((await read.getChunk(testValue2Chunk.hash))?.data).to.equal(
+    expect((await read.getChunk(testValue2Chunk.hash))?.data).toBe(
       testValue2Chunk.data,
     );
     // evicts testValue1Chunk
-    expect((await read.getChunk(testValue3Chunk.hash))?.data).to.equal(
+    expect((await read.getChunk(testValue3Chunk.hash))?.data).toBe(
       testValue3Chunk.data,
     );
   });
 
-  expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
-    testValue2Chunk.hash,
-    testValue3Chunk.hash,
-  ]);
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+  );
 });
 
 test('cache eviction suspension, basic test of just reads', async () => {
@@ -416,29 +413,26 @@ test('cache eviction suspension, basic test of just reads', async () => {
 
   await lazyStore.withSuspendedSourceCacheEvictsAndDeletes(async () => {
     await withRead(lazyStore, async read => {
-      expect((await read.getChunk(testValue1Chunk.hash))?.data).to.equal(
+      expect((await read.getChunk(testValue1Chunk.hash))?.data).toBe(
         testValue1Chunk.data,
       );
-      expect((await read.getChunk(testValue2Chunk.hash))?.data).to.equal(
+      expect((await read.getChunk(testValue2Chunk.hash))?.data).toBe(
         testValue2Chunk.data,
       );
       // would evict testValue1Chunk, but doesn't because evicts suspended
-      expect((await read.getChunk(testValue3Chunk.hash))?.data).to.equal(
+      expect((await read.getChunk(testValue3Chunk.hash))?.data).toBe(
         testValue3Chunk.data,
       );
     });
-    expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
-      testValue1Chunk.hash,
-      testValue2Chunk.hash,
-      testValue3Chunk.hash,
-    ]);
+    expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+      [testValue1Chunk.hash, testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+    );
   });
 
   // testValue1Chunk now evicted
-  expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
-    testValue2Chunk.hash,
-    testValue3Chunk.hash,
-  ]);
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+  );
 });
 
 test('source store values are reloaded if evicted from cache', async () => {
@@ -447,33 +441,31 @@ test('source store values are reloaded if evicted from cache', async () => {
     await setupTestChunks(sourceStore, lazyStore);
 
   await withRead(lazyStore, async read => {
-    expect((await read.getChunk(testValue1Chunk.hash))?.data).to.equal(
+    expect((await read.getChunk(testValue1Chunk.hash))?.data).toBe(
       testValue1Chunk.data,
     );
-    expect((await read.getChunk(testValue2Chunk.hash))?.data).to.equal(
+    expect((await read.getChunk(testValue2Chunk.hash))?.data).toBe(
       testValue2Chunk.data,
     );
     // evicts testValue1Chunk
-    expect((await read.getChunk(testValue3Chunk.hash))?.data).to.equal(
+    expect((await read.getChunk(testValue3Chunk.hash))?.data).toBe(
       testValue3Chunk.data,
     );
   });
 
-  expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
-    testValue2Chunk.hash,
-    testValue3Chunk.hash,
-  ]);
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+  );
 
   await withRead(lazyStore, async read => {
-    expect((await read.getChunk(testValue1Chunk.hash))?.data).to.equal(
+    expect((await read.getChunk(testValue1Chunk.hash))?.data).toBe(
       testValue1Chunk.data,
     );
   });
 
-  expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
-    testValue1Chunk.hash,
-    testValue3Chunk.hash,
-  ]);
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue1Chunk.hash, testValue3Chunk.hash].sort(),
+  );
 });
 
 test('cache evicts in lru fashion, slightly more complex test with repeats of just reads', async () => {
@@ -482,25 +474,24 @@ test('cache evicts in lru fashion, slightly more complex test with repeats of ju
     await setupTestChunks(sourceStore, lazyStore);
 
   await withRead(lazyStore, async read => {
-    expect((await read.getChunk(testValue1Chunk.hash))?.data).to.equal(
+    expect((await read.getChunk(testValue1Chunk.hash))?.data).toBe(
       testValue1Chunk.data,
     );
-    expect((await read.getChunk(testValue2Chunk.hash))?.data).to.equal(
+    expect((await read.getChunk(testValue2Chunk.hash))?.data).toBe(
       testValue2Chunk.data,
     );
-    expect((await read.getChunk(testValue1Chunk.hash))?.data).to.equal(
+    expect((await read.getChunk(testValue1Chunk.hash))?.data).toBe(
       testValue1Chunk.data,
     );
     // evicts testValue2Chunk
-    expect((await read.getChunk(testValue3Chunk.hash))?.data).to.equal(
+    expect((await read.getChunk(testValue3Chunk.hash))?.data).toBe(
       testValue3Chunk.data,
     );
   });
 
-  expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
-    testValue1Chunk.hash,
-    testValue3Chunk.hash,
-  ]);
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue1Chunk.hash, testValue3Chunk.hash].sort(),
+  );
 });
 
 test('cache evicts in lru fashion, basic test of evict on write', async () => {
@@ -509,10 +500,10 @@ test('cache evicts in lru fashion, basic test of evict on write', async () => {
     await setupTestChunks(sourceStore, lazyStore);
 
   await withRead(lazyStore, async read => {
-    expect((await read.getChunk(testValue1Chunk.hash))?.data).to.equal(
+    expect((await read.getChunk(testValue1Chunk.hash))?.data).toBe(
       testValue1Chunk.data,
     );
-    expect((await read.getChunk(testValue2Chunk.hash))?.data).to.equal(
+    expect((await read.getChunk(testValue2Chunk.hash))?.data).toBe(
       testValue2Chunk.data,
     );
   });
@@ -522,10 +513,9 @@ test('cache evicts in lru fashion, basic test of evict on write', async () => {
     await write.getChunk(testValue3Chunk.hash);
   });
 
-  expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
-    testValue2Chunk.hash,
-    testValue3Chunk.hash,
-  ]);
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+  );
 });
 
 test('cache eviction suspension, basic test of evict on write', async () => {
@@ -534,10 +524,10 @@ test('cache eviction suspension, basic test of evict on write', async () => {
     await setupTestChunks(sourceStore, lazyStore);
 
   await withRead(lazyStore, async read => {
-    expect((await read.getChunk(testValue1Chunk.hash))?.data).to.equal(
+    expect((await read.getChunk(testValue1Chunk.hash))?.data).toBe(
       testValue1Chunk.data,
     );
-    expect((await read.getChunk(testValue2Chunk.hash))?.data).to.equal(
+    expect((await read.getChunk(testValue2Chunk.hash))?.data).toBe(
       testValue2Chunk.data,
     );
   });
@@ -547,18 +537,15 @@ test('cache eviction suspension, basic test of evict on write', async () => {
       // would evict testValue1Chunk, but doesn't because evicts are suspended
       await write.getChunk(testValue3Chunk.hash);
     });
-    expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
-      testValue1Chunk.hash,
-      testValue2Chunk.hash,
-      testValue3Chunk.hash,
-    ]);
+    expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+      [testValue1Chunk.hash, testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+    );
   });
 
   // now testValue1Chunk is evicted
-  expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
-    testValue2Chunk.hash,
-    testValue3Chunk.hash,
-  ]);
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+  );
 });
 
 test('cache will evict multiple chunks to make room for newly read chunk', async () => {
@@ -599,25 +586,18 @@ test('cache will evict multiple chunks to make room for newly read chunk', async
   });
 
   await withRead(lazyStore, async read => {
-    expect((await read.getChunk(testValue1Chunk.hash))?.data).to.equal(
-      testValue1,
-    );
-    expect((await read.getChunk(testValue2Chunk.hash))?.data).to.equal(
-      testValue2,
-    );
-    expect((await read.getChunk(testValue3Chunk.hash))?.data).to.equal(
-      testValue3,
-    );
+    expect((await read.getChunk(testValue1Chunk.hash))?.data).toBe(testValue1);
+    expect((await read.getChunk(testValue2Chunk.hash))?.data).toBe(testValue2);
+    expect((await read.getChunk(testValue3Chunk.hash))?.data).toBe(testValue3);
     // evicts testValue1Chunk and testValue2Chunk as its size is 200
-    expect((await read.getChunk(testValue4Chunk.hash))?.data).to.deep.equal(
+    expect((await read.getChunk(testValue4Chunk.hash))?.data).toEqual(
       testValue4,
     );
   });
 
-  expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
-    testValue3Chunk.hash,
-    testValue4Chunk.hash,
-  ]);
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue3Chunk.hash, testValue4Chunk.hash].sort(),
+  );
 });
 
 test('cache will evict multiple chunks to make room for newly cached chunk on Write.commit', async () => {
@@ -658,15 +638,9 @@ test('cache will evict multiple chunks to make room for newly cached chunk on Wr
   });
 
   await withRead(lazyStore, async read => {
-    expect((await read.getChunk(testValue1Chunk.hash))?.data).to.equal(
-      testValue1,
-    );
-    expect((await read.getChunk(testValue2Chunk.hash))?.data).to.equal(
-      testValue2,
-    );
-    expect((await read.getChunk(testValue3Chunk.hash))?.data).to.equal(
-      testValue3,
-    );
+    expect((await read.getChunk(testValue1Chunk.hash))?.data).toBe(testValue1);
+    expect((await read.getChunk(testValue2Chunk.hash))?.data).toBe(testValue2);
+    expect((await read.getChunk(testValue3Chunk.hash))?.data).toBe(testValue3);
   });
 
   await withWrite(lazyStore, async write => {
@@ -674,10 +648,9 @@ test('cache will evict multiple chunks to make room for newly cached chunk on Wr
     await write.getChunk(testValue4Chunk.hash);
   });
 
-  expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
-    testValue3Chunk.hash,
-    testValue4Chunk.hash,
-  ]);
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue3Chunk.hash, testValue4Chunk.hash].sort(),
+  );
 });
 
 test('cache will evict all cached values to make room for new chunk', async () => {
@@ -718,24 +691,18 @@ test('cache will evict all cached values to make room for new chunk', async () =
   });
 
   await withRead(lazyStore, async read => {
-    expect((await read.getChunk(testValue1Chunk.hash))?.data).to.equal(
-      testValue1,
-    );
-    expect((await read.getChunk(testValue2Chunk.hash))?.data).to.equal(
-      testValue2,
-    );
-    expect((await read.getChunk(testValue3Chunk.hash))?.data).to.equal(
-      testValue3,
-    );
+    expect((await read.getChunk(testValue1Chunk.hash))?.data).toBe(testValue1);
+    expect((await read.getChunk(testValue2Chunk.hash))?.data).toBe(testValue2);
+    expect((await read.getChunk(testValue3Chunk.hash))?.data).toBe(testValue3);
     // evicts testValue1Chunk, testValue2Chunk, and testValue3Chunk as its size is 250
-    expect((await read.getChunk(testValue4Chunk.hash))?.data).to.deep.equal(
+    expect((await read.getChunk(testValue4Chunk.hash))?.data).toEqual(
       testValue4,
     );
   });
 
-  expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
-    testValue4Chunk.hash,
-  ]);
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue4Chunk.hash].sort(),
+  );
 });
 
 test(
@@ -779,27 +746,25 @@ test(
     });
 
     await withRead(lazyStore, async read => {
-      expect((await read.getChunk(testValue1Chunk.hash))?.data).to.equal(
+      expect((await read.getChunk(testValue1Chunk.hash))?.data).toBe(
         testValue1,
       );
-      expect((await read.getChunk(testValue2Chunk.hash))?.data).to.equal(
+      expect((await read.getChunk(testValue2Chunk.hash))?.data).toBe(
         testValue2,
       );
-      expect((await read.getChunk(testValue3Chunk.hash))?.data).to.equal(
+      expect((await read.getChunk(testValue3Chunk.hash))?.data).toBe(
         testValue3,
       );
       // is not cached because its size exceeds cache size limit
       // other chunks are not evicted
-      expect((await read.getChunk(testValue4Chunk.hash))?.data).to.deep.equal(
+      expect((await read.getChunk(testValue4Chunk.hash))?.data).toEqual(
         testValue4,
       );
     });
 
-    expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
-      testValue1Chunk.hash,
-      testValue2Chunk.hash,
-      testValue3Chunk.hash,
-    ]);
+    expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+      [testValue1Chunk.hash, testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+    );
   },
 );
 
@@ -855,10 +820,10 @@ test(
     });
 
     await withRead(lazyStore, async read => {
-      expect((await read.getChunk(testValue1Chunk.hash))?.data).to.equal(
+      expect((await read.getChunk(testValue1Chunk.hash))?.data).toBe(
         testValue1,
       );
-      expect((await read.getChunk(testValue2Chunk.hash))?.data).to.equal(
+      expect((await read.getChunk(testValue2Chunk.hash))?.data).toBe(
         testValue2,
       );
     });
@@ -872,10 +837,9 @@ test(
       await write.getChunk(testValue5Chunk.hash);
     });
 
-    expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
-      testValue2Chunk.hash,
-      testValue3Chunk.hash,
-    ]);
+    expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+      [testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+    );
   },
 );
 
@@ -921,34 +885,24 @@ test('cache eviction does not change ref counts or remove refs', async () => {
   });
 
   await withRead(lazyStore, async read => {
-    expect((await read.getChunk(testValue4Chunk.hash))?.data).to.equal(
-      testValue4,
-    );
-    expect((await read.getChunk(testValue2Chunk.hash))?.data).to.equal(
-      testValue2,
-    );
-    expect((await read.getChunk(testValue1Chunk.hash))?.data).to.equal(
-      testValue1,
-    );
+    expect((await read.getChunk(testValue4Chunk.hash))?.data).toBe(testValue4);
+    expect((await read.getChunk(testValue2Chunk.hash))?.data).toBe(testValue2);
+    expect((await read.getChunk(testValue1Chunk.hash))?.data).toBe(testValue1);
     // Current LRU order 4, 2, 1
     // Update LRU order to 2, 4, 1
     // 2, 1, 4
-    expect((await read.getChunk(testValue4Chunk.hash))?.data).to.equal(
-      testValue4,
-    );
+    expect((await read.getChunk(testValue4Chunk.hash))?.data).toBe(testValue4);
     // 2, 4, 1
-    expect((await read.getChunk(testValue1Chunk.hash))?.data).to.equal(
-      testValue1,
-    );
+    expect((await read.getChunk(testValue1Chunk.hash))?.data).toBe(testValue1);
   });
 
-  expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({
+  expect(lazyStore.getRefCountsSnapshot()).toEqual({
     [testValue1Chunk.hash]: 1,
     [testValue2Chunk.hash]: 1,
     [testValue3Chunk.hash]: 1,
     [testValue4Chunk.hash]: 1,
   });
-  expect(lazyStore.getRefsSnapshot()).to.deep.equal({
+  expect(lazyStore.getRefsSnapshot()).toEqual({
     [testValue1Chunk.hash]: [],
     [testValue2Chunk.hash]: [testValue1Chunk.hash],
     [testValue4Chunk.hash]: [testValue2Chunk.hash, testValue3Chunk.hash],
@@ -957,29 +911,26 @@ test('cache eviction does not change ref counts or remove refs', async () => {
   await withRead(lazyStore, async read => {
     // To make room for 3 (of size 200), 2 chunks of size 100 need to be
     // removed from cache.  2 and 4 are least recently used, and so are evicted
-    expect((await read.getChunk(testValue3Chunk.hash))?.data).to.equal(
-      testValue3,
-    );
+    expect((await read.getChunk(testValue3Chunk.hash))?.data).toBe(testValue3);
   });
 
   // Ref counts are unchanged, refs were not removed
-  expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({
+  expect(lazyStore.getRefCountsSnapshot()).toEqual({
     [testValue1Chunk.hash]: 1,
     [testValue2Chunk.hash]: 1,
     [testValue3Chunk.hash]: 1,
     [testValue4Chunk.hash]: 1,
   });
-  expect(lazyStore.getRefsSnapshot()).to.deep.equal({
+  expect(lazyStore.getRefsSnapshot()).toEqual({
     [testValue1Chunk.hash]: [],
     [testValue2Chunk.hash]: [testValue1Chunk.hash],
     [testValue3Chunk.hash]: [],
     [testValue4Chunk.hash]: [testValue2Chunk.hash, testValue3Chunk.hash],
   });
 
-  expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
-    testValue1Chunk.hash,
-    testValue3Chunk.hash,
-  ]);
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue1Chunk.hash, testValue3Chunk.hash].sort(),
+  );
 
   // Delete chunks from lazy store
   await withWrite(lazyStore, async write => {
@@ -987,9 +938,9 @@ test('cache eviction does not change ref counts or remove refs', async () => {
   });
 
   // Refs and ref counts of delete chunks are deleted
-  expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({});
-  expect(lazyStore.getRefsSnapshot()).to.deep.equal({});
-  expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([]);
+  expect(lazyStore.getRefCountsSnapshot()).toEqual({});
+  expect(lazyStore.getRefsSnapshot()).toEqual({});
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([]);
 });
 
 test('memory-only chunks are not evicted when cache size is exceeded', async () => {
@@ -1033,38 +984,23 @@ test('memory-only chunks are not evicted when cache size is exceeded', async () 
   );
 
   await withRead(lazyStore, async read => {
-    expect((await read.getChunk(tempValue1Chunk.hash))?.data).to.equal(
-      tempValue1,
-    );
-    expect((await read.getChunk(tempValue2Chunk.hash))?.data).to.equal(
-      tempValue2,
-    );
-    expect((await read.getChunk(testValue1Chunk.hash))?.data).to.equal(
-      testValue1,
-    );
-    expect((await read.getChunk(testValue2Chunk.hash))?.data).to.equal(
-      testValue2,
-    );
+    expect((await read.getChunk(tempValue1Chunk.hash))?.data).toBe(tempValue1);
+    expect((await read.getChunk(tempValue2Chunk.hash))?.data).toBe(tempValue2);
+    expect((await read.getChunk(testValue1Chunk.hash))?.data).toBe(testValue1);
+    expect((await read.getChunk(testValue2Chunk.hash))?.data).toBe(testValue2);
     // over cache size limit, should evict testValue1Chunk, but not any
     // memory-only chunks
-    expect((await read.getChunk(testValue3Chunk.hash))?.data).to.equal(
-      testValue3,
-    );
+    expect((await read.getChunk(testValue3Chunk.hash))?.data).toBe(testValue3);
   });
 
-  expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
-    testValue2Chunk.hash,
-    testValue3Chunk.hash,
-  ]);
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [testValue2Chunk.hash, testValue3Chunk.hash].sort(),
+  );
 
   await withRead(lazyStore, async read => {
     // memory-only chunks were not evicted
-    expect((await read.getChunk(tempValue1Chunk.hash))?.data).to.equal(
-      tempValue1,
-    );
-    expect((await read.getChunk(tempValue2Chunk.hash))?.data).to.equal(
-      tempValue2,
-    );
+    expect((await read.getChunk(tempValue1Chunk.hash))?.data).toBe(tempValue1);
+    expect((await read.getChunk(tempValue2Chunk.hash))?.data).toBe(tempValue2);
   });
 });
 
@@ -1096,14 +1032,14 @@ test(
       return {r, a, b, c, d};
     });
 
-    expect(lazyStore.getRefsSnapshot()).to.deep.equal({
+    expect(lazyStore.getRefsSnapshot()).toEqual({
       [r.hash]: [b.hash, a.hash],
       [a.hash]: [c.hash],
       [b.hash]: [c.hash],
       [c.hash]: [d.hash],
       [d.hash]: [],
     });
-    expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({
+    expect(lazyStore.getRefCountsSnapshot()).toEqual({
       [r.hash]: 1,
       [a.hash]: 1,
       [b.hash]: 1,
@@ -1121,22 +1057,22 @@ test(
       return e;
     });
 
-    expect(lazyStore.getRefsSnapshot()).to.deep.equal({
+    expect(lazyStore.getRefsSnapshot()).toEqual({
       [e.hash]: [d.hash],
       [d.hash]: [],
     });
-    expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({
+    expect(lazyStore.getRefCountsSnapshot()).toEqual({
       [d.hash]: 1,
       [e.hash]: 1,
     });
 
     await withRead(lazyStore, async read => {
-      expect(await read.getChunk(r.hash)).to.be.undefined;
-      expect(await read.getChunk(a.hash)).to.be.undefined;
-      expect(await read.getChunk(b.hash)).to.be.undefined;
-      expect(await read.getChunk(c.hash)).to.be.undefined;
-      expect(await read.getChunk(d.hash)).to.deep.equal(d);
-      expect(await read.getChunk(e.hash)).to.deep.equal(e);
+      expect(await read.getChunk(r.hash)).toBeUndefined();
+      expect(await read.getChunk(a.hash)).toBeUndefined();
+      expect(await read.getChunk(b.hash)).toBeUndefined();
+      expect(await read.getChunk(c.hash)).toBeUndefined();
+      expect(await read.getChunk(d.hash)).toEqual(d);
+      expect(await read.getChunk(e.hash)).toEqual(e);
     });
   },
 );
@@ -1183,14 +1119,14 @@ test(
       await write.setHead('testLazy', r.hash);
     });
 
-    expect(lazyStore.getRefsSnapshot()).to.deep.equal({
+    expect(lazyStore.getRefsSnapshot()).toEqual({
       [r.hash]: [b.hash, a.hash],
       [a.hash]: [c.hash],
       [b.hash]: [c.hash],
       [c.hash]: [d.hash],
       [d.hash]: [],
     });
-    expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({
+    expect(lazyStore.getRefCountsSnapshot()).toEqual({
       [r.hash]: 1,
       [a.hash]: 1,
       [b.hash]: 1,
@@ -1215,22 +1151,22 @@ test(
       return e;
     });
 
-    expect(lazyStore.getRefsSnapshot()).to.deep.equal({
+    expect(lazyStore.getRefsSnapshot()).toEqual({
       [e.hash]: [d.hash],
       [d.hash]: [],
     });
-    expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({
+    expect(lazyStore.getRefCountsSnapshot()).toEqual({
       [d.hash]: 1,
       [e.hash]: 1,
     });
 
     await withRead(lazyStore, async read => {
-      expect(await read.getChunk(r.hash)).to.be.undefined;
-      expect(await read.getChunk(a.hash)).to.be.undefined;
-      expect(await read.getChunk(b.hash)).to.be.undefined;
-      expect(await read.getChunk(c.hash)).to.be.undefined;
-      expect(await read.getChunk(d.hash)).to.deep.equal(d);
-      expect(await read.getChunk(e.hash)).to.deep.equal(e);
+      expect(await read.getChunk(r.hash)).toBeUndefined();
+      expect(await read.getChunk(a.hash)).toBeUndefined();
+      expect(await read.getChunk(b.hash)).toBeUndefined();
+      expect(await read.getChunk(c.hash)).toBeUndefined();
+      expect(await read.getChunk(d.hash)).toEqual(d);
+      expect(await read.getChunk(e.hash)).toEqual(e);
     });
   },
 );
@@ -1277,14 +1213,14 @@ test(
       await write.setHead('testLazy', r.hash);
     });
 
-    expect(lazyStore.getRefsSnapshot()).to.deep.equal({
+    expect(lazyStore.getRefsSnapshot()).toEqual({
       [r.hash]: [b.hash, a.hash],
       [a.hash]: [c.hash],
       [b.hash]: [c.hash],
       [c.hash]: [d.hash],
       [d.hash]: [],
     });
-    expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({
+    expect(lazyStore.getRefCountsSnapshot()).toEqual({
       [r.hash]: 1,
       [a.hash]: 1,
       [b.hash]: 1,
@@ -1303,11 +1239,11 @@ test(
       return tempE;
     });
 
-    expect(lazyStore.getRefsSnapshot()).to.deep.equal({
+    expect(lazyStore.getRefsSnapshot()).toEqual({
       [tempE.hash]: [d.hash],
       [d.hash]: [],
     });
-    expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({
+    expect(lazyStore.getRefCountsSnapshot()).toEqual({
       [d.hash]: 1,
       [tempE.hash]: 1,
     });
@@ -1328,23 +1264,23 @@ test(
       return e;
     });
 
-    expect(lazyStore.getRefsSnapshot()).to.deep.equal({
+    expect(lazyStore.getRefsSnapshot()).toEqual({
       [e.hash]: [d.hash],
       [d.hash]: [],
     });
-    expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({
+    expect(lazyStore.getRefCountsSnapshot()).toEqual({
       [d.hash]: 1,
       [e.hash]: 1,
     });
 
     await withRead(lazyStore, async read => {
-      expect(await read.getChunk(r.hash)).to.be.undefined;
-      expect(await read.getChunk(a.hash)).to.be.undefined;
-      expect(await read.getChunk(b.hash)).to.be.undefined;
-      expect(await read.getChunk(c.hash)).to.be.undefined;
-      expect(await read.getChunk(tempE.hash)).to.be.undefined;
-      expect(await read.getChunk(d.hash)).to.deep.equal(d);
-      expect(await read.getChunk(e.hash)).to.deep.equal(e);
+      expect(await read.getChunk(r.hash)).toBeUndefined();
+      expect(await read.getChunk(a.hash)).toBeUndefined();
+      expect(await read.getChunk(b.hash)).toBeUndefined();
+      expect(await read.getChunk(c.hash)).toBeUndefined();
+      expect(await read.getChunk(tempE.hash)).toBeUndefined();
+      expect(await read.getChunk(d.hash)).toEqual(d);
+      expect(await read.getChunk(e.hash)).toEqual(e);
     });
   },
 );
@@ -1396,7 +1332,7 @@ test(
       return tempR1;
     });
 
-    expect(lazyStore.getRefsSnapshot()).to.deep.equal({
+    expect(lazyStore.getRefsSnapshot()).toEqual({
       [tempR1.hash]: [r.hash],
       [r.hash]: [b.hash, a.hash],
       [a.hash]: [c.hash],
@@ -1404,7 +1340,7 @@ test(
       [c.hash]: [d.hash],
       [d.hash]: [],
     });
-    expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({
+    expect(lazyStore.getRefCountsSnapshot()).toEqual({
       [tempR1.hash]: 1,
       [r.hash]: 1,
       [a.hash]: 1,
@@ -1413,15 +1349,11 @@ test(
       [d.hash]: 1,
     });
     await withRead(lazyStore, async read => {
-      expect((await read.getChunk(tempR1.hash))?.data).to.equal(tempR1.data);
+      expect((await read.getChunk(tempR1.hash))?.data).toBe(tempR1.data);
     });
-    expect(await lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
-      r.hash,
-      a.hash,
-      b.hash,
-      c.hash,
-      d.hash,
-    ]);
+    expect(
+      [...(await lazyStore.getCachedSourceChunksSnapshot())].sort(),
+    ).toEqual([r.hash, a.hash, b.hash, c.hash, d.hash].sort());
 
     const tempR2 = await lazyStore.withSuspendedSourceCacheEvictsAndDeletes(
       async () => {
@@ -1435,7 +1367,7 @@ test(
           return tempR2;
         });
 
-        expect(lazyStore.getRefsSnapshot()).to.deep.equal({
+        expect(lazyStore.getRefsSnapshot()).toEqual({
           [tempR2.hash]: [d.hash],
           [r.hash]: [b.hash, a.hash],
           [a.hash]: [c.hash],
@@ -1443,7 +1375,7 @@ test(
           [c.hash]: [d.hash],
           [d.hash]: [],
         });
-        expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({
+        expect(lazyStore.getRefCountsSnapshot()).toEqual({
           [tempR2.hash]: 1,
           [r.hash]: 0,
           [a.hash]: 0,
@@ -1452,14 +1384,12 @@ test(
           [d.hash]: 1,
         });
         await withRead(lazyStore, async read => {
-          expect(await read.getChunk(tempR1.hash)).to.be.undefined;
-          expect((await read.getChunk(tempR2.hash))?.data).to.equal(
-            tempR2.data,
-          );
+          expect(await read.getChunk(tempR1.hash)).toBeUndefined();
+          expect((await read.getChunk(tempR2.hash))?.data).toBe(tempR2.data);
         });
-        expect(await lazyStore.getCachedSourceChunksSnapshot()).to.deep.members(
-          [r.hash, a.hash, b.hash, c.hash, d.hash],
-        );
+        expect(
+          [...(await lazyStore.getCachedSourceChunksSnapshot())].sort(),
+        ).toEqual([r.hash, a.hash, b.hash, c.hash, d.hash].sort());
 
         // C
         // |
@@ -1468,14 +1398,14 @@ test(
           await write.setHead('testLazy', c.hash);
         });
 
-        expect(lazyStore.getRefsSnapshot()).to.deep.equal({
+        expect(lazyStore.getRefsSnapshot()).toEqual({
           [r.hash]: [b.hash, a.hash],
           [a.hash]: [c.hash],
           [b.hash]: [c.hash],
           [c.hash]: [d.hash],
           [d.hash]: [],
         });
-        expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({
+        expect(lazyStore.getRefCountsSnapshot()).toEqual({
           [r.hash]: 0,
           [a.hash]: 0,
           [b.hash]: 0,
@@ -1483,32 +1413,31 @@ test(
           [d.hash]: 1,
         });
         await withRead(lazyStore, async read => {
-          expect(await read.getChunk(tempR1.hash)).to.be.undefined;
-          expect(await read.getChunk(tempR2.hash)).to.be.undefined;
+          expect(await read.getChunk(tempR1.hash)).toBeUndefined();
+          expect(await read.getChunk(tempR2.hash)).toBeUndefined();
         });
-        expect(await lazyStore.getCachedSourceChunksSnapshot()).to.deep.members(
-          [r.hash, a.hash, b.hash, c.hash, d.hash],
-        );
+        expect(
+          [...(await lazyStore.getCachedSourceChunksSnapshot())].sort(),
+        ).toEqual([r.hash, a.hash, b.hash, c.hash, d.hash].sort());
         return tempR2;
       },
     );
 
-    expect(lazyStore.getRefsSnapshot()).to.deep.equal({
+    expect(lazyStore.getRefsSnapshot()).toEqual({
       [c.hash]: [d.hash],
       [d.hash]: [],
     });
-    expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({
+    expect(lazyStore.getRefCountsSnapshot()).toEqual({
       [c.hash]: 1,
       [d.hash]: 1,
     });
     await withRead(lazyStore, async read => {
-      expect(await read.getChunk(tempR1.hash)).to.be.undefined;
-      expect(await read.getChunk(tempR2.hash)).to.be.undefined;
+      expect(await read.getChunk(tempR1.hash)).toBeUndefined();
+      expect(await read.getChunk(tempR2.hash)).toBeUndefined();
     });
-    expect(await lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([
-      c.hash,
-      d.hash,
-    ]);
+    expect(
+      [...(await lazyStore.getCachedSourceChunksSnapshot())].sort(),
+    ).toEqual([c.hash, d.hash].sort());
   },
 );
 
@@ -1567,7 +1496,7 @@ async function testChunksCacheForFirstTimeRefsAreCounted(
     await write.setHead('headLazy', b.hash);
   });
 
-  expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({
+  expect(lazyStore.getRefCountsSnapshot()).toEqual({
     [b.hash]: 1,
   });
 
@@ -1596,7 +1525,7 @@ async function testChunksCacheForFirstTimeRefsAreCounted(
   // B was already reachable, its ref to A is still counted since it
   // was not never-previously cached and so the ref was lazily discovered
   // during this write.
-  expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({
+  expect(lazyStore.getRefCountsSnapshot()).toEqual({
     [c.hash]: 1,
     [b.hash]: 1,
     [a.hash]: 2,
@@ -1611,9 +1540,9 @@ async function testChunksCacheForFirstTimeRefsAreCounted(
     // reachable, A would now have a negative refCount (as its refCount
     // would be 1, and then -1 for C's ref to it and -1 for B's ref to it).
     // Assert that instead everything has a refCount of zero (no entry).
-    expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({});
-    expect(lazyStore.getRefsSnapshot()).to.deep.equal({});
-    expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([]);
+    expect(lazyStore.getRefCountsSnapshot()).toEqual({});
+    expect(lazyStore.getRefsSnapshot()).toEqual({});
+    expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([]);
   }
   return {a, b, c};
 }
@@ -1630,15 +1559,19 @@ test('the refs of chunks being cached for a *second* time are not counted on com
     false,
   );
 
-  expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([b.hash]);
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [b.hash].sort(),
+  );
 
   await withRead(lazyStore, async read => {
     // B is evicted
     await read.getChunk(a.hash);
   });
-  expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([a.hash]);
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [a.hash].sort(),
+  );
 
-  expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({
+  expect(lazyStore.getRefCountsSnapshot()).toEqual({
     [c.hash]: 1,
     [b.hash]: 1,
     [a.hash]: 2,
@@ -1648,10 +1581,12 @@ test('the refs of chunks being cached for a *second* time are not counted on com
     // recache B, A is evicted
     await write.getChunk(b.hash);
   });
-  expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([b.hash]);
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual(
+    [b.hash].sort(),
+  );
 
   // B's refs are not recounted
-  expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({
+  expect(lazyStore.getRefCountsSnapshot()).toEqual({
     [c.hash]: 1,
     [b.hash]: 1,
     [a.hash]: 2,
@@ -1661,7 +1596,7 @@ test('the refs of chunks being cached for a *second* time are not counted on com
   await withWrite(lazyStore, async write => {
     await write.removeHead('headLazy');
   });
-  expect(lazyStore.getRefCountsSnapshot()).to.deep.equal({});
-  expect(lazyStore.getRefsSnapshot()).to.deep.equal({});
-  expect(lazyStore.getCachedSourceChunksSnapshot()).to.deep.members([]);
+  expect(lazyStore.getRefCountsSnapshot()).toEqual({});
+  expect(lazyStore.getRefsSnapshot()).toEqual({});
+  expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([]);
 });

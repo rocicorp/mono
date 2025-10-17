@@ -41,14 +41,14 @@ describe('ProcessScheduler', () => {
     );
     const result = scheduler.schedule();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(0);
-    expect(requestIdleCalls.length).to.equal(1);
-    expect(requestIdleCalls[0]).to.equal(1234);
+    expect(testProcessCallCount).toBe(0);
+    expect(requestIdleCalls.length).toBe(1);
+    expect(requestIdleCalls[0]).toBe(1234);
     requestIdleResolver.resolve();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(1);
+    expect(testProcessCallCount).toBe(1);
     await result;
-    expect(testProcessCallCount).to.equal(1);
+    expect(testProcessCallCount).toBe(1);
   });
 
   test('rejects if process rejects', async () => {
@@ -75,20 +75,20 @@ describe('ProcessScheduler', () => {
     );
     const result = scheduler.schedule();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(0);
-    expect(requestIdleCalls.length).to.equal(1);
-    expect(requestIdleCalls[0]).to.equal(1234);
+    expect(testProcessCallCount).toBe(0);
+    expect(requestIdleCalls.length).toBe(1);
+    expect(requestIdleCalls[0]).toBe(1234);
     requestIdleResolver.resolve();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(1);
+    expect(testProcessCallCount).toBe(1);
     let expectedE;
     try {
       await result;
     } catch (e) {
       expectedE = e;
     }
-    expect(expectedE).to.equal(testProcessError);
-    expect(testProcessCallCount).to.equal(1);
+    expect(expectedE).toBe(testProcessError);
+    expect(testProcessCallCount).toBe(1);
   });
 
   test('rejects if process rejects', async () => {
@@ -115,20 +115,20 @@ describe('ProcessScheduler', () => {
     );
     const result = scheduler.schedule();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(0);
-    expect(requestIdleCalls.length).to.equal(1);
-    expect(requestIdleCalls[0]).to.equal(1234);
+    expect(testProcessCallCount).toBe(0);
+    expect(requestIdleCalls.length).toBe(1);
+    expect(requestIdleCalls[0]).toBe(1234);
     requestIdleResolver.resolve();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(1);
+    expect(testProcessCallCount).toBe(1);
     let expectedE;
     try {
       await result;
     } catch (e) {
       expectedE = e;
     }
-    expect(expectedE).to.equal(testProcessError);
-    expect(testProcessCallCount).to.equal(1);
+    expect(expectedE).toBe(testProcessError);
+    expect(testProcessCallCount).toBe(1);
   });
 
   test('multiple calls to schedule while process is running are fullfilled by one process run', async () => {
@@ -166,59 +166,59 @@ describe('ProcessScheduler', () => {
 
     const result1 = schedule();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(0);
+    expect(testProcessCallCount).toBe(0);
     await aFewMicrotasks();
-    expect(requestIdleCalls.length).to.equal(1);
-    expect(requestIdleCalls[0]).to.equal(1234);
+    expect(requestIdleCalls.length).toBe(1);
+    expect(requestIdleCalls[0]).toBe(1234);
     // schedule during first scheduled process idle
     const result2 = schedule();
-    expect(result1).to.equal(result2);
+    expect(result1).toBe(result2);
     requestIdleResolvers[0].resolve();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(1);
+    expect(testProcessCallCount).toBe(1);
     // schedule during first scheduled process run
     const result3 = schedule();
     const result4 = schedule();
-    expect(result1).to.not.equal(result3);
-    expect(result3).to.equal(result4);
-    expect(testProcessCallCount).to.equal(1);
+    expect(result1).not.toBe(result3);
+    expect(result3).toBe(result4);
+    expect(testProcessCallCount).toBe(1);
     testProcessResolvers[0].resolve();
     await aFewMicrotasks();
-    expect(resolved).to.deep.equal([1, 2]);
+    expect(resolved).toEqual([1, 2]);
     await result1;
     await result2;
 
-    expect(requestIdleCalls.length).to.equal(2);
-    expect(requestIdleCalls[1]).to.equal(1234);
+    expect(requestIdleCalls.length).toBe(2);
+    expect(requestIdleCalls[1]).toBe(1234);
     // schedule during second scheduled process idle
     const result5 = schedule();
-    expect(result4).to.equal(result5);
-    expect(testProcessCallCount).to.equal(1);
+    expect(result4).toBe(result5);
+    expect(testProcessCallCount).toBe(1);
     requestIdleResolvers[1].resolve();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(2);
+    expect(testProcessCallCount).toBe(2);
     // schedule during second process run
     const result6 = schedule();
     const result7 = schedule();
-    expect(result5).to.not.equal(result6);
-    expect(result6).to.equal(result7);
-    expect(testProcessCallCount).to.equal(2);
+    expect(result5).not.toBe(result6);
+    expect(result6).toBe(result7);
+    expect(testProcessCallCount).toBe(2);
     testProcessResolvers[1].resolve();
     await aFewMicrotasks();
-    expect(resolved).to.deep.equal([1, 2, 3, 4, 5]);
+    expect(resolved).toEqual([1, 2, 3, 4, 5]);
     await result3;
     await result4;
     await result5;
 
-    expect(requestIdleCalls.length).to.equal(3);
-    expect(requestIdleCalls[2]).to.equal(1234);
-    expect(testProcessCallCount).to.equal(2);
+    expect(requestIdleCalls.length).toBe(3);
+    expect(requestIdleCalls[2]).toBe(1234);
+    expect(testProcessCallCount).toBe(2);
     requestIdleResolvers[2].resolve();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(3);
+    expect(testProcessCallCount).toBe(3);
     testProcessResolvers[2].resolve();
     await aFewMicrotasks();
-    expect(resolved).to.deep.equal([1, 2, 3, 4, 5, 6, 7]);
+    expect(resolved).toEqual([1, 2, 3, 4, 5, 6, 7]);
     await result6;
     await result7;
   });
@@ -258,51 +258,51 @@ describe('ProcessScheduler', () => {
 
     const result1 = schedule();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(0);
+    expect(testProcessCallCount).toBe(0);
     await aFewMicrotasks();
-    expect(requestIdleCalls.length).to.equal(1);
-    expect(requestIdleCalls[0]).to.equal(1234);
+    expect(requestIdleCalls.length).toBe(1);
+    expect(requestIdleCalls[0]).toBe(1234);
     // schedule during first scheduled process idle
     const result2 = schedule();
-    expect(result1).to.equal(result2);
+    expect(result1).toBe(result2);
     requestIdleResolvers[0].resolve();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(1);
+    expect(testProcessCallCount).toBe(1);
     // schedule during first scheduled process run
     const result3 = schedule();
     const result4 = schedule();
-    expect(result1).to.not.equal(result3);
-    expect(result3).to.equal(result4);
-    expect(testProcessCallCount).to.equal(1);
+    expect(result1).not.toBe(result3);
+    expect(result3).toBe(result4);
+    expect(testProcessCallCount).toBe(1);
     const testProcessError1 = new Error('testProcess error 1');
     testProcessResolvers[0].reject(testProcessError1);
     await aFewMicrotasks();
-    expect(rejected).to.deep.equal([1, 2]);
-    (await expectPromiseToReject(result1)).to.equal(testProcessError1);
-    (await expectPromiseToReject(result2)).to.equal(testProcessError1);
+    expect(rejected).toEqual([1, 2]);
+    (await expectPromiseToReject(result1)).toBe(testProcessError1);
+    (await expectPromiseToReject(result2)).toBe(testProcessError1);
 
-    expect(requestIdleCalls.length).to.equal(2);
-    expect(requestIdleCalls[1]).to.equal(1234);
+    expect(requestIdleCalls.length).toBe(2);
+    expect(requestIdleCalls[1]).toBe(1234);
     // schedule during second scheduled process idle
     const result5 = schedule();
-    expect(result4).to.equal(result5);
-    expect(testProcessCallCount).to.equal(1);
+    expect(result4).toBe(result5);
+    expect(testProcessCallCount).toBe(1);
     requestIdleResolvers[1].resolve();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(2);
+    expect(testProcessCallCount).toBe(2);
     // schedule during second process run
     const result6 = schedule();
     const result7 = schedule();
-    expect(result5).to.not.equal(result6);
-    expect(result6).to.equal(result7);
-    expect(testProcessCallCount).to.equal(2);
+    expect(result5).not.toBe(result6);
+    expect(result6).toBe(result7);
+    expect(testProcessCallCount).toBe(2);
     const testProcessError2 = new Error('testProcess error 2');
     testProcessResolvers[1].reject(testProcessError2);
     await aFewMicrotasks();
-    expect(rejected).to.deep.equal([1, 2, 3, 4, 5]);
-    (await expectPromiseToReject(result3)).to.equal(testProcessError2);
-    (await expectPromiseToReject(result4)).to.equal(testProcessError2);
-    (await expectPromiseToReject(result5)).to.equal(testProcessError2);
+    expect(rejected).toEqual([1, 2, 3, 4, 5]);
+    (await expectPromiseToReject(result3)).toBe(testProcessError2);
+    (await expectPromiseToReject(result4)).toBe(testProcessError2);
+    (await expectPromiseToReject(result5)).toBe(testProcessError2);
   });
 
   test('process runs are throttled so that the process runs at most once every throttleMs', async () => {
@@ -340,61 +340,61 @@ describe('ProcessScheduler', () => {
 
     const result1 = schedule();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(0);
+    expect(testProcessCallCount).toBe(0);
     await aFewMicrotasks();
-    expect(requestIdleCalls.length).to.equal(1);
-    expect(requestIdleCalls[0]).to.equal(1234);
+    expect(requestIdleCalls.length).toBe(1);
+    expect(requestIdleCalls[0]).toBe(1234);
     // schedule during first scheduled process idle
     const result2 = schedule();
-    expect(result1).to.equal(result2);
+    expect(result1).toBe(result2);
     // make idle take 100 ms
     await vi.advanceTimersByTimeAsync(100);
     requestIdleResolvers[0].resolve();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(1);
+    expect(testProcessCallCount).toBe(1);
     // schedule during first scheduled process run
     const result3 = schedule();
     const result4 = schedule();
-    expect(result1).to.not.equal(result3);
-    expect(result3).to.equal(result4);
-    expect(testProcessCallCount).to.equal(1);
+    expect(result1).not.toBe(result3);
+    expect(result3).toBe(result4);
+    expect(testProcessCallCount).toBe(1);
     // make process take 200ms
     await vi.advanceTimersByTimeAsync(200);
     testProcessResolvers[0].resolve();
     await aFewMicrotasks();
-    expect(resolved).to.deep.equal([1, 2]);
+    expect(resolved).toEqual([1, 2]);
     await result1;
     await result2;
 
     // not called yet because 250ms hasn't elapsed since last
     // process run started (100 ms idle doesn't count, only 200ms run does)
-    expect(requestIdleCalls.length).to.equal(1);
+    expect(requestIdleCalls.length).toBe(1);
     // schedule during second scheduled process throttle
     const result5 = schedule();
-    expect(result4).to.equal(result5);
+    expect(result4).toBe(result5);
     await vi.advanceTimersByTimeAsync(50);
     await aFewMicrotasks();
     // now 250ms has elapsed
-    expect(requestIdleCalls.length).to.equal(2);
-    expect(requestIdleCalls[1]).to.equal(1234);
+    expect(requestIdleCalls.length).toBe(2);
+    expect(requestIdleCalls[1]).toBe(1234);
     // schedule during second scheduled process idle
     const result6 = schedule();
-    expect(result5).to.equal(result6);
-    expect(testProcessCallCount).to.equal(1);
+    expect(result5).toBe(result6);
+    expect(testProcessCallCount).toBe(1);
     requestIdleResolvers[1].resolve();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(2);
+    expect(testProcessCallCount).toBe(2);
     // schedule during second process run
     const result7 = schedule();
     const result8 = schedule();
-    expect(result6).to.not.equal(result7);
-    expect(result7).to.equal(result8);
-    expect(testProcessCallCount).to.equal(2);
+    expect(result6).not.toBe(result7);
+    expect(result7).toBe(result8);
+    expect(testProcessCallCount).toBe(2);
     // make second process run take 250ms
     await vi.advanceTimersByTimeAsync(250);
     testProcessResolvers[1].resolve();
     await aFewMicrotasks();
-    expect(resolved).to.deep.equal([1, 2, 3, 4, 5, 6]);
+    expect(resolved).toEqual([1, 2, 3, 4, 5, 6]);
     await result3;
     await result4;
     await result5;
@@ -402,15 +402,15 @@ describe('ProcessScheduler', () => {
 
     // already 3 because 250ms has elapsed since
     // last process run started (250ms run time)
-    expect(requestIdleCalls.length).to.equal(3);
-    expect(requestIdleCalls[2]).to.equal(1234);
-    expect(testProcessCallCount).to.equal(2);
+    expect(requestIdleCalls.length).toBe(3);
+    expect(requestIdleCalls[2]).toBe(1234);
+    expect(testProcessCallCount).toBe(2);
     requestIdleResolvers[2].resolve();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(3);
+    expect(testProcessCallCount).toBe(3);
     testProcessResolvers[2].resolve();
     await aFewMicrotasks();
-    expect(resolved).to.deep.equal([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(resolved).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
     await result7;
     await result8;
   });
@@ -436,10 +436,10 @@ describe('ProcessScheduler', () => {
       requestIdle,
     );
     abortController.abort();
-    (await expectPromiseToReject(scheduler.schedule())).to.be.instanceOf(
+    (await expectPromiseToReject(scheduler.schedule())).toBeInstanceOf(
       AbortError,
     );
-    expect(testProcessCallCount).to.equal(0);
+    expect(testProcessCallCount).toBe(0);
   });
 
   test('rejects with AbortError when running', async () => {
@@ -465,14 +465,14 @@ describe('ProcessScheduler', () => {
     );
     const result = scheduler.schedule();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(0);
-    expect(requestIdleCalls.length).to.equal(1);
-    expect(requestIdleCalls[0]).to.equal(1234);
+    expect(testProcessCallCount).toBe(0);
+    expect(requestIdleCalls.length).toBe(1);
+    expect(requestIdleCalls[0]).toBe(1234);
     requestIdleResolver.resolve();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(1);
+    expect(testProcessCallCount).toBe(1);
     abortController.abort();
-    (await expectPromiseToReject(result)).to.be.instanceOf(AbortError);
+    (await expectPromiseToReject(result)).toBeInstanceOf(AbortError);
   });
 
   test('rejects with AbortError both running and waiting', async () => {
@@ -499,14 +499,14 @@ describe('ProcessScheduler', () => {
     const result1 = scheduler.schedule();
     const result2 = scheduler.schedule();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(0);
-    expect(requestIdleCalls.length).to.equal(1);
-    expect(requestIdleCalls[0]).to.equal(1234);
+    expect(testProcessCallCount).toBe(0);
+    expect(requestIdleCalls.length).toBe(1);
+    expect(requestIdleCalls[0]).toBe(1234);
     requestIdleResolver.resolve();
     await aFewMicrotasks();
-    expect(testProcessCallCount).to.equal(1);
+    expect(testProcessCallCount).toBe(1);
     abortController.abort();
-    (await expectPromiseToReject(result1)).to.be.instanceOf(AbortError);
-    (await expectPromiseToReject(result2)).to.be.instanceOf(AbortError);
+    (await expectPromiseToReject(result1)).toBeInstanceOf(AbortError);
+    (await expectPromiseToReject(result2)).toBeInstanceOf(AbortError);
   });
 });

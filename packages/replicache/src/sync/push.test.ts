@@ -27,11 +27,11 @@ type FakePusherArgs = {
 function makeFakePusher(options: FakePusherArgs): Pusher {
   // oxlint-disable-next-line require-await
   return async (pushReq, requestID): Promise<PusherResult> => {
-    expect(options.expPush).to.be.true;
+    expect(options.expPush).toBe(true);
 
     if (options.expPushReq) {
-      expect(options.expPushReq).to.deep.equal(pushReq);
-      expect(options.expRequestID).to.equal(requestID);
+      expect(options.expPushReq).toEqual(pushReq);
+      expect(options.expRequestID).toBe(requestID);
     }
 
     if (options.error) {
@@ -268,7 +268,7 @@ test('try push [DD31]', async () => {
           got = true;
           break;
         }
-        expect(got).to.be.true;
+        expect(got).toBe(true);
       });
     }
 
@@ -304,6 +304,6 @@ test('try push [DD31]', async () => {
       PUSH_VERSION_DD31,
     );
 
-    expect(pusherResult).to.deep.equal(c.expPusherResult, `name: ${c.name}`);
+    expect(pusherResult).toEqual(c.expPusherResult, `name: ${c.name}`);
   }
 });

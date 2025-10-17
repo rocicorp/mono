@@ -11,7 +11,7 @@ test('filterAsyncIterable', async () => {
   ) => {
     const iter = makeAsyncIterable(elements);
     const filtered = filterAsyncIterable(iter, predicate);
-    expect(await asyncIterableToArray(filtered)).to.deep.equal(expected);
+    expect(await asyncIterableToArray(filtered)).toEqual(expected);
   };
 
   await t([1, 2, 3], () => false, []);

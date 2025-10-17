@@ -52,44 +52,44 @@ test('subscribe', async () => {
     },
   );
 
-  expect(log).to.have.length(0);
-  expect(queryCallCount).to.equal(0);
+  expect(log).toHaveLength(0);
+  expect(queryCallCount).toBe(0);
 
   const add = rep.mutate.addData;
   await add({'a/0': 0});
-  expect(log).to.deep.equal([['a/0', 0]]);
-  expect(queryCallCount).to.equal(2); // One for initial subscribe and one for the add.
+  expect(log).toEqual([['a/0', 0]]);
+  expect(queryCallCount).toBe(2); // One for initial subscribe and one for the add.
 
   // Changing a entry to the same value no longer triggers the subscription to
   // fire.
   log.length = 0;
   await add({'a/0': 0});
-  expect(log).to.deep.equal([]);
-  expect(queryCallCount).to.equal(2);
+  expect(log).toEqual([]);
+  expect(queryCallCount).toBe(2);
 
   log.length = 0;
   await add({'a/1': 1});
-  expect(log).to.deep.equal([
+  expect(log).toEqual([
     ['a/0', 0],
     ['a/1', 1],
   ]);
-  expect(queryCallCount).to.equal(3);
+  expect(queryCallCount).toBe(3);
 
   log.length = 0;
   log.length = 0;
   await add({'a/1': 11});
-  expect(log).to.deep.equal([
+  expect(log).toEqual([
     ['a/0', 0],
     ['a/1', 11],
   ]);
-  expect(queryCallCount).to.equal(4);
+  expect(queryCallCount).toBe(4);
 
   log.length = 0;
   cancel();
   await add({'a/1': 12});
   await Promise.resolve();
-  expect(log).to.have.length(0);
-  expect(queryCallCount).to.equal(4);
+  expect(log).toHaveLength(0);
+  expect(queryCallCount).toBe(4);
 });
 
 describe('subscribe', () => {
@@ -127,8 +127,8 @@ describe('subscribe', () => {
       },
     );
 
-    expect(queryCallCount).to.equal(0);
-    expect(onDataCallCount).to.equal(0);
+    expect(queryCallCount).toBe(0);
+    expect(onDataCallCount).toBe(0);
     expect(onErrorFake).not.toHaveBeenCalled();
 
     await tickUntil(vi, () => queryCallCount > 0);
@@ -163,7 +163,7 @@ describe('subscribe', () => {
       b: {id: 'bx'},
     });
 
-    expect(log).to.deep.equal([
+    expect(log).toEqual([
       [
         ['a-1', 'a1'],
         {
@@ -179,17 +179,17 @@ describe('subscribe', () => {
         },
       ],
     ]);
-    expect(queryCallCount()).to.equal(2); // One for initial subscribe and one for the add.
-    expect(onDataCallCount()).to.equal(2);
+    expect(queryCallCount()).toBe(2); // One for initial subscribe and one for the add.
+    expect(onDataCallCount()).toBe(2);
     expect(onErrorFake).not.toHaveBeenCalled();
 
     log.length = 0;
     await rep.mutate.addData({a3: {id: 'a-3', x: 3}});
 
-    expect(queryCallCount()).to.equal(3);
-    expect(onDataCallCount()).to.equal(3);
+    expect(queryCallCount()).toBe(3);
+    expect(onDataCallCount()).toBe(3);
     expect(onErrorFake).not.toHaveBeenCalled();
-    expect(log).to.deep.equal([
+    expect(log).toEqual([
       [
         ['a-1', 'a1'],
         {
@@ -226,9 +226,9 @@ describe('subscribe', () => {
     });
 
     expect(onErrorFake).toHaveBeenCalledOnce();
-    expect(onErrorFake.mock.calls[0][0])
-      .to.be.instanceOf(Error)
-      .with.property('message', 'Unknown index name: i1');
+    const error = onErrorFake.mock.calls[0][0];
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toHaveProperty('message', 'Unknown index name: i1');
 
     cancel();
   });
@@ -249,7 +249,7 @@ describe('subscribe', () => {
       b: {id: 'bx'},
     });
 
-    expect(log).to.deep.equal([
+    expect(log).toEqual([
       [
         ['a-1', 'a1'],
         {
@@ -291,7 +291,7 @@ describe('subscribe', () => {
       b: {id: 'bx'},
     });
 
-    expect(log).to.deep.equal([
+    expect(log).toEqual([
       [
         ['a-2', 'a2'],
         {
@@ -306,14 +306,14 @@ describe('subscribe', () => {
         },
       ],
     ]);
-    expect(queryCallCount()).to.equal(2); // One for initial subscribe and one for the add.
-    expect(onDataCallCount()).to.equal(2);
+    expect(queryCallCount()).toBe(2); // One for initial subscribe and one for the add.
+    expect(onDataCallCount()).toBe(2);
 
     log.length = 0;
     await rep.mutate.addData({
       b: {id: 'bx2'},
     });
-    expect(log).to.deep.equal([
+    expect(log).toEqual([
       [
         ['a-2', 'a2'],
         {
@@ -328,29 +328,29 @@ describe('subscribe', () => {
         },
       ],
     ]);
-    expect(queryCallCount()).to.equal(3); // One for initial subscribe and one for the add.
-    expect(onDataCallCount()).to.equal(3);
+    expect(queryCallCount()).toBe(3); // One for initial subscribe and one for the add.
+    expect(onDataCallCount()).toBe(3);
 
     // Adding a entry that does not match the index... no id property
     await rep.mutate.addData({
       c: {noid: 'c-3'},
     });
-    expect(queryCallCount()).to.equal(3); // One for initial subscribe and one for the add.
-    expect(onDataCallCount()).to.equal(3);
+    expect(queryCallCount()).toBe(3); // One for initial subscribe and one for the add.
+    expect(onDataCallCount()).toBe(3);
 
     // Changing a entry before the start key
     await rep.mutate.addData({
       a1: {id: 'a-1', x: 2},
     });
-    expect(queryCallCount()).to.equal(3); // One for initial subscribe and one for the add.
-    expect(onDataCallCount()).to.equal(3);
+    expect(queryCallCount()).toBe(3); // One for initial subscribe and one for the add.
+    expect(onDataCallCount()).toBe(3);
 
     // Changing a entry to the same value we do not fire the subscription any more.
     await rep.mutate.addData({
       a2: {id: 'a-2', x: 2},
     });
-    expect(queryCallCount()).to.equal(3); // One for initial subscribe and one for the add.
-    expect(onDataCallCount()).to.equal(3);
+    expect(queryCallCount()).toBe(3); // One for initial subscribe and one for the add.
+    expect(onDataCallCount()).toBe(3);
 
     cancel();
   });
@@ -371,7 +371,7 @@ describe('subscribe', () => {
       b: {id: 'bx'},
     });
 
-    expect(log).to.deep.equal([
+    expect(log).toEqual([
       [
         ['bx', 'b'],
         {
@@ -379,14 +379,14 @@ describe('subscribe', () => {
         },
       ],
     ]);
-    expect(queryCallCount()).to.equal(2); // One for initial subscribe and one for the add.
-    expect(onDataCallCount()).to.equal(2);
+    expect(queryCallCount()).toBe(2); // One for initial subscribe and one for the add.
+    expect(onDataCallCount()).toBe(2);
 
     log.length = 0;
     await rep.mutate.addData({
       b: {id: 'bx2'},
     });
-    expect(log).to.deep.equal([
+    expect(log).toEqual([
       [
         ['bx2', 'b'],
         {
@@ -394,29 +394,29 @@ describe('subscribe', () => {
         },
       ],
     ]);
-    expect(queryCallCount()).to.equal(3); // One for initial subscribe and one for the add.
-    expect(onDataCallCount()).to.equal(3);
+    expect(queryCallCount()).toBe(3); // One for initial subscribe and one for the add.
+    expect(onDataCallCount()).toBe(3);
 
     // Adding a entry that does not match the index... no id property
     await rep.mutate.addData({
       c: {noid: 'c-3'},
     });
-    expect(queryCallCount()).to.equal(3); // One for initial subscribe and one for the add.
-    expect(onDataCallCount()).to.equal(3);
+    expect(queryCallCount()).toBe(3); // One for initial subscribe and one for the add.
+    expect(onDataCallCount()).toBe(3);
 
     // Changing a entry but still matching prefix
     await rep.mutate.addData({
       b: {id: 'bx3', x: 3},
     });
-    expect(queryCallCount()).to.equal(4);
-    expect(onDataCallCount()).to.equal(4);
+    expect(queryCallCount()).toBe(4);
+    expect(onDataCallCount()).toBe(4);
 
     // Changing a entry to the same value will not trigger the subscription.
     await rep.mutate.addData({
       b: {id: 'bx3', x: 3},
     });
-    expect(queryCallCount()).to.equal(4); // One for initial subscribe and one for the add.
-    expect(onDataCallCount()).to.equal(4);
+    expect(queryCallCount()).toBe(4); // One for initial subscribe and one for the add.
+    expect(onDataCallCount()).toBe(4);
 
     cancel();
   });
@@ -447,43 +447,43 @@ test('subscribe with isEmpty and prefix', async () => {
     },
   );
 
-  expect(log).to.deep.equal([]);
-  expect(queryCallCount).to.equal(0);
-  expect(onDataCallCount).to.equal(0);
+  expect(log).toEqual([]);
+  expect(queryCallCount).toBe(0);
+  expect(onDataCallCount).toBe(0);
 
   await tickAFewTimes(vi);
 
-  expect(log).to.deep.equal([true]);
-  expect(queryCallCount).to.equal(1);
-  expect(onDataCallCount).to.equal(1);
+  expect(log).toEqual([true]);
+  expect(queryCallCount).toBe(1);
+  expect(onDataCallCount).toBe(1);
 
   await rep.mutate.addData({
     a: 1,
   });
 
-  expect(log).to.deep.equal([true, false]);
-  expect(queryCallCount).to.equal(2);
-  expect(onDataCallCount).to.equal(2);
+  expect(log).toEqual([true, false]);
+  expect(queryCallCount).toBe(2);
+  expect(onDataCallCount).toBe(2);
 
   await rep.mutate.addData({
     b: 2,
   });
 
-  expect(log).to.deep.equal([true, false]);
-  expect(queryCallCount).to.equal(3);
-  expect(onDataCallCount).to.equal(2);
+  expect(log).toEqual([true, false]);
+  expect(queryCallCount).toBe(3);
+  expect(onDataCallCount).toBe(2);
 
   await rep.mutate.del('a');
 
-  expect(log).to.deep.equal([true, false]);
-  expect(queryCallCount).to.equal(4);
-  expect(onDataCallCount).to.equal(2);
+  expect(log).toEqual([true, false]);
+  expect(queryCallCount).toBe(4);
+  expect(onDataCallCount).toBe(2);
 
   await rep.mutate.del('b');
 
-  expect(log).to.deep.equal([true, false, true]);
-  expect(queryCallCount).to.equal(5);
-  expect(onDataCallCount).to.equal(3);
+  expect(log).toEqual([true, false, true]);
+  expect(queryCallCount).toBe(5);
+  expect(onDataCallCount).toBe(3);
 
   cancel();
 });
@@ -519,63 +519,63 @@ test('subscribe change keys', async () => {
     },
   );
 
-  expect(log).to.have.length(0);
-  expect(queryCallCount).to.equal(0);
-  expect(onDataCallCount).to.equal(0);
+  expect(log).toHaveLength(0);
+  expect(queryCallCount).toBe(0);
+  expect(onDataCallCount).toBe(0);
 
   await rep.mutate.addData({
     a: 0,
   });
 
-  expect(log).to.deep.equal([['no-a'], [0]]);
-  expect(queryCallCount).to.equal(2); // One for initial subscribe and one for the add.
-  expect(onDataCallCount).to.equal(2);
+  expect(log).toEqual([['no-a'], [0]]);
+  expect(queryCallCount).toBe(2); // One for initial subscribe and one for the add.
+  expect(onDataCallCount).toBe(2);
 
   await rep.mutate.addData({
     b: 2,
   });
-  expect(queryCallCount).to.equal(2);
-  expect(onDataCallCount).to.equal(2);
+  expect(queryCallCount).toBe(2);
+  expect(onDataCallCount).toBe(2);
 
   log.length = 0;
   await rep.mutate.addData({
     a: 1,
   });
-  expect(queryCallCount).to.equal(3);
-  expect(onDataCallCount).to.equal(3);
-  expect(log).to.deep.equal([[1, 2]]);
+  expect(queryCallCount).toBe(3);
+  expect(onDataCallCount).toBe(3);
+  expect(log).toEqual([[1, 2]]);
 
   log.length = 0;
   await rep.mutate.addData({
     b: 3,
   });
-  expect(queryCallCount).to.equal(4);
-  expect(onDataCallCount).to.equal(4);
-  expect(log).to.deep.equal([[1, 3]]);
+  expect(queryCallCount).toBe(4);
+  expect(onDataCallCount).toBe(4);
+  expect(log).toEqual([[1, 3]]);
 
   log.length = 0;
   await rep.mutate.addData({
     a: 4,
   });
-  expect(queryCallCount).to.equal(5);
-  expect(onDataCallCount).to.equal(5);
-  expect(log).to.deep.equal([[4]]);
+  expect(queryCallCount).toBe(5);
+  expect(onDataCallCount).toBe(5);
+  expect(log).toEqual([[4]]);
 
   await rep.mutate.addData({
     b: 5,
   });
-  expect(queryCallCount).to.equal(5);
-  expect(onDataCallCount).to.equal(5);
+  expect(queryCallCount).toBe(5);
+  expect(onDataCallCount).toBe(5);
 
   await rep.mutate.addData({
     c: 6,
   });
-  expect(queryCallCount).to.equal(6);
-  expect(onDataCallCount).to.equal(5);
+  expect(queryCallCount).toBe(6);
+  expect(onDataCallCount).toBe(5);
 
   await rep.mutate.del('c');
-  expect(queryCallCount).to.equal(7);
-  expect(onDataCallCount).to.equal(5);
+  expect(queryCallCount).toBe(7);
+  expect(onDataCallCount).toBe(5);
 
   cancel();
 });
@@ -592,17 +592,17 @@ test('subscribe close', async () => {
     onDone: () => (done = true),
   });
 
-  expect(log).to.have.length(0);
+  expect(log).toHaveLength(0);
 
   const add = rep.mutate.addData;
   await add({k: 0});
   await Promise.resolve();
-  expect(log).to.deep.equal([undefined, 0]);
+  expect(log).toEqual([undefined, 0]);
 
   let done = false;
 
   await rep.close();
-  expect(done).to.equal(true);
+  expect(done).toBe(true);
   cancel();
 });
 
@@ -633,13 +633,13 @@ test('subscribe with error', async () => {
   );
   await Promise.resolve();
 
-  expect(error).to.equal(undefined);
-  expect(gottenValue).to.equal(0);
+  expect(error).toBe(undefined);
+  expect(gottenValue).toBe(0);
 
   await add({k: 'throw'});
-  expect(gottenValue).to.equal(1);
+  expect(gottenValue).toBe(1);
   await Promise.resolve();
-  expect(error).to.equal('throw');
+  expect(error).toBe('throw');
 
   cancel();
 });
@@ -694,8 +694,8 @@ test('subscribe pull and index update', async () => {
 
     rep.pullIgnorePromise();
     await tickUntil(vi, () => log.length >= opt.expectedLog.length);
-    expect(queryCallCount).to.equal(expectedQueryCallCount);
-    expect(log).to.deep.equal(opt.expectedLog);
+    expect(queryCallCount).toBe(expectedQueryCallCount);
+    expect(log).toEqual(opt.expectedLog);
   }
 
   await testPull({patch: [], expectedLog: [[]], expectChange: false});
@@ -873,7 +873,7 @@ test('subscription coalescing', async () => {
 
   await Promise.all([resolverA.promise, resolverB.promise, resolverC.promise]);
 
-  expect(log).to.deep.equal(['a', 'b', 'c']);
+  expect(log).toEqual(['a', 'b', 'c']);
 
   expect(readSpy).toHaveBeenCalledTimes(1);
   expect(writeSpy).toHaveBeenCalledTimes(0);
@@ -907,7 +907,7 @@ test('subscription coalescing', async () => {
   expect(closeSpy).toHaveBeenCalledTimes(0);
   resetCounters();
 
-  expect(log).to.deep.equal(['d', 'e']);
+  expect(log).toEqual(['d', 'e']);
 });
 
 test('subscribe perf test regression', async () => {
@@ -964,9 +964,9 @@ test('subscribe perf test regression', async () => {
 
   await sleep(100);
 
-  expect(onDataCallCount).to.equal(count + mut);
+  expect(onDataCallCount).toBe(count + mut);
   for (let i = 0; i < count; i++) {
-    expect(data[i]).to.equal(i < mut ? i ** 2 + rand : i);
+    expect(data[i]).toBe(i < mut ? i ** 2 + rand : i);
   }
 });
 
@@ -1000,16 +1000,15 @@ test('subscription with error in body', async () => {
     },
     {
       onData(data) {
-        expect(data).to.deep.equal({a: 1, b: 2, c: 3});
+        expect(data).toEqual({a: 1, b: 2, c: 3});
       },
       onError(err) {
-        expect(err)
-          .to.be.instanceOf(Error)
-          .with.property(
-            'message',
-            letters[errorCounter++] + ' is undefined',
-            `Error for ${errorCounter} is incorrect`,
-          );
+        expect(err).toBeInstanceOf(Error);
+        expect(err).toHaveProperty(
+          'message',
+          letters[errorCounter++] + ' is undefined',
+          `Error for ${errorCounter} is incorrect`,
+        );
       },
     },
   );
@@ -1017,13 +1016,13 @@ test('subscription with error in body', async () => {
   await tickUntil(vi, () => bodyCallCounter === 1);
 
   await rep.mutate.addData({a: 1});
-  expect(bodyCallCounter).to.equal(2);
+  expect(bodyCallCounter).toBe(2);
 
   await rep.mutate.addData({b: 2});
-  expect(bodyCallCounter).to.equal(3);
+  expect(bodyCallCounter).toBe(3);
 
   await rep.mutate.addData({c: 3});
-  expect(bodyCallCounter).to.equal(4);
+  expect(bodyCallCounter).toBe(4);
 });
 
 test('Errors in subscriptions are logged if no onError', async () => {
@@ -1096,13 +1095,13 @@ test('subscribe using a function', async () => {
     },
   );
 
-  expect(log).to.have.length(0);
-  expect(queryCallCount).to.equal(0);
+  expect(log).toHaveLength(0);
+  expect(queryCallCount).toBe(0);
 
   const add = rep.mutate.addData;
   await add({'a/0': 0});
-  expect(log).to.deep.equal([['a/0', 0]]);
-  expect(queryCallCount).to.equal(2); // One for initial subscribe and one for the add.
+  expect(log).toEqual([['a/0', 0]]);
+  expect(queryCallCount).toBe(2); // One for initial subscribe and one for the add.
 
   cancel();
 });
@@ -1122,7 +1121,7 @@ test('subscribe where body returns non json', async () => {
     },
     {
       onData(values) {
-        expect(values).instanceOf(Map);
+        expect(values).toBeInstanceOf(Map);
         for (const entry of values) {
           log.push(entry);
         }
@@ -1142,7 +1141,7 @@ test('subscribe where body returns non json', async () => {
   );
 
   await rep.mutate.addData({a: 0, b: 1});
-  expect(log).to.deep.equal([
+  expect(log).toEqual([
     ['a', 0n],
     ['b', 1n],
   ]);

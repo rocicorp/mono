@@ -713,7 +713,7 @@ test('Send promise', async () => {
 
   const p1 = loop.send(false);
   await tickUntilTimeIs(50);
-  expect(await p1).undefined;
+  expect(await p1).toBeUndefined();
 
   const expectedError = new Error('xxx');
   nextInvokeSendResult = expectedError;
@@ -725,7 +725,7 @@ test('Send promise', async () => {
   nextInvokeSendResult = false;
   const p3 = loop.send(false);
   await tickUntilTimeIs(500);
-  expect(await p3).undefined;
+  expect(await p3).toBeUndefined();
 });
 
 describe('Send when closed should resolve with error', () => {
@@ -751,8 +751,8 @@ describe('Send when closed should resolve with error', () => {
       }
 
       const err = await sendP;
-      expect(err?.error).instanceOf(Error);
-      expect((err?.error as Error).message).equal('Closed');
+      expect(err?.error).toBeInstanceOf(Error);
+      expect((err?.error as Error).message).toBe('Closed');
     });
   }
 });

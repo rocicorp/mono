@@ -19,9 +19,9 @@ describe('GatherNotCachedVisitor', () => {
         getSize,
       );
       await visitor.visit(pb.headHash);
-      expect(
-        Object.fromEntries(visitor.gatheredChunks.entries()),
-      ).to.deep.equal(allChunksInVisitOrder);
+      expect(Object.fromEntries(visitor.gatheredChunks.entries())).toEqual(
+        allChunksInVisitOrder,
+      );
       return visitor.gatheredChunks;
     });
 
@@ -41,7 +41,7 @@ describe('GatherNotCachedVisitor', () => {
         getSize,
       );
       await visitor.visit(pb.headHash);
-      expect(visitor.gatheredChunks).to.be.empty;
+      expect(visitor.gatheredChunks).toHaveLength(0);
     });
   });
 
@@ -64,9 +64,9 @@ describe('GatherNotCachedVisitor', () => {
       const expectedChunks = Object.fromEntries(
         allChunksInVisitOrderEntries.slice(0, 5),
       );
-      expect(
-        Object.fromEntries(visitor.gatheredChunks.entries()),
-      ).to.deep.equal(expectedChunks);
+      expect(Object.fromEntries(visitor.gatheredChunks.entries())).toEqual(
+        expectedChunks,
+      );
     });
   });
 
@@ -82,9 +82,9 @@ describe('GatherNotCachedVisitor', () => {
         getSize,
       );
       await visitor.visit(pb.headHash);
-      expect(
-        Object.fromEntries(visitor.gatheredChunks.entries()),
-      ).to.deep.equal(allChunksInVisitOrder);
+      expect(Object.fromEntries(visitor.gatheredChunks.entries())).toEqual(
+        allChunksInVisitOrder,
+      );
       return visitor.gatheredChunks;
     });
 
@@ -106,9 +106,7 @@ describe('GatherNotCachedVisitor', () => {
         getSize,
       );
       await visitor.visit(pb.headHash);
-      expect(
-        Object.fromEntries(visitor.gatheredChunks.entries()),
-      ).to.deep.equal({
+      expect(Object.fromEntries(visitor.gatheredChunks.entries())).toEqual({
         [fakeHash(14)]: {
           chunk: {
             hash: fakeHash(14),

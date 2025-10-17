@@ -1902,7 +1902,7 @@ test('result type unknown then complete', async () => {
   expect(rows).toEqual([]);
   expect(resultType).toEqual('unknown');
 
-  expect(queryDelegate.gotCallbacks.length).to.equal(1);
+  expect(queryDelegate.gotCallbacks.length).toBe(1);
   queryDelegate.gotCallbacks[0]?.(true);
 
   // updating of resultType is promised based, so check in a new

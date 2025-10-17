@@ -46,12 +46,12 @@ async function createMutationSequenceFixture() {
 
   const testMutator1 = async (tx: WriteTransaction, args?: unknown) => {
     await tx.set('whiz', 'bang');
-    expect(args).to.deep.equal(localCommit1.meta.mutatorArgsJSON);
+    expect(args).toEqual(localCommit1.meta.mutatorArgsJSON);
     fixture.testMutator1CallCount++;
   };
   const testMutator2 = async (tx: WriteTransaction, args?: unknown) => {
     await tx.set('fuzzy', 'wuzzy');
-    expect(args).to.deep.equal(localCommit2.meta.mutatorArgsJSON);
+    expect(args).toEqual(localCommit2.meta.mutatorArgsJSON);
     fixture.testMutator2CallCount++;
   };
 
@@ -72,69 +72,69 @@ async function createMutationSequenceFixture() {
       rebasedCommit: Commit<Meta>,
       btreeRead: BTreeRead,
     ) => {
-      expect(commitIsLocal(rebasedCommit)).to.be.true;
+      expect(commitIsLocal(rebasedCommit)).toBe(true);
       if (commitIsLocal(rebasedCommit)) {
         const rebasedCommitLocalMeta: LocalMeta = rebasedCommit.meta;
-        expect(rebasedCommitLocalMeta.basisHash).to.equal(
+        expect(rebasedCommitLocalMeta.basisHash).toBe(
           syncSnapshotCommit.chunk.hash,
         );
-        expect(rebasedCommitLocalMeta.mutationID).to.equal(
+        expect(rebasedCommitLocalMeta.mutationID).toBe(
           localCommit1.meta.mutationID,
         );
-        expect(rebasedCommitLocalMeta.mutatorName).to.equal(
+        expect(rebasedCommitLocalMeta.mutatorName).toBe(
           localCommit1.meta.mutatorName,
         );
-        expect(rebasedCommitLocalMeta.originalHash).to.equal(
+        expect(rebasedCommitLocalMeta.originalHash).toBe(
           localCommit1.chunk.hash,
         );
-        expect(rebasedCommitLocalMeta.timestamp).to.equal(
+        expect(rebasedCommitLocalMeta.timestamp).toBe(
           localCommit1.meta.timestamp,
         );
 
         if (commitIsLocalDD31(rebasedCommit)) {
           assertLocalCommitDD31(localCommit1);
           const rebasedCommitLocalMeta: LocalMetaDD31 = rebasedCommit.meta;
-          expect(rebasedCommitLocalMeta.clientID).to.equal(
+          expect(rebasedCommitLocalMeta.clientID).toBe(
             localCommit1.meta.clientID,
           );
         }
       }
-      expect(await btreeRead.get('fuzzy')).to.be.undefined;
-      expect(await btreeRead.get('foo')).to.equal('bar');
-      expect(await btreeRead.get('whiz')).to.equal('bang');
+      expect(await btreeRead.get('fuzzy')).toBeUndefined();
+      expect(await btreeRead.get('foo')).toBe('bar');
+      expect(await btreeRead.get('whiz')).toBe('bang');
     },
     expectRebasedCommit2: async (
       rebasedCommit: Commit<Meta>,
       btreeRead: BTreeRead,
       expectedBasis: Hash,
     ) => {
-      expect(commitIsLocal(rebasedCommit)).to.be.true;
+      expect(commitIsLocal(rebasedCommit)).toBe(true);
       if (commitIsLocal(rebasedCommit)) {
         const rebasedCommitLocalMeta: LocalMeta = rebasedCommit.meta;
-        expect(rebasedCommitLocalMeta.basisHash).to.equal(expectedBasis);
-        expect(rebasedCommitLocalMeta.mutationID).to.equal(
+        expect(rebasedCommitLocalMeta.basisHash).toBe(expectedBasis);
+        expect(rebasedCommitLocalMeta.mutationID).toBe(
           localCommit2.meta.mutationID,
         );
-        expect(rebasedCommitLocalMeta.mutatorName).to.equal(
+        expect(rebasedCommitLocalMeta.mutatorName).toBe(
           localCommit2.meta.mutatorName,
         );
-        expect(rebasedCommitLocalMeta.originalHash).to.equal(
+        expect(rebasedCommitLocalMeta.originalHash).toBe(
           localCommit2.chunk.hash,
         );
-        expect(rebasedCommitLocalMeta.timestamp).to.equal(
+        expect(rebasedCommitLocalMeta.timestamp).toBe(
           localCommit2.meta.timestamp,
         );
         if (commitIsLocalDD31(rebasedCommit)) {
           assertLocalCommitDD31(localCommit2);
           const rebasedCommitLocalMeta: LocalMetaDD31 = rebasedCommit.meta;
-          expect(rebasedCommitLocalMeta.clientID).to.equal(
+          expect(rebasedCommitLocalMeta.clientID).toBe(
             localCommit2.meta.clientID,
           );
         }
       }
-      expect(await btreeRead.get('fuzzy')).to.equal('wuzzy');
-      expect(await btreeRead.get('foo')).to.equal('bar');
-      expect(await btreeRead.get('whiz')).to.equal('bang');
+      expect(await btreeRead.get('fuzzy')).toBe('wuzzy');
+      expect(await btreeRead.get('foo')).toBe('bar');
+      expect(await btreeRead.get('whiz')).toBe('bang');
     },
   };
   return fixture;
@@ -164,38 +164,38 @@ async function createMissingMutatorFixture() {
       rebasedCommit: Commit<Meta>,
       btreeRead: BTreeRead,
     ) => {
-      expect(commitIsLocal(rebasedCommit)).to.be.true;
+      expect(commitIsLocal(rebasedCommit)).toBe(true);
       if (commitIsLocal(rebasedCommit)) {
         const rebasedCommitLocalMeta: LocalMeta = rebasedCommit.meta;
-        expect(rebasedCommitLocalMeta.basisHash).to.equal(
+        expect(rebasedCommitLocalMeta.basisHash).toBe(
           syncSnapshotCommit.chunk.hash,
         );
-        expect(rebasedCommitLocalMeta.mutationID).to.equal(
+        expect(rebasedCommitLocalMeta.mutationID).toBe(
           localCommit.meta.mutationID,
         );
-        expect(rebasedCommitLocalMeta.mutatorName).to.equal(
+        expect(rebasedCommitLocalMeta.mutatorName).toBe(
           localCommit.meta.mutatorName,
         );
-        expect(rebasedCommitLocalMeta.originalHash).to.equal(
+        expect(rebasedCommitLocalMeta.originalHash).toBe(
           localCommit.chunk.hash,
         );
-        expect(rebasedCommitLocalMeta.timestamp).to.equal(
+        expect(rebasedCommitLocalMeta.timestamp).toBe(
           localCommit.meta.timestamp,
         );
         if (commitIsLocalDD31(rebasedCommit)) {
           assertLocalCommitDD31(localCommit);
           const rebasedCommitLocalMeta: LocalMetaDD31 = rebasedCommit.meta;
-          expect(rebasedCommitLocalMeta.clientID).to.equal(
+          expect(rebasedCommitLocalMeta.clientID).toBe(
             localCommit.meta.clientID,
           );
         }
       }
-      expect(await btreeRead.get('foo')).to.equal('bar');
+      expect(await btreeRead.get('foo')).toBe('bar');
     },
     expectMissingMutatorErrorLog: () => {
       expect(consoleErrorStub).toBeCalledTimes(1);
       const args = consoleErrorStub.mock.calls[0];
-      expect(args[0]).to.equal(
+      expect(args[0]).toBe(
         `Cannot rebase unknown mutator ${localCommit.meta.mutatorName}`,
       );
     },
@@ -231,17 +231,15 @@ describe('rebaseMutationAndCommit', () => {
           undefined,
         ),
     );
-    expect(fixture.testMutator1CallCount).to.equal(1);
-    expect(fixture.testMutator2CallCount).to.equal(0);
+    expect(fixture.testMutator1CallCount).toBe(1);
+    expect(fixture.testMutator2CallCount).toBe(0);
     await withRead(fixture.store, async read => {
       const [rebasedLocalCommit1, btreeRead] = await commitAndBTree(
         SYNC_HEAD_NAME,
         read,
         fixture.formatVersion,
       );
-      expect(hashOfRebasedLocalCommit1).to.equal(
-        rebasedLocalCommit1.chunk.hash,
-      );
+      expect(hashOfRebasedLocalCommit1).toBe(rebasedLocalCommit1.chunk.hash);
       await fixture.expectRebasedCommit1(rebasedLocalCommit1, btreeRead);
     });
     const hashOfRebasedLocalCommit2 = await withWriteNoImplicitCommit(
@@ -259,17 +257,15 @@ describe('rebaseMutationAndCommit', () => {
           undefined,
         ),
     );
-    expect(fixture.testMutator1CallCount).to.equal(1);
-    expect(fixture.testMutator2CallCount).to.equal(1);
+    expect(fixture.testMutator1CallCount).toBe(1);
+    expect(fixture.testMutator2CallCount).toBe(1);
     await withRead(fixture.store, async read => {
       const [rebasedLocalCommit2, btreeRead] = await commitAndBTree(
         SYNC_HEAD_NAME,
         read,
         fixture.formatVersion,
       );
-      expect(hashOfRebasedLocalCommit2).to.equal(
-        rebasedLocalCommit2.chunk.hash,
-      );
+      expect(hashOfRebasedLocalCommit2).toBe(rebasedLocalCommit2.chunk.hash);
       await fixture.expectRebasedCommit2(
         rebasedLocalCommit2,
         btreeRead,
@@ -301,7 +297,7 @@ describe('rebaseMutationAndCommit', () => {
         read,
         fixture.formatVersion,
       );
-      expect(hashOfRebasedLocalCommit).to.equal(rebasedLocalCommit.chunk.hash);
+      expect(hashOfRebasedLocalCommit).toBe(rebasedLocalCommit.chunk.hash);
       await fixture.expectRebasedCommit(rebasedLocalCommit, btreeRead);
       await fixture.expectMissingMutatorErrorLog();
     });
@@ -342,17 +338,15 @@ describe('rebaseMutationAndPutCommit', () => {
         return commit.chunk.hash;
       },
     );
-    expect(fixture.testMutator1CallCount).to.equal(1);
-    expect(fixture.testMutator2CallCount).to.equal(0);
+    expect(fixture.testMutator1CallCount).toBe(1);
+    expect(fixture.testMutator2CallCount).toBe(0);
     await withRead(fixture.store, async read => {
       const [rebasedLocalCommit1, btreeRead] = await commitAndBTree(
         TEST_HEAD_NAME,
         read,
         fixture.formatVersion,
       );
-      expect(hashOfRebasedLocalCommit1).to.equal(
-        rebasedLocalCommit1.chunk.hash,
-      );
+      expect(hashOfRebasedLocalCommit1).toBe(rebasedLocalCommit1.chunk.hash);
       await fixture.expectRebasedCommit1(rebasedLocalCommit1, btreeRead);
     });
     const hashOfRebasedLocalCommit2 = await withWriteNoImplicitCommit(
@@ -378,17 +372,15 @@ describe('rebaseMutationAndPutCommit', () => {
         return commit.chunk.hash;
       },
     );
-    expect(fixture.testMutator1CallCount).to.equal(1);
-    expect(fixture.testMutator2CallCount).to.equal(1);
+    expect(fixture.testMutator1CallCount).toBe(1);
+    expect(fixture.testMutator2CallCount).toBe(1);
     await withRead(fixture.store, async read => {
       const [rebasedLocalCommit2, btreeRead] = await commitAndBTree(
         TEST_HEAD_NAME,
         read,
         fixture.formatVersion,
       );
-      expect(hashOfRebasedLocalCommit2).to.equal(
-        rebasedLocalCommit2.chunk.hash,
-      );
+      expect(hashOfRebasedLocalCommit2).toBe(rebasedLocalCommit2.chunk.hash);
       await fixture.expectRebasedCommit2(
         rebasedLocalCommit2,
         btreeRead,
@@ -428,7 +420,7 @@ describe('rebaseMutationAndPutCommit', () => {
         read,
         fixture.formatVersion,
       );
-      expect(hashOfRebasedLocalCommit).to.equal(rebasedLocalCommit.chunk.hash);
+      expect(hashOfRebasedLocalCommit).toBe(rebasedLocalCommit.chunk.hash);
       await fixture.expectRebasedCommit(rebasedLocalCommit, btreeRead);
       await fixture.expectMissingMutatorErrorLog();
     });
@@ -461,7 +453,7 @@ async function testThrowsErrorOnClientIDMismatch(
   let testMutatorCallCount = 0;
   const testMutator = async (tx: WriteTransaction, args?: unknown) => {
     await tx.set('whiz', 'bang');
-    expect(args).to.deep.equal(localCommit.meta.mutatorArgsJSON);
+    expect(args).toEqual(localCommit.meta.mutatorArgsJSON);
     testMutatorCallCount++;
   };
   await withWriteNoImplicitCommit(store, async write => {
@@ -493,12 +485,12 @@ async function testThrowsErrorOnClientIDMismatch(
             undefined,
           );
     } catch {
-      expect(formatVersion).to.be.greaterThanOrEqual(FormatVersion.DD31);
+      expect(formatVersion).toBeGreaterThanOrEqual(FormatVersion.DD31);
       return;
     }
-    expect(formatVersion).to.be.lessThanOrEqual(FormatVersion.SDD);
+    expect(formatVersion).toBeLessThanOrEqual(FormatVersion.SDD);
   });
-  expect(testMutatorCallCount).to.equal(
+  expect(testMutatorCallCount).toBe(
     formatVersion >= FormatVersion.DD31 ? 0 : 1,
   );
 }
@@ -522,13 +514,13 @@ async function testThrowsErrorOnMutationIDMismatch(
   let testMutator1CallCount = 0;
   const testMutator1 = async (tx: WriteTransaction, args?: unknown) => {
     await tx.set('whiz', 'bang');
-    expect(args).to.deep.equal(localCommit1.meta.mutatorArgsJSON);
+    expect(args).toEqual(localCommit1.meta.mutatorArgsJSON);
     testMutator1CallCount++;
   };
   let testMutator2CallCount = 0;
   const testMutator2 = async (tx: WriteTransaction, args?: unknown) => {
     await tx.set('fuzzy', 'wuzzy');
-    expect(args).to.deep.equal(localCommit2.meta.mutatorArgsJSON);
+    expect(args).toEqual(localCommit2.meta.mutatorArgsJSON);
     testMutator2CallCount++;
   };
   const mutators = {
@@ -565,6 +557,6 @@ async function testThrowsErrorOnMutationIDMismatch(
     }
     expect(String(expectedError)).contains('Inconsistent mutation ID');
   });
-  expect(testMutator1CallCount).to.equal(0);
-  expect(testMutator2CallCount).to.equal(0);
+  expect(testMutator1CallCount).toBe(0);
+  expect(testMutator2CallCount).toBe(0);
 }

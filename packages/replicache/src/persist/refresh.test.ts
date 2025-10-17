@@ -166,7 +166,7 @@ function assertRefreshHashes(
     const client = await getClient(clientID, read);
     assert(client, `No client ${clientID}`);
     assertClientV6(client);
-    expect(client.refreshHashes).to.deep.equal(hashes);
+    expect(client.refreshHashes).toEqual(hashes);
   });
 }
 
@@ -193,7 +193,7 @@ describe('refresh', () => {
       undefined,
     );
     assert(refreshResult);
-    expect(Object.fromEntries(refreshResult.diffs)).to.deep.equal({});
+    expect(Object.fromEntries(refreshResult.diffs)).toEqual({});
     const hashes = [
       await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
     ];
@@ -247,7 +247,7 @@ describe('refresh', () => {
       await withRead(memdag, read => read.getHead(DEFAULT_HEAD_NAME)),
     ];
 
-    expect(Object.fromEntries(refreshResult.diffs)).to.deep.equal({});
+    expect(Object.fromEntries(refreshResult.diffs)).toEqual({});
 
     await assertRefreshHashes(perdag, clientID, hashes);
   });
@@ -281,7 +281,7 @@ describe('refresh', () => {
     );
     assert(refreshResult);
 
-    expect(Object.fromEntries(refreshResult.diffs)).to.deep.equal({
+    expect(Object.fromEntries(refreshResult.diffs)).toEqual({
       '': [
         {
           key: 'from mutator_name_3',
@@ -327,7 +327,7 @@ describe('refresh', () => {
       formatVersion,
       undefined,
     );
-    expect(result).undefined;
+    expect(result).toBeUndefined();
     await assertRefreshHashes(perdag, clientID, client.refreshHashes);
   });
 
@@ -358,7 +358,7 @@ describe('refresh', () => {
       formatVersion,
       undefined,
     );
-    expect(result).undefined;
+    expect(result).toBeUndefined();
     await assertRefreshHashes(perdag, clientID, client.refreshHashes);
   });
 
@@ -391,7 +391,7 @@ describe('refresh', () => {
       undefined,
     );
     assert(refreshResult);
-    expect(Object.fromEntries(refreshResult.diffs)).to.deep.equal({
+    expect(Object.fromEntries(refreshResult.diffs)).toEqual({
       '': [
         {
           key: 'from mutator_name_3',
@@ -455,7 +455,7 @@ describe('refresh', () => {
       undefined,
     );
     assert(refreshResult);
-    expect(Object.fromEntries(refreshResult.diffs)).to.deep.equal({
+    expect(Object.fromEntries(refreshResult.diffs)).toEqual({
       '': [
         {
           key: 'from mutator_name_3',
@@ -520,7 +520,7 @@ describe('refresh', () => {
       formatVersion,
       undefined,
     );
-    expect(result).undefined;
+    expect(result).toBeUndefined();
     await assertRefreshHashes(perdag, clientID, client.refreshHashes);
   });
 
@@ -577,8 +577,8 @@ describe('refresh', () => {
     } catch (e) {
       expectedE = e;
     }
-    expect(expectedE).instanceOf(Error);
-    expect((expectedE as Error).message).equal(
+    expect(expectedE).toBeInstanceOf(Error);
+    expect((expectedE as Error).message).toBe(
       'Test error in second perdag write',
     );
     await assertRefreshHashes(perdag, clientID, [
@@ -832,7 +832,7 @@ describe('refresh', () => {
       undefined,
     );
     assert(refreshResult);
-    expect(Object.fromEntries(refreshResult.diffs)).to.deep.equal({
+    expect(Object.fromEntries(refreshResult.diffs)).toEqual({
       '': [{key: 'c', newValue: 3, op: 'add'}],
     });
 

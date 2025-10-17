@@ -28,18 +28,18 @@ test('index key', () => {
   const testValid = (secondary: string, primary: string) => {
     // Ensure the encoded value is what we expect.
     const encoded = encodeIndexKey([secondary, primary]);
-    expect(KEY_VERSION_0).to.equal(encoded.slice(0, KEY_VERSION_0.length));
+    expect(KEY_VERSION_0).toBe(encoded.slice(0, KEY_VERSION_0.length));
     const secondaryIndex = KEY_VERSION_0.length;
     const separatorIndex = secondaryIndex + secondary.length;
-    expect(encoded.slice(secondaryIndex, separatorIndex)).to.equal(secondary);
+    expect(encoded.slice(secondaryIndex, separatorIndex)).toBe(secondary);
     const primaryIndex = separatorIndex + KEY_SEPARATOR.length;
-    expect(encoded.slice(separatorIndex, primaryIndex)).to.equal(KEY_SEPARATOR);
-    expect(encoded.slice(primaryIndex)).to.equal(primary);
+    expect(encoded.slice(separatorIndex, primaryIndex)).toBe(KEY_SEPARATOR);
+    expect(encoded.slice(primaryIndex)).toBe(primary);
 
     // Ensure we can decode it properly.
     const decoded = decodeIndexKey(encoded);
-    expect(decoded[0]).to.equal(secondary);
-    expect(decoded[1]).to.equal(primary);
+    expect(decoded[0]).toBe(secondary);
+    expect(decoded[1]).toBe(primary);
   };
 
   testValid('', '');
@@ -54,10 +54,7 @@ test('index key', () => {
     primary: string,
     expected: string,
   ) => {
-    expect(() => encodeIndexKey([secondary, primary])).to.throw(
-      Error,
-      expected,
-    );
+    expect(() => encodeIndexKey([secondary, primary])).toThrow(expected);
   };
   testInvalidEncode(
     'no \0 nulls',
@@ -66,7 +63,7 @@ test('index key', () => {
   );
 
   const testInvalidDecode = (encoded: string, expected: string) => {
-    expect(() => decodeIndexKey(encoded)).to.throw(Error, expected);
+    expect(() => decodeIndexKey(encoded)).toThrow(expected);
   };
   testInvalidDecode('', 'Invalid version');
   testInvalidDecode('\u0001', 'Invalid version');
@@ -79,9 +76,9 @@ test('encode scan key', () => {
     const encodedIndexKey = encodeIndexKey([secondary, primary]);
     const scanKey = encodeIndexScanKey(secondary, primary);
 
-    expect(scanKey.startsWith(encodedIndexKey)).to.be.true;
+    expect(scanKey.startsWith(encodedIndexKey)).toBe(true);
 
-    expect(stringCompare(encodedIndexKey, scanKey)).to.greaterThanOrEqual(0);
+    expect(stringCompare(encodedIndexKey, scanKey)).toBeGreaterThanOrEqual(0);
   };
 
   t('', '');
@@ -96,7 +93,7 @@ test('index key sort', () => {
   const t = (left: IndexKey, right: IndexKey) => {
     const a = encodeIndexKey(left);
     const b = encodeIndexKey(right);
-    expect(stringCompare(a, b)).to.equal(-1);
+    expect(stringCompare(a, b)).toBe(-1);
   };
 
   t(['', ''], ['', '\u0000']);
@@ -116,7 +113,7 @@ test('index key uniqueness', () => {
   const t = (left: IndexKey, right: IndexKey) => {
     const a = encodeIndexKey(left);
     const b = encodeIndexKey(right);
-    expect(stringCompare(a, b)).to.not.equal(0);
+    expect(stringCompare(a, b)).not.toBe(0);
   };
 
   t(['', '\u0061'], ['a', '']);
@@ -131,11 +128,11 @@ test('get index keys', () => {
   ) => {
     if (Array.isArray(expected)) {
       const keys = getIndexKeys(key, deepFreeze(input), jsonPointer, false);
-      expect(keys).to.deep.equal(expected.map(k => encodeIndexKey(k)));
+      expect(keys).toEqual(expected.map(k => encodeIndexKey(k)));
     } else {
       expect(() =>
         getIndexKeys(key, deepFreeze(input), jsonPointer, false),
-      ).to.throw(expected);
+      ).toThrow(expected);
     }
   };
 
@@ -168,11 +165,11 @@ test('get index keys', () => {
 
 test('json pointer', () => {
   const t = (v: JSONValue, p: string, res: JSONValue | undefined) => {
-    expect(evaluateJSONPointer(deepFreeze(v), p)).deep.equal(res);
+    expect(evaluateJSONPointer(deepFreeze(v), p)).toEqual(res);
   };
 
   for (const v of [null, 42, true, false, [], {}, 'foo']) {
-    expect(() => evaluateJSONPointer(null, 'x')).to.throw(
+    expect(() => evaluateJSONPointer(null, 'x')).toThrow(
       'Invalid JSON pointer',
     );
 
@@ -222,14 +219,14 @@ test('index value', async () => {
         );
 
         const actualVal = await asyncIterableToArray(index.entries());
-        expect(expected.length).to.equal(actualVal.length);
+        expect(expected.length).toBe(actualVal.length);
         for (let i = 0; i < expected.length; i++) {
           const expEntry = encodeIndexKey([
             `s${expected[i]}`,
             `${expected[i]}`,
           ]);
-          expect(expEntry).to.deep.equal(actualVal[i][0]);
-          expect(await index.get(expEntry)).to.deep.equal(actualVal[i][1]);
+          expect(expEntry).toEqual(actualVal[i][0]);
+          expect(await index.get(expEntry)).toEqual(actualVal[i][1]);
         }
       } else {
         expect(() =>
@@ -242,7 +239,7 @@ test('index value', async () => {
             jsonPointer,
             false,
           ),
-        ).to.throw(expected);
+        ).toThrow(expected);
       }
     });
   };
@@ -252,10 +249,10 @@ test('index value', async () => {
 });
 
 test(`decodeIndexKey`, () => {
-  expect(decodeIndexKey('\u0000abc\u0000def')).to.deep.equal(['abc', 'def']);
-  expect(decodeIndexKey('\u0000abc\u0000')).to.deep.equal(['abc', '']);
-  expect(decodeIndexKey('\u0000\u0000def')).to.deep.equal(['', 'def']);
+  expect(decodeIndexKey('\u0000abc\u0000def')).toEqual(['abc', 'def']);
+  expect(decodeIndexKey('\u0000abc\u0000')).toEqual(['abc', '']);
+  expect(decodeIndexKey('\u0000\u0000def')).toEqual(['', 'def']);
 
-  expect(() => decodeIndexKey('abc')).to.throw('Invalid version');
-  expect(() => decodeIndexKey('\u0000abc')).to.throw('Invalid formatting');
+  expect(() => decodeIndexKey('abc')).toThrow('Invalid version');
+  expect(() => decodeIndexKey('\u0000abc')).toThrow('Invalid formatting');
 });

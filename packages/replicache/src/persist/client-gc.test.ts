@@ -84,7 +84,7 @@ test('initClientGC starts 5 min interval that collects clients that have been in
 
   await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
-    expect(readClientMap).to.deep.equal(clientMap);
+    expect(readClientMap).toEqual(clientMap);
   });
 
   vi.setSystemTime(Date.now() + 24 * HOURS);
@@ -97,7 +97,7 @@ test('initClientGC starts 5 min interval that collects clients that have been in
   // client4 is not collected because it is < 24 hours inactive (by 1 minute)
   await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
-    expect(Object.fromEntries(readClientMap)).to.deep.equal({
+    expect(Object.fromEntries(readClientMap)).toEqual({
       client1,
       client3,
       client4,
@@ -131,7 +131,7 @@ test('initClientGC starts 5 min interval that collects clients that have been in
   // client4 is not collected because its update heartbeat is < 24 hours inactive (24 hours - 5 mins)
   await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
-    expect(Object.fromEntries(readClientMap)).to.deep.equal({
+    expect(Object.fromEntries(readClientMap)).toEqual({
       client1,
       client4: client4UpdatedHeartbeat,
     });
@@ -159,7 +159,7 @@ test('initClientGC starts 5 min interval that collects clients that have been in
   // client4 is collected because it is > 24 hours inactive
   await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
-    expect(Object.fromEntries(readClientMap)).to.deep.equal({
+    expect(Object.fromEntries(readClientMap)).toEqual({
       client1,
     });
   });

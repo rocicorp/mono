@@ -57,7 +57,7 @@ test('push', async () => {
   await tickAFewTimes(vi);
   const {mutations} = await fetchMock.lastCall().request.json();
   const {clientID} = rep;
-  expect(mutations).to.deep.equal([
+  expect(mutations).toEqual([
     {
       clientID,
       id: 1,
@@ -84,7 +84,7 @@ test('push', async () => {
         text: string;
       }
     ).text,
-  ).to.equal('Test');
+  ).toBe('Test');
 
   fetchMock.postOnce(pushURL, {
     mutationInfos: [{id: 3, error: 'mutation has already been processed'}],
@@ -92,7 +92,7 @@ test('push', async () => {
   await tickAFewTimes(vi);
   {
     const {mutations} = await fetchMock.lastCall().request.json();
-    expect(mutations).to.deep.equal([
+    expect(mutations).toEqual([
       {
         clientID,
         id: 1,
@@ -123,7 +123,7 @@ test('push', async () => {
   });
   expect(
     ((await rep.query(tx => tx.get(`/todo/${id2}`))) as {text: string}).text,
-  ).to.equal('Test 2');
+  ).toBe('Test 2');
 
   // Clean up
   await deleteTodo({id: id1});
@@ -135,7 +135,7 @@ test('push', async () => {
   await tickAFewTimes(vi);
   {
     const {mutations} = await fetchMock.lastCall().request.json();
-    expect(mutations).to.deep.equal([
+    expect(mutations).toEqual([
       {
         clientID,
         id: 1,
@@ -211,7 +211,7 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
   await createTodo({id: 'id1'});
   await tickAFewTimes(vi);
 
-  expect(fetchMock.calls()).to.have.length(0);
+  expect(fetchMock.calls()).toHaveLength(0);
 
   await tickAFewTimes(vi);
   fetchMock.reset();
@@ -221,7 +221,7 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
 
   await createTodo({id: 'id2'});
   await tickAFewTimes(vi);
-  expect(fetchMock.calls()).to.have.length(1);
+  expect(fetchMock.calls()).toHaveLength(1);
 
   await tickAFewTimes(vi);
   fetchMock.reset();
@@ -231,7 +231,7 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
 
   await createTodo({id: 'id3'});
   await tickAFewTimes(vi);
-  expect(fetchMock.calls()).to.have.length(0);
+  expect(fetchMock.calls()).toHaveLength(0);
 
   await tickAFewTimes(vi);
   fetchMock.reset();
@@ -252,8 +252,8 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
   await createTodo({id: 'id4'});
   await tickAFewTimes(vi);
 
-  expect(fetchMock.calls()).to.have.length(0);
-  expect(pusherCallCount).to.equal(1);
+  expect(fetchMock.calls()).toHaveLength(0);
+  expect(pusherCallCount).toBe(1);
 
   await tickAFewTimes(vi);
   fetchMock.reset();
@@ -265,8 +265,8 @@ test('push request is only sent when pushURL or non-default pusher are set', asy
   await createTodo({id: 'id5'});
   await tickAFewTimes(vi);
 
-  expect(fetchMock.calls()).to.have.length(0);
-  expect(pusherCallCount).to.equal(0);
+  expect(fetchMock.calls()).toHaveLength(0);
+  expect(pusherCallCount).toBe(0);
 });
 
 test('Version not supported on server', async () => {
@@ -301,7 +301,7 @@ test('Version not supported on server', async () => {
     await rep.push({now: true});
 
     expect(onUpdateNeededStub).toHaveBeenCalledTimes(1);
-    expect(onUpdateNeededStub.mock.lastCall).deep.equal([reason]);
+    expect(onUpdateNeededStub.mock.lastCall).toEqual([reason]);
   };
 
   await t({error: 'VersionNotSupported'}, {type: 'VersionNotSupported'});
@@ -346,5 +346,5 @@ test('ClientStateNotFound on server', async () => {
 
   expect(onUpdateNeededStub).toHaveBeenCalledTimes(0);
   expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
-  expect(rep.isClientGroupDisabled).true;
+  expect(rep.isClientGroupDisabled).toBe(true);
 });

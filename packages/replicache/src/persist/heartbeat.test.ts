@@ -74,7 +74,7 @@ test('startHeartbeats starts interval that writes heartbeat each minute', async 
 
   await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
-    expect(readClientMap).to.deep.equal(clientMap);
+    expect(readClientMap).toEqual(clientMap);
   });
 
   await vi.advanceTimersByTimeAsync(ONE_MIN_IN_MS);
@@ -82,7 +82,7 @@ test('startHeartbeats starts interval that writes heartbeat each minute', async 
 
   await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
-    expect(readClientMap).to.deep.equal(
+    expect(readClientMap).toEqual(
       new Map(
         Object.entries({
           client1: {
@@ -100,7 +100,7 @@ test('startHeartbeats starts interval that writes heartbeat each minute', async 
 
   await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
-    expect(readClientMap).to.deep.equal(
+    expect(readClientMap).toEqual(
       new Map(
         Object.entries({
           client1: {
@@ -144,7 +144,7 @@ test('calling function returned by startHeartbeats, stops heartbeats', async () 
 
   await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
-    expect(readClientMap).to.deep.equal(clientMap);
+    expect(readClientMap).toEqual(clientMap);
   });
 
   await vi.advanceTimersByTimeAsync(ONE_MIN_IN_MS);
@@ -152,7 +152,7 @@ test('calling function returned by startHeartbeats, stops heartbeats', async () 
 
   await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
-    expect(Object.fromEntries(readClientMap)).to.deep.equal({
+    expect(Object.fromEntries(readClientMap)).toEqual({
       client1: {
         ...client1,
         heartbeatTimestampMs: START_TIME + ONE_MIN_IN_MS,
@@ -168,7 +168,7 @@ test('calling function returned by startHeartbeats, stops heartbeats', async () 
 
   await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
-    expect(Object.fromEntries(readClientMap)).to.deep.equal({
+    expect(Object.fromEntries(readClientMap)).toEqual({
       client1: {
         ...client1,
         // Heartbeat *NOT* updated to START_TIME + ONE_MIN_IN_MS + ONE_MIN_IN_MS
@@ -205,7 +205,7 @@ test('writeHeartbeat writes heartbeat', async () => {
   await writeHeartbeat('client1', dagStore);
   await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
-    expect(readClientMap).to.deep.equal(
+    expect(readClientMap).toEqual(
       new Map(
         Object.entries({
           client1: {
@@ -227,9 +227,8 @@ test('writeHeartbeat throws Error if no Client is found for clientID', async () 
   } catch (ex) {
     e = ex;
   }
-  expect(e)
-    .to.be.instanceOf(ClientStateNotFoundError)
-    .property('id', 'client1');
+  expect(e).toBeInstanceOf(ClientStateNotFoundError);
+  expect(e).toHaveProperty('id', 'client1');
 });
 
 test('heartbeat with missing client calls callback', async () => {
@@ -286,7 +285,7 @@ test('heartbeat with dropped idb throws', async () => {
 
   expect(message).lengthOf(3);
   assert(message[2] instanceof IDBNotFoundError);
-  expect(message[2].message).to.match(/^Expected IndexedDB not found: /);
+  expect(message[2].message).toMatch(/^Expected IndexedDB not found: /);
 
   controller.abort();
 });
