@@ -47,9 +47,13 @@ test('parse', () => {
   t(headKey('b'), {type: KeyType.Head, name: 'b'});
 
   const invalid = (key: string, message: string) => {
-    expect(() => parse(key))
-      .toThrow(Error)
-      .with.property('message', message);
+    const fn = () => parse(key);
+    expect(fn).toThrow(Error);
+    try {
+      fn();
+    } catch (err) {
+      expect(err).toHaveProperty('message', message);
+    }
   };
 
   invalid('', `Invalid key. Got ""`);

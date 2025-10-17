@@ -54,7 +54,7 @@ test('index key', () => {
     primary: string,
     expected: string,
   ) => {
-    expect(() => encodeIndexKey([secondary, primary])).toThrow(Error, expected);
+    expect(() => encodeIndexKey([secondary, primary])).toThrow(expected);
   };
   testInvalidEncode(
     'no \0 nulls',
@@ -63,7 +63,7 @@ test('index key', () => {
   );
 
   const testInvalidDecode = (encoded: string, expected: string) => {
-    expect(() => decodeIndexKey(encoded)).toThrow(Error, expected);
+    expect(() => decodeIndexKey(encoded)).toThrow(expected);
   };
   testInvalidDecode('', 'Invalid version');
   testInvalidDecode('\u0001', 'Invalid version');

@@ -226,9 +226,9 @@ describe('subscribe', () => {
     });
 
     expect(onErrorFake).toHaveBeenCalledOnce();
-    expect(onErrorFake.mock.calls[0][0])
-      .toBeInstanceOf(Error)
-      .with.property('message', 'Unknown index name: i1');
+    const error = onErrorFake.mock.calls[0][0];
+    expect(error).toBeInstanceOf(Error);
+    expect(error).toHaveProperty('message', 'Unknown index name: i1');
 
     cancel();
   });
@@ -1003,13 +1003,12 @@ test('subscription with error in body', async () => {
         expect(data).toEqual({a: 1, b: 2, c: 3});
       },
       onError(err) {
-        expect(err)
-          .toBeInstanceOf(Error)
-          .with.property(
-            'message',
-            letters[errorCounter++] + ' is undefined',
-            `Error for ${errorCounter} is incorrect`,
-          );
+        expect(err).toBeInstanceOf(Error);
+        expect(err).toHaveProperty(
+          'message',
+          letters[errorCounter++] + ' is undefined',
+          `Error for ${errorCounter} is incorrect`,
+        );
       },
     },
   );
