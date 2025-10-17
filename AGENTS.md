@@ -57,6 +57,9 @@ npm --workspace=zero-client run format
 npm --workspace=zero-cache run lint
 npm --workspace=zero-server run check-types
 
+# Run with coverage (prefer using this flag when possible)
+npm --workspace=zero-client run test -- --coverage
+
 # Run specific test file
 npm --workspace=zero-client run test -- zero.test
 ```
@@ -114,6 +117,7 @@ const user = table('user')
 - Multiple vitest configs for different environments (e.g., `vitest.config.pg-16.ts` for PostgreSQL tests)
 - Test files automatically discovered by the root vitest config
 - Prefer `test` over `it` for consistency
+- Coverage is run with `v8` - use the `--coverage` flag to help write tests
 
 ### Import Patterns
 

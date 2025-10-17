@@ -50,7 +50,6 @@ export default defineConfig({
       ],
     },
     coverage: {
-      enabled: !CI,
       provider: 'v8',
       include: ['src/**'],
     },
