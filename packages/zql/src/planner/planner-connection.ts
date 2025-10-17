@@ -123,6 +123,27 @@ export class PlannerConnection {
     from: PlannerNode,
   ): void {
     const key = path.join(',');
+
+    // If we already have a constraint for this path, keep the best one.
+    // In FI mode (same branch pattern), multiple branches can send different
+    // constraints. We keep the most selective (best) constraint.
+    if (this.#constraints.has(key)) {
+      const existing = this.#constraints.get(key);
+
+      // Determine which constraint is better
+      const existingKeys = existing ? Object.keys(existing).length : 0;
+      const newKeys = c ? Object.keys(c).length : 0;
+
+      // Keep the more constrained one (more keys = more selective = cheaper)
+      // If new is not better, keep existing and just update pinned status
+      if (newKeys <= existingKeys) {
+        if (from.pinned) {
+          this.pinned = true;
+        }
+        return;
+      }
+    }
+
     this.#constraints.set(key, c);
     // Constraints changed, invalidate cost cache
     this.#costDirty = true;

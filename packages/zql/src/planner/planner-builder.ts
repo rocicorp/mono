@@ -319,15 +319,21 @@ function extractConstraint(
  * Uses post-order traversal so subqueries are planned before their parents.
  *
  * @param plans - The Plans tree to execute planning on
+ * @param debug - If true, logs debug information to stderr
+ * @param delegate - Optional debug delegate to trace planning decisions
  */
-function planRecursively(plans: Plans): void {
+function planRecursively(
+  plans: Plans,
+  debug?: boolean,
+  delegate?: import('./planner-debug-delegate.ts').PlannerDebugDelegate,
+): void {
   // Plan subqueries first (post-order traversal)
   for (const subPlan of Object.values(plans.subPlans)) {
-    planRecursively(subPlan);
+    planRecursively(subPlan, debug, delegate);
   }
 
   // Then plan this graph
-  plans.plan.plan();
+  plans.plan.plan(debug, delegate);
 }
 
 /**
@@ -341,14 +347,21 @@ function planRecursively(plans: Plans): void {
  *
  * @param ast - The input AST to plan
  * @param model - The cost model for connection estimation
+ * @param debug - If true, logs debug information to stderr (deprecated, use delegate instead)
+ * @param delegate - Optional debug delegate to trace planning decisions
  * @returns Optimized AST with flip: true on joins that should use FlippedJoin
  */
-export function planQuery(ast: AST, model: ConnectionCostModel): AST {
+export function planQuery(
+  ast: AST,
+  model: ConnectionCostModel,
+  debug?: boolean,
+  delegate?: import('./planner-debug-delegate.ts').PlannerDebugDelegate,
+): AST {
   // Build plan graphs recursively
   const plans = buildPlanGraph(ast, model);
 
   // Execute planning algorithm recursively (post-order)
-  planRecursively(plans);
+  planRecursively(plans, debug, delegate);
 
   // Apply plans to AST
   return applyPlansToAST(ast, plans);
