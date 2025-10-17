@@ -221,7 +221,10 @@ export class PlannerConnection {
     // Cache miss - compute and cache
     const constraint = this.#constraints.get(key);
     // Merge base constraints with propagated constraints
-    const mergedConstraint = mergeConstraints(this.#baseConstraints, constraint);
+    const mergedConstraint = mergeConstraints(
+      this.#baseConstraints,
+      constraint,
+    );
     cost = this.#model(this.table, this.#sort, this.#filters, mergedConstraint);
     this.#cachedConstraintCosts.set(key, cost);
 
