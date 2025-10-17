@@ -1,7 +1,7 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
-import type {ConstraintPropagationType, PlannerNode} from './planner-node.ts';
+import type {PlannerNode} from './planner-node.ts';
 
 /**
  * Represents a connection to a source (table scan).
@@ -120,7 +120,7 @@ export class PlannerConnection {
   propagateConstraints(
     path: number[],
     c: PlannerConstraint | undefined,
-    from: ConstraintPropagationType,
+    from: PlannerNode,
   ): void {
     const key = path.join(',');
     this.#constraints.set(key, c);
@@ -129,11 +129,11 @@ export class PlannerConnection {
 
     if (this.pinned) {
       assert(
-        from === 'pinned' || from === 'terminus',
+        from.pinned,
         'It should be impossible for a pinned connection to receive constraints from a non-pinned node',
       );
     }
-    if (from === 'pinned') {
+    if (from.pinned) {
       this.pinned = true;
     }
   }

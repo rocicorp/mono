@@ -350,6 +350,7 @@ export class PlannerGraph {
       }
 
       // Try to pick costs[i] as root for this attempt
+      console.log('ATTEMPT', i, costs[i].connection.table);
       try {
         let connection = costs[i].connection;
         connection.pinned = true; // Pin FIRST
@@ -360,6 +361,7 @@ export class PlannerGraph {
         // Continue with greedy selection
         while (!this.hasPlan()) {
           costs = this.estimateCosts();
+          console.log(costs);
           if (costs.length === 0) break;
 
           if (debug) {
@@ -377,6 +379,7 @@ export class PlannerGraph {
 
             try {
               connection.pinned = true; // Pin FIRST
+              console.log('PIN', connection.table);
               pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
               pickedCost = cost;
               success = true;

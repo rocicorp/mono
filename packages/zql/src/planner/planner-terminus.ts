@@ -8,8 +8,12 @@ export class PlannerTerminus {
     this.#input = input;
   }
 
+  get pinned(): boolean {
+    return true;
+  }
+
   propagateConstraints(): void {
-    this.#input.propagateConstraints([], undefined, 'terminus');
+    this.#input.propagateConstraints([], undefined, this);
   }
 
   estimateCost(): number {
