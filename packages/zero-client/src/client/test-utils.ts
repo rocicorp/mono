@@ -30,6 +30,8 @@ import type {
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {PullRow, Query} from '../../../zql/src/query/query.ts';
+import type {ConnectionState} from './connection-manager.ts';
+import {ConnectionStatus} from './connection-status.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {LogOptions} from './log-options.ts';
 import type {ZeroOptions} from './options.ts';
@@ -38,10 +40,8 @@ import {
   createLogOptionsSymbol,
   exposedToTestingSymbol,
   getInternalReplicacheImplForTesting,
-  onSetConnectionStateSymbol,
   type TestingContext,
 } from './zero.ts';
-import {ConnectionStatus} from './connection-status.ts';
 
 // Do not use an import statement here because vitest will then load that file
 // which does not work in a worker context.
@@ -109,22 +109,31 @@ export class TestZero<
 
   get connectionStatus(): ConnectionStatus {
     assert(TESTING);
-    return this[exposedToTestingSymbol].connectionState().name;
+    return this[exposedToTestingSymbol].connectionManager().state.name;
+  }
+
+  get connectionState(): ConnectionState {
+    assert(TESTING);
+    return this[exposedToTestingSymbol].connectionManager().state;
   }
 
   get connectingStart() {
     return this[exposedToTestingSymbol].connectStart;
   }
 
-  // Testing only hook
-  [onSetConnectionStateSymbol](newState: ConnectionStatus) {
-    for (const entry of this.#connectionStatusResolvers) {
-      const {state, resolve} = entry;
-      if (state === newState) {
-        this.#connectionStatusResolvers.delete(entry);
-        resolve(newState);
+  constructor(options: ZeroOptions<S, MD>) {
+    super(options);
+
+    // Subscribe to connection manager to handle connection state change notifications
+    this[exposedToTestingSymbol].connectionManager().subscribe(state => {
+      for (const entry of this.#connectionStatusResolvers) {
+        const {state: expectedState, resolve} = entry;
+        if (expectedState === state.name) {
+          this.#connectionStatusResolvers.delete(entry);
+          resolve(state.name);
+        }
       }
-    }
+    });
   }
 
   [createLogOptionsSymbol](options: {consoleLogLevel: LogLevel}): LogOptions {
@@ -149,6 +158,12 @@ export class TestZero<
     const {promise, resolve} = resolver<ConnectionStatus>();
     this.#connectionStatusResolvers.add({state, resolve});
     return promise;
+  }
+
+  subscribeToConnectionStatus(listener: (state: ConnectionState) => void) {
+    return this[exposedToTestingSymbol].connectionManager().subscribe(state => {
+      listener(state);
+    });
   }
 
   get socket(): Promise<MockSocket> {
