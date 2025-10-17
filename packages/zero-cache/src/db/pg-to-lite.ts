@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {ZERO_VERSION_COLUMN_NAME} from '../services/replicator/schema/replication-state.ts';
+import {ZERO_VERSION_COLUMN_NAME} from '../services/replicator/schema/constants.ts';
 import {
   dataTypeToZqlValueType,
   liteTypeString,

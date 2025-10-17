@@ -8,8 +8,9 @@
 import * as v from '../../../../../shared/src/valita.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../../db/statements.ts';
+import {ZERO_VERSION_COLUMN_NAME} from './constants.ts';
 
-export const ZERO_VERSION_COLUMN_NAME = '_0_version';
+export {ZERO_VERSION_COLUMN_NAME};
 
 export type RuntimeEvent = 'sync' | 'upgrade' | 'vacuum';
 

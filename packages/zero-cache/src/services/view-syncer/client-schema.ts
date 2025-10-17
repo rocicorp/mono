@@ -8,7 +8,7 @@ import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts'
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
 import {appSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
-import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/replication-state.ts';
+import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/constants.ts';
 
 export function checkClientSchema(
   shardID: ShardID,
