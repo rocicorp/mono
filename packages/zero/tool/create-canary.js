@@ -162,7 +162,7 @@ try {
   // Copy the working directory to temp dir (faster than cloning)
   console.log(`Copying repo from ${gitRoot} to ${tempDir}...`);
   execute(
-    `rsync -a --info=progress2 --exclude=node_modules --exclude=.turbo ${gitRoot}/ ${tempDir}/`,
+    `rsync -a --progress --exclude=node_modules --exclude=.turbo ${gitRoot}/ ${tempDir}/`,
   );
   process.chdir(tempDir);
 
