@@ -451,8 +451,7 @@ describe('server results and keeping read queries', () => {
     vi.unstubAllGlobals();
   });
 
-  test.only('waiting for server results', async () => {
-    debugger;
+  test('waiting for server results', async () => {
     const z = zeroForTest({
       schema,
       mutators: {
@@ -469,8 +468,6 @@ describe('server results and keeping read queries', () => {
 
     await z.triggerConnected();
     await z.waitForConnectionStatus(ConnectionStatus.Connected);
-
-    debugger;
 
     const create = z.mutate.issue.create({
       id: '1',

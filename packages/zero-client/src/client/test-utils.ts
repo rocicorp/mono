@@ -31,6 +31,8 @@ import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {PullRow, Query} from '../../../zql/src/query/query.ts';
+import type {ConnectionState} from './connection-manager.ts';
+import {ConnectionStatus} from './connection-status.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {LogOptions} from './log-options.ts';
 import type {ZeroOptions} from './options.ts';
@@ -42,7 +44,6 @@ import {
   onSetConnectionStateSymbol,
   type TestingContext,
 } from './zero.ts';
-import {ConnectionStatus} from './connection-status.ts';
 
 // Do not use an import statement here because vitest will then load that file
 // which does not work in a worker context.
@@ -119,12 +120,12 @@ export class TestZero<
   }
 
   // Testing only hook
-  [onSetConnectionStateSymbol](newState: ConnectionStatus) {
+  [onSetConnectionStateSymbol](newState: ConnectionState) {
     for (const entry of this.#connectionStatusResolvers) {
       const {state, resolve} = entry;
-      if (state === newState) {
+      if (state === newState.name) {
         this.#connectionStatusResolvers.delete(entry);
-        resolve(newState);
+        resolve(newState.name);
       }
     }
   }
