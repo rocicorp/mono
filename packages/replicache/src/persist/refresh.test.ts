@@ -577,7 +577,7 @@ describe('refresh', () => {
     } catch (e) {
       expectedE = e;
     }
-    expect(expectedE).instanceOf(Error);
+    expect(expectedE).toBeInstanceOf(Error);
     expect((expectedE as Error).message).toBe(
       'Test error in second perdag write',
     );

@@ -93,7 +93,8 @@ async function testSetClientGroupsSequenceThrowsError(
     } catch (e) {
       expectedE = e;
     }
-    expect(expectedE).instanceOf(Error).property('message', expectedErrorMsg);
+    expect(expectedE).toBeInstanceOf(Error);
+    expect(expectedE).toHaveProperty('message', expectedErrorMsg);
   });
 }
 
@@ -347,7 +348,8 @@ async function testSetClientGroupThrowsError(
     } catch (e) {
       expectedE = e;
     }
-    expect(expectedE).instanceOf(Error).property('message', expectedErrorMsg);
+    expect(expectedE).toBeInstanceOf(Error);
+    expect(expectedE).toHaveProperty('message', expectedErrorMsg);
   });
 }
 

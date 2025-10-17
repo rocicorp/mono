@@ -1957,7 +1957,7 @@ test('Create KV Store', async () => {
     disableAllBackgroundProcesses,
   );
 
-  expect(store).instanceOf(MemStoreWithCounters);
+  expect(store).toBeInstanceOf(MemStoreWithCounters);
   assert(store);
 
   await testMemStoreWithCounters(rep, store);
@@ -2010,7 +2010,7 @@ test('mutate args in mutation throws due to frozen', async () => {
   } catch (e) {
     err = e;
   }
-  expect(err).instanceOf(Error);
+  expect(err).toBeInstanceOf(Error);
 
   // Safari does not have requestIdleTimeout so it waits for a second.
   await vi.advanceTimersByTimeAsync(1000);
@@ -2439,15 +2439,15 @@ test('set with undefined key', async () => {
     return undefined;
   };
 
-  expect(await set(undefined)).instanceOf(TypeError);
+  expect(await set(undefined)).toBeInstanceOf(TypeError);
 
   // no error
   expect(await set({a: undefined})).toBe(undefined);
 
-  expect(await set([1, undefined, 2])).instanceOf(TypeError);
+  expect(await set([1, undefined, 2])).toBeInstanceOf(TypeError);
 
   // oxlint-disable-next-line no-sparse-arrays
-  expect(await set([1, , 2])).instanceOf(TypeError);
+  expect(await set([1, , 2])).toBeInstanceOf(TypeError);
 });
 
 test('subscribe while closing', async () => {

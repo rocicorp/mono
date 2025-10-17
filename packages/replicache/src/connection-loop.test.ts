@@ -751,7 +751,7 @@ describe('Send when closed should resolve with error', () => {
       }
 
       const err = await sendP;
-      expect(err?.error).instanceOf(Error);
+      expect(err?.error).toBeInstanceOf(Error);
       expect((err?.error as Error).message).equal('Closed');
     });
   }

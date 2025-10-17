@@ -1121,7 +1121,7 @@ test('subscribe where body returns non json', async () => {
     },
     {
       onData(values) {
-        expect(values).instanceOf(Map);
+        expect(values).toBeInstanceOf(Map);
         for (const entry of values) {
           log.push(entry);
         }

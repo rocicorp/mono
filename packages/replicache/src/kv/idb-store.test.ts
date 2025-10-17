@@ -174,6 +174,6 @@ test('Throws if IDB dropped while open', async () => {
   } catch (e) {
     err = e;
   }
-  expect(err).instanceOf(IDBNotFoundError);
+  expect(err).toBeInstanceOf(IDBNotFoundError);
   expect((err as Error).message).toMatch(/Expected IndexedDB/);
 });

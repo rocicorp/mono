@@ -1848,7 +1848,7 @@ test('puller with mutation recovery pull, response timeout', async () => {
   } catch (e) {
     expectedE = e;
   }
-  expect(expectedE).property('message', 'Pull timed out');
+  expect(expectedE).toHaveProperty('message', 'Pull timed out');
 });
 
 test('puller with normal non-mutation recovery pull', async () => {
@@ -2569,12 +2569,11 @@ test('Constructing Zero with a negative hiddenTabDisconnectDelay option throws a
   } catch (e) {
     expected = e;
   }
-  expect(expected)
-    .instanceOf(Error)
-    .property(
-      'message',
-      'ZeroOptions.hiddenTabDisconnectDelay must not be negative.',
-    );
+  expect(expected).toBeInstanceOf(Error);
+  expect(expected).toHaveProperty(
+    'message',
+    'ZeroOptions.hiddenTabDisconnectDelay must not be negative.',
+  );
 });
 
 describe('Disconnect on hide', () => {

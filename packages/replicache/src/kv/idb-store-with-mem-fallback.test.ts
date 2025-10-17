@@ -24,7 +24,7 @@ test('Firefox private browsing', async () => {
   const name = `ff-${Math.random()}`;
 
   const store = storeThatErrorsInOpen(new LogContext(), name);
-  expect(store).instanceOf(IDBStoreWithMemFallback);
+  expect(store).toBeInstanceOf(IDBStoreWithMemFallback);
 
   await withWrite(store, async tx => {
     await tx.put('foo', 'bar');
@@ -40,8 +40,8 @@ test('No wrapper if not Firefox', async () => {
   );
   const name = `not-ff-${Math.random()}`;
   const store = newIDBStoreWithMemFallback(new LogContext(), name);
-  expect(store).not.instanceOf(IDBStoreWithMemFallback);
-  expect(store).instanceOf(IDBStore);
+  expect(store).not.toBeInstanceOf(IDBStoreWithMemFallback);
+  expect(store).toBeInstanceOf(IDBStore);
   await store.close();
 });
 
@@ -80,7 +80,7 @@ function storeThatErrorsInOpen(lc: LogContext, name: string) {
   vi.spyOn(indexedDB, 'open').mockImplementation(() => openRequest);
 
   const store = newIDBStoreWithMemFallback(lc, name);
-  expect(store).instanceOf(IDBStoreWithMemFallback);
+  expect(store).toBeInstanceOf(IDBStoreWithMemFallback);
 
   assert(openRequest.onerror);
   openRequest.onerror(new Event('error'));

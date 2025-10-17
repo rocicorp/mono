@@ -227,7 +227,8 @@ test('writeHeartbeat throws Error if no Client is found for clientID', async () 
   } catch (ex) {
     e = ex;
   }
-  expect(e).toBeInstanceOf(ClientStateNotFoundError).property('id', 'client1');
+  expect(e).toBeInstanceOf(ClientStateNotFoundError);
+  expect(e).toHaveProperty('id', 'client1');
 });
 
 test('heartbeat with missing client calls callback', async () => {
