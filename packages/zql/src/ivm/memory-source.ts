@@ -45,7 +45,6 @@ import type {
   SourceChangeAdd,
   SourceChangeEdit,
   SourceChangeRemove,
-  SourceChangeSet,
   SourceInput,
 } from './source.ts';
 import type {Stream} from './stream.ts';
@@ -359,33 +358,18 @@ export class MemorySource implements Source {
     return this.#fetch(req, connection);
   }
 
-  push(change: SourceChange | SourceChangeSet): void {
+  push(change: SourceChange): void {
     for (const _ of this.genPush(change)) {
       // Nothing to do.
     }
   }
 
-  *genPush(change: SourceChange | SourceChangeSet) {
+  *genPush(change: SourceChange) {
     const primaryIndex = this.#getPrimaryIndex();
     const {data} = primaryIndex;
     const exists = (row: Row) => data.has(row);
     const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
     const writeChange = (c: SourceChange) => this.#writeChange(c);
-    if (change.type === 'set') {
-      const existing = data.get(change.row);
-      if (existing !== undefined) {
-        change = {
-          type: 'edit',
-          row: change.row,
-          oldRow: existing,
-        };
-      } else {
-        change = {
-          type: 'add',
-          row: change.row,
-        };
-      }
-    }
     yield* genPushAndWriteWithSplitEdit(
       this.#connections,
       change,
