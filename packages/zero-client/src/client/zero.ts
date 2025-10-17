@@ -1114,8 +1114,14 @@ export class Zero<
 
     const closeError = new ClientError(
       wasClean
-        ? {kind: ClientErrorKind.CleanClose, message: 'Clean close'}
-        : {kind: ClientErrorKind.AbruptClose, message: 'Abrupt close'},
+        ? {
+            kind: ClientErrorKind.CleanClose,
+            message: 'WebSocket connection closed cleanly',
+          }
+        : {
+            kind: ClientErrorKind.AbruptClose,
+            message: 'WebSocket connection closed abruptly',
+          },
     );
     this.#connectResolver.reject(closeError);
     this.#disconnect(lc, closeError);
@@ -1334,7 +1340,7 @@ export class Zero<
       lc.debug?.('Rejecting connect resolver due to timeout');
       const timeoutError = new ClientError({
         kind: ClientErrorKind.ConnectTimeout,
-        message: 'Connect timed out',
+        message: `Connection attempt timed out after ${CONNECT_TIMEOUT_MS / 1000} seconds`,
       });
       this.#connectResolver.reject(timeoutError);
       this.#disconnect(lc, timeoutError);
@@ -1518,7 +1524,7 @@ export class Zero<
         lc,
         new ClientError({
           kind: ClientErrorKind.UnexpectedBaseCookie,
-          message: 'Unexpected base cookie',
+          message: 'Server returned unexpected base cookie during sync',
         }),
       );
     }
@@ -1754,7 +1760,7 @@ export class Zero<
                   lc,
                   new ClientError({
                     kind: ClientErrorKind.Hidden,
-                    message: 'The tab was hidden',
+                    message: 'Connection closed because tab was hidden',
                   }),
                 );
                 this.#setOnline(false);
@@ -1990,7 +1996,7 @@ export class Zero<
         lc,
         new ClientError({
           kind: ClientErrorKind.PingTimeout,
-          message: 'Ping timed out',
+          message: 'Server ping request timed out',
         }),
       );
       return PingResult.TimedOut;

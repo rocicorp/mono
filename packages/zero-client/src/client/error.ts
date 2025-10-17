@@ -16,8 +16,8 @@ abstract class BaseError<
   Name extends T extends ErrorBody ? 'ServerError' : 'ClientError',
 > extends Error {
   readonly errorBody: T;
-  constructor(errorBody: T) {
-    super(errorBody.kind + ': ' + errorBody.message);
+  constructor(errorBody: T, options?: ErrorOptions) {
+    super(errorBody.kind + ': ' + errorBody.message, options);
     this.errorBody = errorBody;
   }
   get kind(): T['kind'] {
@@ -50,7 +50,9 @@ export function isServerError(ex: unknown): ex is ServerError {
   return ex instanceof ServerError;
 }
 
-export function isAuthError(ex: unknown) {
+export function isAuthError(ex: unknown): ex is ServerError & {
+  kind: ErrorKind.AuthInvalidated | ErrorKind.Unauthorized;
+} {
   return isServerError(ex) && isAuthErrorKind(ex.kind);
 }
 

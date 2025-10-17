@@ -29,6 +29,30 @@ describe('ClientError', () => {
     expect(isClientError(error)).toBe(true);
     expect(isServerError(error)).toBe(false);
   });
+
+  test('preserves error cause when provided', () => {
+    const cause = new Error('underlying error');
+    const body = {
+      kind: ClientErrorKind.AbruptClose,
+      message: 'connection closed',
+    } as const;
+
+    const error = new ClientError(body, {cause});
+
+    expect(error.cause).toBe(cause);
+    expect(error.errorBody).toBe(body);
+    expect(error.kind).toBe(ClientErrorKind.AbruptClose);
+  });
+
+  test('has useful stack trace', () => {
+    const error = new ClientError({
+      kind: ClientErrorKind.PingTimeout,
+      message: 'ping timeout',
+    });
+
+    expect(error.stack).toBeDefined();
+    expect(error.stack).toContain('ClientError');
+  });
 });
 
 describe('ServerError', () => {
@@ -47,6 +71,30 @@ describe('ServerError', () => {
     expect(error.message).toBe('InvalidPush: invalid push');
     expect(isServerError(error)).toBe(true);
     expect(isClientError(error)).toBe(false);
+  });
+
+  test('preserves error cause when provided', () => {
+    const cause = new Error('network failure');
+    const body: ErrorBody = {
+      kind: ErrorKind.Unauthorized,
+      message: 'unauthorized',
+    };
+
+    const error = new ServerError(body, {cause});
+
+    expect(error.cause).toBe(cause);
+    expect(error.errorBody).toBe(body);
+    expect(error.kind).toBe(ErrorKind.Unauthorized);
+  });
+
+  test('has useful stack trace', () => {
+    const error = new ServerError({
+      kind: ErrorKind.InvalidPush,
+      message: 'invalid push',
+    });
+
+    expect(error.stack).toBeDefined();
+    expect(error.stack).toContain('ServerError');
   });
 });
 
