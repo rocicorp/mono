@@ -84,7 +84,7 @@ describe('two joins via or', () => {
   });
 
   // TODO: trace planner.
-  test.only('track.exists(album).or.exists(genre): track < invoiceLines > album', () => {
+  test('track.exists(album).or.exists(genre): track < invoiceLines > album', () => {
     const costModel = makeCostModel({
       track: 10_000,
       album: 10,

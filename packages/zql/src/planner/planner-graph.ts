@@ -8,6 +8,10 @@ import type {PlannerNode} from './planner-node.ts';
 import {PlannerSource, type ConnectionCostModel} from './planner-source.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import {must} from '../../../shared/src/must.ts';
+import type {
+  PlannerDebugDelegate,
+  ConnectionCostDetail,
+} from './planner-debug-delegate.ts';
 
 /**
  * Captured state of a plan for comparison and restoration.
@@ -131,6 +135,29 @@ export class PlannerGraph {
     costs.sort((a, b) => a.cost - b.cost);
 
     return costs;
+  }
+
+  /**
+   * Get detailed connection cost information for debugging.
+   * Includes per-branch-pattern cost breakdown.
+   */
+  getConnectionCostDetails(): ConnectionCostDetail[] {
+    const unpinned = this.getUnpinnedConnections();
+    const details = unpinned.map(connection => {
+      const {branchCosts, branchConstraints} =
+        connection.getBranchCostDetails();
+      return {
+        connection,
+        totalCost: connection.estimateCost(),
+        branchCosts,
+        branchConstraints,
+      };
+    });
+
+    // Sort by total cost ascending (lowest cost first)
+    details.sort((a, b) => a.totalCost - b.totalCost);
+
+    return details;
   }
 
   /**
@@ -325,8 +352,11 @@ export class PlannerGraph {
    * with greedy selection of lowest-cost connections.
    *
    * Returns the best plan found across all attempts.
+   *
+   * @param debug - If true, logs debug information to stderr (deprecated, use delegate instead)
+   * @param delegate - Optional debug delegate to trace planning decisions
    */
-  plan(debug = false): void {
+  plan(debug = false, delegate?: PlannerDebugDelegate): void {
     const numAttempts = Math.min(
       this.connections.length,
       MAX_PLANNING_ATTEMPTS,
@@ -343,26 +373,42 @@ export class PlannerGraph {
       let costs = this.estimateCosts();
       if (i >= costs.length) break;
 
+      const startConnection = costs[i].connection;
+      const startCost = costs[i].cost;
+
+      // Delegate: onAttemptStart
+      delegate?.onAttemptStart?.(i, startConnection, startCost);
+
       if (debug) {
         console.error(
-          `\n--- Attempt ${i + 1}: Starting with connection at index ${i} (cost: ${costs[i].cost}) ---`,
+          `\n--- Attempt ${i + 1}: Starting with connection at index ${i} (cost: ${startCost}) ---`,
         );
       }
 
       // Try to pick costs[i] as root for this attempt
-      console.log('ATTEMPT', i, costs[i].connection.table);
       try {
-        let connection = costs[i].connection;
-        connection.pinned = true; // Pin FIRST
-        pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
+        startConnection.pinned = true; // Pin FIRST
+        const flippedJoins = pinAndMaybeFlipJoins(startConnection); // Then flip/pin joins - might throw
         this.propagateConstraints(); // Then propagate
+
+        // Delegate: onConnectionPinned for initial connection
+        delegate?.onConnectionPinned?.(
+          startConnection,
+          startCost,
+          flippedJoins,
+        );
 
         let step = 1;
         // Continue with greedy selection
         while (!this.hasPlan()) {
           costs = this.estimateCosts();
-          console.log(costs);
           if (costs.length === 0) break;
+
+          // Delegate: onConnectionCosts
+          if (delegate?.onConnectionCosts) {
+            const costDetails = this.getConnectionCostDetails();
+            delegate.onConnectionCosts(step, costDetails);
+          }
 
           if (debug) {
             console.error(
@@ -373,15 +419,19 @@ export class PlannerGraph {
           // Try connections in order until one works
           let success = false;
           let pickedCost = 0;
+          let pickedConnection: PlannerConnection | undefined;
+          let pickedFlippedJoins: PlannerJoin[] = [];
+
           for (const {connection, cost} of costs) {
             // Save state before attempting this connection
             const stateBeforeAttempt = this.capturePlanningSnapshot();
 
             try {
               connection.pinned = true; // Pin FIRST
-              console.log('PIN', connection.table);
-              pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
+              const flipped = pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
               pickedCost = cost;
+              pickedConnection = connection;
+              pickedFlippedJoins = flipped;
               success = true;
               break; // Success, exit the inner loop
             } catch (e) {
@@ -401,11 +451,21 @@ export class PlannerGraph {
               console.error(
                 `  Step ${step}: No connection could be pinned - plan failed`,
               );
+            delegate?.onAttemptFailed?.(i, 'No connection could be pinned');
             break;
           }
 
           // Only propagate after successful connection selection
           this.propagateConstraints();
+
+          // Delegate: onConnectionPinned
+          if (pickedConnection) {
+            delegate?.onConnectionPinned?.(
+              pickedConnection,
+              pickedCost,
+              pickedFlippedJoins,
+            );
+          }
 
           if (debug) {
             console.error(
@@ -418,14 +478,23 @@ export class PlannerGraph {
         // Evaluate this plan (if complete)
         if (this.hasPlan()) {
           const totalCost = this.getTotalCost();
+          const summary = this.getPlanSummary();
+
+          // Delegate: onAttemptComplete
+          delegate?.onAttemptComplete?.(i, totalCost, summary);
+
           if (debug)
             console.error(
               `  Attempt ${i + 1}: Complete! Total cost: ${totalCost}`,
             );
-          console.log('cost', totalCost, this.getPlanSummary());
+
           if (totalCost < bestCost) {
             bestCost = totalCost;
             bestPlan = this.capturePlanningSnapshot();
+
+            // Delegate: onBestPlanFound
+            delegate?.onBestPlanFound?.(i, totalCost, summary);
+
             if (debug) console.error(`  *** New best plan found! ***`);
           }
         }
@@ -434,6 +503,7 @@ export class PlannerGraph {
           // This root connection led to an unreachable path, try next root
           if (debug)
             console.error(`  Attempt ${i + 1}: Failed with unflippable join`);
+          delegate?.onAttemptFailed?.(i, 'Unflippable join encountered');
           continue;
         }
         throw e; // Re-throw other errors
@@ -460,8 +530,14 @@ export class PlannerGraph {
  * - Flip joins where the connection is the child input
  *
  * This ensures the selected connection runs in the outer loop.
+ *
+ * @param flippedJoins - Array to collect joins that were flipped during traversal
  */
-function traverseAndPin(from: PlannerNode, node: PlannerNode): void {
+function traverseAndPin(
+  from: PlannerNode,
+  node: PlannerNode,
+  flippedJoins: PlannerJoin[],
+): void {
   switch (node.kind) {
     case 'join':
       if (node.pinned) {
@@ -470,19 +546,24 @@ function traverseAndPin(from: PlannerNode, node: PlannerNode): void {
         return;
       }
 
+      const typeBefore = node.type;
       node.flipIfNeeded(from);
       node.pin();
-      traverseAndPin(node, node.output);
+      // If type changed from 'left' to 'flipped', this join was flipped
+      if (typeBefore === 'left' && node.type === 'flipped') {
+        flippedJoins.push(node);
+      }
+      traverseAndPin(node, node.output, flippedJoins);
       return;
     case 'fan-out':
       for (const output of node.outputs) {
         // fan-out will always be the parent input to its outputs
         // so it will never cause a flip but it will pin them
-        traverseAndPin(node, output);
+        traverseAndPin(node, output, flippedJoins);
       }
       return;
     case 'fan-in':
-      traverseAndPin(node, node.output);
+      traverseAndPin(node, node.output, flippedJoins);
       return;
     case 'terminus':
       return;
@@ -491,6 +572,10 @@ function traverseAndPin(from: PlannerNode, node: PlannerNode): void {
   }
 }
 
-export function pinAndMaybeFlipJoins(connection: PlannerConnection): void {
-  traverseAndPin(connection, connection.output);
+export function pinAndMaybeFlipJoins(
+  connection: PlannerConnection,
+): PlannerJoin[] {
+  const flippedJoins: PlannerJoin[] = [];
+  traverseAndPin(connection, connection.output, flippedJoins);
+  return flippedJoins;
 }

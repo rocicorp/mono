@@ -191,6 +191,45 @@ export class PlannerConnection {
     // Constraints changed, invalidate cost cache
     this.#costDirty = true;
   }
+
+  /**
+   * Get detailed cost breakdown by branch pattern for debugging.
+   * Returns a map of branch pattern path to individual cost.
+   *
+   * This is useful for understanding how OR queries (FanOut/FanIn) affect costs.
+   */
+  getBranchCostDetails(): {
+    branchCosts: Map<string, number>;
+    branchConstraints: Map<string, PlannerConstraint | undefined>;
+  } {
+    const branchCosts = new Map<string, number>();
+    const branchConstraints = new Map<string, PlannerConstraint | undefined>();
+
+    if (this.#constraints.size === 0) {
+      // No constraints - single branch with no pattern
+      const cost = this.#model(
+        this.table,
+        this.#sort,
+        this.#filters,
+        undefined,
+      );
+      branchCosts.set('', cost);
+      branchConstraints.set('', undefined);
+    } else {
+      for (const [path, constraint] of this.#constraints) {
+        const cost = this.#model(
+          this.table,
+          this.#sort,
+          this.#filters,
+          constraint,
+        );
+        branchCosts.set(path, cost);
+        branchConstraints.set(path, constraint);
+      }
+    }
+
+    return {branchCosts, branchConstraints};
+  }
 }
 
 export type ConnectionCostModel = (
