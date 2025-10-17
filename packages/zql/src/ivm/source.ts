@@ -19,11 +19,6 @@ export type SourceChangeEdit = {
   oldRow: Row;
 };
 
-export type SourceChangeSet = {
-  type: 'set';
-  row: Row;
-};
-
 export type SourceChange =
   | SourceChangeAdd
   | SourceChangeRemove
@@ -72,7 +67,7 @@ export interface Source {
   /**
    * Pushes a change into the source and into all connected outputs.
    */
-  push(change: SourceChange | SourceChangeSet): void;
+  push(change: SourceChange): void;
 
   /**
    * Pushes a change into the source.
