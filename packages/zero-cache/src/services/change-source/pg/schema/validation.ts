@@ -12,7 +12,7 @@ import type {
   PublishedIndexSpec,
   PublishedTableSpec,
 } from '../../../../db/specs.ts';
-import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/replication-state.ts';
+import {ZERO_VERSION_COLUMN_NAME} from '../../../replicator/schema/constants.ts';
 
 export const ALLOWED_APP_ID_CHARACTERS = /^[a-z0-9_]+$/;
 
