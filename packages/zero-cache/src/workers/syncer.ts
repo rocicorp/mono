@@ -129,7 +129,7 @@ export class Syncer implements SingletonService {
         throw new Error(
           'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
             JSON.stringify(tokenOptions) +
-            '. You may also set both ZERO_MUTATE_URL and ZERO_GET_QUERIES_URL to enable custom mutations and queries without passing token verification options.',
+            '. Or, you can set both ZERO_MUTATE_URL and ZERO_GET_QUERIES_URL to enable custom mutations and queries without passing these token verification options.',
         );
       }
 

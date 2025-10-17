@@ -1,11 +1,16 @@
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {ClientErrorKind} from './client-error-kind.ts';
 import type {ConnectionState} from './connection-manager.ts';
 import {ConnectionManager} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
-import {ClientErrorKind} from './client-error-kind.ts';
 import {ClientError} from './error.ts';
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
+
+const sharedDisconnectError = new ClientError({
+  kind: ClientErrorKind.DisconnectTimeout,
+  message: 'Disconnect timed out',
+});
 
 describe('ConnectionManager', () => {
   beforeEach(() => {
@@ -97,7 +102,7 @@ describe('ConnectionManager', () => {
       });
 
       vi.setSystemTime(DEFAULT_TIMEOUT_MS / 2);
-      manager.disconnected();
+      manager.disconnected(sharedDisconnectError);
       expect(manager.is(ConnectionStatus.Disconnected)).toBe(true);
 
       const listener = subscribe(manager);
@@ -256,11 +261,15 @@ describe('ConnectionManager', () => {
       });
       const listener = subscribe(manager);
 
-      manager.disconnected();
+      manager.disconnected(sharedDisconnectError);
 
-      expect(manager.state).toEqual({name: ConnectionStatus.Disconnected});
+      expect(manager.state).toEqual({
+        name: ConnectionStatus.Disconnected,
+        reason: sharedDisconnectError,
+      });
       expect(listener).toHaveBeenCalledWith({
         name: ConnectionStatus.Disconnected,
+        reason: sharedDisconnectError,
       });
     });
 
@@ -273,7 +282,7 @@ describe('ConnectionManager', () => {
       manager.connected();
 
       vi.setSystemTime(8 * 60 * 1000);
-      manager.disconnected();
+      manager.disconnected(sharedDisconnectError);
       expect(manager.is(ConnectionStatus.Disconnected)).toBe(true);
 
       vi.setSystemTime(8 * 60 * 1000);
@@ -286,10 +295,10 @@ describe('ConnectionManager', () => {
       const manager = new ConnectionManager({
         disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
       });
-      manager.disconnected();
+      manager.disconnected(sharedDisconnectError);
 
       const listener = subscribe(manager);
-      manager.disconnected();
+      manager.disconnected(sharedDisconnectError);
 
       expect(listener).not.toHaveBeenCalled();
     });
@@ -301,7 +310,7 @@ describe('ConnectionManager', () => {
       manager.closed();
 
       const listener = subscribe(manager);
-      manager.disconnected();
+      manager.disconnected(sharedDisconnectError);
 
       expect(listener).not.toHaveBeenCalled();
       expect(manager.is(ConnectionStatus.Closed)).toBe(true);
@@ -324,7 +333,7 @@ describe('ConnectionManager', () => {
       listener.mockClear();
       manager.connecting();
       manager.connected();
-      manager.disconnected();
+      manager.disconnected(sharedDisconnectError);
 
       expect(manager.state).toEqual({name: ConnectionStatus.Closed});
       expect(listener).not.toHaveBeenCalled();
@@ -360,9 +369,12 @@ describe('ConnectionManager', () => {
 
       vi.advanceTimersByTime(200);
       expect(manager.is(ConnectionStatus.Disconnected)).toBe(true);
-      expect(listener).toHaveBeenCalledWith({
-        name: ConnectionStatus.Disconnected,
-      });
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: ConnectionStatus.Disconnected,
+          reason: expect.any(ClientError),
+        }),
+      );
     });
 
     test('uses the configured timeout check interval', () => {
@@ -392,7 +404,7 @@ describe('ConnectionManager', () => {
       });
       const listener = subscribe(manager);
 
-      manager.disconnected();
+      manager.disconnected(sharedDisconnectError);
       listener.mockClear();
 
       vi.advanceTimersByTime(1_000);
@@ -414,7 +426,7 @@ describe('ConnectionManager', () => {
       manager.connected();
       expect(manager.shouldContinueRunLoop()).toBe(true);
 
-      manager.disconnected();
+      manager.disconnected(sharedDisconnectError);
       expect(manager.shouldContinueRunLoop()).toBe(true);
 
       manager.closed();
@@ -443,8 +455,11 @@ describe('ConnectionManager', () => {
 
       // Connection lost, transition to disconnected
       vi.setSystemTime(60_000);
-      manager.disconnected();
-      expect(manager.state).toEqual({name: ConnectionStatus.Disconnected});
+      manager.disconnected(sharedDisconnectError);
+      expect(manager.state).toEqual({
+        name: ConnectionStatus.Disconnected,
+        reason: sharedDisconnectError,
+      });
 
       // Reconnection succeeds (can transition directly from disconnected to connected)
       vi.setSystemTime(65_000);
@@ -458,6 +473,7 @@ describe('ConnectionManager', () => {
       });
       expect(listener).toHaveBeenNthCalledWith(2, {
         name: ConnectionStatus.Disconnected,
+        reason: sharedDisconnectError,
       });
       expect(listener).toHaveBeenNthCalledWith(3, {
         name: ConnectionStatus.Connected,
@@ -474,7 +490,9 @@ describe('ConnectionManager', () => {
       const waitForChange = manager.waitForStateChange();
       manager.connected();
 
-      await expect(waitForChange).resolves.toBeUndefined();
+      await expect(waitForChange).resolves.toEqual({
+        name: ConnectionStatus.Connected,
+      });
     });
 
     test('transition nextStatePromise resolves after subsequent state change', async () => {
@@ -487,7 +505,9 @@ describe('ConnectionManager', () => {
       const {nextStatePromise} = manager.connecting();
       manager.connected();
 
-      await expect(nextStatePromise).resolves.toBeUndefined();
+      await expect(nextStatePromise).resolves.toEqual({
+        name: ConnectionStatus.Connected,
+      });
     });
 
     test('transition nextStatePromise resolves on closed', async () => {
@@ -498,7 +518,9 @@ describe('ConnectionManager', () => {
       const {nextStatePromise} = manager.connected();
       manager.closed();
 
-      await expect(nextStatePromise).resolves.toBeUndefined();
+      await expect(nextStatePromise).resolves.toEqual({
+        name: ConnectionStatus.Closed,
+      });
     });
 
     test('waitForStateChange reuses promise until resolved, then creates a new one', async () => {
@@ -518,13 +540,18 @@ describe('ConnectionManager', () => {
       expect(firstResolved).toBe(false);
 
       manager.connected();
-      await expect(first).resolves.toBeUndefined();
+      await expect(first).resolves.toEqual({
+        name: ConnectionStatus.Connected,
+      });
 
       const third = manager.waitForStateChange();
       expect(third).not.toBe(first);
 
-      manager.disconnected();
-      await expect(third).resolves.toBeUndefined();
+      manager.disconnected(sharedDisconnectError);
+      await expect(third).resolves.toEqual({
+        name: ConnectionStatus.Disconnected,
+        reason: sharedDisconnectError,
+      });
     });
 
     test('error nextStatePromise resolves when transitioning from connected to connecting', async () => {
@@ -535,7 +562,33 @@ describe('ConnectionManager', () => {
       const {nextStatePromise} = manager.connected();
       manager.connecting();
 
-      await expect(nextStatePromise).resolves.toBeUndefined();
+      await expect(nextStatePromise).resolves.toEqual(
+        expect.objectContaining({
+          name: ConnectionStatus.Connecting,
+          attempt: 1,
+        }),
+      );
+    });
+
+    test('error nextStatePromise resolves when transitioning out of error', async () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+      const errorDetail = new ClientError({
+        kind: ClientErrorKind.ConnectTimeout,
+        message: 'connect timeout',
+      });
+
+      const {nextStatePromise} = manager.error(errorDetail);
+
+      manager.connecting();
+
+      await expect(nextStatePromise).resolves.toEqual(
+        expect.objectContaining({
+          name: ConnectionStatus.Connecting,
+          attempt: 1,
+        }),
+      );
     });
 
     test('cleanup resolves pending waiters', async () => {
@@ -546,7 +599,31 @@ describe('ConnectionManager', () => {
       const waitPromise = manager.waitForStateChange();
       manager.cleanup();
 
-      await expect(waitPromise).resolves.toBeUndefined();
+      await expect(waitPromise).resolves.toEqual(
+        expect.objectContaining({
+          name: ConnectionStatus.Connecting,
+        }),
+      );
+    });
+  });
+
+  describe('isInTerminalState', () => {
+    test('returns true only for error state', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+      const errorDetail = new ClientError({
+        kind: ClientErrorKind.ConnectTimeout,
+        message: 'connect timeout',
+      });
+
+      expect(manager.isInTerminalState()).toBe(false);
+
+      manager.connected();
+      expect(manager.isInTerminalState()).toBe(false);
+
+      manager.error(errorDetail);
+      expect(manager.isInTerminalState()).toBe(true);
     });
   });
 });

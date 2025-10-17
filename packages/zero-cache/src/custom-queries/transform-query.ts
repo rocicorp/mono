@@ -19,12 +19,6 @@ import {TimedCache} from '../../../shared/src/cache.ts';
 import {must} from '../../../shared/src/must.ts';
 import {ErrorForClient} from '../types/error-for-client.ts';
 
-export type HttpError = {
-  error: 'http';
-  status: number;
-  details: string;
-};
-
 /**
  * Transforms a custom query by calling the user's API server.
  * Caches the transformed queries for 5 seconds to avoid unnecessary API calls.

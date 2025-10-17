@@ -151,9 +151,9 @@ import {
 import {
   ClientError,
   ServerError,
+  getBackoffParams,
+  getErrorConnectionTransition,
   isAuthError,
-  isBackoffError,
-  isClientError,
   isServerError,
   type ZeroError,
 } from './error.ts';
@@ -1001,6 +1001,33 @@ export class Zero<
     }
   }
 
+  /**
+   * Resumes the connection from a terminal state.
+   *
+   * If called when not in a terminal state, this method does nothing.
+   *
+   * @returns A promise that resolves once the connection state has transitioned to connecting.
+   */
+  async connect(): Promise<void> {
+    const lc = this.#lc.withContext('connect');
+
+    // Only allow connect() to be called from a terminal state
+    if (!this.#connectionManager.isInTerminalState()) {
+      lc.debug?.(
+        'connect() called but not in a terminal state. Current state:',
+        this.#connectionManager.state.name,
+      );
+      return;
+    }
+
+    lc.info?.('Resuming connection from error state');
+
+    // Transition to connecting, which will trigger the state change resolver
+    // and unblock the run loop. Wait for the next state change (connected, disconnected, etc.)
+    const {nextStatePromise} = this.#connectionManager.connecting();
+    await nextStatePromise;
+  }
+
   #onMessage = (e: MessageEvent<string>) => {
     const lc = this.#lc;
     lc.debug?.('received message', e.data);
@@ -1422,8 +1449,8 @@ export class Zero<
       connectErrorCount: this.#connectErrorCount,
     });
 
-    const connectionState = this.#connectionManager.state.name;
-    switch (connectionState) {
+    const connectionStatus = this.#connectionManager.state.name;
+    switch (connectionStatus) {
       case ConnectionStatus.Connected: {
         if (this.#connectStart !== undefined) {
           lc.error?.(
@@ -1460,6 +1487,13 @@ export class Zero<
       case ConnectionStatus.Closed:
         lc.error?.('disconnect() called while closed');
         return;
+
+      case ConnectionStatus.Error:
+        lc.error?.('disconnect() called while in error state');
+        return;
+
+      default:
+        unreachable(connectionStatus);
     }
 
     this.#socketResolver = resolver();
@@ -1476,16 +1510,23 @@ export class Zero<
     this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
     this.#pokeHandler.handleDisconnect();
 
-    // we handle a client-side connection timeout by staying in the connecting state
-    const isStillConnecting =
-      reason instanceof ClientError &&
-      (reason.kind === ClientErrorKind.ConnectTimeout ||
-        reason.kind === ClientErrorKind.Hidden);
+    const transition = getErrorConnectionTransition(reason);
 
-    if (isStillConnecting) {
-      this.#connectionManager.connecting(reason);
-    } else {
-      this.#connectionManager.disconnected(reason);
+    switch (transition.status) {
+      case ConnectionStatus.Error:
+        this.#connectionManager.error(transition.reason);
+        break;
+      case ConnectionStatus.Disconnected:
+        this.#connectionManager.disconnected(transition.reason);
+        break;
+      case ConnectionStatus.Closed:
+        this.#connectionManager.closed();
+        break;
+      case null:
+        this.#connectionManager.connecting(transition.reason);
+        break;
+      default:
+        unreachable(transition);
     }
   }
 
@@ -1661,8 +1702,8 @@ export class Zero<
 
     let needsReauth = false;
     let lastReauthAttemptAt: number | undefined;
-    let gotError = false;
-    let backoffMs = RUN_LOOP_INTERVAL_MS;
+    // let gotError = false;
+    let backoffMs: number | undefined;
     let additionalConnectParams: Record<string, string> | undefined;
 
     while (this.#connectionManager.shouldContinueRunLoop()) {
@@ -1671,7 +1712,9 @@ export class Zero<
       backoffMs = RUN_LOOP_INTERVAL_MS;
 
       try {
-        switch (this.#connectionManager.state.name) {
+        const currentState = this.#connectionManager.state;
+
+        switch (currentState.name) {
           case ConnectionStatus.Connecting:
           case ConnectionStatus.Disconnected: {
             if (this.#visibilityWatcher.visibilityState === 'hidden') {
@@ -1680,8 +1723,17 @@ export class Zero<
               // is no longer trying to connect due to being hidden.
               this.#totalToConnectStart = undefined;
             }
+            const STATE_CHANGE = 1;
             // If hidden, we wait for the tab to become visible before trying again.
-            await this.#visibilityWatcher.waitForVisible();
+            // or for a state change (e.g. an error)
+            const visibilityResult = await promiseRace([
+              this.#visibilityWatcher.waitForVisible(),
+              this.#connectionManager.waitForStateChange(),
+            ]);
+
+            if (visibilityResult === STATE_CHANGE) {
+              break;
+            }
 
             // If we got an auth error we try to get a new auth token before reconnecting.
             if (needsReauth) {
@@ -1705,7 +1757,6 @@ export class Zero<
             lc = getLogContext();
 
             lc.debug?.('Connected successfully');
-            gotError = false;
             needsReauth = false;
             this.#setOnline(true);
             break;
@@ -1739,11 +1790,6 @@ export class Zero<
               this.#rejectMessageError.promise,
             ]);
 
-            if (this.closed) {
-              this.#rejectMessageError = undefined;
-              break;
-            }
-
             switch (raceResult) {
               case PING: {
                 const pingResult = await this.#ping(
@@ -1751,29 +1797,47 @@ export class Zero<
                   this.#rejectMessageError.promise,
                 );
                 if (pingResult === PingResult.TimedOut) {
-                  gotError = true;
+                  throw new ClientError({
+                    kind: ClientErrorKind.PingTimeout,
+                    message: 'Ping timed out',
+                  });
                 }
                 break;
               }
               case HIDDEN:
-                this.#disconnect(
-                  lc,
-                  new ClientError({
-                    kind: ClientErrorKind.Hidden,
-                    message: 'Connection closed because tab was hidden',
-                  }),
-                );
-                this.#setOnline(false);
-                break;
+                const hiddenError = new ClientError({
+                  kind: ClientErrorKind.Hidden,
+                  message: 'Connection closed because tab was hidden',
+                });
+                this.#disconnect(lc, hiddenError);
+                throw hiddenError;
             }
 
-            this.#rejectMessageError = undefined;
+            break;
+          }
+
+          case ConnectionStatus.Error: {
+            // we pause the run loop and wait for a state change
+            // or for a timeout
+            lc.info?.(
+              'Run loop paused in error state. Call connect() to resume.',
+              currentState.reason,
+            );
+
+            await promiseRace([
+              sleep(RUN_LOOP_INTERVAL_MS),
+              this.#connectionManager.waitForStateChange(),
+            ]);
+
             break;
           }
 
           case ConnectionStatus.Closed:
-            this.#rejectMessageError = undefined;
+            // we break the loop and the run loop will terminate
             break;
+
+          default:
+            unreachable(currentState);
         }
       } catch (ex) {
         if (!this.#connectionManager.is(ConnectionStatus.Connected)) {
@@ -1793,75 +1857,80 @@ export class Zero<
           ex,
         );
 
-        if (isAuthError(ex)) {
-          const now = Date.now();
-          const msSinceLastReauthAttempt =
-            lastReauthAttemptAt === undefined
-              ? Number.POSITIVE_INFINITY
-              : now - lastReauthAttemptAt;
-          needsReauth = true;
-          if (msSinceLastReauthAttempt > RUN_LOOP_INTERVAL_MS) {
-            // First auth error (or first in a while), try right away without waiting.
-            continue;
+        const transition = getErrorConnectionTransition(ex);
+
+        // We continue the loop because the error does not indicate
+        // a need to transition to a new state and we should continue retrying
+        if (transition.status === null) {
+          const backoffParams = getBackoffParams(transition.reason);
+          if (backoffParams) {
+            if (backoffParams.minBackoffMs !== undefined) {
+              backoffMs = Math.max(backoffMs, backoffParams.minBackoffMs);
+            }
+            if (backoffParams.maxBackoffMs !== undefined) {
+              backoffMs = Math.min(backoffMs, backoffParams.maxBackoffMs);
+            }
+            additionalConnectParams = backoffParams.reconnectParams;
           }
+
+          // Only authentication errors are retried immediately the first time they
+          // occur. All other errors wait a few seconds before retrying the first
+          // time. We specifically do not use a backoff for consecutive errors
+          // because it's a bad experience to wait many seconds for reconnection.
+          if (isAuthError(transition.reason)) {
+            const now = Date.now();
+            const msSinceLastReauthAttempt =
+              lastReauthAttemptAt === undefined
+                ? Number.POSITIVE_INFINITY
+                : now - lastReauthAttemptAt;
+            needsReauth = true;
+            if (msSinceLastReauthAttempt > RUN_LOOP_INTERVAL_MS) {
+              // First auth error (or first in a while), try right away without waiting.
+              continue;
+            }
+          }
+
+          this.#setOnline(false);
+
+          lc.debug?.(
+            'Sleeping',
+            backoffMs,
+            'ms before reconnecting due to error, state:',
+            this.#connectionManager.state,
+          );
+          await sleep(backoffMs);
+          continue;
         }
 
-        if (
-          isServerError(ex) ||
-          (isClientError(ex) &&
-            (ex.kind === ClientErrorKind.ConnectTimeout ||
-              ex.kind === ClientErrorKind.AbruptClose ||
-              ex.kind === ClientErrorKind.CleanClose))
-        ) {
-          gotError = true;
+        // Check for fatal errors that should transition to error state
+        if (transition.status === ConnectionStatus.Error) {
+          lc.error?.(
+            'Fatal error encountered, transitioning to error state',
+            transition.reason,
+          );
+          this.#setOnline(false);
+          this.#connectionManager.error(transition.reason);
+          // run loop will enter the error state case and await a state change
+          continue;
         }
 
-        const backoffError = isBackoffError(ex);
-        if (backoffError) {
-          if (backoffError.minBackoffMs !== undefined) {
-            backoffMs = Math.max(backoffMs, backoffError.minBackoffMs);
-          }
-          if (backoffError.maxBackoffMs !== undefined) {
-            backoffMs = Math.min(backoffMs, backoffError.maxBackoffMs);
-          }
-          additionalConnectParams = backoffError.reconnectParams;
+        if (transition.status === ConnectionStatus.Disconnected) {
+          this.#setOnline(false);
+          this.#connectionManager.disconnected(transition.reason);
+          // run loop will enter the disconnected state case
+          // and continue retrying
+          continue;
         }
-      }
 
-      // Only authentication errors are retried immediately the first time they
-      // occur. All other errors wait a few seconds before retrying the first
-      // time. We specifically do not use a backoff for consecutive errors
-      // because it's a bad experience to wait many seconds for reconnection.
+        if (transition.status === ConnectionStatus.Closed) {
+          this.#setOnline(false);
+          // run loop will terminate
+          continue;
+        }
 
-      if (gotError) {
-        this.#setOnline(false);
-        //
-        // let cfGetCheckSucceeded = false;
-        // const cfGetCheckURL = new URL(this.#server);
-        // cfGetCheckURL.pathname = '/api/canary/v0/get';
-        // cfGetCheckURL.searchParams.set('id', nanoid());
-        // const cfGetCheckController = new AbortController();
-        // fetch(cfGetCheckURL, {signal: cfGetCheckController.signal})
-        //   .then(_ => {
-        //     cfGetCheckSucceeded = true;
-        //   })
-        //   .catch(_ => {
-        //     cfGetCheckSucceeded = false;
-        //   });
-        lc.debug?.(
-          'Sleeping',
-          backoffMs,
-          'ms before reconnecting due to error, state:',
-          this.#connectionManager.state,
-        );
-        await sleep(backoffMs);
-        // cfGetCheckController.abort();
-        // if (!cfGetCheckSucceeded) {
-        //   lc.info?.(
-        //     'Canary request failed, resetting total time to connect start time.',
-        //   );
-        //   this.#totalToConnectStart = undefined;
-        // }
+        unreachable(transition);
+      } finally {
+        this.#rejectMessageError = undefined;
       }
     }
   }

@@ -13,10 +13,19 @@ export const InvalidConnectionRequestClientDeleted =
   'InvalidConnectionRequestClientDeleted';
 export const InvalidMessage = 'InvalidMessage';
 export const InvalidPush = 'InvalidPush';
+/**
+ * @deprecated MutationFailed is used for CRUD mutators.
+ */
 export const MutationFailed = 'MutationFailed';
+/**
+ * @deprecated MutationRateLimited is used for CRUD mutators.
+ */
 export const MutationRateLimited = 'MutationRateLimited';
 export const Rebalance = 'Rebalance';
 export const Rehome = 'Rehome';
+/**
+ * @deprecated Unauthorized is used for JWT validation errors.
+ */
 export const Unauthorized = 'Unauthorized';
 export const VersionNotSupported = 'VersionNotSupported';
 export const SchemaVersionNotSupported = 'SchemaVersionNotSupported';
@@ -34,10 +43,13 @@ export type InvalidConnectionRequestClientDeleted =
   typeof InvalidConnectionRequestClientDeleted;
 export type InvalidMessage = typeof InvalidMessage;
 export type InvalidPush = typeof InvalidPush;
+/** @deprecated */
 export type MutationFailed = typeof MutationFailed;
+/** @deprecated */
 export type MutationRateLimited = typeof MutationRateLimited;
 export type Rebalance = typeof Rebalance;
 export type Rehome = typeof Rehome;
+/** @deprecated */
 export type Unauthorized = typeof Unauthorized;
 export type VersionNotSupported = typeof VersionNotSupported;
 export type SchemaVersionNotSupported = typeof SchemaVersionNotSupported;

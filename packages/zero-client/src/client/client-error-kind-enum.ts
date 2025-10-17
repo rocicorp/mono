@@ -7,6 +7,7 @@ export const UnexpectedBaseCookie = 'UnexpectedBaseCookie';
 export const PingTimeout = 'PingTimeout';
 export const Hidden = 'Hidden';
 export const NoSocketOrigin = 'NoSocketOrigin';
+export const Internal = 'Internal';
 
 export type AbruptClose = typeof AbruptClose;
 export type CleanClose = typeof CleanClose;
@@ -17,3 +18,4 @@ export type UnexpectedBaseCookie = typeof UnexpectedBaseCookie;
 export type PingTimeout = typeof PingTimeout;
 export type Hidden = typeof Hidden;
 export type NoSocketOrigin = typeof NoSocketOrigin;
+export type Internal = typeof Internal;
