@@ -63,7 +63,7 @@ export class Take implements Operator {
     limit: number,
     partitionKey?: PartitionKey | undefined,
   ) {
-    assert(limit >= 0);
+    assert(limit >= 0, 'Limit must be non-negative');
     assertOrderingIncludesPK(
       input.getSchema().sort,
       input.getSchema().primaryKey,
@@ -143,16 +143,22 @@ export class Take implements Operator {
   }
 
   *#initialFetch(req: FetchRequest): Stream<Node> {
-    assert(req.start === undefined);
-    assert(!req.reverse);
-    assert(constraintMatchesPartitionKey(req.constraint, this.#partitionKey));
+    assert(req.start === undefined, 'Start should be undefined');
+    assert(!req.reverse, 'Reverse should be false');
+    assert(
+      constraintMatchesPartitionKey(req.constraint, this.#partitionKey),
+      'Constraint should match partition key',
+    );
 
     if (this.#limit === 0) {
       return;
     }
 
     const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
-    assert(this.#storage.get(takeStateKey) === undefined);
+    assert(
+      this.#storage.get(takeStateKey) === undefined,
+      'Take state should be undefined',
+    );
 
     let size = 0;
     let bound: Row | undefined;
@@ -192,8 +198,11 @@ export class Take implements Operator {
   }
 
   *cleanup(req: FetchRequest): Stream<Node> {
-    assert(req.start === undefined);
-    assert(constraintMatchesPartitionKey(req.constraint, this.#partitionKey));
+    assert(req.start === undefined, 'Start should be undefined');
+    assert(
+      constraintMatchesPartitionKey(req.constraint, this.#partitionKey),
+      'Constraint should match partition key',
+    );
     const takeStateKey = getTakeStateKey(this.#partitionKey, req.constraint);
     this.#storage.del(takeStateKey);
     let size = 0;
@@ -472,7 +481,7 @@ export class Take implements Operator {
         return;
       }
 
-      assert(newCmp > 0);
+      assert(newCmp > 0, 'New comparison must be greater than 0');
       // Find the first item at the old bounds. This will be the new bounds.
       const newBoundNode = must(
         first(
@@ -529,7 +538,7 @@ export class Take implements Operator {
       }
 
       // old was outside, new is inside. Pushing out the old bounds
-      assert(newCmp < 0);
+      assert(newCmp < 0, 'New comparison must be less than 0');
 
       const [oldBoundNode, newBoundNode] = take(
         this.#input.fetch({
@@ -581,7 +590,7 @@ export class Take implements Operator {
 
       // old was inside, new is larger than old bound
 
-      assert(newCmp > 0);
+      assert(newCmp > 0, 'New comparison must be greater than 0');
 
       // at this point we need to find the row after the bound and use that or
       // the newRow as the new bound.
