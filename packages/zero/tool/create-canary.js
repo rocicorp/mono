@@ -156,16 +156,20 @@ try {
   }
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
-  // In order to be able to check out the release branch we have to do a full
-  // clone. Only do the deep clone in this case though since in the common case
-  // we can do releases way faster with a shallow clone.
-  const shallow = buildBranch === 'main' ? '--depth 1' : '';
-  execute(`git clone ${shallow} git@github.com:rocicorp/mono.git ${tempDir}`);
+  // Find the git root directory
+  const gitRoot = execute('git rev-parse --show-toplevel', {stdio: 'pipe'});
+
+  // Copy the working directory to temp dir (faster than cloning)
+  console.log(`Copying repo from ${gitRoot} to ${tempDir}...`);
+  execute(
+    `rsync -a --info=progress2 --exclude=node_modules --exclude=.turbo ${gitRoot}/ ${tempDir}/`,
+  );
   process.chdir(tempDir);
 
-  if (buildBranch !== 'main') {
-    execute(`git checkout origin/${buildBranch}`);
-  }
+  // Discard any local changes and sync to the correct branch
+  execute('git reset --hard');
+  execute('git fetch origin');
+  execute(`git checkout origin/${buildBranch}`);
 
   //installs turbo and other build dependencies
   execute('npm install');
