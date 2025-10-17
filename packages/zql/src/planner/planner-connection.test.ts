@@ -37,7 +37,7 @@ suite('PlannerConnection', () => {
 
     connection.propagateConstraints(
       [0],
-      {userId: undefined, postId: undefined},
+      {fields: {userId: undefined, postId: undefined}, isSemiJoin: false},
       unpinned,
     );
 

@@ -30,15 +30,16 @@ export const DEFAULT_SORT: Ordering = [['id', 'asc']];
  * Common constraints used in tests.
  */
 export const CONSTRAINTS = {
-  userId: {userId: undefined} as PlannerConstraint,
-  id: {id: undefined} as PlannerConstraint,
-  postId: {postId: undefined} as PlannerConstraint,
-  name: {name: undefined} as PlannerConstraint,
+  userId: {fields: {userId: undefined}, isSemiJoin: false} as PlannerConstraint,
+  id: {fields: {id: undefined}, isSemiJoin: false} as PlannerConstraint,
+  postId: {fields: {postId: undefined}, isSemiJoin: false} as PlannerConstraint,
+  name: {fields: {name: undefined}, isSemiJoin: false} as PlannerConstraint,
 } as const;
 
 /**
  * Simple cost model for testing.
- * Base cost of 100, reduced by 10 per constraint.
+ * Base cost of 100, reduced by 10 per constraint field.
+ * Applies 10x discount for semi-joins (early termination).
  * Ignores sort and filters for simplicity.
  */
 export const simpleCostModel: ConnectionCostModel = (
@@ -47,8 +48,10 @@ export const simpleCostModel: ConnectionCostModel = (
   _filters: Condition | undefined,
   constraint: PlannerConstraint | undefined,
 ): number => {
-  const constraintCount = constraint ? Object.keys(constraint).length : 0;
-  return Math.max(1, 100 - constraintCount * 10);
+  const constraintCount = constraint ? Object.keys(constraint.fields).length : 0;
+  const baseCost = Math.max(1, 100 - constraintCount * 10);
+  // Apply 10x discount for semi-joins
+  return constraint?.isSemiJoin ? baseCost / 10 : baseCost;
 };
 
 /**

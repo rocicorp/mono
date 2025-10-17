@@ -130,9 +130,9 @@ export class PlannerConnection {
     if (this.#constraints.has(key)) {
       const existing = this.#constraints.get(key);
 
-      // Determine which constraint is better
-      const existingKeys = existing ? Object.keys(existing).length : 0;
-      const newKeys = c ? Object.keys(c).length : 0;
+      // Determine which constraint is better (more fields = more selective)
+      const existingKeys = existing ? Object.keys(existing.fields).length : 0;
+      const newKeys = c ? Object.keys(c.fields).length : 0;
 
       // Keep the more constrained one (more keys = more selective = cheaper)
       // If new is not better, keep existing and just update pinned status

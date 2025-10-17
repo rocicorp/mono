@@ -300,6 +300,9 @@ function hasCorrelatedSubquery(condition: Condition): boolean {
 /**
  * Extract constraint from correlation fields.
  * Creates a mapping from field names to their types (simplified for now).
+ *
+ * Note: isSemiJoin is set to false here. It will be set to true during
+ * constraint propagation when a semi join sends constraints to its child.
  */
 function extractConstraint(
   fields: readonly string[],
@@ -307,11 +310,14 @@ function extractConstraint(
 ): PlannerConstraint {
   // For now, create a simple constraint with unknown types
   // In a full implementation, this would look up actual column types
-  const constraint: PlannerConstraint = {};
+  const fieldMap: Record<string, undefined> = {};
   for (const field of fields) {
-    constraint[field] = undefined;
+    fieldMap[field] = undefined;
   }
-  return constraint;
+  return {
+    fields: fieldMap,
+    isSemiJoin: false,
+  };
 }
 
 /**

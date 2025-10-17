@@ -10,45 +10,57 @@ suite('mergeConstraints', () => {
   });
 
   test('first undefined returns second', () => {
-    const second: PlannerConstraint = {a: undefined};
-    expect(mergeConstraints(undefined, second)).toEqual({a: undefined});
+    const second: PlannerConstraint = {fields: {a: undefined}, isSemiJoin: false};
+    expect(mergeConstraints(undefined, second)).toEqual({fields: {a: undefined}, isSemiJoin: false});
   });
 
   test('second undefined returns first', () => {
-    const first: PlannerConstraint = {a: undefined};
-    expect(mergeConstraints(first, undefined)).toEqual({a: undefined});
+    const first: PlannerConstraint = {fields: {a: undefined}, isSemiJoin: false};
+    expect(mergeConstraints(first, undefined)).toEqual({fields: {a: undefined}, isSemiJoin: false});
   });
 
   test('merges non-overlapping constraints', () => {
-    const first: PlannerConstraint = {a: undefined};
-    const second: PlannerConstraint = {b: undefined};
+    const first: PlannerConstraint = {fields: {a: undefined}, isSemiJoin: false};
+    const second: PlannerConstraint = {fields: {b: undefined}, isSemiJoin: false};
     expect(mergeConstraints(first, second)).toEqual({
-      a: undefined,
-      b: undefined,
+      fields: {
+        a: undefined,
+        b: undefined,
+      },
+      isSemiJoin: false,
     });
   });
 
   test('second constraint overwrites first for same key', () => {
-    const first: PlannerConstraint = {a: undefined};
-    const second: PlannerConstraint = {a: undefined};
-    expect(mergeConstraints(first, second)).toEqual({a: undefined});
+    const first: PlannerConstraint = {fields: {a: undefined}, isSemiJoin: false};
+    const second: PlannerConstraint = {fields: {a: undefined}, isSemiJoin: false};
+    expect(mergeConstraints(first, second)).toEqual({fields: {a: undefined}, isSemiJoin: false});
   });
 
   test('complex merge with overlap', () => {
     const first: PlannerConstraint = {
-      a: undefined,
-      b: undefined,
-      c: undefined,
+      fields: {
+        a: undefined,
+        b: undefined,
+        c: undefined,
+      },
+      isSemiJoin: false,
     };
     const second: PlannerConstraint = {
-      b: undefined,
-      d: undefined,
+      fields: {
+        b: undefined,
+        d: undefined,
+      },
+      isSemiJoin: true, // Test that isSemiJoin is preserved from either constraint
     };
     expect(mergeConstraints(first, second)).toEqual({
-      a: undefined,
-      b: undefined, // overwritten
-      c: undefined,
-      d: undefined,
+      fields: {
+        a: undefined,
+        b: undefined, // overwritten
+        c: undefined,
+        d: undefined,
+      },
+      isSemiJoin: true, // Should be true if either has it
     });
   });
 });

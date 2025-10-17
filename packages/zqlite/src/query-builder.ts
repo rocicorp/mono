@@ -11,6 +11,7 @@ import type {
 } from '../../zero-schema/src/table-schema.ts';
 import {sql} from './internal/sql.ts';
 import type {Constraint} from '../../zql/src/ivm/constraint.ts';
+import type {PlannerConstraint} from '../../zql/src/planner/planner-constraint.ts';
 import type {Start} from '../../zql/src/ivm/operator.ts';
 
 /**
@@ -25,7 +26,7 @@ export type NoSubqueryCondition = Exclude<
 export function buildSelectQuery(
   tableName: string,
   columns: Record<string, SchemaValue>,
-  constraint: Constraint | undefined,
+  constraint: Constraint | PlannerConstraint | undefined,
   filters: NoSubqueryCondition | undefined,
   order: Ordering,
   reverse: boolean | undefined,
@@ -52,16 +53,27 @@ export function buildSelectQuery(
   return sql`${query} ${orderByToSQL(order, !!reverse)}`;
 }
 
+function isPlannerConstraint(
+  c: Constraint | PlannerConstraint,
+): c is PlannerConstraint {
+  return 'fields' in c;
+}
+
 export function constraintsToSQL(
-  constraint: Constraint | undefined,
+  constraint: Constraint | PlannerConstraint | undefined,
   columns: Record<string, SchemaValue>,
 ) {
   if (!constraint) {
     return [];
   }
 
+  // Handle PlannerConstraint (has fields property) vs IVM Constraint (flat record)
+  const fields = isPlannerConstraint(constraint)
+    ? constraint.fields
+    : constraint;
+
   const constraints: SQLQuery[] = [];
-  for (const [key, value] of Object.entries(constraint)) {
+  for (const [key, value] of Object.entries(fields)) {
     constraints.push(
       sql`${sql.ident(key)} = ${toSQLiteType(value, columns[key].type)}`,
     );

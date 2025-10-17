@@ -18,7 +18,7 @@ import type {
  */
 type PlanState = {
   connections: Array<{pinned: boolean}>;
-  joins: Array<{type: 'left' | 'flipped'; pinned: boolean}>;
+  joins: Array<{type: 'semi' | 'flipped'; pinned: boolean}>;
   fanOuts: Array<{type: 'FO' | 'UFO'}>;
   fanIns: Array<{type: 'FI' | 'UFI'}>;
   connectionConstraints: Array<Map<string, PlannerConstraint | undefined>>;
@@ -549,8 +549,8 @@ function traverseAndPin(
       const typeBefore = node.type;
       node.flipIfNeeded(from);
       node.pin();
-      // If type changed from 'left' to 'flipped', this join was flipped
-      if (typeBefore === 'left' && node.type === 'flipped') {
+      // If type changed from 'semi' to 'flipped', this join was flipped
+      if (typeBefore === 'semi' && node.type === 'flipped') {
         flippedJoins.push(node);
       }
       traverseAndPin(node, node.output, flippedJoins);

@@ -11,18 +11,19 @@ import type {PlannerNode} from './planner-node.ts';
  * # Dual-State Pattern
  * Like all planner nodes, PlannerJoin separates:
  * 1. IMMUTABLE STRUCTURE: Parent/child nodes, constraints, flippability
- * 2. MUTABLE STATE: Join type (left/flipped), pinned status
+ * 2. MUTABLE STATE: Join type (semi/flipped), pinned status
  *
  * # Join Flipping
  * A join can be in two states:
- * - 'left': Parent is outer loop, child is inner
- * - 'flipped': Child is outer loop, parent is inner
+ * - 'semi': Parent is outer loop, child is inner (semi-join with early termination)
+ * - 'flipped': Child is outer loop, parent is inner (will be semi-join after LIMIT 1)
  *
+ * Both are semi-joins (EXISTS), but only 'semi' currently implements early termination.
  * Flipping is the key optimization: choosing which table scans first.
  * NOT EXISTS joins cannot be flipped (#flippable = false).
  *
  * # Constraint Propagation
- * - Left join: Sends childConstraint to child, forwards received constraints to parent
+ * - Semi join: Sends childConstraint to child (marked as semi-join), forwards received to parent
  * - Flipped join: Sends undefined to child, merges parentConstraint with received to parent
  * - Unpinned join: Only forwards constraints to parent (doesn't constrain child yet)
  *
@@ -31,7 +32,7 @@ import type {PlannerNode} from './planner-node.ts';
  * 2. Wire to output node during graph construction
  * 3. Planning calls flipIfNeeded() based on connection selection order
  * 4. pin() locks the join type once chosen
- * 5. reset() clears mutable state (type → 'left', pinned → false)
+ * 5. reset() clears mutable state (type → 'semi', pinned → false)
  */
 export class PlannerJoin {
   readonly kind = 'join' as const;
@@ -50,7 +51,7 @@ export class PlannerJoin {
   // ========================================================================
   // MUTABLE PLANNING STATE (changes during plan search)
   // ========================================================================
-  #type: 'left' | 'flipped';
+  #type: 'semi' | 'flipped';
   #pinned: boolean;
 
   constructor(
@@ -61,7 +62,7 @@ export class PlannerJoin {
     flippable: boolean,
     planId: number,
   ) {
-    this.#type = 'left';
+    this.#type = 'semi';
     this.#pinned = false;
     this.#parent = parent;
     this.#child = child;
@@ -93,7 +94,7 @@ export class PlannerJoin {
   }
 
   flip(): void {
-    assert(this.#type === 'left', 'Can only flip a left join');
+    assert(this.#type === 'semi', 'Can only flip a semi join');
     assert(this.#pinned === false, 'Cannot flip a pinned join');
     if (!this.#flippable) {
       throw new UnflippableJoinError(
@@ -103,7 +104,7 @@ export class PlannerJoin {
     this.#type = 'flipped';
   }
 
-  get type(): 'left' | 'flipped' {
+  get type(): 'semi' | 'flipped' {
     return this.#type;
   }
 
@@ -128,15 +129,20 @@ export class PlannerJoin {
       );
     }
 
-    if (this.#pinned && this.#type === 'left') {
-      // A left join always has constraints for its child.
-      // They are defined by the correlated between parent and child.
+    if (this.#pinned && this.#type === 'semi') {
+      // A semi join always has constraints for its child.
+      // They are defined by the correlation between parent and child.
+      // Mark the constraint as a semi-join to signal early termination opportunity.
+      const semiJoinConstraint: PlannerConstraint = {
+        ...this.#childConstraint,
+        isSemiJoin: true,
+      };
       this.#child.propagateConstraints(
         branchPattern,
-        this.#childConstraint,
+        semiJoinConstraint,
         this,
       );
-      // A left join forwards constraints to its parent.
+      // A semi join forwards constraints to its parent.
       this.#parent.propagateConstraints(branchPattern, constraint, this);
     }
     if (this.#pinned && this.#type === 'flipped') {
@@ -153,7 +159,7 @@ export class PlannerJoin {
         this,
       );
     }
-    if (!this.#pinned && this.#type === 'left') {
+    if (!this.#pinned && this.#type === 'semi') {
       // If a join is not pinned, it cannot contribute constraints to its child.
       // Contributing constraints to its child would reduce the child's cost too early
       // causing the child to be picked by the planning algorithm before the parent
@@ -168,7 +174,7 @@ export class PlannerJoin {
   }
 
   reset(): void {
-    this.#type = 'left';
+    this.#type = 'semi';
     this.#pinned = false;
   }
 

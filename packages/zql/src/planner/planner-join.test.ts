@@ -9,11 +9,11 @@ const pinned = {
 } as PlannerNode;
 
 suite('PlannerJoin', () => {
-  test('initial state is left join, unpinned', () => {
+  test('initial state is semi join, unpinned', () => {
     const {join} = createJoin();
 
     expect(join.kind).toBe('join');
-    expect(join.type).toBe('left');
+    expect(join.type).toBe('semi');
     expect(join.pinned).toBe(false);
   });
 
@@ -48,7 +48,7 @@ suite('PlannerJoin', () => {
     const {join} = createJoin();
 
     join.flip();
-    expect(() => join.flip()).toThrow('Can only flip a left join');
+    expect(() => join.flip()).toThrow('Can only flip a semi join');
   });
 
   test('maybeFlip() flips when input is child', () => {
@@ -62,7 +62,7 @@ suite('PlannerJoin', () => {
     const {parent, join} = createJoin();
 
     join.flipIfNeeded(parent);
-    expect(join.type).toBe('left');
+    expect(join.type).toBe('semi');
   });
 
   test('reset() clears pinned and flipped state', () => {
@@ -74,17 +74,19 @@ suite('PlannerJoin', () => {
     expect(join.pinned).toBe(true);
 
     join.reset();
-    expect(join.type).toBe('left');
+    expect(join.type).toBe('semi');
     expect(join.pinned).toBe(false);
   });
 
-  test('propagateConstraints() on pinned left join sends constraints to child', () => {
+  test('propagateConstraints() on pinned semi join sends constraints to child', () => {
     const {child, join} = createJoin();
 
     join.pin();
     join.propagateConstraints([0], undefined, pinned);
 
-    expect(child.estimateCost()).toBe(expectedCost(1));
+    // Semi join applies constraint with isSemiJoin flag, so cost is reduced by 10x
+    // expectedCost(1) = 90, then / 10 for semi-join = 9
+    expect(child.estimateCost()).toBe(9);
   });
 
   test('propagateConstraints() on pinned flipped join sends undefined to child', () => {
@@ -106,7 +108,7 @@ suite('PlannerJoin', () => {
     join.flip();
     join.pin();
 
-    const outputConstraint: PlannerConstraint = {name: undefined};
+    const outputConstraint: PlannerConstraint = {fields: {name: undefined}, isSemiJoin: false};
     join.propagateConstraints([0], outputConstraint, pinned);
 
     expect(parent.estimateCost()).toBe(expectedCost(2));

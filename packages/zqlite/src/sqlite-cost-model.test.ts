@@ -68,7 +68,7 @@ describe('SQLite cost model', () => {
       'foo',
       [['a', 'asc']],
       undefined,
-      {a: undefined},
+      {fields: {a: undefined}, isSemiJoin: false},
     );
     expect(pkLookupCostViaConstraint).toBe(1);
   });
