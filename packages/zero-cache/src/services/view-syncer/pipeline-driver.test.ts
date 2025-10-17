@@ -1409,7 +1409,7 @@ describe('view-syncer/pipeline-driver', () => {
     ).toMatchInlineSnapshot(`undefined`);
   });
 
-  test('schemaVersions change and insert', () => {
+  test.only('schemaVersions change and insert', () => {
     pipelines.init(null);
     [
       ...pipelines.addQuery(

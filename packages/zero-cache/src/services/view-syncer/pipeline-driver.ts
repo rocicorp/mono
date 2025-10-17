@@ -460,41 +460,80 @@ export class PipelineDriver {
     onChange: (pos: number) => void,
   ): Iterable<RowChange> {
     let pos = 0;
-    for (const {table, prevValue, nextValue, rowKey} of diff) {
+    const removedConflicts: Set<string> = new Set();
+    for (const {table, prevValue, nextValue} of diff) {
       const start = performance.now();
       let type;
       try {
-        if (prevValue && nextValue) {
-          // Rows are ultimately referred to by the union key (in #streamNodes())
-          // so an update is represented as an `edit` if and only if the
-          // unionKey-based row keys are the same in prevValue and nextValue.
-          const {unionKey} = must(this.#tableSpecs.get(table)).tableSpec;
-          if (
-            Object.keys(rowKey).length === unionKey.length ||
-            deepEqual(
-              getRowKey(unionKey, prevValue as Row) as JSONValue,
-              getRowKey(unionKey, nextValue as Row) as JSONValue,
-            )
-          ) {
-            type = 'edit';
-            yield* this.#push(table, {
-              type: 'edit',
-              row: nextValue as Row,
-              oldRow: prevValue as Row,
-            });
-            continue;
-          }
-          // If the unionKey-based row keys differed, they will be
-          // represented as a remove of the old key and an add of the new key.
-        }
-        if (prevValue) {
-          type = 'remove';
-          yield* this.#push(table, {type: 'remove', row: prevValue as Row});
-        }
+        const tableSpec = mustGetTableSpec(this.#tableSpecs, table).tableSpec;
+        const tableSource = must(
+          this.#tables.get(table),
+          `missing table source ${table}`,
+        );
+        let existing: [RowKey, Row] | undefined = undefined;
         if (nextValue) {
-          type = 'add';
-          yield* this.#push(table, {type: 'add', row: nextValue as Row});
+          const conflicts = tableSource.getUniqueConflicts(nextValue as Row);
+          for (const conflict of conflicts) {
+            const conflictPrimaryKey = getRowKey(
+              tableSpec.primaryKey,
+              conflict as Row,
+            );
+            if (
+              deepEqual(
+                conflictPrimaryKey as JSONValue,
+                getRowKey(tableSpec.primaryKey, nextValue as Row) as JSONValue,
+              )
+            ) {
+              existing = [conflictPrimaryKey, conflict];
+            } else {
+              yield* this.#push(tableSource, {
+                type: 'remove',
+                row: conflict,
+              });
+              removedConflicts.add(JSON.stringify(conflictPrimaryKey));
+            }
+          }
         }
+        console.log(removedConflicts);
+        let nextValueProcessed = false;
+        let prevValueProcessed = false;
+        if (existing) {
+          const [existingPrimaryKey, existingRow] = existing;
+          type = 'edit';
+          yield* this.#push(tableSource, {
+            type: 'edit',
+            row: nextValue as Row,
+            oldRow: existingRow,
+          });
+          nextValueProcessed = true;
+
+          prevValueProcessed = deepEqual(
+            existingPrimaryKey as JSONValue,
+            getRowKey(tableSpec.primaryKey, prevValue as Row) as JSONValue,
+          );
+        }
+        if (prevValue && !prevValueProcessed) {
+          type = 'remove';
+          const wasPreviouslyRemovedDueToConflict = removedConflicts.delete(
+            JSON.stringify(getRowKey(tableSpec.primaryKey, prevValue as Row)),
+          );
+          if (!wasPreviouslyRemovedDueToConflict) {
+            yield* this.#push(tableSource, {
+              type: 'remove',
+              row: prevValue as Row,
+            });
+          } else {
+            console.log('wasPreviouslyRemovedDueToConflict', prevValue);
+          }
+          prevValueProcessed = true;
+        }
+        if (nextValue && !nextValueProcessed) {
+          type = 'add';
+          yield* this.#push(tableSource, {type: 'add', row: nextValue as Row});
+          nextValueProcessed = true;
+        }
+        assert(nextValueProcessed || !nextValue);
+        assert(prevValueProcessed || !prevValue);
       } finally {
         onChange(++pos);
       }
@@ -505,6 +544,8 @@ export class PipelineDriver {
         type,
       });
     }
+
+    assert(removedConflicts.size === 0);
 
     // Set the new snapshot on all TableSources.
     const {curr} = diff;
@@ -543,12 +584,7 @@ export class PipelineDriver {
     return this.#storage.createStorage();
   }
 
-  *#push(table: string, change: SourceChange): Iterable<RowChange> {
-    const source = this.#tables.get(table);
-    if (!source) {
-      return;
-    }
-
+  *#push(source: TableSource, change: SourceChange): Iterable<RowChange> {
     this.#startAccumulating();
     for (const _ of source.genPush(change)) {
       yield* this.#stopAccumulating().stream();
