@@ -13,13 +13,12 @@ import type {
 } from '../../../zql/src/mutate/custom.ts';
 import {ZQLDatabase} from '../zql-database.ts';
 
+export type {ZQLDatabase};
+
 export type DrizzleDatabase<
   TQueryResult extends PgQueryResultHKT = PgQueryResultHKT,
   TSchema extends Record<string, unknown> = Record<string, unknown>,
-  TClient = unknown,
-> = PgDatabase<TQueryResult, TSchema> & {
-  $client: TClient;
-};
+> = PgDatabase<TQueryResult, TSchema>;
 
 /**
  * Helper type for the wrapped transaction used by drizzle-orm.
