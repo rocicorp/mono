@@ -36,9 +36,6 @@ import type {PlannerNode} from './planner-node.ts';
 export class PlannerJoin {
   readonly kind = 'join' as const;
 
-  // ========================================================================
-  // IMMUTABLE STRUCTURE (set during construction, never changes)
-  // ========================================================================
   readonly #parent: PlannerNode;
   readonly #child: PlannerNode;
   readonly #parentConstraint: PlannerConstraint;
@@ -47,9 +44,7 @@ export class PlannerJoin {
   readonly planId: number;
   #output?: PlannerNode | undefined; // Set once during graph construction
 
-  // ========================================================================
-  // MUTABLE PLANNING STATE (changes during plan search)
-  // ========================================================================
+  // Reset between planning attempts
   #type: 'left' | 'flipped';
   #pinned: boolean;
 
