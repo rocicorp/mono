@@ -38,7 +38,7 @@ test('poke', async () => {
   const text = 'yo';
 
   await setTodo({id, text});
-  expect(await rep.query(tx => tx.has(key))).true;
+  expect(await rep.query(tx => tx.has(key))).toBe(true);
 
   // cookie *does* apply
   const poke: Poke = {
@@ -47,7 +47,7 @@ test('poke', async () => {
   };
 
   await rep.poke(poke);
-  expect(await rep.query(tx => tx.has(key))).false;
+  expect(await rep.query(tx => tx.has(key))).toBe(false);
 
   // cookie does not apply
   await setTodo({id, text});
@@ -62,7 +62,7 @@ test('poke', async () => {
     error = String(e);
   }
   expect(error).contains('unexpected base cookie for poke');
-  expect(await rep.query(tx => tx.has(key))).true;
+  expect(await rep.query(tx => tx.has(key))).toBe(true);
 
   // cookie applies, but lmid goes backward - should be an error.
   await setTodo({id, text});
@@ -143,7 +143,7 @@ test('overlapped pokes not supported', async () => {
   }
   expect(error).contains('unexpected base cookie for poke');
 
-  expect(await rep.query(tx => tx.get('a'))).equal(1);
+  expect(await rep.query(tx => tx.get('a'))).toBe(1);
 });
 
 test('Client group unknown on server', async () => {
@@ -152,7 +152,7 @@ test('Client group unknown on server', async () => {
     onClientStateNotFound,
   });
 
-  expect(rep.isClientGroupDisabled).false;
+  expect(rep.isClientGroupDisabled).toBe(false);
 
   const poke: Poke = {
     baseCookie: 123,
@@ -167,9 +167,9 @@ test('Client group unknown on server', async () => {
     err = e;
   }
 
-  expect(err).undefined;
+  expect(err).toBeUndefined();
   expect(onClientStateNotFound).toHaveBeenCalledOnce();
-  expect(rep.isClientGroupDisabled).true;
+  expect(rep.isClientGroupDisabled).toBe(true);
 });
 
 test('Version not supported on server', async () => {

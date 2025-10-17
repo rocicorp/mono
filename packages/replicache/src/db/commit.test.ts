@@ -532,10 +532,10 @@ test('getMutationID across commits with different clients', async () => {
 
 test('chunkIndexDefinitionEqualIgnoreName', () => {
   const t = (a: ChunkIndexDefinition, b = a) => {
-    expect(chunkIndexDefinitionEqualIgnoreName(a, b)).true;
+    expect(chunkIndexDefinitionEqualIgnoreName(a, b)).toBe(true);
   };
   const f = (a: ChunkIndexDefinition, b = a) => {
-    expect(chunkIndexDefinitionEqualIgnoreName(a, b)).false;
+    expect(chunkIndexDefinitionEqualIgnoreName(a, b)).toBe(false);
   };
 
   t({name: 'a', jsonPointer: '/a', keyPrefix: ''});

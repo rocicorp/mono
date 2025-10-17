@@ -676,7 +676,7 @@ describe('initClientV6', () => {
         );
         expect(clientID).toBeInstanceOf('string');
         assertClientV6(client);
-        expect(newClientGroup).true;
+        expect(newClientGroup).toBe(true);
         expect(clientMap.size).toBe(1);
         expect(clientMap.get(clientID)).toBe(client);
         expect(client.persistHash).toBeNull();
@@ -735,7 +735,7 @@ describe('initClientV6', () => {
             enableClientGroupForking,
           );
         expect(clientID2).not.toBe(clientID1);
-        expect(newClientGroup).false;
+        expect(newClientGroup).toBe(false);
         expect(clientMap.size).toBe(2);
         expect(client2).toEqual({
           clientGroupID,

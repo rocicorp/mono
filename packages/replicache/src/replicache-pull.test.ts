@@ -347,14 +347,14 @@ test('Client Group not found on server', async () => {
     },
   });
 
-  expect(rep.isClientGroupDisabled).false;
+  expect(rep.isClientGroupDisabled).toBe(false);
 
   rep.puller = puller;
   rep.pullIgnorePromise();
 
   await waitForSync(rep);
 
-  expect(rep.isClientGroupDisabled).true;
+  expect(rep.isClientGroupDisabled).toBe(true);
   expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
 });
 

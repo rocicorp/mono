@@ -106,14 +106,14 @@ test('isDeepFrozen', () => {
 
 test('deepFreeze with undefined throws', () => {
   // @ts-expect-error undefined is not allowed
-  expect(() => deepFreeze(undefined)).throw(TypeError);
+  expect(() => deepFreeze(undefined)).toThrow(TypeError);
 
   // @ts-expect-error undefined is not allowed
-  expect(() => deepFreeze([undefined])).throw(TypeError);
+  expect(() => deepFreeze([undefined])).toThrow(TypeError);
 
   // @ts-expect-error undefined is not allowed
   // oxlint-disable-next-line no-sparse-arrays
-  expect(() => deepFreeze([1, , 2])).throw(TypeError);
+  expect(() => deepFreeze([1, , 2])).toThrow(TypeError);
 });
 
 test('deepFreezeAllowUndefined', () => {
@@ -122,9 +122,9 @@ test('deepFreezeAllowUndefined', () => {
   // Holes/undefined array elements are still not allowed.
 
   // @ts-expect-error undefined is not allowed
-  expect(() => deepFreezeAllowUndefined([undefined])).throw(TypeError);
+  expect(() => deepFreezeAllowUndefined([undefined])).toThrow(TypeError);
 
   // @ts-expect-error undefined is not allowed
   // oxlint-disable-next-line no-sparse-arrays
-  expect(() => deepFreezeAllowUndefined([1, , 2])).throw(TypeError);
+  expect(() => deepFreezeAllowUndefined([1, , 2])).toThrow(TypeError);
 });

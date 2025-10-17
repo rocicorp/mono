@@ -18,7 +18,7 @@ test('Creating multiple with same name shares data', async () => {
 
   const store2 = new MemStore('test');
   await withRead(store2, async rt => {
-    expect(await rt.get('foo')).equal('bar');
+    expect(await rt.get('foo')).toBe('bar');
   });
 });
 
@@ -30,7 +30,7 @@ test('Creating multiple with different name gets unique data', async () => {
 
   const store2 = new MemStore('test2');
   await withRead(store2, async rt => {
-    expect(await rt.get('foo')).equal(undefined);
+    expect(await rt.get('foo')).toBe(undefined);
   });
 });
 
@@ -44,20 +44,20 @@ test('Multiple reads at the same time', async () => {
 
   let readCounter = 0;
   const p1 = withRead(store, async rt => {
-    expect(await rt.get('foo')).equal('bar');
+    expect(await rt.get('foo')).toBe('bar');
     await promise;
-    expect(readCounter).equal(1);
+    expect(readCounter).toBe(1);
     readCounter++;
   });
   const p2 = withRead(store, async rt => {
-    expect(readCounter).equal(0);
+    expect(readCounter).toBe(0);
     readCounter++;
-    expect(await rt.get('foo')).equal('bar');
+    expect(await rt.get('foo')).toBe('bar');
     resolve();
   });
-  expect(readCounter).equal(0);
+  expect(readCounter).toBe(0);
   await Promise.all([p1, p2]);
-  expect(readCounter).equal(2);
+  expect(readCounter).toBe(2);
 });
 
 test('Single write at a time', async () => {
@@ -72,14 +72,14 @@ test('Single write at a time', async () => {
   let writeCounter = 0;
   const p1 = withWrite(store, async wt => {
     await promise1;
-    expect(await wt.get('foo')).equal('bar');
-    expect(writeCounter).equal(0);
+    expect(await wt.get('foo')).toBe('bar');
+    expect(writeCounter).toBe(0);
     writeCounter++;
   });
   const p2 = withWrite(store, async wt => {
     await promise2;
-    expect(writeCounter).equal(1);
-    expect(await wt.get('foo')).equal('bar');
+    expect(writeCounter).toBe(1);
+    expect(await wt.get('foo')).toBe('bar');
     writeCounter++;
   });
 
@@ -88,5 +88,5 @@ test('Single write at a time', async () => {
   resolve1();
 
   await Promise.all([p1, p2]);
-  expect(writeCounter).equal(2);
+  expect(writeCounter).toBe(2);
 });

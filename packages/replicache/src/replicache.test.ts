@@ -2016,7 +2016,7 @@ test('mutate args in mutation throws due to frozen', async () => {
   await vi.advanceTimersByTimeAsync(1000);
 
   const o = findPropertyValue(store.map(), 'mutatorName', 'mutArgs');
-  expect(o).undefined;
+  expect(o).toBeUndefined();
 });
 
 test('client ID is set correctly on transactions', async () => {
@@ -2171,7 +2171,7 @@ describe('check for client not found in visibilitychange', () => {
 
       if (shouldBeCalled) {
         await onClientStateNotFound.resolver.promise;
-        expect(onClientStateNotFound.called).true;
+        expect(onClientStateNotFound.called).toBe(true);
         expectLogContext(
           consoleErrorStub,
           0,
@@ -2179,7 +2179,7 @@ describe('check for client not found in visibilitychange', () => {
           `Client state not found on client, clientID: ${clientID}`,
         );
       } else {
-        expect(onClientStateNotFound.called).false;
+        expect(onClientStateNotFound.called).toBe(false);
       }
 
       await rep.close();
@@ -2204,25 +2204,25 @@ test('disableClientGroup', async () => {
   );
   const clientGroupID = await rep.clientGroupID;
 
-  expect(rep.isClientGroupDisabled).false;
+  expect(rep.isClientGroupDisabled).toBe(false);
   expect(
     (
       await withRead(rep.perdag, dagRead =>
         getClientGroup(clientGroupID, dagRead),
       )
     )?.disabled,
-  ).false;
+  ).toBe(false);
 
   await rep.impl.disableClientGroup();
 
-  expect(rep.isClientGroupDisabled).true;
+  expect(rep.isClientGroupDisabled).toBe(true);
   expect(
     (
       await withRead(rep.perdag, dagRead =>
         getClientGroup(clientGroupID, dagRead),
       )
     )?.disabled,
-  ).true;
+  ).toBe(true);
 });
 
 test('scan in write transaction', async () => {

@@ -872,12 +872,12 @@ test('getClientGroup', async () => {
 
 test('mutatorNamesEqual', () => {
   const t = (a: string[], b: string[] = a) => {
-    expect(mutatorNamesEqual(new Set(a), b)).true;
-    expect(mutatorNamesEqual(new Set(b), a)).true;
+    expect(mutatorNamesEqual(new Set(a), b)).toBe(true);
+    expect(mutatorNamesEqual(new Set(b), a)).toBe(true);
   };
   const f = (a: string[], b: string[] = a) => {
-    expect(mutatorNamesEqual(new Set(a), b)).false;
-    expect(mutatorNamesEqual(new Set(b), a)).false;
+    expect(mutatorNamesEqual(new Set(a), b)).toBe(false);
+    expect(mutatorNamesEqual(new Set(b), a)).toBe(false);
   };
 
   t([]);
@@ -968,13 +968,13 @@ test('Disable Client Group', async () => {
 
   async function testDisabledState(tx: Read) {
     const readClientGroup1 = await getClientGroup('client-group-1', tx);
-    expect(readClientGroup1?.disabled).true;
+    expect(readClientGroup1?.disabled).toBe(true);
     const readClientGroup2 = await getClientGroup('client-group-2', tx);
-    expect(readClientGroup2?.disabled).false;
+    expect(readClientGroup2?.disabled).toBe(false);
 
     const readClientGroupMap = await getClientGroups(tx);
-    expect(readClientGroupMap.get('client-group-1')?.disabled).true;
-    expect(readClientGroupMap.get('client-group-2')?.disabled).false;
+    expect(readClientGroupMap.get('client-group-1')?.disabled).toBe(true);
+    expect(readClientGroupMap.get('client-group-2')?.disabled).toBe(false);
   }
 
   await withWriteNoImplicitCommit(dagStore, async (write: Write) => {

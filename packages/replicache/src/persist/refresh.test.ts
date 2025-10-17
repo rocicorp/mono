@@ -327,7 +327,7 @@ describe('refresh', () => {
       formatVersion,
       undefined,
     );
-    expect(result).undefined;
+    expect(result).toBeUndefined();
     await assertRefreshHashes(perdag, clientID, client.refreshHashes);
   });
 
@@ -358,7 +358,7 @@ describe('refresh', () => {
       formatVersion,
       undefined,
     );
-    expect(result).undefined;
+    expect(result).toBeUndefined();
     await assertRefreshHashes(perdag, clientID, client.refreshHashes);
   });
 
@@ -520,7 +520,7 @@ describe('refresh', () => {
       formatVersion,
       undefined,
     );
-    expect(result).undefined;
+    expect(result).toBeUndefined();
     await assertRefreshHashes(perdag, clientID, client.refreshHashes);
   });
 

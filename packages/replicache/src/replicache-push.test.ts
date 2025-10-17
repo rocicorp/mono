@@ -346,5 +346,5 @@ test('ClientStateNotFound on server', async () => {
 
   expect(onUpdateNeededStub).toHaveBeenCalledTimes(0);
   expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
-  expect(rep.isClientGroupDisabled).true;
+  expect(rep.isClientGroupDisabled).toBe(true);
 });
