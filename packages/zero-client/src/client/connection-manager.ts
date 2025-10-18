@@ -1,18 +1,20 @@
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import {Subscribable} from '../../../shared/src/subscribable.ts';
 import {ConnectionStatus} from './connection-status.ts';
+import type {ZeroError} from './error.ts';
 
 const DEFAULT_TIMEOUT_CHECK_INTERVAL_MS = 1_000;
 
 export type ConnectionState =
   | {
       name: ConnectionStatus.Disconnected;
+      reason?: ZeroError | undefined;
     }
   | {
       name: ConnectionStatus.Connecting;
       attempt: number;
       disconnectAt: number;
-      reason?: string | undefined;
+      reason?: ZeroError | undefined;
     }
   | {
       name: ConnectionStatus.Connected;
@@ -115,7 +117,7 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
    *
    * @returns An object containing a promise that resolves on the next state change.
    */
-  connecting(reason?: string | undefined): {
+  connecting(reason?: ZeroError | undefined): {
     nextStatePromise: Promise<void>;
   } {
     // cannot transition from closed to any other status
@@ -200,7 +202,7 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
    *
    * @returns An object containing a promise that resolves on the next state change.
    */
-  disconnected(): {
+  disconnected(reason?: ZeroError | undefined): {
     nextStatePromise: Promise<void>;
   } {
     // cannot transition from closed to any other status
@@ -225,6 +227,7 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
 
     this.#state = {
       name: ConnectionStatus.Disconnected,
+      reason,
     };
     const nextStatePromise = this.#publishStateAndGetPromise();
     return {nextStatePromise};
