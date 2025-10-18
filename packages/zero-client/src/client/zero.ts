@@ -890,6 +890,28 @@ export class Zero<
   }
 
   /**
+   * The schema passed into Zero when it was constructed.
+   *
+   * This can be paired with the inspector API to explore the client cache for
+   * debugging or tooling. The inspector exposes the raw key/value map as well
+   * as the per-table rows that back `zero.query[tableName].run()`.
+   *
+   * ```ts
+   * const inspector = __zero.inspector;
+   * const client = inspector.client;
+   *
+   * console.log('client map:', await client.map());
+   *
+   * for (const tableName of Object.keys(__zero.schema.tables)) {
+   *   console.table(await client.rows(tableName));
+   * }
+   * ```
+   */
+  get schema(): S {
+    return this.#options.schema;
+  }
+
+  /**
    * The client ID for this instance of Zero. Each instance
    * gets a unique client ID.
    */
