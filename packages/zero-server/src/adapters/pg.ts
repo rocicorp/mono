@@ -7,6 +7,8 @@ import type {
 import {Client, Pool, type PoolClient} from 'pg';
 import {ZQLDatabase} from '../zql-database.ts';
 
+export type {ZQLDatabase};
+
 /**
  * Helper type for the wrapped transaction used by node-postgres.
  *
