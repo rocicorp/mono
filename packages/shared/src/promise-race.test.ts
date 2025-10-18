@@ -109,7 +109,9 @@ describe('promiseRace with record', () => {
       }),
       succeeding: sleep(10),
     });
-    expectTypeOf(racePromise).toEqualTypeOf<Promise<'failing' | 'succeeding'>>();
+    expectTypeOf(racePromise).toEqualTypeOf<
+      Promise<'failing' | 'succeeding'>
+    >();
     await expect(racePromise).rejects.toBe(error);
   });
 
