@@ -5,6 +5,7 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
+import {createBuilder} from '../../../zql/src/query/named.ts';
 
 // auto-generated from `Chinook_PostgreSql.sql` by Claude
 // Table definitions
@@ -281,3 +282,5 @@ export const schema = createSchema({
     playlistRelationships,
   ],
 });
+
+export const builder = createBuilder(schema);

@@ -3,6 +3,7 @@ import {
   PlannerConnection,
   type ConnectionCostModel,
 } from './planner-connection.ts';
+import type {PlannerConstraint} from './planner-constraint.ts';
 
 export type {ConnectionCostModel};
 
@@ -15,7 +16,17 @@ export class PlannerSource {
     this.#model = model;
   }
 
-  connect(sort: Ordering, filters: Condition | undefined): PlannerConnection {
-    return new PlannerConnection(this.name, this.#model, sort, filters);
+  connect(
+    sort: Ordering,
+    filters: Condition | undefined,
+    baseConstraints?: PlannerConstraint,
+  ): PlannerConnection {
+    return new PlannerConnection(
+      this.name,
+      this.#model,
+      sort,
+      filters,
+      baseConstraints,
+    );
   }
 }
