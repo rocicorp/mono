@@ -22,9 +22,8 @@ let mapper: NameMapper;
 let getPlanAST: ReturnType<typeof makeGetPlanAST>;
 describe('Chinook planner tests', () => {
   beforeAll(() => {
+    mapper = clientToServer(schema.tables);
     dbs.sqlite.exec('ANALYZE;');
-
-    getPlanAST = makeGetPlanAST(mapper, costModel);
 
     costModel = createSQLiteCostModel(
       dbs.sqlite,
@@ -45,7 +44,8 @@ describe('Chinook planner tests', () => {
         ]),
       ),
     );
-    mapper = clientToServer(schema.tables);
+
+    getPlanAST = makeGetPlanAST(mapper, costModel);
   });
 
   test('tracks for a given album', () => {
@@ -71,9 +71,10 @@ describe('Chinook planner tests', () => {
 
   test('playlist with track', () => {
     const ast = getPlanAST(queries.sqlite.playlist.whereExists('tracks'));
-    // TODO: why was ths middle table flipped? Add planner tracing.
     expect(pick(ast, ['where', 'flip'])).toBe(true);
-    expect(pick(ast, ['where', 'related', 'subquery', 'flip'])).toBe(false);
+    expect(pick(ast, ['where', 'related', 'subquery', 'where', 'flip'])).toBe(
+      false,
+    );
   });
 
   test('tracks with playlist', () => {
@@ -93,8 +94,7 @@ describe('Chinook planner tests', () => {
       ),
     );
 
-    // TODO: why were these not flipped? Add planner tracing.
-    expect(pick(ast, ['where', 'conditions', 0, 'flip'])).toBe(false);
-    expect(pick(ast, ['where', 'conditions', 1, 'flip'])).toBe(false);
+    expect(pick(ast, ['where', 'conditions', 0, 'flip'])).toBe(true);
+    expect(pick(ast, ['where', 'conditions', 1, 'flip'])).toBe(true);
   });
 });
