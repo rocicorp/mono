@@ -35,68 +35,99 @@ export type Relationships = {
   relationships: Record<string, Relationship>; // relationships for that table
 };
 
+// Overloaded types for better inference
+type ManyConnector<TSource extends TableSchema> = {
+  // Single direct relationship
+  <TDest extends TableSchema>(
+    arg: ConnectArg<
+      readonly (keyof TSource['columns'] & string)[],
+      readonly (keyof TDest['columns'] & string)[],
+      TDest
+    >,
+  ): [
+    ManyConnection<
+      readonly (keyof TSource['columns'] & string)[],
+      readonly (keyof TDest['columns'] & string)[],
+      TDest
+    >,
+  ];
+
+  // Junction relationship (two hops)
+  <TJunction extends TableSchema, TDest extends TableSchema>(
+    firstHop: ConnectArg<
+      readonly (keyof TSource['columns'] & string)[],
+      readonly (keyof TJunction['columns'] & string)[],
+      TJunction
+    >,
+    secondHop: ConnectArg<
+      readonly (keyof TJunction['columns'] & string)[],
+      readonly (keyof TDest['columns'] & string)[],
+      TDest
+    >,
+  ): [
+    ManyConnection<
+      readonly (keyof TSource['columns'] & string)[],
+      readonly (keyof TJunction['columns'] & string)[],
+      TJunction
+    >,
+    ManyConnection<
+      readonly (keyof TJunction['columns'] & string)[],
+      readonly (keyof TDest['columns'] & string)[],
+      TDest
+    >,
+  ];
+};
+
+type OneConnector<TSource extends TableSchema> = {
+  // Single direct relationship
+  <TDest extends TableSchema>(
+    arg: ConnectArg<
+      readonly (keyof TSource['columns'] & string)[],
+      readonly (keyof TDest['columns'] & string)[],
+      TDest
+    >,
+  ): [
+    OneConnection<
+      readonly (keyof TSource['columns'] & string)[],
+      readonly (keyof TDest['columns'] & string)[],
+      TDest
+    >,
+  ];
+
+  // Two-hop relationship (e.g., invoice_line -> invoice -> customer)
+  <TIntermediate extends TableSchema, TDest extends TableSchema>(
+    firstHop: ConnectArg<
+      readonly (keyof TSource['columns'] & string)[],
+      readonly (keyof TIntermediate['columns'] & string)[],
+      TIntermediate
+    >,
+    secondHop: ConnectArg<
+      readonly (keyof TIntermediate['columns'] & string)[],
+      readonly (keyof TDest['columns'] & string)[],
+      TDest
+    >,
+  ): [
+    OneConnection<
+      readonly (keyof TSource['columns'] & string)[],
+      readonly (keyof TIntermediate['columns'] & string)[],
+      TIntermediate
+    >,
+    OneConnection<
+      readonly (keyof TIntermediate['columns'] & string)[],
+      readonly (keyof TDest['columns'] & string)[],
+      TDest
+    >,
+  ];
+};
+
 export function relationships<
   TSource extends TableSchema,
   TRelationships extends Record<string, Relationship>,
 >(
   table: TableBuilderWithColumns<TSource>,
   cb: (connects: {
-    many: <
-      TDests extends TableSchema[],
-      TSourceFields extends {
-        [K in keyof TDests]: (keyof PreviousSchema<
-          TSource,
-          K & number,
-          TDests
-        >['columns'] &
-          string)[];
-      },
-      TDestFields extends {
-        [K in keyof TDests]: (keyof TDests[K]['columns'] & string)[];
-      },
-    >(
-      ...args: {
-        [K in keyof TDests]: ConnectArg<
-          TSourceFields[K],
-          TDestFields[K],
-          TDests[K]
-        >;
-      }
-    ) => {
-      [K in keyof TDests]: ManyConnection<
-        TSourceFields[K],
-        TDestFields[K],
-        TDests[K]
-      >;
-    };
-    one: <
-      TDests extends TableSchema[],
-      TSourceFields extends {
-        [K in keyof TDests]: (keyof PreviousSchema<
-          TSource,
-          K & number,
-          TDests
-        >['columns'] &
-          string)[];
-      },
-      TDestFields extends {
-        [K in keyof TDests]: (keyof TDests[K]['columns'] & string)[];
-      },
-    >(
-      ...args: {
-        [K in keyof TDests]: ConnectArg<
-          TSourceFields[K],
-          TDestFields[K],
-          TDests[K]
-        >;
-      }
-    ) => {
-      [K in keyof TDests]: OneConnection<
-        TSourceFields[K],
-        TDestFields[K],
-        TDests[K]
-      >;
-    };
+    many: ManyConnector<TSource>;
+    one: OneConnector<TSource>;
   }) => TRelationships,
 ): {name: TSource['name']; relationships: TRelationships} {
   const relationships = cb({many, one} as any);

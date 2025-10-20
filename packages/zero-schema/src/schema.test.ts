@@ -149,6 +149,7 @@ test('Missing column in direct relationship source should throw', () => {
 
   const fooRelationships = relationships(foo, connect => ({
     barRelation: connect.many({
+      // @ts-expect-error - missing column
       sourceField: ['missing'],
       destField: ['id'],
       destSchema: bar,
@@ -229,6 +230,7 @@ test('Missing column in junction relationship source should throw', () => {
         destSchema: junctionTable,
       },
       {
+        // @ts-expect-error - missing column
         sourceField: ['missing'],
         destField: ['id'],
         destSchema: tableB,
@@ -243,5 +245,110 @@ test('Missing column in junction relationship source should throw', () => {
     }),
   ).toThrowErrorMatchingInlineSnapshot(
     `[Error: For relationship "tableA"."relationAToB", the source field "missing" is missing in the table schema "junctionTable"]`,
+  );
+});
+
+test('Two-hop one-to-one relationship works (invoice_line -> invoice -> customer)', () => {
+  const customer = table('customer')
+    .columns({
+      id: number(),
+      name: string(),
+    })
+    .primaryKey('id');
+
+  const invoice = table('invoice')
+    .columns({
+      id: number(),
+      customerID: number(),
+    })
+    .primaryKey('id');
+
+  const invoiceLine = table('invoice_line')
+    .columns({
+      id: number(),
+      invoiceID: number(),
+    })
+    .primaryKey('id');
+
+  const invoiceLineRelationships = relationships(invoiceLine, connect => ({
+    customer: connect.one(
+      {
+        sourceField: ['invoiceID'],
+        destField: ['id'],
+        destSchema: invoice,
+      },
+      {
+        sourceField: ['customerID'],
+        destField: ['id'],
+        destSchema: customer,
+      },
+    ),
+  }));
+
+  const schema = createSchema({
+    tables: [customer, invoice, invoiceLine],
+    relationships: [invoiceLineRelationships],
+  });
+
+  expect(schema.relationships.invoice_line.customer).toMatchObject([
+    {
+      sourceField: ['invoiceID'],
+      destField: ['id'],
+      destSchema: 'invoice',
+      cardinality: 'one',
+    },
+    {
+      sourceField: ['customerID'],
+      destField: ['id'],
+      destSchema: 'customer',
+      cardinality: 'one',
+    },
+  ]);
+});
+
+test('Missing column in two-hop one-to-one relationship source should throw', () => {
+  const customer = table('customer')
+    .columns({
+      id: number(),
+    })
+    .primaryKey('id');
+
+  const invoice = table('invoice')
+    .columns({
+      id: number(),
+      customerID: number(),
+    })
+    .primaryKey('id');
+
+  const invoiceLine = table('invoice_line')
+    .columns({
+      id: number(),
+      invoiceID: number(),
+    })
+    .primaryKey('id');
+
+  const invoiceLineRelationships = relationships(invoiceLine, connect => ({
+    customer: connect.one(
+      {
+        sourceField: ['invoiceID'],
+        destField: ['id'],
+        destSchema: invoice,
+      },
+      {
+        // @ts-expect-error - missing column
+        sourceField: ['missing'],
+        destField: ['id'],
+        destSchema: customer,
+      },
+    ),
+  }));
+
+  expect(() =>
+    createSchema({
+      tables: [customer, invoice, invoiceLine],
+      relationships: [invoiceLineRelationships],
+    }),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `[Error: For relationship "invoice_line"."customer", the source field "missing" is missing in the table schema "invoice"]`,
   );
 });
