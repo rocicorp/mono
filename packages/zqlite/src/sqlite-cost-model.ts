@@ -6,8 +6,8 @@ import {buildSelectQuery, type NoSubqueryCondition} from './query-builder.ts';
 import type {Database, Statement} from './db.ts';
 import {compile} from './internal/sql.ts';
 import {assert} from '../../shared/src/asserts.ts';
-import type {SchemaValue} from '../../zero-types/src/schema-value.ts';
 import {must} from '../../shared/src/must.ts';
+import type {TableSchema} from '../../zero-protocol/src/client-schema.ts';
 
 /**
  * Loop information returned by SQLite's scanstatus API.
@@ -32,7 +32,7 @@ interface ScanstatusLoop {
  */
 export function createSQLiteCostModel(
   db: Database,
-  columns: Record<string, SchemaValue>,
+  tableSchemas: Record<string, TableSchema>,
 ): ConnectionCostModel {
   return (
     tableName: string,
@@ -50,7 +50,7 @@ export function createSQLiteCostModel(
     // Build the SQL query using the same logic as actual queries
     const query = buildSelectQuery(
       tableName,
-      columns,
+      tableSchemas[tableName].columns,
       constraint,
       noSubqueryFilters,
       sort,
