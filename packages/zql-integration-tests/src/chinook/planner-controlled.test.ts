@@ -6,6 +6,7 @@ import {pick} from '../helpers/planner.ts';
 import type {PlannerConstraint} from '../../../zql/src/planner/planner-constraint.ts';
 import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
 import {must} from '../../../shared/src/must.ts';
+import {assert} from '../../../shared/src/asserts.ts';
 
 describe('one join', () => {
   test('no changes in cost', () => {
@@ -186,16 +187,48 @@ describe('no exists', () => {
 });
 
 describe('related calls get plans', () => {
-  test('related with exists inside', () => {
-    const costModel = makeCostModel({track: 1000, album: 10, artist: 2});
+  test('1:1 will not flip since it is anchored by primary key', () => {
+    // album cost is decimated to 1 during the `related` transition since we are related by `albumId -> id`
+    const costModel = makeCostModel({track: 1000, album: 100000, artist: 2});
     const unplanned = builder.track
       .where('name', 'Outlaw Blues')
-      // TODO: this is wrong. album should have cost 1 when coming from a related call
-      // because it is pinned to the given track!
       .related('album', q => q.whereExists('artist')).ast;
     const planned = planQuery(unplanned, costModel);
 
-    console.log(JSON.stringify(planned, null, 2));
+    expect(pick(planned, ['related', 0, 'subquery', 'where', 'flip'])).toBe(
+      false,
+    );
+  });
+
+  test('1:many may flip', () => {
+    const unplanned = builder.album.related('tracks', q =>
+      q.whereExists('genre', q => q.where('name', 'Foo')),
+    ).ast;
+    const costModel = (
+      table: string,
+      _sort: Ordering,
+      _filters: Condition | undefined,
+      constraint: PlannerConstraint | undefined,
+    ) => {
+      // Force `.related('tracks')` to be more expensive
+      if (table === 'track') {
+        assert(
+          constraint?.hasOwnProperty('albumId'),
+          'Expected constraint to have albumId',
+        );
+        // if we flip to do genre, we can reduce the cost.
+        if (constraint?.hasOwnProperty('genreId')) {
+          return 1;
+        }
+        return 10_000;
+      }
+      return 10;
+    };
+
+    const planned = planQuery(unplanned, costModel);
+    expect(pick(planned, ['related', 0, 'subquery', 'where', 'flip'])).toBe(
+      true,
+    );
   });
 });
 

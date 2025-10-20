@@ -142,40 +142,6 @@ export class PlannerGraph {
   }
 
   /**
-   * Get a summary of the current planning state for debugging.
-   * Uses single-pass iteration for efficiency.
-   */
-  getPlanSummary(): {
-    totalConnections: number;
-    pinnedConnections: number;
-    unpinnedConnections: number;
-    totalJoins: number;
-    pinnedJoins: number;
-    flippedJoins: number;
-  } {
-    let pinnedConnections = 0;
-    for (const c of this.connections) {
-      if (c.pinned) pinnedConnections++;
-    }
-
-    let pinnedJoins = 0;
-    let flippedJoins = 0;
-    for (const j of this.joins) {
-      if (j.pinned) pinnedJoins++;
-      if (j.type === 'flipped') flippedJoins++;
-    }
-
-    return {
-      totalConnections: this.connections.length,
-      pinnedConnections,
-      unpinnedConnections: this.connections.length - pinnedConnections,
-      totalJoins: this.joins.length,
-      pinnedJoins,
-      flippedJoins,
-    };
-  }
-
-  /**
    * Calculate total cost of the current plan.
    */
   getTotalCost(): number {
@@ -304,7 +270,7 @@ export class PlannerGraph {
    *
    * Returns the best plan found across all attempts.
    */
-  plan(debug = false): void {
+  plan(): void {
     const numAttempts = Math.min(
       this.connections.length,
       MAX_PLANNING_ATTEMPTS,
@@ -312,7 +278,6 @@ export class PlannerGraph {
     let bestCost = Infinity;
     let bestPlan: PlanState | undefined = undefined;
 
-    /* eslint-disable no-console */
     for (let i = 0; i < numAttempts; i++) {
       // Reset to initial state
       this.resetPlanningState();
@@ -321,48 +286,29 @@ export class PlannerGraph {
       let costs = this.getUnpinnedConnectionCosts();
       if (i >= costs.length) break;
 
-      if (debug) {
-        console.error(
-          `\n--- Attempt ${i + 1}: Starting with connection at index ${i} (cost: ${costs[i].cost}) ---`,
-        );
-      }
-
       // Try to pick costs[i] as root for this attempt
-      console.log('\nStarting attempt', i);
       try {
         let connection = costs[i].connection;
         connection.pinned = true; // Pin FIRST
-        console.log('pin', connection);
         pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
         checkAndConvertFOFI(this); // Convert FO/FI to UFO/UFI if joins flipped
         this.propagateConstraints(); // Then propagate
 
-        let step = 1;
         // Continue with greedy selection
         while (!this.hasPlan()) {
           costs = this.getUnpinnedConnectionCosts();
-          console.log('unpinned costs', costs);
           if (costs.length === 0) break;
-
-          if (debug) {
-            console.error(
-              `  Step ${step}: Available connections: ${costs.length}, costs: [${costs.map(c => c.cost).join(', ')}]`,
-            );
-          }
 
           // Try connections in order until one works
           let success = false;
-          let pickedCost = 0;
-          for (const {connection, cost} of costs) {
+          for (const {connection} of costs) {
             // Save state before attempting this connection
             const stateBeforeAttempt = this.capturePlanningSnapshot();
 
             try {
               connection.pinned = true; // Pin FIRST
-              console.log('pin', connection);
               pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
               checkAndConvertFOFI(this); // Convert FO/FI to UFO/UFI if joins flipped
-              pickedCost = cost;
               success = true;
               break; // Success, exit the inner loop
             } catch (e) {
@@ -378,50 +324,29 @@ export class PlannerGraph {
 
           if (!success) {
             // No connection could be pinned, this plan attempt failed
-            if (debug)
-              console.error(
-                `  Step ${step}: No connection could be pinned - plan failed`,
-              );
             break;
           }
 
           // Only propagate after successful connection selection
           this.propagateConstraints();
-
-          if (debug) {
-            console.error(
-              `  Step ${step}: Picked connection with cost ${pickedCost}`,
-            );
-          }
-          step++;
         }
 
         // Evaluate this plan (if complete)
         if (this.hasPlan()) {
           const totalCost = this.getTotalCost();
-          console.log('total cost', totalCost);
-          if (debug)
-            console.error(
-              `  Attempt ${i + 1}: Complete! Total cost: ${totalCost}`,
-            );
           if (totalCost < bestCost) {
             bestCost = totalCost;
             bestPlan = this.capturePlanningSnapshot();
-            console.log('best plan', bestPlan);
-            if (debug) console.error(`  *** New best plan found! ***`);
           }
         }
       } catch (e) {
         if (e instanceof UnflippableJoinError) {
           // This root connection led to an unreachable path, try next root
-          if (debug)
-            console.error(`  Attempt ${i + 1}: Failed with unflippable join`);
           continue;
         }
         throw e; // Re-throw other errors
       }
     }
-    /* eslint-enable no-console */
 
     // Restore best plan
     if (bestPlan) {
@@ -506,7 +431,7 @@ function findFIAndCheckFlips(fo: PlannerFanOut): {
   const visited = new Set<PlannerNode>();
 
   while (queue.length > 0) {
-    const node = queue.shift()!;
+    const node = must(queue.shift());
     if (visited.has(node)) continue;
     visited.add(node);
 
