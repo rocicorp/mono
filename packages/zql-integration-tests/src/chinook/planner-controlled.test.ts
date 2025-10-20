@@ -232,6 +232,76 @@ describe('related calls get plans', () => {
   });
 });
 
+describe('junction edge', () => {
+  test('playlist -> track', () => {
+    // should incur no flips since fewer playlists than tracks
+    const costModel = makeCostModel({
+      playlist: 100,
+      playlistTrack: 1000,
+      track: 10000,
+    });
+    const planned = planQuery(
+      builder.playlist.whereExists('tracks').ast,
+      costModel,
+    );
+
+    // No flip: playlist (100) -> playlistTrack -> track is cheaper than flipping
+    expect(pick(planned, ['where', 'flip'])).toBe(false);
+  });
+
+  test('track -> playlist', () => {
+    // should flip since fewer playlists than tracks
+    const costModel = makeCostModel({
+      playlist: 100,
+      playlistTrack: 1000,
+      track: 10000,
+    });
+    const planned = planQuery(
+      builder.track.whereExists('playlists').ast,
+      costModel,
+    );
+
+    // Flip: start from playlist (100) instead of track (10000)
+    expect(pick(planned, ['where', 'flip'])).toBe(true);
+  });
+});
+
+test('ors anded one after the other', () => {
+  // (A or B) and (C or D)
+  const ast = builder.track
+    .where(({or, exists}) => or(exists('album'), exists('genre')))
+    .where(({or, exists}) =>
+      or(exists('invoiceLines'), exists('mediaType')),
+    ).ast;
+
+  // All tables have similar cost, so no flips should occur
+  const costModel = makeCostModel({
+    track: 10000,
+    album: 10000,
+    genre: 10000,
+    invoiceLine: 10000,
+    mediaType: 10000,
+  });
+
+  const planned = planQuery(ast, costModel);
+
+  // With uniform costs, planner should keep original order (no flips)
+  // Check first OR: album and genre
+  expect(
+    pick(planned, ['where', 'conditions', 0, 'conditions', 0, 'flip']),
+  ).toBe(false);
+  expect(
+    pick(planned, ['where', 'conditions', 0, 'conditions', 1, 'flip']),
+  ).toBe(false);
+  // Check second OR: invoiceLines and mediaType
+  expect(
+    pick(planned, ['where', 'conditions', 1, 'conditions', 0, 'flip']),
+  ).toBe(false);
+  expect(
+    pick(planned, ['where', 'conditions', 1, 'conditions', 1, 'flip']),
+  ).toBe(false);
+});
+
 function makeCostModel(costs: Record<string, number>) {
   return (
     table: string,
