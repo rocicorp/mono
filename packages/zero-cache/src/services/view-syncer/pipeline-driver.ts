@@ -461,7 +461,7 @@ export class PipelineDriver {
   ): Iterable<RowChange> {
     let pos = 0;
     const removedConflicts: Set<string> = new Set();
-    for (const {table, prevValue, nextValue} of diff) {
+    for (const {table, prevValue, nextValue, conflictValues} of diff) {
       const start = performance.now();
       let type;
       try {
@@ -473,8 +473,7 @@ export class PipelineDriver {
         }
         let existing: [RowKey, Row] | undefined = undefined;
         if (nextValue) {
-          const conflicts = tableSource.getUniqueConflicts(nextValue as Row);
-          for (const conflict of conflicts) {
+          for (const conflict of conflictValues) {
             const conflictPrimaryKey = getRowKey(
               tableSpec.primaryKey,
               conflict as Row,
@@ -590,7 +589,7 @@ export class PipelineDriver {
 
   *#push(source: TableSource, change: SourceChange): Iterable<RowChange> {
     this.#startAccumulating();
-    for (const _ of source.genPush(change, true)) {
+    for (const _ of source.genPush(change)) {
       yield* this.#stopAccumulating().stream();
       this.#startAccumulating();
     }
