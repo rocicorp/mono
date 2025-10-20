@@ -1,3 +1,5 @@
+// oxlint-disable valid-describe-callback
+// oxlint-disable expect-expect
 /* oxlint-disable @typescript-eslint/no-explicit-any */
 import {describe, test} from 'vitest';
 import {must} from '../../../shared/src/must.ts';

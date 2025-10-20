@@ -1,4 +1,7 @@
 import {makeDefine} from '../build.ts';
+import {defineConfig} from 'vitest/config';
+
+export const CI = process.env['CI'] === 'true' || process.env['CI'] === '1';
 
 const define = {
   ...makeDefine(),
@@ -15,7 +18,7 @@ const logSilenceMessages = [
   'Zero starting up with no server URL',
 ];
 
-export default {
+export default defineConfig({
   // https://github.com/vitest-dev/vitest/issues/5332#issuecomment-1977785593
   optimizeDeps: {
     include: ['vitest > @vitest/expect > chai'],
@@ -43,13 +46,16 @@ export default {
       screenshotFailures: false,
       instances: [
         {browser: 'chromium'},
-        {browser: 'firefox'},
-        {browser: 'webkit'},
+        ...(CI ? [{browser: 'firefox'}, {browser: 'webkit'}] : []),
       ],
+    },
+    coverage: {
+      provider: 'v8',
+      include: ['src/**'],
     },
     typecheck: {
       enabled: false,
     },
     testTimeout: 10_000,
   },
-};
+});
