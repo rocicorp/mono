@@ -8,6 +8,8 @@ import type {
 import postgres from 'postgres';
 import {ZQLDatabase} from '../zql-database.ts';
 
+export type {ZQLDatabase};
+
 /**
  * Helper type for the wrapped transaction used by postgres.js.
  *
