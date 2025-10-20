@@ -69,11 +69,73 @@ function createQuery<TTable extends keyof typeof schema.tables & string>(
 function benchmarkQuery<TTable extends keyof typeof schema.tables & string>(
   name: string,
   query: Query<typeof schema, TTable>,
+  debug = false,
 ) {
   const unplannedAST = ast(query);
 
   // Map to server names, plan, then map back to client names
   const mappedAST = mapAST(unplannedAST, clientToServerMapper);
+
+  if (debug) {
+    console.log(`\n=== DEBUG: ${name} ===`);
+    console.log('Unplanned AST (client names):');
+    console.log(JSON.stringify(unplannedAST, null, 2));
+    console.log('\nMapped AST (server names):');
+    console.log(JSON.stringify(mappedAST, null, 2));
+
+    // Create logging cost model
+    const loggingCostModel = (
+      table: string,
+      sort: any,
+      filters: any,
+      constraint: any,
+    ) => {
+      const cost = costModel(table, sort, filters, constraint);
+      console.log(`Cost for ${table}:`, {
+        constraint,
+        filters: filters ? 'present' : 'none',
+        cost,
+      });
+      return cost;
+    };
+
+    console.log('\nPlanning with costs:');
+    const plannedServerAST = planQuery(mappedAST, loggingCostModel);
+
+    console.log('\nPlanned AST (server names):');
+    console.log(JSON.stringify(plannedServerAST, null, 2));
+
+    const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
+    console.log('\nPlanned AST (client names):');
+    console.log(JSON.stringify(plannedClientAST, null, 2));
+
+    // Check flip decisions
+    function checkFlips(ast: any, path: string = 'root') {
+      if (ast.where) {
+        if ('flip' in ast.where) {
+          console.log(`${path}.where.flip = ${ast.where.flip}`);
+        }
+        if (ast.where.related?.subquery?.where) {
+          checkFlips(
+            ast.where.related.subquery,
+            `${path}.where.related.subquery`,
+          );
+        }
+        if (ast.where.conditions) {
+          ast.where.conditions.forEach((c: any, i: number) => {
+            if ('flip' in c) {
+              console.log(`${path}.where.conditions[${i}].flip = ${c.flip}`);
+            }
+          });
+        }
+      }
+    }
+
+    console.log('\nFlip decisions:');
+    checkFlips(plannedClientAST);
+    console.log('=== END DEBUG ===\n');
+  }
+
   const plannedServerAST = planQuery(mappedAST, costModel);
   const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
 
@@ -92,6 +154,21 @@ function benchmarkQuery<TTable extends keyof typeof schema.tables & string>(
   });
 }
 
+// Print table row counts
+console.log('\n=== TABLE ROW COUNTS ===');
+const playlistCount = dbs.sqlite
+  .prepare('SELECT COUNT(*) as count FROM playlist')
+  .get() as {count: number};
+const playlistTrackCount = dbs.sqlite
+  .prepare('SELECT COUNT(*) as count FROM playlist_track')
+  .get() as {count: number};
+const trackCount = dbs.sqlite
+  .prepare('SELECT COUNT(*) as count FROM track')
+  .get() as {count: number};
+console.log(`Playlist: ${playlistCount.count}`);
+console.log(`PlaylistTrack: ${playlistTrackCount.count}`);
+console.log(`Track: ${trackCount.count}\n`);
+
 // Benchmark queries
 benchmarkQuery(
   'track.exists(album) where title="Big Ones"',
@@ -109,6 +186,47 @@ benchmarkQuery(
     .whereExists('album', q => q.where('title', 'Big Ones'))
     .whereExists('genre', q => q.where('name', 'Rock')),
 );
+
+// DEBUG: Just print costs for playlist.exists(tracks) without running benchmark
+{
+  const query = queries.sqlite.playlist.whereExists('tracks');
+  const unplannedAST = ast(query);
+  const mappedAST = mapAST(unplannedAST, clientToServerMapper);
+
+  console.log('\n=== DEBUG: playlist.exists(tracks) ===');
+  console.log('Unplanned AST (client names):');
+  console.log(JSON.stringify(unplannedAST, null, 2));
+
+  // Create logging cost model
+  const loggingCostModel = (
+    table: string,
+    sort: any,
+    filters: any,
+    constraint: any,
+  ) => {
+    const cost = costModel(table, sort, filters, constraint);
+    console.log(`Cost for ${table}:`, {
+      constraint,
+      filters: filters ? 'present' : 'none',
+      cost,
+    });
+    return cost;
+  };
+
+  console.log('\nPlanning with costs:');
+  try {
+    const plannedServerAST = planQuery(mappedAST, loggingCostModel);
+    console.log('\nPlanned AST (server names):');
+    console.log(JSON.stringify(plannedServerAST, null, 2));
+
+    const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
+    console.log('\nPlanned AST (client names):');
+    console.log(JSON.stringify(plannedClientAST, null, 2));
+  } catch (e) {
+    console.error('Planning failed:', e);
+  }
+  console.log('=== END DEBUG ===\n');
+}
 
 benchmarkQuery(
   'playlist.exists(tracks)',
