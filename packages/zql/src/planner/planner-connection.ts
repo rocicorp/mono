@@ -1,7 +1,10 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
-import type {PlannerConstraint} from './planner-constraint.ts';
-import type {ConstraintPropagationType, PlannerNode} from './planner-node.ts';
+import {
+  mergeConstraints,
+  type PlannerConstraint,
+} from './planner-constraint.ts';
+import type {PlannerNode} from './planner-node.ts';
 
 /**
  * Represents a connection to a source (table scan).
@@ -57,6 +60,7 @@ export class PlannerConnection {
   readonly #filters: Condition | undefined;
   readonly #model: ConnectionCostModel;
   readonly table: string;
+  readonly #baseConstraints: PlannerConstraint | undefined; // Constraints from parent correlation
   #output?: PlannerNode | undefined; // Set once during graph construction
 
   // ========================================================================
@@ -74,10 +78,18 @@ export class PlannerConnection {
   readonly #constraints: Map<string, PlannerConstraint | undefined>;
 
   /**
-   * Cached cost result to avoid redundant cost model calls.
+   * Cached total cost (sum of all branches) to avoid redundant calculations.
    * Invalidated when constraints change.
    */
-  #cachedCost: number | undefined = undefined;
+  #cachedTotalCost: number | undefined = undefined;
+
+  /**
+   * Cached per-constraint costs to avoid redundant cost model calls.
+   * Maps constraint key (branch pattern string) to computed cost.
+   * Invalidated when constraints change.
+   */
+  #cachedConstraintCosts: Map<string, number> = new Map();
+
   #costDirty = true;
 
   constructor(
@@ -85,12 +97,14 @@ export class PlannerConnection {
     model: ConnectionCostModel,
     sort: Ordering,
     filters: Condition | undefined,
+    baseConstraints?: PlannerConstraint,
   ) {
     this.pinned = false;
     this.table = table;
     this.#sort = sort;
     this.#filters = filters;
     this.#model = model;
+    this.#baseConstraints = baseConstraints;
     this.#constraints = new Map();
   }
 
@@ -120,52 +134,109 @@ export class PlannerConnection {
   propagateConstraints(
     path: number[],
     c: PlannerConstraint | undefined,
-    from: ConstraintPropagationType,
+    from: PlannerNode,
   ): void {
     const key = path.join(',');
     this.#constraints.set(key, c);
-    // Constraints changed, invalidate cost cache
+    // Constraints changed, invalidate cost caches
+    this.#cachedTotalCost = undefined;
+    this.#cachedConstraintCosts.clear();
     this.#costDirty = true;
 
     if (this.pinned) {
       assert(
-        from === 'pinned' || from === 'terminus',
+        from.pinned,
         'It should be impossible for a pinned connection to receive constraints from a non-pinned node',
       );
     }
-    if (from === 'pinned') {
+    if (from.pinned) {
       this.pinned = true;
     }
   }
 
-  estimateCost(): number {
-    // Return cached cost if still valid
-    if (!this.#costDirty && this.#cachedCost !== undefined) {
-      return this.#cachedCost;
-    }
-
-    // Calculate fresh cost
-    let total = 0;
-    if (this.#constraints.size === 0) {
-      total = this.#model(this.table, this.#sort, this.#filters, undefined);
-    } else {
-      for (const c of this.#constraints.values()) {
-        total += this.#model(this.table, this.#sort, this.#filters, c);
+  estimateCost(branchPattern?: number[]): number {
+    // If no branch pattern specified, return sum of all branches
+    // This is used by getUnpinnedConnectionCosts to get total cost
+    if (branchPattern === undefined) {
+      // Return cached total cost if still valid
+      if (!this.#costDirty && this.#cachedTotalCost !== undefined) {
+        return this.#cachedTotalCost;
       }
+
+      // Calculate fresh cost - sum of all branch costs
+      let total = 0;
+      if (this.#constraints.size === 0) {
+        // No constraints - compute unconstrained cost (but still merge base constraints)
+        const key = '';
+        let cost = this.#cachedConstraintCosts.get(key);
+        if (cost === undefined) {
+          // Merge base constraints even when no propagated constraints
+          cost = this.#model(
+            this.table,
+            this.#sort,
+            this.#filters,
+            this.#baseConstraints,
+          );
+          this.#cachedConstraintCosts.set(key, cost);
+        }
+        total = cost;
+      } else {
+        // Sum costs for all constraint branches
+        for (const [key, constraint] of this.#constraints.entries()) {
+          let cost = this.#cachedConstraintCosts.get(key);
+          if (cost === undefined) {
+            // Merge base constraints with propagated constraints
+            const mergedConstraint = mergeConstraints(
+              this.#baseConstraints,
+              constraint,
+            );
+            cost = this.#model(
+              this.table,
+              this.#sort,
+              this.#filters,
+              mergedConstraint,
+            );
+            this.#cachedConstraintCosts.set(key, cost);
+          }
+          total += cost;
+        }
+      }
+
+      // Cache total and mark as clean
+      this.#cachedTotalCost = total;
+      this.#costDirty = false;
+
+      return total;
     }
 
-    // Cache result and mark as clean
-    this.#cachedCost = total;
-    this.#costDirty = false;
+    // Branch pattern specified - return cost for this specific branch
+    const key = branchPattern.join(',');
 
-    return total;
+    // Check per-constraint cache first
+    let cost = this.#cachedConstraintCosts.get(key);
+    if (cost !== undefined) {
+      return cost;
+    }
+
+    // Cache miss - compute and cache
+    const constraint = this.#constraints.get(key);
+    // Merge base constraints with propagated constraints
+    const mergedConstraint = mergeConstraints(
+      this.#baseConstraints,
+      constraint,
+    );
+    cost = this.#model(this.table, this.#sort, this.#filters, mergedConstraint);
+    this.#cachedConstraintCosts.set(key, cost);
+
+    return cost;
   }
 
   reset() {
     this.#constraints.clear();
     this.pinned = false;
-    // Clear cost cache
-    this.#cachedCost = undefined;
+    // Clear all cost caches
+    this.#cachedTotalCost = undefined;
+    this.#cachedConstraintCosts.clear();
     this.#costDirty = true;
   }
 
@@ -188,7 +259,9 @@ export class PlannerConnection {
     for (const [key, value] of constraints) {
       this.#constraints.set(key, value);
     }
-    // Constraints changed, invalidate cost cache
+    // Constraints changed, invalidate cost caches
+    this.#cachedTotalCost = undefined;
+    this.#cachedConstraintCosts.clear();
     this.#costDirty = true;
   }
 }

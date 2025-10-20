@@ -5,6 +5,11 @@ import {
   createFanIn,
   expectedCost,
 } from './test/helpers.ts';
+import type {PlannerNode} from './planner-node.ts';
+
+const unpinned = {
+  pinned: false,
+} as PlannerNode;
 
 suite('PlannerFanIn', () => {
   test('initial state is FI type', () => {
@@ -34,7 +39,7 @@ suite('PlannerFanIn', () => {
   test('propagateConstraints() with FI type sends same branch pattern to all inputs', () => {
     const {inputs, fanIn} = createFanIn();
 
-    fanIn.propagateConstraints([], CONSTRAINTS.userId, 'unpinned');
+    fanIn.propagateConstraints([], CONSTRAINTS.userId, unpinned);
 
     expect(inputs[0].estimateCost()).toBe(expectedCost(1));
     expect(inputs[1].estimateCost()).toBe(expectedCost(1));
@@ -44,7 +49,7 @@ suite('PlannerFanIn', () => {
     const {inputs, fanIn} = createFanIn(3);
     fanIn.convertToUFI();
 
-    fanIn.propagateConstraints([], CONSTRAINTS.userId, 'unpinned');
+    fanIn.propagateConstraints([], CONSTRAINTS.userId, unpinned);
 
     expect(inputs[0].estimateCost()).toBe(expectedCost(1));
     expect(inputs[1].estimateCost()).toBe(expectedCost(1));
