@@ -101,13 +101,19 @@ export function mapPostgresToLiteColumn(
     dflt,
     elemPgTypeClass = null,
   } = column.spec;
+
+  // For array types, PostgreSQL includes [] in dataType (e.g., 'int4[]').
+  // We strip it here and let liteTypeString add it back with the proper attributes.
+  const baseDataType = dataType.replace(/\[\]$/, '');
+  const isArray = elemPgTypeClass !== null;
+
   return {
     pos,
     dataType: liteTypeString(
-      dataType,
+      baseDataType,
       notNull,
       (elemPgTypeClass ?? pgTypeClass) === PostgresTypeClass.Enum,
-      elemPgTypeClass !== null,
+      isArray,
     ),
     characterMaximumLength: null,
     // Note: NOT NULL constraints are always ignored for SQLite (replica) tables.

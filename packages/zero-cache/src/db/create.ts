@@ -1,3 +1,4 @@
+import {TEXT_ARRAY_ATTRIBUTE, upstreamDataType} from '../types/lite.ts';
 import {id, idList} from '../types/sql.ts';
 import type {
   ColumnSpec,
@@ -6,13 +7,26 @@ import type {
   TableSpec,
 } from './specs.ts';
 
-export function columnDef(spec: ColumnSpec) {
-  let def = id(spec.dataType);
+export function columnDef(spec: ColumnSpec, forPostgres: boolean) {
+  // Remove legacy |TEXT_ARRAY attribute for backwards compatibility
+  const typeWithAttrs = spec.dataType.replace(TEXT_ARRAY_ATTRIBUTE, '');
+
+  let def: string;
+  if (spec.elemPgTypeClass !== null) {
+    // Arrays: PostgreSQL wants "type"[], SQLite wants "type[]" (with attributes inside quotes)
+    // upstreamDataType strips attributes (|...) but NOT the [] suffix, so we strip it here
+    const baseType = upstreamDataType(typeWithAttrs).replace(/\[\]$/, '');
+    // New data has [] suffix, but legacy data might not (it had |TEXT_ARRAY instead)
+    const needsBrackets = !typeWithAttrs.endsWith('[]');
+    def = forPostgres
+      ? `${id(baseType)}[]`
+      : id(needsBrackets ? typeWithAttrs + '[]' : typeWithAttrs);
+  } else {
+    def = id(typeWithAttrs);
+  }
+
   if (spec.characterMaximumLength) {
     def += `(${spec.characterMaximumLength})`;
-  }
-  if (spec.elemPgTypeClass !== null) {
-    def += '[]';
   }
   if (spec.notNull) {
     def += ' NOT NULL';
@@ -27,9 +41,13 @@ export function columnDef(spec: ColumnSpec) {
  * Constructs a `CREATE TABLE` statement for a {@link TableSpec}.
  */
 export function createTableStatement(spec: TableSpec | LiteTableSpec): string {
+  const forPostgres = 'schema' in spec;
   const defs = Object.entries(spec.columns)
     .sort(([_a, {pos: a}], [_b, {pos: b}]) => a - b)
-    .map(([name, columnSpec]) => `${id(name)} ${columnDef(columnSpec)}`);
+    .map(
+      ([name, columnSpec]) =>
+        `${id(name)} ${columnDef(columnSpec, forPostgres)}`,
+    );
   if (spec.primaryKey) {
     defs.push(`PRIMARY KEY (${idList(spec.primaryKey)})`);
   }

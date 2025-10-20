@@ -547,7 +547,7 @@ class TransactionProcessor {
     const {name} = msg.column;
     const spec = mapPostgresToLiteColumn(table, msg.column);
     this.#db.db.exec(
-      `ALTER TABLE ${id(table)} ADD ${id(name)} ${columnDef(spec)}`,
+      `ALTER TABLE ${id(table)} ADD ${id(name)} ${columnDef(spec, false)}`,
     );
 
     this.#bumpVersions(table);
@@ -587,7 +587,7 @@ class TransactionProcessor {
       const stmts = indexes.map(idx => `DROP INDEX IF EXISTS ${id(idx.name)};`);
       const tmpName = `tmp.${newName}`;
       stmts.push(`
-        ALTER TABLE ${id(table)} ADD ${id(tmpName)} ${columnDef(newSpec)};
+        ALTER TABLE ${id(table)} ADD ${id(tmpName)} ${columnDef(newSpec, false)};
         UPDATE ${id(table)} SET ${id(tmpName)} = ${id(oldName)};
         ALTER TABLE ${id(table)} DROP ${id(oldName)};
         `);

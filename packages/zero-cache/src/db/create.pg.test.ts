@@ -476,7 +476,7 @@ describe('tables/create', () => {
           },
           tags: {
             pos: 2,
-            dataType: 'varchar|TEXT_ARRAY',
+            dataType: 'varchar[]',
             characterMaximumLength: null,
             notNull: false,
             elemPgTypeClass: 'b',
@@ -484,7 +484,7 @@ describe('tables/create', () => {
           },
           nums: {
             pos: 3,
-            dataType: 'int4|TEXT_ARRAY',
+            dataType: 'int4[]',
             characterMaximumLength: null,
             notNull: false,
             elemPgTypeClass: 'b',
@@ -492,7 +492,7 @@ describe('tables/create', () => {
           },
           enums: {
             pos: 4,
-            dataType: 'my_type|TEXT_ENUM|TEXT_ARRAY',
+            dataType: 'my_type|TEXT_ENUM[]',
             characterMaximumLength: null,
             notNull: false,
             elemPgTypeClass: 'e',
@@ -554,6 +554,108 @@ describe('tables/create', () => {
 
       const tables = listTables(db);
       expect(tables).toEqual(expect.arrayContaining([c.liteTableSpec]));
+    });
+  });
+
+  // Regression tests for array type SQL generation bug
+  // Original issue: Legacy data with "text[]|TEXT_ARRAY" was generating malformed SQL like:
+  //   PostgreSQL: "text[]"[] (double brackets)
+  //   SQLite: "text[]|TEXT_ARRAY"[] (attribute not removed + double brackets)
+  // Root cause: upstreamDataType() extracts base type but doesn't strip [] suffix,
+  //   and columnDef() was adding [] again without checking if it already existed.
+  // Fix: columnDef() now checks if [] suffix already exists before adding it.
+  describe('columnDef - legacy array format handling', () => {
+    test('handles legacy text[]|TEXT_ARRAY format for PostgreSQL', async () => {
+      const {columnDef} = await import('./create.ts');
+      const spec = {
+        pos: 1,
+        dataType: 'text[]|TEXT_ARRAY', // Legacy format with both [] and |TEXT_ARRAY
+        characterMaximumLength: null,
+        notNull: false,
+        dflt: null,
+        elemPgTypeClass:
+          PostgresTypeClass.Base as typeof PostgresTypeClass.Base,
+      };
+
+      // PostgreSQL should get "text"[] (not "text[]"[])
+      const pgResult = columnDef(spec, true);
+      expect(pgResult).toBe('"text"[]');
+    });
+
+    test('handles legacy text[]|TEXT_ARRAY format for SQLite', async () => {
+      const {columnDef} = await import('./create.ts');
+      const spec = {
+        pos: 1,
+        dataType: 'text[]|TEXT_ARRAY', // Legacy format
+        characterMaximumLength: null,
+        notNull: false,
+        dflt: null,
+        elemPgTypeClass: PostgresTypeClass.Base,
+      } as const;
+
+      // SQLite should get "text[]" (not "text[]|TEXT_ARRAY"[])
+      const sqliteResult = columnDef(spec, false);
+      expect(sqliteResult).toBe('"text[]"');
+    });
+
+    test('handles legacy text|TEXT_ARRAY format (without [])', async () => {
+      const {columnDef} = await import('./create.ts');
+      const spec = {
+        pos: 1,
+        dataType: 'text|TEXT_ARRAY', // Old legacy format without []
+        characterMaximumLength: null,
+        notNull: false,
+        dflt: null,
+        elemPgTypeClass: PostgresTypeClass.Base,
+      } as const;
+
+      // PostgreSQL should get "text"[]
+      const pgResult = columnDef(spec, true);
+      expect(pgResult).toBe('"text"[]');
+
+      // SQLite should get "text[]"
+      const sqliteResult = columnDef(spec, false);
+      expect(sqliteResult).toBe('"text[]"');
+    });
+
+    test('handles new text[] format', async () => {
+      const {columnDef} = await import('./create.ts');
+      const spec = {
+        pos: 1,
+        dataType: 'text[]', // New format (no |TEXT_ARRAY)
+        characterMaximumLength: null,
+        notNull: false,
+        dflt: null,
+        elemPgTypeClass: PostgresTypeClass.Base,
+      } as const;
+
+      // PostgreSQL should get "text"[]
+      const pgResult = columnDef(spec, true);
+      expect(pgResult).toBe('"text"[]');
+
+      // SQLite should get "text[]"
+      const sqliteResult = columnDef(spec, false);
+      expect(sqliteResult).toBe('"text[]"');
+    });
+
+    test('handles new text|NOT_NULL[] format', async () => {
+      const {columnDef} = await import('./create.ts');
+      const spec = {
+        pos: 1,
+        dataType: 'text|NOT_NULL[]', // New format with attributes
+        characterMaximumLength: null,
+        notNull: false,
+        dflt: null,
+        elemPgTypeClass: PostgresTypeClass.Base,
+      } as const;
+
+      // PostgreSQL should get "text"[]
+      const pgResult = columnDef(spec, true);
+      expect(pgResult).toBe('"text"[]');
+
+      // SQLite should get "text|NOT_NULL[]"
+      const sqliteResult = columnDef(spec, false);
+      expect(sqliteResult).toBe('"text|NOT_NULL[]"');
     });
   });
 });
