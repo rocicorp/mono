@@ -1,9 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {beforeEach, expect, test, vi} from 'vitest';
-import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
 import {
   DID_NOT_CONNECT_VALUE,
-  type DisconnectReason,
   Gauge,
   MetricManager,
   type Point,
@@ -11,6 +9,9 @@ import {
   type Series,
   State,
 } from './metrics.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ClientError, ServerError, type ZeroError} from './error.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
 
 beforeEach(() => {
   vi.useFakeTimers({now: 0});
@@ -302,7 +303,7 @@ test('MetricManager v2 connect metrics', async () => {
     name: string;
     reportMetrics?: (metricsManager: MetricManager) => void;
     timeToConnect?: number;
-    connectError?: DisconnectReason;
+    connectError?: ZeroError;
     extraTags?: string[];
     expected: Series[];
   };
@@ -390,7 +391,12 @@ test('MetricManager v2 connect metrics', async () => {
     {
       name: 'lce client AbruptClose',
       reportMetrics: metricsManager => {
-        metricsManager.setConnectError({client: 'AbruptClose'});
+        metricsManager.setConnectError(
+          new ClientError({
+            kind: ClientErrorKind.AbruptClose,
+            message: 'Abrupt close',
+          }),
+        );
       },
       expected: [
         {
@@ -410,7 +416,12 @@ test('MetricManager v2 connect metrics', async () => {
     {
       name: 'lce server Unauthorized',
       reportMetrics: metricsManager => {
-        metricsManager.setConnectError({server: ErrorKind.Unauthorized});
+        metricsManager.setConnectError(
+          new ServerError({
+            kind: ErrorKind.Unauthorized,
+            message: 'Unauthorized',
+          }),
+        );
       },
       expected: [
         {
@@ -485,7 +496,12 @@ test('MetricManager v2 connect metrics', async () => {
     {
       name: 'error client ConnectTimeout',
       reportMetrics: metricsManager => {
-        metricsManager.setConnectError({client: 'ConnectTimeout'});
+        metricsManager.setConnectError(
+          new ClientError({
+            kind: ClientErrorKind.ConnectTimeout,
+            message: 'Connect timeout',
+          }),
+        );
       },
       expected: [
         {

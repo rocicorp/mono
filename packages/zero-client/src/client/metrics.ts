@@ -1,6 +1,6 @@
 import type {MaybePromise} from '../../../shared/src/types.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import * as MetricName from './metric-name-enum.ts';
+import {isServerError, type ZeroError, type ZeroErrorKind} from './error.ts';
+import {MetricName} from './metric-name.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
 
 // This value is used to indicate that the client's last connection attempt
@@ -11,15 +11,6 @@ export const DID_NOT_CONNECT_VALUE = 100 * 1000;
 
 export const REPORT_INTERVAL_MS = 5_000;
 
-type ClientDisconnectReason =
-  | 'AbruptClose'
-  | 'CleanClose'
-  | 'ClientClosed'
-  | 'ConnectTimeout'
-  | 'UnexpectedBaseCookie'
-  | 'PingTimeout'
-  | 'Hidden';
-
 type NotConnectedReason =
   | 'init'
   | 'error'
@@ -27,26 +18,15 @@ type NotConnectedReason =
   | 'hidden_was_init'
   | 'hidden_was_error';
 
-export type DisconnectReason =
-  | {
-      server: ErrorKind;
-    }
-  | {
-      client: ClientDisconnectReason;
-    };
-
-export function getLastConnectErrorValue(reason: DisconnectReason): string {
-  if ('server' in reason) {
-    return `server_${camelToSnake(reason.server)}`;
-  }
-  return `client_${camelToSnake(reason.client)}`;
+export function getLastConnectErrorValue(reason: ZeroError) {
+  return `${isServerError(reason) ? 'server_' : 'client_'}${camelToSnake(reason.kind)}` as const;
 }
 
-// camelToSnake is used to convert a protocol ErrorKind into a suitable
+// camelToSnake is used to convert a ZeroErrorKind into a suitable
 // metric name, eg AuthInvalidated => auth_invalidated. It converts
 // both PascalCase and camelCase to snake_case.
-function camelToSnake(s: string): string {
-  return s
+function camelToSnake(kind: ZeroErrorKind): string {
+  return kind
     .split(/\.?(?=[A-Z])/)
     .join('_')
     .toLowerCase();
@@ -186,7 +166,7 @@ export class MetricManager {
     this.#setNotConnectedReason(notConnectedReason);
   }
 
-  setConnectError(reason: DisconnectReason) {
+  setConnectError(reason: ZeroError) {
     this.#timeToConnectMsV2.clear();
     this.#totalTimeToConnectMs.clear();
     this.#setNotConnectedReason('error');

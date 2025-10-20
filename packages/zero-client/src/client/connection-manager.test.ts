@@ -2,6 +2,8 @@ import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import type {ConnectionState} from './connection-manager.ts';
 import {ConnectionManager} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
+import {ClientError} from './error.ts';
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -56,14 +58,19 @@ describe('ConnectionManager', () => {
       });
       const listener = subscribe(manager);
 
+      const reason = new ClientError({
+        kind: ClientErrorKind.ConnectTimeout,
+        message: 'Connect timed out',
+      });
+
       vi.setSystemTime(6_000);
-      manager.connecting('retry');
+      manager.connecting(reason);
 
       expect(manager.state).toEqual({
         name: ConnectionStatus.Connecting,
         attempt: 1,
         disconnectAt: 2_500 + DEFAULT_TIMEOUT_MS,
-        reason: 'retry',
+        reason,
       });
       expect(listener).toHaveBeenCalledTimes(1);
     });
@@ -138,9 +145,24 @@ describe('ConnectionManager', () => {
       const listener = subscribe(manager);
 
       // Call connecting multiple times rapidly
-      manager.connecting('attempt1');
-      manager.connecting('attempt2');
-      manager.connecting('attempt3');
+      manager.connecting(
+        new ClientError({
+          kind: ClientErrorKind.ConnectTimeout,
+          message: 'Connect timed out',
+        }),
+      );
+      manager.connecting(
+        new ClientError({
+          kind: ClientErrorKind.ConnectTimeout,
+          message: 'Connect timed out',
+        }),
+      );
+      manager.connecting(
+        new ClientError({
+          kind: ClientErrorKind.ConnectTimeout,
+          message: 'Connect timed out',
+        }),
+      );
 
       // Verify we're still in connecting state
       expect(manager.is(ConnectionStatus.Connecting)).toBe(true);
