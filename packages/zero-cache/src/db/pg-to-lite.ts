@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {must} from '../../../shared/src/must.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../services/replicator/schema/constants.ts';
 import {
   dataTypeToZqlValueType,
@@ -102,19 +103,22 @@ export function mapPostgresToLiteColumn(
     elemPgTypeClass = null,
   } = column.spec;
 
-  // For array types, PostgreSQL includes [] in dataType (e.g., 'int4[]').
-  // We strip it here and let liteTypeString add it back with the proper attributes.
-  const baseDataType = dataType.replace(/\[\]$/, '');
-  const isArray = elemPgTypeClass !== null;
+  // For array types, PostgreSQL includes [] in dataType (e.g., 'int4[]', 'int4[][]').
+  const [, baseDataType, arraySuffix] = must(
+    /^(.+?)((?:\[\])*)$/.exec(dataType),
+    `Invalid dataType format: ${dataType}`,
+  );
+
+  // Build the lite type string with base type + attributes + array dimensions
+  const liteType = liteTypeString(
+    baseDataType,
+    notNull,
+    (elemPgTypeClass ?? pgTypeClass) === PostgresTypeClass.Enum,
+  );
 
   return {
     pos,
-    dataType: liteTypeString(
-      baseDataType,
-      notNull,
-      (elemPgTypeClass ?? pgTypeClass) === PostgresTypeClass.Enum,
-      isArray,
-    ),
+    dataType: liteType + arraySuffix,
     characterMaximumLength: null,
     // Note: NOT NULL constraints are always ignored for SQLite (replica) tables.
     // 1. They are enforced by the replication stream.

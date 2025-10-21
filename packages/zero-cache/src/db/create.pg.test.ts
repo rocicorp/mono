@@ -364,6 +364,101 @@ describe('tables/create', () => {
         },
       },
     },
+    {
+      name: 'multi-dimensional array types',
+      createStatement: `
+      CREATE TABLE "public"."multidim_array_table" (
+        "id" "int4" NOT NULL,
+        "matrix" "int4"[][],
+        "enum_matrix" "my_type"[][],
+        "text_3d" "text"[][][],
+        PRIMARY KEY ("id")
+      );`,
+      dstTableSpec: {
+        schema: 'public',
+        name: 'multidim_array_table',
+        columns: {
+          id: {
+            pos: 1,
+            dataType: 'int4',
+            characterMaximumLength: null,
+            notNull: true,
+            elemPgTypeClass: null,
+            dflt: null,
+          },
+          matrix: {
+            pos: 2,
+            dataType: 'int4[][]',
+            characterMaximumLength: null,
+            notNull: false,
+            elemPgTypeClass: 'b',
+            dflt: null,
+          },
+          enum_matrix: {
+            pos: 3,
+            dataType: 'my_type[][]',
+            characterMaximumLength: null,
+            notNull: false,
+            elemPgTypeClass: 'e',
+            dflt: null,
+          },
+          text_3d: {
+            pos: 4,
+            dataType: 'text[][][]',
+            characterMaximumLength: null,
+            notNull: false,
+            elemPgTypeClass: 'b',
+            dflt: null,
+          },
+        },
+        primaryKey: ['id'],
+      },
+      liteTableSpec: {
+        name: 'multidim_array_table',
+        columns: {
+          id: {
+            pos: 1,
+            dataType: 'int4|NOT_NULL',
+            characterMaximumLength: null,
+            notNull: false,
+            elemPgTypeClass: null,
+            dflt: null,
+          },
+          matrix: {
+            pos: 2,
+            dataType: 'int4[][]',
+            characterMaximumLength: null,
+            notNull: false,
+            elemPgTypeClass: 'b',
+            dflt: null,
+          },
+          enum_matrix: {
+            pos: 3,
+            dataType: 'my_type|TEXT_ENUM[][]',
+            characterMaximumLength: null,
+            notNull: false,
+            elemPgTypeClass: 'e',
+            dflt: null,
+          },
+          text_3d: {
+            pos: 4,
+            dataType: 'text[][][]',
+            characterMaximumLength: null,
+            notNull: false,
+            elemPgTypeClass: 'b',
+            dflt: null,
+          },
+          ['_0_version']: {
+            pos: 5,
+            dataType: 'TEXT',
+            characterMaximumLength: null,
+            dflt: null,
+            notNull: false,
+            elemPgTypeClass: null,
+          },
+        },
+      },
+    },
   ];
 
   describe('sqlite', () => {

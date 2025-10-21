@@ -171,7 +171,6 @@ export function liteTypeString(
   upstreamDataType: string,
   notNull: boolean | null | undefined,
   textEnum: boolean,
-  textArray: boolean,
 ): LiteTypeString {
   let typeString = upstreamDataType;
   if (notNull) {
@@ -179,10 +178,6 @@ export function liteTypeString(
   }
   if (textEnum) {
     typeString += TEXT_ENUM_ATTRIBUTE;
-  }
-  // Use [] suffix instead of |TEXT_ARRAY attribute for new format
-  if (textArray) {
-    typeString += '[]';
   }
   return typeString;
 }

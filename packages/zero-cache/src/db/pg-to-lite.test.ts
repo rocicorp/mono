@@ -362,6 +362,42 @@ test.each([
       elemPgTypeClass: PostgresTypeClass.Enum,
     },
   ],
+  [
+    {
+      pos: 10,
+      dataType: 'int4[][]',
+      characterMaximumLength: null,
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: PostgresTypeClass.Base,
+    },
+    {
+      pos: 10,
+      dataType: 'int4[][]',
+      characterMaximumLength: null,
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: PostgresTypeClass.Base,
+    },
+  ],
+  [
+    {
+      pos: 11,
+      dataType: 'my_enum[][]',
+      characterMaximumLength: null,
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: PostgresTypeClass.Enum,
+    },
+    {
+      pos: 11,
+      dataType: 'my_enum|TEXT_ENUM[][]',
+      characterMaximumLength: null,
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: PostgresTypeClass.Enum,
+    },
+  ],
 ] satisfies [ColumnSpec, ColumnSpec][])(
   'postgres to lite column %s',
   (pg, lite) => {
