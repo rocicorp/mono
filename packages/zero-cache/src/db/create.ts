@@ -5,16 +5,12 @@ export function liteColumnDef(spec: ColumnSpec) {
   // Remove legacy |TEXT_ARRAY attribute for backwards compatibility
   const typeWithAttrs = spec.dataType.replace(/\|TEXT_ARRAY(\[\])*/, '');
 
-  let def: string;
-  if (spec.elemPgTypeClass !== null) {
-    // Arrays: SQLite wants "type[]", "type[]|TEXT_ENUM" (with attributes inside quotes)
-    // New dataType has [] suffix, but legacy data might not (it only had |TEXT_ARRAY instead)
-    const needsBrackets = !typeWithAttrs.endsWith('[]');
-
-    def = id(needsBrackets ? typeWithAttrs + '[]' : typeWithAttrs);
-  } else {
-    def = id(typeWithAttrs);
-  }
+  // Arrays: SQLite wants "type[]", "type[]|TEXT_ENUM" (with attributes inside quotes)
+  let def = id(
+    spec.elemPgTypeClass === null || typeWithAttrs.endsWith('[]')
+      ? typeWithAttrs
+      : typeWithAttrs + '[]',
+  );
 
   if (spec.characterMaximumLength) {
     def += `(${spec.characterMaximumLength})`;
