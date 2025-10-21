@@ -494,7 +494,9 @@ export class PipelineDriver {
           ) {
             editOldRow = prevValue;
           } else {
-            this.#conflictRowsDeleted.add(1);
+            if (nextValue) {
+              this.#conflictRowsDeleted.add(1);
+            }
             yield* this.#push(tableSource, {
               type: 'remove',
               row: prevValue,
