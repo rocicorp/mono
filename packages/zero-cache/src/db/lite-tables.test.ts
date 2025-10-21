@@ -922,11 +922,14 @@ describe('computeZqlSpec', () => {
           "name" "varchar|NOT_NULL",
           "order" "integer|NOT_NULL",
           "createdAt" "timestamp|NOT_NULL",
-          "updatedAt" "timestamp|NOT_NULL"
+          "updatedAt" "timestamp|NOT_NULL",
+          "title" "text"
       );
       CREATE UNIQUE INDEX funk_name_unique ON funk (name ASC);
       CREATE UNIQUE INDEX funk_order_unique ON funk ("order" ASC);
       CREATE UNIQUE INDEX funk_pkey ON funk (id ASC);
+      CREATE UNIQUE INDEX funk_title_unique ON funk (title ASC);
+      CREATE UNIQUE INDEX funk_name_title_unique ON funk (name ASC, title ASC);
     `),
     ).toMatchInlineSnapshot(`
       [
@@ -976,6 +979,14 @@ describe('computeZqlSpec', () => {
                 "notNull": false,
                 "pos": 3,
               },
+              "title": {
+                "characterMaximumLength": null,
+                "dataType": "TEXT",
+                "dflt": null,
+                "elemPgTypeClass": null,
+                "notNull": false,
+                "pos": 6,
+              },
               "updatedAt": {
                 "characterMaximumLength": null,
                 "dataType": "timestamp|NOT_NULL",
@@ -997,12 +1008,19 @@ describe('computeZqlSpec', () => {
             "uniqueKeys": [
               [
                 "name",
+                "title",
+              ],
+              [
+                "name",
               ],
               [
                 "order",
               ],
               [
                 "id",
+              ],
+              [
+                "title",
               ],
             ],
           },
@@ -1018,6 +1036,9 @@ describe('computeZqlSpec', () => {
             },
             "order": {
               "type": "number",
+            },
+            "title": {
+              "type": "string",
             },
             "updatedAt": {
               "type": "number",
