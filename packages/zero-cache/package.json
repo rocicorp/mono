@@ -6,6 +6,8 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:pg17": "vitest --project='*17*' run",
+    "test:pg17:watch": "vitest --project='*17*'",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",

@@ -1,10 +1,10 @@
 import {assert} from '../../../shared/src/asserts.ts';
+import {stringify, type JSONValue} from '../../../shared/src/bigint-json.ts';
 import type {
   SchemaValue,
   ValueType,
 } from '../../../zero-schema/src/table-schema.ts';
 import type {LiteTableSpec} from '../db/specs.ts';
-import {stringify, type JSONValue} from '../../../shared/src/bigint-json.ts';
 import {
   dataTypeToZqlValueType as upstreamDataTypeToZqlValueType,
   type PostgresValueType,
@@ -132,7 +132,7 @@ function mapLiteDataTypeToZqlValueType(dataType: LiteTypeString): ValueType {
 // Note: Includes the "TEXT" substring for SQLite type affinity
 const TEXT_ENUM_ATTRIBUTE = '|TEXT_ENUM';
 const NOT_NULL_ATTRIBUTE = '|NOT_NULL';
-const TEXT_ARRAY_ATTRIBUTE = '|TEXT_ARRAY';
+export const TEXT_ARRAY_ATTRIBUTE = '|TEXT_ARRAY';
 
 /**
  * The `LiteTypeString` utilizes SQLite's loose type system to encode
@@ -141,11 +141,15 @@ const TEXT_ARRAY_ATTRIBUTE = '|TEXT_ARRAY';
  * but nonetheless determines how higher level logic handles the data.
  *
  * The format of the type string is the original upstream type, followed
- * by any number of attributes, each of which begins with the `|` character.
+ * by any number of attributes, each of which begins with the `|` character,
+ * and optionally ending with `[]` to indicate an array type.
  * The current list of attributes are:
  * * `|NOT_NULL` to indicate that the upstream column does not allow nulls
  * * `|TEXT_ENUM` to indicate an enum that should be treated as a string
- * * `|TEXT_ARRAY` to indicate an array which is stored as a JSON string
+ * * `[]` suffix to indicate an array type
+ *
+ * Note: The legacy `|TEXT_ARRAY` attribute is still supported for backwards
+ * compatibility but new data uses the `[]` suffix instead.
  *
  * Examples:
  * * `int8`
@@ -154,8 +158,9 @@ const TEXT_ARRAY_ATTRIBUTE = '|TEXT_ARRAY';
  * * `timestamp with time zone|NOT_NULL`
  * * `nomz|TEXT_ENUM`
  * * `nomz|NOT_NULL|TEXT_ENUM`
- * * `int8|TEXT_ARRAY`
- * * `nomz|TEXT_ARRAY|TEXT_ENUM`
+ * * `int8[]`
+ * * `int8|NOT_NULL[]`
+ * * `nomz|TEXT_ENUM[]`
  */
 export type LiteTypeString = string;
 
@@ -166,7 +171,6 @@ export function liteTypeString(
   upstreamDataType: string,
   notNull: boolean | null | undefined,
   textEnum: boolean,
-  textArray: boolean,
 ): LiteTypeString {
   let typeString = upstreamDataType;
   if (notNull) {
@@ -174,9 +178,6 @@ export function liteTypeString(
   }
   if (textEnum) {
     typeString += TEXT_ENUM_ATTRIBUTE;
-  }
-  if (textArray) {
-    typeString += TEXT_ARRAY_ATTRIBUTE;
   }
   return typeString;
 }
