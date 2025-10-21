@@ -1,6 +1,10 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
-import type {PlannerNode} from './planner-node.ts';
+import type {
+  CostEstimate,
+  JoinOrConnection,
+  PlannerNode,
+} from './planner-node.ts';
 
 /**
  * A PlannerFanIn node can either be a normal FanIn or UnionFanIn.
@@ -37,6 +41,10 @@ export class PlannerFanIn {
     return false;
   }
 
+  closestJoinOrSource(): JoinOrConnection {
+    return 'join';
+  }
+
   setOutput(node: PlannerNode): void {
     this.#output = node;
   }
@@ -54,25 +62,41 @@ export class PlannerFanIn {
     this.#type = 'UFI';
   }
 
-  estimateCost(branchPattern?: number[]): number {
+  estimateCost(branchPattern?: number[]): CostEstimate {
     // FanIn always sums costs of its inputs
     // But it needs to pass the correct branch pattern to each input
-    let totalCost = 0;
+    let totalCost = {
+      baseCardinality: 0,
+      runningCost: 0,
+    };
 
     if (this.#type === 'FI') {
       // Normal FanIn: all inputs get the same branch pattern with 0 prepended
       const updatedPattern =
         branchPattern === undefined ? undefined : [0, ...branchPattern];
+      let maxBaseCardinality = 0;
+      let maxRunningCost = 0;
       for (const input of this.#inputs) {
-        totalCost += input.estimateCost(updatedPattern);
+        const cost = input.estimateCost(updatedPattern);
+        if (cost.baseCardinality > maxBaseCardinality) {
+          maxBaseCardinality = cost.baseCardinality;
+        }
+        if (cost.runningCost > maxRunningCost) {
+          maxRunningCost = cost.runningCost;
+        }
       }
+
+      totalCost.baseCardinality = maxBaseCardinality;
+      totalCost.runningCost = maxRunningCost;
     } else {
       // Union FanIn (UFI): each input gets unique branch pattern
       let i = 0;
       for (const input of this.#inputs) {
         const updatedPattern =
           branchPattern === undefined ? undefined : [i, ...branchPattern];
-        totalCost += input.estimateCost(updatedPattern);
+        const cost = input.estimateCost(updatedPattern);
+        totalCost.baseCardinality += cost.baseCardinality;
+        totalCost.runningCost += cost.runningCost;
         i++;
       }
     }

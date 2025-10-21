@@ -14,3 +14,10 @@ export type PlannerNode =
   | PlannerFanOut
   | PlannerFanIn
   | PlannerTerminus;
+
+export type CostEstimate = {
+  baseCardinality: number;
+  runningCost: number;
+};
+
+export type JoinOrConnection = 'join' | 'connection';

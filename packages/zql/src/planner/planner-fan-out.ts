@@ -1,5 +1,9 @@
 import type {PlannerConstraint} from './planner-constraint.ts';
-import type {PlannerNode} from './planner-node.ts';
+import type {
+  CostEstimate,
+  JoinOrConnection,
+  PlannerNode,
+} from './planner-node.ts';
 
 export class PlannerFanOut {
   readonly kind = 'fan-out' as const;
@@ -29,6 +33,10 @@ export class PlannerFanOut {
     return this.#outputs;
   }
 
+  closestJoinOrSource(): JoinOrConnection {
+    return this.#input.closestJoinOrSource();
+  }
+
   propagateConstraints(
     branchPattern: number[],
     constraint: PlannerConstraint | undefined,
@@ -37,7 +45,7 @@ export class PlannerFanOut {
     this.#input.propagateConstraints(branchPattern, constraint, this);
   }
 
-  estimateCost(branchPattern?: number[]): number {
+  estimateCost(branchPattern?: number[]): CostEstimate {
     return this.#input.estimateCost(branchPattern);
   }
 

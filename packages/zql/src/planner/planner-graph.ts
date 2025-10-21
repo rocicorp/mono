@@ -112,7 +112,7 @@ export class PlannerGraph {
     const costs = unpinned.map(connection => ({
       connection,
       // Pass undefined to get sum of all branch costs
-      cost: connection.estimateCost(undefined),
+      cost: connection.estimateCost(undefined).runningCost,
     }));
 
     // Sort by cost ascending (lowest cost first)
@@ -145,7 +145,7 @@ export class PlannerGraph {
    * Calculate total cost of the current plan.
    */
   getTotalCost(): number {
-    return must(this.#terminus).estimateCost();
+    return must(this.#terminus).estimateCost().runningCost;
   }
 
   /**
