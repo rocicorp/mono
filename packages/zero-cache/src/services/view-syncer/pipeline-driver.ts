@@ -29,7 +29,10 @@ import {
 import type {LogConfig} from '../../config/zero-config.ts';
 import {computeZqlSpecs, mustGetTableSpec} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
-import {getOrCreateHistogram} from '../../observability/metrics.ts';
+import {
+  getOrCreateCounter,
+  getOrCreateHistogram,
+} from '../../observability/metrics.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type RowKey} from '../../types/row-key.ts';
 import type {SchemaVersions} from '../../types/schema-versions.ts';
@@ -102,6 +105,13 @@ export class PipelineDriver {
       'Time to advance all queries for a given client group for in response to a single change.',
     unit: 's',
   });
+
+  readonly #conflictRowsDeleted = getOrCreateCounter(
+    'sync',
+    'ivm.conflict-rows-deleted',
+    'Number of rows deleted because they conflicted with added row',
+  );
+
   readonly #inspectorDelegate: InspectorDelegate;
 
   constructor(
@@ -484,6 +494,7 @@ export class PipelineDriver {
           ) {
             editOldRow = prevValue;
           } else {
+            this.#conflictRowsDeleted.add(1);
             yield* this.#push(tableSource, {
               type: 'remove',
               row: prevValue,

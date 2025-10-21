@@ -187,6 +187,12 @@ export class Snapshotter {
 
 export type Change = {
   readonly table: string;
+  /**
+   * If this change represents a remove the row to remove,
+   * if nextValue is not null then all rows that have a unique constraint
+   * violation with nextValue.
+   * In both cases these rows should be removed.
+   */
   readonly prevValues: Readonly<Row>[];
   readonly nextValue: Readonly<Row> | null;
   readonly rowKey: RowKey;
