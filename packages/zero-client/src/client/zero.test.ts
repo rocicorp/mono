@@ -463,6 +463,41 @@ test('transition to connecting state if ping fails', async () => {
   expect(r.connectionStatus).toBe(ConnectionStatus.Connecting);
 });
 
+test('does not ping when ping timeout is aborted by inbound message', async () => {
+  const r = zeroForTest();
+
+  await r.waitForConnectionStatus(ConnectionStatus.Connecting);
+  await r.triggerConnected();
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
+
+  await tickAFewTimes(vi);
+
+  const socket = await r.socket;
+  socket.messages.length = 0;
+
+  await r.triggerPullResponse({
+    cookie: 'cookie-1',
+    requestID: 'req-1',
+    lastMutationIDChanges: {},
+  });
+  await tickAFewTimes(vi);
+
+  const pingCountAfterAbort = socket.messages.filter(message =>
+    message.startsWith('["ping"'),
+  ).length;
+  expect(pingCountAfterAbort).toBe(0);
+
+  await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
+
+  const pingMessages = socket.messages.filter(message =>
+    message.startsWith('["ping"'),
+  );
+  expect(pingMessages).toHaveLength(1);
+
+  await r.triggerPong();
+  await tickAFewTimes(vi);
+});
+
 const mockRep = {
   query() {
     return Promise.resolve(new Map());
@@ -2190,6 +2225,21 @@ test('Disconnect on error', async () => {
   await r.triggerConnected();
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
   await r.triggerError(ErrorKind.InvalidMessage, 'Bad message');
+  expect(r.connectionStatus).toBe(ConnectionStatus.Error);
+});
+
+test('connection.disconnect resolves while in error state', async () => {
+  const r = zeroForTest();
+  await r.triggerConnected();
+  await r.triggerError(ErrorKind.InvalidMessage, 'Disconnect test');
+  await r.waitForConnectionStatus(ConnectionStatus.Error);
+
+  const result = await Promise.race([
+    r.connection.disconnect().then(() => 'resolved'),
+    vi.advanceTimersByTimeAsync(0).then(() => 'timeout'),
+  ]);
+
+  expect(result).toBe('resolved');
   expect(r.connectionStatus).toBe(ConnectionStatus.Error);
 });
 

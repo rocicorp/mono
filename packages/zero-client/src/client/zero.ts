@@ -168,6 +168,7 @@ import {ZeroRep} from './zero-rep.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {Subscribable} from '../../../shared/src/subscribable.ts';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 
 export type NoRelations = Record<string, never>;
 
@@ -641,7 +642,7 @@ export class Zero<
     this.#connection = new ConnectionImpl(
       this.#connectionManager,
       this.#lc,
-      this.#handleUserDisconnect,
+      () => this.#handleUserDisconnect(),
     );
     this.#mutationTracker.setClientIDAndWatch(
       rep.clientID,
@@ -1515,8 +1516,8 @@ export class Zero<
         return;
 
       case ConnectionStatus.Error:
-        lc.error?.('disconnect() called while in error state');
-        return;
+        lc.debug?.('disconnect() called while in error state; continuing');
+        break;
 
       default:
         unreachable(connectionStatus);
@@ -1559,13 +1560,13 @@ export class Zero<
   /**
    * Handles user-initiated disconnection via the connection.disconnect() API.
    */
-  async #handleUserDisconnect(): Promise<void> {
+  #handleUserDisconnect(): Promise<void> {
     const lc = this.#lc.withContext('handleUserDisconnect');
 
     // don't disconnect if already closed
     if (this.#connectionManager.is(ConnectionStatus.Closed)) {
       lc.debug?.('Cannot disconnect: Zero instance is already closed');
-      return;
+      return promiseVoid;
     }
 
     const userDisconnectError = new ClientError({
@@ -1573,14 +1574,10 @@ export class Zero<
       message: 'User requested disconnect via connection.disconnect()',
     });
 
-    // get the next state promise to wait for the disconnect to complete
-    const nextStatePromise = this.#connectionManager.waitForStateChange();
-
     this.#disconnect(lc, userDisconnectError, CLOSE_CODE_NORMAL);
     this.#setOnline(false);
 
-    // wait for the disconnect to complete
-    await nextStatePromise;
+    return promiseVoid;
   }
 
   #handlePokeStart(_lc: ZeroLogContext, pokeMessage: PokeStartMessage): void {
@@ -1836,11 +1833,13 @@ export class Zero<
             });
 
             switch (raceResult.key) {
-              case 'waitForPing':
-              case 'waitForPingAborted': {
+              case 'waitForPing': {
                 await this.#ping(lc);
                 break;
               }
+
+              case 'waitForPingAborted':
+                break;
 
               case 'tabHidden': {
                 const hiddenError = new ClientError({
