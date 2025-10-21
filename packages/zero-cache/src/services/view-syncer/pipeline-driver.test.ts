@@ -932,7 +932,7 @@ describe('view-syncer/pipeline-driver', () => {
     `);
   });
 
-  test.fails('unique constraint conflict due to changelog compression', () => {
+  test('unique constraint conflict due to changelog compression', () => {
     pipelines.init(null);
     expect([
       ...pipelines.addQuery('hash1', 'queryID1', UNIQUES_QUERY, startTimer()),
