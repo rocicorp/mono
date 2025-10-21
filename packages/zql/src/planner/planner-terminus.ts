@@ -1,4 +1,8 @@
-import type {PlannerNode} from './planner-node.ts';
+import type {
+  CostEstimate,
+  JoinOrConnection,
+  PlannerNode,
+} from './planner-node.ts';
 
 export class PlannerTerminus {
   readonly kind = 'terminus' as const;
@@ -12,11 +16,15 @@ export class PlannerTerminus {
     return true;
   }
 
+  closestJoinOrSource(): JoinOrConnection {
+    return this.#input.closestJoinOrSource();
+  }
+
   propagateConstraints(): void {
     this.#input.propagateConstraints([], undefined, this);
   }
 
-  estimateCost(): number {
+  estimateCost(): CostEstimate {
     // Terminus starts the cost estimation flow with empty branch pattern
     return this.#input.estimateCost([]);
   }

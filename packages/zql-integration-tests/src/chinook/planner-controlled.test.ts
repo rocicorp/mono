@@ -84,7 +84,7 @@ describe('two joins via or', () => {
     expect(pick(planned, ['where', 'conditions', 1, 'flip'])).toBe(true);
   });
 
-  test('track.exists(album).or.exists(genre): track < invoiceLines > album', () => {
+  test('track.exists(album).or.exists(invoiceLines): track < invoiceLines > album', () => {
     const costModel = makeCostModel({
       track: 10_000, // gets decimated to 10 when fetched by album⨝track join
       album: 1_000, // gets decimated to 5 from the `title` filter

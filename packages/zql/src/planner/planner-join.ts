@@ -3,7 +3,11 @@ import {
   mergeConstraints,
   type PlannerConstraint,
 } from './planner-constraint.ts';
-import type {PlannerNode} from './planner-node.ts';
+import type {
+  CostEstimate,
+  JoinOrConnection,
+  PlannerNode,
+} from './planner-node.ts';
 
 /**
  * Represents a join between two data streams (parent and child).
@@ -73,6 +77,10 @@ export class PlannerJoin {
   get output(): PlannerNode {
     assert(this.#output !== undefined, 'Output not set');
     return this.#output;
+  }
+
+  closestJoinOrSource(): JoinOrConnection {
+    return 'join';
   }
 
   flipIfNeeded(input: PlannerNode): void {
@@ -167,10 +175,25 @@ export class PlannerJoin {
     this.#pinned = false;
   }
 
-  estimateCost(branchPattern?: number[]): number {
+  estimateCost(branchPattern?: number[]): CostEstimate {
     const parentCost = this.#parent.estimateCost(branchPattern);
     const childCost = this.#child.estimateCost(branchPattern);
-    return parentCost * childCost;
+
+    if (this.#parent.closestJoinOrSource() === 'join') {
+      // if the parent is a join, we're in a pipeline rather than nesting of joins.
+      return {
+        baseCardinality: parentCost.baseCardinality,
+        runningCost:
+          parentCost.runningCost +
+          parentCost.baseCardinality * childCost.runningCost,
+      };
+    }
+
+    // if the parent is a source, we're in a nested loop join
+    return {
+      baseCardinality: parentCost.baseCardinality,
+      runningCost: parentCost.runningCost * childCost.runningCost,
+    };
   }
 }
 

@@ -41,8 +41,8 @@ suite('PlannerFanIn', () => {
 
     fanIn.propagateConstraints([], CONSTRAINTS.userId, unpinned);
 
-    expect(inputs[0].estimateCost()).toBe(expectedCost(1));
-    expect(inputs[1].estimateCost()).toBe(expectedCost(1));
+    expect(inputs[0].estimateCost()).toStrictEqual(expectedCost(1));
+    expect(inputs[1].estimateCost()).toStrictEqual(expectedCost(1));
   });
 
   test('propagateConstraints() with UFI type sends unique branch patterns to each input', () => {
@@ -51,9 +51,9 @@ suite('PlannerFanIn', () => {
 
     fanIn.propagateConstraints([], CONSTRAINTS.userId, unpinned);
 
-    expect(inputs[0].estimateCost()).toBe(expectedCost(1));
-    expect(inputs[1].estimateCost()).toBe(expectedCost(1));
-    expect(inputs[2].estimateCost()).toBe(expectedCost(1));
+    expect(inputs[0].estimateCost()).toStrictEqual(expectedCost(1));
+    expect(inputs[1].estimateCost()).toStrictEqual(expectedCost(1));
+    expect(inputs[2].estimateCost()).toStrictEqual(expectedCost(1));
   });
 
   test('can set and get output', () => {

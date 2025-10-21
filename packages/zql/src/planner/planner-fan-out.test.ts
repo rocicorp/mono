@@ -45,7 +45,7 @@ suite('PlannerFanOut', () => {
 
     fanOut.propagateConstraints([0], CONSTRAINTS.userId, unpinned);
 
-    expect(input.estimateCost()).toBe(expectedCost(1));
+    expect(input.estimateCost()).toStrictEqual(expectedCost(1));
   });
 
   test('reset() restores FO type', () => {

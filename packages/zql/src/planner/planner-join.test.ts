@@ -84,7 +84,7 @@ suite('PlannerJoin', () => {
     join.pin();
     join.propagateConstraints([0], undefined, pinned);
 
-    expect(child.estimateCost()).toBe(expectedCost(1));
+    expect(child.estimateCost()).toStrictEqual(expectedCost(1));
   });
 
   test('propagateConstraints() on pinned flipped join sends undefined to child', () => {
@@ -94,7 +94,7 @@ suite('PlannerJoin', () => {
     join.pin();
     join.propagateConstraints([0], undefined, pinned);
 
-    expect(child.estimateCost()).toBe(expectedCost(0));
+    expect(child.estimateCost()).toStrictEqual(expectedCost(0));
   });
 
   test('propagateConstraints() on pinned flipped join merges constraints for parent', () => {
@@ -109,6 +109,6 @@ suite('PlannerJoin', () => {
     const outputConstraint: PlannerConstraint = {name: undefined};
     join.propagateConstraints([0], outputConstraint, pinned);
 
-    expect(parent.estimateCost()).toBe(expectedCost(2));
+    expect(parent.estimateCost()).toStrictEqual(expectedCost(2));
   });
 });

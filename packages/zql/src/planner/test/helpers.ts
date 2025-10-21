@@ -6,6 +6,7 @@ import type {PlannerConnection} from '../planner-connection.ts';
 import {PlannerJoin} from '../planner-join.ts';
 import {PlannerFanIn} from '../planner-fan-in.ts';
 import {PlannerFanOut} from '../planner-fan-out.ts';
+import type {CostEstimate} from '../planner-node.ts';
 
 // ============================================================================
 // Test Constants
@@ -54,8 +55,19 @@ export const simpleCostModel: ConnectionCostModel = (
 /**
  * Calculates expected cost given a number of constraints.
  */
-export function expectedCost(constraintCount: number): number {
-  return Math.max(1, BASE_COST - constraintCount * CONSTRAINT_REDUCTION);
+export function expectedCost(constraintCount: number): CostEstimate {
+  const c = Math.max(1, BASE_COST - constraintCount * CONSTRAINT_REDUCTION);
+  return {
+    baseCardinality: c,
+    runningCost: c,
+  };
+}
+
+export function multCost(base: CostEstimate, factor: number): CostEstimate {
+  return {
+    baseCardinality: base.baseCardinality * factor,
+    runningCost: base.runningCost * factor,
+  };
 }
 
 // ============================================================================

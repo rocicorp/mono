@@ -4,7 +4,12 @@ import {PlannerJoin} from './planner-join.ts';
 import {PlannerFanOut} from './planner-fan-out.ts';
 import {PlannerFanIn} from './planner-fan-in.ts';
 import {PlannerTerminus} from './planner-terminus.ts';
-import {CONSTRAINTS, simpleCostModel, expectedCost} from './test/helpers.ts';
+import {
+  CONSTRAINTS,
+  simpleCostModel,
+  expectedCost,
+  multCost,
+} from './test/helpers.ts';
 
 suite('Planner Pipeline Integration', () => {
   test('FO/FI pairing produces small cost (single fetch)', () => {
@@ -69,7 +74,7 @@ suite('Planner Pipeline Integration', () => {
     // Parent connection sees only 1 unique branch pattern
     // Cost should be: expectedCost(0) for base case
     const parentCost = parentConnection.estimateCost();
-    expect(parentCost).toBe(expectedCost(0));
+    expect(parentCost).toStrictEqual(expectedCost(0));
 
     // Verify fan-out and fan-in are still normal types
     expect(fanOut.type).toBe('FO');
@@ -142,7 +147,7 @@ suite('Planner Pipeline Integration', () => {
     // Parent connection sees 3 unique branch patterns
     // Cost should be: 3 * expectedCost(0)
     const parentCost = parentConnection.estimateCost();
-    expect(parentCost).toBe(3 * expectedCost(0));
+    expect(parentCost).toStrictEqual(multCost(expectedCost(0), 3));
 
     // Verify fan-out and fan-in are union types
     expect(fanOut.type).toBe('UFO');
@@ -214,9 +219,9 @@ suite('Planner Pipeline Integration', () => {
     const unionCost = unionConnection.estimateCost();
 
     // Union cost should be 3x normal cost
-    expect(unionCost).toBe(3 * normalCost);
-    expect(unionCost).toBe(3 * expectedCost(0));
-    expect(normalCost).toBe(expectedCost(0));
+    expect(unionCost).toStrictEqual(multCost(normalCost, 3));
+    expect(unionCost).toStrictEqual(multCost(expectedCost(0), 3));
+    expect(normalCost).toStrictEqual(expectedCost(0));
   });
 
   test('chained UFO/UFI pairs demonstrate exponential cost explosion (2x2=4x)', () => {
@@ -389,15 +394,15 @@ suite('Planner Pipeline Integration', () => {
 
     // Normal FO/FI: All branches collapse to single pattern [0, 0]
     // Cost = expectedCost(0) = 100
-    expect(normalCost).toBe(expectedCost(0));
+    expect(normalCost).toStrictEqual(expectedCost(0));
 
     // Union UFO/UFI: Exponential branch pattern explosion
     // First UFI: 2 patterns [0], [1]
     // Second UFI on each: [0,0], [0,1], [1,0], [1,1] = 4 patterns
     // Cost = 4 * expectedCost(0) = 400
-    expect(unionCost).toBe(4 * expectedCost(0));
+    expect(unionCost).toStrictEqual(multCost(expectedCost(0), 4));
 
     // Demonstrate multiplicative explosion: 2 branches × 2 branches = 4x cost
-    expect(unionCost).toBe(4 * normalCost);
+    expect(unionCost).toStrictEqual(multCost(normalCost, 4));
   });
 });
