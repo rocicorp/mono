@@ -316,7 +316,7 @@ class Snapshot {
   }
 
   getRows(table: LiteTableSpecWithKeys, keys: PrimaryKey[], row: RowValue) {
-    const conds = keys.map(key => Object.keys(key).map(c => `${id(c)}=?`));
+    const conds = keys.map(key => key.map(c => `${id(c)}=?`));
     const cols = Object.keys(table.columns);
     const cached = this.db.statementCache.get(
       `SELECT ${cols.map(c => id(c)).join(',')} FROM ${id(
@@ -398,11 +398,19 @@ class Diff implements SnapshotDiff {
             const {tableSpec, zqlSpec} = must(this.tables.get(table));
 
             assert(rowKey !== null);
-            let nextValue =
+            const nextValue =
               op === SET_OP ? this.curr.getRow(tableSpec, rowKey) : null;
-            let prevValues = nextValue
-              ? this.prev.getRows(tableSpec, tableSpec.allKeys, nextValue)
-              : [this.prev.getRow(tableSpec, rowKey)];
+            let prevValues;
+            if (nextValue) {
+              prevValues = this.prev.getRows(
+                tableSpec,
+                tableSpec.allKeys,
+                nextValue,
+              );
+            } else {
+              const prevValue = this.prev.getRow(tableSpec, rowKey);
+              prevValues = prevValue ? [prevValue] : [];
+            }
             if (nextValue === undefined) {
               throw new Error(
                 `Missing value for ${table} ${stringify(rowKey)}`,
@@ -411,7 +419,7 @@ class Diff implements SnapshotDiff {
             // Sanity check detects if the diff is being accessed after the Snapshots have advanced.
             this.checkThatDiffIsValid(stateVersion, op, prevValues, nextValue);
 
-            if (prevValues === null && nextValue === null) {
+            if (prevValues.length === 0 && nextValue === null) {
               // Filter out no-op changes (e.g. a delete of a row that does not exist in prev).
               // TODO: Consider doing this for deep-equal values.
               continue;
@@ -477,9 +485,9 @@ class Diff implements SnapshotDiff {
       );
     }
     if (
-      prevValues.findIndex(
-        prevValue => (prevValue[ROW_VERSION] ?? '~') > this.prev.version,
-      ) !== -1
+      prevValues.findIndex(prevValue => {
+        return (prevValue[ROW_VERSION] ?? '~') > this.prev.version;
+      }) !== -1
     ) {
       throw new InvalidDiffError(
         `Diff is no longer valid. prev db has advanced past ${this.prev.version}.`,
