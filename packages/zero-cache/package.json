@@ -59,7 +59,8 @@
     "ws": "^8.18.1",
     "zero-protocol": "0.0.0",
     "zql": "0.0.0",
-    "zqlite": "0.0.0"
+    "zqlite": "0.0.0",
+    "zero-types": "0.0.0"
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",
