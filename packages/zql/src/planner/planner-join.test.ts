@@ -9,7 +9,7 @@ const pinned = {
 } as PlannerNode;
 
 suite('PlannerJoin', () => {
-  test('initial state is semi join, unpinned', () => {
+  test('initial state is semi-join, unpinned', () => {
     const {join} = createJoin();
 
     expect(join.kind).toBe('join');
@@ -78,7 +78,7 @@ suite('PlannerJoin', () => {
     expect(join.pinned).toBe(false);
   });
 
-  test('propagateConstraints() on pinned semi join sends constraints to child', () => {
+  test('propagateConstraints() on pinned semi-join sends constraints to child', () => {
     const {child, join} = createJoin();
 
     join.pin();

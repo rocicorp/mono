@@ -56,4 +56,19 @@ export class PlannerFanOut {
   reset(): void {
     this.#type = 'FO';
   }
+
+  /**
+   * Propagate unlimiting when a parent join is flipped.
+   * Fan-out propagates to its input.
+   */
+  propagateUnlimitFromFlippedJoin(): void {
+    if (
+      'propagateUnlimitFromFlippedJoin' in this.#input &&
+      typeof this.#input.propagateUnlimitFromFlippedJoin === 'function'
+    ) {
+      (
+        this.#input as {propagateUnlimitFromFlippedJoin(): void}
+      ).propagateUnlimitFromFlippedJoin();
+    }
+  }
 }

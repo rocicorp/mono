@@ -119,6 +119,34 @@ export class PlannerJoin {
     return this.#pinned;
   }
 
+  /**
+   * Propagate unlimiting through the child subgraph when this join is flipped.
+   * When a join is flipped, the child becomes the outer loop and should produce
+   * all rows rather than stopping at an EXISTS limit.
+   *
+   * Propagation rules:
+   * - Connection: call unlimit()
+   * - Semi-join: continue to parent (outer loop)
+   * - Flipped join: stop (already unlimited when it was flipped)
+   * - Fan-out/Fan-in: propagate to all inputs
+   */
+  propagateUnlimit(): void {
+    assert(this.#type === 'flipped', 'Can only unlimit a flipped join');
+    propagateUnlimitToNode(this.#child);
+  }
+
+  /**
+   * Called when a parent join is flipped and this join is part of its child subgraph.
+   * - Semi-join: continue propagation to parent (the outer loop)
+   * - Flipped join: stop propagation (already unlimited when it was flipped)
+   */
+  propagateUnlimitFromFlippedJoin(): void {
+    if (this.#type === 'semi') {
+      propagateUnlimitToNode(this.#parent);
+    }
+    // For flipped joins, stop propagation
+  }
+
   propagateConstraints(
     branchPattern: number[],
     constraint: PlannerConstraint | undefined,
@@ -179,20 +207,29 @@ export class PlannerJoin {
     const parentCost = this.#parent.estimateCost(branchPattern);
     const childCost = this.#child.estimateCost(branchPattern);
 
+    let scanEst = parentCost.baseCardinality;
+    if (this.#type === 'semi' && parentCost.limit !== undefined) {
+      if (childCost.selectivity !== 0) {
+        scanEst = Math.min(scanEst, parentCost.limit / childCost.selectivity);
+      }
+    }
+
     if (this.#parent.closestJoinOrSource() === 'join') {
       // if the parent is a join, we're in a pipeline rather than nesting of joins.
       return {
         baseCardinality: parentCost.baseCardinality,
-        runningCost:
-          parentCost.runningCost +
-          parentCost.baseCardinality * childCost.runningCost,
+        runningCost: parentCost.runningCost + scanEst * childCost.runningCost,
+        selectivity: parentCost.selectivity,
+        limit: parentCost.limit,
       };
     }
 
     // if the parent is a source, we're in a nested loop join
     return {
       baseCardinality: parentCost.baseCardinality,
-      runningCost: parentCost.runningCost * childCost.runningCost,
+      runningCost: scanEst * childCost.runningCost,
+      selectivity: parentCost.selectivity,
+      limit: parentCost.limit,
     };
   }
 
@@ -247,5 +284,23 @@ function getNodeName(node: PlannerNode): string {
       return 'FI';
     case 'terminus':
       return 'terminus';
+  }
+}
+
+/**
+ * Propagate unlimiting through a node in the planner graph.
+ * Called recursively to unlimit all nodes in a subgraph when a join is flipped.
+ *
+ * This calls the propagateUnlimitFromFlippedJoin() method on each node,
+ * which implements the type-specific logic.
+ */
+function propagateUnlimitToNode(node: PlannerNode): void {
+  if (
+    'propagateUnlimitFromFlippedJoin' in node &&
+    typeof node.propagateUnlimitFromFlippedJoin === 'function'
+  ) {
+    (
+      node as {propagateUnlimitFromFlippedJoin(): void}
+    ).propagateUnlimitFromFlippedJoin();
   }
 }

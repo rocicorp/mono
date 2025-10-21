@@ -271,4 +271,204 @@ suite('buildPlanGraph', () => {
       }
     });
   });
+
+  suite('limit assignment', () => {
+    test('simple EXISTS child connection has limit=1', () => {
+      const ast = builder.users.whereExists('posts').ast;
+      const plans = buildPlanGraph(ast, simpleCostModel);
+
+      expect(plans.plan.connections).toHaveLength(2);
+
+      const usersConnection = plans.plan.connections.find(
+        c => c.table === 'users',
+      );
+      const postsConnection = plans.plan.connections.find(
+        c => c.table === 'posts',
+      );
+
+      expect(usersConnection).toBeDefined();
+      expect(postsConnection).toBeDefined();
+
+      // Root connection should have no limit
+      expect(usersConnection?.limit).toBeUndefined();
+      // EXISTS child should have limit=1
+      expect(postsConnection?.limit).toBe(1);
+    });
+
+    test('NOT EXISTS child connection has no limit', () => {
+      const ast = {
+        table: 'users',
+        where: {
+          type: 'correlatedSubquery' as const,
+          op: 'NOT EXISTS' as const,
+          related: {
+            correlation: {
+              parentField: ['id'],
+              childField: ['userId'],
+            },
+            subquery: {
+              table: 'posts',
+            },
+          },
+        },
+      } as const;
+      const plans = buildPlanGraph(ast, simpleCostModel);
+
+      expect(plans.plan.connections).toHaveLength(2);
+
+      const postsConnection = plans.plan.connections.find(
+        c => c.table === 'posts',
+      );
+
+      expect(postsConnection).toBeDefined();
+      // NOT EXISTS child should have no limit
+      expect(postsConnection?.limit).toBeUndefined();
+    });
+
+    test('AND with multiple EXISTS - each child has limit=1', () => {
+      const ast = builder.users
+        .whereExists('posts')
+        .whereExists('comments').ast;
+      const plans = buildPlanGraph(ast, simpleCostModel);
+
+      expect(plans.plan.connections).toHaveLength(3);
+
+      const usersConnection = plans.plan.connections.find(
+        c => c.table === 'users',
+      );
+      const postsConnection = plans.plan.connections.find(
+        c => c.table === 'posts',
+      );
+      const commentsConnection = plans.plan.connections.find(
+        c => c.table === 'comments',
+      );
+
+      expect(usersConnection).toBeDefined();
+      expect(postsConnection).toBeDefined();
+      expect(commentsConnection).toBeDefined();
+
+      // Root has no limit
+      expect(usersConnection?.limit).toBeUndefined();
+      // Both EXISTS children have limit=1
+      expect(postsConnection?.limit).toBe(1);
+      expect(commentsConnection?.limit).toBe(1);
+    });
+
+    test('OR with EXISTS branches - each child has limit=1', () => {
+      const ast = builder.users.where(({or, exists}) =>
+        or(exists('posts'), exists('comments')),
+      ).ast;
+      const plans = buildPlanGraph(ast, simpleCostModel);
+
+      expect(plans.plan.connections).toHaveLength(3);
+
+      const usersConnection = plans.plan.connections.find(
+        c => c.table === 'users',
+      );
+      const postsConnection = plans.plan.connections.find(
+        c => c.table === 'posts',
+      );
+      const commentsConnection = plans.plan.connections.find(
+        c => c.table === 'comments',
+      );
+
+      expect(usersConnection).toBeDefined();
+      expect(postsConnection).toBeDefined();
+      expect(commentsConnection).toBeDefined();
+
+      // Root has no limit
+      expect(usersConnection?.limit).toBeUndefined();
+      // Both EXISTS branches have limit=1
+      expect(postsConnection?.limit).toBe(1);
+      expect(commentsConnection?.limit).toBe(1);
+    });
+
+    test('nested EXISTS - both levels have limit=1', () => {
+      const ast = builder.users.whereExists('posts', q =>
+        q.whereExists('comments'),
+      ).ast;
+      const plans = buildPlanGraph(ast, simpleCostModel);
+
+      // Main plan has all three connections (users, posts, comments)
+      // because nested whereExists in the subquery creates connections in the main plan
+      expect(plans.plan.connections).toHaveLength(3);
+
+      const usersConnection = plans.plan.connections.find(
+        c => c.table === 'users',
+      );
+      const postsConnection = plans.plan.connections.find(
+        c => c.table === 'posts',
+      );
+      const commentsConnection = plans.plan.connections.find(
+        c => c.table === 'comments',
+      );
+
+      expect(usersConnection).toBeDefined();
+      expect(postsConnection).toBeDefined();
+      expect(commentsConnection).toBeDefined();
+
+      // Root has no limit
+      expect(usersConnection?.limit).toBeUndefined();
+      // Both EXISTS children have limit=1
+      expect(postsConnection?.limit).toBe(1);
+      expect(commentsConnection?.limit).toBe(1);
+
+      // Should have 2 joins (one for each EXISTS)
+      expect(plans.plan.joins).toHaveLength(2);
+    });
+
+    test('root connection gets ast.limit', () => {
+      const ast = builder.users.limit(10).ast;
+      const plans = buildPlanGraph(ast, simpleCostModel);
+
+      expect(plans.plan.connections).toHaveLength(1);
+
+      const usersConnection = plans.plan.connections[0];
+      expect(usersConnection.table).toBe('users');
+      // Root should get the limit from the query
+      expect(usersConnection.limit).toBe(10);
+    });
+
+    test('root with limit and EXISTS - separate limits', () => {
+      const ast = builder.users.limit(10).whereExists('posts').ast;
+      const plans = buildPlanGraph(ast, simpleCostModel);
+
+      expect(plans.plan.connections).toHaveLength(2);
+
+      const usersConnection = plans.plan.connections.find(
+        c => c.table === 'users',
+      );
+      const postsConnection = plans.plan.connections.find(
+        c => c.table === 'posts',
+      );
+
+      expect(usersConnection).toBeDefined();
+      expect(postsConnection).toBeDefined();
+
+      // Root gets the query limit
+      expect(usersConnection?.limit).toBe(10);
+      // EXISTS child gets limit=1
+      expect(postsConnection?.limit).toBe(1);
+    });
+
+    test('related subPlan root gets its own limit', () => {
+      const ast = builder.users.related('posts', q => q.limit(10)).ast;
+      const plans = buildPlanGraph(ast, simpleCostModel);
+
+      // Main plan should have only users connection
+      expect(plans.plan.connections).toHaveLength(1);
+      const usersConnection = plans.plan.connections[0];
+      expect(usersConnection.table).toBe('users');
+      expect(usersConnection.limit).toBeUndefined();
+
+      // SubPlan for posts should exist
+      expect(plans.subPlans).toHaveProperty('posts');
+      expect(plans.subPlans.posts.plan.connections).toHaveLength(1);
+
+      const postsConnection = plans.subPlans.posts.plan.connections[0];
+      expect(postsConnection.table).toBe('posts');
+      // SubPlan root should get the limit from the subquery
+      expect(postsConnection.limit).toBe(10);
+    });
+  });
 });

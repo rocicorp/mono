@@ -24,6 +24,8 @@ suite('PlannerConnection', () => {
     expect(connection.estimateCost()).toStrictEqual({
       baseCardinality: BASE_COST,
       runningCost: BASE_COST,
+      selectivity: 1.0,
+      limit: undefined,
     });
   });
 
@@ -57,6 +59,8 @@ suite('PlannerConnection', () => {
     expect(connection.estimateCost()).toStrictEqual({
       baseCardinality: ec.baseCardinality * 2,
       runningCost: ec.runningCost * 2,
+      selectivity: 1.0,
+      limit: undefined,
     });
   });
 
@@ -81,6 +85,8 @@ suite('PlannerConnection', () => {
     expect(connection.estimateCost()).toStrictEqual({
       baseCardinality: BASE_COST,
       runningCost: BASE_COST,
+      selectivity: 1.0,
+      limit: undefined,
     });
   });
 });

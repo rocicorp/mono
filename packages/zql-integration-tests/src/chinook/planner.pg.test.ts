@@ -71,7 +71,9 @@ describe('Chinook planner tests', () => {
 
   test('playlist with track', () => {
     const ast = getPlanAST(queries.sqlite.playlist.whereExists('tracks'));
-    expect(pick(ast, ['where', 'flip'])).toBe(true);
+    // No flip because:
+    // all playlists have a track so we must scan all playlists!
+    expect(pick(ast, ['where', 'flip'])).toBe(false);
     expect(pick(ast, ['where', 'related', 'subquery', 'where', 'flip'])).toBe(
       false,
     );
@@ -80,8 +82,14 @@ describe('Chinook planner tests', () => {
   test('tracks with playlist', () => {
     const ast = getPlanAST(queries.sqlite.track.whereExists('playlists'));
 
-    // playlist table is smaller. Should be flipped.
-    expect(pick(ast, ['where', 'flip'])).toBe(true);
+    // TODO:
+    // This is where SELECTIVITY_PLAN.md would help.
+    // We assume a selectivity of 1 on playlist_track and playlist
+    // because there are no filters.
+    // but a track may not be part of a playlist!
+    // If many tracks are not part of any playlist
+    // then flipping would be better.
+    expect(pick(ast, ['where', 'flip'])).toBe(false);
   });
 
   test('has album a or album b', () => {
