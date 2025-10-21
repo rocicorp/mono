@@ -62,11 +62,6 @@ describe('view-syncer/snapshotter', () => {
     initChangeLog(db);
 
     tableSpecs = computeZqlSpecs(lc, db);
-    console.log(tableSpecs);
-    for (const [k, v] of tableSpecs.entries()) {
-      console.log(k, v);
-      console.log(v.tableSpec.allKeys);
-    }
 
     replicator = fakeReplicator(lc, db);
     s = new Snapshotter(lc, dbFile.path, {appID: 'my_app'}).init();

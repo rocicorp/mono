@@ -485,9 +485,9 @@ class Diff implements SnapshotDiff {
       );
     }
     if (
-      prevValues.findIndex(prevValue => {
-        return (prevValue[ROW_VERSION] ?? '~') > this.prev.version;
-      }) !== -1
+      prevValues.findIndex(
+        prevValue => (prevValue[ROW_VERSION] ?? '~') > this.prev.version,
+      ) !== -1
     ) {
       throw new InvalidDiffError(
         `Diff is no longer valid. prev db has advanced past ${this.prev.version}.`,
