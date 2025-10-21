@@ -95,7 +95,7 @@ test('postgres to lite table spec', () => {
         pos: 1,
       },
       b: {
-        characterMaximumLength: null,
+        characterMaximumLength: 180,
         dataType: 'varchar|NOT_NULL',
         dflt: null,
         elemPgTypeClass: null,
