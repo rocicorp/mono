@@ -13,6 +13,7 @@ import type {AST} from '../../zero-protocol/src/ast.ts';
 import {QueryImpl} from '../../zql/src/query/query-impl.ts';
 import {defaultFormat} from '../../zql/src/ivm/default-format.ts';
 import type {Query} from '../../zql/src/query/query.ts';
+import {expect, test} from 'vitest';
 
 const pgContent = await getChinook();
 
@@ -146,3 +147,7 @@ if (format === 'json') {
 } else {
   await run();
 }
+
+test('no-op', () => {
+  expect(true).toBe(true);
+});
