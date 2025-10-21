@@ -355,7 +355,7 @@ test.each([
     },
     {
       pos: 9,
-      dataType: 'my_enum|TEXT_ENUM[]',
+      dataType: 'my_enum[]|TEXT_ENUM',
       characterMaximumLength: null,
       notNull: false,
       dflt: null,
@@ -391,7 +391,7 @@ test.each([
     },
     {
       pos: 11,
-      dataType: 'my_enum|TEXT_ENUM[][]',
+      dataType: 'my_enum[][]|TEXT_ENUM',
       characterMaximumLength: null,
       notNull: false,
       dflt: null,

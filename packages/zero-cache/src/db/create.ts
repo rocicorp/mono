@@ -3,14 +3,16 @@ import type {ColumnSpec, LiteIndexSpec, LiteTableSpec} from './specs.ts';
 
 export function liteColumnDef(spec: ColumnSpec) {
   // Remove legacy |TEXT_ARRAY attribute for backwards compatibility
-  const typeWithAttrs = spec.dataType.replace(/\|TEXT_ARRAY(\[\])*/, '');
+  // Legacy formats: "text|TEXT_ARRAY", "text[]|TEXT_ARRAY", "text|TEXT_ARRAY[]", "text[]|TEXT_ARRAY[]"
+  const hadTextArray = spec.dataType.includes('|TEXT_ARRAY');
+  const typeWithAttrs = spec.dataType.replace(/\|TEXT_ARRAY(\[\])?/, '');
 
-  // Arrays: SQLite wants "type[]", "type[]|TEXT_ENUM" (with attributes inside quotes)
-  let def = id(
-    spec.elemPgTypeClass === null || typeWithAttrs.endsWith('[]')
-      ? typeWithAttrs
-      : typeWithAttrs + '[]',
-  );
+  // Only add brackets if we had |TEXT_ARRAY and there are no brackets after removing it
+  // This handles the legacy "text|TEXT_ARRAY" -> "text" -> "text[]" case
+  const needsBrackets = hadTextArray && !typeWithAttrs.includes('[]');
+  const finalType = needsBrackets ? typeWithAttrs + '[]' : typeWithAttrs;
+
+  let def = id(finalType);
 
   if (spec.characterMaximumLength) {
     def += `(${spec.characterMaximumLength})`;

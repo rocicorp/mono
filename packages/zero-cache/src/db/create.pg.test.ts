@@ -347,7 +347,7 @@ describe('tables/create', () => {
           },
           enums: {
             pos: 4,
-            dataType: 'my_type|TEXT_ENUM[]',
+            dataType: 'my_type[]|TEXT_ENUM',
             characterMaximumLength: null,
             notNull: false,
             elemPgTypeClass: 'e',
@@ -434,7 +434,7 @@ describe('tables/create', () => {
           },
           enum_matrix: {
             pos: 3,
-            dataType: 'my_type|TEXT_ENUM[][]',
+            dataType: 'my_type[][]|TEXT_ENUM',
             characterMaximumLength: null,
             notNull: false,
             elemPgTypeClass: 'e',
