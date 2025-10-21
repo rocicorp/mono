@@ -1,6 +1,10 @@
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../zqlite/src/db.ts';
+import {
+  CREATE_COLUMN_METADATA_TABLE,
+  insertColumnMetadata,
+} from '../services/change-source/column-metadata.ts';
 import {computeZqlSpecs, listIndexes, listTables} from './lite-tables.ts';
 import type {LiteIndexSpec, LiteTableSpec} from './specs.ts';
 
@@ -1047,5 +1051,180 @@ describe('computeZqlSpec', () => {
         },
       ]
     `);
+  });
+});
+
+describe('lite/tables with metadata table', () => {
+  test('reads from metadata table when available', () => {
+    const db = new Database(createSilentLogContext(), ':memory:');
+
+    // Create metadata table
+    db.exec(CREATE_COLUMN_METADATA_TABLE);
+
+    // Create a table with plain SQLite types (no pipe notation)
+    db.exec(`
+      CREATE TABLE users (
+        id INTEGER PRIMARY KEY,
+        name TEXT,
+        email TEXT
+      );
+    `);
+
+    // Insert metadata with pipe notation attributes
+    insertColumnMetadata(db, 'users', 'id', {
+      upstreamType: 'int8',
+      isNotNull: true,
+      isEnum: false,
+      isArray: false,
+    });
+    insertColumnMetadata(db, 'users', 'name', {
+      upstreamType: 'varchar',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: 255,
+    });
+    insertColumnMetadata(db, 'users', 'email', {
+      upstreamType: 'text',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+    });
+
+    const tables = listTables(db);
+
+    expect(tables).toHaveLength(1);
+    expect(tables[0].name).toBe('users');
+
+    // Should read from metadata, so dataType includes pipe notation
+    expect(tables[0].columns.id.dataType).toBe('int8|NOT_NULL');
+    expect(tables[0].columns.id.characterMaximumLength).toBe(null);
+
+    expect(tables[0].columns.name.dataType).toBe('varchar');
+    expect(tables[0].columns.name.characterMaximumLength).toBe(255);
+
+    expect(tables[0].columns.email.dataType).toBe('text');
+    expect(tables[0].columns.email.characterMaximumLength).toBe(null);
+  });
+
+  test('metadata table takes precedence over pragma_table_info', () => {
+    const db = new Database(createSilentLogContext(), ':memory:');
+
+    // Create metadata table
+    db.exec(CREATE_COLUMN_METADATA_TABLE);
+
+    // Create a table where SQLite types don't match what we'll put in metadata
+    db.exec(`
+      CREATE TABLE products (
+        id INTEGER PRIMARY KEY,
+        status TEXT
+      );
+    `);
+
+    // Insert metadata with different types and attributes
+    insertColumnMetadata(db, 'products', 'id', {
+      upstreamType: 'bigint',
+      isNotNull: true,
+      isEnum: false,
+      isArray: false,
+    });
+    insertColumnMetadata(db, 'products', 'status', {
+      upstreamType: 'product_status',
+      isNotNull: true,
+      isEnum: true,
+      isArray: false,
+    });
+
+    const tables = listTables(db);
+
+    expect(tables).toHaveLength(1);
+
+    // Metadata should win over pragma_table_info
+    expect(tables[0].columns.id.dataType).toBe('bigint|NOT_NULL');
+    expect(tables[0].columns.status.dataType).toBe(
+      'product_status|NOT_NULL|TEXT_ENUM',
+    );
+  });
+
+  test('handles arrays and enums from metadata', () => {
+    const db = new Database(createSilentLogContext(), ':memory:');
+
+    // Create metadata table
+    db.exec(CREATE_COLUMN_METADATA_TABLE);
+
+    // Create a table with plain types
+    db.exec(`
+      CREATE TABLE items (
+        id INTEGER PRIMARY KEY,
+        tags TEXT,
+        status TEXT,
+        counts TEXT
+      );
+    `);
+
+    // Insert metadata for different types
+    insertColumnMetadata(db, 'items', 'id', {
+      upstreamType: 'int8',
+      isNotNull: true,
+      isEnum: false,
+      isArray: false,
+    });
+    insertColumnMetadata(db, 'items', 'tags', {
+      upstreamType: 'text[]',
+      isNotNull: false,
+      isEnum: false,
+      isArray: true,
+    });
+    insertColumnMetadata(db, 'items', 'status', {
+      upstreamType: 'item_status',
+      isNotNull: false,
+      isEnum: true,
+      isArray: false,
+    });
+    insertColumnMetadata(db, 'items', 'counts', {
+      upstreamType: 'int4[]',
+      isNotNull: true,
+      isEnum: false,
+      isArray: true,
+    });
+
+    const tables = listTables(db);
+
+    expect(tables).toHaveLength(1);
+
+    // Check array types
+    expect(tables[0].columns.tags.dataType).toBe('text[]');
+    expect(tables[0].columns.tags.elemPgTypeClass).toBe('b');
+
+    // Check enum types
+    expect(tables[0].columns.status.dataType).toBe('item_status|TEXT_ENUM');
+    expect(tables[0].columns.status.elemPgTypeClass).toBe(null);
+
+    // Check array with NOT_NULL
+    // Note: The format is 'int4[]|NOT_NULL' (type with [] followed by attributes)
+    // This is the format currently deployed in production
+    expect(tables[0].columns.counts.dataType).toBe('int4[]|NOT_NULL');
+    expect(tables[0].columns.counts.elemPgTypeClass).toBe('b');
+  });
+
+  test('falls back to pragma_table_info when metadata table missing', () => {
+    const db = new Database(createSilentLogContext(), ':memory:');
+
+    // Do NOT create metadata table
+    // Create a table with pipe notation in SQLite types (old style)
+    db.exec(`
+      CREATE TABLE legacy (
+        id "int8|NOT_NULL" PRIMARY KEY,
+        role "user_role|TEXT_ENUM"
+      );
+    `);
+
+    const tables = listTables(db);
+
+    expect(tables).toHaveLength(1);
+
+    // Should read from pragma_table_info, preserving pipe notation
+    expect(tables[0].columns.id.dataType).toBe('int8|NOT_NULL');
+    expect(tables[0].columns.role.dataType).toBe('user_role|TEXT_ENUM');
   });
 });
