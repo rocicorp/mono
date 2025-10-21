@@ -1,12 +1,11 @@
 import {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {stringify, type JSONValue} from '../../../../shared/src/bigint-json.ts';
-import {deepEqual} from '../../../../shared/src/json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../../../zqlite/src/table-source.ts';
-import type {LiteAndZqlSpec} from '../../db/specs.ts';
+import type {LiteAndZqlSpec, LiteTableSpecWithKeys} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {
   normalizedKeyOrder,
@@ -17,6 +16,7 @@ import {type SchemaVersions} from '../../types/schema-versions.ts';
 import type {AppID} from '../../types/shards.ts';
 import {id} from '../../types/sql.ts';
 import {
+  DEL_OP,
   RESET_OP,
   changeLogEntrySchema as schema,
   SET_OP,
@@ -26,8 +26,7 @@ import {
   getReplicationState,
   ZERO_VERSION_COLUMN_NAME as ROW_VERSION,
 } from '../replicator/schema/replication-state.ts';
-import type {Row} from '../../../../zero-protocol/src/data.ts';
-import type {LoadedPermissions} from '../../auth/load-permissions.ts';
+import type {PrimaryKey} from '../../../../zero-types/src/schema.ts';
 
 /**
  * A `Snapshotter` manages the progression of database snapshots for a
@@ -186,13 +185,22 @@ export class Snapshotter {
   }
 }
 
-export type Change = {
+export type DeleteChange = {
+  type: 'delete';
   readonly table: string;
-  readonly conflictValues: Readonly<Row>[];
-  readonly prevValue: Readonly<Row> | null;
-  readonly nextValue: Readonly<Row> | null;
   readonly rowKey: RowKey;
+  readonly value: Readonly<RowValue>;
 };
+
+export type SetChange = {
+  type: 'set';
+  readonly table: string;
+  readonly rowKey: RowKey;
+  readonly prevValues: Readonly<RowValue>[];
+  readonly nextValue: Readonly<RowValue>;
+};
+
+export type Change = DeleteChange | SetChange;
 
 /**
  * Represents the difference between two database Snapshots.
@@ -299,85 +307,41 @@ class Snapshot {
     };
   }
 
-  getRow(table: LiteAndZqlSpec, rowKey: JSONValue): Row | null {
+  getRow(table: LiteTableSpecWithKeys, rowKey: JSONValue) {
     const key = normalizedKeyOrder(rowKey as RowKey);
     const conds = Object.keys(key).map(c => `${id(c)}=?`);
-    const cols = Object.keys(table.tableSpec.columns);
+    const cols = Object.keys(table.columns);
     const cached = this.db.statementCache.get(
       `SELECT ${cols.map(c => id(c)).join(',')} FROM ${id(
-        table.tableSpec.name,
+        table.name,
       )} WHERE ${conds.join(' AND ')}`,
     );
     cached.statement.safeIntegers(true);
     try {
       // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-      const rowValue = cached.statement.get<any>(Object.values(key));
-      if (!rowValue) {
-        return null;
-      } else {
-        return fromSQLiteTypes(table.zqlSpec, rowValue, table.tableSpec.name);
-      }
+      return cached.statement.get<any>(Object.values(key));
     } finally {
       this.db.statementCache.return(cached);
     }
   }
 
-  getRowsForAllKeys(table: LiteAndZqlSpec, row: Row): Row[] {
-    const conds = table.tableSpec.allKeys.map(key =>
-      Object.keys(key).map(c => `${id(c)}=?`),
-    );
-    const cols = Object.keys(table.tableSpec.columns);
+  getRows(table: LiteTableSpecWithKeys, keys: PrimaryKey[], row: RowValue) {
+    const conds = keys.map(key => Object.keys(key).map(c => `${id(c)}=?`));
+    const cols = Object.keys(table.columns);
     const cached = this.db.statementCache.get(
       `SELECT ${cols.map(c => id(c)).join(',')} FROM ${id(
-        table.tableSpec.name,
+        table.name,
       )} WHERE ${conds.map(cond => cond.join(' AND ')).join(' OR ')}`,
     );
     cached.statement.safeIntegers(true);
     try {
       // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-      return cached.statement
-        .all<any>(
-          table.tableSpec.allKeys.flatMap(key =>
-            key.map(column => row[column]),
-          ),
-        )
-        .map(rowValue =>
-          fromSQLiteTypes(table.zqlSpec, rowValue, table.tableSpec.name),
-        );
+      return cached.statement.all<any>(
+        keys.flatMap(key => key.map(column => row[column])),
+      );
     } finally {
       this.db.statementCache.return(cached);
     }
-  }
-
-  getRowAndConflictRows(
-    table: LiteAndZqlSpec,
-    rowKey: RowKey,
-    row: Row | null,
-  ): [Row | null, Row[]] {
-    if (!row) {
-      return [this.getRow(table, rowKey), []];
-    }
-    const rows = this.getRowsForAllKeys(table, row);
-    const rowKeyAsRow = fromSQLiteTypes(
-      table.zqlSpec,
-      rowKey as Row,
-      table.tableSpec.name,
-    );
-    for (let i = 0; i < rows.length; i++) {
-      const row = rows[i];
-      let match = true;
-      for (const [k, v] of Object.entries(rowKeyAsRow)) {
-        if (deepEqual(row[k], v)) {
-          match = false;
-          break;
-        }
-      }
-      if (match) {
-        rows.splice(i, 1);
-        return [row, rows];
-      }
-    }
-    return [null, rows];
   }
 
   resetToHead(): Snapshot {
@@ -441,47 +405,61 @@ class Diff implements SnapshotDiff {
                 `table ${table} has been truncated`,
               );
             }
-            const liteAndZqlSpec = must(this.tables.get(table));
+            const {tableSpec, zqlSpec} = must(this.tables.get(table));
 
             assert(rowKey !== null);
-            let nextValue =
-              op === SET_OP ? this.curr.getRow(liteAndZqlSpec, rowKey) : null;
-            let [prevValue, conflictValues] = this.prev.getRowAndConflictRows(
-              liteAndZqlSpec,
-              rowKey,
-              nextValue,
-            );
-            if (nextValue === undefined) {
-              throw new Error(
-                `Missing value for ${table} ${stringify(rowKey)}`,
-              );
-            }
-            // Sanity check detects if the diff is being accessed after the Snapshots have advanced.
-            this.checkThatDiffIsValid(
-              stateVersion,
-              op,
-              prevValue,
-              nextValue,
-              conflictValues,
-            );
-
-            if (prevValue === null && nextValue === null) {
-              // Filter out no-op changes (e.g. a delete of a row that does not exist in prev).
-              // TODO: Consider doing this for deep-equal values.
-              continue;
-            }
-
-            if (table === this.#permissionsTable) {
-              const prevLoadedPermisisons = prevValue as LoadedPermissions;
-              const nextLoadedPermissions = nextValue as LoadedPermissions;
-              if (
-                prevLoadedPermisisons.permissions !==
-                nextLoadedPermissions.permissions
-              ) {
-                throw new ResetPipelinesSignal(
-                  `Permissions have changed ${prevLoadedPermisisons.hash} => ${nextLoadedPermissions.hash}`,
+            if (op === DEL_OP) {
+              const value = this.prev.getRow(tableSpec, rowKey);
+              if (value === undefined) {
+                throw new Error(
+                  `Missing value for change ${stringify({table, rowKey, op, stateVersion})}`,
                 );
               }
+              this.checkThatDiffIsValid(stateVersion, [value]);
+              if (table === this.#permissionsTable) {
+                throw new ResetPipelinesSignal(
+                  `Permissions have been deleted ${value.hash}`,
+                );
+              }
+              return {
+                value: {
+                  type: 'delete',
+                  table,
+                  rowKey,
+                  value: fromSQLiteTypes(zqlSpec, value, table) as RowValue,
+                } satisfies DeleteChange,
+              };
+            }
+
+            assert(op === SET_OP);
+            const nextValue = this.curr.getRow(tableSpec, rowKey);
+            if (nextValue === undefined) {
+              throw new Error(
+                `Missing value for change ${stringify({table, rowKey, op, stateVersion})}`,
+              );
+            }
+            const prevValues = this.prev.getRows(
+              tableSpec,
+              tableSpec.allKeys,
+              nextValue,
+            );
+            // Sanity check detects if the diff is being accessed after the Snapshots have advanced.
+            this.checkThatDiffIsValid(stateVersion, prevValues, nextValue);
+
+            if (
+              table === this.#permissionsTable &&
+              prevValues.find(
+                prevValue => prevValue.permissions !== nextValue.permissions,
+              )
+            ) {
+              throw new ResetPipelinesSignal(
+                `Permissions have changed ${
+                  prevValues.find(
+                    prevValue =>
+                      prevValue.permissions !== nextValue.permissions,
+                  ).hash
+                } => ${nextValue.hash}`,
+              );
             }
 
             // Modify the values in place when converting to ZQL rows
@@ -489,10 +467,17 @@ class Diff implements SnapshotDiff {
             // TODO Can we get rid of these RowValue casts?
             return {
               value: {
+                type: 'set',
                 table,
-                nextValue,
-                prevValue,
-                conflictValues,
+                prevValues: prevValues.map(
+                  prevValue =>
+                    fromSQLiteTypes(zqlSpec, prevValue, table) as RowValue,
+                ),
+                nextValue: fromSQLiteTypes(
+                  zqlSpec,
+                  nextValue,
+                  table,
+                ) as RowValue,
                 rowKey,
               } satisfies Change,
             };
@@ -513,10 +498,8 @@ class Diff implements SnapshotDiff {
 
   checkThatDiffIsValid(
     stateVersion: string,
-    op: string,
-    prevValue: Row | null,
-    nextValue: Row | null,
-    conflictValues: Row[],
+    prevValues: RowValue[],
+    nextValue?: RowValue | undefined,
   ) {
     // Sanity checks to detect that the diff is not being accessed after
     // the Snapshots have advanced.
@@ -526,24 +509,15 @@ class Diff implements SnapshotDiff {
       );
     }
     if (
-      prevValue !== null &&
-      (prevValue[ROW_VERSION] ?? '~') > this.prev.version
-    ) {
-      throw new InvalidDiffError(
-        `Diff is no longer valid. prev db has advanced past ${this.prev.version}.`,
-      );
-    }
-    if (
-      conflictValues.findIndex(
-        conflictValue =>
-          (conflictValue[ROW_VERSION] ?? '~') > this.prev.version,
+      prevValues.findIndex(
+        prevValue => (prevValue[ROW_VERSION] ?? '~') > this.prev.version,
       ) !== -1
     ) {
       throw new InvalidDiffError(
         `Diff is no longer valid. prev db has advanced past ${this.prev.version}.`,
       );
     }
-    if (op === SET_OP && nextValue && nextValue[ROW_VERSION] !== stateVersion) {
+    if (nextValue && nextValue[ROW_VERSION] !== stateVersion) {
       throw new InvalidDiffError(
         'Diff is no longer valid. curr db has advanced.',
       );

@@ -461,7 +461,7 @@ export class PipelineDriver {
   ): Iterable<RowChange> {
     let pos = 0;
     const removedConflicts: Set<string> = new Set();
-    for (const {table, prevValue, nextValue, conflictValues} of diff) {
+    for (const {type, table, rowKey} of diff) {
       const start = performance.now();
       let type;
       try {
