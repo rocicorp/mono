@@ -198,13 +198,13 @@ describe('view-syncer/snapshotter', () => {
           "prevValues": [
             {
               "_0_version": "01",
-              "handle": "alice",
-              "id": 10,
+              "handle": "bob",
+              "id": 20,
             },
             {
               "_0_version": "01",
-              "handle": "bob",
-              "id": 20,
+              "handle": "alice",
+              "id": 10,
             },
           ],
           "rowKey": {
