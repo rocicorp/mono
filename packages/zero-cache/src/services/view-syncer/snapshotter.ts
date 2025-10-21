@@ -410,7 +410,7 @@ class Diff implements SnapshotDiff {
             if (nextValue) {
               prevValues = this.prev.getRows(
                 tableSpec,
-                tableSpec.allKeys,
+                tableSpec.uniqueKeys,
                 nextValue,
               );
             } else {

@@ -47,7 +47,7 @@ describe('view-syncer/snapshotter', () => {
         INSERT INTO "my_app.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
           VALUES (1, 1, 1, '01');  
         CREATE TABLE issues(id INT PRIMARY KEY, owner INTEGER, desc TEXT, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
-        CREATE TABLE users(id INT PRIMARY KEY, handle "TEXT|NOT_NULL" UNIQUE, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
+        CREATE TABLE users(id INT PRIMARY KEY, handle TEXT UNIQUE, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
         CREATE TABLE comments(id INT PRIMARY KEY, desc TEXT, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
 
         INSERT INTO issues(id, owner, desc, ignore, _0_version) VALUES(1, 10, 'foo', 'zzz', '01');

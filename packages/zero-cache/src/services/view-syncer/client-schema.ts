@@ -97,7 +97,7 @@ export function checkClientSchema(
     if (clientSpec.primaryKey) {
       const clientPrimaryKey = new Set(clientSpec.primaryKey);
       if (
-        !serverSpec.tableSpec.allKeys.some(key =>
+        !serverSpec.tableSpec.allPotentialPrimaryKeys.some(key =>
           equals(clientPrimaryKey, new Set(key)),
         )
       ) {

@@ -334,7 +334,7 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
-            "allKeys": [
+            "allPotentialPrimaryKeys": [
               [
                 "b",
               ],
@@ -380,6 +380,11 @@ describe('computeZqlSpec', () => {
             "unionKey": [
               "b",
             ],
+            "uniqueKeys": [
+              [
+                "b",
+              ],
+            ],
           },
           "zqlSpec": {
             "a": {
@@ -410,7 +415,7 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
-            "allKeys": [
+            "allPotentialPrimaryKeys": [
               [
                 "b",
               ],
@@ -440,6 +445,11 @@ describe('computeZqlSpec', () => {
             "unionKey": [
               "b",
             ],
+            "uniqueKeys": [
+              [
+                "b",
+              ],
+            ],
           },
           "zqlSpec": {
             "a": {
@@ -465,7 +475,7 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
-            "allKeys": [
+            "allPotentialPrimaryKeys": [
               [
                 "a",
                 "b",
@@ -509,6 +519,17 @@ describe('computeZqlSpec', () => {
               "b",
               "d",
             ],
+            "uniqueKeys": [
+              [
+                "a",
+                "b",
+                "d",
+              ],
+              [
+                "a",
+                "c",
+              ],
+            ],
           },
           "zqlSpec": {
             "a": {
@@ -537,7 +558,7 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
-            "allKeys": [
+            "allPotentialPrimaryKeys": [
               [
                 "a",
                 "b",
@@ -589,6 +610,17 @@ describe('computeZqlSpec', () => {
               "b",
               "d",
             ],
+            "uniqueKeys": [
+              [
+                "a",
+                "b",
+                "d",
+              ],
+              [
+                "a",
+                "c",
+              ],
+            ],
           },
           "zqlSpec": {
             "a": {
@@ -619,7 +651,7 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
-            "allKeys": [
+            "allPotentialPrimaryKeys": [
               [
                 "a",
                 "c",
@@ -670,6 +702,13 @@ describe('computeZqlSpec', () => {
               "a",
               "c",
               "d",
+            ],
+            "uniqueKeys": [
+              [
+                "a",
+                "c",
+                "d",
+              ],
             ],
           },
           "zqlSpec": {
@@ -702,7 +741,7 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
-            "allKeys": [
+            "allPotentialPrimaryKeys": [
               [
                 "b",
               ],
@@ -754,6 +793,15 @@ describe('computeZqlSpec', () => {
               "b",
               "c",
             ],
+            "uniqueKeys": [
+              [
+                "b",
+              ],
+              [
+                "a",
+                "c",
+              ],
+            ],
           },
           "zqlSpec": {
             "a": {
@@ -785,7 +833,7 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
-            "allKeys": [
+            "allPotentialPrimaryKeys": [
               [
                 "c",
               ],
@@ -836,6 +884,15 @@ describe('computeZqlSpec', () => {
               "b",
               "c",
               "d",
+            ],
+            "uniqueKeys": [
+              [
+                "b",
+                "d",
+              ],
+              [
+                "c",
+              ],
             ],
           },
           "zqlSpec": {
@@ -875,7 +932,7 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
-            "allKeys": [
+            "allPotentialPrimaryKeys": [
               [
                 "id",
               ],
@@ -936,6 +993,17 @@ describe('computeZqlSpec', () => {
               "id",
               "name",
               "order",
+            ],
+            "uniqueKeys": [
+              [
+                "name",
+              ],
+              [
+                "order",
+              ],
+              [
+                "id",
+              ],
             ],
           },
           "zqlSpec": {
