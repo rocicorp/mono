@@ -1,51 +1,24 @@
-import type postgres from 'postgres';
 import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../zqlite/src/db.ts';
-import {getPublicationInfo} from '../services/change-source/pg/schema/published.ts';
-import {type PgTest, test} from '../test/db.ts';
-import {createTableStatement} from './create.ts';
+import {test} from '../test/db.ts';
+import {createLiteTableStatement, liteColumnDef} from './create.ts';
 import {listTables} from './lite-tables.ts';
 import {mapPostgresToLite} from './pg-to-lite.ts';
 import * as PostgresTypeClass from './postgres-type-class-enum.ts';
-import {stripCommentsAndWhitespace} from './query-test-util.ts';
-import {type LiteTableSpec, type TableSpec} from './specs.ts';
+import {type ColumnSpec, type LiteTableSpec, type TableSpec} from './specs.ts';
 
 describe('tables/create', () => {
   type Case = {
     name: string;
-    srcTableSpec: TableSpec;
     createStatement: string;
     liteTableSpec: LiteTableSpec;
-    dstTableSpec?: TableSpec;
+    dstTableSpec: TableSpec;
   };
 
   const cases: Case[] = [
     {
       name: 'zero clients',
-      srcTableSpec: {
-        schema: 'public',
-        name: 'clients',
-        columns: {
-          clientID: {
-            pos: 1,
-            dataType: 'varchar',
-            characterMaximumLength: 180,
-            notNull: true,
-            elemPgTypeClass: null,
-            dflt: null,
-          },
-          lastMutationID: {
-            pos: 2,
-            dataType: 'int8',
-            characterMaximumLength: null,
-            notNull: true,
-            elemPgTypeClass: null,
-            dflt: null,
-          },
-        },
-        primaryKey: ['clientID'],
-      },
       createStatement: `
       CREATE TABLE "public"."clients" (
         "clientID" "varchar"(180) NOT NULL,
@@ -107,29 +80,6 @@ describe('tables/create', () => {
     },
     {
       name: 'table name with dot',
-      srcTableSpec: {
-        schema: 'public',
-        name: 'zero.clients',
-        columns: {
-          clientID: {
-            pos: 1,
-            dataType: 'varchar',
-            characterMaximumLength: 180,
-            notNull: true,
-            elemPgTypeClass: null,
-            dflt: null,
-          },
-          lastMutationID: {
-            pos: 2,
-            dataType: 'int8',
-            characterMaximumLength: null,
-            notNull: true,
-            elemPgTypeClass: null,
-            dflt: null,
-          },
-        },
-        primaryKey: ['clientID'],
-      },
       createStatement: `
       CREATE TABLE "public"."zero.clients" (
         "clientID" "varchar"(180) NOT NULL,
@@ -191,62 +141,6 @@ describe('tables/create', () => {
     },
     {
       name: 'types and defaults',
-      srcTableSpec: {
-        schema: 'public',
-        name: 'users',
-        columns: {
-          ['user_id']: {
-            pos: 1,
-            dataType: 'int4',
-            characterMaximumLength: null,
-            notNull: true,
-            elemPgTypeClass: null,
-            dflt: null,
-          },
-          handle: {
-            pos: 2,
-            characterMaximumLength: 40,
-            dataType: 'varchar',
-            notNull: false,
-            elemPgTypeClass: null,
-            dflt: null,
-          },
-          rank: {
-            pos: 3,
-            characterMaximumLength: null,
-            dataType: 'int8',
-            notNull: false,
-            elemPgTypeClass: null,
-            dflt: '1',
-          },
-          admin: {
-            pos: 4,
-            dataType: 'bool',
-            characterMaximumLength: null,
-            notNull: false,
-            elemPgTypeClass: null,
-            dflt: 'false',
-          },
-          bigint: {
-            pos: 5,
-            characterMaximumLength: null,
-            dataType: 'int8',
-            notNull: false,
-            elemPgTypeClass: null,
-            dflt: "'2147483648'::bigint",
-          },
-          enumnum: {
-            pos: 6,
-            characterMaximumLength: null,
-            dataType: 'my_type',
-            pgTypeClass: PostgresTypeClass.Enum,
-            notNull: false,
-            elemPgTypeClass: null,
-            dflt: null,
-          },
-        },
-        primaryKey: ['user_id'],
-      },
       createStatement: `
       CREATE TABLE "public"."users" (
          "user_id" "int4" NOT NULL,
@@ -377,45 +271,6 @@ describe('tables/create', () => {
     },
     {
       name: 'array types',
-      srcTableSpec: {
-        schema: 'public',
-        name: 'array_table',
-        columns: {
-          id: {
-            pos: 1,
-            dataType: 'int4',
-            characterMaximumLength: null,
-            notNull: true,
-            elemPgTypeClass: null,
-            dflt: null,
-          },
-          tags: {
-            pos: 2,
-            dataType: 'varchar',
-            characterMaximumLength: null,
-            notNull: false,
-            elemPgTypeClass: 'b',
-            dflt: null,
-          },
-          nums: {
-            pos: 3,
-            dataType: 'int4',
-            characterMaximumLength: null,
-            notNull: false,
-            elemPgTypeClass: 'b',
-            dflt: null,
-          },
-          enums: {
-            pos: 4,
-            dataType: 'my_type',
-            characterMaximumLength: null,
-            notNull: false,
-            elemPgTypeClass: 'e',
-            dflt: null,
-          },
-        },
-        primaryKey: ['id'],
-      },
       createStatement: `
       CREATE TABLE "public"."array_table" (
         "id" "int4" NOT NULL,
@@ -511,36 +366,6 @@ describe('tables/create', () => {
     },
   ];
 
-  describe('pg', () => {
-    let db: postgres.Sql;
-    beforeEach<PgTest>(async ({testDBs}) => {
-      db = await testDBs.create('create_tables_test');
-      await db`
-      CREATE PUBLICATION zero_all FOR ALL TABLES;
-      CREATE TYPE my_type AS ENUM ('foo', 'bar', 'baz');
-      `.simple();
-
-      return () => testDBs.drop(db);
-    });
-
-    test.each(cases)('$name', async c => {
-      const createStatement = createTableStatement(c.srcTableSpec);
-      expect(stripCommentsAndWhitespace(createStatement)).toBe(
-        stripCommentsAndWhitespace(c.createStatement),
-      );
-      await db.unsafe(createStatement);
-
-      const published = await getPublicationInfo(db, ['zero_all']);
-      expect(published.tables).toMatchObject([
-        {
-          ...(c.dstTableSpec ?? c.srcTableSpec),
-          oid: expect.any(Number),
-          publications: {['zero_all']: {rowFilter: null}},
-        },
-      ]);
-    });
-  });
-
   describe('sqlite', () => {
     let db: Database;
 
@@ -549,8 +374,8 @@ describe('tables/create', () => {
     });
 
     test.each(cases)('$name', c => {
-      const liteTableSpec = mapPostgresToLite(c.srcTableSpec);
-      db.exec(createTableStatement(liteTableSpec));
+      const liteTableSpec = mapPostgresToLite(c.dstTableSpec);
+      db.exec(createLiteTableStatement(liteTableSpec));
 
       const tables = listTables(db);
       expect(tables).toEqual(expect.arrayContaining([c.liteTableSpec]));
@@ -559,31 +384,9 @@ describe('tables/create', () => {
 
   // Regression tests for array type SQL generation bug
   // Original issue: Legacy data with "text[]|TEXT_ARRAY" was generating malformed SQL like:
-  //   PostgreSQL: "text[]"[] (double brackets)
   //   SQLite: "text[]|TEXT_ARRAY"[] (attribute not removed + double brackets)
-  // Root cause: upstreamDataType() extracts base type but doesn't strip [] suffix,
-  //   and columnDef() was adding [] again without checking if it already existed.
-  // Fix: columnDef() now checks if [] suffix already exists before adding it.
   describe('columnDef - legacy array format handling', () => {
-    test('handles legacy text[]|TEXT_ARRAY format for PostgreSQL', async () => {
-      const {columnDef} = await import('./create.ts');
-      const spec = {
-        pos: 1,
-        dataType: 'text[]|TEXT_ARRAY', // Legacy format with both [] and |TEXT_ARRAY
-        characterMaximumLength: null,
-        notNull: false,
-        dflt: null,
-        elemPgTypeClass:
-          PostgresTypeClass.Base as typeof PostgresTypeClass.Base,
-      };
-
-      // PostgreSQL should get "text"[] (not "text[]"[])
-      const pgResult = columnDef(spec, true);
-      expect(pgResult).toBe('"text"[]');
-    });
-
-    test('handles legacy text[]|TEXT_ARRAY format for SQLite', async () => {
-      const {columnDef} = await import('./create.ts');
+    test('handles legacy text[]|TEXT_ARRAY format for SQLite', () => {
       const spec = {
         pos: 1,
         dataType: 'text[]|TEXT_ARRAY', // Legacy format
@@ -594,12 +397,11 @@ describe('tables/create', () => {
       } as const;
 
       // SQLite should get "text[]" (not "text[]|TEXT_ARRAY"[])
-      const sqliteResult = columnDef(spec, false);
+      const sqliteResult = liteColumnDef(spec);
       expect(sqliteResult).toBe('"text[]"');
     });
 
-    test('handles legacy text|TEXT_ARRAY format (without [])', async () => {
-      const {columnDef} = await import('./create.ts');
+    test('handles legacy text|TEXT_ARRAY format (without [])', () => {
       const spec = {
         pos: 1,
         dataType: 'text|TEXT_ARRAY', // Old legacy format without []
@@ -609,17 +411,42 @@ describe('tables/create', () => {
         elemPgTypeClass: PostgresTypeClass.Base,
       } as const;
 
-      // PostgreSQL should get "text"[]
-      const pgResult = columnDef(spec, true);
-      expect(pgResult).toBe('"text"[]');
-
       // SQLite should get "text[]"
-      const sqliteResult = columnDef(spec, false);
+      const sqliteResult = liteColumnDef(spec);
       expect(sqliteResult).toBe('"text[]"');
     });
 
-    test('handles new text[] format', async () => {
-      const {columnDef} = await import('./create.ts');
+    test('handles legacy text|TEXT_ARRAY format (without [])', () => {
+      const spec = {
+        pos: 1,
+        dataType: 'text|TEXT_ARRAY[]', // Old legacy format without []
+        characterMaximumLength: null,
+        notNull: false,
+        dflt: null,
+        elemPgTypeClass: PostgresTypeClass.Base,
+      } as const;
+
+      // SQLite should get "text[]"
+      const sqliteResult = liteColumnDef(spec);
+      expect(sqliteResult).toBe('"text[]"');
+    });
+
+    test('handles legacy text|TEXT_ARRAY format (without [])', () => {
+      const spec = {
+        pos: 1,
+        dataType: 'text[]|TEXT_ARRAY[]',
+        characterMaximumLength: null,
+        notNull: false,
+        dflt: null,
+        elemPgTypeClass: PostgresTypeClass.Base,
+      } satisfies ColumnSpec;
+
+      // SQLite should get "text[]"
+      const sqliteResult = liteColumnDef(spec);
+      expect(sqliteResult).toBe('"text[]"');
+    });
+
+    test('handles new text[] format', () => {
       const spec = {
         pos: 1,
         dataType: 'text[]', // New format (no |TEXT_ARRAY)
@@ -629,17 +456,27 @@ describe('tables/create', () => {
         elemPgTypeClass: PostgresTypeClass.Base,
       } as const;
 
-      // PostgreSQL should get "text"[]
-      const pgResult = columnDef(spec, true);
-      expect(pgResult).toBe('"text"[]');
-
       // SQLite should get "text[]"
-      const sqliteResult = columnDef(spec, false);
+      const sqliteResult = liteColumnDef(spec);
       expect(sqliteResult).toBe('"text[]"');
     });
 
-    test('handles new text|NOT_NULL[] format', async () => {
-      const {columnDef} = await import('./create.ts');
+    test('handles new text[][] format', () => {
+      const spec = {
+        pos: 1,
+        dataType: 'text[][]', // New format (no |TEXT_ARRAY)
+        characterMaximumLength: null,
+        notNull: false,
+        dflt: null,
+        elemPgTypeClass: PostgresTypeClass.Base,
+      } as const;
+
+      // SQLite should get "text[]"
+      const sqliteResult = liteColumnDef(spec);
+      expect(sqliteResult).toBe('"text[][]"');
+    });
+
+    test('handles new text|NOT_NULL[] format', () => {
       const spec = {
         pos: 1,
         dataType: 'text|NOT_NULL[]', // New format with attributes
@@ -649,12 +486,8 @@ describe('tables/create', () => {
         elemPgTypeClass: PostgresTypeClass.Base,
       } as const;
 
-      // PostgreSQL should get "text"[]
-      const pgResult = columnDef(spec, true);
-      expect(pgResult).toBe('"text"[]');
-
       // SQLite should get "text|NOT_NULL[]"
-      const sqliteResult = columnDef(spec, false);
+      const sqliteResult = liteColumnDef(spec);
       expect(sqliteResult).toBe('"text|NOT_NULL[]"');
     });
   });

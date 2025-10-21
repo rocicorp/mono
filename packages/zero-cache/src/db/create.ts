@@ -1,26 +1,17 @@
-import {TEXT_ARRAY_ATTRIBUTE, upstreamDataType} from '../types/lite.ts';
 import {id, idList} from '../types/sql.ts';
-import type {
-  ColumnSpec,
-  LiteIndexSpec,
-  LiteTableSpec,
-  TableSpec,
-} from './specs.ts';
+import type {ColumnSpec, LiteIndexSpec, LiteTableSpec} from './specs.ts';
 
-export function columnDef(spec: ColumnSpec, forPostgres: boolean) {
+export function liteColumnDef(spec: ColumnSpec) {
   // Remove legacy |TEXT_ARRAY attribute for backwards compatibility
-  const typeWithAttrs = spec.dataType.replace(TEXT_ARRAY_ATTRIBUTE, '');
+  const typeWithAttrs = spec.dataType.replace(/\|TEXT_ARRAY(\[\])*/, '');
 
   let def: string;
   if (spec.elemPgTypeClass !== null) {
-    // Arrays: PostgreSQL wants "type"[], SQLite wants "type[]" (with attributes inside quotes)
-    // upstreamDataType strips attributes (|...) but NOT the [] suffix, so we strip it here
-    const baseType = upstreamDataType(typeWithAttrs).replace(/\[\]$/, '');
-    // New data has [] suffix, but legacy data might not (it had |TEXT_ARRAY instead)
+    // Arrays: SQLite wants "type[]", "type[]|TEXT_ENUM" (with attributes inside quotes)
+    // New dataType has [] suffix, but legacy data might not (it only had |TEXT_ARRAY instead)
     const needsBrackets = !typeWithAttrs.endsWith('[]');
-    def = forPostgres
-      ? `${id(baseType)}[]`
-      : id(needsBrackets ? typeWithAttrs + '[]' : typeWithAttrs);
+
+    def = id(needsBrackets ? typeWithAttrs + '[]' : typeWithAttrs);
   } else {
     def = id(typeWithAttrs);
   }
@@ -40,26 +31,19 @@ export function columnDef(spec: ColumnSpec, forPostgres: boolean) {
 /**
  * Constructs a `CREATE TABLE` statement for a {@link TableSpec}.
  */
-export function createTableStatement(spec: TableSpec | LiteTableSpec): string {
-  const forPostgres = 'schema' in spec;
+export function createLiteTableStatement(spec: LiteTableSpec): string {
   const defs = Object.entries(spec.columns)
     .sort(([_a, {pos: a}], [_b, {pos: b}]) => a - b)
-    .map(
-      ([name, columnSpec]) =>
-        `${id(name)} ${columnDef(columnSpec, forPostgres)}`,
-    );
+    .map(([name, columnSpec]) => `${id(name)} ${liteColumnDef(columnSpec)}`);
   if (spec.primaryKey) {
     defs.push(`PRIMARY KEY (${idList(spec.primaryKey)})`);
   }
 
-  const createStmt =
-    'schema' in spec
-      ? `CREATE TABLE ${id(spec.schema)}.${id(spec.name)} (`
-      : `CREATE TABLE ${id(spec.name)} (`;
+  const createStmt = `CREATE TABLE ${id(spec.name)} (`;
   return [createStmt, defs.join(',\n'), ');'].join('\n');
 }
 
-export function createIndexStatement(index: LiteIndexSpec): string {
+export function createLiteIndexStatement(index: LiteIndexSpec): string {
   const columns = Object.entries(index.columns)
     .map(([name, dir]) => `${id(name)} ${dir}`)
     .join(',');
