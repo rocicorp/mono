@@ -460,7 +460,6 @@ export class PipelineDriver {
     onChange: (pos: number) => void,
   ): Iterable<RowChange> {
     let pos = 0;
-    const removedConflicts: Set<string> = new Set();
     for (const {table, prevValues, nextValue} of diff) {
       const start = performance.now();
       let type;
@@ -515,8 +514,6 @@ export class PipelineDriver {
         type,
       });
     }
-
-    assert(removedConflicts.size === 0);
 
     // Set the new snapshot on all TableSources.
     const {curr} = diff;

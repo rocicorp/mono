@@ -50,7 +50,6 @@ type Statements = {
   readonly update: Statement | undefined;
   readonly checkExists: Statement;
   readonly getExisting: Statement;
-  readonly getUniqueConflicts: Statement;
 };
 
 let eventCount = 0;
@@ -76,7 +75,6 @@ export class TableSource implements Source {
   readonly #columns: Record<string, SchemaValue>;
   // Maps sorted columns JSON string (e.g. '["a","b"]) to Set of columns.
   readonly #uniqueIndexes: Map<string, Set<string>>;
-  readonly #uniqueIndexesSortedKeys: string[][];
   readonly #primaryKey: PrimaryKey;
   readonly #logConfig: LogConfig;
   readonly #lc: LogContext;
@@ -89,22 +87,20 @@ export class TableSource implements Source {
     db: Database,
     tableName: string,
     columns: Record<string, SchemaValue>,
-    primaryKey: PrimaryKey,
+    primaryKey: readonly [string, ...string[]],
   ) {
     this.#lc = logContext;
     this.#logConfig = logConfig;
     this.#table = tableName;
     this.#columns = columns;
+    this.#uniqueIndexes = getUniqueIndexes(db, tableName);
     this.#primaryKey = primaryKey;
-    const [uniqueIndexes, uniqueIndexesSortedKeys] = getUniqueIndexes(
-      db,
-      tableName,
-      primaryKey,
-    );
-    this.#uniqueIndexes = uniqueIndexes;
-    this.#uniqueIndexesSortedKeys = uniqueIndexesSortedKeys;
-
     this.#stmts = this.#getStatementsFor(db);
+
+    assert(
+      this.#uniqueIndexes.has(JSON.stringify([...primaryKey].sort())),
+      `primary key ${primaryKey} does not have a UNIQUE index`,
+    );
   }
 
   get table() {
@@ -182,21 +178,6 @@ export class TableSource implements Source {
           )}`,
         ),
       ),
-      getUniqueConflicts: db.prepare(
-        compile(
-          sql`SELECT * FROM ${sql.ident(this.#table)} WHERE ${sql.join(
-            [
-              ...this.#uniqueIndexesSortedKeys.map(key =>
-                sql.join(
-                  key.map(k => sql`${sql.ident(k)}=?`),
-                  ' AND ',
-                ),
-              ),
-            ],
-            ' OR ',
-          )}`,
-        ),
-      ),
     };
     this.#dbCache.set(db, stmts);
     return stmts;
@@ -262,14 +243,6 @@ export class TableSource implements Source {
 
     this.#connections.push(connection);
     return input;
-  }
-
-  getUniqueConflicts(row: Row): Row[] {
-    return this.#stmts.getUniqueConflicts.all<Row>(
-      this.#uniqueIndexesSortedKeys.flatMap(key =>
-        toSQLiteTypes(key, row, this.#columns),
-      ),
-    );
   }
 
   toSQLiteRow(row: Row): Row {
@@ -514,8 +487,7 @@ export class TableSource implements Source {
 function getUniqueIndexes(
   db: Database,
   tableName: string,
-  primaryKey: PrimaryKey,
-): [Map<string, Set<string>>, string[][]] {
+): Map<string, Set<string>> {
   const sqlAndBindings = format(
     sql`
     SELECT idx.name, json_group_array(col.name) as columnsJSON
@@ -530,24 +502,13 @@ function getUniqueIndexes(
   );
   const stmt = db.prepare(sqlAndBindings.text);
   const indexes = stmt.all<{columnsJSON: string}>(...sqlAndBindings.values);
-  const uniqueIndexes = new Map(
+  return new Map(
     indexes.map(({columnsJSON}) => {
       const columns = JSON.parse(columnsJSON);
-      const columnsSet = new Set<string>(columns);
-      columns.sort();
-      return [JSON.stringify(columns), columnsSet];
+      const set = new Set<string>(columns);
+      return [JSON.stringify(columns.sort()), set];
     }),
   );
-  const primaryKeyKey = JSON.stringify([...primaryKey].sort());
-  assert(
-    uniqueIndexes.has(primaryKeyKey),
-    `primary key ${primaryKey} does not have a UNIQUE index`,
-  );
-  const uniqueIndexesSortedKeys = [];
-  for (const columnsSet of uniqueIndexes.values()) {
-    uniqueIndexesSortedKeys.push([...columnsSet].sort());
-  }
-  return [uniqueIndexes, uniqueIndexesSortedKeys];
 }
 
 export function toSQLiteTypes(
