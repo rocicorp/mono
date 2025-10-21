@@ -294,7 +294,7 @@ export class TableSource implements Source {
     const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text);
     try {
       cachedStatement.statement.safeIntegers(true);
-      const rowIterator = cachedStatement.statement.iterate<RowValue>(
+      const rowIterator = cachedStatement.statement.iterate<Row>(
         ...sqlAndBindings.values,
       );
 

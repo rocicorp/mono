@@ -16,7 +16,6 @@ import {type SchemaVersions} from '../../types/schema-versions.ts';
 import type {AppID} from '../../types/shards.ts';
 import {id} from '../../types/sql.ts';
 import {
-  DEL_OP,
   RESET_OP,
   changeLogEntrySchema as schema,
   SET_OP,
@@ -27,6 +26,7 @@ import {
   ZERO_VERSION_COLUMN_NAME as ROW_VERSION,
 } from '../replicator/schema/replication-state.ts';
 import type {PrimaryKey} from '../../../../zero-types/src/schema.ts';
+import type {Row} from '../../../../zero-protocol/src/data.ts';
 
 /**
  * A `Snapshotter` manages the progression of database snapshots for a
@@ -185,22 +185,12 @@ export class Snapshotter {
   }
 }
 
-export type DeleteChange = {
-  type: 'delete';
+export type Change = {
   readonly table: string;
+  readonly prevValues: Readonly<Row>[];
+  readonly nextValue: Readonly<Row> | null;
   readonly rowKey: RowKey;
-  readonly value: Readonly<RowValue>;
 };
-
-export type SetChange = {
-  type: 'set';
-  readonly table: string;
-  readonly rowKey: RowKey;
-  readonly prevValues: Readonly<RowValue>[];
-  readonly nextValue: Readonly<RowValue>;
-};
-
-export type Change = DeleteChange | SetChange;
 
 /**
  * Represents the difference between two database Snapshots.
@@ -408,43 +398,24 @@ class Diff implements SnapshotDiff {
             const {tableSpec, zqlSpec} = must(this.tables.get(table));
 
             assert(rowKey !== null);
-            if (op === DEL_OP) {
-              const value = this.prev.getRow(tableSpec, rowKey);
-              if (value === undefined) {
-                throw new Error(
-                  `Missing value for change ${stringify({table, rowKey, op, stateVersion})}`,
-                );
-              }
-              this.checkThatDiffIsValid(stateVersion, [value]);
-              if (table === this.#permissionsTable) {
-                throw new ResetPipelinesSignal(
-                  `Permissions have been deleted ${value.hash}`,
-                );
-              }
-              return {
-                value: {
-                  type: 'delete',
-                  table,
-                  rowKey,
-                  value: fromSQLiteTypes(zqlSpec, value, table) as RowValue,
-                } satisfies DeleteChange,
-              };
-            }
-
-            assert(op === SET_OP);
-            const nextValue = this.curr.getRow(tableSpec, rowKey);
+            let nextValue =
+              op === SET_OP ? this.curr.getRow(tableSpec, rowKey) : null;
+            let prevValues = nextValue
+              ? this.prev.getRows(tableSpec, tableSpec.allKeys, nextValue)
+              : [this.prev.getRow(tableSpec, rowKey)];
             if (nextValue === undefined) {
               throw new Error(
-                `Missing value for change ${stringify({table, rowKey, op, stateVersion})}`,
+                `Missing value for ${table} ${stringify(rowKey)}`,
               );
             }
-            const prevValues = this.prev.getRows(
-              tableSpec,
-              tableSpec.allKeys,
-              nextValue,
-            );
             // Sanity check detects if the diff is being accessed after the Snapshots have advanced.
-            this.checkThatDiffIsValid(stateVersion, prevValues, nextValue);
+            this.checkThatDiffIsValid(stateVersion, op, prevValues, nextValue);
+
+            if (prevValues === null && nextValue === null) {
+              // Filter out no-op changes (e.g. a delete of a row that does not exist in prev).
+              // TODO: Consider doing this for deep-equal values.
+              continue;
+            }
 
             if (
               table === this.#permissionsTable &&
@@ -467,17 +438,13 @@ class Diff implements SnapshotDiff {
             // TODO Can we get rid of these RowValue casts?
             return {
               value: {
-                type: 'set',
                 table,
-                prevValues: prevValues.map(
-                  prevValue =>
-                    fromSQLiteTypes(zqlSpec, prevValue, table) as RowValue,
+                prevValues: prevValues.map(prevValue =>
+                  fromSQLiteTypes(zqlSpec, prevValue, table),
                 ),
-                nextValue: fromSQLiteTypes(
-                  zqlSpec,
-                  nextValue,
-                  table,
-                ) as RowValue,
+                nextValue: nextValue
+                  ? fromSQLiteTypes(zqlSpec, nextValue, table)
+                  : null,
                 rowKey,
               } satisfies Change,
             };
@@ -498,8 +465,9 @@ class Diff implements SnapshotDiff {
 
   checkThatDiffIsValid(
     stateVersion: string,
+    op: string,
     prevValues: RowValue[],
-    nextValue?: RowValue | undefined,
+    nextValue: RowValue,
   ) {
     // Sanity checks to detect that the diff is not being accessed after
     // the Snapshots have advanced.
@@ -517,7 +485,7 @@ class Diff implements SnapshotDiff {
         `Diff is no longer valid. prev db has advanced past ${this.prev.version}.`,
       );
     }
-    if (nextValue && nextValue[ROW_VERSION] !== stateVersion) {
+    if (op === SET_OP && nextValue[ROW_VERSION] !== stateVersion) {
       throw new InvalidDiffError(
         'Diff is no longer valid. curr db has advanced.',
       );

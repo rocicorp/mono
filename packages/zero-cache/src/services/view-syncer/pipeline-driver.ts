@@ -461,7 +461,7 @@ export class PipelineDriver {
   ): Iterable<RowChange> {
     let pos = 0;
     const removedConflicts: Set<string> = new Set();
-    for (const {type, table, rowKey} of diff) {
+    for (const {table, prevValues, nextValue} of diff) {
       const start = performance.now();
       let type;
       try {
@@ -471,72 +471,40 @@ export class PipelineDriver {
           // no pipelines read from this table, so no need to process the change
           continue;
         }
-        let existing: [RowKey, Row] | undefined = undefined;
-        if (nextValue) {
-          for (const conflict of conflictValues) {
-            const conflictPrimaryKey = getRowKey(
-              tableSpec.primaryKey,
-              conflict as Row,
-            );
-            // Rows are ultimately referred to by the union key (in #streamNodes())
-            // so an update is represented as an `edit` if and only if the
-            // unionKey-based row keys are the same in prevValue and nextValue.
-            if (
-              deepEqual(
-                conflictPrimaryKey as JSONValue,
-                getRowKey(tableSpec.primaryKey, nextValue as Row) as JSONValue,
-              )
-            ) {
-              existing = [conflictPrimaryKey, conflict];
-            } else {
-              yield* this.#push(tableSource, {
-                type: 'remove',
-                row: conflict,
-              });
-              removedConflicts.add(rowKeyString(conflictPrimaryKey));
-            }
-          }
-        }
-        console.log(removedConflicts);
-        let nextValueProcessed = false;
-        let prevValueProcessed = false;
-        if (existing) {
-          const [existingPrimaryKey, existingRow] = existing;
-          type = 'edit';
-          yield* this.#push(tableSource, {
-            type: 'edit',
-            row: nextValue as Row,
-            oldRow: existingRow,
-          });
-          nextValueProcessed = true;
-
-          prevValueProcessed = deepEqual(
-            existingPrimaryKey as JSONValue,
-            getRowKey(tableSpec.primaryKey, prevValue as Row) as JSONValue,
-          );
-        }
-        if (prevValue && !prevValueProcessed) {
-          type = 'remove';
-          const wasPreviouslyRemovedDueToConflict = removedConflicts.delete(
-            rowKeyString(getRowKey(tableSpec.primaryKey, prevValue as Row)),
-          );
-          if (!wasPreviouslyRemovedDueToConflict) {
+        let editOldRow: Row | undefined = undefined;
+        for (const prevValue of prevValues) {
+          // Rows are ultimately referred to by the union key (in #streamNodes())
+          // so an update is represented as an `edit` if and only if the
+          // unionKey-based row keys are the same in prevValue and nextValue.
+          if (
+            nextValue &&
+            deepEqual(
+              getRowKey(tableSpec.unionKey, prevValue as Row) as JSONValue,
+              getRowKey(tableSpec.unionKey, nextValue as Row) as JSONValue,
+            )
+          ) {
+            editOldRow = prevValue;
+          } else {
             yield* this.#push(tableSource, {
               type: 'remove',
-              row: prevValue as Row,
+              row: prevValue,
+            });
+          }
+        }
+        if (nextValue) {
+          if (editOldRow) {
+            yield* this.#push(tableSource, {
+              type: 'edit',
+              row: nextValue,
+              oldRow: editOldRow,
             });
           } else {
-            console.log('wasPreviouslyRemovedDueToConflict', prevValue);
+            yield* this.#push(tableSource, {
+              type: 'add',
+              row: nextValue,
+            });
           }
-          prevValueProcessed = true;
         }
-        if (nextValue && !nextValueProcessed) {
-          type = 'add';
-          yield* this.#push(tableSource, {type: 'add', row: nextValue as Row});
-          nextValueProcessed = true;
-        }
-        assert(nextValueProcessed || !nextValue);
-        assert(prevValueProcessed || !prevValue);
       } finally {
         onChange(++pos);
       }
