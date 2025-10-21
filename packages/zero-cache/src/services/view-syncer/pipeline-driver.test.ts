@@ -932,6 +932,94 @@ describe('view-syncer/pipeline-driver', () => {
     `);
   });
 
+  test.fails('unique constraint conflict due to changelog compression', () => {
+    pipelines.init(null);
+    expect([
+      ...pipelines.addQuery('hash1', 'queryID1', UNIQUES_QUERY, startTimer()),
+    ]).toMatchInlineSnapshot(`
+        [
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "123",
+              "id": "foo",
+              "name": "bar",
+            },
+            "rowKey": {
+              "id": "foo",
+              "name": "bar",
+            },
+            "table": "uniques",
+            "type": "add",
+          },
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "123",
+              "id": "boo",
+              "name": "dar",
+            },
+            "rowKey": {
+              "id": "boo",
+              "name": "dar",
+            },
+            "table": "uniques",
+            "type": "add",
+          },
+        ]
+      `);
+
+    replicator.processTransaction(
+      '134',
+      messages.delete('uniques', {id: 'foo'}),
+      messages.insert('uniques', {id: 'baz', name: 'bar'}),
+      messages.insert('uniques', {id: 'foo', name: 'wuzzy'}),
+    );
+
+    expect(changes()).toMatchInlineSnapshot(`
+      [
+        {
+          "queryHash": "hash1",
+          "row": undefined,
+          "rowKey": {
+            "id": "foo",
+            "name": "bar",
+          },
+          "table": "uniques",
+          "type": "remove",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "134",
+            "id": "baz",
+            "name": "bar",
+          },
+          "rowKey": {
+            "id": "baz",
+            "name": "bar",
+          },
+          "table": "uniques",
+          "type": "add",
+        },
+        {
+          "queryHash": "hash1",
+          "row": {
+            "_0_version": "134",
+            "id": "foo",
+            "name": "wuzzy",
+          },
+          "rowKey": {
+            "id": "foo",
+            "name": "wuzzy",
+          },
+          "table": "uniques",
+          "type": "add",
+        },
+      ]
+    `);
+  });
+
   test('whereExists query', () => {
     pipelines.init(null);
     [
