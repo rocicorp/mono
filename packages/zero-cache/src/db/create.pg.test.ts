@@ -496,10 +496,10 @@ describe('tables/create', () => {
       expect(sqliteResult).toBe('"text[]"');
     });
 
-    test('handles legacy text|TEXT_ARRAY format (without [])', () => {
+    test('handles legacy text|TEXT_ARRAY format', () => {
       const spec = {
         pos: 1,
-        dataType: 'text|TEXT_ARRAY', // Old legacy format without []
+        dataType: 'text|TEXT_ARRAY', // Legacy format without brackets
         characterMaximumLength: null,
         notNull: false,
         dflt: null,
@@ -511,10 +511,10 @@ describe('tables/create', () => {
       expect(sqliteResult).toBe('"text[]"');
     });
 
-    test('handles legacy text|TEXT_ARRAY format (without [])', () => {
+    test('handles legacy text|TEXT_ARRAY[] format', () => {
       const spec = {
         pos: 1,
-        dataType: 'text|TEXT_ARRAY[]', // Old legacy format without []
+        dataType: 'text|TEXT_ARRAY[]', // Legacy format with trailing []
         characterMaximumLength: null,
         notNull: false,
         dflt: null,
@@ -526,10 +526,10 @@ describe('tables/create', () => {
       expect(sqliteResult).toBe('"text[]"');
     });
 
-    test('handles legacy text|TEXT_ARRAY format (without [])', () => {
+    test('handles legacy text[]|TEXT_ARRAY[] format', () => {
       const spec = {
         pos: 1,
-        dataType: 'text[]|TEXT_ARRAY[]',
+        dataType: 'text[]|TEXT_ARRAY[]', // Legacy format with both [] and trailing []
         characterMaximumLength: null,
         notNull: false,
         dflt: null,
