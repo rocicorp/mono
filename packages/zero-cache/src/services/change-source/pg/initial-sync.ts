@@ -9,8 +9,8 @@ import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {
-  createIndexStatement,
-  createTableStatement,
+  createLiteIndexStatement,
+  createLiteTableStatement,
 } from '../../../db/create.ts';
 import * as Mode from '../../../db/mode-enum.ts';
 import {TsvParser} from '../../../db/pg-copy.ts';
@@ -355,13 +355,13 @@ function createLiteTables(
   initialVersion: string,
 ) {
   for (const t of tables) {
-    tx.exec(createTableStatement(mapPostgresToLite(t, initialVersion)));
+    tx.exec(createLiteTableStatement(mapPostgresToLite(t, initialVersion)));
   }
 }
 
 function createLiteIndices(tx: Database, indices: IndexSpec[]) {
   for (const index of indices) {
-    tx.exec(createIndexStatement(mapPostgresToLiteIndex(index)));
+    tx.exec(createLiteIndexStatement(mapPostgresToLiteIndex(index)));
   }
 }
 
