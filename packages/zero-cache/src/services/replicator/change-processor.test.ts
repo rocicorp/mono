@@ -15,6 +15,12 @@ import {
   initReplicationState,
 } from './schema/replication-state.ts';
 import {createChangeProcessor, ReplicationMessages} from './test-utils.ts';
+import {
+  CREATE_COLUMN_METADATA_TABLE,
+  getColumnMetadata,
+  getTableMetadata,
+} from '../change-source/column-metadata.ts';
+import * as PostgresTypeClass from '../../db/postgres-type-class-enum.ts';
 
 describe('replicator/incremental-sync', () => {
   let lc: LogContext;
@@ -2206,5 +2212,318 @@ describe('replicator/change-processor-errors', () => {
     expect(replica.inTransaction).toBe(true);
     processor.abort(lc);
     expect(replica.inTransaction).toBe(false);
+  });
+});
+
+/**
+ * Integration tests verifying that DDL operations correctly write to the
+ * _zero.column_metadata table.
+ */
+describe('replicator/ddl-metadata-integration', () => {
+  let lc: LogContext;
+  let replica: Database;
+  let processor: ChangeProcessor;
+  const messages = new ReplicationMessages({foo: 'id', bar: 'id'});
+
+  beforeEach(() => {
+    lc = createSilentLogContext();
+    replica = new Database(lc, ':memory:');
+    processor = createChangeProcessor(replica);
+
+    // Initialize the metadata table
+    replica.exec(CREATE_COLUMN_METADATA_TABLE);
+    initReplicationState(replica, ['zero_data'], '02');
+    initChangeLog(replica);
+  });
+
+  test('CREATE TABLE writes metadata for all columns', () => {
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '07'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.createTable({
+        schema: 'public',
+        name: 'foo',
+        columns: {
+          id: {pos: 0, dataType: 'int8', notNull: true},
+          name: {pos: 1, dataType: 'varchar', characterMaximumLength: 255},
+          tags: {pos: 2, dataType: 'text[]'},
+          role: {
+            pos: 3,
+            dataType: 'user_role',
+            pgTypeClass: PostgresTypeClass.Enum,
+          },
+        },
+        primaryKey: ['id'],
+      }),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '07'},
+    ]);
+
+    const metadata = getTableMetadata(replica, 'foo');
+
+    expect(metadata.get('id')).toEqual({
+      upstreamType: 'int8',
+      isNotNull: true,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    });
+
+    expect(metadata.get('name')).toEqual({
+      upstreamType: 'varchar',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: 255,
+    });
+
+    expect(metadata.get('tags')).toEqual({
+      upstreamType: 'text[]',
+      isNotNull: false,
+      isEnum: false,
+      isArray: true,
+      characterMaxLength: null,
+    });
+
+    expect(metadata.get('role')).toEqual({
+      upstreamType: 'user_role',
+      isNotNull: false,
+      isEnum: true,
+      isArray: false,
+      characterMaxLength: null,
+    });
+
+    // Verify _0_version column was created
+    expect(metadata.get('_0_version')).toBeDefined();
+  });
+
+  test('ADD COLUMN writes metadata', () => {
+    // First create a table
+    replica.exec('CREATE TABLE foo(id INT8 PRIMARY KEY, _0_version TEXT);');
+    replica.exec(
+      "INSERT INTO \"_zero.column_metadata\" (table_name, column_name, upstream_type, is_not_null, is_enum, is_array) VALUES ('foo', 'id', 'int8', 0, 0, 0);",
+    );
+
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '08'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.addColumn('foo', 'newCol', {
+        pos: 10,
+        dataType: 'text',
+        notNull: true,
+      }),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '08'},
+    ]);
+
+    const metadata = getColumnMetadata(replica, 'foo', 'newCol');
+    expect(metadata).toEqual({
+      upstreamType: 'text',
+      isNotNull: true,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    });
+  });
+
+  test('UPDATE COLUMN (rename) updates metadata', () => {
+    // Create table with metadata
+    replica.exec(
+      'CREATE TABLE foo(id INT8 PRIMARY KEY, oldName TEXT, _0_version TEXT);',
+    );
+    replica.exec(
+      "INSERT INTO \"_zero.column_metadata\" (table_name, column_name, upstream_type, is_not_null, is_enum, is_array) VALUES ('foo', 'oldName', 'text', 0, 0, 0);",
+    );
+
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '09'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.updateColumn(
+        'foo',
+        {name: 'oldName', spec: {pos: 1, dataType: 'text'}},
+        {name: 'newName', spec: {pos: 1, dataType: 'text'}},
+      ),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '09'},
+    ]);
+
+    // Old column should not exist
+    expect(getColumnMetadata(replica, 'foo', 'oldName')).toBeNull();
+
+    // New column should exist
+    const metadata = getColumnMetadata(replica, 'foo', 'newName');
+    expect(metadata).toEqual({
+      upstreamType: 'text',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    });
+  });
+
+  test('UPDATE COLUMN (type change) updates metadata', () => {
+    replica.exec(
+      'CREATE TABLE foo(id INT8 PRIMARY KEY, col TEXT, _0_version TEXT);',
+    );
+    replica.exec(
+      "INSERT INTO \"_zero.column_metadata\" (table_name, column_name, upstream_type, is_not_null, is_enum, is_array) VALUES ('foo', 'col', 'text', 0, 0, 0);",
+    );
+
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0a'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.updateColumn(
+        'foo',
+        {name: 'col', spec: {pos: 1, dataType: 'text'}},
+        {name: 'col', spec: {pos: 1, dataType: 'int8', notNull: true}},
+      ),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0a'},
+    ]);
+
+    const metadata = getColumnMetadata(replica, 'foo', 'col');
+    expect(metadata).toEqual({
+      upstreamType: 'int8',
+      isNotNull: true,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    });
+  });
+
+  test('UPDATE COLUMN (nullability change) updates metadata', () => {
+    replica.exec(
+      'CREATE TABLE foo(id INT8 PRIMARY KEY, col TEXT, _0_version TEXT);',
+    );
+    replica.exec(
+      "INSERT INTO \"_zero.column_metadata\" (table_name, column_name, upstream_type, is_not_null, is_enum, is_array) VALUES ('foo', 'col', 'text', 0, 0, 0);",
+    );
+
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0b'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.updateColumn(
+        'foo',
+        {name: 'col', spec: {pos: 1, dataType: 'text'}},
+        {name: 'col', spec: {pos: 1, dataType: 'text', notNull: true}},
+      ),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0b'},
+    ]);
+
+    const metadata = getColumnMetadata(replica, 'foo', 'col');
+    expect(metadata?.isNotNull).toBe(true);
+  });
+
+  test('RENAME TABLE updates all metadata rows', () => {
+    replica.exec('CREATE TABLE foo(id INT8, name TEXT, _0_version TEXT);');
+    replica.exec(
+      "INSERT INTO \"_zero.column_metadata\" (table_name, column_name, upstream_type, is_not_null, is_enum, is_array) VALUES ('foo', 'id', 'int8', 0, 0, 0), ('foo', 'name', 'text', 0, 0, 0);",
+    );
+
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0c'},
+    ]);
+    processor.processMessage(lc, ['data', messages.renameTable('foo', 'bar')]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0c'},
+    ]);
+
+    // Old table should have no metadata
+    expect(getTableMetadata(replica, 'foo').size).toBe(0);
+
+    // New table should have all metadata
+    const metadata = getTableMetadata(replica, 'bar');
+    expect(metadata.size).toBeGreaterThan(0);
+    expect(metadata.get('id')).toBeDefined();
+    expect(metadata.get('name')).toBeDefined();
+  });
+
+  test('DROP COLUMN deletes metadata', () => {
+    replica.exec(
+      'CREATE TABLE foo(id INT8 PRIMARY KEY, dropMe TEXT, _0_version TEXT);',
+    );
+    replica.exec(
+      "INSERT INTO \"_zero.column_metadata\" (table_name, column_name, upstream_type, is_not_null, is_enum, is_array) VALUES ('foo', 'id', 'int8', 0, 0, 0), ('foo', 'dropMe', 'text', 0, 0, 0);",
+    );
+
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0d'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.dropColumn('foo', 'dropMe'),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0d'},
+    ]);
+
+    expect(getColumnMetadata(replica, 'foo', 'dropMe')).toBeNull();
+    expect(getColumnMetadata(replica, 'foo', 'id')).toBeDefined();
+  });
+
+  test('DROP TABLE deletes all metadata', () => {
+    replica.exec('CREATE TABLE foo(id INT8, name TEXT, _0_version TEXT);');
+    replica.exec(
+      "INSERT INTO \"_zero.column_metadata\" (table_name, column_name, upstream_type, is_not_null, is_enum, is_array) VALUES ('foo', 'id', 'int8', 0, 0, 0), ('foo', 'name', 'text', 0, 0, 0);",
+    );
+
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0e'},
+    ]);
+    processor.processMessage(lc, ['data', messages.dropTable('foo')]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0e'},
+    ]);
+
+    const metadata = getTableMetadata(replica, 'foo');
+    expect(metadata.size).toBe(0);
   });
 });

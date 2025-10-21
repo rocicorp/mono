@@ -368,4 +368,132 @@ describe('column-metadata', () => {
       expect(rows).toHaveLength(0);
     });
   });
+
+  describe('edge cases', () => {
+    test('handles array of enums with new-style format', () => {
+      // New-style format: 'user_role[]|TEXT_ENUM'
+      const metadata = liteTypeStringToMetadata('user_role[]|TEXT_ENUM');
+
+      expect(metadata).toEqual({
+        upstreamType: 'user_role[]',
+        isNotNull: false,
+        isEnum: true,
+        isArray: true,
+        characterMaxLength: null,
+      });
+    });
+
+    test('handles old-style array format with attributes', () => {
+      // Old-style format: 'int4|NOT_NULL[]' (attributes before brackets)
+      const metadata = liteTypeStringToMetadata('int4|NOT_NULL[]');
+
+      expect(metadata).toEqual({
+        upstreamType: 'int4[]',
+        isNotNull: true,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      });
+    });
+
+    test('handles new-style array format with attributes', () => {
+      // New-style format: 'int4[]|NOT_NULL' (attributes after brackets)
+      const metadata = liteTypeStringToMetadata('int4[]|NOT_NULL');
+
+      expect(metadata).toEqual({
+        upstreamType: 'int4[]',
+        isNotNull: true,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      });
+    });
+
+    test('preserves character max length through round-trip conversion', () => {
+      const db = createTestDb();
+
+      // Insert metadata with character max length
+      insertColumnMetadata(db, 'users', 'email', {
+        upstreamType: 'varchar',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: 255,
+      });
+
+      // Read it back
+      const row = db
+        .prepare(
+          'SELECT * FROM "_zero.column_metadata" WHERE table_name = ? AND column_name = ?',
+        )
+        .get('users', 'email') as Record<string, unknown>;
+
+      expect(row.character_max_length).toBe(255);
+
+      // Convert to LiteTypeString and back
+      const liteType = liteTypeStringToMetadata('varchar', 255);
+      expect(liteType.characterMaxLength).toBe(255);
+    });
+
+    test('handles complex combinations: array of enum with NOT_NULL', () => {
+      // This tests the most complex case: array + enum + not null
+      const metadata = liteTypeStringToMetadata('status[]|NOT_NULL|TEXT_ENUM');
+
+      expect(metadata).toEqual({
+        upstreamType: 'status[]',
+        isNotNull: true,
+        isEnum: true,
+        isArray: true,
+        characterMaxLength: null,
+      });
+    });
+
+    test('handles multidimensional arrays', () => {
+      // PostgreSQL supports multidimensional arrays like 'int4[][]'
+      const metadata = liteTypeStringToMetadata('int4[][]');
+
+      expect(metadata).toEqual({
+        upstreamType: 'int4[][]',
+        isNotNull: false,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      });
+    });
+
+    test('round-trip conversion preserves all metadata', () => {
+      const original = {
+        upstreamType: 'varchar',
+        isNotNull: true,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: 100,
+      };
+
+      const db = createTestDb();
+      insertColumnMetadata(db, 'test', 'col', original);
+
+      const row = db
+        .prepare(
+          'SELECT * FROM "_zero.column_metadata" WHERE table_name = ? AND column_name = ?',
+        )
+        .get('test', 'col') as {
+        upstream_type: string;
+        is_not_null: number;
+        is_enum: number;
+        is_array: number;
+        character_max_length: number | null;
+      };
+
+      const reconstructed = {
+        upstreamType: row.upstream_type,
+        isNotNull: row.is_not_null !== 0,
+        isEnum: row.is_enum !== 0,
+        isArray: row.is_array !== 0,
+        characterMaxLength: row.character_max_length,
+      };
+
+      expect(reconstructed).toEqual(original);
+    });
+  });
 });

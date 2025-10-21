@@ -99,6 +99,7 @@ export function mapPostgresToLiteColumn(
     pgTypeClass,
     notNull,
     dflt,
+    characterMaximumLength = null,
     elemPgTypeClass = null,
   } = column.spec;
 
@@ -113,7 +114,7 @@ export function mapPostgresToLiteColumn(
   return {
     pos,
     dataType: liteType,
-    characterMaximumLength: null,
+    characterMaximumLength,
     // Note: NOT NULL constraints are always ignored for SQLite (replica) tables.
     // 1. They are enforced by the replication stream.
     // 2. We need nullability for columns with defaults to support
