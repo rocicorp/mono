@@ -29,9 +29,12 @@ import {
 import type {LogConfig} from '../../config/zero-config.ts';
 import {computeZqlSpecs, mustGetTableSpec} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
-import {getOrCreateHistogram} from '../../observability/metrics.ts';
+import {
+  getOrCreateCounter,
+  getOrCreateHistogram,
+} from '../../observability/metrics.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
-import type {RowKey} from '../../types/row-key.ts';
+import {type RowKey} from '../../types/row-key.ts';
 import type {SchemaVersions} from '../../types/schema-versions.ts';
 import type {ShardID} from '../../types/shards.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
@@ -102,6 +105,13 @@ export class PipelineDriver {
       'Time to advance all queries for a given client group for in response to a single change.',
     unit: 's',
   });
+
+  readonly #conflictRowsDeleted = getOrCreateCounter(
+    'sync',
+    'ivm.conflict-rows-deleted',
+    'Number of rows deleted because they conflicted with added row',
+  );
+
   readonly #inspectorDelegate: InspectorDelegate;
 
   constructor(
@@ -460,40 +470,52 @@ export class PipelineDriver {
     onChange: (pos: number) => void,
   ): Iterable<RowChange> {
     let pos = 0;
-    for (const {table, prevValue, nextValue, rowKey} of diff) {
+    for (const {table, prevValues, nextValue} of diff) {
       const start = performance.now();
       let type;
       try {
-        if (prevValue && nextValue) {
+        const tableSpec = mustGetTableSpec(this.#tableSpecs, table).tableSpec;
+        const tableSource = this.#tables.get(table);
+        if (!tableSource) {
+          // no pipelines read from this table, so no need to process the change
+          continue;
+        }
+        let editOldRow: Row | undefined = undefined;
+        for (const prevValue of prevValues) {
           // Rows are ultimately referred to by the union key (in #streamNodes())
           // so an update is represented as an `edit` if and only if the
           // unionKey-based row keys are the same in prevValue and nextValue.
-          const {unionKey} = must(this.#tableSpecs.get(table)).tableSpec;
           if (
-            Object.keys(rowKey).length === unionKey.length ||
+            nextValue &&
             deepEqual(
-              getRowKey(unionKey, prevValue as Row) as JSONValue,
-              getRowKey(unionKey, nextValue as Row) as JSONValue,
+              getRowKey(tableSpec.unionKey, prevValue as Row) as JSONValue,
+              getRowKey(tableSpec.unionKey, nextValue as Row) as JSONValue,
             )
           ) {
-            type = 'edit';
-            yield* this.#push(table, {
-              type: 'edit',
-              row: nextValue as Row,
-              oldRow: prevValue as Row,
+            editOldRow = prevValue;
+          } else {
+            if (nextValue) {
+              this.#conflictRowsDeleted.add(1);
+            }
+            yield* this.#push(tableSource, {
+              type: 'remove',
+              row: prevValue,
             });
-            continue;
           }
-          // If the unionKey-based row keys differed, they will be
-          // represented as a remove of the old key and an add of the new key.
-        }
-        if (prevValue) {
-          type = 'remove';
-          yield* this.#push(table, {type: 'remove', row: prevValue as Row});
         }
         if (nextValue) {
-          type = 'add';
-          yield* this.#push(table, {type: 'add', row: nextValue as Row});
+          if (editOldRow) {
+            yield* this.#push(tableSource, {
+              type: 'edit',
+              row: nextValue,
+              oldRow: editOldRow,
+            });
+          } else {
+            yield* this.#push(tableSource, {
+              type: 'add',
+              row: nextValue,
+            });
+          }
         }
       } finally {
         onChange(++pos);
@@ -543,12 +565,7 @@ export class PipelineDriver {
     return this.#storage.createStorage();
   }
 
-  *#push(table: string, change: SourceChange): Iterable<RowChange> {
-    const source = this.#tables.get(table);
-    if (!source) {
-      return;
-    }
-
+  *#push(source: TableSource, change: SourceChange): Iterable<RowChange> {
     this.#startAccumulating();
     for (const _ of source.genPush(change)) {
       yield* this.#stopAccumulating().stream();

@@ -66,6 +66,12 @@ export type LiteTableSpec = Readonly<MutableLiteTableSpec>;
 
 export type LiteTableSpecWithKeys = Omit<LiteTableSpec, 'primaryKey'> & {
   /**
+   * All keys associated with a unique index.  Includes indexes with
+   * nullable columns.
+   */
+  uniqueKeys: PrimaryKey[];
+
+  /**
    * The key selected to act as the "primary key". Primary keys
    * are not explicitly set on the replica, but an appropriate
    * unique index is required.
@@ -73,17 +79,17 @@ export type LiteTableSpecWithKeys = Omit<LiteTableSpec, 'primaryKey'> & {
   primaryKey: PrimaryKey; // note: required
 
   /**
-   * The union of all columns that are part of any unique index.
-   * This is guaranteed to include any combination of columns that
-   * can serve as a key.
-   */
-  unionKey: PrimaryKey;
-
-  /**
    * All keys associated with a unique index over non-null
    * columns, i.e. suitable as a primary key.
    */
-  allKeys: PrimaryKey[];
+  allPotentialPrimaryKeys: PrimaryKey[];
+
+  /**
+   * The union of all columns that are part of any potential primary key.
+   * This is guaranteed to include any combination of columns that
+   * can serve as a primary key.
+   */
+  unionKey: PrimaryKey;
 };
 
 export type LiteAndZqlSpec = {

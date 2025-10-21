@@ -185,8 +185,9 @@ export function computeZqlSpecs(
     // Collect all columns that are part of a unique index.
     const allKeyColumns = new Set<string>();
 
+    const uniqueKeys = uniqueColumns.get(fullTable.name) ?? [];
     // Examine all column combinations that can serve as a primary key.
-    const keys = (uniqueColumns.get(fullTable.name) ?? []).filter(key => {
+    const keys = uniqueKeys.filter(key => {
       if (difference(new Set(key), notNullColumns).size > 0) {
         return false; // Exclude indexes over non-visible columns.
       }
@@ -216,7 +217,10 @@ export function computeZqlSpecs(
       // See row-key.ts: normalizedKeyOrder()
       primaryKey: v.parse(primaryKey.sort(), primaryKeySchema),
       unionKey: v.parse(unionKey.sort(), primaryKeySchema),
-      allKeys: keys.map(key => v.parse(key.sort(), primaryKeySchema)),
+      uniqueKeys: uniqueKeys.map(key => v.parse(key.sort(), primaryKeySchema)),
+      allPotentialPrimaryKeys: keys.map(key =>
+        v.parse(key.sort(), primaryKeySchema),
+      ),
     };
 
     tableSpecs.set(tableSpec.name, {
