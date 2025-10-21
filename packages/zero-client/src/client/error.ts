@@ -101,6 +101,7 @@ export function getErrorConnectionTransition(ex: unknown) {
       case ClientErrorKind.UnexpectedBaseCookie:
       case ClientErrorKind.Internal:
       case ClientErrorKind.InvalidMessage:
+      case ClientErrorKind.UserDisconnect:
         return {status: ConnectionStatus.Error, reason: ex} as const;
 
       // Disconnected error (this should already result in a disconnected state)

@@ -9,6 +9,7 @@ export const PullTimeout = 'PullTimeout';
 export const Hidden = 'Hidden';
 export const NoSocketOrigin = 'NoSocketOrigin';
 export const InvalidMessage = 'InvalidMessage';
+export const UserDisconnect = 'UserDisconnect';
 export const Internal = 'Internal';
 
 export type AbruptClose = typeof AbruptClose;
@@ -22,4 +23,5 @@ export type PullTimeout = typeof PullTimeout;
 export type Hidden = typeof Hidden;
 export type NoSocketOrigin = typeof NoSocketOrigin;
 export type InvalidMessage = typeof InvalidMessage;
+export type UserDisconnect = typeof UserDisconnect;
 export type Internal = typeof Internal;

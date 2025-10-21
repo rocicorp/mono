@@ -220,7 +220,7 @@ describe('onOnlineChange callback', () => {
     expect(getOfflineCount()).toBe(1);
     // And followed by a reconnect.
     await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
-    await z.connect();
+    await z.connection.connect();
     await z.triggerConnected();
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
@@ -416,7 +416,7 @@ test('onOnline listener', async () => {
   expect(offline2).toBe(1);
 
   // Reconnect: only the second listener should be notified.
-  await z.connect();
+  await z.connection.connect();
   await z.waitForConnectionStatus(ConnectionStatus.Connecting);
   await z.triggerConnected();
   await vi.advanceTimersByTimeAsync(0);
@@ -2199,13 +2199,14 @@ test('No backoff on errors', async () => {
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
   let currentSocket = await r.socket;
 
-  const step = async (delta: number) => {
-    await r.triggerClose();
-    expect(r.connectionStatus).toBe(ConnectionStatus.Connecting);
+  const step = async (delta: number, message: string) => {
+    await r.triggerError(ErrorKind.InvalidMessage, message);
+    expect(r.connectionStatus).toBe(ConnectionStatus.Error);
 
     const nextSocketPromise = r.socket;
 
     await vi.advanceTimersByTimeAsync(delta - 1);
+    await r.connection.connect();
     expect(r.connectionStatus).toBe(ConnectionStatus.Connecting);
     await vi.advanceTimersByTimeAsync(1);
     const nextSocket = await nextSocketPromise;
@@ -2216,10 +2217,10 @@ test('No backoff on errors', async () => {
   };
 
   const steps = async () => {
-    await step(5_000);
-    await step(5_000);
-    await step(5_000);
-    await step(5_000);
+    await step(5_000, 'a');
+    await step(5_000, 'b');
+    await step(5_000, 'c');
+    await step(5_000, 'd');
   };
 
   await steps();
@@ -2370,9 +2371,7 @@ test('socketOrigin', async () => {
     await tickAFewTimes(vi);
 
     expect(r.connectionStatus, c.name).toBe(
-      c.socketEnabled
-        ? ConnectionStatus.Connecting
-        : ConnectionStatus.Disconnected,
+      c.socketEnabled ? ConnectionStatus.Connecting : ConnectionStatus.Error,
     );
   }
 });
@@ -2450,7 +2449,7 @@ async function testWaitsForConnection(
   expect(log).toEqual([]);
 
   // Error state requires manual connect() to resume
-  await r.connect();
+  await r.connection.connect();
   const reconnectPromise = r.socket;
   await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS);
   await reconnectPromise;

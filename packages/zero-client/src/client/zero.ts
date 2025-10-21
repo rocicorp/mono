@@ -33,7 +33,6 @@ import {navigator} from '../../../shared/src/navigator.ts';
 import {promiseRace} from '../../../shared/src/promise-race.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
-import {Subscribable} from '../../../shared/src/subscribable.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
@@ -108,6 +107,7 @@ import {
   ConnectionManager,
   throwIfConnectionError,
 } from './connection-manager.ts';
+import {type Connection, ConnectionImpl} from './connection.ts';
 import {ZeroContext} from './context.ts';
 import {
   type BatchMutator,
@@ -167,6 +167,7 @@ import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
+import {Subscribable} from '../../../shared/src/subscribable.ts';
 
 export type NoRelations = Record<string, never>;
 
@@ -385,6 +386,7 @@ export class Zero<
   readonly #visibilityWatcher;
 
   readonly #connectionManager: ConnectionManager;
+  readonly #connection: Connection;
   readonly #activeClientsManager: Promise<ActiveClientsManager>;
   #inspector: Inspector | undefined;
 
@@ -636,6 +638,11 @@ export class Zero<
     this.#server = server;
     this.userID = userID;
     this.#lc = lc.withContext('clientID', rep.clientID);
+    this.#connection = new ConnectionImpl(
+      this.#connectionManager,
+      this.#lc,
+      this.#handleUserDisconnect,
+    );
     this.#mutationTracker.setClientIDAndWatch(
       rep.clientID,
       rep.experimentalWatch.bind(rep),
@@ -976,6 +983,26 @@ export class Zero<
   readonly mutateBatch: BatchMutator<S>;
 
   /**
+   * The connection API for managing Zero's connection lifecycle.
+   *
+   * Use this to monitor connection state and manually control connections.
+   *
+   * @example
+   * ```ts
+   * // Subscribe to connection state changes
+   * z.connection.state.subscribe(state => {
+   *   console.log('Connection state:', state.name);
+   * });
+   *
+   * // Manually resume connection from error state
+   * await z.connection.connect();
+   * ```
+   */
+  get connection(): Connection {
+    return this.#connection;
+  }
+
+  /**
    * Whether this Zero instance has been closed.
    *
    * Once a Zero instance has been closed it no longer syncs, you can no
@@ -1026,33 +1053,6 @@ export class Zero<
     } finally {
       this.#connectionManager.closed();
     }
-  }
-
-  /**
-   * Resumes the connection from a terminal state.
-   *
-   * If called when not in a terminal state, this method does nothing.
-   *
-   * @returns A promise that resolves once the connection state has transitioned to connecting.
-   */
-  async connect(): Promise<void> {
-    const lc = this.#lc.withContext('connect');
-
-    // Only allow connect() to be called from a terminal state
-    if (!this.#connectionManager.isInTerminalState()) {
-      lc.debug?.(
-        'connect() called but not in a terminal state. Current state:',
-        this.#connectionManager.state.name,
-      );
-      return;
-    }
-
-    lc.info?.('Resuming connection from error state');
-
-    // Transition to connecting, which will trigger the state change resolver
-    // and unblock the run loop. Wait for the next state change (connected, disconnected, etc.)
-    const {nextStatePromise} = this.#connectionManager.connecting();
-    await nextStatePromise;
   }
 
   #onMessage = (e: MessageEvent<string>) => {
@@ -1556,6 +1556,33 @@ export class Zero<
     }
   }
 
+  /**
+   * Handles user-initiated disconnection via the connection.disconnect() API.
+   */
+  async #handleUserDisconnect(): Promise<void> {
+    const lc = this.#lc.withContext('handleUserDisconnect');
+
+    // don't disconnect if already closed
+    if (this.#connectionManager.is(ConnectionStatus.Closed)) {
+      lc.debug?.('Cannot disconnect: Zero instance is already closed');
+      return;
+    }
+
+    const userDisconnectError = new ClientError({
+      kind: ClientErrorKind.UserDisconnect,
+      message: 'User requested disconnect via connection.disconnect()',
+    });
+
+    // get the next state promise to wait for the disconnect to complete
+    const nextStatePromise = this.#connectionManager.waitForStateChange();
+
+    this.#disconnect(lc, userDisconnectError, CLOSE_CODE_NORMAL);
+    this.#setOnline(false);
+
+    // wait for the disconnect to complete
+    await nextStatePromise;
+  }
+
   #handlePokeStart(_lc: ZeroLogContext, pokeMessage: PokeStartMessage): void {
     this.#abortPingTimeout();
     this.#pokeHandler.handlePokeStart(pokeMessage[1]);
@@ -1728,7 +1755,6 @@ export class Zero<
 
     let needsReauth = false;
     let lastReauthAttemptAt: number | undefined;
-    // let gotError = false;
     let backoffMs: number | undefined;
     let additionalConnectParams: Record<string, string> | undefined;
 
