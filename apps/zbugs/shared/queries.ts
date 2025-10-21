@@ -77,9 +77,13 @@ export const queries = {
     (auth: AuthData | undefined, {userID, projectName}) =>
       applyIssuePermissions(
         builder.issue
-          .whereExists('project', p => p.where('name', projectName), {
-            flip: true,
-          })
+          .whereExists(
+            'project',
+            p => p.where('lowerCaseName', projectName.toLocaleLowerCase()),
+            {
+              flip: true,
+            },
+          )
           .related('labels')
           .related('viewState', q => q.where('userID', userID))
           .related('creator')
