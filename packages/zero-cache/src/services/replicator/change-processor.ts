@@ -49,6 +49,15 @@ import type {
   TableDrop,
   TableRename,
 } from '../change-source/protocol/current/data.ts';
+import {
+  deleteColumnMetadata,
+  deleteTableMetadata,
+  hasColumnMetadataTable,
+  insertColumnMetadata,
+  liteTypeStringToMetadata,
+  renameTableMetadata,
+  updateColumnMetadata,
+} from '../change-source/column-metadata.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {ReplicatorMode} from './replicator.ts';
 import {
@@ -528,6 +537,17 @@ class TransactionProcessor {
     const table = mapPostgresToLite(create.spec);
     this.#db.db.exec(createLiteTableStatement(table));
 
+    // Write column metadata if metadata table exists
+    if (hasColumnMetadataTable(this.#db.db)) {
+      for (const [columnName, columnSpec] of Object.entries(table.columns)) {
+        const metadata = liteTypeStringToMetadata(
+          columnSpec.dataType,
+          columnSpec.characterMaximumLength,
+        );
+        insertColumnMetadata(this.#db.db, table.name, columnName, metadata);
+      }
+    }
+
     this.#logResetOp(table.name);
     this.#lc.info?.(create.tag, table.name);
   }
@@ -536,6 +556,11 @@ class TransactionProcessor {
     const oldName = liteTableName(rename.old);
     const newName = liteTableName(rename.new);
     this.#db.db.exec(`ALTER TABLE ${id(oldName)} RENAME TO ${id(newName)}`);
+
+    // Update metadata table if it exists
+    if (hasColumnMetadataTable(this.#db.db)) {
+      renameTableMetadata(this.#db.db, oldName, newName);
+    }
 
     this.#bumpVersions(newName);
     this.#logResetOp(oldName);
@@ -549,6 +574,15 @@ class TransactionProcessor {
     this.#db.db.exec(
       `ALTER TABLE ${id(table)} ADD ${id(name)} ${liteColumnDef(spec)}`,
     );
+
+    // Write column metadata if metadata table exists
+    if (hasColumnMetadataTable(this.#db.db)) {
+      const metadata = liteTypeStringToMetadata(
+        spec.dataType,
+        spec.characterMaximumLength,
+      );
+      insertColumnMetadata(this.#db.db, table, name, metadata);
+    }
 
     this.#bumpVersions(table);
     this.#lc.info?.(msg.tag, table, msg.column);
@@ -598,12 +632,34 @@ class TransactionProcessor {
         stmts.push(createLiteIndexStatement(idx));
       }
       this.#db.db.exec(stmts.join(''));
+
+      // Update metadata if metadata table exists
+      if (hasColumnMetadataTable(this.#db.db)) {
+        const newMetadata = liteTypeStringToMetadata(
+          newSpec.dataType,
+          newSpec.characterMaximumLength,
+        );
+        // Delete old column metadata
+        deleteColumnMetadata(this.#db.db, table, oldName);
+        // Insert new column metadata with tmp name
+        insertColumnMetadata(this.#db.db, table, tmpName, newMetadata);
+      }
+
       oldName = tmpName;
     }
     if (oldName !== newName) {
       this.#db.db.exec(
         `ALTER TABLE ${id(table)} RENAME ${id(oldName)} TO ${id(newName)}`,
       );
+
+      // Update metadata if metadata table exists
+      if (hasColumnMetadataTable(this.#db.db)) {
+        const metadata = liteTypeStringToMetadata(
+          newSpec.dataType,
+          newSpec.characterMaximumLength,
+        );
+        updateColumnMetadata(this.#db.db, table, oldName, newName, metadata);
+      }
     }
     this.#bumpVersions(table);
     this.#lc.info?.(msg.tag, table, msg.new);
@@ -614,6 +670,11 @@ class TransactionProcessor {
     const {column} = msg;
     this.#db.db.exec(`ALTER TABLE ${id(table)} DROP ${id(column)}`);
 
+    // Delete column metadata if metadata table exists
+    if (hasColumnMetadataTable(this.#db.db)) {
+      deleteColumnMetadata(this.#db.db, table, column);
+    }
+
     this.#bumpVersions(table);
     this.#lc.info?.(msg.tag, table, column);
   }
@@ -621,6 +682,11 @@ class TransactionProcessor {
   processDropTable(drop: TableDrop) {
     const name = liteTableName(drop.id);
     this.#db.db.exec(`DROP TABLE IF EXISTS ${id(name)}`);
+
+    // Delete table metadata if metadata table exists
+    if (hasColumnMetadataTable(this.#db.db)) {
+      deleteTableMetadata(this.#db.db, name);
+    }
 
     this.#logResetOp(name);
     this.#lc.info?.(drop.tag, name);

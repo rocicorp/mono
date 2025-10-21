@@ -191,6 +191,23 @@ export function liteTypeStringToMetadata(
 }
 
 /**
+ * Converts structured ColumnMetadata back to pipe-delimited LiteTypeString.
+ * This is a compatibility helper for the migration period.
+ */
+export function metadataToLiteTypeString(metadata: ColumnMetadata): string {
+  const {upstreamType, isNotNull, isEnum} = metadata;
+
+  let typeString = upstreamType;
+  if (isNotNull) {
+    typeString += '|NOT_NULL';
+  }
+  if (isEnum) {
+    typeString += '|TEXT_ENUM';
+  }
+  return typeString;
+}
+
+/**
  * Populates metadata table from existing tables that use pipe notation.
  * This is used during migration v6 to backfill the metadata table.
  */
@@ -222,4 +239,84 @@ export function hasColumnMetadataTable(db: Database): boolean {
     )
     .get();
   return result !== undefined;
+}
+
+/**
+ * Reads metadata for a single column.
+ * Returns null if the column metadata doesn't exist.
+ */
+export function getColumnMetadata(
+  db: Database,
+  tableName: string,
+  columnName: string,
+): ColumnMetadata | null {
+  const row = db
+    .prepare(
+      `
+    SELECT upstream_type, is_not_null, is_enum, is_array, character_max_length
+    FROM "_zero.column_metadata"
+    WHERE table_name = ? AND column_name = ?
+    `,
+    )
+    .get(tableName, columnName) as
+    | {
+        upstream_type: string;
+        is_not_null: number;
+        is_enum: number;
+        is_array: number;
+        character_max_length: number | null;
+      }
+    | undefined;
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    upstreamType: row.upstream_type,
+    isNotNull: row.is_not_null !== 0,
+    isEnum: row.is_enum !== 0,
+    isArray: row.is_array !== 0,
+    characterMaxLength: row.character_max_length,
+  };
+}
+
+/**
+ * Reads all column metadata for a table.
+ * Returns a Map from column name to ColumnMetadata.
+ */
+export function getTableMetadata(
+  db: Database,
+  tableName: string,
+): Map<string, ColumnMetadata> {
+  const rows = db
+    .prepare(
+      `
+    SELECT column_name, upstream_type, is_not_null, is_enum, is_array, character_max_length
+    FROM "_zero.column_metadata"
+    WHERE table_name = ?
+    ORDER BY column_name
+    `,
+    )
+    .all(tableName) as Array<{
+    column_name: string;
+    upstream_type: string;
+    is_not_null: number;
+    is_enum: number;
+    is_array: number;
+    character_max_length: number | null;
+  }>;
+
+  const metadata = new Map<string, ColumnMetadata>();
+  for (const row of rows) {
+    metadata.set(row.column_name, {
+      upstreamType: row.upstream_type,
+      isNotNull: row.is_not_null !== 0,
+      isEnum: row.is_enum !== 0,
+      isArray: row.is_array !== 0,
+      characterMaxLength: row.character_max_length,
+    });
+  }
+
+  return metadata;
 }

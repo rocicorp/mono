@@ -1,12 +1,17 @@
 import type {LogContext} from '@rocicorp/logger';
 import {SqliteError} from '@rocicorp/zero-sqlite3';
 import type {Database} from '../../../../zqlite/src/db.ts';
+import {listTables} from '../../db/lite-tables.ts';
 import {
   runSchemaMigrations,
   type IncrementalMigrationMap,
   type Migration,
 } from '../../db/migration-lite.ts';
 import {AutoResetSignal} from '../change-streamer/schema/tables.ts';
+import {
+  CREATE_COLUMN_METADATA_TABLE,
+  populateColumnMetadataFromExistingTables,
+} from './column-metadata.ts';
 import {
   CREATE_RUNTIME_EVENTS_TABLE,
   recordEvent,
@@ -75,6 +80,16 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
     },
     migrateData: (_, db) => {
       recordEvent(db, 'upgrade');
+    },
+  },
+
+  6: {
+    migrateSchema: (_, db) => {
+      db.exec(CREATE_COLUMN_METADATA_TABLE);
+    },
+    migrateData: (_, db) => {
+      const tables = listTables(db);
+      populateColumnMetadataFromExistingTables(db, tables);
     },
   },
 };

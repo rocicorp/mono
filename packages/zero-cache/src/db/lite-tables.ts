@@ -5,6 +5,12 @@ import * as v from '../../../shared/src/valita.ts';
 import {primaryKeySchema} from '../../../zero-protocol/src/primary-key.ts';
 import type {Database} from '../../../zqlite/src/db.ts';
 import {
+  type ColumnMetadata,
+  getTableMetadata,
+  hasColumnMetadataTable,
+  metadataToLiteTypeString,
+} from '../services/change-source/column-metadata.ts';
+import {
   dataTypeToZqlValueType,
   isArray,
   isEnum,
@@ -33,15 +39,15 @@ export function listTables(db: Database): LiteTableSpec[] {
   const columns = db
     .prepare(
       `
-      SELECT 
-        m.name as "table", 
-        p.name as name, 
-        p.type as type, 
+      SELECT
+        m.name as "table",
+        p.name as name,
+        p.type as type,
         p."notnull" as "notNull",
         p.dflt_value as "dflt",
-        p.pk as keyPos 
-      FROM sqlite_master as m 
-      LEFT JOIN pragma_table_info(m.name) as p 
+        p.pk as keyPos
+      FROM sqlite_master as m
+      LEFT JOIN pragma_table_info(m.name) as p
       WHERE m.type = 'table'
       AND m.name NOT LIKE 'sqlite_%'
       AND m.name NOT LIKE '_zero.%'
@@ -50,8 +56,10 @@ export function listTables(db: Database): LiteTableSpec[] {
     )
     .all() as ColumnInfo[];
 
+  const useMetadata = hasColumnMetadataTable(db);
   const tables: LiteTableSpec[] = [];
   let table: MutableLiteTableSpec | undefined;
+  let tableMetadata: Map<string, ColumnMetadata> | null = null;
 
   columns.forEach(col => {
     if (col.table !== table?.name) {
@@ -61,18 +69,32 @@ export function listTables(db: Database): LiteTableSpec[] {
         columns: {},
       };
       tables.push(table);
+      // Load metadata for this table if using metadata table
+      tableMetadata = useMetadata ? getTableMetadata(db, col.table) : null;
     }
 
-    const elemPgTypeClass = isArray(col.type)
-      ? isEnum(col.type)
+    // Get dataType from metadata table if available, otherwise use pragma_table_info
+    let dataType: string;
+    let characterMaximumLength: number | null = null;
+
+    const colMetadata = tableMetadata?.get(col.name);
+    if (colMetadata) {
+      dataType = metadataToLiteTypeString(colMetadata);
+      characterMaximumLength = colMetadata.characterMaxLength ?? null;
+    } else {
+      dataType = col.type;
+    }
+
+    const elemPgTypeClass = isArray(dataType)
+      ? isEnum(dataType)
         ? PostgresTypeClass.Enum
         : PostgresTypeClass.Base
       : null;
 
     table.columns[col.name] = {
       pos: Object.keys(table.columns).length + 1,
-      dataType: col.type,
-      characterMaximumLength: null,
+      dataType,
+      characterMaximumLength,
       notNull: col.notNull !== 0,
       dflt: col.dflt,
       elemPgTypeClass,
