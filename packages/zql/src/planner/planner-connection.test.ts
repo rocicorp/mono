@@ -5,6 +5,11 @@ import {
   createConnection,
   expectedCost,
 } from './test/helpers.ts';
+import type {PlannerNode} from './planner-node.ts';
+
+const unpinned = {
+  pinned: false,
+} as PlannerNode;
 
 suite('PlannerConnection', () => {
   test('initial state is unpinned', () => {
@@ -22,7 +27,7 @@ suite('PlannerConnection', () => {
   test('estimateCost() with constraints reduces cost', () => {
     const connection = createConnection();
 
-    connection.propagateConstraints([0], CONSTRAINTS.userId, 'unpinned');
+    connection.propagateConstraints([0], CONSTRAINTS.userId, unpinned);
 
     expect(connection.estimateCost()).toBe(expectedCost(1));
   });
@@ -33,7 +38,7 @@ suite('PlannerConnection', () => {
     connection.propagateConstraints(
       [0],
       {userId: undefined, postId: undefined},
-      'unpinned',
+      unpinned,
     );
 
     expect(connection.estimateCost()).toBe(expectedCost(2));
@@ -42,8 +47,8 @@ suite('PlannerConnection', () => {
   test('multiple branch patterns sum costs', () => {
     const connection = createConnection();
 
-    connection.propagateConstraints([0], CONSTRAINTS.userId, 'unpinned');
-    connection.propagateConstraints([1], CONSTRAINTS.postId, 'unpinned');
+    connection.propagateConstraints([0], CONSTRAINTS.userId, unpinned);
+    connection.propagateConstraints([1], CONSTRAINTS.postId, unpinned);
 
     expect(connection.estimateCost()).toBe(expectedCost(1) + expectedCost(1));
   });
@@ -61,7 +66,7 @@ suite('PlannerConnection', () => {
   test('reset() clears propagated constraints', () => {
     const connection = createConnection();
 
-    connection.propagateConstraints([0], CONSTRAINTS.userId, 'unpinned');
+    connection.propagateConstraints([0], CONSTRAINTS.userId, unpinned);
     expect(connection.estimateCost()).toBe(expectedCost(1));
 
     connection.reset();

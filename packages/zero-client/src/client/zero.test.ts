@@ -33,7 +33,7 @@ import {
   encodeSecProtocols,
   initConnectionMessageSchema,
 } from '../../../zero-protocol/src/connect.ts';
-import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import {
@@ -60,7 +60,7 @@ import type {WSString} from './http-string.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import type {QueryManager} from './query-manager.ts';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.ts';
-import {ServerError} from './server-error.ts';
+import {isServerError, ServerError} from './error.ts';
 import {
   MockSocket,
   storageMock,
@@ -2880,7 +2880,7 @@ test(ErrorKind.InvalidConnectionRequest, async () => {
   expect(msg[0]).equal('error');
 
   const err = msg[2][1];
-  assert(err instanceof ServerError);
+  assert(isServerError(err));
   expect(err.message).equal('InvalidConnectionRequest: test');
 
   const data = msg[2].at(-1);
