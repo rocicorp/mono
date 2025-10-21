@@ -74,18 +74,20 @@ export class PlannerFanIn {
       // Normal FanIn: all inputs get the same branch pattern with 0 prepended
       const updatedPattern =
         branchPattern === undefined ? undefined : [0, ...branchPattern];
-      let first = true;
+      let maxBaseCardinality = 0;
+      let maxRunningCost = 0;
       for (const input of this.#inputs) {
         const cost = input.estimateCost(updatedPattern);
-
-        if (first) {
-          // FI only does a single fetch
-          totalCost.baseCardinality += cost.baseCardinality;
-          first = false;
+        if (cost.baseCardinality > maxBaseCardinality) {
+          maxBaseCardinality = cost.baseCardinality;
         }
-
-        totalCost.runningCost += cost.runningCost;
+        if (cost.runningCost > maxRunningCost) {
+          maxRunningCost = cost.runningCost;
+        }
       }
+
+      totalCost.baseCardinality = maxBaseCardinality;
+      totalCost.runningCost = maxRunningCost;
     } else {
       // Union FanIn (UFI): each input gets unique branch pattern
       let i = 0;
@@ -97,9 +99,6 @@ export class PlannerFanIn {
         totalCost.runningCost += cost.runningCost;
         i++;
       }
-
-      // Each input will do a fetch, so we need to add a penalty
-      totalCost.runningCost += totalCost.baseCardinality;
     }
 
     return totalCost;

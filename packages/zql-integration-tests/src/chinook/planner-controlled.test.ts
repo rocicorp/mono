@@ -85,11 +85,56 @@ describe('two joins via or', () => {
   });
 
   test('track.exists(album).or.exists(invoiceLines): track < invoiceLines > album', () => {
-    const costModel = makeCostModel({
-      track: 10_000, // gets decimated to 10 when fetched by album⨝track join
-      album: 1_000, // gets decimated to 5 from the `title` filter
-      invoiceLine: 1_000_000, // gets decimated to 100 when fetched by track⨝invoiceLine join
-    });
+    const costModel = (
+      table: string,
+      _sort: Ordering,
+      _filters: Condition | undefined,
+      constraint: PlannerConstraint | undefined,
+    ) => {
+      if (table === 'album') {
+        if (constraint !== undefined) {
+          // fetching album by id
+          assert(
+            constraint.hasOwnProperty('id'),
+            'Expected constraint to have id',
+          );
+          return 1;
+        }
+        return 2; // only 2 albums with the name 'Outlaw Blues'
+      }
+
+      if (table === 'invoiceLine') {
+        if (constraint !== undefined) {
+          // fetching invoiceLines by trackId
+          assert(
+            constraint.hasOwnProperty('trackId'),
+            'Expected constraint to have trackId',
+          );
+          // TODO: We cannot get this to flip one and not the other without incorporating
+          // limits and selectivity into the cost model. For now, just return a low cost to
+          // simulate the track quickly matching invoices and returning early.
+          return 0.1;
+        }
+
+        return 10_000;
+      }
+
+      if (table === 'track') {
+        if (constraint !== undefined) {
+          if (constraint.hasOwnProperty('id')) {
+            return 1;
+          }
+          if (constraint.hasOwnProperty('albumId')) {
+            return 10;
+          }
+          throw new Error('Unexpected constraint on track');
+        }
+        return 1_000;
+      }
+
+      throw new Error(`Unexpected table: ${table}`);
+    };
+
     const planned = planQuery(
       builder.track.where(({or, exists}) =>
         or(
@@ -306,7 +351,7 @@ function makeCostModel(costs: Record<string, number>) {
   return (
     table: string,
     _sort: Ordering,
-    filters: Condition | undefined,
+    _filters: Condition | undefined,
     constraint: PlannerConstraint | undefined,
   ) => {
     constraint = constraint ?? {};
@@ -323,16 +368,6 @@ function makeCostModel(costs: Record<string, number>) {
     if (table === 'track' && 'albumId' in constraint) {
       // not many tracks per album
       return 10;
-    }
-
-    if (
-      table === 'album' &&
-      filters?.type === 'simple' &&
-      filters.left.type === 'column' &&
-      filters.left.name === 'title'
-    ) {
-      // not many albums with same title
-      return 5;
     }
 
     const ret =
