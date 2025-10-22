@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1760541685362,
+  "lastUpdate": 1761131740406,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54201,6 +54201,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/10f9a6a7094788becdb14d5c1ec818edb6561ec8"
         },
         "date": 1760541671585,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302365,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54477,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111453,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31872,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "198982749+Copilot@users.noreply.github.com",
+            "name": "Copilot",
+            "username": "Copilot"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4c484b7fa1f3575657808f636164c3ff0d5396bf",
+          "message": "Convert mocha/chai style expects to jest style expects for consistency (#5027)\n\nConverting mocha/chai style expects to jest style expects in vitest\ntests\n\n- [x] Understand codebase and test patterns\n- [x] Create conversion script to automate the transformation\n- [x] Convert all test files with chai-style expects (68 files)\n  - [x] packages/replicache tests (57 files)\n  - [x] packages/zero-client tests (8 files)\n  - [x] packages/shared tests (2 files)\n  - [x] packages/zql tests (1 file)\n- [x] Run lint and format on converted files\n- [x] Fix chained assertions (3 instances)\n- [x] Fix remaining multi-line assertions (5 instances)\n- [x] Fix .deep.toBe() to .toEqual() (26 instances)\n- [x] Fix .toThrow() with two arguments (2 instances)\n- [x] Fix .with.property() chained assertions (3 instances)\n- [x] Fix order-independent array comparison with .sort() (26 instances)\n- [x] Fix remaining .instanceOf() patterns (13 instances)\n- [x] Fix remaining .property() chained assertions (5 instances)\n- [x] Fix .empty patterns (4 instances)\n- [x] Fix chai property accessors (.true, .false, .undefined, .equal,\n.throw)\n- [x] Fix incorrect toBeInstanceOf('string') usage (2 instances) ⭐ NEW\n- [x] Apply prettier formatting ✅\n- [x] Verify no chai-style expects remain ✅\n\n## ✅ Conversion Complete\n\nSuccessfully converted **68 test files** from mocha/chai style to jest\nstyle expects.\n\n### Latest Fix:\nFixed incorrect usage of `toBeInstanceOf('string')` to use\n`toBeTypeOf('string')` instead. The `toBeInstanceOf` matcher is for\nchecking class instances, while `toBeTypeOf` is for checking primitive\ntypes.\n\n### Key Conversions Made:\n- `.to.equal()` → `.toBe()`\n- `.equal()` → `.toBe()`\n- `.to.deep.equal()` → `.toEqual()`\n- `.deep.toBe()` → `.toEqual()`\n- `.to.be.true` → `.toBe(true)`\n- `.true` → `.toBe(true)`\n- `.to.be.false` → `.toBe(false)`\n- `.false` → `.toBe(false)`\n- `.to.be.undefined` → `.toBeUndefined()`\n- `.undefined` → `.toBeUndefined()`\n- `.not.undefined` → `.not.toBeUndefined()`\n- `.to.be.null` → `.toBeNull()`\n- `.to.be.empty` → `.toHaveLength(0)`\n- `.empty` → `.toHaveLength(0)`\n- `.to.have.length()` → `.toHaveLength()`\n- `.to.throw()` → `.toThrow()`\n- `.throw()` → `.toThrow()`\n- `.not.throw()` → `.not.toThrow()`\n- `.to.throw(Error, msg)` → `.toThrow(msg)`\n- `.to.match()` → `.toMatch()`\n- `.to.be.greaterThan()` → `.toBeGreaterThan()`\n- `.to.be.instanceOf()` → `.toBeInstanceOf()`\n- `.instanceOf()` → `.toBeInstanceOf()`\n- `.toBeInstanceOf('string')` → `.toBeTypeOf('string')` ⭐ NEW FIX\n- `.to.deep.members([...])` → sorted array comparison\n- `.with.property()` → `.toHaveProperty()`\n- `.property()` → `.toHaveProperty()`\n- Chained assertions split into separate expects\n\n### Quality Assurance:\n✅ All files formatted with prettier  \n✅ Linting passed (0 errors)  \n✅ Build passed (excluding unrelated packages)\n✅ Zero chai-style patterns remain  \n✅ All object comparisons now use .toEqual()\n✅ Order-independent array comparisons use sorted arrays\n✅ All error assertions properly split\n✅ All instance checks use .toBeInstanceOf()\n✅ All property checks use .toHaveProperty()\n✅ All empty checks use .toHaveLength(0)\n✅ All property accessor patterns converted\n✅ All type checks use correct matchers\n✅ Code properly formatted and compacted\n✅ Long lines properly wrapped\n\n<!-- START COPILOT CODING AGENT SUFFIX -->\n\n\n\n<details>\n\n<summary>Original prompt</summary>\n\n> Can you change all mocha/chai style expects to jest style expects\nAPIs? vitest supports both bot for consistency it would be nice to only\nuse the jest style\n\n\n</details>\n\n\n\n<!-- START COPILOT CODING AGENT TIPS -->\n---\n\n✨ Let Copilot coding agent [set things up for\nyou](https://github.com/rocicorp/mono/issues/new?title=✨+Set+up+Copilot+instructions&body=Configure%20instructions%20for%20this%20repository%20as%20documented%20in%20%5BBest%20practices%20for%20Copilot%20coding%20agent%20in%20your%20repository%5D%28https://gh.io/copilot-coding-agent-tips%29%2E%0A%0A%3COnboard%20this%20repo%3E&assignees=copilot)\n— coding agent works faster and does higher quality work when set up for\nyour repo.\n\n---------\n\nCo-authored-by: copilot-swe-agent[bot] <198982749+Copilot@users.noreply.github.com>\nCo-authored-by: arv <45845+arv@users.noreply.github.com>\nCo-authored-by: Erik Arvidsson <arv@roci.dev>",
+          "timestamp": "2025-10-22T11:05:37Z",
+          "tree_id": "28eeba04226a5ca207a318733fef4d75b5e5c95b",
+          "url": "https://github.com/rocicorp/mono/commit/4c484b7fa1f3575657808f636164c3ff0d5396bf"
+        },
+        "date": 1761131728337,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
