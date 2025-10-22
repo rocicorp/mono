@@ -14,18 +14,18 @@ test('toString', () => {
   const hashEmptyString = fakeHash('');
   const hashA = fakeHash('a');
   const hashAB = fakeHash('ab');
-  expect(chunkDataKey(hashEmptyString)).to.equal(`c/${hashEmptyString}/d`);
-  expect(chunkDataKey(hashA)).to.equal(`c/${hashA}/d`);
-  expect(chunkDataKey(hashAB)).to.equal(`c/${hashAB}/d`);
-  expect(chunkMetaKey(hashEmptyString)).to.equal(`c/${hashEmptyString}/m`);
-  expect(chunkMetaKey(hashA)).to.equal(`c/${hashA}/m`);
-  expect(chunkMetaKey(hashAB)).to.equal(`c/${hashAB}/m`);
-  expect(chunkRefCountKey(hashEmptyString)).to.equal(`c/${hashEmptyString}/r`);
-  expect(chunkRefCountKey(hashA)).to.equal(`c/${hashA}/r`);
-  expect(chunkRefCountKey(hashAB)).to.equal(`c/${hashAB}/r`);
-  expect(headKey('')).to.equal(`h/`);
-  expect(headKey('a')).to.equal(`h/a`);
-  expect(headKey('ab')).to.equal(`h/ab`);
+  expect(chunkDataKey(hashEmptyString)).toBe(`c/${hashEmptyString}/d`);
+  expect(chunkDataKey(hashA)).toBe(`c/${hashA}/d`);
+  expect(chunkDataKey(hashAB)).toBe(`c/${hashAB}/d`);
+  expect(chunkMetaKey(hashEmptyString)).toBe(`c/${hashEmptyString}/m`);
+  expect(chunkMetaKey(hashA)).toBe(`c/${hashA}/m`);
+  expect(chunkMetaKey(hashAB)).toBe(`c/${hashAB}/m`);
+  expect(chunkRefCountKey(hashEmptyString)).toBe(`c/${hashEmptyString}/r`);
+  expect(chunkRefCountKey(hashA)).toBe(`c/${hashA}/r`);
+  expect(chunkRefCountKey(hashAB)).toBe(`c/${hashAB}/r`);
+  expect(headKey('')).toBe(`h/`);
+  expect(headKey('a')).toBe(`h/a`);
+  expect(headKey('ab')).toBe(`h/ab`);
 });
 
 test('parse', () => {
@@ -33,7 +33,7 @@ test('parse', () => {
   const hashB = fakeHash('b');
 
   const t = (key: string, expected: Key) => {
-    expect(parse(key)).to.deep.equal(expected);
+    expect(parse(key)).toEqual(expected);
   };
 
   t(chunkDataKey(hashA), {type: KeyType.ChunkData, hash: hashA});
@@ -47,9 +47,13 @@ test('parse', () => {
   t(headKey('b'), {type: KeyType.Head, name: 'b'});
 
   const invalid = (key: string, message: string) => {
-    expect(() => parse(key))
-      .to.throw(Error)
-      .with.property('message', message);
+    const fn = () => parse(key);
+    expect(fn).toThrow(Error);
+    try {
+      fn();
+    } catch (err) {
+      expect(err).toHaveProperty('message', message);
+    }
   };
 
   invalid('', `Invalid key. Got ""`);

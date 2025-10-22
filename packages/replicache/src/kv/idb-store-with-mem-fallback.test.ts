@@ -24,13 +24,13 @@ test('Firefox private browsing', async () => {
   const name = `ff-${Math.random()}`;
 
   const store = storeThatErrorsInOpen(new LogContext(), name);
-  expect(store).instanceOf(IDBStoreWithMemFallback);
+  expect(store).toBeInstanceOf(IDBStoreWithMemFallback);
 
   await withWrite(store, async tx => {
     await tx.put('foo', 'bar');
   });
   await withRead(store, async tx => {
-    expect(await tx.get('foo')).to.equal('bar');
+    expect(await tx.get('foo')).toBe('bar');
   });
 });
 
@@ -40,8 +40,8 @@ test('No wrapper if not Firefox', async () => {
   );
   const name = `not-ff-${Math.random()}`;
   const store = newIDBStoreWithMemFallback(new LogContext(), name);
-  expect(store).not.instanceOf(IDBStoreWithMemFallback);
-  expect(store).instanceOf(IDBStore);
+  expect(store).not.toBeInstanceOf(IDBStoreWithMemFallback);
+  expect(store).toBeInstanceOf(IDBStore);
   await store.close();
 });
 
@@ -63,7 +63,7 @@ test('race condition', async () => {
   await p2;
 
   expect(logFake).toBeCalledTimes(1);
-  expect(logFake.mock.calls[0]).to.deep.equal([
+  expect(logFake.mock.calls[0]).toEqual([
     'info',
     {my: 'context'},
     'Switching to MemStore because of Firefox private browsing error',
@@ -80,7 +80,7 @@ function storeThatErrorsInOpen(lc: LogContext, name: string) {
   vi.spyOn(indexedDB, 'open').mockImplementation(() => openRequest);
 
   const store = newIDBStoreWithMemFallback(lc, name);
-  expect(store).instanceOf(IDBStoreWithMemFallback);
+  expect(store).toBeInstanceOf(IDBStoreWithMemFallback);
 
   assert(openRequest.onerror);
   openRequest.onerror(new Event('error'));

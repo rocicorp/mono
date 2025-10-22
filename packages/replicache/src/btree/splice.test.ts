@@ -10,7 +10,7 @@ test('splice', () => {
     current: Entry<T>[],
     expected: Splice[],
   ) => {
-    expect([...computeSplices(previous, current)]).to.deep.equal(expected);
+    expect([...computeSplices(previous, current)]).toEqual(expected);
   };
 
   t([['a', 0]], [['a', 0]], []);
@@ -258,7 +258,7 @@ test('splice roundtrip', () => {
     const expected: Splice[] = [
       [start, deleteCount, items.length, items.length === 0 ? 0 : start],
     ];
-    expect(res).to.deep.equal(expected);
+    expect(res).toEqual(expected);
   };
 
   t(

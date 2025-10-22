@@ -73,7 +73,7 @@ test('pull', async () => {
   await deleteTodo({id: id2});
 
   let cookie = 1;
-  expect(deleteCount).to.equal(2);
+  expect(deleteCount).toBe(2);
   const {clientID} = rep;
   fetchMock.postOnce(
     pullURL,
@@ -93,7 +93,7 @@ test('pull', async () => {
   );
   rep.pullIgnorePromise();
   await tickAFewTimes(vi);
-  expect(deleteCount).to.equal(2);
+  expect(deleteCount).toBe(2);
 
   fetchMock.postOnce(
     pullURL,
@@ -101,17 +101,17 @@ test('pull', async () => {
   );
   beginPullResult = await rep.beginPull();
   ({syncHead} = beginPullResult);
-  expect(syncHead).to.equal(emptyHash);
-  expect(deleteCount).to.equal(2);
+  expect(syncHead).toBe(emptyHash);
+  expect(deleteCount).toBe(2);
 
   await createTodo({
     id: id1,
     text: 'Test',
   });
-  expect(createCount).to.equal(1);
+  expect(createCount).toBe(1);
   expect(
     ((await rep.query(tx => tx.get(`/todo/${id1}`))) as {text: string}).text,
-  ).to.equal('Test');
+  ).toBe('Test');
 
   fetchMock.postOnce(
     pullURL,
@@ -130,22 +130,22 @@ test('pull', async () => {
   );
   beginPullResult = await rep.beginPull();
   ({syncHead} = beginPullResult);
-  expect(syncHead).to.not.be.undefined;
-  expect(syncHead).to.not.equal(emptyHash);
+  expect(syncHead).not.toBeUndefined();
+  expect(syncHead).not.toBe(emptyHash);
 
-  expect(rep.lastMutationID).to.equal(3);
+  expect(rep.lastMutationID).toBe(3);
 
   await createTodo({
     id: id2,
     text: 'Test 2',
   });
 
-  expect(rep.lastMutationID).to.equal(4);
+  expect(rep.lastMutationID).toBe(4);
 
-  expect(createCount).to.equal(2);
+  expect(createCount).toBe(2);
   expect(
     ((await rep.query(tx => tx.get(`/todo/${id2}`))) as {text: string}).text,
-  ).to.equal('Test 2');
+  ).toBe('Test 2');
 
   fetchMock.postOnce(
     pullURL,
@@ -153,16 +153,16 @@ test('pull', async () => {
   );
   await rep.maybeEndPull(syncHead, beginPullResult.requestID);
 
-  expect(createCount).to.equal(3);
+  expect(createCount).toBe(3);
 
-  expect(rep.lastMutationID).to.equal(4);
+  expect(rep.lastMutationID).toBe(4);
 
   // Clean up
   await deleteTodo({id: id1});
   await deleteTodo({id: id2});
 
-  expect(deleteCount).to.equal(4);
-  expect(createCount).to.equal(3);
+  expect(deleteCount).toBe(4);
+  expect(createCount).toBe(3);
 
   fetchMock.postOnce(
     pullURL,
@@ -176,10 +176,10 @@ test('pull', async () => {
   rep.pullIgnorePromise();
   await tickAFewTimes(vi);
 
-  expect(rep.lastMutationID).to.equal(6);
+  expect(rep.lastMutationID).toBe(6);
 
-  expect(deleteCount).to.equal(4);
-  expect(createCount).to.equal(3);
+  expect(deleteCount).toBe(4);
+  expect(createCount).toBe(3);
 });
 
 test('reauth pull', async () => {
@@ -225,7 +225,7 @@ test('reauth pull', async () => {
     const getAuthFake = vi.fn(() => 'boo');
     rep.getAuth = getAuthFake;
 
-    expect((await rep.beginPull()).syncHead).to.equal(emptyHash);
+    expect((await rep.beginPull()).syncHead).toBe(emptyHash);
 
     expect(getAuthFake).toHaveBeenCalledTimes(8);
     expect(consoleErrorStub).toHaveBeenCalledTimes(9);
@@ -256,7 +256,7 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
   rep.pullIgnorePromise();
   await tickAFewTimes(vi);
 
-  expect(fetchMock.calls()).to.have.length(0);
+  expect(fetchMock.calls()).toHaveLength(0);
 
   await tickAFewTimes(vi);
   fetchMock.reset();
@@ -266,7 +266,7 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
 
   rep.pullIgnorePromise();
   await tickAFewTimes(vi);
-  expect(fetchMock.calls()).to.have.length.greaterThan(0);
+  expect(fetchMock.calls().length).toBeGreaterThan(0);
 
   await tickAFewTimes(vi);
   fetchMock.reset();
@@ -276,7 +276,7 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
 
   rep.pullIgnorePromise();
   await tickAFewTimes(vi);
-  expect(fetchMock.calls()).to.have.length(0);
+  expect(fetchMock.calls()).toHaveLength(0);
 
   await tickAFewTimes(vi);
   fetchMock.reset();
@@ -299,8 +299,8 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
   rep.pullIgnorePromise();
   await tickAFewTimes(vi);
 
-  expect(fetchMock.calls()).to.have.length(0);
-  expect(pullerCallCount).to.be.greaterThan(0);
+  expect(fetchMock.calls()).toHaveLength(0);
+  expect(pullerCallCount).toBeGreaterThan(0);
 
   expectConsoleLogContextStub(
     rep.name,
@@ -320,8 +320,8 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
   rep.pullIgnorePromise();
   await tickAFewTimes(vi);
 
-  expect(fetchMock.calls()).to.have.length(0);
-  expect(pullerCallCount).to.equal(0);
+  expect(fetchMock.calls()).toHaveLength(0);
+  expect(pullerCallCount).toBe(0);
 });
 
 test('Client Group not found on server', async () => {
@@ -347,14 +347,14 @@ test('Client Group not found on server', async () => {
     },
   });
 
-  expect(rep.isClientGroupDisabled).false;
+  expect(rep.isClientGroupDisabled).toBe(false);
 
   rep.puller = puller;
   rep.pullIgnorePromise();
 
   await waitForSync(rep);
 
-  expect(rep.isClientGroupDisabled).true;
+  expect(rep.isClientGroupDisabled).toBe(true);
   expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
 });
 
@@ -389,7 +389,7 @@ test('Version not supported on server', async () => {
     await promise;
 
     expect(onUpdateNeededStub).toHaveBeenCalledTimes(1);
-    expect(onUpdateNeededStub.mock.calls[0]).deep.equal([reason]);
+    expect(onUpdateNeededStub.mock.calls[0]).toEqual([reason]);
   };
 
   await t({error: 'VersionNotSupported'}, {type: 'VersionNotSupported'});

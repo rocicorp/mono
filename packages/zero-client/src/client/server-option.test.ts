@@ -2,30 +2,30 @@ import {expect, test} from 'vitest';
 import {getServer} from './server-option.ts';
 
 test('getServer', () => {
-  expect(getServer(null)).equal(null);
-  expect(getServer(undefined)).equal(null);
+  expect(getServer(null)).toBe(null);
+  expect(getServer(undefined)).toBe(null);
 
-  expect(getServer('http://myapp-myteam.zero.ms/')).equal(
+  expect(getServer('http://myapp-myteam.zero.ms/')).toBe(
     'http://myapp-myteam.zero.ms/',
   );
-  expect(getServer('https://myapp-myteam.zero.ms')).equal(
+  expect(getServer('https://myapp-myteam.zero.ms')).toBe(
     'https://myapp-myteam.zero.ms/',
   );
-  expect(getServer('http://myapp-myteam.zero.ms')).equal(
+  expect(getServer('http://myapp-myteam.zero.ms')).toBe(
     'http://myapp-myteam.zero.ms/',
   );
-  expect(getServer('https://myapp-myteam.zero.ms/foo')).equal(
+  expect(getServer('https://myapp-myteam.zero.ms/foo')).toBe(
     'https://myapp-myteam.zero.ms/foo',
   );
-  expect(getServer('https://myapp-myteam.zero.ms/foo/')).equal(
+  expect(getServer('https://myapp-myteam.zero.ms/foo/')).toBe(
     'https://myapp-myteam.zero.ms/foo/',
   );
-  expect(getServer('https://myapp-myteam.zero.ms//')).equal(
+  expect(getServer('https://myapp-myteam.zero.ms//')).toBe(
     'https://myapp-myteam.zero.ms//',
   );
 
   const expectError = (server: string, expectedError: string) => {
-    expect(() => getServer(server)).to.throw(expectedError);
+    expect(() => getServer(server)).toThrow(expectedError);
   };
 
   expectError(

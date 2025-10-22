@@ -139,9 +139,9 @@ describe('btree node', () => {
     expected: TreeData,
   ) {
     await withRead(dagStore, async dagRead => {
-      expect(
-        await readTreeData(rootHash, dagRead, formatVersion),
-      ).to.deep.equal(expected);
+      expect(await readTreeData(rootHash, dagRead, formatVersion)).toEqual(
+        expected,
+      );
     });
   }
 
@@ -289,7 +289,7 @@ describe('btree node', () => {
           expected: DataNode,
         ) => {
           const actual = await findLeaf(key, hash, source, source.rootHash);
-          expect(toChunkData(actual, formatVersion)).to.deep.equal(expected);
+          expect(toChunkData(actual, formatVersion)).toEqual(expected);
         };
 
         await t('b', h0, source, leaf0);
@@ -312,9 +312,9 @@ describe('btree node', () => {
       const dagStore = new TestStore();
       await withRead(dagStore, async dagRead => {
         const r = new BTreeRead(dagRead, formatVersion);
-        expect(await r.get('a')).to.be.undefined;
-        expect(await r.has('b')).to.be.false;
-        expect(await asyncIterToArray(r.scan(''))).to.deep.equal([]);
+        expect(await r.get('a')).toBeUndefined();
+        expect(await r.has('b')).toBe(false);
+        expect(await asyncIterToArray(r.scan(''))).toEqual([]);
       });
     });
 
@@ -334,12 +334,12 @@ describe('btree node', () => {
           getEntrySize,
           chunkHeaderSize,
         );
-        expect(await w.get('a')).to.be.undefined;
-        expect(await w.has('b')).to.be.false;
-        expect(await asyncIterToArray(w.scan(''))).to.deep.equal([]);
+        expect(await w.get('a')).toBeUndefined();
+        expect(await w.has('b')).toBe(false);
+        expect(await asyncIterToArray(w.scan(''))).toEqual([]);
 
         const h = await w.flush();
-        expect(h).to.equal(fakeHash('1'));
+        expect(h).toBe(fakeHash('1'));
       });
       let rootHash = await withWrite(dagStore, async dagWrite => {
         const w = new BTreeWrite(
@@ -353,19 +353,19 @@ describe('btree node', () => {
         );
         await w.put('a', 1);
         const h = await w.flush();
-        expect(h).to.not.equal(emptyHash);
-        expect(h).to.not.equal(emptyTreeHash);
+        expect(h).not.toBe(emptyHash);
+        expect(h).not.toBe(emptyTreeHash);
         await dagWrite.setHead('test', h);
         return h;
       });
 
       rootHash = await doWrite(rootHash, dagStore, formatVersion, async w => {
-        expect(await w.del('a')).to.be.true;
+        expect(await w.del('a')).toBe(true);
       });
 
       // We do not restore back to empty hash when empty.
-      expect(rootHash).to.not.equal(emptyHash);
-      expect(rootHash).to.equal(fakeHash(3));
+      expect(rootHash).not.toBe(emptyHash);
+      expect(rootHash).toBe(fakeHash(3));
     });
 
     test(`get > v${formatVersion}`, async () => {
@@ -404,26 +404,26 @@ describe('btree node', () => {
           chunkHeaderSize,
         );
 
-        expect(await source.get('b')).to.equal(0);
-        expect(await source.get('d')).to.equal(1);
-        expect(await source.get('f')).to.equal(2);
-        expect(await source.get('h')).to.equal(3);
-        expect(await source.get('j')).to.equal(4);
-        expect(await source.get('l')).to.equal(5);
-        expect(await source.get('n')).to.equal(6);
-        expect(await source.get('p')).to.equal(7);
-        expect(await source.get('r')).to.equal(8);
+        expect(await source.get('b')).toBe(0);
+        expect(await source.get('d')).toBe(1);
+        expect(await source.get('f')).toBe(2);
+        expect(await source.get('h')).toBe(3);
+        expect(await source.get('j')).toBe(4);
+        expect(await source.get('l')).toBe(5);
+        expect(await source.get('n')).toBe(6);
+        expect(await source.get('p')).toBe(7);
+        expect(await source.get('r')).toBe(8);
 
-        expect(await source.get('a')).to.equal(undefined);
-        expect(await source.get('c')).to.equal(undefined);
-        expect(await source.get('e')).to.equal(undefined);
-        expect(await source.get('g')).to.equal(undefined);
-        expect(await source.get('i')).to.equal(undefined);
-        expect(await source.get('k')).to.equal(undefined);
-        expect(await source.get('m')).to.equal(undefined);
-        expect(await source.get('o')).to.equal(undefined);
-        expect(await source.get('q')).to.equal(undefined);
-        expect(await source.get('s')).to.equal(undefined);
+        expect(await source.get('a')).toBe(undefined);
+        expect(await source.get('c')).toBe(undefined);
+        expect(await source.get('e')).toBe(undefined);
+        expect(await source.get('g')).toBe(undefined);
+        expect(await source.get('i')).toBe(undefined);
+        expect(await source.get('k')).toBe(undefined);
+        expect(await source.get('m')).toBe(undefined);
+        expect(await source.get('o')).toBe(undefined);
+        expect(await source.get('q')).toBe(undefined);
+        expect(await source.get('s')).toBe(undefined);
       });
     });
 
@@ -463,26 +463,26 @@ describe('btree node', () => {
           chunkHeaderSize,
         );
 
-        expect(await source.has('b')).to.be.true;
-        expect(await source.has('d')).to.be.true;
-        expect(await source.has('f')).to.be.true;
-        expect(await source.has('h')).to.be.true;
-        expect(await source.has('j')).to.be.true;
-        expect(await source.has('l')).to.be.true;
-        expect(await source.has('n')).to.be.true;
-        expect(await source.has('p')).to.be.true;
-        expect(await source.has('r')).to.be.true;
+        expect(await source.has('b')).toBe(true);
+        expect(await source.has('d')).toBe(true);
+        expect(await source.has('f')).toBe(true);
+        expect(await source.has('h')).toBe(true);
+        expect(await source.has('j')).toBe(true);
+        expect(await source.has('l')).toBe(true);
+        expect(await source.has('n')).toBe(true);
+        expect(await source.has('p')).toBe(true);
+        expect(await source.has('r')).toBe(true);
 
-        expect(await source.has('a')).to.be.false;
-        expect(await source.has('c')).to.be.false;
-        expect(await source.has('e')).to.be.false;
-        expect(await source.has('g')).to.be.false;
-        expect(await source.has('i')).to.be.false;
-        expect(await source.has('k')).to.be.false;
-        expect(await source.has('m')).to.be.false;
-        expect(await source.has('o')).to.be.false;
-        expect(await source.has('q')).to.be.false;
-        expect(await source.has('s')).to.be.false;
+        expect(await source.has('a')).toBe(false);
+        expect(await source.has('c')).toBe(false);
+        expect(await source.has('e')).toBe(false);
+        expect(await source.has('g')).toBe(false);
+        expect(await source.has('i')).toBe(false);
+        expect(await source.has('k')).toBe(false);
+        expect(await source.has('m')).toBe(false);
+        expect(await source.has('o')).toBe(false);
+        expect(await source.has('q')).toBe(false);
+        expect(await source.has('s')).toBe(false);
       });
     });
 
@@ -490,7 +490,7 @@ describe('btree node', () => {
       const getSize = (v: string) => v.length;
 
       const t = (input: string[], expected: string[][]) => {
-        expect(partition(input, getSize, 2, 4)).to.deep.equal(expected);
+        expect(partition(input, getSize, 2, 4)).toEqual(expected);
       };
 
       t([], []);
@@ -550,10 +550,10 @@ describe('btree node', () => {
       rootHash = await doWrite(rootHash, dagStore, formatVersion, async w => {
         await w.put('a', 'aaa');
 
-        expect(await w.get('a')).to.equal('aaa');
-        expect(await w.get('b')).to.equal(0);
+        expect(await w.get('a')).toBe('aaa');
+        expect(await w.get('b')).toBe(0);
         await w.put('b', 'bbb');
-        expect(await w.get('b')).to.equal('bbb');
+        expect(await w.get('b')).toBe('bbb');
       });
 
       await expectTree(rootHash, dagStore, formatVersion, {
@@ -566,9 +566,9 @@ describe('btree node', () => {
 
       rootHash = await doWrite(rootHash, dagStore, formatVersion, async w => {
         await w.put('c', 'ccc');
-        expect(await w.get('a')).to.equal('aaa');
-        expect(await w.get('b')).to.equal('bbb');
-        expect(await w.get('c')).to.equal('ccc');
+        expect(await w.get('a')).toBe('aaa');
+        expect(await w.get('b')).toBe('bbb');
+        expect(await w.get('c')).toBe('ccc');
       });
 
       await expectTree(rootHash, dagStore, formatVersion, {
@@ -599,20 +599,20 @@ describe('btree node', () => {
           );
           for (const [k, v] of Object.entries(data)) {
             await w.put(k, deepFreeze(v));
-            expect(await w.get(k)).to.equal(v);
-            expect(await w.has(k)).to.equal(true);
+            expect(await w.get(k)).toBe(v);
+            expect(await w.has(k)).toBe(true);
           }
           const h = await w.flush();
           for (const [k, v] of Object.entries(data)) {
-            expect(await w.get(k)).to.equal(v);
-            expect(await w.has(k)).to.equal(true);
+            expect(await w.get(k)).toBe(v);
+            expect(await w.has(k)).toBe(true);
           }
 
           await dagWrite.setHead('test', h);
 
           for (const [k, v] of Object.entries(data)) {
-            expect(await w.get(k)).to.equal(v);
-            expect(await w.has(k)).to.equal(true);
+            expect(await w.get(k)).toBe(v);
+            expect(await w.has(k)).toBe(true);
           }
 
           return h;
@@ -890,8 +890,8 @@ describe('btree node', () => {
       let rootHash = await makeTree(tree, dagStore, formatVersion);
 
       rootHash = await doWrite(rootHash, dagStore, formatVersion, async w => {
-        expect(await w.del('a')).to.equal(false);
-        expect(await w.del('d')).to.equal(true);
+        expect(await w.del('a')).toBe(false);
+        expect(await w.del('d')).toBe(true);
       });
 
       await expectTree(rootHash, dagStore, formatVersion, {
@@ -901,7 +901,7 @@ describe('btree node', () => {
       });
 
       rootHash = await doWrite(rootHash, dagStore, formatVersion, async w => {
-        expect(await w.del('f')).to.equal(true);
+        expect(await w.del('f')).toBe(true);
       });
 
       await expectTree(rootHash, dagStore, formatVersion, {
@@ -910,7 +910,7 @@ describe('btree node', () => {
       });
 
       rootHash = await doWrite(rootHash, dagStore, formatVersion, async w => {
-        expect(await w.del('b')).to.equal(true);
+        expect(await w.del('b')).toBe(true);
       });
 
       await expectTree(rootHash, dagStore, formatVersion, {
@@ -942,7 +942,7 @@ describe('btree node', () => {
         let rootHash = await makeTree(tree, dagStore, formatVersion);
 
         rootHash = await doWrite(rootHash, dagStore, formatVersion, async w => {
-          expect(await w.del('a')).to.equal(true);
+          expect(await w.del('a')).toBe(true);
         });
 
         await expectTree(rootHash, dagStore, formatVersion, {
@@ -970,7 +970,7 @@ describe('btree node', () => {
         let rootHash = await makeTree(tree, dagStore, formatVersion);
 
         rootHash = await doWrite(rootHash, dagStore, formatVersion, async w => {
-          expect(await w.del('b')).to.equal(true);
+          expect(await w.del('b')).toBe(true);
         });
 
         await expectTree(rootHash, dagStore, formatVersion, {
@@ -1022,7 +1022,7 @@ describe('btree node', () => {
       let rootHash = await makeTree(tree, dagStore, formatVersion);
 
       rootHash = await doWrite(rootHash, dagStore, formatVersion, async w => {
-        expect(await w.del('k')).to.equal(true);
+        expect(await w.del('k')).toBe(true);
       });
 
       await expectTree(rootHash, dagStore, formatVersion, {
@@ -1061,7 +1061,7 @@ describe('btree node', () => {
       });
 
       rootHash = await doWrite(rootHash, dagStore, formatVersion, async w => {
-        expect(await w.del('c')).to.equal(true);
+        expect(await w.del('c')).toBe(true);
       });
 
       await expectTree(rootHash, dagStore, formatVersion, {
@@ -1096,10 +1096,10 @@ describe('btree node', () => {
       });
 
       rootHash = await doWrite(rootHash, dagStore, formatVersion, async w => {
-        expect(await w.del('e')).to.equal(true);
-        expect(await w.del('f')).to.equal(true);
-        expect(await w.del('g')).to.equal(true);
-        expect(await w.del('h')).to.equal(true);
+        expect(await w.del('e')).toBe(true);
+        expect(await w.del('f')).toBe(true);
+        expect(await w.del('g')).toBe(true);
+        expect(await w.del('h')).toBe(true);
       });
 
       await expectTree(rootHash, dagStore, formatVersion, {
@@ -1118,8 +1118,8 @@ describe('btree node', () => {
       });
 
       rootHash = await doWrite(rootHash, dagStore, formatVersion, async w => {
-        expect(await w.del('a')).to.equal(true);
-        expect(await w.del('b')).to.equal(true);
+        expect(await w.del('a')).toBe(true);
+        expect(await w.del('b')).toBe(true);
       });
 
       await expectTree(rootHash, dagStore, formatVersion, {
@@ -1130,8 +1130,8 @@ describe('btree node', () => {
       });
 
       rootHash = await doWrite(rootHash, dagStore, formatVersion, async w => {
-        expect(await w.del('i')).to.equal(true);
-        expect(await w.del('j')).to.equal(true);
+        expect(await w.del('i')).toBe(true);
+        expect(await w.del('j')).toBe(true);
       });
 
       await expectTree(rootHash, dagStore, formatVersion, {
@@ -1140,7 +1140,7 @@ describe('btree node', () => {
       });
 
       rootHash = await doWrite(rootHash, dagStore, formatVersion, async w => {
-        expect(await w.del('d')).to.equal(true);
+        expect(await w.del('d')).toBe(true);
       });
 
       await expectTree(rootHash, dagStore, formatVersion, {
@@ -1202,9 +1202,9 @@ describe('btree node', () => {
         await w.put('aaaa', 'a1');
       });
 
-      expect(getSizeOfValue('aaaa')).to.equal(9);
-      expect(getSizeOfValue('a1')).to.equal(7);
-      expect(getSizeOfEntry('aaaa', 'a1')).to.equal(27);
+      expect(getSizeOfValue('aaaa')).toBe(9);
+      expect(getSizeOfValue('a1')).toBe(7);
+      expect(getSizeOfEntry('aaaa', 'a1')).toBe(27);
       await expectTree(rootHash, dagStore, formatVersion, {
         $level: 0,
         aaaa: 'a1',
@@ -1213,7 +1213,7 @@ describe('btree node', () => {
       rootHash = await doWrite(rootHash, dagStore, formatVersion, async w => {
         await w.put('c', '');
       });
-      expect(getSizeOfEntry('c', '')).to.equal(22);
+      expect(getSizeOfEntry('c', '')).toBe(22);
       await expectTree(rootHash, dagStore, formatVersion, {
         $level: 0,
         aaaa: 'a1',
@@ -1223,7 +1223,7 @@ describe('btree node', () => {
       rootHash = await doWrite(rootHash, dagStore, formatVersion, async w => {
         await w.put('b', 'b234');
       });
-      expect(getSizeOfEntry('b', 'b234')).to.equal(26);
+      expect(getSizeOfEntry('b', 'b234')).toBe(26);
       await expectTree(rootHash, dagStore, formatVersion, {
         $level: 1,
 
@@ -1274,7 +1274,7 @@ describe('btree node', () => {
           for await (const e of scanResult) {
             res.push(e);
           }
-          expect(res).to.deep.equal(expectedEntries);
+          expect(res).toEqual(expectedEntries);
         });
       };
 
@@ -1408,7 +1408,7 @@ describe('btree node', () => {
           for await (const diffRes of newTree.diff(oldTree)) {
             actual.push(diffRes);
           }
-          expect(actual).to.deep.equal(expectedDiff);
+          expect(actual).toEqual(expectedDiff);
         });
       };
 
@@ -1569,7 +1569,7 @@ describe('btree node', () => {
       const chunkData = makeNodeChunkData(0, [], formatVersion);
       const entriesSize = getSizeOfValue(chunkData[NODE_ENTRIES]);
       const chunkSize = getSizeOfValue(chunkData);
-      expect(chunkSize - entriesSize).to.equal(NODE_HEADER_SIZE);
+      expect(chunkSize - entriesSize).toBe(NODE_HEADER_SIZE);
     });
   }
 
@@ -1636,7 +1636,7 @@ describe('btree node', () => {
 
       await putPromise;
 
-      expect(await Promise.all(ps)).deep.equal([
+      expect(await Promise.all(ps)).toEqual([
         'lll2',
         'lll2',
         'lll2',
@@ -1677,7 +1677,7 @@ describe('Write nodes using ChainBuilder', () => {
   };
 
   test('v6', async () => {
-    expect(await getBTreeNodes(FormatVersion.V6)).to.deep.equal([
+    expect(await getBTreeNodes(FormatVersion.V6)).toEqual([
       [0, []],
       [0, [['a', 'a']]],
       [
@@ -1691,7 +1691,7 @@ describe('Write nodes using ChainBuilder', () => {
   });
 
   test('v7', async () => {
-    expect(await getBTreeNodes(FormatVersion.V7)).to.deep.equal([
+    expect(await getBTreeNodes(FormatVersion.V7)).toEqual([
       [0, []],
       [0, [['a', 'a', 23]]],
       [

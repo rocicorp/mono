@@ -15,7 +15,7 @@ test('worker test', async () => {
   if (data !== undefined) {
     throw data;
   }
-  expect(data).to.be.undefined;
+  expect(data).toBeUndefined();
 });
 
 function waitForReady(w: Worker): Promise<void> {

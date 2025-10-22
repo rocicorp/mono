@@ -60,7 +60,7 @@ test('getClients with no existing ClientMap in dag store', async () => {
   const dagStore = new TestStore();
   await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
-    expect(readClientMap.size).to.equal(0);
+    expect(readClientMap.size).toBe(0);
   });
 });
 
@@ -82,7 +82,7 @@ test('updateClients and getClients', async () => {
 
   await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
-    expect(readClientMap).to.deep.equal(clientMap);
+    expect(readClientMap).toEqual(clientMap);
   });
 });
 
@@ -106,7 +106,7 @@ test('updateClients and getClients for DD31', async () => {
 
   await withRead(dagStore, async (read: Read) => {
     const readClientMap = await getClients(read);
-    expect(readClientMap).to.deep.equal(clientMap);
+    expect(readClientMap).toEqual(clientMap);
   });
 
   // Make sure we write the refresh1Hash as well.
@@ -115,7 +115,7 @@ test('updateClients and getClients for DD31', async () => {
     assert(h);
     const chunk = await read.getChunk(h);
     assert(chunk);
-    expect(chunk.meta).to.deep.equal([
+    expect(chunk.meta).toEqual([
       refresh1Hash,
       headClient1Hash,
       headClient2Hash,
@@ -150,14 +150,14 @@ test('updateClients and getClients sequence', async () => {
 
   await withRead(dagStore, async (read: Read) => {
     const readClientMap1 = await getClients(read);
-    expect(readClientMap1).to.deep.equal(clientMap1);
+    expect(readClientMap1).toEqual(clientMap1);
   });
 
   await setClientsForTesting(clientMap2, dagStore);
 
   await withRead(dagStore, async (read: Read) => {
     const readClientMap2 = await getClients(read);
-    expect(readClientMap2).to.deep.equal(clientMap2);
+    expect(readClientMap2).toEqual(clientMap2);
   });
 });
 
@@ -194,10 +194,7 @@ test('updateClients properly manages refs to client heads when clients are remov
     const clientsHash = await read.getHead('clients');
     assertHash(clientsHash);
     const clientsChunk = await read.getChunk(clientsHash);
-    expect(clientsChunk?.meta).to.deep.equal([
-      client1HeadHash,
-      client2HeadHash,
-    ]);
+    expect(clientsChunk?.meta).toEqual([client1HeadHash, client2HeadHash]);
   });
   await setClientsForTesting(clientMap2, dagStore);
 
@@ -205,7 +202,7 @@ test('updateClients properly manages refs to client heads when clients are remov
     const clientsHash = await read.getHead('clients');
     assertHash(clientsHash);
     const clientsChunk = await read.getChunk(clientsHash);
-    expect(clientsChunk?.meta).to.deep.equal([client3HeadHash]);
+    expect(clientsChunk?.meta).toEqual([client3HeadHash]);
   });
 });
 
@@ -241,10 +238,7 @@ test("updateClients properly manages refs to client heads when a client's head c
     const clientsHash = await read.getHead('clients');
     assertHash(clientsHash);
     const clientsChunk = await read.getChunk(clientsHash);
-    expect(clientsChunk?.meta).to.deep.equal([
-      client2HeadHash,
-      client1V1HeadHash,
-    ]);
+    expect(clientsChunk?.meta).toEqual([client2HeadHash, client1V1HeadHash]);
   });
 
   await setClientsForTesting(
@@ -261,10 +255,7 @@ test("updateClients properly manages refs to client heads when a client's head c
     const clientsHash = await read.getHead('clients');
     assertHash(clientsHash);
     const clientsChunk = await read.getChunk(clientsHash);
-    expect(clientsChunk?.meta).to.deep.equal([
-      client2HeadHash,
-      client1V2HeadHash,
-    ]);
+    expect(clientsChunk?.meta).toEqual([client2HeadHash, client1V2HeadHash]);
   });
 });
 
@@ -287,7 +278,7 @@ test('getClient', async () => {
 
   await withRead(dagStore, async (read: Read) => {
     const readClient1 = await getClient('client1', read);
-    expect(readClient1).to.deep.equal(client1);
+    expect(readClient1).toEqual(client1);
   });
 });
 
@@ -303,7 +294,7 @@ test('updateClients throws errors if clients head exist but the chunk it referen
     } catch (ex) {
       e = ex;
     }
-    expect(e).to.be.instanceOf(Error);
+    expect(e).toBeInstanceOf(Error);
   });
 });
 
@@ -331,7 +322,7 @@ test('updateClients throws errors if chunk pointed to by clients head does not c
     } catch (ex) {
       e = ex;
     }
-    expect(e).to.be.instanceOf(Error);
+    expect(e).toBeInstanceOf(Error);
   });
 });
 
@@ -350,7 +341,7 @@ test('initClient creates new empty snapshot when no existing snapshot to bootstr
     true /* enableClientGroupForking */,
   );
 
-  expect(clients).to.deep.equal(
+  expect(clients).toEqual(
     new Map(
       Object.entries({
         [clientID]: client,
@@ -360,28 +351,28 @@ test('initClient creates new empty snapshot when no existing snapshot to bootstr
 
   await withRead(dagStore, async (dagRead: Read) => {
     // New client was added to the client map.
-    expect(await getClient(clientID, dagRead)).to.deep.equal(client);
-    expect(client.heartbeatTimestampMs).to.equal(Date.now());
+    expect(await getClient(clientID, dagRead)).toEqual(client);
+    expect(client.heartbeatTimestampMs).toBe(Date.now());
 
     const {clientGroupID} = client;
     const clientGroup = await getClientGroup(clientGroupID, dagRead);
     assert(clientGroup);
-    expect(clientGroup.mutationIDs).to.deep.equal({});
-    expect(clientGroup.lastServerAckdMutationIDs).to.deep.equal({});
+    expect(clientGroup.mutationIDs).toEqual({});
+    expect(clientGroup.lastServerAckdMutationIDs).toEqual({});
 
     // New client's head hash points to an empty snapshot with an empty btree.
     const headChunk = await dagRead.getChunk(headHash);
     assertNotUndefined(headChunk);
     const commit = fromChunk(headChunk);
-    expect(commitIsSnapshot(commit)).to.be.true;
+    expect(commitIsSnapshot(commit)).toBe(true);
     const snapshotMeta = commit.meta as SnapshotMetaDD31;
-    expect(snapshotMeta.basisHash).to.be.null;
-    expect(snapshotMeta.cookieJSON).to.be.null;
-    expect(await commit.getMutationID(clientID, dagRead)).to.equal(0);
-    expect(commit.indexes).to.be.empty;
+    expect(snapshotMeta.basisHash).toBeNull();
+    expect(snapshotMeta.cookieJSON).toBeNull();
+    expect(await commit.getMutationID(clientID, dagRead)).toBe(0);
+    expect(commit.indexes).toHaveLength(0);
     expect(
       await new BTreeRead(dagRead, formatVersion, commit.valueHash).isEmpty(),
-    ).to.be.true;
+    ).toBe(true);
   });
 });
 
@@ -395,7 +386,7 @@ test('setClient', async () => {
 
     await withRead(dagStore, async (read: Read) => {
       const actualClient = await getClient(clientID, read);
-      expect(actualClient).to.deep.equal(client);
+      expect(actualClient).toEqual(client);
     });
   };
 
@@ -442,12 +433,12 @@ test('getClientGroupID', async () => {
     const actualClientGroupID = await withRead(dagStore, read =>
       getClientGroupIDForClient(clientID, read),
     );
-    expect(actualClientGroupID).to.equal(expectedClientGroupID);
+    expect(actualClientGroupID).toBe(expectedClientGroupID);
 
     const actualClientGroup = await withRead(dagStore, read =>
       getClientGroupForClient(clientID, read),
     );
-    expect(actualClientGroup).to.deep.equal(expectedClientGroup);
+    expect(actualClientGroup).toEqual(expectedClientGroup);
   };
 
   const clientID = 'client-id-1';
@@ -499,18 +490,18 @@ test('getClientGroupID', async () => {
       err = e;
     }
     // Invalid client group ID.
-    expect(err).to.be.instanceOf(Error);
+    expect(err).toBeInstanceOf(Error);
   }
 
   const actualClientGroupID2 = await withRead(dagStore, read =>
     getClientGroupIDForClient(clientID, read),
   );
-  expect(actualClientGroupID2).to.equal('client-group-id-wrong');
+  expect(actualClientGroupID2).toBe('client-group-id-wrong');
 
   const actualClientGroup2 = await withRead(dagStore, read =>
     getClientGroupForClient(clientID, read),
   );
-  expect(actualClientGroup2).to.be.undefined;
+  expect(actualClientGroup2).toBeUndefined();
 });
 
 describe('findMatchingClient', () => {
@@ -519,7 +510,7 @@ describe('findMatchingClient', () => {
     await withRead(perdag, async read => {
       const mutatorNames: string[] = [];
       const indexes = {};
-      expect(await findMatchingClient(read, mutatorNames, indexes)).deep.equal({
+      expect(await findMatchingClient(read, mutatorNames, indexes)).toEqual({
         type: FIND_MATCHING_CLIENT_TYPE_NEW,
       });
     });
@@ -565,7 +556,7 @@ describe('findMatchingClient', () => {
         type: FIND_MATCHING_CLIENT_TYPE_FORK,
         snapshot: b.chain[0] as Commit<SnapshotMetaDD31>,
       };
-      expect(res).deep.equal(expected);
+      expect(res).toEqual(expected);
     });
   }
 
@@ -651,7 +642,7 @@ describe('findMatchingClient', () => {
         clientGroupID,
         headHash,
       };
-      expect(res).deep.equal(expected);
+      expect(res).toEqual(expected);
     });
   }
 
@@ -683,12 +674,12 @@ describe('initClientV6', () => {
           formatVersion,
           enableClientGroupForking,
         );
-        expect(clientID).to.be.a('string');
+        expect(clientID).toBeTypeOf('string');
         assertClientV6(client);
-        expect(newClientGroup).true;
-        expect(clientMap.size).to.equal(1);
-        expect(clientMap.get(clientID)).to.equal(client);
-        expect(client.persistHash).to.be.null;
+        expect(newClientGroup).toBe(true);
+        expect(clientMap.size).toBe(1);
+        expect(clientMap.get(clientID)).toBe(client);
+        expect(client.persistHash).toBeNull();
 
         await withRead(perdag, async read => {
           const clientGroup = await getClientGroup(client.clientGroupID, read);
@@ -743,21 +734,21 @@ describe('initClientV6', () => {
             formatVersion,
             enableClientGroupForking,
           );
-        expect(clientID2).to.not.equal(clientID1);
-        expect(newClientGroup).false;
-        expect(clientMap.size).to.equal(2);
-        expect(client2).to.deep.equal({
+        expect(clientID2).not.toBe(clientID1);
+        expect(newClientGroup).toBe(false);
+        expect(clientMap.size).toBe(2);
+        expect(client2).toEqual({
           clientGroupID,
           refreshHashes: [client2HeadHash],
           heartbeatTimestampMs: 10,
           persistHash: null,
         });
-        expect(client2HeadHash).to.equal(clientGroup1.headHash);
+        expect(client2HeadHash).toBe(clientGroup1.headHash);
 
         const clientGroup2 = await withRead(perdag, read =>
           getClientGroup(clientGroupID, read),
         );
-        expect(clientGroup2).to.deep.equal({
+        expect(clientGroup2).toEqual({
           ...clientGroup1,
           lastServerAckdMutationIDs: {
             [clientID1]: 0,
@@ -825,23 +816,23 @@ describe('initClientV6', () => {
           formatVersion,
           enableClientGroupForking,
         );
-        expect(clientID2).to.not.equal(clientID1);
+        expect(clientID2).not.toBe(clientID1);
         assertClientV6(client2);
         const clientGroupID2 = client2.clientGroupID;
-        expect(clientGroupID2).to.not.equal(clientGroupID1);
-        expect(clientMap.size).to.equal(2);
+        expect(clientGroupID2).not.toBe(clientGroupID1);
+        expect(clientMap.size).toBe(2);
 
-        expect(client2HeadHash).to.not.equal(
+        expect(client2HeadHash).not.toBe(
           clientGroup1.headHash,
           'Forked so we need a new head',
         );
-        expect(client2.refreshHashes).to.deep.equal([client2HeadHash]);
-        expect(client2.heartbeatTimestampMs).to.equal(10);
-        expect(client2.persistHash).to.be.null;
+        expect(client2.refreshHashes).toEqual([client2HeadHash]);
+        expect(client2.heartbeatTimestampMs).toBe(10);
+        expect(client2.persistHash).toBeNull();
 
         await withRead(perdag, async read => {
           const clientGroup2 = await getClientGroup(clientGroupID2, read);
-          expect(clientGroup2).to.deep.equal({
+          expect(clientGroup2).toEqual({
             headHash: client2HeadHash,
             indexes: newIndexes,
             mutatorNames: newMutatorNames,
@@ -854,17 +845,17 @@ describe('initClientV6', () => {
             read,
           );
           if (enableClientGroupForking) {
-            expect(clientGroup2HeadCommit.valueHash).to.equal(
+            expect(clientGroup2HeadCommit.valueHash).toBe(
               clientGroup1Snapshot.valueHash,
             );
-            expect(clientGroup2HeadCommit.meta.basisHash).to.equal(
+            expect(clientGroup2HeadCommit.meta.basisHash).toBe(
               clientGroup1Snapshot.meta.basisHash,
             );
           } else {
-            expect(clientGroup2HeadCommit.valueHash).to.not.equal(
+            expect(clientGroup2HeadCommit.valueHash).not.toBe(
               clientGroup1Snapshot.valueHash,
             );
-            expect(clientGroup2HeadCommit.meta.basisHash).to.not.equal(
+            expect(clientGroup2HeadCommit.meta.basisHash).not.toBe(
               clientGroup1Snapshot.meta.basisHash,
             );
             expect(
@@ -873,7 +864,7 @@ describe('initClientV6', () => {
                 formatVersion,
                 clientGroup2HeadCommit.valueHash,
               ).isEmpty(),
-            ).to.be.true;
+            ).toBe(true);
           }
         });
       });
@@ -942,24 +933,24 @@ describe('initClientV6', () => {
           formatVersion,
           enableClientGroupForking,
         );
-        expect(clientID2).to.not.equal(clientID1);
+        expect(clientID2).not.toBe(clientID1);
         assertClientV6(client2);
         const clientGroupID2 = client2.clientGroupID;
-        expect(clientGroupID2).to.not.equal(clientGroupID1);
-        expect(clientMap.size).to.equal(2);
+        expect(clientGroupID2).not.toBe(clientGroupID1);
+        expect(clientMap.size).toBe(2);
 
-        expect(client2HeadHash).to.not.equal(
+        expect(client2HeadHash).not.toBe(
           client1.headHash,
           'Forked so we need a new head',
         );
-        expect(client2.refreshHashes).to.deep.equal([client2HeadHash]);
-        expect(client2.heartbeatTimestampMs).to.equal(10);
-        expect(client2.persistHash).to.be.null;
+        expect(client2.refreshHashes).toEqual([client2HeadHash]);
+        expect(client2.heartbeatTimestampMs).toBe(10);
+        expect(client2.persistHash).toBeNull();
 
         const clientGroup2 = await withRead(perdag, read =>
           getClientGroup(clientGroupID2, read),
         );
-        expect(clientGroup2).to.deep.equal({
+        expect(clientGroup2).toEqual({
           headHash: client2HeadHash,
           indexes: newIndexes,
           mutatorNames: newMutatorNames,
@@ -976,24 +967,22 @@ describe('initClientV6', () => {
           expect(c2.chunk.data.indexes).length(2);
 
           if (enableClientGroupForking) {
-            expect(c2.valueHash).to.equal(clientGroup1Snapshot.valueHash);
-            expect(c2.meta.basisHash).to.equal(
-              clientGroup1Snapshot.meta.basisHash,
-            );
-            expect(c1.chunk.data.indexes[0].valueHash).to.equal(
+            expect(c2.valueHash).toBe(clientGroup1Snapshot.valueHash);
+            expect(c2.meta.basisHash).toBe(clientGroup1Snapshot.meta.basisHash);
+            expect(c1.chunk.data.indexes[0].valueHash).toBe(
               c2.chunk.data.indexes[0].valueHash,
             );
-            expect(c1.chunk.data.indexes[0].valueHash).to.not.equal(
+            expect(c1.chunk.data.indexes[0].valueHash).not.toBe(
               c2.chunk.data.indexes[1].valueHash,
             );
           } else {
-            expect(c2.valueHash).to.not.equal(clientGroup1Snapshot.valueHash);
-            expect(c2.meta.basisHash).to.not.equal(
+            expect(c2.valueHash).not.toBe(clientGroup1Snapshot.valueHash);
+            expect(c2.meta.basisHash).not.toBe(
               clientGroup1Snapshot.meta.basisHash,
             );
             expect(
               await new BTreeRead(read, formatVersion, c2.valueHash).isEmpty(),
-            ).to.be.true;
+            ).toBe(true);
           }
         });
       });

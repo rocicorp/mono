@@ -279,15 +279,15 @@ describe('persistDD31', () => {
 
     const afterPersist = await getClientMapClientGroupAndHeadHashes();
     // memdag, perdag client group, perdag client map all unchanged
-    expect(afterPersist.clientGroup).to.deep.equal(clientGroup);
-    expect(afterPersist.clientMap).to.deep.equal(clientMap);
-    expect(afterPersist.memdagHeadHash).to.equal(memdagHeadHash);
-    expect(
-      await getChunkSnapshot(memdag, afterPersist.memdagHeadHash),
-    ).to.deep.equal(memdagSnapshot);
+    expect(afterPersist.clientGroup).toEqual(clientGroup);
+    expect(afterPersist.clientMap).toEqual(clientMap);
+    expect(afterPersist.memdagHeadHash).toBe(memdagHeadHash);
+    expect(await getChunkSnapshot(memdag, afterPersist.memdagHeadHash)).toEqual(
+      memdagSnapshot,
+    );
     expect(
       await getChunkSnapshot(perdag, afterPersist.perdagClientGroupHeadHash),
-    ).to.deep.equal(perdagClientGroupSnapshot);
+    ).toEqual(perdagClientGroupSnapshot);
   });
 
   test('equal snapshot cookies with locals', async () => {
@@ -309,7 +309,7 @@ describe('persistDD31', () => {
     await testPersist(PersistedExpectation.Locals);
 
     const afterPersist = await getClientMapClientGroupAndHeadHashes();
-    expect(afterPersist.clientGroup).to.deep.equal({
+    expect(afterPersist.clientGroup).toEqual({
       ...clientGroup,
       mutationIDs: {
         [clients[0].clientID]: 2,
@@ -318,12 +318,12 @@ describe('persistDD31', () => {
       },
       headHash: afterPersist.perdagClientGroupHeadHash,
     });
-    expect(afterPersist.clientMap).to.deep.equal(clientMap);
+    expect(afterPersist.clientMap).toEqual(clientMap);
     // memdag unchanged
-    expect(afterPersist.memdagHeadHash).to.equal(memdagHeadHash);
-    expect(
-      await getChunkSnapshot(memdag, afterPersist.memdagHeadHash),
-    ).to.deep.equal(memdagSnapshot);
+    expect(afterPersist.memdagHeadHash).toBe(memdagHeadHash);
+    expect(await getChunkSnapshot(memdag, afterPersist.memdagHeadHash)).toEqual(
+      memdagSnapshot,
+    );
     // memdagLocalCommit3Client0M2 rebased on to perdag client group rest of
     // perdag client group unchanged
     await withRead(perdag, async perdagRead => {
@@ -340,10 +340,10 @@ describe('persistDD31', () => {
         afterPersistPerdagClientGroupLocalCommit4.meta.basisHash,
         perdagRead,
       );
-      expect(afterPersistPerdagClientGroupLocalCommit3.chunk.hash).to.equal(
+      expect(afterPersistPerdagClientGroupLocalCommit3.chunk.hash).toBe(
         perdagClientGroupHeadHash,
       );
-      expect(afterPersistPerdagClientGroupLocalCommit3).to.deep.equal(
+      expect(afterPersistPerdagClientGroupLocalCommit3).toEqual(
         perdagClientGroupLocalCommit3Client2M1,
       );
     });
@@ -370,15 +370,15 @@ describe('persistDD31', () => {
 
     const afterPersist = await getClientMapClientGroupAndHeadHashes();
     // memdag and perdag client group both unchanged
-    expect(afterPersist.clientGroup).to.deep.equal(clientGroup);
-    expect(afterPersist.clientMap).to.deep.equal(clientMap);
-    expect(afterPersist.memdagHeadHash).to.equal(memdagHeadHash);
-    expect(
-      await getChunkSnapshot(memdag, afterPersist.memdagHeadHash),
-    ).to.deep.equal(memdagSnapshot);
+    expect(afterPersist.clientGroup).toEqual(clientGroup);
+    expect(afterPersist.clientMap).toEqual(clientMap);
+    expect(afterPersist.memdagHeadHash).toBe(memdagHeadHash);
+    expect(await getChunkSnapshot(memdag, afterPersist.memdagHeadHash)).toEqual(
+      memdagSnapshot,
+    );
     expect(
       await getChunkSnapshot(perdag, afterPersist.perdagClientGroupHeadHash),
-    ).to.deep.equal(perdagClientGroupSnapshot);
+    ).toEqual(perdagClientGroupSnapshot);
   });
 
   test('memdag older snapshot with locals', async () => {
@@ -403,7 +403,7 @@ describe('persistDD31', () => {
     await testPersist(PersistedExpectation.Locals);
 
     const afterPersist = await getClientMapClientGroupAndHeadHashes();
-    expect(afterPersist.clientGroup).to.deep.equal({
+    expect(afterPersist.clientGroup).toEqual({
       ...clientGroup,
       mutationIDs: {
         [clients[0].clientID]: 2,
@@ -412,12 +412,12 @@ describe('persistDD31', () => {
       },
       headHash: afterPersist.perdagClientGroupHeadHash,
     });
-    expect(afterPersist.clientMap).to.deep.equal(clientMap);
+    expect(afterPersist.clientMap).toEqual(clientMap);
     // memdag unchanged
-    expect(afterPersist.memdagHeadHash).to.equal(memdagHeadHash);
-    expect(
-      await getChunkSnapshot(memdag, afterPersist.memdagHeadHash),
-    ).to.deep.equal(memdagSnapshot);
+    expect(afterPersist.memdagHeadHash).toBe(memdagHeadHash);
+    expect(await getChunkSnapshot(memdag, afterPersist.memdagHeadHash)).toEqual(
+      memdagSnapshot,
+    );
     // memdagLocalCommit3Client0M2 rebased on to perdag client group rest of
     // perdag client group unchanged
     await withRead(perdag, async perdagRead => {
@@ -434,10 +434,10 @@ describe('persistDD31', () => {
         afterPersistPerdagClientGroupLocalCommit4.meta.basisHash,
         perdagRead,
       );
-      expect(afterPersistPerdagClientGroupLocalCommit3.chunk.hash).to.equal(
+      expect(afterPersistPerdagClientGroupLocalCommit3.chunk.hash).toBe(
         perdagClientGroupHeadHash,
       );
-      expect(afterPersistPerdagClientGroupLocalCommit3).to.deep.equal(
+      expect(afterPersistPerdagClientGroupLocalCommit3).toEqual(
         perdagClientGroupLocalCommit3Client2M1,
       );
     });
@@ -484,7 +484,7 @@ describe('persistDD31', () => {
     await testPersist(PersistedExpectation.Nothing);
 
     const afterPersist = await getClientMapClientGroupAndHeadHashes();
-    expect(afterPersist.clientGroup).to.deep.equal({
+    expect(afterPersist.clientGroup).toEqual({
       ...clientGroup,
       mutationIDs: {
         [clients[0].clientID]: 2,
@@ -493,14 +493,14 @@ describe('persistDD31', () => {
       },
       headHash: afterPersist.perdagClientGroupHeadHash,
     });
-    expect(afterPersist.clientMap).to.deep.equal(clientMap);
+    expect(afterPersist.clientMap).toEqual(clientMap);
     // memdag unchanged
-    expect(afterPersist.memdagHeadHash).to.equal(memdagHeadHash);
-    expect(
-      await getChunkSnapshot(memdag, afterPersist.memdagHeadHash),
-    ).to.deep.equal(memdagSnapshot);
+    expect(afterPersist.memdagHeadHash).toBe(memdagHeadHash);
+    expect(await getChunkSnapshot(memdag, afterPersist.memdagHeadHash)).toEqual(
+      memdagSnapshot,
+    );
     // perdag unchanged, no snapshot to persist and nothing to rebase
-    expect(afterPersist.perdagClientGroupHeadHash).to.equal(
+    expect(afterPersist.perdagClientGroupHeadHash).toBe(
       perdagClientGroupHeadHash,
     );
   });
@@ -529,7 +529,7 @@ describe('persistDD31', () => {
 
     const afterPersist = await getClientMapClientGroupAndHeadHashes();
 
-    expect(afterPersist.clientGroup).to.deep.equal({
+    expect(afterPersist.clientGroup).toEqual({
       ...clientGroup,
       headHash: afterPersist.perdagClientGroupHeadHash,
       lastServerAckdMutationIDs: {
@@ -550,9 +550,7 @@ describe('persistDD31', () => {
     // memdag and perdag client group snapshots should be identical (memdag
     // snapshot written to perdag client group with temp hashes replace with
     // permanent hashes, and then memdag fixed up with permanent hashes)
-    expect(
-      await getChunkSnapshot(memdag, afterPersist.memdagHeadHash),
-    ).to.deep.equal(
+    expect(await getChunkSnapshot(memdag, afterPersist.memdagHeadHash)).toEqual(
       await getChunkSnapshot(perdag, afterPersist.perdagClientGroupHeadHash),
     );
     // expect values from memdag snapshot are persisted to perdag client group
@@ -566,8 +564,8 @@ describe('persistDD31', () => {
         formatVersion,
         commit.valueHash,
       );
-      expect(await btreeRead.get('k1')).to.equal('value1');
-      expect(await btreeRead.get('k2')).to.equal('value2');
+      expect(await btreeRead.get('k1')).toBe('value1');
+      expect(await btreeRead.get('k2')).toBe('value2');
     });
   });
 
@@ -610,7 +608,7 @@ describe('persistDD31', () => {
 
     const afterPersist = await getClientMapClientGroupAndHeadHashes();
 
-    expect(afterPersist.clientGroup).to.deep.equal({
+    expect(afterPersist.clientGroup).toEqual({
       ...clientGroup,
       headHash: afterPersist.perdagClientGroupHeadHash,
       lastServerAckdMutationIDs: {
@@ -655,12 +653,12 @@ describe('persistDD31', () => {
           perdagRead,
         );
         assertSnapshotCommitDD31(afterPersistPerdagClientGroupBaseSnapshot);
-        expect(
-          afterPersistPerdagClientGroupBaseSnapshot.meta.cookieJSON,
-        ).to.equal(memdagCookie);
+        expect(afterPersistPerdagClientGroupBaseSnapshot.meta.cookieJSON).toBe(
+          memdagCookie,
+        );
         expect(
           afterPersistPerdagClientGroupBaseSnapshot.meta.lastMutationIDs,
-        ).to.deep.equal(memdagMutationIDs);
+        ).toEqual(memdagMutationIDs);
 
         // expect values from memdag snapshot are persisted to perdag client group
         const commit = await commitFromHash(
@@ -672,8 +670,8 @@ describe('persistDD31', () => {
           formatVersion,
           commit.valueHash,
         );
-        expect(await btreeRead.get('k1')).to.equal('value1');
-        expect(await btreeRead.get('k2')).to.equal('value2');
+        expect(await btreeRead.get('k1')).toBe('value1');
+        expect(await btreeRead.get('k2')).toBe('value2');
         return afterPersistPerdagClientGroupBaseSnapshot.chunk.hash;
       },
     );
@@ -694,7 +692,7 @@ describe('persistDD31', () => {
     // permanent hashes, and then memdag fixed up with permanent hashes)
     expect(
       await getChunkSnapshot(memdag, afterPersistPerdagBaseSnapshotHash),
-    ).to.deep.equal(
+    ).toEqual(
       await getChunkSnapshot(perdag, afterPersistMemdagBaseSnapshotHash),
     );
   });
@@ -766,7 +764,7 @@ describe('persistDD31', () => {
 
     const afterPersist = await getClientMapClientGroupAndHeadHashes();
 
-    expect(afterPersist.clientGroup).to.deep.equal({
+    expect(afterPersist.clientGroup).toEqual({
       ...clientGroup,
       headHash: afterPersist.perdagClientGroupHeadHash,
       lastServerAckdMutationIDs: {
@@ -780,12 +778,12 @@ describe('persistDD31', () => {
         [clients[2].clientID]: 1,
       },
     });
-    expect(afterPersist.clientMap).to.deep.equal(clientMap);
+    expect(afterPersist.clientMap).toEqual(clientMap);
     // memdag unchanged
-    expect(afterPersist.memdagHeadHash).to.equal(memdagHeadHash);
-    expect(
-      await getChunkSnapshot(memdag, afterPersist.memdagHeadHash),
-    ).to.deep.equal(memdagSnapshot);
+    expect(afterPersist.memdagHeadHash).toBe(memdagHeadHash);
+    expect(await getChunkSnapshot(memdag, afterPersist.memdagHeadHash)).toEqual(
+      memdagSnapshot,
+    );
     // memdagLocalCommit3Client0M2 rebased on to perdag client group
     // (with basis updatedPerdagClientGroupSnapshot)
     const afterPersistPerdagClientGroupBaseSnapshotHash = await withRead(
@@ -806,9 +804,9 @@ describe('persistDD31', () => {
           perdagRead,
         );
         assertSnapshotCommitDD31(afterPersistPerdagClientGroupBaseSnapshot);
-        expect(
-          afterPersistPerdagClientGroupBaseSnapshot.meta.cookieJSON,
-        ).to.equal(updatedPerdagClientGroupCookie);
+        expect(afterPersistPerdagClientGroupBaseSnapshot.meta.cookieJSON).toBe(
+          updatedPerdagClientGroupCookie,
+        );
         return afterPersistPerdagClientGroupBaseSnapshot.chunk.hash;
       },
     );
@@ -818,7 +816,7 @@ describe('persistDD31', () => {
         perdag,
         afterPersistPerdagClientGroupBaseSnapshotHash,
       ),
-    ).to.deep.equal(updatedPerdagClientGroupSnapshot);
+    ).toEqual(updatedPerdagClientGroupSnapshot);
   });
 
   test('persist throws a ClientStateNotFoundError if client is missing', async () => {
@@ -838,9 +836,8 @@ describe('persistDD31', () => {
     } catch (e) {
       err = e;
     }
-    expect(err)
-      .to.be.an.instanceof(ClientStateNotFoundError)
-      .property('id', clients[0].clientID);
+    expect(err).toBeInstanceOf(ClientStateNotFoundError);
+    expect(err).toHaveProperty('id', clients[0].clientID);
   });
 });
 
@@ -857,7 +854,7 @@ function expectUpdatedClientPersistHash(
     ...persistingClient,
     persistHash: memdagSnapshotCommitHash,
   });
-  expect(afterPersistClientMap).to.deep.equal(expectedClientMap);
+  expect(afterPersistClientMap).toEqual(expectedClientMap);
 }
 
 async function setupPersistTest() {
@@ -946,27 +943,27 @@ async function setupPersistTest() {
     }
     switch (persistedExpectation) {
       case PersistedExpectation.Snapshot:
-        expect(persistedChunkHashes.length).to.be.greaterThan(0);
+        expect(persistedChunkHashes.length).toBeGreaterThan(0);
         expect(chunksPersistedSpy).toHaveBeenCalledTimes(1);
-        expect(chunksPersistedSpy.mock.calls[0][0]).to.deep.equal(
+        expect(chunksPersistedSpy.mock.calls[0][0]).toEqual(
           persistedChunkHashes,
         );
         break;
       case PersistedExpectation.SnapshotAndLocals:
-        expect(persistedChunkHashes.length).to.be.greaterThan(0);
+        expect(persistedChunkHashes.length).toBeGreaterThan(0);
         expect(chunksPersistedSpy).toHaveBeenCalledTimes(1);
         // Persisted chunks is a superset of chunks passed to
         // chunksPersisted
-        expect([...persistedChunkHashes]).to.include.members(
-          chunksPersistedSpy.mock.calls[0][0],
+        expect([...persistedChunkHashes]).toEqual(
+          expect.arrayContaining(chunksPersistedSpy.mock.calls[0][0]),
         );
         break;
       case PersistedExpectation.Locals:
-        expect(persistedChunkHashes.length).to.be.greaterThan(0);
+        expect(persistedChunkHashes.length).toBeGreaterThan(0);
         expect(chunksPersistedSpy).toHaveBeenCalledTimes(0);
         break;
       case PersistedExpectation.Nothing:
-        expect(persistedChunkHashes.length).to.equal(0);
+        expect(persistedChunkHashes.length).toBe(0);
         expect(chunksPersistedSpy).toHaveBeenCalledTimes(0);
         break;
     }
@@ -996,15 +993,13 @@ function getClientMapAndClientGroup(
 }
 
 function expectRebasedLocal(rebased: Commit<Meta>, original: Commit<Meta>) {
-  expect(rebased.chunk.hash).to.not.equal(original.chunk.hash);
+  expect(rebased.chunk.hash).not.toBe(original.chunk.hash);
   const rebasedMeta = rebased.meta;
   assertLocalMetaDD31(rebasedMeta);
   const originalMeta = original.meta;
   assertLocalMetaDD31(originalMeta);
-  expect(rebasedMeta.clientID).to.equal(originalMeta.clientID);
-  expect(rebasedMeta.mutationID).to.equal(originalMeta.mutationID);
-  expect(rebasedMeta.mutatorName).to.equal(originalMeta.mutatorName);
-  expect(rebasedMeta.mutatorArgsJSON).to.deep.equal(
-    originalMeta.mutatorArgsJSON,
-  );
+  expect(rebasedMeta.clientID).toBe(originalMeta.clientID);
+  expect(rebasedMeta.mutationID).toBe(originalMeta.mutationID);
+  expect(rebasedMeta.mutatorName).toBe(originalMeta.mutatorName);
+  expect(rebasedMeta.mutatorArgsJSON).toEqual(originalMeta.mutatorArgsJSON);
 }

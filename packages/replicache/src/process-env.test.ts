@@ -7,5 +7,5 @@ declare const process: {
 };
 
 test('process', () => {
-  expect(process.env.NODE_ENV).to.equal('test');
+  expect(process.env.NODE_ENV).toBe('test');
 });

@@ -40,7 +40,7 @@ describe('basics', () => {
     const dagRead = await dagStore.read();
     const dbRead = await readFromDefaultHead(dagRead, replicacheFormatVersion);
     const val = await dbRead.get('foo');
-    expect(val).to.deep.equal('bar');
+    expect(val).toEqual('bar');
   };
   test('dd31', () => t(FormatVersion.Latest));
 });

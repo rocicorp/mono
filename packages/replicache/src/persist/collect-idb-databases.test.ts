@@ -171,7 +171,7 @@ describe('collectIDBDatabases', {timeout: 20_000}, () => {
         newDagStore,
       );
 
-      expect(Object.keys(await store.getDatabases())).to.deep.equal(
+      expect(Object.keys(await store.getDatabases())).toEqual(
         expectedDatabases,
       );
 
@@ -783,7 +783,7 @@ test('dropDatabases mem', async () => {
       schemaVersion: 'testSchemaVersion1',
     };
 
-    expect(await store.putDatabase(db)).to.have.property(db.name);
+    expect(await store.putDatabase(db)).toHaveProperty(db.name);
     const kvStore = createStore(db.name);
     await withWrite(kvStore, async write => {
       await write.put('foo', {
@@ -795,10 +795,10 @@ test('dropDatabases mem', async () => {
   for (let i = 0; i < numDbs; i++) {
     const dbName = `db${i}`;
     const store = hasMemStore(dbName);
-    expect(store).to.be.true;
+    expect(store).toBe(true);
   }
 
-  expect(Object.values(await store.getDatabases())).to.have.length(numDbs);
+  expect(Object.values(await store.getDatabases())).toHaveLength(numDbs);
 
   const result = await dropAllDatabases({
     kvStore: 'mem',
@@ -807,12 +807,12 @@ test('dropDatabases mem', async () => {
   for (let i = 0; i < numDbs; i++) {
     const dbName = `db${i}`;
     const store = hasMemStore(dbName);
-    expect(store).to.be.false;
+    expect(store).toBe(false);
   }
 
-  expect(Object.values(await store.getDatabases())).to.have.length(0);
-  expect(result.dropped).to.have.length(numDbs);
-  expect(result.errors).to.have.length(0);
+  expect(Object.values(await store.getDatabases())).toHaveLength(0);
+  expect(result.dropped).toHaveLength(numDbs);
+  expect(result.errors).toHaveLength(0);
 });
 
 test('dropDatabases idb', async () => {
@@ -828,7 +828,7 @@ test('dropDatabases idb', async () => {
       schemaVersion: 'testSchemaVersion1',
     };
 
-    expect(await store.putDatabase(db)).to.have.property(db.name);
+    expect(await store.putDatabase(db)).toHaveProperty(db.name);
     const kvStore = createStore(db.name);
     await withWrite(kvStore, async write => {
       await write.put('foo', {
@@ -846,13 +846,13 @@ test('dropDatabases idb', async () => {
       const objectStore = transaction.objectStore('chunks');
       const getRequest = objectStore.get('foo');
       getRequest.onsuccess = _event => {
-        expect(getRequest.result).to.deep.equal({baz: 'bar'});
+        expect(getRequest.result).toEqual({baz: 'bar'});
         db.close();
       };
     };
   }
   //idb interfaces and loop and make sure that it actually wrote
-  expect(Object.values(await store.getDatabases())).to.have.length(numDbs);
+  expect(Object.values(await store.getDatabases())).toHaveLength(numDbs);
 
   const result = await dropAllDatabases({kvStore: 'idb'});
 
@@ -871,11 +871,11 @@ test('dropDatabases idb', async () => {
 
   const foundDbs = await Promise.all(dbPromise);
   const foundDbCount = foundDbs.filter(db => db !== undefined).length;
-  expect(foundDbCount).to.equal(0);
+  expect(foundDbCount).toBe(0);
 
-  expect(Object.values(await store.getDatabases())).to.have.length(0);
-  expect(result.dropped).to.have.length(numDbs);
-  expect(result.errors).to.have.length(0);
+  expect(Object.values(await store.getDatabases())).toHaveLength(0);
+  expect(result.dropped).toHaveLength(numDbs);
+  expect(result.errors).toHaveLength(0);
 });
 
 test('dropDatabase', async () => {
@@ -893,14 +893,14 @@ test('dropDatabase', async () => {
     schemaVersion: 'testSchemaVersion1',
   };
 
-  expect(await store.putDatabase(db)).to.have.property(db.name);
+  expect(await store.putDatabase(db)).toHaveProperty(db.name);
 
-  expect(Object.values(await store.getDatabases())).to.have.length(
+  expect(Object.values(await store.getDatabases())).toHaveLength(
     initialDatabasesLength + 1,
   );
   await dropDatabase(db.name);
 
-  expect(Object.values(await store.getDatabases())).to.have.length(
+  expect(Object.values(await store.getDatabases())).toHaveLength(
     initialDatabasesLength,
   );
 

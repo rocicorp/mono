@@ -140,8 +140,8 @@ describe('DD31', () => {
     );
     assertClientV6(client2);
 
-    expect(client1.clientGroupID).to.equal(client2.clientGroupID);
-    expect(await rep.clientGroupID).to.not.equal(client1.clientGroupID);
+    expect(client1.clientGroupID).toBe(client2.clientGroupID);
+    expect(await rep.clientGroupID).not.toBe(client1.clientGroupID);
 
     const clientGroup = await withRead(testPerdag, read =>
       getClientGroup(client1.clientGroupID, read),
@@ -173,8 +173,8 @@ describe('DD31', () => {
     await rep.recoverMutations();
 
     const pushCalls = fetchMock.calls(pushURL);
-    expect(pushCalls.length).to.equal(1);
-    expect(await pushCalls[0].request.json()).to.deep.equal({
+    expect(pushCalls.length).toBe(1);
+    expect(await pushCalls[0].request.json()).toEqual({
       profileID,
       clientGroupID: client1.clientGroupID,
       mutations: [
@@ -214,9 +214,9 @@ describe('DD31', () => {
     const pullCalls = fetchMock.calls(pullURL);
 
     if (pushResponse && pushResponse.error) {
-      expect(pullCalls.length).to.equal(0);
+      expect(pullCalls.length).toBe(0);
     } else {
-      expect(pullCalls.length).to.equal(1);
+      expect(pullCalls.length).toBe(1);
       const pullReq: PullRequestV1 = {
         profileID,
         clientGroupID: client1.clientGroupID,
@@ -224,7 +224,7 @@ describe('DD31', () => {
         pullVersion: PULL_VERSION_DD31,
         schemaVersion: schemaVersionOfClientWPendingMutations,
       };
-      expect(await pullCalls[0].request.json()).to.deep.equal(pullReq);
+      expect(await pullCalls[0].request.json()).toEqual(pullReq);
     }
 
     const updatedClient1 = await withRead(testPerdag, read =>
@@ -232,7 +232,7 @@ describe('DD31', () => {
     );
     assertClientV6(updatedClient1);
 
-    expect(updatedClient1.clientGroupID).to.deep.equal(client1.clientGroupID);
+    expect(updatedClient1.clientGroupID).toEqual(client1.clientGroupID);
 
     const updatedClientGroup = await withRead(testPerdag, read =>
       getClientGroup(client1.clientGroupID, read),
@@ -245,22 +245,20 @@ describe('DD31', () => {
     );
     assertClientV6(updatedClient2);
 
-    expect(updatedClient2.clientGroupID).to.deep.equal(client2.clientGroupID);
-    //expect(updatedClient2.headHash).to.equal(client2.headHash);
+    expect(updatedClient2.clientGroupID).toEqual(client2.clientGroupID);
+    //expect(updatedClient2.headHash).toBe(client2.headHash);
 
     if ('error' in pullResponse || (pushResponse && 'error' in pushResponse)) {
-      expect(updatedClientGroup.lastServerAckdMutationIDs).to.deep.equal(
+      expect(updatedClientGroup.lastServerAckdMutationIDs).toEqual(
         clientGroup.lastServerAckdMutationIDs,
       );
     } else {
-      expect(updatedClientGroup.lastServerAckdMutationIDs).to.deep.equal(
+      expect(updatedClientGroup.lastServerAckdMutationIDs).toEqual(
         expectedLastServerAckdMutationIDs,
       );
     }
-    expect(updatedClientGroup.mutationIDs).to.deep.equal(
-      clientGroup.mutationIDs,
-    );
-    expect(updatedClientGroup.disabled).to.equal(expectClientGroupDisabled);
+    expect(updatedClientGroup.mutationIDs).toEqual(clientGroup.mutationIDs);
+    expect(updatedClientGroup.disabled).toBe(expectClientGroupDisabled);
   }
 
   for (const formatVersion of [FormatVersion.V6, FormatVersion.V7] as const) {
@@ -456,8 +454,8 @@ describe('DD31', () => {
     await rep.recoverMutations();
 
     const pushCalls = fetchMock.calls(pushURL);
-    expect(pushCalls.length).to.equal(1, "didn't call push");
-    expect(await pushCalls[0].request.json()).to.deep.equal({
+    expect(pushCalls.length).toBe(1, "didn't call push");
+    expect(await pushCalls[0].request.json()).toEqual({
       profileID,
       clientGroupID: client1.clientGroupID,
       mutations: [
@@ -481,13 +479,13 @@ describe('DD31', () => {
     });
 
     // Expect no unmatched fetches (only a push request should be sent, no pull)
-    expect(fetchMock.calls('unmatched').length).to.equal(0);
+    expect(fetchMock.calls('unmatched').length).toBe(0);
 
     const updatedClient1 = await withRead(testPerdag, read =>
       getClient(client1ID, read),
     );
     // unchanged
-    expect(updatedClient1).to.deep.equal(client1);
+    expect(updatedClient1).toEqual(client1);
   });
 
   test('client does not attempt to recover mutations from IndexedDB with different replicache name', async () => {
@@ -550,8 +548,8 @@ describe('DD31', () => {
 
     await rep.recoverMutations();
 
-    expect(fetchMock.calls(pushURL).length).to.equal(0);
-    expect(fetchMock.calls(pullURL).length).to.equal(0);
+    expect(fetchMock.calls(pushURL).length).toBe(0);
+    expect(fetchMock.calls(pullURL).length).toBe(0);
   });
 
   test('successfully recovering mutations of multiple clients with mix of schema versions and same replicache format version', async () => {
@@ -612,7 +610,7 @@ describe('DD31', () => {
         cookie: 2,
         formatVersion,
       });
-    expect(client2PendingLocalMetas.length).to.equal(0);
+    expect(client2PendingLocalMetas.length).toBe(0);
     const client3PendingLocalMetas =
       await createAndPersistClientWithPendingLocalDD31({
         clientID: client3ID,
@@ -707,8 +705,8 @@ describe('DD31', () => {
     await rep.recoverMutations();
 
     const pushCalls = fetchMock.calls(pushURL);
-    expect(pushCalls.length).to.equal(3);
-    expect(await pushCalls[0].request.json()).to.deep.equal(
+    expect(pushCalls.length).toBe(3);
+    expect(await pushCalls[0].request.json()).toEqual(
       createPushRequestBodyDD31(
         profileID,
         client1.clientGroupID,
@@ -717,7 +715,7 @@ describe('DD31', () => {
         schemaVersionOfClients1Thru3AndClientRecoveringMutations,
       ),
     );
-    expect(await pushCalls[1].request.json()).to.deep.equal(
+    expect(await pushCalls[1].request.json()).toEqual(
       createPushRequestBodyDD31(
         profileID,
         client3.clientGroupID,
@@ -726,7 +724,7 @@ describe('DD31', () => {
         schemaVersionOfClients1Thru3AndClientRecoveringMutations,
       ),
     );
-    expect(await pushCalls[2].request.json()).to.deep.equal(
+    expect(await pushCalls[2].request.json()).toEqual(
       createPushRequestBodyDD31(
         profileID,
         client4.clientGroupID,
@@ -736,22 +734,22 @@ describe('DD31', () => {
       ),
     );
 
-    expect(pullRequestJsonBodies.length).to.equal(3);
-    expect(pullRequestJsonBodies[0]).to.deep.equal({
+    expect(pullRequestJsonBodies.length).toBe(3);
+    expect(pullRequestJsonBodies[0]).toEqual({
       clientGroupID: client1.clientGroupID,
       profileID,
       schemaVersion: schemaVersionOfClients1Thru3AndClientRecoveringMutations,
       cookie: 1,
       pullVersion: 1,
     });
-    expect(pullRequestJsonBodies[1]).to.deep.equal({
+    expect(pullRequestJsonBodies[1]).toEqual({
       clientGroupID: client3.clientGroupID,
       profileID,
       schemaVersion: schemaVersionOfClients1Thru3AndClientRecoveringMutations,
       cookie: 3,
       pullVersion: 1,
     });
-    expect(pullRequestJsonBodies[2]).to.deep.equal({
+    expect(pullRequestJsonBodies[2]).toEqual({
       profileID,
       clientGroupID: client4.clientGroupID,
       schemaVersion: schemaVersionOfClient4,
@@ -790,8 +788,8 @@ describe('DD31', () => {
     );
     assert(updatedClientGroup4);
 
-    expect(updatedClient1).to.deep.equal(client1);
-    expect(updatedClientGroup1).to.deep.equal({
+    expect(updatedClient1).toEqual(client1);
+    expect(updatedClientGroup1).toEqual({
       ...clientGroup1,
       lastServerAckdMutationIDs: {
         ...clientGroup1.lastServerAckdMutationIDs,
@@ -801,11 +799,11 @@ describe('DD31', () => {
       },
     });
 
-    expect(updatedClient2).to.deep.equal(client2);
-    expect(updatedClientGroup2).to.deep.equal(clientGroup2);
+    expect(updatedClient2).toEqual(client2);
+    expect(updatedClientGroup2).toEqual(clientGroup2);
 
-    expect(updatedClient3).to.deep.equal(client3);
-    expect(updatedClientGroup3).to.deep.equal({
+    expect(updatedClient3).toEqual(client3);
+    expect(updatedClientGroup3).toEqual({
       ...clientGroup3,
       lastServerAckdMutationIDs: {
         ...clientGroup3.lastServerAckdMutationIDs,
@@ -815,8 +813,8 @@ describe('DD31', () => {
       },
     });
 
-    expect(updatedClient4).to.deep.equal(client4);
-    expect(updatedClientGroup4).to.deep.equal({
+    expect(updatedClient4).toEqual(client4);
+    expect(updatedClientGroup4).toEqual({
       ...clientGroup4,
       lastServerAckdMutationIDs: {
         ...clientGroup4.lastServerAckdMutationIDs,
@@ -953,8 +951,8 @@ describe('DD31', () => {
 
     await rep.recoverMutations();
 
-    expect(pushRequestJSONBodies.length).to.equal(3);
-    expect(pushRequestJSONBodies[0]).to.deep.equal(
+    expect(pushRequestJSONBodies.length).toBe(3);
+    expect(pushRequestJSONBodies[0]).toEqual(
       createPushRequestBodyDD31(
         profileID,
         client1.clientGroupID,
@@ -963,7 +961,7 @@ describe('DD31', () => {
         schemaVersion,
       ),
     );
-    expect(pushRequestJSONBodies[1]).to.deep.equal(
+    expect(pushRequestJSONBodies[1]).toEqual(
       createPushRequestBodyDD31(
         profileID,
         client2.clientGroupID,
@@ -972,7 +970,7 @@ describe('DD31', () => {
         schemaVersion,
       ),
     );
-    expect(pushRequestJSONBodies[2]).to.deep.equal(
+    expect(pushRequestJSONBodies[2]).toEqual(
       createPushRequestBodyDD31(
         profileID,
         client3.clientGroupID,
@@ -982,15 +980,15 @@ describe('DD31', () => {
       ),
     );
 
-    expect(pullRequestJsonBodies.length).to.equal(2);
-    expect(pullRequestJsonBodies[0]).to.deep.equal({
+    expect(pullRequestJsonBodies.length).toBe(2);
+    expect(pullRequestJsonBodies[0]).toEqual({
       profileID,
       clientGroupID: client1.clientGroupID,
       schemaVersion,
       cookie: 1,
       pullVersion: 1,
     });
-    expect(pullRequestJsonBodies[1]).to.deep.equal({
+    expect(pullRequestJsonBodies[1]).toEqual({
       profileID,
       clientGroupID: client3.clientGroupID,
       schemaVersion,
@@ -1016,14 +1014,14 @@ describe('DD31', () => {
     const updatedClientGroup3 = updatedClientGroups.get(client3.clientGroupID);
     assert(updatedClientGroup3);
 
-    expect(updatedClient1).to.deep.equal(client1);
-    expect(updatedClientGroup1).to.deep.equal(clientGroup1);
+    expect(updatedClient1).toEqual(client1);
+    expect(updatedClientGroup1).toEqual(clientGroup1);
 
-    expect(updatedClient2).to.deep.equal(client2);
-    expect(updatedClientGroup2).to.deep.equal(clientGroup2);
+    expect(updatedClient2).toEqual(client2);
+    expect(updatedClientGroup2).toEqual(clientGroup2);
 
-    expect(updatedClient3).to.deep.equal(client3);
-    expect(updatedClientGroup3).to.deep.equal(clientGroup3);
+    expect(updatedClient3).toEqual(client3);
+    expect(updatedClientGroup3).toEqual(clientGroup3);
   });
 
   test('if an error occurs recovering one client, continues to try to recover other clients', async () => {
@@ -1154,7 +1152,7 @@ describe('DD31', () => {
     await rep.recoverMutations();
 
     expect(consoleErrorStub).toHaveBeenCalledTimes(1);
-    // expect(consoleErrorStub.mock.calls[0].join(' ')).to.contain(testErrorMsg);
+    // expect(consoleErrorStub.mock.calls[0].join(' ')).toContain(testErrorMsg);
     expect(consoleErrorStub.mock.calls[0]).toEqual([
       expect.any(String),
       expect.any(String),
@@ -1162,8 +1160,8 @@ describe('DD31', () => {
     ]);
 
     const pushCalls = fetchMock.calls(pushURL);
-    expect(pushCalls.length).to.equal(2);
-    expect(await pushCalls[0].request.json()).to.deep.equal(
+    expect(pushCalls.length).toBe(2);
+    expect(await pushCalls[0].request.json()).toEqual(
       createPushRequestBodyDD31(
         profileID,
         client1.clientGroupID,
@@ -1172,7 +1170,7 @@ describe('DD31', () => {
         schemaVersion,
       ),
     );
-    expect(await pushCalls[1].request.json()).to.deep.equal(
+    expect(await pushCalls[1].request.json()).toEqual(
       createPushRequestBodyDD31(
         profileID,
         client3.clientGroupID,
@@ -1182,15 +1180,15 @@ describe('DD31', () => {
       ),
     );
 
-    expect(pullRequestJsonBodies.length).to.equal(2);
-    expect(pullRequestJsonBodies[0]).to.deep.equal({
+    expect(pullRequestJsonBodies.length).toBe(2);
+    expect(pullRequestJsonBodies[0]).toEqual({
       profileID,
       clientGroupID: client1.clientGroupID,
       schemaVersion,
       cookie: 1,
       pullVersion: 1,
     });
-    expect(pullRequestJsonBodies[1]).to.deep.equal({
+    expect(pullRequestJsonBodies[1]).toEqual({
       profileID,
       clientGroupID: client3.clientGroupID,
       schemaVersion,
@@ -1216,14 +1214,14 @@ describe('DD31', () => {
     const updatedClientGroup3 = updatedClientGroups.get(client3.clientGroupID);
     assert(updatedClientGroup3);
 
-    expect(updatedClient1).to.deep.equal(client1);
-    expect(updatedClientGroup1).to.deep.equal(clientGroup1);
+    expect(updatedClient1).toEqual(client1);
+    expect(updatedClientGroup1).toEqual(clientGroup1);
 
-    expect(updatedClient2).to.deep.equal(client2);
-    expect(updatedClientGroup2).to.deep.equal(clientGroup2);
+    expect(updatedClient2).toEqual(client2);
+    expect(updatedClientGroup2).toEqual(clientGroup2);
 
-    expect(updatedClient3).to.deep.equal(client3);
-    expect(updatedClientGroup3).to.deep.equal(clientGroup3);
+    expect(updatedClient3).toEqual(client3);
+    expect(updatedClientGroup3).toEqual(clientGroup3);
   });
 
   test('if an error occurs recovering one db, continues to try to recover clients from other dbs', async () => {
@@ -1347,7 +1345,7 @@ describe('DD31', () => {
     await rep.recoverMutations();
 
     expect(consoleErrorStub).toHaveBeenCalledTimes(1);
-    // expect(consoleErrorStub.firstCall.args.join(' ')).to.contain(testErrorMsg);
+    // expect(consoleErrorStub.firstCall.args.join(' ')).toContain(testErrorMsg);
     expect(consoleErrorStub.mock.calls[0]).toEqual([
       expect.any(String),
       expect.any(String),
@@ -1355,8 +1353,8 @@ describe('DD31', () => {
     ]);
 
     const pushCalls = fetchMock.calls(pushURL);
-    expect(pushCalls.length).to.equal(1);
-    expect(await pushCalls[0].request.json()).to.deep.equal(
+    expect(pushCalls.length).toBe(1);
+    expect(await pushCalls[0].request.json()).toEqual(
       createPushRequestBodyDD31(
         profileID,
         client2.clientGroupID,
@@ -1366,8 +1364,8 @@ describe('DD31', () => {
       ),
     );
 
-    expect(pullRequestJsonBodies.length).to.equal(1);
-    expect(pullRequestJsonBodies[0]).to.deep.equal({
+    expect(pullRequestJsonBodies.length).toBe(1);
+    expect(pullRequestJsonBodies[0]).toEqual({
       clientGroupID: client2.clientGroupID,
       profileID,
       schemaVersion: schemaVersionOfClient2,
@@ -1394,21 +1392,21 @@ describe('DD31', () => {
     );
     assert(updatedClientGroup2);
 
-    expect(updatedClientGroup1.mutationIDs[client1ID]).equal(
+    expect(updatedClientGroup1.mutationIDs[client1ID]).toBe(
       clientGroup1.mutationIDs[client1ID],
     );
     // lastServerAckdMutationID not updated due to error when recovering this
     // client's db
-    expect(updatedClientGroup1.lastServerAckdMutationIDs[client1ID]).equal(
+    expect(updatedClientGroup1.lastServerAckdMutationIDs[client1ID]).toBe(
       clientGroup1.lastServerAckdMutationIDs[client1ID],
     );
 
-    expect(updatedClientGroup2.mutationIDs[client2ID]).equal(
+    expect(updatedClientGroup2.mutationIDs[client2ID]).toBe(
       clientGroup2.mutationIDs[client2ID],
     );
     // lastServerAckdMutationID is updated to high mutationID as mutations
     // were recovered despite error in other db
-    expect(updatedClientGroup2.lastServerAckdMutationIDs[client2ID]).equal(
+    expect(updatedClientGroup2.lastServerAckdMutationIDs[client2ID]).toBe(
       clientGroup2.mutationIDs[client2ID],
     );
   });
@@ -1508,8 +1506,8 @@ describe('DD31', () => {
     await rep.recoverMutations();
 
     const pushCalls = fetchMock.calls(pushURL);
-    expect(pushCalls.length).to.equal(1);
-    expect(await pushCalls[0].request.json()).to.deep.equal(
+    expect(pushCalls.length).toBe(1);
+    expect(await pushCalls[0].request.json()).toEqual(
       createPushRequestBodyDD31(
         profileID,
         client1.clientGroupID,
@@ -1524,7 +1522,7 @@ describe('DD31', () => {
     const rep = await replicacheForTesting('mutation-recovery-startup-dd31');
     expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
     expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
-    expect(await rep.recoverMutationsFake.mock.results[0].value).to.equal(true);
+    expect(await rep.recoverMutationsFake.mock.results[0].value).toBe(true);
   });
 
   test('mutation recovery returns early without running if push is disabled', async () => {
@@ -1539,10 +1537,8 @@ describe('DD31', () => {
       },
     );
     expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
-    expect(await rep.recoverMutationsFake.mock.results[0].value).to.equal(
-      false,
-    );
-    expect(await rep.recoverMutations()).to.equal(false);
+    expect(await rep.recoverMutationsFake.mock.results[0].value).toBe(false);
+    expect(await rep.recoverMutations()).toBe(false);
   });
 
   test('mutation recovery returns early when internal option enableMutationRecovery is false', async () => {
@@ -1554,10 +1550,8 @@ describe('DD31', () => {
       disableAllBackgroundProcesses,
     );
     expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
-    expect(await rep.recoverMutationsFake.mock.results[0].value).to.equal(
-      false,
-    );
-    expect(await rep.recoverMutations()).to.equal(false);
+    expect(await rep.recoverMutationsFake.mock.results[0].value).toBe(false);
+    expect(await rep.recoverMutations()).toBe(false);
   });
 
   test('mutation recovery is invoked on change from offline to online', async () => {
@@ -1566,7 +1560,7 @@ describe('DD31', () => {
       pullURL,
     });
     expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
-    expect(rep.online).to.equal(true);
+    expect(rep.online).toBe(true);
 
     fetchMock.post(pullURL, () => ({
       throws: new Error('Simulate fetch error in push'),
@@ -1575,7 +1569,7 @@ describe('DD31', () => {
     rep.pullIgnorePromise();
 
     await tickAFewTimes(vi);
-    expect(rep.online).to.equal(false);
+    expect(rep.online).toBe(false);
     expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
 
     const {clientID} = rep;
@@ -1641,12 +1635,12 @@ describe('DD31', () => {
       getClient(client1ID, read),
     );
     assertClientV6(client1);
-    expect(client1.clientGroupID).to.not.equal(await rep.clientGroupID);
+    expect(client1.clientGroupID).not.toBe(await rep.clientGroupID);
     const clientGroup1 = await withRead(testPerdagDD31, read =>
       getClientGroup(client1.clientGroupID, read),
     );
     assert(clientGroup1);
-    expect(clientGroup1.mutationIDs[client1ID]).to.equal(2);
+    expect(clientGroup1.mutationIDs[client1ID]).toBe(2);
 
     const pullRequestJSONBodies: JSONObject[] = [];
     const pushRequestJSONBodies: JSONObject[] = [];
@@ -1672,19 +1666,19 @@ describe('DD31', () => {
 
     await rep.recoverMutations();
 
-    expect(pushRequestJSONBodies).to.deep.equal([]);
-    expect(pullRequestJSONBodies).to.deep.equal([]);
+    expect(pushRequestJSONBodies).toEqual([]);
+    expect(pullRequestJSONBodies).toEqual([]);
 
     const updatedClient1 = await withRead(testPerdagDD31, read =>
       getClient(client1ID, read),
     );
     assertClientV6(updatedClient1);
-    expect(updatedClient1).to.deep.equal(client1);
+    expect(updatedClient1).toEqual(client1);
 
     const updatedClientGroup1 = await withRead(testPerdagDD31, read =>
       getClientGroup(client1.clientGroupID, read),
     );
-    expect(updatedClientGroup1).to.deep.equal(clientGroup1);
+    expect(updatedClientGroup1).toEqual(clientGroup1);
   }
 
   test('pushDisabled so no recovery possible', async () => {
@@ -1732,12 +1726,12 @@ describe('DD31', () => {
       getClient(client1ID, read),
     );
     assertClientV6(client1);
-    expect(client1.clientGroupID).to.not.equal(await rep.clientGroupID);
+    expect(client1.clientGroupID).not.toBe(await rep.clientGroupID);
     const clientGroup1 = await withRead(testPerdagDD31, read =>
       getClientGroup(client1.clientGroupID, read),
     );
     assert(clientGroup1);
-    expect(clientGroup1.mutationIDs[client1ID]).to.equal(2);
+    expect(clientGroup1.mutationIDs[client1ID]).toBe(2);
 
     const pullRequestJSONBodies: JSONObject[] = [];
     const pushRequestJSONBodies: JSONObject[] = [];
@@ -1778,21 +1772,21 @@ describe('DD31', () => {
       pushVersion: PUSH_VERSION_DD31,
       schemaVersion: schemaVersion2,
     };
-    expect(pushRequestJSONBodies).to.deep.equal([pushRequestBody1]);
+    expect(pushRequestJSONBodies).toEqual([pushRequestBody1]);
 
-    expect(pullRequestJSONBodies).to.deep.equal([]);
+    expect(pullRequestJSONBodies).toEqual([]);
 
     const updatedClient1 = await withRead(testPerdagDD31, read =>
       getClient(client1ID, read),
     );
     assertClientV6(updatedClient1);
-    expect(updatedClient1).to.deep.equal(client1);
+    expect(updatedClient1).toEqual(client1);
 
     const updatedClientGroup1 = await withRead(testPerdagDD31, read =>
       getClientGroup(client1.clientGroupID, read),
     );
     // This did not get updated because pull was disabled!
-    expect(updatedClientGroup1).to.deep.equal(clientGroup1);
+    expect(updatedClientGroup1).toEqual(clientGroup1);
   }
 
   test('pullDisabled so cannot confirm recovery', async () => {
@@ -1860,7 +1854,7 @@ describe('DD31', () => {
       getClient(client1ID, read),
     );
     assertClientV6(client1);
-    expect(client1.clientGroupID).to.not.equal(await rep.clientGroupID);
+    expect(client1.clientGroupID).not.toBe(await rep.clientGroupID);
     await withWriteNoImplicitCommit(testPerdagDD31, async write => {
       await disableClientGroup(client1.clientGroupID, write);
       await write.commit();
@@ -1869,19 +1863,19 @@ describe('DD31', () => {
       getClientGroup(client1.clientGroupID, read),
     );
     assert(clientGroup1);
-    expect(clientGroup1.mutationIDs[client1ID]).to.equal(2);
+    expect(clientGroup1.mutationIDs[client1ID]).toBe(2);
 
     const client2 = await withRead(testPerdagDD31, read =>
       getClient(client2ID, read),
     );
     assertClientV6(client2);
-    expect(client2.clientGroupID).to.not.equal(await rep.clientGroupID);
-    expect(client2.clientGroupID).to.not.equal(client1.clientGroupID);
+    expect(client2.clientGroupID).not.toBe(await rep.clientGroupID);
+    expect(client2.clientGroupID).not.toBe(client1.clientGroupID);
     const clientGroup2 = await withRead(testPerdagDD31, read =>
       getClientGroup(client2.clientGroupID, read),
     );
     assert(clientGroup2);
-    expect(clientGroup2.mutationIDs[client2ID]).to.equal(2);
+    expect(clientGroup2.mutationIDs[client2ID]).toBe(2);
 
     fetchMock.reset();
 
@@ -1930,7 +1924,7 @@ describe('DD31', () => {
       pushVersion: PUSH_VERSION_DD31,
       schemaVersion: schemaVersion2,
     };
-    expect(pushRequestJSONBodies).to.deep.equal([pushRequestBody1]);
+    expect(pushRequestJSONBodies).toEqual([pushRequestBody1]);
     const pullRequestBody1: PullRequestV1 = {
       profileID,
       clientGroupID: client2.clientGroupID,
@@ -1938,31 +1932,31 @@ describe('DD31', () => {
       pullVersion: PULL_VERSION_DD31,
       schemaVersion: schemaVersion2,
     };
-    expect(pullRequestJSONBodies).to.deep.equal([pullRequestBody1]);
+    expect(pullRequestJSONBodies).toEqual([pullRequestBody1]);
 
     const updatedClient1 = await withRead(testPerdagDD31, read =>
       getClient(client1ID, read),
     );
     assertClientV6(updatedClient1);
-    expect(updatedClient1).to.deep.equal(client1);
+    expect(updatedClient1).toEqual(client1);
 
     const updatedClientGroup1 = await withRead(testPerdagDD31, read =>
       getClientGroup(client1.clientGroupID, read),
     );
     // This did not get updated because the client group was disabled!
-    expect(updatedClientGroup1).to.deep.equal(clientGroup1);
+    expect(updatedClientGroup1).toEqual(clientGroup1);
 
     const updatedClient2 = await withRead(testPerdagDD31, read =>
       getClient(client2ID, read),
     );
     assertClientV6(updatedClient2);
-    expect(updatedClient2).to.deep.equal(client2);
+    expect(updatedClient2).toEqual(client2);
 
     const updatedClientGroup2 = await withRead(testPerdagDD31, read =>
       getClientGroup(client2.clientGroupID, read),
     );
     // Updated with new lastServerAckdMutationIDs from pull response
-    expect(updatedClientGroup2).to.deep.equal({
+    expect(updatedClientGroup2).toEqual({
       ...clientGroup2,
       lastServerAckdMutationIDs: {
         [client2ID]: 2,

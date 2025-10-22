@@ -25,7 +25,7 @@ test('dropStore', async () => {
 
   // Verify it's there.
   await withRead(store, async rt => {
-    expect(await rt.get('foo')).to.deep.equal('bar');
+    expect(await rt.get('foo')).toEqual('bar');
   });
 
   // Drop db
@@ -35,7 +35,7 @@ test('dropStore', async () => {
   // Reopen store, verify data is gone
   store = new IDBStore(name);
   await withRead(store, async rt => {
-    expect(await rt.has('foo')).to.be.false;
+    expect(await rt.has('foo')).toBe(false);
   });
 });
 
@@ -80,8 +80,8 @@ describe('reopening IDB', () => {
     });
 
     await withRead(store, async rt => {
-      expect(await rt.get('foo')).to.deep.equal('bar');
-      expect(await rt.get('baz')).to.deep.equal('qux');
+      expect(await rt.get('foo')).toEqual('bar');
+      expect(await rt.get('baz')).toEqual('qux');
     });
   });
 
@@ -101,7 +101,7 @@ describe('reopening IDB', () => {
     } catch (e) {
       ex = e;
     }
-    expect(ex as Error).to.match(/Expected IndexedDB not found/);
+    expect((ex as Error).message).toMatch(/Expected IndexedDB not found/);
 
     // ensure that any db creation during the reopening process was aborted
     const req = indexedDB.open(name);
@@ -114,7 +114,7 @@ describe('reopening IDB', () => {
     });
 
     await promise;
-    expect(aborted).to.be.true;
+    expect(aborted).toBe(true);
   });
 
   test('deletes corrupt IDB and throws error', async () => {
@@ -140,7 +140,7 @@ describe('reopening IDB', () => {
     } catch (e) {
       ex = e;
     }
-    expect((ex as Error).message).to.match(
+    expect((ex as Error).message).toMatch(
       /Expected IndexedDB .* missing object store/,
     );
 
@@ -155,7 +155,7 @@ describe('reopening IDB', () => {
     });
 
     await promise;
-    expect(newlyCreated).to.be.true;
+    expect(newlyCreated).toBe(true);
   });
 });
 
@@ -174,6 +174,6 @@ test('Throws if IDB dropped while open', async () => {
   } catch (e) {
     err = e;
   }
-  expect(err).instanceOf(IDBNotFoundError);
-  expect((err as Error).message).to.match(/Expected IndexedDB/);
+  expect(err).toBeInstanceOf(IDBNotFoundError);
+  expect((err as Error).message).toMatch(/Expected IndexedDB/);
 });

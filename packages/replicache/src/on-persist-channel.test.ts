@@ -47,12 +47,12 @@ describe('initOnPersistChannel', () => {
       persistInfo: PersistInfo,
     ): Promise<void> {
       await channelMessageCallResolvers[i].promise;
-      expect(channelMessageCalls.length).to.equal(i + 1);
-      expect(channelMessageCalls[i].data).to.deep.equal(persistInfo);
-      expect(handlePersistCalls1.length).to.equal(i + 1);
-      expect(handlePersistCalls1[i]).to.deep.equal(persistInfo);
-      expect(handlePersistCalls2.length).to.equal(i + 1);
-      expect(handlePersistCalls2[i]).to.deep.equal(persistInfo);
+      expect(channelMessageCalls.length).toBe(i + 1);
+      expect(channelMessageCalls[i].data).toEqual(persistInfo);
+      expect(handlePersistCalls1.length).toBe(i + 1);
+      expect(handlePersistCalls1[i]).toEqual(persistInfo);
+      expect(handlePersistCalls2.length).toBe(i + 1);
+      expect(handlePersistCalls2[i]).toEqual(persistInfo);
     }
 
     onPersist1({
@@ -113,9 +113,9 @@ describe('initOnPersistChannel', () => {
     };
     onPersist1(persistInfo1);
     await channelMessageCallResolvers[0].promise;
-    expect(channelMessageCalls[0].data).to.deep.equal(persistInfo1);
-    expect(handlePersistCalls1[0]).to.deep.equal(persistInfo1);
-    expect(handlePersistCalls2[0]).to.deep.equal(persistInfo1);
+    expect(channelMessageCalls[0].data).toEqual(persistInfo1);
+    expect(handlePersistCalls1[0]).toEqual(persistInfo1);
+    expect(handlePersistCalls2[0]).toEqual(persistInfo1);
 
     controller1.abort();
 
@@ -125,9 +125,9 @@ describe('initOnPersistChannel', () => {
     };
     onPersist2(persistInfo2);
     await channelMessageCallResolvers[1].promise;
-    expect(channelMessageCalls[1].data).to.deep.equal(persistInfo2);
+    expect(channelMessageCalls[1].data).toEqual(persistInfo2);
     // not called because closed
-    expect(handlePersistCalls1.length).to.equal(1);
-    expect(handlePersistCalls2[1]).to.deep.equal(persistInfo2);
+    expect(handlePersistCalls1.length).toBe(1);
+    expect(handlePersistCalls2[1]).toEqual(persistInfo2);
   });
 });

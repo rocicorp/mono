@@ -11,7 +11,7 @@ afterEach(() => {
 
 test('getDatabases with no existing record in db', async () => {
   const store = new IDBDatabasesStore(_ => new TestMemStore());
-  expect(await store.getDatabases()).to.deep.equal({});
+  expect(await store.getDatabases()).toEqual({});
 });
 
 test('putDatabase with no existing record in db', async () => {
@@ -24,10 +24,10 @@ test('putDatabase with no existing record in db', async () => {
     replicacheFormatVersion: 1,
     schemaVersion: 'testSchemaVersion',
   };
-  expect(await store.putDatabase(testDB)).to.deep.equal({
+  expect(await store.putDatabase(testDB)).toEqual({
     testName: withLastOpenedTimestampMS(testDB, 1),
   });
-  expect(await store.getDatabases()).to.deep.equal({
+  expect(await store.getDatabases()).toEqual({
     testName: withLastOpenedTimestampMS(testDB, 1),
   });
 });
@@ -42,18 +42,18 @@ test('putDatabase updates lastOpenedTimestampMS', async () => {
     replicacheFormatVersion: 1,
     schemaVersion: 'testSchemaVersion',
   };
-  expect(await store.putDatabase(testDB)).to.deep.equal({
+  expect(await store.putDatabase(testDB)).toEqual({
     testName: withLastOpenedTimestampMS(testDB, 1),
   });
-  expect(await store.getDatabases()).to.deep.equal({
+  expect(await store.getDatabases()).toEqual({
     testName: withLastOpenedTimestampMS(testDB, 1),
   });
 
   vi.setSystemTime(2);
-  expect(await store.putDatabase(testDB)).to.deep.equal({
+  expect(await store.putDatabase(testDB)).toEqual({
     testName: withLastOpenedTimestampMS(testDB, 2),
   });
-  expect(await store.getDatabases()).to.deep.equal({
+  expect(await store.getDatabases()).toEqual({
     testName: withLastOpenedTimestampMS(testDB, 2),
   });
 });
@@ -69,10 +69,10 @@ test('putDatabase ignores passed in lastOpenedTimestampMS', async () => {
     schemaVersion: 'testSchemaVersion',
     lastOpenedTimestampMS: 1,
   };
-  expect(await store.putDatabase(testDB)).to.deep.equal({
+  expect(await store.putDatabase(testDB)).toEqual({
     testName: withLastOpenedTimestampMS(testDB, 2),
   });
-  expect(await store.getDatabases()).to.deep.equal({
+  expect(await store.getDatabases()).toEqual({
     testName: withLastOpenedTimestampMS(testDB, 2),
   });
 });
@@ -97,10 +97,10 @@ test('putDatabase sequence', async () => {
     schemaVersion: 'testSchemaVersion1',
   };
 
-  expect(await store.putDatabase(testDB1)).to.deep.equal({
+  expect(await store.putDatabase(testDB1)).toEqual({
     testName1: withLastOpenedTimestampMS(testDB1, 1),
   });
-  expect(await store.getDatabases()).to.deep.equal({
+  expect(await store.getDatabases()).toEqual({
     testName1: withLastOpenedTimestampMS(testDB1, 1),
   });
 
@@ -113,11 +113,11 @@ test('putDatabase sequence', async () => {
 
   vi.setSystemTime(2);
 
-  expect(await store.putDatabase(testDB2)).to.deep.equal({
+  expect(await store.putDatabase(testDB2)).toEqual({
     testName1: withLastOpenedTimestampMS(testDB1, 1),
     testName2: withLastOpenedTimestampMS(testDB2, 2),
   });
-  expect(await store.getDatabases()).to.deep.equal({
+  expect(await store.getDatabases()).toEqual({
     testName1: withLastOpenedTimestampMS(testDB1, 1),
     testName2: withLastOpenedTimestampMS(testDB2, 2),
   });
@@ -126,9 +126,9 @@ test('putDatabase sequence', async () => {
 test('close closes kv store', async () => {
   const memstore = new TestMemStore();
   const store = new IDBDatabasesStore(_ => memstore);
-  expect(memstore.closed).to.be.false;
+  expect(memstore.closed).toBe(false);
   await store.close();
-  expect(memstore.closed).to.be.true;
+  expect(memstore.closed).toBe(true);
 });
 
 test('clear', async () => {
@@ -141,16 +141,16 @@ test('clear', async () => {
     schemaVersion: 'testSchemaVersion1',
   };
 
-  expect(await store.putDatabase(testDB1)).to.deep.equal({
+  expect(await store.putDatabase(testDB1)).toEqual({
     testName1: withLastOpenedTimestampMS(testDB1, Date.now()),
   });
-  expect(await store.getDatabases()).to.deep.equal({
+  expect(await store.getDatabases()).toEqual({
     testName1: withLastOpenedTimestampMS(testDB1, Date.now()),
   });
 
   await store.clearDatabases();
 
-  expect(await store.getDatabases()).to.deep.equal({});
+  expect(await store.getDatabases()).toEqual({});
 
   const testDB2 = {
     name: 'testName2',
@@ -161,10 +161,10 @@ test('clear', async () => {
 
   vi.setSystemTime(2);
 
-  expect(await store.putDatabase(testDB2)).to.deep.equal({
+  expect(await store.putDatabase(testDB2)).toEqual({
     testName2: withLastOpenedTimestampMS(testDB2, Date.now()),
   });
-  expect(await store.getDatabases()).to.deep.equal({
+  expect(await store.getDatabases()).toEqual({
     testName2: withLastOpenedTimestampMS(testDB2, Date.now()),
   });
 });
@@ -172,8 +172,8 @@ test('clear', async () => {
 test('getProfileID', async () => {
   const store = new IDBDatabasesStore(_ => new TestMemStore());
   const profileID = await store.getProfileID();
-  expect(profileID).to.be.a('string');
-  expect(profileID).to.match(/^p[a-zA-Z0-9]+$/);
+  expect(profileID).toBeTypeOf('string');
+  expect(profileID).toMatch(/^p[a-zA-Z0-9]+$/);
   const profileID2 = await store.getProfileID();
-  expect(profileID2).to.equal(profileID);
+  expect(profileID2).toBe(profileID);
 });

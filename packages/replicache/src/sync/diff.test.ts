@@ -42,7 +42,7 @@ test('db diff dd31', async () => {
         testSubscriptionsManagerOptions,
         formatVersion,
       );
-      expect(Object.fromEntries(diffsMap)).to.deep.equal(expectedDiff);
+      expect(Object.fromEntries(diffsMap)).toEqual(expectedDiff);
     });
   };
 

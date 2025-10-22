@@ -5,19 +5,22 @@ import {
 } from './subscriptions.ts';
 
 test('scanInfoMatchesKey', () => {
-  expect(scanInfoMatchesKey({options: {}}, '', 'a')).to.be.true;
-  expect(scanInfoMatchesKey({options: {indexName: 'idx'}}, 'idx', 'a')).to.be
-    .true;
-  expect(scanInfoMatchesKey({options: {indexName: 'idx'}}, '', 'a')).to.be
-    .false;
-  expect(scanInfoMatchesKey({options: {}}, 'idx', 'a')).to.be.false;
+  expect(scanInfoMatchesKey({options: {}}, '', 'a')).toBe(true);
+  expect(scanInfoMatchesKey({options: {indexName: 'idx'}}, 'idx', 'a')).toBe(
+    true,
+  );
+  expect(scanInfoMatchesKey({options: {indexName: 'idx'}}, '', 'a')).toBe(
+    false,
+  );
+  expect(scanInfoMatchesKey({options: {}}, 'idx', 'a')).toBe(false);
 
-  expect(scanInfoMatchesKey({options: {prefix: 'p'}}, '', 'a')).to.be.false;
+  expect(scanInfoMatchesKey({options: {prefix: 'p'}}, '', 'a')).toBe(false);
 
-  expect(scanInfoMatchesKey({options: {startKey: 'sk'}}, '', 'a')).to.be.false;
-  expect(scanInfoMatchesKey({options: {startKey: 'sk'}}, '', 'skate')).to.be
-    .true;
-  expect(scanInfoMatchesKey({options: {startKey: 'a'}}, '', 'b')).to.be.true;
+  expect(scanInfoMatchesKey({options: {startKey: 'sk'}}, '', 'a')).toBe(false);
+  expect(scanInfoMatchesKey({options: {startKey: 'sk'}}, '', 'skate')).toBe(
+    true,
+  );
+  expect(scanInfoMatchesKey({options: {startKey: 'a'}}, '', 'b')).toBe(true);
 
   expect(
     scanInfoMatchesKey(
@@ -25,14 +28,14 @@ test('scanInfoMatchesKey', () => {
       'idx',
       '\u0000a\u0000b',
     ),
-  ).to.be.true;
+  ).toBe(true);
   expect(
     scanInfoMatchesKey(
       {options: {prefix: 'sb', indexName: 'idx'}},
       'idx',
       '\u0000sa\u0000p',
     ),
-  ).to.be.false;
+  ).toBe(false);
 
   expect(
     scanInfoMatchesKey(
@@ -40,21 +43,21 @@ test('scanInfoMatchesKey', () => {
       'idx',
       '\u0000sab\u0000p',
     ),
-  ).to.be.true;
+  ).toBe(true);
   expect(
     scanInfoMatchesKey(
       {options: {prefix: 'sa', indexName: 'idx', startSecondaryKey: 'sab'}},
       'idx',
       '\u0000sac\u0000p',
     ),
-  ).to.be.true;
+  ).toBe(true);
   expect(
     scanInfoMatchesKey(
       {options: {prefix: 'sa', indexName: 'idx', startSecondaryKey: 'sac'}},
       'idx',
       '\u0000sab\u0000p',
     ),
-  ).to.be.false;
+  ).toBe(false);
 
   expect(
     scanInfoMatchesKey(
@@ -69,7 +72,7 @@ test('scanInfoMatchesKey', () => {
       'idx',
       '\u0000sac\u0000pa',
     ),
-  ).to.be.true;
+  ).toBe(true);
   expect(
     scanInfoMatchesKey(
       {
@@ -83,7 +86,7 @@ test('scanInfoMatchesKey', () => {
       'idx',
       '\u0000sac\u0000pab',
     ),
-  ).to.be.true;
+  ).toBe(true);
   expect(
     scanInfoMatchesKey(
       {
@@ -97,7 +100,7 @@ test('scanInfoMatchesKey', () => {
       'idx',
       '\u0000sac\u0000pac',
     ),
-  ).to.be.true;
+  ).toBe(true);
   expect(
     scanInfoMatchesKey(
       {
@@ -111,7 +114,7 @@ test('scanInfoMatchesKey', () => {
       'idx',
       '\u0000sac\u0000pab',
     ),
-  ).to.be.false;
+  ).toBe(false);
 });
 
 test('scanInfoMatchesKey limit optimizations', () => {
@@ -128,7 +131,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac2',
     ),
-  ).to.be.true;
+  ).toBe(true);
 
   expect(
     scanInfoMatchesKey(
@@ -142,7 +145,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac2',
     ),
-  ).to.be.true;
+  ).toBe(true);
 
   // Changed key is after start key, no inclusive limit key
   expect(
@@ -156,7 +159,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac4',
     ),
-  ).to.be.true;
+  ).toBe(true);
 
   // Changed key is between inclusive start and inclusive limit keys
   expect(
@@ -171,7 +174,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac4',
     ),
-  ).to.be.true;
+  ).toBe(true);
 
   // Changed key is equal to inclusive limit key
   expect(
@@ -186,7 +189,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac8',
     ),
-  ).to.be.true;
+  ).toBe(true);
 
   // Changed key is after inclusive limit
   expect(
@@ -201,7 +204,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac9',
     ),
-  ).to.be.false;
+  ).toBe(false);
 
   // Changed key is before start key
   expect(
@@ -215,7 +218,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac1',
     ),
-  ).to.be.false;
+  ).toBe(false);
 
   expect(
     scanInfoMatchesKey(
@@ -229,7 +232,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac1',
     ),
-  ).to.be.false;
+  ).toBe(false);
 
   // Changed key is equal to exclusive start key
   expect(
@@ -244,7 +247,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac2',
     ),
-  ).to.be.false;
+  ).toBe(false);
 
   expect(
     scanInfoMatchesKey(
@@ -259,7 +262,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac2',
     ),
-  ).to.be.false;
+  ).toBe(false);
 
   // No limit
   expect(
@@ -273,7 +276,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac9',
     ),
-  ).to.be.true;
+  ).toBe(true);
 
   // Prefix tests
   // Changed key matches prefix and is less than inclusive limit key
@@ -289,7 +292,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac1',
     ),
-  ).to.be.true;
+  ).toBe(true);
 
   // Changed key matches prefix and equals inclusive limit key
   expect(
@@ -304,7 +307,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac8',
     ),
-  ).to.be.true;
+  ).toBe(true);
 
   // Changed key matches prefix but is after inclusive limit
   expect(
@@ -319,7 +322,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac9',
     ),
-  ).to.be.false;
+  ).toBe(false);
 
   // Changed key doesn't match prefix but is less than inclusive limit
   expect(
@@ -334,7 +337,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pab',
     ),
-  ).to.be.false;
+  ).toBe(false);
 
   // No limit
   expect(
@@ -348,7 +351,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac9',
     ),
-  ).to.be.true;
+  ).toBe(true);
 
   // Start and prefix tests
   // Changed key is equal to inclusive start key and matches prefix
@@ -364,7 +367,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac22',
     ),
-  ).to.be.true;
+  ).toBe(true);
   expect(
     scanInfoMatchesKey(
       {
@@ -378,7 +381,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac22',
     ),
-  ).to.be.true;
+  ).toBe(true);
 
   // Changed key is after start key and matches prefix, no inclusive limit key
   expect(
@@ -393,7 +396,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac24',
     ),
-  ).to.be.true;
+  ).toBe(true);
 
   // Changed key is between inclusive start and inclusive limit keys and matches prefix
   expect(
@@ -409,7 +412,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac24',
     ),
-  ).to.be.true;
+  ).toBe(true);
 
   // Changed key is equal to inclusive limit key and matches prefix
   expect(
@@ -425,7 +428,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac28',
     ),
-  ).to.be.true;
+  ).toBe(true);
 
   // Changed key match prefix but is after inclusive limit
   expect(
@@ -441,7 +444,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac29',
     ),
-  ).to.be.false;
+  ).toBe(false);
 
   // Changed key matches prefix but is before start key
   expect(
@@ -456,7 +459,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac21',
     ),
-  ).to.be.false;
+  ).toBe(false);
 
   expect(
     scanInfoMatchesKey(
@@ -471,7 +474,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac21',
     ),
-  ).to.be.false;
+  ).toBe(false);
 
   // Changed key is equal to exclusive start key
   expect(
@@ -487,7 +490,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac22',
     ),
-  ).to.be.false;
+  ).toBe(false);
 
   expect(
     scanInfoMatchesKey(
@@ -503,7 +506,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac22',
     ),
-  ).to.be.false;
+  ).toBe(false);
 
   // No limit
   expect(
@@ -518,7 +521,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pac29',
     ),
-  ).to.be.true;
+  ).toBe(true);
 
   // Changed key is between startKey and lastKey inclusive, but doesnt match prefix
   expect(
@@ -533,7 +536,7 @@ test('scanInfoMatchesKey limit optimizations', () => {
       '',
       'pab2',
     ),
-  ).to.be.false;
+  ).toBe(false);
 });
 
 test('isEqual', () => {
@@ -586,7 +589,7 @@ test('isEqual', () => {
   for (const result of queryResults) {
     sub.onData(result);
   }
-  expect(dataLog).to.deep.equal([
+  expect(dataLog).toEqual([
     {a: 1},
     {b: 2},
     {c: 3},
@@ -599,7 +602,7 @@ test('isEqual', () => {
     // s2 is considered equal to s1
     s3,
   ]);
-  expect(isEqualLog).to.deep.equal([
+  expect(isEqualLog).toEqual([
     [{a: 1}, {b: 2}],
     [{b: 2}, {c: 3}],
     [{c: 3}, {c: 3}],

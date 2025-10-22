@@ -35,5 +35,5 @@ test('Ensure only visited once', async () => {
   const v = new TestVisitor(dagRead);
   await v.visit(c3.hash);
 
-  expect(log).to.deep.equal([c3, c1, c2]);
+  expect(log).toEqual([c3, c1, c2]);
 });

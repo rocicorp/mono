@@ -20,7 +20,7 @@ test('worker test', async () => {
   if (data !== undefined) {
     throw data;
   }
-  expect(data).to.be.undefined;
+  expect(data).toBeUndefined();
 });
 
 function send(w: Worker, data: {name: string}): Promise<unknown> {

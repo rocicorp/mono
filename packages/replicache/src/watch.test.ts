@@ -31,7 +31,7 @@ test('watch', async () => {
   await rep.mutate.addData({a: 1, b: 2});
 
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([
+  expect(spy.mock.lastCall).toEqual([
     [
       {
         op: 'add',
@@ -52,7 +52,7 @@ test('watch', async () => {
 
   await rep.mutate.addData({a: 11});
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([
+  expect(spy.mock.lastCall).toEqual([
     [
       {
         op: 'change',
@@ -66,7 +66,7 @@ test('watch', async () => {
   spy.mockClear();
   await rep.mutate.del('b');
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([
+  expect(spy.mock.lastCall).toEqual([
     [
       {
         op: 'del',
@@ -97,7 +97,7 @@ test('watch with prefix', async () => {
   await rep.mutate.addData({a: 1, b: 2});
 
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([
+  expect(spy.mock.lastCall).toEqual([
     [
       {
         op: 'add',
@@ -116,7 +116,7 @@ test('watch with prefix', async () => {
 
   await rep.mutate.addData({b: 3, b1: 4, c: 5});
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([
+  expect(spy.mock.lastCall).toEqual([
     [
       {
         op: 'change',
@@ -135,7 +135,7 @@ test('watch with prefix', async () => {
   spy.mockClear();
   await rep.mutate.del('b');
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([
+  expect(spy.mock.lastCall).toEqual([
     [
       {
         op: 'del',
@@ -168,7 +168,7 @@ test('watch and initial callback with no data', async () => {
   const unwatch = rep.experimentalWatch(spy, {initialValuesInFirstDiff: true});
   await tickAFewTimes(vi);
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([[]]);
+  expect(spy.mock.lastCall).toEqual([[]]);
   spy.mockClear();
 
   unwatch();
@@ -192,7 +192,7 @@ test('watch and initial callback with data', async () => {
   const unwatch = rep.experimentalWatch(spy, {initialValuesInFirstDiff: true});
   await tickAFewTimes(vi);
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([
+  expect(spy.mock.lastCall).toEqual([
     [
       {
         op: 'add',
@@ -230,13 +230,13 @@ test('watch with prefix and initial callback no data', async () => {
 
   // Initial callback should always be called even with no data.
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([[]]);
+  expect(spy.mock.lastCall).toEqual([[]]);
   spy.mockClear();
 
   await rep.mutate.addData({a: 1, b: 2});
 
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([
+  expect(spy.mock.lastCall).toEqual([
     [
       {
         op: 'add',
@@ -268,7 +268,7 @@ test('watch with prefix and initial callback and data', async () => {
   await tickAFewTimes(vi);
 
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([
+  expect(spy.mock.lastCall).toEqual([
     [
       {
         op: 'add',
@@ -300,7 +300,7 @@ test('watch on index', async () => {
   await rep.mutate.addData({a: {id: 'aaa'}, b: {id: 'bbb'}});
 
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([
+  expect(spy.mock.lastCall).toEqual([
     [
       {
         op: 'add',
@@ -318,7 +318,7 @@ test('watch on index', async () => {
   spy.mockClear();
   await rep.mutate.addData({b: {id: 'bbb', more: 42}});
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([
+  expect(spy.mock.lastCall).toEqual([
     [
       {
         op: 'change',
@@ -332,7 +332,7 @@ test('watch on index', async () => {
   spy.mockClear();
   await rep.mutate.del('a');
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([
+  expect(spy.mock.lastCall).toEqual([
     [
       {
         op: 'del',
@@ -365,7 +365,7 @@ test('watch on index with prefix', async () => {
   await rep.mutate.addData({a: {id: 'aaa'}, b: {id: 'bbb'}});
 
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([
+  expect(spy.mock.lastCall).toEqual([
     [
       {
         op: 'add',
@@ -378,7 +378,7 @@ test('watch on index with prefix', async () => {
   spy.mockClear();
   await rep.mutate.addData({b: {id: 'bbb', more: 42}});
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([
+  expect(spy.mock.lastCall).toEqual([
     [
       {
         op: 'change',
@@ -392,7 +392,7 @@ test('watch on index with prefix', async () => {
   spy.mockClear();
   await rep.mutate.addData({a: {id: 'baa'}});
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([
+  expect(spy.mock.lastCall).toEqual([
     [
       {
         op: 'add',
@@ -409,7 +409,7 @@ test('watch on index with prefix', async () => {
   spy.mockClear();
   await rep.mutate.del('b');
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([
+  expect(spy.mock.lastCall).toEqual([
     [
       {
         op: 'del',
@@ -444,7 +444,7 @@ test('watch with index and initial callback with no data', async () => {
 
   // Initial callback should always be called even with no data.
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([[]]);
+  expect(spy.mock.lastCall).toEqual([[]]);
   spy.mockClear();
 
   unwatch();
@@ -468,7 +468,7 @@ test('watch and initial callback with data', async () => {
   });
   await tickAFewTimes(vi);
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([
+  expect(spy.mock.lastCall).toEqual([
     [
       {
         op: 'add',
@@ -507,7 +507,7 @@ test('watch with index and prefix and initial callback and data', async () => {
   await tickAFewTimes(vi);
 
   expect(spy).toHaveBeenCalledTimes(1);
-  expect(spy.mock.lastCall).to.deep.equal([
+  expect(spy.mock.lastCall).toEqual([
     [
       {
         op: 'add',
@@ -542,11 +542,11 @@ describe('watch with initial values', () => {
         {initialValuesInFirstDiff: true, prefix},
       );
 
-      expect(await q.dequeue()).to.deep.equal([]);
+      expect(await q.dequeue()).toEqual([]);
 
       await rep.mutate.addData({[key]: true});
 
-      expect(await q.dequeue()).to.deep.equal([
+      expect(await q.dequeue()).toEqual([
         {
           op: 'add',
           key,

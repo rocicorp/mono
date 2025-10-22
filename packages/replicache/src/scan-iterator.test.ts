@@ -43,13 +43,13 @@ test('makeScanResult', async () => {
   ) => {
     {
       const iter = makeScanResult(options, getTestScanAsyncIterator(entries));
-      expect(await asyncIterableToArray(iter.entries())).to.deep.equal(
+      expect(await asyncIterableToArray(iter.entries())).toEqual(
         expectedEntries,
       );
     }
     {
       const iter = makeScanResult(options, getTestScanIterator(entries));
-      expect(await asyncIterableToArray(iter.entries())).to.deep.equal(
+      expect(await asyncIterableToArray(iter.entries())).toEqual(
         expectedEntries,
       );
     }
@@ -314,7 +314,7 @@ test('makeScanResult with index', async () => {
     entries: (readonly [key: IndexKey, value: ReadonlyJSONValue])[],
   ): GetIndexScanIterator {
     return async function* (indexName, secondaryKey, primaryKey) {
-      expect(indexName).to.equal('index');
+      expect(indexName).toBe('index');
       for (const [key, value] of entries) {
         if (key[0] >= secondaryKey) {
           if (primaryKey === undefined || key[1] >= primaryKey) {
@@ -329,7 +329,7 @@ test('makeScanResult with index', async () => {
     entries: (readonly [key: IndexKey, value: ReadonlyJSONValue])[],
   ): GetIndexScanIterator {
     return function* (indexName, secondaryKey, primaryKey) {
-      expect(indexName).to.equal('index');
+      expect(indexName).toBe('index');
       for (const [key, value] of entries) {
         if (key[0] >= secondaryKey) {
           if (primaryKey === undefined || key[1] >= primaryKey) {
@@ -351,14 +351,14 @@ test('makeScanResult with index', async () => {
         indexOptions,
         getTestScanAsyncIterator(entries),
       );
-      expect(await asyncIterableToArray(iter.entries())).to.deep.equal(
+      expect(await asyncIterableToArray(iter.entries())).toEqual(
         expectedEntries,
       );
     }
     {
       const indexOptions = {indexName: 'index', ...options};
       const iter = makeScanResult(indexOptions, getTestScanIterator(entries));
-      expect(await asyncIterableToArray(iter.entries())).to.deep.equal(
+      expect(await asyncIterableToArray(iter.entries())).toEqual(
         expectedEntries,
       );
     }
@@ -653,7 +653,7 @@ test('fromKeyForIndexScan', () => {
     expected: [secondary: string, primary?: string | undefined],
   ) => {
     const indexOptions = {indexName: 'i', ...options};
-    expect(fromKeyForIndexScan(indexOptions)).to.deep.equal(expected);
+    expect(fromKeyForIndexScan(indexOptions)).toEqual(expected);
   };
 
   t({}, ['', undefined]);

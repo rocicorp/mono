@@ -8,12 +8,12 @@ import {
 
 test('indexDefinitionsEqual', () => {
   const t = (a: IndexDefinition, b: IndexDefinition = a) => {
-    expect(indexDefinitionEqual(a, b)).true;
-    expect(indexDefinitionEqual(b, a)).true;
+    expect(indexDefinitionEqual(a, b)).toBe(true);
+    expect(indexDefinitionEqual(b, a)).toBe(true);
   };
   const f = (a: IndexDefinition, b: IndexDefinition = a) => {
-    expect(indexDefinitionEqual(a, b)).false;
-    expect(indexDefinitionEqual(b, a)).false;
+    expect(indexDefinitionEqual(a, b)).toBe(false);
+    expect(indexDefinitionEqual(b, a)).toBe(false);
   };
 
   t({jsonPointer: ''});
@@ -33,12 +33,12 @@ test('indexDefinitionsEqual', () => {
 
 test('indexDefinitionsEqual', () => {
   const t = (a: IndexDefinitions, b: IndexDefinitions = a) => {
-    expect(indexDefinitionsEqual(a, b)).true;
-    expect(indexDefinitionsEqual(b, a)).true;
+    expect(indexDefinitionsEqual(a, b)).toBe(true);
+    expect(indexDefinitionsEqual(b, a)).toBe(true);
   };
   const f = (a: IndexDefinitions, b: IndexDefinitions = a) => {
-    expect(indexDefinitionsEqual(a, b)).false;
-    expect(indexDefinitionsEqual(b, a)).false;
+    expect(indexDefinitionsEqual(a, b)).toBe(false);
+    expect(indexDefinitionsEqual(b, a)).toBe(false);
   };
 
   t({});

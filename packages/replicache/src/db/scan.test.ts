@@ -28,7 +28,7 @@ test('scan', async () => {
         actual.push(entry[0]);
       }
       const expected2 = expected;
-      expect(actual).to.deep.equal(expected2);
+      expect(actual).toEqual(expected2);
     });
   };
 
@@ -82,7 +82,7 @@ test('scan index startKey', async () => {
         actual.push({primaryKey, secondaryKey, val: entry[1]});
       }
 
-      expect(actual).to.deep.equal(expected);
+      expect(actual).toEqual(expected);
     });
   };
 

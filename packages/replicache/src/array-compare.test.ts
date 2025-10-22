@@ -3,8 +3,9 @@ import {arrayCompare} from './array-compare.ts';
 
 test('array compare', () => {
   const t = <T>(a: ArrayLike<T>, b: ArrayLike<T>, expected: number) => {
-    expect(arrayCompare(a, b)).to.equal(expected);
-    expect(arrayCompare(b, a)).to.equal(-expected);
+    expect(arrayCompare(a, b)).toBe(expected);
+    // -expected || 0 converts -0 to 0 to avoid Object.is(-0, 0) === false
+    expect(arrayCompare(b, a)).toBe(-expected || 0);
   };
 
   t([], [], 0);

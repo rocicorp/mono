@@ -28,28 +28,28 @@ function hashes() {
 }
 
 test('isHash', () => {
-  expect(isHash(emptyHash)).to.be.true;
+  expect(isHash(emptyHash)).toBe(true);
 
   for (const h of hashes()) {
-    expect(isHash(h)).to.be.true;
-    expect(isHash(h + 'a')).to.be.true;
-    expect(isHash(String(h).slice(0, -1))).to.be.true;
+    expect(isHash(h)).toBe(true);
+    expect(isHash(h + 'a')).toBe(true);
+    expect(isHash(String(h).slice(0, -1))).toBe(true);
   }
 });
 
 test('parse', () => {
   for (const h of hashes()) {
-    expect(parse(String(emptyHash))).to.equal(emptyHash);
-    expect(parse(String(h))).to.equal(h);
-    expect(parse(h + 'a')).to.equal(h + 'a');
-    expect(parse(String(h).slice(0, -1))).to.equal(String(h).slice(0, -1));
+    expect(parse(String(emptyHash))).toBe(emptyHash);
+    expect(parse(String(h))).toBe(h);
+    expect(parse(h + 'a')).toBe(h + 'a');
+    expect(parse(String(h).slice(0, -1))).toBe(String(h).slice(0, -1));
   }
 });
 
 test('newRandomHash', () => {
   const h = newRandomHash();
-  expect(h.length).to.equal(22);
-  expect(h).to.match(/^[0-9a-v-]+$/);
+  expect(h.length).toBe(22);
+  expect(h).toMatch(/^[0-9a-v-]+$/);
 });
 
 test.skip('type checking only', () => {
@@ -68,49 +68,49 @@ test.skip('type checking only', () => {
 test('makeNewFakeHashFunction', () => {
   {
     const f = makeNewFakeHashFunction('a');
-    expect(f()).to.equal('a000000000000000000000');
-    expect(f()).to.equal('a000000000000000000001');
-    expect(f()).to.equal('a000000000000000000002');
+    expect(f()).toBe('a000000000000000000000');
+    expect(f()).toBe('a000000000000000000001');
+    expect(f()).toBe('a000000000000000000002');
   }
   {
     const f = makeNewFakeHashFunction('b');
-    expect(f()).to.equal('b000000000000000000000');
-    expect(f()).to.equal('b000000000000000000001');
-    expect(f()).to.equal('b000000000000000000002');
+    expect(f()).toBe('b000000000000000000000');
+    expect(f()).toBe('b000000000000000000001');
+    expect(f()).toBe('b000000000000000000002');
   }
   {
     const f = makeNewFakeHashFunction();
-    expect(f()).to.equal('fake000000000000000000');
-    expect(f()).to.equal('fake000000000000000001');
-    expect(f()).to.equal('fake000000000000000002');
+    expect(f()).toBe('fake000000000000000000');
+    expect(f()).toBe('fake000000000000000001');
+    expect(f()).toBe('fake000000000000000002');
   }
   {
     const f = makeNewFakeHashFunction('');
-    expect(f()).to.equal('0000000000000000000000');
-    expect(f()).to.equal('0000000000000000000001');
-    expect(f()).to.equal('0000000000000000000002');
+    expect(f()).toBe('0000000000000000000000');
+    expect(f()).toBe('0000000000000000000001');
+    expect(f()).toBe('0000000000000000000002');
   }
-  expect(() => makeNewFakeHashFunction('x')).to.throw();
-  expect(() => makeNewFakeHashFunction('000000000')).to.throw();
+  expect(() => makeNewFakeHashFunction('x')).toThrow();
+  expect(() => makeNewFakeHashFunction('000000000')).toThrow();
 });
 
 test('fakeHash', () => {
-  expect(String(fakeHash('aa')).length).to.equal(STRING_LENGTH);
-  expect(fakeHash('aa')).to.equal(fakeHash('aa'));
-  expect(fakeHash('aa')).to.equal('fake0000000000000000aa');
+  expect(String(fakeHash('aa')).length).toBe(STRING_LENGTH);
+  expect(fakeHash('aa')).toBe(fakeHash('aa'));
+  expect(fakeHash('aa')).toBe('fake0000000000000000aa');
 });
 
 test('valita schema', () => {
   for (const h of hashes()) {
-    expect(valita.is(h, hashSchema)).to.be.true;
+    expect(valita.is(h, hashSchema)).toBe(true);
   }
-  expect(valita.is('xyz', hashSchema)).to.be.false;
+  expect(valita.is('xyz', hashSchema)).toBe(false);
 
   for (const h of hashes()) {
-    expect(() => valita.assert(h, hashSchema)).not.to.throw();
+    expect(() => valita.assert(h, hashSchema)).not.toThrow();
   }
-  expect(() => valita.assert('xyz', hashSchema)).to.throw(TypeError);
-  expect(() => valita.assert('xyz', hashSchema)).to.throw(
+  expect(() => valita.assert('xyz', hashSchema)).toThrow(TypeError);
+  expect(() => valita.assert('xyz', hashSchema)).toThrow(
     'Invalid hash. Got "xyz"',
   );
 });

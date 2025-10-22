@@ -68,9 +68,9 @@ test('Gauge', () => {
     }
     const series = g.flush();
     if (c.expected === undefined) {
-      expect(series, c.name).to.be.undefined;
+      expect(series, c.name).toBeUndefined();
     } else {
-      expect(series, c.name).deep.equal({
+      expect(series, c.name).toEqual({
         metric: 'mygauge',
         points: c.expected,
       });
@@ -123,18 +123,18 @@ test('State', () => {
       m1.set(c.state);
     }
     const s1 = m1.flush();
-    expect(s1, c.name).deep.equal(c.expected);
+    expect(s1, c.name).toEqual(c.expected);
     const s2 = m1.flush();
-    expect(s2, c.name).deep.equal(c.expected);
+    expect(s2, c.name).toEqual(c.expected);
 
     const m2 = new State('mygauge', true);
     if (c.state !== undefined) {
       m2.set(c.state);
     }
     const s3 = m2.flush();
-    expect(s3, c.name).deep.equal(c.expected);
+    expect(s3, c.name).toEqual(c.expected);
     const s4 = m2.flush();
-    expect(s4, c.name).deep.equal(undefined);
+    expect(s4, c.name).toEqual(undefined);
   }
 });
 
@@ -271,7 +271,7 @@ test('MetricManager v1 connect metrics', async () => {
     intervalTickCount++;
 
     expect(reporter).toBeCalledTimes(1);
-    expect(reporter.mock.calls[0][0]).to.deep.equal([
+    expect(reporter.mock.calls[0][0]).toEqual([
       ...c.expected,
       {
         host: 'test-host',
@@ -547,7 +547,7 @@ test('MetricManager v2 connect metrics', async () => {
     intervalTickCount++;
 
     expect(reporter, c.name).toBeCalledTimes(1);
-    expect(reporter.mock.calls[0][0], c.name).to.deep.equal([
+    expect(reporter.mock.calls[0][0], c.name).toEqual([
       {
         host: 'test-host',
         metric: 'time_to_connect_ms',
@@ -586,7 +586,7 @@ test('MetricManager.stop', async () => {
 
   await vi.advanceTimersByTimeAsync(REPORT_INTERVAL_MS);
   expect(reporter).toBeCalledTimes(1);
-  expect(reporter.mock.calls[0][0]).to.deep.equal([
+  expect(reporter.mock.calls[0][0]).toEqual([
     {
       metric: 'time_to_connect_ms',
       points: [[REPORT_INTERVAL_MS / 1000, [100]]],

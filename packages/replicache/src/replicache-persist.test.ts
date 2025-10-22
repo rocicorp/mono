@@ -117,8 +117,8 @@ test('basic persist & load', async () => {
   }
 
   await rep.query(async tx => {
-    expect(await tx.get('a')).to.equal(1);
-    expect(await tx.get('b')).to.equal(2);
+    expect(await tx.get('a')).toBe(1);
+    expect(await tx.get('b')).toBe(2);
   });
 
   // If we create another instance it will lazy load the data from IDB
@@ -131,11 +131,11 @@ test('basic persist & load', async () => {
     {useUniqueName: false},
   );
   await rep2.query(async tx => {
-    expect(await tx.get('a')).to.equal(1);
-    expect(await tx.get('b')).to.equal(2);
+    expect(await tx.get('a')).toBe(1);
+    expect(await tx.get('b')).toBe(2);
   });
 
-  expect(rep.clientID).to.not.equal(rep2.clientID);
+  expect(rep.clientID).not.toBe(rep2.clientID);
 
   await perdag.close();
 });
@@ -159,7 +159,7 @@ describe('onClientStateNotFound', () => {
     await rep.persist();
 
     expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
-    expect(onClientStateNotFound.mock.lastCall).to.deep.equal([]);
+    expect(onClientStateNotFound.mock.lastCall).toEqual([]);
     expectLogContext(
       consoleErrorStub,
       0,
@@ -228,14 +228,14 @@ describe('onClientStateNotFound', () => {
     } catch (err) {
       e = err;
     }
-    expect(e).to.be.instanceOf(ClientStateNotFoundError);
+    expect(e).toBeInstanceOf(ClientStateNotFoundError);
     expectLogContext(
       consoleErrorStub,
       0,
       rep2,
       `Client state not found on client, clientID: ${clientID2}`,
     );
-    expect(onClientStateNotFound.mock.lastCall).to.deep.equal([]);
+    expect(onClientStateNotFound.mock.lastCall).toEqual([]);
   });
 
   test('Called in mutate if collected', async () => {
@@ -294,14 +294,14 @@ describe('onClientStateNotFound', () => {
       e = err;
     }
 
-    expect(e).to.be.instanceOf(ClientStateNotFoundError);
+    expect(e).toBeInstanceOf(ClientStateNotFoundError);
     expectLogContext(
       consoleErrorStub,
       0,
       rep2,
       `Client state not found on client, clientID: ${clientID2}`,
     );
-    expect(onClientStateNotFound.mock.lastCall).to.deep.equal([]);
+    expect(onClientStateNotFound.mock.lastCall).toEqual([]);
   });
 });
 
@@ -327,7 +327,7 @@ test('Persist throws if idb dropped', async () => {
   } catch (e) {
     err = e;
   }
-  expect(err).to.be.instanceOf(IDBNotFoundError);
+  expect(err).toBeInstanceOf(IDBNotFoundError);
 
   await rep.close();
 });

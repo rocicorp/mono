@@ -38,7 +38,7 @@ describe('base snapshot', () => {
     await withRead(store, async dagRead => {
       expect(
         (await baseSnapshotFromHash(genesisHash, dagRead)).chunk.hash,
-      ).to.equal(genesisHash);
+      ).toBe(genesisHash);
     });
 
     await b.addLocal(clientID);
@@ -53,7 +53,7 @@ describe('base snapshot', () => {
             dagRead,
           )
         ).chunk.hash,
-      ).to.equal(genesisHash);
+      ).toBe(genesisHash);
     });
 
     await b.addSnapshot(undefined, clientID);
@@ -66,7 +66,7 @@ describe('base snapshot', () => {
             dagRead,
           )
         ).chunk.hash,
-      ).to.equal(baseHash);
+      ).toBe(baseHash);
       return baseHash;
     });
 
@@ -80,7 +80,7 @@ describe('base snapshot', () => {
             dagRead,
           )
         ).chunk.hash,
-      ).to.equal(baseHash);
+      ).toBe(baseHash);
     });
   };
 
@@ -95,7 +95,7 @@ describe('local mutations', () => {
     await b.addGenesis(clientID);
     const genesisHash = b.chain[0].chunk.hash;
     await withRead(store, async dagRead => {
-      expect(await localMutations(genesisHash, dagRead)).to.have.lengthOf(0);
+      expect(await localMutations(genesisHash, dagRead)).toHaveLength(0);
     });
 
     await b.addLocal(clientID);
@@ -107,7 +107,7 @@ describe('local mutations', () => {
     const commits = await withRead(store, dagRead =>
       localMutations(headHash, dagRead),
     );
-    expect(commits).to.deep.equal([
+    expect(commits).toEqual([
       b.chain[formatVersion >= FormatVersion.DD31 ? 2 : 3],
       b.chain[1],
     ]);
@@ -129,7 +129,7 @@ test('local mutations greater than', async () => {
         {[clientID1]: 0, [clientID2]: 0},
         dagRead,
       ),
-    ).to.have.lengthOf(0);
+    ).toHaveLength(0);
   });
   await b.addLocal(clientID1);
   await b.addLocal(clientID2);
@@ -142,7 +142,7 @@ test('local mutations greater than', async () => {
     await withRead(store, dagRead =>
       localMutationsGreaterThan(headCommit, {}, dagRead),
     ),
-  ).to.deep.equal([]);
+  ).toEqual([]);
 
   expect(
     await withRead(store, dagRead =>
@@ -152,7 +152,7 @@ test('local mutations greater than', async () => {
         dagRead,
       ),
     ),
-  ).to.deep.equal([b.chain[5], b.chain[4], b.chain[3], b.chain[2], b.chain[1]]);
+  ).toEqual([b.chain[5], b.chain[4], b.chain[3], b.chain[2], b.chain[1]]);
 
   expect(
     await withRead(store, dagRead =>
@@ -162,7 +162,7 @@ test('local mutations greater than', async () => {
         dagRead,
       ),
     ),
-  ).to.deep.equal([b.chain[5], b.chain[4], b.chain[3]]);
+  ).toEqual([b.chain[5], b.chain[4], b.chain[3]]);
 
   expect(
     await withRead(store, dagRead =>
@@ -172,13 +172,13 @@ test('local mutations greater than', async () => {
         dagRead,
       ),
     ),
-  ).to.deep.equal([b.chain[5], b.chain[3]]);
+  ).toEqual([b.chain[5], b.chain[3]]);
 
   expect(
     await withRead(store, dagRead =>
       localMutationsGreaterThan(headCommit, {[clientID2]: 1}, dagRead),
     ),
-  ).to.deep.equal([b.chain[3]]);
+  ).toEqual([b.chain[3]]);
 
   expect(
     await withRead(store, dagRead =>
@@ -188,7 +188,7 @@ test('local mutations greater than', async () => {
         dagRead,
       ),
     ),
-  ).to.deep.equal([]);
+  ).toEqual([]);
 });
 
 describe('chain', () => {
@@ -202,8 +202,8 @@ describe('chain', () => {
       commitChain(b.chain[b.chain.length - 1].chunk.hash, dagRead),
     );
 
-    expect(got).to.have.lengthOf(1);
-    expect(got[0]).to.deep.equal(b.chain[0]);
+    expect(got).toHaveLength(1);
+    expect(got[0]).toEqual(b.chain[0]);
 
     await b.addSnapshot(undefined, clientID);
     await b.addLocal(clientID);
@@ -212,10 +212,10 @@ describe('chain', () => {
 
     const headHash = b.chain[b.chain.length - 1].chunk.hash;
     got = await withRead(store, dagRead => commitChain(headHash, dagRead));
-    expect(got).to.have.lengthOf(3);
-    expect(got[0]).to.deep.equal(b.chain[3]);
-    expect(got[1]).to.deep.equal(b.chain[2]);
-    expect(got[2]).to.deep.equal(b.chain[1]);
+    expect(got).toHaveLength(3);
+    expect(got[0]).toEqual(b.chain[3]);
+    expect(got[1]).toEqual(b.chain[2]);
+    expect(got[2]).toEqual(b.chain[1]);
   };
 
   test('dd31', () => t(FormatVersion.Latest));
@@ -226,13 +226,13 @@ test('load roundtrip', () => {
   const t = (chunk: Chunk, expected: Commit<Meta> | Error) => {
     {
       if (expected instanceof Error) {
-        expect(() => fromChunk(chunk)).to.throw(
+        expect(() => fromChunk(chunk)).toThrow(
           expected.constructor,
           expected.message,
         );
       } else {
         const actual = fromChunk(chunk);
-        expect(actual).to.deep.equal(expected);
+        expect(actual).toEqual(expected);
       }
     }
   };
@@ -435,17 +435,17 @@ test('accessors', async () => {
   );
   const lm = local.meta;
   if (lm.type === MetaType.LocalDD31) {
-    expect(lm.mutationID).to.equal(1);
-    expect(lm.mutatorName).to.equal('foo_mutator');
-    expect(lm.mutatorArgsJSON).to.equal(42);
-    expect(lm.originalHash).to.equal(originalHash);
-    expect(lm.timestamp).equal(timestamp);
-    expect(lm.clientID).equal(clientID);
+    expect(lm.mutationID).toBe(1);
+    expect(lm.mutatorName).toBe('foo_mutator');
+    expect(lm.mutatorArgsJSON).toBe(42);
+    expect(lm.originalHash).toBe(originalHash);
+    expect(lm.timestamp).toBe(timestamp);
+    expect(lm.clientID).toBe(clientID);
   } else {
     throw new Error('unexpected type');
   }
-  expect(local.meta.basisHash).to.equal(basisHash);
-  expect(local.valueHash).to.equal(valueHash);
+  expect(local.meta.basisHash).toBe(basisHash);
+  expect(local.valueHash).toBe(valueHash);
 
   const fakeRead = {
     // oxlint-disable-next-line require-await
@@ -455,7 +455,7 @@ test('accessors', async () => {
     },
   };
 
-  expect(await local.getNextMutationID(clientID, fakeRead)).to.equal(2);
+  expect(await local.getNextMutationID(clientID, fakeRead)).toBe(2);
 
   const snapshot = fromChunk(
     makeCommit(
@@ -471,14 +471,14 @@ test('accessors', async () => {
   );
   const sm = snapshot.meta;
   if (sm.type === MetaType.SnapshotDD31) {
-    expect(sm.lastMutationIDs[clientID]).to.equal(2);
+    expect(sm.lastMutationIDs[clientID]).toBe(2);
   } else {
     throw new Error('unexpected type');
   }
-  expect(sm.cookieJSON).to.deep.equal('cookie 2');
-  expect(sm.basisHash).to.equal(fakeHash('face9'));
-  expect(snapshot.valueHash).to.equal(fakeHash('face10'));
-  expect(await snapshot.getNextMutationID(clientID, fakeRead)).to.equal(3);
+  expect(sm.cookieJSON).toEqual('cookie 2');
+  expect(sm.basisHash).toBe(fakeHash('face9'));
+  expect(snapshot.valueHash).toBe(fakeHash('face10'));
+  expect(await snapshot.getNextMutationID(clientID, fakeRead)).toBe(3);
 });
 
 const chunkHasher = makeNewFakeHashFunction('face55');
@@ -520,22 +520,22 @@ test('getMutationID across commits with different clients', async () => {
   // oxlint-disable-next-line @typescript-eslint/no-non-null-assertion
   const local = b.chain.at(-1)!;
   await withRead(store, async dagRead => {
-    expect(await local.getMutationID(clientID, dagRead)).to.equal(2);
-    expect(await local.getMutationID(clientID2, dagRead)).to.equal(1);
+    expect(await local.getMutationID(clientID, dagRead)).toBe(2);
+    expect(await local.getMutationID(clientID2, dagRead)).toBe(1);
   });
 
   await withRead(store, async dagRead => {
-    expect(await getMutationID(clientID, dagRead, local.meta)).to.equal(2);
-    expect(await getMutationID(clientID2, dagRead, local.meta)).to.equal(1);
+    expect(await getMutationID(clientID, dagRead, local.meta)).toBe(2);
+    expect(await getMutationID(clientID2, dagRead, local.meta)).toBe(1);
   });
 });
 
 test('chunkIndexDefinitionEqualIgnoreName', () => {
   const t = (a: ChunkIndexDefinition, b = a) => {
-    expect(chunkIndexDefinitionEqualIgnoreName(a, b)).true;
+    expect(chunkIndexDefinitionEqualIgnoreName(a, b)).toBe(true);
   };
   const f = (a: ChunkIndexDefinition, b = a) => {
-    expect(chunkIndexDefinitionEqualIgnoreName(a, b)).false;
+    expect(chunkIndexDefinitionEqualIgnoreName(a, b)).toBe(false);
   };
 
   t({name: 'a', jsonPointer: '/a', keyPrefix: ''});

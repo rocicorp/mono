@@ -476,7 +476,7 @@ test('begin try pull DD31', async () => {
           break;
         }
 
-        expect(got, c.name).to.be.true;
+        expect(got, c.name).toBe(true);
       });
     }
 
@@ -526,8 +526,8 @@ test('begin try pull DD31', async () => {
           syncHeadCommit,
           clientID,
         );
-        expect(expSyncHead.lastMutationID).to.equal(gotLastMutationID);
-        expect(expSyncHead.cookie).to.deep.equal(gotCookie);
+        expect(expSyncHead.lastMutationID).toBe(gotLastMutationID);
+        expect(expSyncHead.cookie).toEqual(gotCookie);
         // Check the value is what's expected.
         const bTreeRead = new BTreeRead(
           read,
@@ -540,13 +540,13 @@ test('begin try pull DD31', async () => {
         gotValueMap.sort((a, b) => stringCompare(a[0], b[0]));
         const expValueMap = Array.from(expSyncHead.valueMap);
         expValueMap.sort((a, b) => stringCompare(a[0], b[0]));
-        expect(expValueMap).to.deep.equal(gotValueMap);
+        expect(expValueMap).toEqual(gotValueMap);
 
         // Check we have the expected index definitions.
         const indexes: string[] = syncHeadCommit.indexes.map(
           i => i.definition.name,
         );
-        expect(expSyncHead.indexes).to.deep.equal(indexes);
+        expect(expSyncHead.indexes).toEqual(indexes);
 
         // Check that we *don't* have old indexed values. The indexes should
         // have been rebuilt with a client view returned by the server that
@@ -562,39 +562,39 @@ test('begin try pull DD31', async () => {
             );
             const indexMap = read.getMapForIndex('2');
             for await (const _ of indexMap.scan('')) {
-              expect(false).to.be.true;
+              expect(false).toBe(true);
             }
           });
 
           assertObject(result);
-          expect(syncHeadCommit.chunk.hash).to.equal(result.syncHead);
+          expect(syncHeadCommit.chunk.hash).toBe(result.syncHead);
         }
       } else {
         const gotHead = await read.getHead(SYNC_HEAD_NAME);
-        expect(gotHead).to.be.undefined;
+        expect(gotHead).toBeUndefined();
         // When createSyncBranch is false or sync is a noop (empty patch,
         // same last mutation id, same cookie) we except BeginPull to succeed
         // but sync_head will be empty.
         if (typeof c.expBeginPullResult !== 'string') {
           assertObject(result);
-          expect(result.syncHead).to.be.equal(emptyHash);
+          expect(result.syncHead).toBe(emptyHash);
         }
       }
 
-      expect(typeof result).to.equal(typeof c.expBeginPullResult);
+      expect(typeof result).toBe(typeof c.expBeginPullResult);
       if (typeof result === 'object') {
         assertObject(c.expBeginPullResult);
-        expect(result.httpRequestInfo).to.deep.equal(
+        expect(result.httpRequestInfo).toEqual(
           c.expBeginPullResult.httpRequestInfo,
         );
         if (typeof c.pullResult === 'object') {
-          expect(result.pullResponse).to.deep.equal(c.pullResult);
+          expect(result.pullResponse).toEqual(c.pullResult);
         } else {
-          expect(result.pullResponse).to.be.undefined;
+          expect(result.pullResponse).toBeUndefined();
         }
       } else {
         // use to_debug since some errors cannot be made PartialEq
-        expect(result).to.equal(c.expBeginPullResult);
+        expect(result).toBe(c.expBeginPullResult);
       }
     });
   }
@@ -739,27 +739,27 @@ describe('maybe end try pull', () => {
 
       if (c.expErr !== undefined) {
         const e = c.expErr;
-        expect(result).to.equal(e);
+        expect(result).toBe(e);
       } else {
         assertObject(result);
         const resp = result;
-        expect(syncHead).to.equal(resp.syncHead);
-        expect(c.expReplayIDs.length).to.equal(
+        expect(syncHead).toBe(resp.syncHead);
+        expect(c.expReplayIDs.length).toBe(
           resp.replayMutations?.length,
           `${c.name}: expected ${c.expReplayIDs}, got ${resp.replayMutations}`,
         );
-        expect(Object.fromEntries(resp.diffs), c.name).to.deep.equal(
+        expect(Object.fromEntries(resp.diffs), c.name).toEqual(
           Object.fromEntries(c.expDiffs),
         );
 
         for (let i = 0; i < c.expReplayIDs.length; i++) {
           const chainIdx = b.chain.length - c.numNeedingReplay + i;
-          expect(c.expReplayIDs[i]).to.equal(
+          expect(c.expReplayIDs[i]).toBe(
             resp.replayMutations?.[i].meta.mutationID,
           );
           const commit = b.chain[chainIdx];
           if (commitIsLocal(commit)) {
-            expect(resp.replayMutations?.[i]).to.deep.equal(commit);
+            expect(resp.replayMutations?.[i]).toEqual(commit);
           } else {
             throw new Error('inconceivable');
           }
@@ -768,11 +768,11 @@ describe('maybe end try pull', () => {
         // Check if we set the main head like we should have.
         if (c.expReplayIDs.length === 0) {
           await withRead(store, async read => {
-            expect(syncHead).to.equal(
+            expect(syncHead).toBe(
               await read.getHead(DEFAULT_HEAD_NAME),
               c.name,
             );
-            expect(await read.getHead(SYNC_HEAD_NAME)).to.be.undefined;
+            expect(await read.getHead(SYNC_HEAD_NAME)).toBeUndefined();
           });
         }
       }
@@ -795,8 +795,8 @@ function makeFakePuller(options: FakePullerArgs): Puller {
     pullReq: PullRequestV1,
     requestID: string,
   ): Promise<PullerResultV1> => {
-    expect(options.expPullReq).to.deep.equal(pullReq);
-    expect(options.expRequestID).to.equal(requestID);
+    expect(options.expPullReq).toEqual(pullReq);
+    expect(options.expRequestID).toBe(requestID);
 
     let httpRequestInfo: HTTPRequestInfo;
     if (options.err !== undefined) {
@@ -930,7 +930,7 @@ describe('changed keys', () => {
         testSubscriptionsManagerOptions,
         formatVersion,
       );
-      expect(Object.fromEntries(result.diffs)).to.deep.equal(
+      expect(Object.fromEntries(result.diffs)).toEqual(
         Object.fromEntries(expectedDiffsMap),
       );
     };
@@ -1204,7 +1204,7 @@ test('pull for client group with multiple client local changes', async () => {
     lc,
   );
 
-  expect(response).to.deep.equal({
+  expect(response).toEqual({
     httpRequestInfo: {
       errorMessage: '',
       httpStatusCode: 200,
@@ -1255,7 +1255,7 @@ describe('beginPull DD31', () => {
       lc,
     );
 
-    expect(response).to.deep.equal({
+    expect(response).toEqual({
       httpRequestInfo: {
         errorMessage: '',
         httpStatusCode: 200,
@@ -1316,14 +1316,14 @@ describe('handlePullResponseDD31', () => {
       formatVersion,
     );
 
-    expect(result.type).to.equal(expectedResultType);
+    expect(result.type).toBe(expectedResultType);
     if (result.type === HandlePullResponseResultEnum.Applied) {
       assertHash(result.syncHead);
 
       await withRead(store, async dagRead => {
         const head = await commitFromHash(result.syncHead, dagRead);
         assertSnapshotCommitDD31(head);
-        expect(head.chunk.data.meta.lastMutationIDs).to.deep.equal(
+        expect(head.chunk.data.meta.lastMutationIDs).toEqual(
           expectedLastMutationIDs,
         );
 
@@ -1331,11 +1331,11 @@ describe('handlePullResponseDD31', () => {
           const map = new BTreeRead(dagRead, formatVersion, head.valueHash);
           expect(
             Object.fromEntries(await asyncIterableToArray(map.entries())),
-          ).deep.equal(expectedMap);
+          ).toEqual(expectedMap);
         }
         if (expectedIndex) {
-          expect(head.indexes.length).to.equal(1);
-          expect(head.indexes[0].definition.name).to.equal(expectedIndex[0]);
+          expect(head.indexes.length).toBe(1);
+          expect(head.indexes[0].definition.name).toBe(expectedIndex[0]);
           const map = new BTreeRead(
             dagRead,
             formatVersion,
@@ -1343,7 +1343,7 @@ describe('handlePullResponseDD31', () => {
           );
           expect(
             Object.fromEntries(await asyncIterableToArray(map.entries())),
-          ).deep.equal(expectedIndex[1]);
+          ).toEqual(expectedIndex[1]);
         }
       });
     }
