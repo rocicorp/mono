@@ -8,6 +8,7 @@ import type {PlannerNode} from './planner-node.ts';
 import {PlannerSource, type ConnectionCostModel} from './planner-source.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import {must} from '../../../shared/src/must.ts';
+import type {PlanDebugger} from './planner-debug.ts';
 
 /**
  * Captured state of a plan for comparison and restoration.
@@ -184,6 +185,59 @@ export class PlannerGraph {
   }
 
   /**
+   * Collect cost estimates from all nodes in the graph for debugging.
+   */
+  #collectNodeCosts(): Array<{
+    node: string;
+    nodeType: 'connection' | 'join' | 'fan-out' | 'fan-in' | 'terminus';
+    costEstimate: import('./planner-node.ts').CostEstimate;
+  }> {
+    const costs: Array<{
+      node: string;
+      nodeType: 'connection' | 'join' | 'fan-out' | 'fan-in' | 'terminus';
+      costEstimate: import('./planner-node.ts').CostEstimate;
+    }> = [];
+
+    // Collect connection costs
+    for (const c of this.connections) {
+      costs.push({
+        node: c.name,
+        nodeType: 'connection',
+        costEstimate: c.estimateCost(undefined),
+      });
+    }
+
+    // Collect join costs
+    for (const j of this.joins) {
+      costs.push({
+        node: j.getName(),
+        nodeType: 'join',
+        costEstimate: j.estimateCost(undefined),
+      });
+    }
+
+    // Collect fan-out costs
+    for (const fo of this.fanOuts) {
+      costs.push({
+        node: 'FO',
+        nodeType: 'fan-out',
+        costEstimate: fo.estimateCost(undefined),
+      });
+    }
+
+    // Collect fan-in costs
+    for (const fi of this.fanIns) {
+      costs.push({
+        node: 'FI',
+        nodeType: 'fan-in',
+        costEstimate: fi.estimateCost(undefined),
+      });
+    }
+
+    return costs;
+  }
+
+  /**
    * Validate that snapshot shape matches current graph structure.
    */
   #validateSnapshotShape(state: PlanState): void {
@@ -269,35 +323,86 @@ export class PlannerGraph {
    * with greedy selection of lowest-cost connections.
    *
    * Returns the best plan found across all attempts.
+   *
+   * @param planDebugger - Optional debugger to receive structured events during planning
    */
-  plan(): void {
+  plan(planDebugger?: PlanDebugger): void {
     const numAttempts = Math.min(
       this.connections.length,
       MAX_PLANNING_ATTEMPTS,
     );
     let bestCost = Infinity;
     let bestPlan: PlanState | undefined = undefined;
+    let bestAttemptNumber = -1;
 
     for (let i = 0; i < numAttempts; i++) {
       // Reset to initial state
       this.resetPlanningState();
 
+      planDebugger?.log({
+        type: 'attempt-start',
+        attemptNumber: i,
+        totalAttempts: numAttempts,
+      });
+
       // Get initial costs (no propagation yet)
       let costs = this.getUnpinnedConnectionCosts();
       if (i >= costs.length) break;
+
+      planDebugger?.log({
+        type: 'connection-costs',
+        attemptNumber: i,
+        costs: costs.map(c => ({
+          connection: c.connection.name,
+          cost: c.cost,
+          costEstimate: c.connection.estimateCost(undefined),
+          pinned: c.connection.pinned,
+          constraints: c.connection.getConstraintsForDebug(),
+        })),
+      });
 
       // Try to pick costs[i] as root for this attempt
       try {
         let connection = costs[i].connection;
         connection.pinned = true; // Pin FIRST
+
+        planDebugger?.log({
+          type: 'connection-selected',
+          attemptNumber: i,
+          connection: connection.name,
+          cost: costs[i].cost,
+          isRoot: true,
+        });
+
         pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
         checkAndConvertFOFI(this); // Convert FO/FI to UFO/UFI if joins flipped
         this.propagateConstraints(); // Then propagate
+
+        planDebugger?.log({
+          type: 'constraints-propagated',
+          attemptNumber: i,
+          connectionConstraints: this.connections.map(c => ({
+            connection: c.name,
+            constraints: c.getConstraintsForDebug(),
+          })),
+        });
 
         // Continue with greedy selection
         while (!this.hasPlan()) {
           costs = this.getUnpinnedConnectionCosts();
           if (costs.length === 0) break;
+
+          planDebugger?.log({
+            type: 'connection-costs',
+            attemptNumber: i,
+            costs: costs.map(c => ({
+              connection: c.connection.name,
+              cost: c.cost,
+              costEstimate: c.connection.estimateCost(undefined),
+              pinned: c.connection.pinned,
+              constraints: c.connection.getConstraintsForDebug(),
+            })),
+          });
 
           // Try connections in order until one works
           let success = false;
@@ -307,6 +412,15 @@ export class PlannerGraph {
 
             try {
               connection.pinned = true; // Pin FIRST
+
+              planDebugger?.log({
+                type: 'connection-selected',
+                attemptNumber: i,
+                connection: connection.name,
+                cost: connection.estimateCost(undefined).runningCost,
+                isRoot: false,
+              });
+
               pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
               checkAndConvertFOFI(this); // Convert FO/FI to UFO/UFI if joins flipped
               success = true;
@@ -324,24 +438,61 @@ export class PlannerGraph {
 
           if (!success) {
             // No connection could be pinned, this plan attempt failed
+            planDebugger?.log({
+              type: 'plan-failed',
+              attemptNumber: i,
+              reason:
+                'No connection could be pinned (all attempts led to unflippable joins)',
+            });
             break;
           }
 
           // Only propagate after successful connection selection
           this.propagateConstraints();
+
+          planDebugger?.log({
+            type: 'constraints-propagated',
+            attemptNumber: i,
+            connectionConstraints: this.connections.map(c => ({
+              connection: c.name,
+              constraints: c.getConstraintsForDebug(),
+            })),
+          });
         }
 
         // Evaluate this plan (if complete)
         if (this.hasPlan()) {
           const totalCost = this.getTotalCost();
+
+          planDebugger?.log({
+            type: 'plan-complete',
+            attemptNumber: i,
+            totalCost,
+            nodeCosts: this.#collectNodeCosts(),
+            joinStates: this.joins.map(j => {
+              const info = j.getDebugInfo();
+              return {
+                join: info.name,
+                type: info.type,
+                pinned: info.pinned,
+              };
+            }),
+          });
+
           if (totalCost < bestCost) {
             bestCost = totalCost;
             bestPlan = this.capturePlanningSnapshot();
+            bestAttemptNumber = i;
           }
         }
       } catch (e) {
         if (e instanceof UnflippableJoinError) {
           // This root connection led to an unreachable path, try next root
+          planDebugger?.log({
+            type: 'plan-failed',
+            attemptNumber: i,
+            reason: `Root connection led to unflippable join: ${e.message}`,
+          });
           continue;
         }
         throw e; // Re-throw other errors
@@ -355,6 +506,16 @@ export class PlannerGraph {
       // While we restore constraint maps from the snapshot, propagation
       // ensures FanOut/FanIn states and any derived values are correct.
       this.propagateConstraints();
+
+      planDebugger?.log({
+        type: 'best-plan-selected',
+        bestAttemptNumber,
+        totalCost: bestCost,
+        joinStates: this.joins.map(j => ({
+          join: j.getName(),
+          type: j.type,
+        })),
+      });
     }
   }
 }

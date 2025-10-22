@@ -195,11 +195,57 @@ export class PlannerJoin {
       runningCost: parentCost.runningCost * childCost.runningCost,
     };
   }
+
+  /**
+   * Get a human-readable name for this join for debugging.
+   * Format: "parentName ⋈ childName"
+   */
+  getName(): string {
+    const parentName = getNodeName(this.#parent);
+    const childName = getNodeName(this.#child);
+    return `${parentName} ⋈ ${childName}`;
+  }
+
+  /**
+   * Get debug information about this join's state.
+   */
+  getDebugInfo(): {
+    name: string;
+    type: 'semi' | 'flipped';
+    pinned: boolean;
+    planId: number;
+  } {
+    return {
+      name: this.getName(),
+      type: this.#type,
+      pinned: this.#pinned,
+      planId: this.planId,
+    };
+  }
 }
 
 export class UnflippableJoinError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'UnflippableJoinError';
+  }
+}
+
+/**
+ * Get a human-readable name for any planner node.
+ * Used for debugging and tracing.
+ */
+function getNodeName(node: PlannerNode): string {
+  switch (node.kind) {
+    case 'connection':
+      return node.name;
+    case 'join':
+      return node.getName();
+    case 'fan-out':
+      return 'FO';
+    case 'fan-in':
+      return 'FI';
+    case 'terminus':
+      return 'terminus';
   }
 }
