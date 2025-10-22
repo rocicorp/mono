@@ -6,11 +6,16 @@ import {
   type IncrementalMigrationMap,
   type Migration,
 } from '../../db/migration-lite.ts';
+import {listTables} from '../../db/lite-tables.ts';
 import {AutoResetSignal} from '../change-streamer/schema/tables.ts';
 import {
   CREATE_RUNTIME_EVENTS_TABLE,
   recordEvent,
 } from '../replicator/schema/replication-state.ts';
+import {
+  ColumnMetadataStore,
+  CREATE_COLUMN_METADATA_TABLE,
+} from './column-metadata.ts';
 
 export async function initReplica(
   log: LogContext,
@@ -75,6 +80,17 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
     },
     migrateData: (_, db) => {
       recordEvent(db, 'upgrade');
+    },
+  },
+
+  6: {
+    migrateSchema: (_, db) => {
+      db.exec(CREATE_COLUMN_METADATA_TABLE);
+    },
+    migrateData: (_, db) => {
+      const store = ColumnMetadataStore.getInstance(db);
+      const tables = listTables(db);
+      store!.populateFromExistingTables(tables);
     },
   },
 };
