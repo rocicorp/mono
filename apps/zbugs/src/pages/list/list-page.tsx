@@ -4,7 +4,6 @@ import classNames from 'classnames';
 import React, {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -32,6 +31,7 @@ import {mark} from '../../perf-log.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {preload} from '../../zero-preload.ts';
 import {useListContext} from '../../routes.tsx';
+import {ast} from 'zql/src/query/query-impl.ts';
 
 let firstRowRendered = false;
 const ITEM_SIZE = 56;
@@ -132,41 +132,33 @@ export function ListPage({onReady}: {onReady: () => void}) {
       ? Math.max(MIN_PAGE_SIZE, Math.ceil(size?.height / ITEM_SIZE) * 3)
       : MIN_PAGE_SIZE;
     if (newPageSize > pageSize) {
-      setPageSize(pageSize);
+      setPageSize(newPageSize);
     }
   }, [pageSize, size]);
+
+  const prevParamsKeyRef = useRef(listContextParams);
+  const paramsChanged = listContextParams !== prevParamsKeyRef.current;
+
+  const effectiveAnchor = paramsChanged ? TOP_ANCHOR : anchor;
+  console.log({anchor, effectiveAnchor}, anchor !== effectiveAnchor);
 
   const q = queries.issueListV2(
     login.loginState?.decoded,
     listContextParams,
     z.userID,
     pageSize,
-    anchor.startRow
+    effectiveAnchor.startRow
       ? {
-          id: anchor.startRow.id,
-          modified: anchor.startRow.modified,
-          created: anchor.startRow.created,
+          id: effectiveAnchor.startRow.id,
+          modified: effectiveAnchor.startRow.modified,
+          created: effectiveAnchor.startRow.created,
         }
       : null,
-    anchor.direction,
+    effectiveAnchor.direction,
   );
 
-  // For detecting if the base query, i.e. ignoring pagination parameters, has
-  // changed.
-  const baseQHash = queries
-    .issueListV2(
-      login.loginState?.decoded,
-      listContextParams,
-      z.userID,
-      null, // no limit
-      null, // no start
-      'forward', // fixed direction
-    )
-    .hash();
+  console.log(q.ast);
 
-  const [totalsForBaseQHash, setTotalsForBaseQHash] = useState<
-    unknown | undefined
-  >(undefined);
   const [estimatedTotal, setEstimatedTotal] = useState(0);
   const [total, setTotal] = useState<number | undefined>(undefined);
 
@@ -185,22 +177,20 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   // useLayoutEffect to avoid a render at the old scroll position which
   // will cause pages to get to that position to start to be loaded.
-  useLayoutEffect(() => {
-    listRef.current?.scrollTo(0, 0);
+  useEffect(() => {
+    console.log('scrolling to top', listRef.current);
+    virtualizer.scrollToOffset(0);
+    setEstimatedTotal(0);
+    setTotal(undefined);
     setAnchor(TOP_ANCHOR);
-  }, [baseQHash]);
+  }, [listContextParams]);
 
   // useLayoutEffect to avoid a 1 frame render of the old counts
-  useLayoutEffect(() => {
-    const eTotal = anchor.index + issues.length;
-    if (baseQHash !== totalsForBaseQHash) {
-      setEstimatedTotal(eTotal);
-      setTotal(undefined);
-      setTotalsForBaseQHash(baseQHash);
-    }
-    if (anchor.direction !== 'forward') {
+  useEffect(() => {
+    if (issuesResult.type !== 'complete') {
       return;
     }
+    const eTotal = anchor.index + issues.length;
     if (eTotal > estimatedTotal) {
       setEstimatedTotal(eTotal);
     }
@@ -208,8 +198,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       setTotal(eTotal);
     }
   }, [
-    baseQHash,
-    totalsForBaseQHash,
+    listContextParams,
     anchor,
     issuesResult.type,
     issues,
@@ -379,6 +368,14 @@ export function ListPage({onReady}: {onReady: () => void}) {
       return;
     }
 
+    console.log(
+      listRef.current?.scrollTop,
+      anchor,
+      virtualItems,
+      [issues[0], issues[1], [issues[2]]],
+      listRef.current?.scrollTop === 0,
+    );
+
     if (
       anchor.index !== 0 &&
       firstItem.index <= getNearPageEdgeThreshold(pageSize)
@@ -389,7 +386,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       return;
     }
 
-    if (issuesResult.type !== 'complete') {
+    if (issuesResult.type !== 'complete' || listRef.current?.scrollTop === 0) {
       return;
     }
 
