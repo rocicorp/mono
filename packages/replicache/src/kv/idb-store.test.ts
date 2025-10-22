@@ -101,7 +101,7 @@ describe('reopening IDB', () => {
     } catch (e) {
       ex = e;
     }
-    expect(ex as Error).toMatch(/Expected IndexedDB not found/);
+    expect((ex as Error).message).toMatch(/Expected IndexedDB not found/);
 
     // ensure that any db creation during the reopening process was aborted
     const req = indexedDB.open(name);

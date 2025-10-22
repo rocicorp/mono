@@ -266,7 +266,7 @@ test('pull request is only sent when pullURL or non-default puller are set', asy
 
   rep.pullIgnorePromise();
   await tickAFewTimes(vi);
-  expect(fetchMock.calls()).toHaveLength.greaterThan(0);
+  expect(fetchMock.calls().length).toBeGreaterThan(0);
 
   await tickAFewTimes(vi);
   fetchMock.reset();
