@@ -172,7 +172,7 @@ test('clear', async () => {
 test('getProfileID', async () => {
   const store = new IDBDatabasesStore(_ => new TestMemStore());
   const profileID = await store.getProfileID();
-  expect(profileID).toBeInstanceOf('string');
+  expect(profileID).toBeTypeOf('string');
   expect(profileID).toMatch(/^p[a-zA-Z0-9]+$/);
   const profileID2 = await store.getProfileID();
   expect(profileID2).toBe(profileID);

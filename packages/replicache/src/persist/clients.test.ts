@@ -674,7 +674,7 @@ describe('initClientV6', () => {
           formatVersion,
           enableClientGroupForking,
         );
-        expect(clientID).toBeInstanceOf('string');
+        expect(clientID).toBeTypeOf('string');
         assertClientV6(client);
         expect(newClientGroup).toBe(true);
         expect(clientMap.size).toBe(1);
