@@ -24,28 +24,21 @@ import {
 export interface ColumnMetadata {
   /** PostgreSQL type name, e.g., 'int8', 'varchar', 'text[]', 'user_role' */
   upstreamType: string;
-  /** True if column has NOT NULL constraint */
   isNotNull: boolean;
-  /** True if column is a PostgreSQL enum type */
   isEnum: boolean;
-  /** True if column is an array type (includes [] in upstreamType) */
   isArray: boolean;
   /** Maximum character length for varchar/char types */
   characterMaxLength?: number | null;
 }
 
-/**
- * Creates the _zero.column_metadata table.
- *
- * Columns:
- * - table_name: The name of the table this column belongs to
- * - column_name: The name of the column
- * - upstream_type: The PostgreSQL type name (e.g., 'int8', 'varchar', 'my_enum')
- * - is_not_null: 1 if column has NOT NULL constraint, 0 otherwise
- * - is_enum: 1 if column is a PostgreSQL enum type, 0 otherwise
- * - is_array: 1 if column is an array type, 0 otherwise
- * - character_max_length: Maximum length for character types (nullable)
- */
+type ColumnMetadataRow = {
+  upstream_type: string;
+  is_not_null: number;
+  is_enum: number;
+  is_array: number;
+  character_max_length: number | null;
+};
+
 export const CREATE_COLUMN_METADATA_TABLE = `
   CREATE TABLE "_zero.column_metadata" (
     table_name TEXT NOT NULL,
@@ -57,12 +50,8 @@ export const CREATE_COLUMN_METADATA_TABLE = `
     character_max_length INTEGER,
     PRIMARY KEY (table_name, column_name)
   );
-  CREATE INDEX "idx_column_metadata_table" ON "_zero.column_metadata"(table_name);
 `;
 
-/**
- * Inserts metadata for a single column.
- */
 export function insertColumnMetadata(
   db: Database,
   tableName: string,
@@ -86,9 +75,6 @@ export function insertColumnMetadata(
   );
 }
 
-/**
- * Updates metadata for a column (type change or rename).
- */
 export function updateColumnMetadata(
   db: Database,
   tableName: string,
@@ -119,9 +105,6 @@ export function updateColumnMetadata(
   );
 }
 
-/**
- * Deletes metadata for a single column.
- */
 export function deleteColumnMetadata(
   db: Database,
   tableName: string,
@@ -135,9 +118,6 @@ export function deleteColumnMetadata(
   ).run(tableName, columnName);
 }
 
-/**
- * Deletes all metadata for a table.
- */
 export function deleteTableMetadata(db: Database, tableName: string): void {
   db.prepare(
     `
@@ -147,9 +127,6 @@ export function deleteTableMetadata(db: Database, tableName: string): void {
   ).run(tableName);
 }
 
-/**
- * Renames a table in the metadata (updates all column entries).
- */
 export function renameTableMetadata(
   db: Database,
   oldTableName: string,
@@ -226,9 +203,6 @@ export function populateColumnMetadataFromExistingTables(
   }
 }
 
-/**
- * Checks if the metadata table exists.
- */
 export function hasColumnMetadataTable(db: Database): boolean {
   const result = db
     .prepare(
@@ -241,15 +215,11 @@ export function hasColumnMetadataTable(db: Database): boolean {
   return result !== undefined;
 }
 
-/**
- * Reads metadata for a single column.
- * Returns null if the column metadata doesn't exist.
- */
 export function getColumnMetadata(
   db: Database,
   tableName: string,
   columnName: string,
-): ColumnMetadata | null {
+): ColumnMetadata | undefined {
   const row = db
     .prepare(
       `
@@ -258,18 +228,10 @@ export function getColumnMetadata(
     WHERE table_name = ? AND column_name = ?
     `,
     )
-    .get(tableName, columnName) as
-    | {
-        upstream_type: string;
-        is_not_null: number;
-        is_enum: number;
-        is_array: number;
-        character_max_length: number | null;
-      }
-    | undefined;
+    .get(tableName, columnName) as ColumnMetadataRow | undefined;
 
   if (!row) {
-    return null;
+    return undefined;
   }
 
   return {
@@ -281,10 +243,6 @@ export function getColumnMetadata(
   };
 }
 
-/**
- * Reads all column metadata for a table.
- * Returns a Map from column name to ColumnMetadata.
- */
 export function getTableMetadata(
   db: Database,
   tableName: string,
@@ -298,14 +256,7 @@ export function getTableMetadata(
     ORDER BY column_name
     `,
     )
-    .all(tableName) as Array<{
-    column_name: string;
-    upstream_type: string;
-    is_not_null: number;
-    is_enum: number;
-    is_array: number;
-    character_max_length: number | null;
-  }>;
+    .all(tableName) as Array<ColumnMetadataRow & {column_name: string}>;
 
   const metadata = new Map<string, ColumnMetadata>();
   for (const row of rows) {
