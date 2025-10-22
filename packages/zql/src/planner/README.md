@@ -23,7 +23,7 @@ Think of this as the "blueprint" of the query - the structural relationships tha
 Modified during `PlannerGraph.plan()` as we search for the optimal execution plan:
 
 - **Pinned flags**: Which connections have been locked into the plan
-- **Join types**: Whether joins are 'left' (original) or 'flipped' (reversed)
+- **Join types**: Whether joins are 'semi' (original) or 'flipped' (reversed)
 - **Accumulated constraints**: What constraints have propagated from parent joins
 
 Think of this as the "current attempt" - the state that changes as we explore different plans.

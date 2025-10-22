@@ -9,11 +9,11 @@ const pinned = {
 } as PlannerNode;
 
 suite('PlannerJoin', () => {
-  test('initial state is left join, unpinned', () => {
+  test('initial state is semi join, unpinned', () => {
     const {join} = createJoin();
 
     expect(join.kind).toBe('join');
-    expect(join.type).toBe('left');
+    expect(join.type).toBe('semi');
     expect(join.pinned).toBe(false);
   });
 
@@ -48,7 +48,7 @@ suite('PlannerJoin', () => {
     const {join} = createJoin();
 
     join.flip();
-    expect(() => join.flip()).toThrow('Can only flip a left join');
+    expect(() => join.flip()).toThrow('Can only flip a semi-join');
   });
 
   test('maybeFlip() flips when input is child', () => {
@@ -62,7 +62,7 @@ suite('PlannerJoin', () => {
     const {parent, join} = createJoin();
 
     join.flipIfNeeded(parent);
-    expect(join.type).toBe('left');
+    expect(join.type).toBe('semi');
   });
 
   test('reset() clears pinned and flipped state', () => {
@@ -74,11 +74,11 @@ suite('PlannerJoin', () => {
     expect(join.pinned).toBe(true);
 
     join.reset();
-    expect(join.type).toBe('left');
+    expect(join.type).toBe('semi');
     expect(join.pinned).toBe(false);
   });
 
-  test('propagateConstraints() on pinned left join sends constraints to child', () => {
+  test('propagateConstraints() on pinned semi join sends constraints to child', () => {
     const {child, join} = createJoin();
 
     join.pin();

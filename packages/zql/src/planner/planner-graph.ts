@@ -14,7 +14,7 @@ import {must} from '../../../shared/src/must.ts';
  */
 type PlanState = {
   connections: Array<{pinned: boolean}>;
-  joins: Array<{type: 'left' | 'flipped'; pinned: boolean}>;
+  joins: Array<{type: 'semi' | 'flipped'; pinned: boolean}>;
   fanOuts: Array<{type: 'FO' | 'UFO'}>;
   fanIns: Array<{type: 'FI' | 'UFI'}>;
   connectionConstraints: Array<Map<string, PlannerConstraint | undefined>>;
