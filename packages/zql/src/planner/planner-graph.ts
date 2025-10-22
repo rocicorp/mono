@@ -339,70 +339,80 @@ export class PlannerGraph {
       // Reset to initial state
       this.resetPlanningState();
 
-      planDebugger?.log({
-        type: 'attempt-start',
-        attemptNumber: i,
-        totalAttempts: numAttempts,
-      });
+      if (planDebugger) {
+        planDebugger.log({
+          type: 'attempt-start',
+          attemptNumber: i,
+          totalAttempts: numAttempts,
+        });
+      }
 
       // Get initial costs (no propagation yet)
       let costs = this.getUnpinnedConnectionCosts();
       if (i >= costs.length) break;
 
-      planDebugger?.log({
-        type: 'connection-costs',
-        attemptNumber: i,
-        costs: costs.map(c => ({
-          connection: c.connection.name,
-          cost: c.cost,
-          costEstimate: c.connection.estimateCost(undefined),
-          pinned: c.connection.pinned,
-          constraints: c.connection.getConstraintsForDebug(),
-        })),
-      });
+      if (planDebugger) {
+        planDebugger.log({
+          type: 'connection-costs',
+          attemptNumber: i,
+          costs: costs.map(c => ({
+            connection: c.connection.name,
+            cost: c.cost,
+            costEstimate: c.connection.estimateCost(undefined),
+            pinned: c.connection.pinned,
+            constraints: c.connection.getConstraintsForDebug(),
+          })),
+        });
+      }
 
       // Try to pick costs[i] as root for this attempt
       try {
         let connection = costs[i].connection;
         connection.pinned = true; // Pin FIRST
 
-        planDebugger?.log({
-          type: 'connection-selected',
-          attemptNumber: i,
-          connection: connection.name,
-          cost: costs[i].cost,
-          isRoot: true,
-        });
+        if (planDebugger) {
+          planDebugger.log({
+            type: 'connection-selected',
+            attemptNumber: i,
+            connection: connection.name,
+            cost: costs[i].cost,
+            isRoot: true,
+          });
+        }
 
         pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
         checkAndConvertFOFI(this); // Convert FO/FI to UFO/UFI if joins flipped
         this.propagateConstraints(); // Then propagate
 
-        planDebugger?.log({
-          type: 'constraints-propagated',
-          attemptNumber: i,
-          connectionConstraints: this.connections.map(c => ({
-            connection: c.name,
-            constraints: c.getConstraintsForDebug(),
-          })),
-        });
+        if (planDebugger) {
+          planDebugger.log({
+            type: 'constraints-propagated',
+            attemptNumber: i,
+            connectionConstraints: this.connections.map(c => ({
+              connection: c.name,
+              constraints: c.getConstraintsForDebug(),
+            })),
+          });
+        }
 
         // Continue with greedy selection
         while (!this.hasPlan()) {
           costs = this.getUnpinnedConnectionCosts();
           if (costs.length === 0) break;
 
-          planDebugger?.log({
-            type: 'connection-costs',
-            attemptNumber: i,
-            costs: costs.map(c => ({
-              connection: c.connection.name,
-              cost: c.cost,
-              costEstimate: c.connection.estimateCost(undefined),
-              pinned: c.connection.pinned,
-              constraints: c.connection.getConstraintsForDebug(),
-            })),
-          });
+          if (planDebugger) {
+            planDebugger.log({
+              type: 'connection-costs',
+              attemptNumber: i,
+              costs: costs.map(c => ({
+                connection: c.connection.name,
+                cost: c.cost,
+                costEstimate: c.connection.estimateCost(undefined),
+                pinned: c.connection.pinned,
+                constraints: c.connection.getConstraintsForDebug(),
+              })),
+            });
+          }
 
           // Try connections in order until one works
           let success = false;
@@ -413,13 +423,15 @@ export class PlannerGraph {
             try {
               connection.pinned = true; // Pin FIRST
 
-              planDebugger?.log({
-                type: 'connection-selected',
-                attemptNumber: i,
-                connection: connection.name,
-                cost: connection.estimateCost(undefined).runningCost,
-                isRoot: false,
-              });
+              if (planDebugger) {
+                planDebugger.log({
+                  type: 'connection-selected',
+                  attemptNumber: i,
+                  connection: connection.name,
+                  cost: connection.estimateCost(undefined).runningCost,
+                  isRoot: false,
+                });
+              }
 
               pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
               checkAndConvertFOFI(this); // Convert FO/FI to UFO/UFI if joins flipped
@@ -438,46 +450,52 @@ export class PlannerGraph {
 
           if (!success) {
             // No connection could be pinned, this plan attempt failed
-            planDebugger?.log({
-              type: 'plan-failed',
-              attemptNumber: i,
-              reason:
-                'No connection could be pinned (all attempts led to unflippable joins)',
-            });
+            if (planDebugger) {
+              planDebugger.log({
+                type: 'plan-failed',
+                attemptNumber: i,
+                reason:
+                  'No connection could be pinned (all attempts led to unflippable joins)',
+              });
+            }
             break;
           }
 
           // Only propagate after successful connection selection
           this.propagateConstraints();
 
-          planDebugger?.log({
-            type: 'constraints-propagated',
-            attemptNumber: i,
-            connectionConstraints: this.connections.map(c => ({
-              connection: c.name,
-              constraints: c.getConstraintsForDebug(),
-            })),
-          });
+          if (planDebugger) {
+            planDebugger.log({
+              type: 'constraints-propagated',
+              attemptNumber: i,
+              connectionConstraints: this.connections.map(c => ({
+                connection: c.name,
+                constraints: c.getConstraintsForDebug(),
+              })),
+            });
+          }
         }
 
         // Evaluate this plan (if complete)
         if (this.hasPlan()) {
           const totalCost = this.getTotalCost();
 
-          planDebugger?.log({
-            type: 'plan-complete',
-            attemptNumber: i,
-            totalCost,
-            nodeCosts: this.#collectNodeCosts(),
-            joinStates: this.joins.map(j => {
-              const info = j.getDebugInfo();
-              return {
-                join: info.name,
-                type: info.type,
-                pinned: info.pinned,
-              };
-            }),
-          });
+          if (planDebugger) {
+            planDebugger.log({
+              type: 'plan-complete',
+              attemptNumber: i,
+              totalCost,
+              nodeCosts: this.#collectNodeCosts(),
+              joinStates: this.joins.map(j => {
+                const info = j.getDebugInfo();
+                return {
+                  join: info.name,
+                  type: info.type,
+                  pinned: info.pinned,
+                };
+              }),
+            });
+          }
 
           if (totalCost < bestCost) {
             bestCost = totalCost;
@@ -488,11 +506,13 @@ export class PlannerGraph {
       } catch (e) {
         if (e instanceof UnflippableJoinError) {
           // This root connection led to an unreachable path, try next root
-          planDebugger?.log({
-            type: 'plan-failed',
-            attemptNumber: i,
-            reason: `Root connection led to unflippable join: ${e.message}`,
-          });
+          if (planDebugger) {
+            planDebugger.log({
+              type: 'plan-failed',
+              attemptNumber: i,
+              reason: `Root connection led to unflippable join: ${e.message}`,
+            });
+          }
           continue;
         }
         throw e; // Re-throw other errors
@@ -507,15 +527,17 @@ export class PlannerGraph {
       // ensures FanOut/FanIn states and any derived values are correct.
       this.propagateConstraints();
 
-      planDebugger?.log({
-        type: 'best-plan-selected',
-        bestAttemptNumber,
-        totalCost: bestCost,
-        joinStates: this.joins.map(j => ({
-          join: j.getName(),
-          type: j.type,
-        })),
-      });
+      if (planDebugger) {
+        planDebugger.log({
+          type: 'best-plan-selected',
+          bestAttemptNumber,
+          totalCost: bestCost,
+          joinStates: this.joins.map(j => ({
+            join: j.getName(),
+            type: j.type,
+          })),
+        });
+      }
     }
   }
 }
