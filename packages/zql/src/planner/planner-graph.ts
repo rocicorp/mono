@@ -4,7 +4,7 @@ import type {PlannerFanOut} from './planner-fan-out.ts';
 import type {PlannerFanIn} from './planner-fan-in.ts';
 import type {PlannerConnection} from './planner-connection.ts';
 import type {PlannerTerminus} from './planner-terminus.ts';
-import type {PlannerNode} from './planner-node.ts';
+import type {CostEstimate, PlannerNode} from './planner-node.ts';
 import {PlannerSource, type ConnectionCostModel} from './planner-source.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -190,12 +190,12 @@ export class PlannerGraph {
   #collectNodeCosts(): Array<{
     node: string;
     nodeType: 'connection' | 'join' | 'fan-out' | 'fan-in' | 'terminus';
-    costEstimate: import('./planner-node.ts').CostEstimate;
+    costEstimate: CostEstimate;
   }> {
     const costs: Array<{
       node: string;
       nodeType: 'connection' | 'join' | 'fan-out' | 'fan-in' | 'terminus';
-      costEstimate: import('./planner-node.ts').CostEstimate;
+      costEstimate: CostEstimate;
     }> = [];
 
     // Collect connection costs
