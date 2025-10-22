@@ -735,7 +735,16 @@ describe('view-syncer/pipeline-driver', () => {
 
     replicator.processTransaction(
       '134',
-      messages.addColumn('issues', 'newColumn', {dataType: 'TEXT', pos: 0}),
+      messages.addColumn('issues', 'newColumn', {
+        metadata: {
+          upstreamType: 'TEXT',
+          isNotNull: false,
+          isEnum: false,
+          isArray: false,
+          characterMaxLength: null,
+        },
+        pos: 0,
+      }),
     );
 
     pipelines.advanceWithoutDiff();

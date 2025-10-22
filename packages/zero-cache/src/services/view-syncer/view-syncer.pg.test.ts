@@ -2866,7 +2866,16 @@ describe('view-syncer/service', () => {
 
     replicator.processTransaction(
       '07',
-      messages.addColumn('issues', 'newColumn', {dataType: 'TEXT', pos: 0}),
+      messages.addColumn('issues', 'newColumn', {
+        metadata: {
+          upstreamType: 'TEXT',
+          isNotNull: false,
+          isEnum: false,
+          isArray: false,
+          characterMaxLength: null,
+        },
+        pos: 0,
+      }),
     );
 
     stateChanges.push({state: 'version-ready'});

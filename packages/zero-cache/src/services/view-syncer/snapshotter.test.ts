@@ -617,7 +617,16 @@ describe('view-syncer/snapshotter', () => {
 
     replicator.processTransaction(
       '07',
-      messages.addColumn('comments', 'likes', {dataType: 'INT4', pos: 0}),
+      messages.addColumn('comments', 'likes', {
+        metadata: {
+          upstreamType: 'INT4',
+          isNotNull: false,
+          isEnum: false,
+          isArray: false,
+          characterMaxLength: null,
+        },
+        pos: 0,
+      }),
     );
 
     const diff = s.advance(tableSpecs);

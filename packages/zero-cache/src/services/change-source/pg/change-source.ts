@@ -724,7 +724,8 @@ class ChangeMaker {
         oldSpec.metadata.isNotNull !== newSpec.metadata.isNotNull ||
         oldSpec.metadata.isEnum !== newSpec.metadata.isEnum ||
         oldSpec.metadata.isArray !== newSpec.metadata.isArray ||
-        oldSpec.metadata.characterMaxLength !== newSpec.metadata.characterMaxLength;
+        oldSpec.metadata.characterMaxLength !==
+          newSpec.metadata.characterMaxLength;
 
       if (
         oldName !== newName ||

@@ -31,16 +31,28 @@ describe('tables/create', () => {
         columns: {
           clientID: {
             pos: 1,
-            dataType: 'varchar',
-            characterMaximumLength: 180,
+            metadata: {
+              upstreamType: 'varchar',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: 180,
+            },
+
             notNull: true,
             elemPgTypeClass: null,
             dflt: null,
           },
           lastMutationID: {
             pos: 2,
-            dataType: 'int8',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'int8',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+
             notNull: true,
             elemPgTypeClass: null,
             dflt: null,
@@ -53,24 +65,42 @@ describe('tables/create', () => {
         columns: {
           clientID: {
             pos: 1,
-            dataType: 'varchar|NOT_NULL',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'varchar',
+              isNotNull: true,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: null,
             dflt: null,
           },
           lastMutationID: {
             pos: 2,
-            dataType: 'int8|NOT_NULL',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'int8',
+              isNotNull: true,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: null,
             dflt: null,
           },
           ['_0_version']: {
             pos: 3,
-            dataType: 'TEXT',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'TEXT',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+
             dflt: null,
             notNull: false,
             elemPgTypeClass: null,
@@ -92,16 +122,28 @@ describe('tables/create', () => {
         columns: {
           clientID: {
             pos: 1,
-            dataType: 'varchar',
-            characterMaximumLength: 180,
+            metadata: {
+              upstreamType: 'varchar',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: 180,
+            },
+
             notNull: true,
             elemPgTypeClass: null,
             dflt: null,
           },
           lastMutationID: {
             pos: 2,
-            dataType: 'int8',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'int8',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+
             notNull: true,
             elemPgTypeClass: null,
             dflt: null,
@@ -114,23 +156,40 @@ describe('tables/create', () => {
         columns: {
           clientID: {
             pos: 1,
-            dataType: 'varchar|NOT_NULL',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'varchar',
+              isNotNull: true,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: null,
             dflt: null,
           },
           lastMutationID: {
             pos: 2,
-            dataType: 'int8|NOT_NULL',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'int8',
+              isNotNull: true,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: null,
             dflt: null,
           },
           ['_0_version']: {
-            characterMaximumLength: null,
-            dataType: 'TEXT',
+            metadata: {
+              upstreamType: 'TEXT',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
             dflt: null,
             notNull: false,
             elemPgTypeClass: null,
@@ -157,48 +216,80 @@ describe('tables/create', () => {
         columns: {
           ['user_id']: {
             pos: 1,
-            dataType: 'int4',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'int4',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+
             notNull: true,
             elemPgTypeClass: null,
             dflt: null,
           },
           handle: {
             pos: 2,
-            characterMaximumLength: 40,
-            dataType: 'varchar',
+            metadata: {
+              upstreamType: 'varchar',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
             notNull: false,
             elemPgTypeClass: null,
             dflt: null,
           },
           rank: {
             pos: 3,
-            characterMaximumLength: null,
-            dataType: 'int8',
+            metadata: {
+              upstreamType: 'int8',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
             notNull: false,
             elemPgTypeClass: null,
             dflt: '1',
           },
           admin: {
             pos: 4,
-            dataType: 'bool',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'bool',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: null,
             dflt: 'false',
           },
           bigint: {
             pos: 5,
-            characterMaximumLength: null,
-            dataType: 'int8',
+            metadata: {
+              upstreamType: 'int8',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
             notNull: false,
             elemPgTypeClass: null,
             dflt: "'2147483648'::bigint",
           },
           enumnum: {
             pos: 6,
-            characterMaximumLength: null,
-            dataType: 'my_type',
+            metadata: {
+              upstreamType: 'my_type',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
             pgTypeClass: PostgresTypeClass.Enum,
             notNull: false,
             elemPgTypeClass: null,
@@ -212,55 +303,92 @@ describe('tables/create', () => {
         columns: {
           ['user_id']: {
             pos: 1,
-            dataType: 'int4|NOT_NULL',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'int4',
+              isNotNull: true,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: null,
             dflt: null,
           },
           handle: {
             pos: 2,
-            characterMaximumLength: null,
-            dataType: 'varchar',
+            metadata: {
+              upstreamType: 'varchar',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
             notNull: false,
             elemPgTypeClass: null,
             dflt: null,
           },
           rank: {
             pos: 3,
-            characterMaximumLength: null,
-            dataType: 'int8',
+            metadata: {
+              upstreamType: 'int8',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
             notNull: false,
             elemPgTypeClass: null,
             dflt: null,
           },
           admin: {
             pos: 4,
-            dataType: 'bool',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'bool',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: null,
             dflt: null,
           },
           bigint: {
             pos: 5,
-            characterMaximumLength: null,
-            dataType: 'int8',
+            metadata: {
+              upstreamType: 'int8',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
             notNull: false,
             elemPgTypeClass: null,
             dflt: null,
           },
           enumnum: {
             pos: 6,
-            characterMaximumLength: null,
-            dataType: 'my_type|TEXT_ENUM',
+            metadata: {
+              upstreamType: 'my_type',
+              isNotNull: false,
+              isEnum: true,
+              isArray: false,
+              characterMaxLength: null,
+            },
             notNull: false,
             elemPgTypeClass: null,
             dflt: null,
           },
           ['_0_version']: {
-            characterMaximumLength: null,
-            dataType: 'TEXT',
+            metadata: {
+              upstreamType: 'TEXT',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
             dflt: null,
             notNull: false,
             elemPgTypeClass: null,
@@ -285,32 +413,56 @@ describe('tables/create', () => {
         columns: {
           id: {
             pos: 1,
-            dataType: 'int4',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'int4',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+
             notNull: true,
             elemPgTypeClass: null,
             dflt: null,
           },
           tags: {
             pos: 2,
-            dataType: 'varchar[]',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'varchar[]',
+              isNotNull: false,
+              isEnum: false,
+              isArray: true,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: 'b',
             dflt: null,
           },
           nums: {
             pos: 3,
-            dataType: 'int4[]',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'int4[]',
+              isNotNull: false,
+              isEnum: false,
+              isArray: true,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: 'b',
             dflt: null,
           },
           enums: {
             pos: 4,
-            dataType: 'my_type[]',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'my_type[]',
+              isNotNull: false,
+              isEnum: false,
+              isArray: true,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: 'e',
             dflt: null,
@@ -323,40 +475,70 @@ describe('tables/create', () => {
         columns: {
           id: {
             pos: 1,
-            dataType: 'int4|NOT_NULL',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'int4',
+              isNotNull: true,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: null,
             dflt: null,
           },
           tags: {
             pos: 2,
-            dataType: 'varchar[]',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'varchar[]',
+              isNotNull: false,
+              isEnum: false,
+              isArray: true,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: 'b',
             dflt: null,
           },
           nums: {
             pos: 3,
-            dataType: 'int4[]',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'int4[]',
+              isNotNull: false,
+              isEnum: false,
+              isArray: true,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: 'b',
             dflt: null,
           },
           enums: {
             pos: 4,
-            dataType: 'my_type[]|TEXT_ENUM',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'my_type[]',
+              isNotNull: false,
+              isEnum: true,
+              isArray: true,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: 'e',
             dflt: null,
           },
           ['_0_version']: {
             pos: 5,
-            dataType: 'TEXT',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'TEXT',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+
             dflt: null,
             notNull: false,
             elemPgTypeClass: null,
@@ -380,32 +562,56 @@ describe('tables/create', () => {
         columns: {
           id: {
             pos: 1,
-            dataType: 'int4',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'int4',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+
             notNull: true,
             elemPgTypeClass: null,
             dflt: null,
           },
           matrix: {
             pos: 2,
-            dataType: 'int4[][]',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'int4[][]',
+              isNotNull: false,
+              isEnum: false,
+              isArray: true,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: 'b',
             dflt: null,
           },
           enum_matrix: {
             pos: 3,
-            dataType: 'my_type[][]',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'my_type[][]',
+              isNotNull: false,
+              isEnum: false,
+              isArray: true,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: 'e',
             dflt: null,
           },
           text_3d: {
             pos: 4,
-            dataType: 'text[][][]',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'text[][][]',
+              isNotNull: false,
+              isEnum: false,
+              isArray: true,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: 'b',
             dflt: null,
@@ -418,40 +624,70 @@ describe('tables/create', () => {
         columns: {
           id: {
             pos: 1,
-            dataType: 'int4|NOT_NULL',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'int4',
+              isNotNull: true,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: null,
             dflt: null,
           },
           matrix: {
             pos: 2,
-            dataType: 'int4[][]',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'int4[][]',
+              isNotNull: false,
+              isEnum: false,
+              isArray: true,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: 'b',
             dflt: null,
           },
           enum_matrix: {
             pos: 3,
-            dataType: 'my_type[][]|TEXT_ENUM',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'my_type[][]',
+              isNotNull: false,
+              isEnum: true,
+              isArray: true,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: 'e',
             dflt: null,
           },
           text_3d: {
             pos: 4,
-            dataType: 'text[][][]',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'text[][][]',
+              isNotNull: false,
+              isEnum: false,
+              isArray: true,
+              characterMaxLength: null,
+            },
+
             notNull: false,
             elemPgTypeClass: 'b',
             dflt: null,
           },
           ['_0_version']: {
             pos: 5,
-            dataType: 'TEXT',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'TEXT',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+
             dflt: null,
             notNull: false,
             elemPgTypeClass: null,
@@ -484,8 +720,13 @@ describe('tables/create', () => {
     test('handles legacy text[]|TEXT_ARRAY format for SQLite', () => {
       const spec = {
         pos: 1,
-        dataType: 'text[]|TEXT_ARRAY', // Legacy format
-        characterMaximumLength: null,
+        metadata: {
+          upstreamType: 'text[]',
+          isNotNull: false,
+          isEnum: false,
+          isArray: true,
+          characterMaxLength: null,
+        }, // Legacy format
         notNull: false,
         dflt: null,
         elemPgTypeClass: PostgresTypeClass.Base,
@@ -499,8 +740,13 @@ describe('tables/create', () => {
     test('handles legacy text|TEXT_ARRAY format', () => {
       const spec = {
         pos: 1,
-        dataType: 'text|TEXT_ARRAY', // Legacy format without brackets
-        characterMaximumLength: null,
+        metadata: {
+          upstreamType: 'text[]',
+          isNotNull: false,
+          isEnum: false,
+          isArray: true,
+          characterMaxLength: null,
+        }, // Legacy format without brackets
         notNull: false,
         dflt: null,
         elemPgTypeClass: PostgresTypeClass.Base,
@@ -514,8 +760,13 @@ describe('tables/create', () => {
     test('handles legacy text|TEXT_ARRAY[] format', () => {
       const spec = {
         pos: 1,
-        dataType: 'text|TEXT_ARRAY[]', // Legacy format with trailing []
-        characterMaximumLength: null,
+        metadata: {
+          upstreamType: 'text[]',
+          isNotNull: false,
+          isEnum: false,
+          isArray: true,
+          characterMaxLength: null,
+        }, // Legacy format with trailing []
         notNull: false,
         dflt: null,
         elemPgTypeClass: PostgresTypeClass.Base,
@@ -529,8 +780,13 @@ describe('tables/create', () => {
     test('handles legacy text[]|TEXT_ARRAY[] format', () => {
       const spec = {
         pos: 1,
-        dataType: 'text[]|TEXT_ARRAY[]', // Legacy format with both [] and trailing []
-        characterMaximumLength: null,
+        metadata: {
+          upstreamType: 'text[]',
+          isNotNull: false,
+          isEnum: false,
+          isArray: true,
+          characterMaxLength: null,
+        }, // Legacy format with both [] and trailing []
         notNull: false,
         dflt: null,
         elemPgTypeClass: PostgresTypeClass.Base,
@@ -544,8 +800,13 @@ describe('tables/create', () => {
     test('handles new text[] format', () => {
       const spec = {
         pos: 1,
-        dataType: 'text[]', // New format (no |TEXT_ARRAY)
-        characterMaximumLength: null,
+        metadata: {
+          upstreamType: 'text[]',
+          isNotNull: false,
+          isEnum: false,
+          isArray: true,
+          characterMaxLength: null,
+        }, // New format (no |TEXT_ARRAY)
         notNull: false,
         dflt: null,
         elemPgTypeClass: PostgresTypeClass.Base,
@@ -559,8 +820,13 @@ describe('tables/create', () => {
     test('handles new text[][] format', () => {
       const spec = {
         pos: 1,
-        dataType: 'text[][]', // New format (no |TEXT_ARRAY)
-        characterMaximumLength: null,
+        metadata: {
+          upstreamType: 'text[][]',
+          isNotNull: false,
+          isEnum: false,
+          isArray: true,
+          characterMaxLength: null,
+        }, // New format (no |TEXT_ARRAY)
         notNull: false,
         dflt: null,
         elemPgTypeClass: PostgresTypeClass.Base,
@@ -574,8 +840,13 @@ describe('tables/create', () => {
     test('handles new text|NOT_NULL[] format', () => {
       const spec = {
         pos: 1,
-        dataType: 'text|NOT_NULL[]', // New format with attributes
-        characterMaximumLength: null,
+        metadata: {
+          upstreamType: 'text',
+          isNotNull: true,
+          isEnum: false,
+          isArray: true,
+          characterMaxLength: null,
+        }, // New format with attributes
         notNull: false,
         dflt: null,
         elemPgTypeClass: PostgresTypeClass.Base,

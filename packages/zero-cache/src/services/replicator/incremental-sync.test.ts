@@ -376,7 +376,16 @@ describe('replicator/incremental-sync', () => {
       ['begin', issues.begin(), {commitWatermark: '110'}],
       [
         'data',
-        issues.addColumn('issues', 'new_column', {pos: 4, dataType: 'int8'}),
+        issues.addColumn('issues', 'new_column', {
+          pos: 4,
+          metadata: {
+            upstreamType: 'int8',
+            isNotNull: false,
+            isEnum: false,
+            isArray: false,
+            characterMaxLength: null,
+          },
+        }),
       ],
       ['commit', issues.commit(), {watermark: '110'}],
     ] satisfies Downstream[]) {

@@ -877,12 +877,45 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             name: 'foo',
             columns: {
-              id: {pos: 0, dataType: 'varchar'},
-              count: {pos: 1, dataType: 'int8'},
-              bool: {pos: 3, dataType: 'bool'},
+              id: {
+                pos: 0,
+                metadata: {
+                  upstreamType: 'varchar',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+              },
+              count: {
+                pos: 1,
+                metadata: {
+                  upstreamType: 'int8',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+              },
+              bool: {
+                pos: 3,
+                metadata: {
+                  upstreamType: 'bool',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+              },
               serial: {
                 pos: 4,
-                dataType: 'int4',
+                metadata: {
+                  upstreamType: 'int4',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
                 dflt: "nextval('issues_serial_seq'::regclass)",
                 notNull: true,
               },
@@ -936,40 +969,65 @@ describe('replicator/incremental-sync', () => {
           name: 'foo',
           columns: {
             id: {
-              characterMaximumLength: null,
-              dataType: 'varchar',
+              metadata: {
+                upstreamType: 'varchar',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 1,
             },
             count: {
-              characterMaximumLength: null,
-              dataType: 'int8',
+              metadata: {
+                upstreamType: 'int8',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 2,
             },
             bool: {
-              characterMaximumLength: null,
-              dataType: 'bool',
+              metadata: {
+                upstreamType: 'bool',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 3,
             },
             serial: {
-              characterMaximumLength: null,
-              dataType: 'int4|NOT_NULL',
+              metadata: {
+                upstreamType: 'int4',
+                isNotNull: true,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 4,
             },
             ['_0_version']: {
-              characterMaximumLength: null,
-              dataType: 'TEXT',
+              metadata: {
+                upstreamType: 'TEXT',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
@@ -1027,16 +1085,26 @@ describe('replicator/incremental-sync', () => {
           name: 'bar',
           columns: {
             id: {
-              characterMaximumLength: null,
-              dataType: 'INT8',
+              metadata: {
+                upstreamType: 'INT8',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 1,
             },
             ['_0_version']: {
-              characterMaximumLength: null,
-              dataType: 'TEXT',
+              metadata: {
+                upstreamType: 'TEXT',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
@@ -1061,7 +1129,13 @@ describe('replicator/incremental-sync', () => {
           'data',
           fooBarBaz.addColumn('foo', 'newInt', {
             pos: 9,
-            dataType: 'int8',
+            metadata: {
+              upstreamType: 'int8',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
             dflt: '123', // DEFAULT should applied for ADD COLUMN
           }),
         ],
@@ -1069,7 +1143,13 @@ describe('replicator/incremental-sync', () => {
           'data',
           fooBarBaz.addColumn('foo', 'newBool', {
             pos: 10,
-            dataType: 'bool',
+            metadata: {
+              upstreamType: 'bool',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
             dflt: 'true', // DEFAULT should applied for ADD COLUMN
           }),
         ],
@@ -1077,7 +1157,13 @@ describe('replicator/incremental-sync', () => {
           'data',
           fooBarBaz.addColumn('foo', 'newJSON', {
             pos: 10,
-            dataType: 'json',
+            metadata: {
+              upstreamType: 'json',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
           }),
         ],
         [
@@ -1142,40 +1228,65 @@ describe('replicator/incremental-sync', () => {
           name: 'foo',
           columns: {
             id: {
-              characterMaximumLength: null,
-              dataType: 'INT8',
+              metadata: {
+                upstreamType: 'INT8',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 1,
             },
             ['_0_version']: {
-              characterMaximumLength: null,
-              dataType: 'TEXT',
+              metadata: {
+                upstreamType: 'TEXT',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 2,
             },
             newInt: {
-              characterMaximumLength: null,
-              dataType: 'int8',
+              metadata: {
+                upstreamType: 'int8',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: '123',
               notNull: false,
               elemPgTypeClass: null,
               pos: 3,
             },
             newBool: {
-              characterMaximumLength: null,
-              dataType: 'bool',
+              metadata: {
+                upstreamType: 'bool',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: '1',
               notNull: false,
               elemPgTypeClass: null,
               pos: 4,
             },
             newJSON: {
-              characterMaximumLength: null,
-              dataType: 'json',
+              metadata: {
+                upstreamType: 'json',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
@@ -1228,16 +1339,26 @@ describe('replicator/incremental-sync', () => {
           name: 'foo',
           columns: {
             id: {
-              characterMaximumLength: null,
-              dataType: 'INT8',
+              metadata: {
+                upstreamType: 'INT8',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 1,
             },
             ['_0_version']: {
-              characterMaximumLength: null,
-              dataType: 'TEXT',
+              metadata: {
+                upstreamType: 'TEXT',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
@@ -1264,8 +1385,32 @@ describe('replicator/incremental-sync', () => {
           'data',
           fooBarBaz.updateColumn(
             'foo',
-            {name: 'renameMe', spec: {pos: 1, dataType: 'TEXT'}},
-            {name: 'newName', spec: {pos: 1, dataType: 'TEXT'}},
+            {
+              name: 'renameMe',
+              spec: {
+                pos: 1,
+                metadata: {
+                  upstreamType: 'TEXT',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+              },
+            },
+            {
+              name: 'newName',
+              spec: {
+                pos: 1,
+                metadata: {
+                  upstreamType: 'TEXT',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+              },
+            },
           ),
         ],
         ['data', fooBarBaz.insert('foo', {id: 4, newName: 'yay'})],
@@ -1298,24 +1443,39 @@ describe('replicator/incremental-sync', () => {
           name: 'foo',
           columns: {
             id: {
-              characterMaximumLength: null,
-              dataType: 'INT8',
+              metadata: {
+                upstreamType: 'INT8',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 1,
             },
             newName: {
-              characterMaximumLength: null,
-              dataType: 'TEXT',
+              metadata: {
+                upstreamType: 'TEXT',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 2,
             },
             ['_0_version']: {
-              characterMaximumLength: null,
-              dataType: 'TEXT',
+              metadata: {
+                upstreamType: 'TEXT',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
@@ -1349,8 +1509,33 @@ describe('replicator/incremental-sync', () => {
           'data',
           fooBarBaz.updateColumn(
             'foo',
-            {name: 'nolz', spec: {pos: 1, dataType: 'TEXT'}},
-            {name: 'nolz', spec: {pos: 1, dataType: 'TEXT', notNull: true}},
+            {
+              name: 'nolz',
+              spec: {
+                pos: 1,
+                metadata: {
+                  upstreamType: 'TEXT',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+              },
+            },
+            {
+              name: 'nolz',
+              spec: {
+                pos: 1,
+                metadata: {
+                  upstreamType: 'TEXT',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+                notNull: true,
+              },
+            },
           ),
         ],
         ['data', fooBarBaz.insert('foo', {id: 4, nolz: 'yay'})],
@@ -1383,24 +1568,39 @@ describe('replicator/incremental-sync', () => {
           name: 'foo',
           columns: {
             id: {
-              characterMaximumLength: null,
-              dataType: 'INT8',
+              metadata: {
+                upstreamType: 'INT8',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 1,
             },
             nolz: {
-              characterMaximumLength: null,
-              dataType: 'TEXT|NOT_NULL',
+              metadata: {
+                upstreamType: 'TEXT',
+                isNotNull: true,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 3,
             },
             ['_0_version']: {
-              characterMaximumLength: null,
-              dataType: 'TEXT',
+              metadata: {
+                upstreamType: 'TEXT',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
@@ -1434,10 +1634,33 @@ describe('replicator/incremental-sync', () => {
           'data',
           fooBarBaz.updateColumn(
             'foo',
-            {name: 'nolz', spec: {pos: 1, dataType: 'TEXT'}},
             {
               name: 'nolz',
-              spec: {pos: 1, dataType: 'TEXT', notNull: true, dflt: 'now()'},
+              spec: {
+                pos: 1,
+                metadata: {
+                  upstreamType: 'TEXT',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+              },
+            },
+            {
+              name: 'nolz',
+              spec: {
+                pos: 1,
+                metadata: {
+                  upstreamType: 'TEXT',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+                notNull: true,
+                dflt: 'now()',
+              },
             },
           ),
         ],
@@ -1471,24 +1694,39 @@ describe('replicator/incremental-sync', () => {
           name: 'foo',
           columns: {
             id: {
-              characterMaximumLength: null,
-              dataType: 'INT8',
+              metadata: {
+                upstreamType: 'INT8',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 1,
             },
             nolz: {
-              characterMaximumLength: null,
-              dataType: 'TEXT|NOT_NULL',
+              metadata: {
+                upstreamType: 'TEXT',
+                isNotNull: true,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 3,
             },
             ['_0_version']: {
-              characterMaximumLength: null,
-              dataType: 'TEXT',
+              metadata: {
+                upstreamType: 'TEXT',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
@@ -1523,8 +1761,32 @@ describe('replicator/incremental-sync', () => {
           'data',
           fooBarBaz.updateColumn(
             'foo',
-            {name: 'renameMe', spec: {pos: 1, dataType: 'TEXT'}},
-            {name: 'newName', spec: {pos: 1, dataType: 'TEXT'}},
+            {
+              name: 'renameMe',
+              spec: {
+                pos: 1,
+                metadata: {
+                  upstreamType: 'TEXT',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+              },
+            },
+            {
+              name: 'newName',
+              spec: {
+                pos: 1,
+                metadata: {
+                  upstreamType: 'TEXT',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+              },
+            },
           ),
         ],
         ['data', fooBarBaz.insert('foo', {id: 4, newName: 'yay'})],
@@ -1557,24 +1819,39 @@ describe('replicator/incremental-sync', () => {
           name: 'foo',
           columns: {
             id: {
-              characterMaximumLength: null,
-              dataType: 'INT8',
+              metadata: {
+                upstreamType: 'INT8',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 1,
             },
             newName: {
-              characterMaximumLength: null,
-              dataType: 'TEXT',
+              metadata: {
+                upstreamType: 'TEXT',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 2,
             },
             ['_0_version']: {
-              characterMaximumLength: null,
-              dataType: 'TEXT',
+              metadata: {
+                upstreamType: 'TEXT',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
@@ -1614,8 +1891,32 @@ describe('replicator/incremental-sync', () => {
           'data',
           fooBarBaz.updateColumn(
             'foo',
-            {name: 'num', spec: {pos: 1, dataType: 'TEXT'}},
-            {name: 'num', spec: {pos: 1, dataType: 'INT8'}},
+            {
+              name: 'num',
+              spec: {
+                pos: 1,
+                metadata: {
+                  upstreamType: 'TEXT',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+              },
+            },
+            {
+              name: 'num',
+              spec: {
+                pos: 1,
+                metadata: {
+                  upstreamType: 'INT8',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+              },
+            },
           ),
         ],
         ['data', fooBarBaz.insert('foo', {id: 4, num: 23})],
@@ -1648,24 +1949,39 @@ describe('replicator/incremental-sync', () => {
           name: 'foo',
           columns: {
             id: {
-              characterMaximumLength: null,
-              dataType: 'INT8',
+              metadata: {
+                upstreamType: 'INT8',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 1,
             },
             num: {
-              characterMaximumLength: null,
-              dataType: 'INT8',
+              metadata: {
+                upstreamType: 'INT8',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 3,
             },
             ['_0_version']: {
-              characterMaximumLength: null,
-              dataType: 'TEXT',
+              metadata: {
+                upstreamType: 'TEXT',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
@@ -1701,8 +2017,32 @@ describe('replicator/incremental-sync', () => {
           'data',
           fooBarBaz.updateColumn(
             'foo',
-            {name: 'num', spec: {pos: 1, dataType: 'TEXT'}},
-            {name: 'num', spec: {pos: 1, dataType: 'INT8'}},
+            {
+              name: 'num',
+              spec: {
+                pos: 1,
+                metadata: {
+                  upstreamType: 'TEXT',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+              },
+            },
+            {
+              name: 'num',
+              spec: {
+                pos: 1,
+                metadata: {
+                  upstreamType: 'INT8',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+              },
+            },
           ),
         ],
         ['data', fooBarBaz.insert('foo', {id: 4, num: 23})],
@@ -1735,24 +2075,39 @@ describe('replicator/incremental-sync', () => {
           name: 'foo',
           columns: {
             id: {
-              characterMaximumLength: null,
-              dataType: 'INT8',
+              metadata: {
+                upstreamType: 'INT8',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 1,
             },
             num: {
-              characterMaximumLength: null,
-              dataType: 'INT8',
+              metadata: {
+                upstreamType: 'INT8',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 3,
             },
             ['_0_version']: {
-              characterMaximumLength: null,
-              dataType: 'TEXT',
+              metadata: {
+                upstreamType: 'TEXT',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
@@ -1798,8 +2153,32 @@ describe('replicator/incremental-sync', () => {
           'data',
           fooBarBaz.updateColumn(
             'foo',
-            {name: 'numburr', spec: {pos: 1, dataType: 'TEXT'}},
-            {name: 'number', spec: {pos: 1, dataType: 'INT8'}},
+            {
+              name: 'numburr',
+              spec: {
+                pos: 1,
+                metadata: {
+                  upstreamType: 'TEXT',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+              },
+            },
+            {
+              name: 'number',
+              spec: {
+                pos: 1,
+                metadata: {
+                  upstreamType: 'INT8',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+              },
+            },
           ),
         ],
         ['data', fooBarBaz.insert('foo', {id: 4, number: 23})],
@@ -1832,24 +2211,39 @@ describe('replicator/incremental-sync', () => {
           name: 'foo',
           columns: {
             id: {
-              characterMaximumLength: null,
-              dataType: 'INT8',
+              metadata: {
+                upstreamType: 'INT8',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 1,
             },
             number: {
-              characterMaximumLength: null,
-              dataType: 'INT8',
+              metadata: {
+                upstreamType: 'INT8',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 3,
             },
             ['_0_version']: {
-              characterMaximumLength: null,
-              dataType: 'TEXT',
+              metadata: {
+                upstreamType: 'TEXT',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
@@ -1972,8 +2366,26 @@ describe('replicator/incremental-sync', () => {
             schema: 'public',
             name: 'transaction',
             columns: {
-              column: {pos: 0, dataType: 'int8'},
-              commit: {pos: 1, dataType: 'int8'},
+              column: {
+                pos: 0,
+                metadata: {
+                  upstreamType: 'int8',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+              },
+              commit: {
+                pos: 1,
+                metadata: {
+                  upstreamType: 'int8',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+              },
             },
             primaryKey: ['column'],
           }),
@@ -1981,7 +2393,13 @@ describe('replicator/incremental-sync', () => {
         [
           'data',
           tables.addColumn('transaction', 'trigger', {
-            dataType: 'text',
+            metadata: {
+              upstreamType: 'text',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
             pos: 10,
           }),
         ],
@@ -1991,11 +2409,29 @@ describe('replicator/incremental-sync', () => {
             'transaction',
             {
               name: 'trigger',
-              spec: {dataType: 'text', pos: 10},
+              spec: {
+                metadata: {
+                  upstreamType: 'text',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+                pos: 10,
+              },
             },
             {
               name: 'index',
-              spec: {dataType: 'text', pos: 10},
+              spec: {
+                metadata: {
+                  upstreamType: 'text',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+                pos: 10,
+              },
             },
           ),
         ],
@@ -2005,11 +2441,29 @@ describe('replicator/incremental-sync', () => {
             'transaction',
             {
               name: 'index',
-              spec: {dataType: 'text', pos: 10},
+              spec: {
+                metadata: {
+                  upstreamType: 'text',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+                pos: 10,
+              },
             },
             {
               name: 'index',
-              spec: {dataType: 'int8', pos: 10},
+              spec: {
+                metadata: {
+                  upstreamType: 'int8',
+                  isNotNull: false,
+                  isEnum: false,
+                  isArray: false,
+                  characterMaxLength: null,
+                },
+                pos: 10,
+              },
             },
           ),
         ],
@@ -2032,24 +2486,39 @@ describe('replicator/incremental-sync', () => {
           name: 'transaction',
           columns: {
             column: {
-              characterMaximumLength: null,
-              dataType: 'int8',
+              metadata: {
+                upstreamType: 'int8',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 1,
             },
             index: {
-              characterMaximumLength: null,
-              dataType: 'int8',
+              metadata: {
+                upstreamType: 'int8',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
               pos: 3,
             },
             ['_0_version']: {
-              characterMaximumLength: null,
-              dataType: 'TEXT',
+              metadata: {
+                upstreamType: 'TEXT',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               dflt: null,
               notNull: false,
               elemPgTypeClass: null,
@@ -2248,12 +2717,48 @@ describe('replicator/ddl-metadata-integration', () => {
         schema: 'public',
         name: 'foo',
         columns: {
-          id: {pos: 0, dataType: 'int8', notNull: true},
-          name: {pos: 1, dataType: 'varchar', characterMaximumLength: 255},
-          tags: {pos: 2, dataType: 'text[]'},
+          id: {
+            pos: 0,
+            metadata: {
+              upstreamType: 'int8',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            notNull: true,
+          },
+          name: {
+            pos: 1,
+            metadata: {
+              upstreamType: 'varchar',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            notNull: false,
+          },
+          tags: {
+            pos: 2,
+            metadata: {
+              upstreamType: 'text[]',
+              isNotNull: false,
+              isEnum: false,
+              isArray: true,
+              characterMaxLength: null,
+            },
+            notNull: false,
+          },
           role: {
             pos: 3,
-            dataType: 'user_role',
+            metadata: {
+              upstreamType: 'user_role',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
             pgTypeClass: PostgresTypeClass.Enum,
           },
         },
@@ -2320,7 +2825,13 @@ describe('replicator/ddl-metadata-integration', () => {
       'data',
       messages.addColumn('foo', 'newCol', {
         pos: 10,
-        dataType: 'text',
+        metadata: {
+          upstreamType: 'text',
+          isNotNull: false,
+          isEnum: false,
+          isArray: false,
+          characterMaxLength: null,
+        },
         notNull: true,
       }),
     ]);
@@ -2358,8 +2869,32 @@ describe('replicator/ddl-metadata-integration', () => {
       'data',
       messages.updateColumn(
         'foo',
-        {name: 'oldName', spec: {pos: 1, dataType: 'text'}},
-        {name: 'newName', spec: {pos: 1, dataType: 'text'}},
+        {
+          name: 'oldName',
+          spec: {
+            pos: 1,
+            metadata: {
+              upstreamType: 'text',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+          },
+        },
+        {
+          name: 'newName',
+          spec: {
+            pos: 1,
+            metadata: {
+              upstreamType: 'text',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+          },
+        },
       ),
     ]);
     processor.processMessage(lc, [
@@ -2399,8 +2934,33 @@ describe('replicator/ddl-metadata-integration', () => {
       'data',
       messages.updateColumn(
         'foo',
-        {name: 'col', spec: {pos: 1, dataType: 'text'}},
-        {name: 'col', spec: {pos: 1, dataType: 'int8', notNull: true}},
+        {
+          name: 'col',
+          spec: {
+            pos: 1,
+            metadata: {
+              upstreamType: 'text',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+          },
+        },
+        {
+          name: 'col',
+          spec: {
+            pos: 1,
+            metadata: {
+              upstreamType: 'int8',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            notNull: true,
+          },
+        },
       ),
     ]);
     processor.processMessage(lc, [
@@ -2436,8 +2996,33 @@ describe('replicator/ddl-metadata-integration', () => {
       'data',
       messages.updateColumn(
         'foo',
-        {name: 'col', spec: {pos: 1, dataType: 'text'}},
-        {name: 'col', spec: {pos: 1, dataType: 'text', notNull: true}},
+        {
+          name: 'col',
+          spec: {
+            pos: 1,
+            metadata: {
+              upstreamType: 'text',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+          },
+        },
+        {
+          name: 'col',
+          spec: {
+            pos: 1,
+            metadata: {
+              upstreamType: 'text',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            notNull: true,
+          },
+        },
       ),
     ]);
     processor.processMessage(lc, [

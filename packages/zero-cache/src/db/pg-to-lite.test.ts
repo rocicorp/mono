@@ -16,60 +16,107 @@ test('postgres to lite table spec', () => {
       columns: {
         a: {
           pos: 1,
-          dataType: 'varchar',
-          characterMaximumLength: null,
+          metadata: {
+            upstreamType: 'varchar',
+            isNotNull: false,
+            isEnum: false,
+            isArray: false,
+            characterMaxLength: null,
+          },
+
           notNull: false,
           dflt: null,
           elemPgTypeClass: null,
         },
         b: {
           pos: 2,
-          dataType: 'varchar',
-          characterMaximumLength: 180,
+          metadata: {
+            upstreamType: 'varchar',
+            isNotNull: false,
+            isEnum: false,
+            isArray: false,
+            characterMaxLength: 180,
+          },
+
           notNull: true,
           dflt: null,
           elemPgTypeClass: null,
         },
         int: {
           pos: 3,
-          dataType: 'int8',
-          characterMaximumLength: null,
+          metadata: {
+            upstreamType: 'int8',
+            isNotNull: false,
+            isEnum: false,
+            isArray: false,
+            characterMaxLength: null,
+          },
+
           notNull: false,
           dflt: '2147483648',
         },
         bigint: {
           pos: 4,
-          dataType: 'int8',
-          characterMaximumLength: null,
+          metadata: {
+            upstreamType: 'int8',
+            isNotNull: false,
+            isEnum: false,
+            isArray: false,
+            characterMaxLength: null,
+          },
+
           notNull: false,
           dflt: "'9007199254740992'::bigint",
         },
         text: {
           pos: 5,
-          dataType: 'text',
-          characterMaximumLength: null,
+          metadata: {
+            upstreamType: 'text',
+            isNotNull: false,
+            isEnum: false,
+            isArray: false,
+            characterMaxLength: null,
+          },
+
           notNull: false,
           dflt: "'foo'::string",
         },
         bool1: {
           pos: 6,
-          dataType: 'bool',
-          characterMaximumLength: null,
+          metadata: {
+            upstreamType: 'bool',
+            isNotNull: false,
+            isEnum: false,
+            isArray: false,
+            characterMaxLength: null,
+          },
+
           notNull: false,
           dflt: 'true',
         },
         bool2: {
           pos: 7,
-          dataType: 'bool',
-          characterMaximumLength: null,
+          metadata: {
+            upstreamType: 'bool',
+            isNotNull: false,
+            isEnum: false,
+            isArray: false,
+            characterMaxLength: null,
+          },
+
           notNull: false,
           dflt: 'false',
         },
         enomz: {
           pos: 8,
-          dataType: 'my_type',
+          metadata: {
+            upstreamType: 'my_type',
+            isNotNull: false,
+            isEnum: false,
+            isArray: false,
+            characterMaxLength: null,
+          },
           pgTypeClass: PostgresTypeClass.Enum,
-          characterMaximumLength: null,
           notNull: false,
           dflt: 'false',
         },
@@ -79,72 +126,117 @@ test('postgres to lite table spec', () => {
     name: 'issue',
     columns: {
       ['_0_version']: {
-        characterMaximumLength: null,
-        dataType: 'text',
+        metadata: {
+          upstreamType: 'text',
+          isNotNull: false,
+          isEnum: false,
+          isArray: false,
+          characterMaxLength: null,
+        },
         dflt: null,
         elemPgTypeClass: null,
         notNull: false,
         pos: 9007199254740991,
       },
       a: {
-        characterMaximumLength: null,
-        dataType: 'varchar',
+        metadata: {
+          upstreamType: 'varchar',
+          isNotNull: false,
+          isEnum: false,
+          isArray: false,
+          characterMaxLength: null,
+        },
         dflt: null,
         elemPgTypeClass: null,
         notNull: false,
         pos: 1,
       },
       b: {
-        characterMaximumLength: 180,
-        dataType: 'varchar|NOT_NULL',
+        metadata: {
+          upstreamType: 'varchar',
+          isNotNull: true,
+          isEnum: false,
+          isArray: false,
+          characterMaxLength: null,
+        },
         dflt: null,
         elemPgTypeClass: null,
         notNull: false,
         pos: 2,
       },
       bigint: {
-        characterMaximumLength: null,
-        dataType: 'int8',
+        metadata: {
+          upstreamType: 'int8',
+          isNotNull: false,
+          isEnum: false,
+          isArray: false,
+          characterMaxLength: null,
+        },
         dflt: null,
         elemPgTypeClass: null,
         notNull: false,
         pos: 4,
       },
       bool1: {
-        characterMaximumLength: null,
-        dataType: 'bool',
+        metadata: {
+          upstreamType: 'bool',
+          isNotNull: false,
+          isEnum: false,
+          isArray: false,
+          characterMaxLength: null,
+        },
         dflt: null,
         elemPgTypeClass: null,
         notNull: false,
         pos: 6,
       },
       bool2: {
-        characterMaximumLength: null,
-        dataType: 'bool',
+        metadata: {
+          upstreamType: 'bool',
+          isNotNull: false,
+          isEnum: false,
+          isArray: false,
+          characterMaxLength: null,
+        },
         dflt: null,
         elemPgTypeClass: null,
         notNull: false,
         pos: 7,
       },
       enomz: {
-        characterMaximumLength: null,
-        dataType: 'my_type|TEXT_ENUM',
+        metadata: {
+          upstreamType: 'my_type',
+          isNotNull: false,
+          isEnum: true,
+          isArray: false,
+          characterMaxLength: null,
+        },
         dflt: null,
         elemPgTypeClass: null,
         notNull: false,
         pos: 8,
       },
       int: {
-        characterMaximumLength: null,
-        dataType: 'int8',
+        metadata: {
+          upstreamType: 'int8',
+          isNotNull: false,
+          isEnum: false,
+          isArray: false,
+          characterMaxLength: null,
+        },
         dflt: null,
         elemPgTypeClass: null,
         notNull: false,
         pos: 3,
       },
       text: {
-        characterMaximumLength: null,
-        dataType: 'text',
+        metadata: {
+          upstreamType: 'text',
+          isNotNull: false,
+          isEnum: false,
+          isArray: false,
+          characterMaxLength: null,
+        },
         dflt: null,
         elemPgTypeClass: null,
         notNull: false,
@@ -161,8 +253,14 @@ test('postgres to lite table spec', () => {
       columns: {
         a: {
           pos: 1,
-          dataType: 'varchar',
-          characterMaximumLength: null,
+          metadata: {
+            upstreamType: 'varchar',
+            isNotNull: false,
+            isEnum: false,
+            isArray: false,
+            characterMaxLength: null,
+          },
+
           notNull: true,
           dflt: null,
           elemPgTypeClass: null,
@@ -174,16 +272,26 @@ test('postgres to lite table spec', () => {
     name: 'zero.foo',
     columns: {
       ['_0_version']: {
-        characterMaximumLength: null,
-        dataType: 'text',
+        metadata: {
+          upstreamType: 'text',
+          isNotNull: false,
+          isEnum: false,
+          isArray: false,
+          characterMaxLength: null,
+        },
         dflt: null,
         elemPgTypeClass: null,
         notNull: false,
         pos: 9007199254740991,
       },
       a: {
-        characterMaximumLength: null,
-        dataType: 'varchar|NOT_NULL',
+        metadata: {
+          upstreamType: 'varchar',
+          isNotNull: true,
+          isEnum: false,
+          isArray: false,
+          characterMaxLength: null,
+        },
         dflt: null,
         elemPgTypeClass: null,
         notNull: false,
@@ -201,8 +309,14 @@ test('postgres to lite table spec', () => {
         columns: {
           a: {
             pos: 1,
-            dataType: 'varchar',
-            characterMaximumLength: null,
+            metadata: {
+              upstreamType: 'varchar',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+
             notNull: true,
             dflt: null,
             elemPgTypeClass: null,
@@ -216,16 +330,26 @@ test('postgres to lite table spec', () => {
     name: 'foo',
     columns: {
       ['_0_version']: {
-        characterMaximumLength: null,
-        dataType: 'text',
+        metadata: {
+          upstreamType: 'text',
+          isNotNull: false,
+          isEnum: false,
+          isArray: false,
+          characterMaxLength: null,
+        },
         dflt: "'136'",
         elemPgTypeClass: null,
         notNull: false,
         pos: 9007199254740991,
       },
       a: {
-        characterMaximumLength: null,
-        dataType: 'varchar|NOT_NULL',
+        metadata: {
+          upstreamType: 'varchar',
+          isNotNull: true,
+          isEnum: false,
+          isArray: false,
+          characterMaxLength: null,
+        },
         dflt: null,
         elemPgTypeClass: null,
         notNull: false,
@@ -239,16 +363,28 @@ test.each([
   [
     {
       pos: 3,
-      dataType: 'int8',
-      characterMaximumLength: null,
+      metadata: {
+        upstreamType: 'int8',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+
       notNull: true,
       dflt: '2147483648',
       elemPgTypeClass: null,
     },
     {
       pos: 3,
-      dataType: 'int8|NOT_NULL',
-      characterMaximumLength: null,
+      metadata: {
+        upstreamType: 'int8',
+        isNotNull: true,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+
       notNull: false,
       dflt: '2147483648',
       elemPgTypeClass: null,
@@ -257,16 +393,28 @@ test.each([
   [
     {
       pos: 4,
-      dataType: 'int8',
-      characterMaximumLength: null,
+      metadata: {
+        upstreamType: 'int8',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+
       notNull: false,
       dflt: "'9007199254740992'::bigint",
       elemPgTypeClass: null,
     },
     {
       pos: 4,
-      dataType: 'int8',
-      characterMaximumLength: null,
+      metadata: {
+        upstreamType: 'int8',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+
       notNull: false,
       dflt: "'9007199254740992'",
       elemPgTypeClass: null,
@@ -275,16 +423,28 @@ test.each([
   [
     {
       pos: 5,
-      dataType: 'text',
-      characterMaximumLength: null,
+      metadata: {
+        upstreamType: 'text',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+
       notNull: false,
       dflt: "'foo'::string",
       elemPgTypeClass: null,
     },
     {
       pos: 5,
-      dataType: 'text',
-      characterMaximumLength: null,
+      metadata: {
+        upstreamType: 'text',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+
       notNull: false,
       dflt: "'foo'",
       elemPgTypeClass: null,
@@ -293,16 +453,28 @@ test.each([
   [
     {
       pos: 6,
-      dataType: 'bool',
-      characterMaximumLength: null,
+      metadata: {
+        upstreamType: 'bool',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+
       notNull: false,
       dflt: 'true',
       elemPgTypeClass: null,
     },
     {
       pos: 6,
-      dataType: 'bool',
-      characterMaximumLength: null,
+      metadata: {
+        upstreamType: 'bool',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+
       notNull: false,
       dflt: '1',
       elemPgTypeClass: null,
@@ -311,16 +483,28 @@ test.each([
   [
     {
       pos: 7,
-      dataType: 'bool',
-      characterMaximumLength: null,
+      metadata: {
+        upstreamType: 'bool',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+
       notNull: false,
       dflt: 'false',
       elemPgTypeClass: null,
     },
     {
       pos: 7,
-      dataType: 'bool',
-      characterMaximumLength: null,
+      metadata: {
+        upstreamType: 'bool',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+
       notNull: false,
       dflt: '0',
       elemPgTypeClass: null,
@@ -329,16 +513,28 @@ test.each([
   [
     {
       pos: 8,
-      dataType: 'int4[]',
-      characterMaximumLength: null,
+      metadata: {
+        upstreamType: 'int4[]',
+        isNotNull: false,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      },
+
       notNull: false,
       dflt: null,
       elemPgTypeClass: PostgresTypeClass.Base,
     },
     {
       pos: 8,
-      dataType: 'int4[]',
-      characterMaximumLength: null,
+      metadata: {
+        upstreamType: 'int4[]',
+        isNotNull: false,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      },
+
       notNull: false,
       dflt: null,
       elemPgTypeClass: PostgresTypeClass.Base,
@@ -347,16 +543,28 @@ test.each([
   [
     {
       pos: 9,
-      dataType: 'my_enum[]',
-      characterMaximumLength: null,
+      metadata: {
+        upstreamType: 'my_enum[]',
+        isNotNull: false,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      },
+
       notNull: false,
       dflt: null,
       elemPgTypeClass: PostgresTypeClass.Enum,
     },
     {
       pos: 9,
-      dataType: 'my_enum[]|TEXT_ENUM',
-      characterMaximumLength: null,
+      metadata: {
+        upstreamType: 'my_enum[]',
+        isNotNull: false,
+        isEnum: true,
+        isArray: true,
+        characterMaxLength: null,
+      },
+
       notNull: false,
       dflt: null,
       elemPgTypeClass: PostgresTypeClass.Enum,
@@ -365,16 +573,28 @@ test.each([
   [
     {
       pos: 10,
-      dataType: 'int4[][]',
-      characterMaximumLength: null,
+      metadata: {
+        upstreamType: 'int4[][]',
+        isNotNull: false,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      },
+
       notNull: false,
       dflt: null,
       elemPgTypeClass: PostgresTypeClass.Base,
     },
     {
       pos: 10,
-      dataType: 'int4[][]',
-      characterMaximumLength: null,
+      metadata: {
+        upstreamType: 'int4[][]',
+        isNotNull: false,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      },
+
       notNull: false,
       dflt: null,
       elemPgTypeClass: PostgresTypeClass.Base,
@@ -383,16 +603,28 @@ test.each([
   [
     {
       pos: 11,
-      dataType: 'my_enum[][]',
-      characterMaximumLength: null,
+      metadata: {
+        upstreamType: 'my_enum[][]',
+        isNotNull: false,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      },
+
       notNull: false,
       dflt: null,
       elemPgTypeClass: PostgresTypeClass.Enum,
     },
     {
       pos: 11,
-      dataType: 'my_enum[][]|TEXT_ENUM',
-      characterMaximumLength: null,
+      metadata: {
+        upstreamType: 'my_enum[][]',
+        isNotNull: false,
+        isEnum: true,
+        isArray: true,
+        characterMaxLength: null,
+      },
+
       notNull: false,
       dflt: null,
       elemPgTypeClass: PostgresTypeClass.Enum,
@@ -416,17 +648,68 @@ test.each([
   ['current_DATE'],
 ])('unsupported column default %s', value => {
   expect(() =>
-    mapPostgresToLiteDefault('foo', 'bar', 'boolean', value),
+    mapPostgresToLiteDefault(
+      'foo',
+      'bar',
+      {
+        upstreamType: 'boolean',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+      value,
+    ),
   ).toThrow(UnsupportedColumnDefaultError);
 });
 
 test.each([
-  ['123', '123', 'int4'],
-  ['true', '1', 'boolean'],
-  ['false', '0', 'boolean'],
-  ["'12345678901234567890'::bigint", "'12345678901234567890'", 'int8'],
-])('supported column default %s', (input, output, dataType) => {
-  expect(mapPostgresToLiteDefault('foo', 'bar', dataType, input)).toEqual(
+  [
+    '123',
+    '123',
+    {
+      upstreamType: 'int4',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    },
+  ],
+  [
+    'true',
+    '1',
+    {
+      upstreamType: 'boolean',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    },
+  ],
+  [
+    'false',
+    '0',
+    {
+      upstreamType: 'boolean',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    },
+  ],
+  [
+    "'12345678901234567890'::bigint",
+    "'12345678901234567890'",
+    {
+      upstreamType: 'int8',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    },
+  ],
+])('supported column default %s', (input, output, metadata) => {
+  expect(mapPostgresToLiteDefault('foo', 'bar', metadata, input)).toEqual(
     output,
   );
 });

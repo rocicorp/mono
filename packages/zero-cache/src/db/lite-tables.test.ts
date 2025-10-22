@@ -35,16 +35,28 @@ describe('lite/tables', () => {
           columns: {
             clientID: {
               pos: 1,
-              dataType: 'VARCHAR (180)',
-              characterMaximumLength: null,
+              metadata: {
+                upstreamType: 'VARCHAR (180)',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
+
               elemPgTypeClass: null,
               notNull: false,
               dflt: null,
             },
             lastMutationID: {
               pos: 2,
-              dataType: 'BIGINT',
-              characterMaximumLength: null,
+              metadata: {
+                upstreamType: 'BIGINT',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
+
               elemPgTypeClass: null,
               notNull: false,
               dflt: null,
@@ -76,80 +88,134 @@ describe('lite/tables', () => {
           columns: {
             ['user_id']: {
               pos: 1,
-              dataType: 'INTEGER',
+              metadata: {
+                upstreamType: 'INTEGER',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               elemPgTypeClass: null,
-              characterMaximumLength: null,
               notNull: false,
               dflt: null,
             },
             handle: {
               pos: 2,
-              characterMaximumLength: null,
-              dataType: 'TEXT',
+              metadata: {
+                upstreamType: 'TEXT',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               elemPgTypeClass: null,
               notNull: false,
               dflt: "'foo'",
             },
             address: {
               pos: 3,
-              characterMaximumLength: null,
-              dataType: 'text[]',
+              metadata: {
+                upstreamType: 'text[]',
+                isNotNull: false,
+                isEnum: false,
+                isArray: true,
+                characterMaxLength: null,
+              },
               elemPgTypeClass: 'b',
               notNull: false,
               dflt: null,
             },
             bigint: {
               pos: 4,
-              characterMaximumLength: null,
-              dataType: 'BIGINT',
+              metadata: {
+                upstreamType: 'BIGINT',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
               elemPgTypeClass: null,
               notNull: false,
               dflt: "'2147483648'",
             },
             ['bool_array']: {
               pos: 5,
-              characterMaximumLength: null,
-              dataType: 'BOOL[]',
+              metadata: {
+                upstreamType: 'BOOL[]',
+                isNotNull: false,
+                isEnum: false,
+                isArray: true,
+                characterMaxLength: null,
+              },
               elemPgTypeClass: 'b',
               notNull: false,
               dflt: null,
             },
             ['real_array']: {
               pos: 6,
-              characterMaximumLength: null,
-              dataType: 'REAL[]',
+              metadata: {
+                upstreamType: 'REAL[]',
+                isNotNull: false,
+                isEnum: false,
+                isArray: true,
+                characterMaxLength: null,
+              },
               elemPgTypeClass: 'b',
               notNull: false,
               dflt: null,
             },
             ['int_array']: {
               pos: 7,
-              dataType: 'INTEGER[]',
-              characterMaximumLength: null,
+              metadata: {
+                upstreamType: 'INTEGER[]',
+                isNotNull: false,
+                isEnum: false,
+                isArray: true,
+                characterMaxLength: null,
+              },
+
               elemPgTypeClass: 'b',
               notNull: false,
               dflt: "'{1, 2, 3}'",
             },
             ['json_val']: {
               pos: 8,
-              dataType: 'JSONB',
-              characterMaximumLength: null,
+              metadata: {
+                upstreamType: 'JSONB',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
+
               elemPgTypeClass: null,
               notNull: false,
               dflt: null,
             },
             ['time_value']: {
               pos: 9,
-              dataType: 'TIME',
-              characterMaximumLength: null,
+              metadata: {
+                upstreamType: 'TIME',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
+
               elemPgTypeClass: null,
               notNull: false,
               dflt: null,
             },
             ['time_array']: {
               pos: 10,
-              dataType: 'TIME[]',
-              characterMaximumLength: null,
+              metadata: {
+                upstreamType: 'TIME[]',
+                isNotNull: false,
+                isEnum: false,
+                isArray: true,
+                characterMaxLength: null,
+              },
+
               elemPgTypeClass: 'b',
               notNull: false,
               dflt: null,
@@ -176,32 +242,56 @@ describe('lite/tables', () => {
           columns: {
             ['issue_id']: {
               pos: 1,
-              dataType: 'INTEGER',
-              characterMaximumLength: null,
+              metadata: {
+                upstreamType: 'INTEGER',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
+
               elemPgTypeClass: null,
               notNull: false,
               dflt: null,
             },
             ['description']: {
               pos: 2,
-              dataType: 'TEXT',
-              characterMaximumLength: null,
+              metadata: {
+                upstreamType: 'TEXT',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
+
               elemPgTypeClass: null,
               notNull: false,
               dflt: null,
             },
             ['org_id']: {
               pos: 3,
-              dataType: 'INTEGER',
-              characterMaximumLength: null,
+              metadata: {
+                upstreamType: 'INTEGER',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
+
               elemPgTypeClass: null,
               notNull: true,
               dflt: null,
             },
             ['component_id']: {
               pos: 4,
-              dataType: 'INTEGER',
-              characterMaximumLength: null,
+              metadata: {
+                upstreamType: 'INTEGER',
+                isNotNull: false,
+                isEnum: false,
+                isArray: false,
+                characterMaxLength: null,
+              },
+
               elemPgTypeClass: null,
               notNull: false,
               dflt: null,
@@ -1096,15 +1186,16 @@ describe('lite/tables with metadata table', () => {
     expect(tables).toHaveLength(1);
     expect(tables[0].name).toBe('users');
 
-    // Should read from metadata, so dataType includes pipe notation
-    expect(tables[0].columns.id.dataType).toBe('int8|NOT_NULL');
-    expect(tables[0].columns.id.characterMaximumLength).toBe(null);
+    // Should read from metadata table and return structured metadata
+    expect(tables[0].columns.id.metadata.upstreamType).toBe('int8');
+    expect(tables[0].columns.id.metadata.isNotNull).toBe(true);
+    expect(tables[0].columns.id.metadata.characterMaxLength).toBe(null);
 
-    expect(tables[0].columns.name.dataType).toBe('varchar');
-    expect(tables[0].columns.name.characterMaximumLength).toBe(255);
+    expect(tables[0].columns.name.metadata.upstreamType).toBe('varchar');
+    expect(tables[0].columns.name.metadata.characterMaxLength).toBe(255);
 
-    expect(tables[0].columns.email.dataType).toBe('text');
-    expect(tables[0].columns.email.characterMaximumLength).toBe(null);
+    expect(tables[0].columns.email.metadata.upstreamType).toBe('text');
+    expect(tables[0].columns.email.metadata.characterMaxLength).toBe(null);
   });
 
   test('metadata table takes precedence over pragma_table_info', () => {
@@ -1140,10 +1231,13 @@ describe('lite/tables with metadata table', () => {
     expect(tables).toHaveLength(1);
 
     // Metadata should win over pragma_table_info
-    expect(tables[0].columns.id.dataType).toBe('bigint|NOT_NULL');
-    expect(tables[0].columns.status.dataType).toBe(
-      'product_status|NOT_NULL|TEXT_ENUM',
+    expect(tables[0].columns.id.metadata.upstreamType).toBe('bigint');
+    expect(tables[0].columns.id.metadata.isNotNull).toBe(true);
+    expect(tables[0].columns.status.metadata.upstreamType).toBe(
+      'product_status',
     );
+    expect(tables[0].columns.status.metadata.isNotNull).toBe(true);
+    expect(tables[0].columns.status.metadata.isEnum).toBe(true);
   });
 
   test('handles arrays and enums from metadata', () => {
@@ -1193,17 +1287,19 @@ describe('lite/tables with metadata table', () => {
     expect(tables).toHaveLength(1);
 
     // Check array types
-    expect(tables[0].columns.tags.dataType).toBe('text[]');
+    expect(tables[0].columns.tags.metadata.upstreamType).toBe('text[]');
+    expect(tables[0].columns.tags.metadata.isArray).toBe(true);
     expect(tables[0].columns.tags.elemPgTypeClass).toBe('b');
 
     // Check enum types
-    expect(tables[0].columns.status.dataType).toBe('item_status|TEXT_ENUM');
+    expect(tables[0].columns.status.metadata.upstreamType).toBe('item_status');
+    expect(tables[0].columns.status.metadata.isEnum).toBe(true);
     expect(tables[0].columns.status.elemPgTypeClass).toBe(null);
 
     // Check array with NOT_NULL
-    // Note: The format is 'int4[]|NOT_NULL' (type with [] followed by attributes)
-    // This is the format currently deployed in production
-    expect(tables[0].columns.counts.dataType).toBe('int4[]|NOT_NULL');
+    expect(tables[0].columns.counts.metadata.upstreamType).toBe('int4[]');
+    expect(tables[0].columns.counts.metadata.isNotNull).toBe(true);
+    expect(tables[0].columns.counts.metadata.isArray).toBe(true);
     expect(tables[0].columns.counts.elemPgTypeClass).toBe('b');
   });
 
@@ -1223,8 +1319,10 @@ describe('lite/tables with metadata table', () => {
 
     expect(tables).toHaveLength(1);
 
-    // Should read from pragma_table_info, preserving pipe notation
-    expect(tables[0].columns.id.dataType).toBe('int8|NOT_NULL');
-    expect(tables[0].columns.role.dataType).toBe('user_role|TEXT_ENUM');
+    // Should read from pragma_table_info and parse pipe notation to metadata
+    expect(tables[0].columns.id.metadata.upstreamType).toBe('int8');
+    expect(tables[0].columns.id.metadata.isNotNull).toBe(true);
+    expect(tables[0].columns.role.metadata.upstreamType).toBe('user_role');
+    expect(tables[0].columns.role.metadata.isEnum).toBe(true);
   });
 });

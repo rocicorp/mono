@@ -58,7 +58,11 @@ export function liteRow(
   const converted: Record<string, LiteValueType> = {};
   for (const key in row) {
     numCols++;
-    converted[key] = liteValue(row[key], columnMetadata(key, table), jsonFormat);
+    converted[key] = liteValue(
+      row[key],
+      columnMetadata(key, table),
+      jsonFormat,
+    );
   }
   return {row: converted, numCols};
 }

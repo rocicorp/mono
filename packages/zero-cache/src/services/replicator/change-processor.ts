@@ -539,7 +539,12 @@ class TransactionProcessor {
     // Write column metadata if metadata table exists
     if (hasColumnMetadataTable(this.#db.db)) {
       for (const [columnName, columnSpec] of Object.entries(table.columns)) {
-        insertColumnMetadata(this.#db.db, table.name, columnName, columnSpec.metadata);
+        insertColumnMetadata(
+          this.#db.db,
+          table.name,
+          columnName,
+          columnSpec.metadata,
+        );
       }
     }
 
@@ -598,7 +603,10 @@ class TransactionProcessor {
     const newSpec = mapPostgresToLiteColumn(table, msg.new, 'ignore-default');
 
     // Helper to compare metadata objects
-    const metadataEqual = (a: typeof oldSpec.metadata, b: typeof newSpec.metadata) =>
+    const metadataEqual = (
+      a: typeof oldSpec.metadata,
+      b: typeof newSpec.metadata,
+    ) =>
       a.upstreamType === b.upstreamType &&
       a.isNotNull === b.isNotNull &&
       a.isEnum === b.isEnum &&
@@ -606,7 +614,10 @@ class TransactionProcessor {
       a.characterMaxLength === b.characterMaxLength;
 
     // The only updates that are relevant are the column name and the data type.
-    if (oldName === newName && metadataEqual(oldSpec.metadata, newSpec.metadata)) {
+    if (
+      oldName === newName &&
+      metadataEqual(oldSpec.metadata, newSpec.metadata)
+    ) {
       this.#lc.info?.(msg.tag, 'no thing to update', oldSpec, newSpec);
       return;
     }
@@ -649,7 +660,13 @@ class TransactionProcessor {
 
       // Update metadata if metadata table exists
       if (hasColumnMetadataTable(this.#db.db)) {
-        updateColumnMetadata(this.#db.db, table, oldName, newName, newSpec.metadata);
+        updateColumnMetadata(
+          this.#db.db,
+          table,
+          oldName,
+          newName,
+          newSpec.metadata,
+        );
       }
     }
     this.#bumpVersions(table);

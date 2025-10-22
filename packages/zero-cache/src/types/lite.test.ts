@@ -7,10 +7,8 @@ import {
   liteRow,
   liteValue,
   type JSONFormat,
-  type LiteTypeString,
 } from './lite.ts';
 import type {RowValue} from './row-key.ts';
-import type {ValueType} from '../../../zero-protocol/src/client-schema.ts';
 
 describe('types/lite', () => {
   test.each([
@@ -20,7 +18,19 @@ describe('types/lite', () => {
       {
         name: 'tableName',
         primaryKey: ['foo'],
-        columns: {foo: {dataType: 'string', pos: 1, elemPgTypeClass: null}},
+        columns: {
+          foo: {
+            metadata: {
+              upstreamType: 'string',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 1,
+            elemPgTypeClass: null,
+          },
+        },
       },
       JSON_PARSED,
     ],
@@ -31,8 +41,28 @@ describe('types/lite', () => {
         name: 'tableName',
         primaryKey: ['foo'],
         columns: {
-          foo: {dataType: 'string', pos: 1, elemPgTypeClass: null},
-          baz: {dataType: 'int', pos: 2, elemPgTypeClass: null},
+          foo: {
+            metadata: {
+              upstreamType: 'string',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 1,
+            elemPgTypeClass: null,
+          },
+          baz: {
+            metadata: {
+              upstreamType: 'int',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 2,
+            elemPgTypeClass: null,
+          },
         },
       },
       JSON_PARSED,
@@ -44,9 +74,39 @@ describe('types/lite', () => {
         name: 'tableName',
         primaryKey: ['foo'],
         columns: {
-          foo: {dataType: 'string', pos: 1, elemPgTypeClass: null},
-          baz: {dataType: 'int', pos: 2, elemPgTypeClass: null},
-          boo: {dataType: 'int', pos: 3, elemPgTypeClass: null},
+          foo: {
+            metadata: {
+              upstreamType: 'string',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 1,
+            elemPgTypeClass: null,
+          },
+          baz: {
+            metadata: {
+              upstreamType: 'int',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 2,
+            elemPgTypeClass: null,
+          },
+          boo: {
+            metadata: {
+              upstreamType: 'int',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 3,
+            elemPgTypeClass: null,
+          },
         },
       },
       JSON_PARSED,
@@ -58,10 +118,50 @@ describe('types/lite', () => {
         name: 'tableName',
         primaryKey: ['foo'],
         columns: {
-          foo: {dataType: 'string', pos: 1, elemPgTypeClass: null},
-          baz: {dataType: 'int', pos: 2, elemPgTypeClass: null},
-          boo: {dataType: 'int', pos: 3, elemPgTypeClass: null},
-          zoo: {dataType: 'int', pos: 4, elemPgTypeClass: null},
+          foo: {
+            metadata: {
+              upstreamType: 'string',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 1,
+            elemPgTypeClass: null,
+          },
+          baz: {
+            metadata: {
+              upstreamType: 'int',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 2,
+            elemPgTypeClass: null,
+          },
+          boo: {
+            metadata: {
+              upstreamType: 'int',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 3,
+            elemPgTypeClass: null,
+          },
+          zoo: {
+            metadata: {
+              upstreamType: 'int',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 4,
+            elemPgTypeClass: null,
+          },
         },
       },
       JSON_PARSED,
@@ -72,7 +172,19 @@ describe('types/lite', () => {
       {
         name: 'tableName',
         primaryKey: ['foo'],
-        columns: {foo: {dataType: 'bool', pos: 1, elemPgTypeClass: null}},
+        columns: {
+          foo: {
+            metadata: {
+              upstreamType: 'bool',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 1,
+            elemPgTypeClass: null,
+          },
+        },
       },
       JSON_PARSED,
     ],
@@ -83,8 +195,28 @@ describe('types/lite', () => {
         name: 'tableName',
         primaryKey: ['foo'],
         columns: {
-          foo: {dataType: 'string', pos: 1, elemPgTypeClass: null},
-          b: {dataType: 'boolean', pos: 2, elemPgTypeClass: null},
+          foo: {
+            metadata: {
+              upstreamType: 'string',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 1,
+            elemPgTypeClass: null,
+          },
+          b: {
+            metadata: {
+              upstreamType: 'boolean',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 2,
+            elemPgTypeClass: null,
+          },
         },
       },
       JSON_PARSED,
@@ -96,9 +228,39 @@ describe('types/lite', () => {
         name: 'tableName',
         primaryKey: ['foo'],
         columns: {
-          foo: {dataType: 'string', pos: 1, elemPgTypeClass: null},
-          b: {dataType: 'boolean', pos: 2, elemPgTypeClass: null},
-          baz: {dataType: 'int', pos: 3, elemPgTypeClass: null},
+          foo: {
+            metadata: {
+              upstreamType: 'string',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 1,
+            elemPgTypeClass: null,
+          },
+          b: {
+            metadata: {
+              upstreamType: 'boolean',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 2,
+            elemPgTypeClass: null,
+          },
+          baz: {
+            metadata: {
+              upstreamType: 'int',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 3,
+            elemPgTypeClass: null,
+          },
         },
       },
       JSON_PARSED,
@@ -110,10 +272,50 @@ describe('types/lite', () => {
         name: 'tableName',
         primaryKey: ['foo'],
         columns: {
-          foo: {dataType: 'string', pos: 1, elemPgTypeClass: null},
-          b: {dataType: 'boolean', pos: 2, elemPgTypeClass: null},
-          boo: {dataType: 'int', pos: 3, elemPgTypeClass: null},
-          baz: {dataType: 'int', pos: 4, elemPgTypeClass: null},
+          foo: {
+            metadata: {
+              upstreamType: 'string',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 1,
+            elemPgTypeClass: null,
+          },
+          b: {
+            metadata: {
+              upstreamType: 'boolean',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 2,
+            elemPgTypeClass: null,
+          },
+          boo: {
+            metadata: {
+              upstreamType: 'int',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 3,
+            elemPgTypeClass: null,
+          },
+          baz: {
+            metadata: {
+              upstreamType: 'int',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 4,
+            elemPgTypeClass: null,
+          },
         },
       },
       JSON_PARSED,
@@ -125,11 +327,61 @@ describe('types/lite', () => {
         name: 'tableName',
         primaryKey: ['foo'],
         columns: {
-          foo: {dataType: 'string', pos: 1, elemPgTypeClass: null},
-          b: {dataType: 'boolean', pos: 2, elemPgTypeClass: null},
-          boo: {dataType: 'int', pos: 3, elemPgTypeClass: null},
-          baz: {dataType: 'int', pos: 4, elemPgTypeClass: null},
-          zoo: {dataType: 'float', pos: 5, elemPgTypeClass: null},
+          foo: {
+            metadata: {
+              upstreamType: 'string',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 1,
+            elemPgTypeClass: null,
+          },
+          b: {
+            metadata: {
+              upstreamType: 'boolean',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 2,
+            elemPgTypeClass: null,
+          },
+          boo: {
+            metadata: {
+              upstreamType: 'int',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 3,
+            elemPgTypeClass: null,
+          },
+          baz: {
+            metadata: {
+              upstreamType: 'int',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 4,
+            elemPgTypeClass: null,
+          },
+          zoo: {
+            metadata: {
+              upstreamType: 'float',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 5,
+            elemPgTypeClass: null,
+          },
         },
       },
       JSON_PARSED,
@@ -151,10 +403,50 @@ describe('types/lite', () => {
         name: 'tableName',
         primaryKey: ['foo'],
         columns: {
-          foo: {dataType: 'json', pos: 1, elemPgTypeClass: null},
-          bar: {dataType: 'jsonb', pos: 2, elemPgTypeClass: null},
-          baz: {dataType: 'json', pos: 3, elemPgTypeClass: null},
-          boo: {dataType: 'jsonb', pos: 4, elemPgTypeClass: null},
+          foo: {
+            metadata: {
+              upstreamType: 'json',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 1,
+            elemPgTypeClass: null,
+          },
+          bar: {
+            metadata: {
+              upstreamType: 'jsonb',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 2,
+            elemPgTypeClass: null,
+          },
+          baz: {
+            metadata: {
+              upstreamType: 'json',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 3,
+            elemPgTypeClass: null,
+          },
+          boo: {
+            metadata: {
+              upstreamType: 'jsonb',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 4,
+            elemPgTypeClass: null,
+          },
         },
       },
       JSON_PARSED,
@@ -171,10 +463,50 @@ describe('types/lite', () => {
         name: 'tableName',
         primaryKey: ['foo'],
         columns: {
-          foo: {dataType: 'json', pos: 1, elemPgTypeClass: null},
-          bar: {dataType: 'jsonb', pos: 2, elemPgTypeClass: null},
-          baz: {dataType: 'json', pos: 3, elemPgTypeClass: null},
-          boo: {dataType: 'jsonb', pos: 4, elemPgTypeClass: null},
+          foo: {
+            metadata: {
+              upstreamType: 'json',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 1,
+            elemPgTypeClass: null,
+          },
+          bar: {
+            metadata: {
+              upstreamType: 'jsonb',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 2,
+            elemPgTypeClass: null,
+          },
+          baz: {
+            metadata: {
+              upstreamType: 'json',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 3,
+            elemPgTypeClass: null,
+          },
+          boo: {
+            metadata: {
+              upstreamType: 'jsonb',
+              isNotNull: false,
+              isEnum: false,
+              isArray: false,
+              characterMaxLength: null,
+            },
+            pos: 4,
+            elemPgTypeClass: null,
+          },
         },
       },
       JSON_STRINGIFIED,
@@ -193,68 +525,367 @@ describe('types/lite', () => {
   );
 
   test.each([
-    ['int', 1, 1],
-    ['string', 'two', 'two'],
-    ['string', null, null],
-    ['int', 12313214123432n, 12313214123432n],
-    ['float', 123.456, 123.456],
-    ['bool', true, 1],
-    ['boolean', false, 0],
-
-    ['bytea', Buffer.from('hello world'), Buffer.from('hello world')],
-    ['json', {custom: {json: 'object'}}, '{"custom":{"json":"object"}}'],
-    ['jsonb', [1, 2], '[1,2]'],
-    ['json', ['two', 'three'], '["two","three"]'],
-    ['json', [null, null], '[null,null]'],
     [
-      'int[]',
+      {
+        upstreamType: 'int',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+      1,
+      1,
+    ],
+    [
+      {
+        upstreamType: 'string',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+      'two',
+      'two',
+    ],
+    [
+      {
+        upstreamType: 'string',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+      null,
+      null,
+    ],
+    [
+      {
+        upstreamType: 'int',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+      12313214123432n,
+      12313214123432n,
+    ],
+    [
+      {
+        upstreamType: 'float',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+      123.456,
+      123.456,
+    ],
+    [
+      {
+        upstreamType: 'bool',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+      true,
+      1,
+    ],
+    [
+      {
+        upstreamType: 'boolean',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+      false,
+      0,
+    ],
+
+    [
+      {
+        upstreamType: 'bytea',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+      Buffer.from('hello world'),
+      Buffer.from('hello world'),
+    ],
+    [
+      {
+        upstreamType: 'json',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+      {custom: {json: 'object'}},
+      '{"custom":{"json":"object"}}',
+    ],
+    [
+      {
+        upstreamType: 'jsonb',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+      [1, 2],
+      '[1,2]',
+    ],
+    [
+      {
+        upstreamType: 'json',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+      ['two', 'three'],
+      '["two","three"]',
+    ],
+    [
+      {
+        upstreamType: 'json',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+      [null, null],
+      '[null,null]',
+    ],
+    [
+      {
+        upstreamType: 'int[]',
+        isNotNull: false,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      },
       [12313214123432n, 12313214123432n],
       '[12313214123432,12313214123432]',
     ],
-    ['float[]', [123.456, 987.654], '[123.456,987.654]'],
-    ['bool[]', [true, false], '[true,false]'],
     [
-      'json',
+      {
+        upstreamType: 'float[]',
+        isNotNull: false,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      },
+      [123.456, 987.654],
+      '[123.456,987.654]',
+    ],
+    [
+      {
+        upstreamType: 'bool[]',
+        isNotNull: false,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      },
+      [true, false],
+      '[true,false]',
+    ],
+    [
+      {
+        upstreamType: 'json',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
       [{custom: {json: 'object'}}, {another: {json: 'object'}}],
       '[{"custom":{"json":"object"}},{"another":{"json":"object"}}]',
     ],
 
     // Multi-dimensional array
     [
-      'json[][]',
+      {
+        upstreamType: 'json[][]',
+        isNotNull: false,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      },
       [
         [{custom: {json: 'object'}}, {another: {json: 'object'}}],
         [{custom: {foo: 'bar'}}, {another: {boo: 'far'}}],
       ],
       '[[{"custom":{"json":"object"}},{"another":{"json":"object"}}],[{"custom":{"foo":"bar"}},{"another":{"boo":"far"}}]]',
     ],
-  ])('liteValue: %s', (dataType, input, output) => {
-    expect(liteValue(input, dataType, JSON_PARSED)).toEqual(output);
+  ])('liteValue: $upstreamType', (metadata, input, output) => {
+    expect(liteValue(input, metadata, JSON_PARSED)).toEqual(output);
   });
 });
 
 describe('dataTypeToZqlValueType', () => {
   test.each([
-    ['int', 'number'],
-    ['text', 'string'],
-    ['float', 'number'],
-    ['bool', 'boolean'],
-    ['boolean', 'boolean'],
-    ['json', 'json'],
-    ['int[]|NOT_NULL', 'json'],
-    ['float[]', 'json'],
-    ['bool[]', 'json'],
-    ['json[]', 'json'],
-    ['f[]|TEXT_ENUM', 'json'],
-    ['b[]', 'json'],
-    ['int|TEXT_ARRAY', 'json'],
-    ['float|TEXT_ARRAY', 'json'],
-    ['bool|TEXT_ARRAY', 'json'],
-    ['json|TEXT_ARRAY', 'json'],
-  ] satisfies [LiteTypeString, ValueType][])(
-    'dataTypeToZqlValueType: %s => %s',
-    (pgType, zqlType) => {
-      expect(dataTypeToZqlValueType(pgType)).toBe(zqlType);
-    },
-  );
+    [
+      {
+        upstreamType: 'int',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+      'number',
+    ],
+    [
+      {
+        upstreamType: 'text',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+      'string',
+    ],
+    [
+      {
+        upstreamType: 'float',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+      'number',
+    ],
+    [
+      {
+        upstreamType: 'bool',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+      'boolean',
+    ],
+    [
+      {
+        upstreamType: 'boolean',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+      'boolean',
+    ],
+    [
+      {
+        upstreamType: 'json',
+        isNotNull: false,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      },
+      'json',
+    ],
+    [
+      {
+        upstreamType: 'int[]',
+        isNotNull: true,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      },
+      'json',
+    ],
+    [
+      {
+        upstreamType: 'float[]',
+        isNotNull: false,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      },
+      'json',
+    ],
+    [
+      {
+        upstreamType: 'bool[]',
+        isNotNull: false,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      },
+      'json',
+    ],
+    [
+      {
+        upstreamType: 'json[]',
+        isNotNull: false,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      },
+      'json',
+    ],
+    [
+      {
+        upstreamType: 'f[]',
+        isNotNull: false,
+        isEnum: true,
+        isArray: true,
+        characterMaxLength: null,
+      },
+      'json',
+    ],
+    [
+      {
+        upstreamType: 'b[]',
+        isNotNull: false,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      },
+      'json',
+    ],
+    [
+      {
+        upstreamType: 'int[]',
+        isNotNull: false,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      },
+      'json',
+    ],
+    [
+      {
+        upstreamType: 'float[]',
+        isNotNull: false,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      },
+      'json',
+    ],
+    [
+      {
+        upstreamType: 'bool[]',
+        isNotNull: false,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      },
+      'json',
+    ],
+    [
+      {
+        upstreamType: 'json[]',
+        isNotNull: false,
+        isEnum: false,
+        isArray: true,
+        characterMaxLength: null,
+      },
+      'json',
+    ],
+  ])('dataTypeToZqlValueType: $upstreamType => %s', (metadata, zqlType) => {
+    expect(dataTypeToZqlValueType(metadata)).toBe(zqlType);
+  });
 });
