@@ -11,12 +11,31 @@
 
 import {Database} from '../../../../zqlite/src/db.ts';
 import type {LiteTableSpec} from '../../db/specs.ts';
-import {
-  upstreamDataType,
-  nullableUpstream,
-  isEnum as checkIsEnum,
-  isArray as checkIsArray,
-} from '../../types/lite.ts';
+
+// Legacy pipe-delimited format parsing helpers (used internally for backward compatibility)
+const TEXT_ENUM_ATTRIBUTE = '|TEXT_ENUM';
+const NOT_NULL_ATTRIBUTE = '|NOT_NULL';
+const TEXT_ARRAY_ATTRIBUTE = '|TEXT_ARRAY';
+
+function upstreamDataType(liteTypeString: string): string {
+  const delim = liteTypeString.indexOf('|');
+  return delim > 0 ? liteTypeString.substring(0, delim) : liteTypeString;
+}
+
+function nullableUpstream(liteTypeString: string): boolean {
+  return !liteTypeString.includes(NOT_NULL_ATTRIBUTE);
+}
+
+function checkIsEnum(liteTypeString: string): boolean {
+  return liteTypeString.includes(TEXT_ENUM_ATTRIBUTE);
+}
+
+function checkIsArray(liteTypeString: string): boolean {
+  return (
+    liteTypeString.includes(TEXT_ARRAY_ATTRIBUTE) ||
+    liteTypeString.includes('[]')
+  );
+}
 
 /**
  * Structured column metadata, replacing the old pipe-delimited string format.
@@ -31,7 +50,7 @@ export interface ColumnMetadata {
   /** True if column is an array type (includes [] in upstreamType) */
   isArray: boolean;
   /** Maximum character length for varchar/char types */
-  characterMaxLength?: number | null;
+  characterMaxLength?: number | null | undefined;
 }
 
 /**
@@ -166,7 +185,15 @@ export function renameTableMetadata(
 
 /**
  * Converts pipe-delimited LiteTypeString to structured ColumnMetadata.
- * This is a compatibility helper for the migration period.
+ *
+ * **Legacy compatibility function**: Used only for reading old database schemas
+ * that don't have the `_zero.column_metadata` table yet. This function parses
+ * the old pipe-delimited format (e.g., "int8|NOT_NULL") embedded in SQLite
+ * column type strings.
+ *
+ * New code should use structured `ColumnMetadata` objects directly.
+ *
+ * @internal
  */
 export function liteTypeStringToMetadata(
   liteTypeString: string,
@@ -192,7 +219,16 @@ export function liteTypeStringToMetadata(
 
 /**
  * Converts structured ColumnMetadata back to pipe-delimited LiteTypeString.
- * This is a compatibility helper for the migration period.
+ *
+ * **Dual-write compatibility function**: Used to generate pipe-delimited type
+ * strings for SQLite column definitions during the migration period. This ensures
+ * that old services can still read column metadata from the SQLite schema even
+ * if they don't know about the `_zero.column_metadata` table.
+ *
+ * Once all services are upgraded to read from the metadata table, this function
+ * and the dual-write strategy can be removed.
+ *
+ * @internal
  */
 export function metadataToLiteTypeString(metadata: ColumnMetadata): string {
   const {upstreamType, isNotNull, isEnum} = metadata;
@@ -217,11 +253,8 @@ export function populateColumnMetadataFromExistingTables(
 ): void {
   for (const table of tables) {
     for (const [columnName, columnSpec] of Object.entries(table.columns)) {
-      const metadata = liteTypeStringToMetadata(
-        columnSpec.dataType,
-        columnSpec.characterMaximumLength,
-      );
-      insertColumnMetadata(db, table.name, columnName, metadata);
+      // Column spec already has metadata in the new format
+      insertColumnMetadata(db, table.name, columnName, columnSpec.metadata);
     }
   }
 }

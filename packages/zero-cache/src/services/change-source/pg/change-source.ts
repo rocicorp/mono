@@ -717,11 +717,18 @@ class ChangeMaker {
       const {name: newName, ...newSpec} = must(newColumns.get(id));
       // The three things that we care about are:
       // 1. name
-      // 2. type
+      // 2. metadata (type info)
       // 3. not-null
+      const metadataChanged =
+        oldSpec.metadata.upstreamType !== newSpec.metadata.upstreamType ||
+        oldSpec.metadata.isNotNull !== newSpec.metadata.isNotNull ||
+        oldSpec.metadata.isEnum !== newSpec.metadata.isEnum ||
+        oldSpec.metadata.isArray !== newSpec.metadata.isArray ||
+        oldSpec.metadata.characterMaxLength !== newSpec.metadata.characterMaxLength;
+
       if (
         oldName !== newName ||
-        oldSpec.dataType !== newSpec.dataType ||
+        metadataChanged ||
         oldSpec.notNull !== newSpec.notNull
       ) {
         changes.push({

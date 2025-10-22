@@ -5,6 +5,7 @@ import type {
   ValueType,
 } from '../../../zero-schema/src/table-schema.ts';
 import type {LiteTableSpec} from '../db/specs.ts';
+import type {ColumnMetadata} from '../services/change-source/column-metadata.ts';
 import {
   dataTypeToZqlValueType as upstreamDataTypeToZqlValueType,
   type PostgresValueType,
@@ -17,10 +18,10 @@ export type LiteValueType = number | bigint | string | null | Uint8Array;
 export type LiteRow = Readonly<Record<string, LiteValueType>>;
 export type LiteRowKey = LiteRow; // just for API readability
 
-function columnType(col: string, table: LiteTableSpec) {
+function columnMetadata(col: string, table: LiteTableSpec): ColumnMetadata {
   const spec = table.columns[col];
   assert(spec, `Unknown column ${col} in table ${table.name}`);
-  return spec.dataType;
+  return spec.metadata;
 }
 
 export const JSON_STRINGIFIED = 's';
@@ -43,7 +44,7 @@ export function liteRow(
   for (const key in row) {
     numCols++;
     const val = row[key];
-    const liteVal = liteValue(val, columnType(key, table), jsonFormat);
+    const liteVal = liteValue(val, columnMetadata(key, table), jsonFormat);
     if (val !== liteVal) {
       copyNeeded = true;
       break;
@@ -57,7 +58,7 @@ export function liteRow(
   const converted: Record<string, LiteValueType> = {};
   for (const key in row) {
     numCols++;
-    converted[key] = liteValue(row[key], columnType(key, table), jsonFormat);
+    converted[key] = liteValue(row[key], columnMetadata(key, table), jsonFormat);
   }
   return {row: converted, numCols};
 }
@@ -74,13 +75,13 @@ export function liteRow(
  */
 export function liteValue(
   val: PostgresValueType,
-  pgType: string,
+  metadata: ColumnMetadata,
   jsonFormat: JSONFormat,
 ): LiteValueType {
   if (val instanceof Uint8Array || val === null) {
     return val;
   }
-  const valueType = dataTypeToZqlValueType(pgType);
+  const valueType = dataTypeToZqlValueType(metadata);
   if (valueType === 'json') {
     if (jsonFormat === JSON_STRINGIFIED && typeof val === 'string') {
       // JSON and JSONB values are already strings if the JSON was not parsed.
@@ -116,29 +117,23 @@ function toLiteValue(val: JSONValue): Exclude<JSONValue, boolean> {
 }
 
 export function mapLiteDataTypeToZqlSchemaValue(
-  liteDataType: LiteTypeString,
+  metadata: ColumnMetadata,
 ): SchemaValue {
-  return {type: mapLiteDataTypeToZqlValueType(liteDataType)};
+  return {type: mapLiteDataTypeToZqlValueType(metadata)};
 }
 
-function mapLiteDataTypeToZqlValueType(dataType: LiteTypeString): ValueType {
-  const type = dataTypeToZqlValueType(dataType);
+function mapLiteDataTypeToZqlValueType(metadata: ColumnMetadata): ValueType {
+  const type = dataTypeToZqlValueType(metadata);
   if (type === undefined) {
-    throw new Error(`Unsupported data type ${dataType}`);
+    throw new Error(`Unsupported data type ${metadata.upstreamType}`);
   }
   return type;
 }
 
-// Note: Includes the "TEXT" substring for SQLite type affinity
-const TEXT_ENUM_ATTRIBUTE = '|TEXT_ENUM';
-const NOT_NULL_ATTRIBUTE = '|NOT_NULL';
-export const TEXT_ARRAY_ATTRIBUTE = '|TEXT_ARRAY';
-
 /**
- * The `LiteTypeString` utilizes SQLite's loose type system to encode
- * auxiliary information about the upstream column (e.g. type and
- * constraints) that does not necessarily affect how SQLite handles the data,
- * but nonetheless determines how higher level logic handles the data.
+ * Legacy type alias for pipe-delimited column type strings.
+ * Kept for backward compatibility with old database schemas that don't have
+ * the metadata table yet.
  *
  * The format of the type string is the original upstream type, followed
  * by any number of attributes, each of which begins with the `|` character,
@@ -165,55 +160,18 @@ export const TEXT_ARRAY_ATTRIBUTE = '|TEXT_ARRAY';
 export type LiteTypeString = string;
 
 /**
- * Formats a {@link LiteTypeString}.
- */
-export function liteTypeString(
-  upstreamDataType: string,
-  notNull: boolean | null | undefined,
-  textEnum: boolean,
-): LiteTypeString {
-  let typeString = upstreamDataType;
-  if (notNull) {
-    typeString += NOT_NULL_ATTRIBUTE;
-  }
-  if (textEnum) {
-    typeString += TEXT_ENUM_ATTRIBUTE;
-  }
-  return typeString;
-}
-
-export function upstreamDataType(liteTypeString: LiteTypeString) {
-  const delim = liteTypeString.indexOf('|');
-  return delim > 0 ? liteTypeString.substring(0, delim) : liteTypeString;
-}
-
-export function nullableUpstream(liteTypeString: LiteTypeString) {
-  return !liteTypeString.includes(NOT_NULL_ATTRIBUTE);
-}
-
-/**
- * Returns the value type for the `pgDataType` if it is supported by ZQL.
- * (Note that `pgDataType` values are stored as-is in the SQLite column defs).
+ * Returns the value type for the column metadata if it is supported by ZQL.
  *
  * For types not supported by ZQL, returns `undefined`.
  */
 export function dataTypeToZqlValueType(
-  liteTypeString: LiteTypeString,
+  metadata: ColumnMetadata,
 ): ValueType | undefined {
+  // Extract base type, removing array notation if present
+  const baseType = metadata.upstreamType.replace(/\[\]$/, '');
   return upstreamDataTypeToZqlValueType(
-    upstreamDataType(liteTypeString).toLowerCase(),
-    liteTypeString.includes(TEXT_ENUM_ATTRIBUTE),
-    isArray(liteTypeString),
-  );
-}
-
-export function isEnum(liteTypeString: LiteTypeString) {
-  return liteTypeString.includes(TEXT_ENUM_ATTRIBUTE);
-}
-
-export function isArray(liteTypeString: LiteTypeString) {
-  return (
-    liteTypeString.includes(TEXT_ARRAY_ATTRIBUTE) ||
-    liteTypeString.includes('[]')
+    baseType.toLowerCase(),
+    metadata.isEnum,
+    metadata.isArray,
   );
 }

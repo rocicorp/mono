@@ -40,9 +40,9 @@ export function bench(opts: Options) {
         db,
         name,
         Object.fromEntries(
-          Object.entries(columns).map(([name, {dataType}]) => [
+          Object.entries(columns).map(([name, {metadata}]) => [
             name,
-            mapLiteDataTypeToZqlSchemaValue(dataType),
+            mapLiteDataTypeToZqlSchemaValue(metadata),
           ]),
         ),
         [primaryKey[0], ...primaryKey.slice(1)],

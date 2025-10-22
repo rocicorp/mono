@@ -265,9 +265,9 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
       this.#replica,
       tableName,
       Object.fromEntries(
-        Object.entries(columns).map(([name, {dataType}]) => [
+        Object.entries(columns).map(([name, {metadata}]) => [
           name,
-          mapLiteDataTypeToZqlSchemaValue(dataType),
+          mapLiteDataTypeToZqlSchemaValue(metadata),
         ]),
       ),
       [primaryKey[0], ...primaryKey.slice(1)],

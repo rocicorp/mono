@@ -1,11 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
+import type {ColumnMetadata} from '../services/change-source/column-metadata.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../services/replicator/schema/constants.ts';
-import {
-  dataTypeToZqlValueType,
-  liteTypeString,
-  upstreamDataType,
-  type LiteTypeString,
-} from '../types/lite.ts';
+import {dataTypeToZqlValueType} from '../types/lite.ts';
 import {liteTableName} from '../types/names.ts';
 import * as PostgresTypeClass from './postgres-type-class-enum.ts';
 import {
@@ -19,8 +15,13 @@ import {
 function zeroVersionColumnSpec(defaultVersion: string | undefined): ColumnSpec {
   return {
     pos: Number.MAX_SAFE_INTEGER, // i.e. last
-    characterMaximumLength: null,
-    dataType: 'text',
+    metadata: {
+      upstreamType: 'text',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    },
     notNull: false,
     dflt: !defaultVersion ? null : `'${defaultVersion}'`,
     elemPgTypeClass: null,
@@ -29,15 +30,13 @@ function zeroVersionColumnSpec(defaultVersion: string | undefined): ColumnSpec {
 
 export function warnIfDataTypeSupported(
   lc: LogContext,
-  liteTypeString: LiteTypeString,
+  metadata: ColumnMetadata,
   table: string,
   column: string,
 ) {
-  if (dataTypeToZqlValueType(liteTypeString) === undefined) {
+  if (dataTypeToZqlValueType(metadata) === undefined) {
     lc.warn?.(
-      `\n\nWARNING: zero does not yet support the "${upstreamDataType(
-        liteTypeString,
-      )}" data type.\n` +
+      `\n\nWARNING: zero does not yet support the "${metadata.upstreamType}" data type.\n` +
         `The "${table}"."${column}" column will not be synced to clients.\n\n`,
     );
   }
@@ -62,7 +61,7 @@ const STRING_EXPRESSION_REGEX = /^('.*')::[^']+$/;
 export function mapPostgresToLiteDefault(
   table: string,
   column: string,
-  dataType: string,
+  metadata: ColumnMetadata,
   defaultExpression: string | null | undefined,
 ) {
   if (!defaultExpression) {
@@ -74,7 +73,7 @@ export function mapPostgresToLiteDefault(
     );
   }
   if (SIMPLE_TOKEN_EXPRESSION_REGEX.test(defaultExpression)) {
-    if (dataTypeToZqlValueType(dataType) === 'boolean') {
+    if (dataTypeToZqlValueType(metadata) === 'boolean') {
       return defaultExpression === 'true' ? '1' : '0';
     }
     return defaultExpression;
@@ -95,26 +94,27 @@ export function mapPostgresToLiteColumn(
 ): ColumnSpec {
   const {
     pos,
-    dataType,
+    metadata: upstreamMetadata,
     pgTypeClass,
     notNull,
     dflt,
-    characterMaximumLength = null,
     elemPgTypeClass = null,
   } = column.spec;
 
-  // PostgreSQL includes [] in dataType for array types (e.g., 'int4[]', 'int4[][]').
-  // liteTypeString() appends attributes: "varchar[]|NOT_NULL", "my_enum[][]|TEXT_ENUM"
-  const liteType = liteTypeString(
-    dataType,
-    notNull,
-    (elemPgTypeClass ?? pgTypeClass) === PostgresTypeClass.Enum,
-  );
+  // Build ColumnMetadata directly from upstream column spec
+  // PostgreSQL includes [] in dataType for array types (e.g., 'int4[]', 'int4[][]')
+  const isArray = upstreamMetadata.upstreamType.includes('[]');
+  const metadata: ColumnMetadata = {
+    upstreamType: upstreamMetadata.upstreamType,
+    isNotNull: notNull ?? false,
+    isEnum: (elemPgTypeClass ?? pgTypeClass) === PostgresTypeClass.Enum,
+    isArray,
+    characterMaxLength: upstreamMetadata.characterMaxLength ?? null,
+  };
 
   return {
     pos,
-    dataType: liteType,
-    characterMaximumLength,
+    metadata,
     // Note: NOT NULL constraints are always ignored for SQLite (replica) tables.
     // 1. They are enforced by the replication stream.
     // 2. We need nullability for columns with defaults to support
@@ -128,7 +128,7 @@ export function mapPostgresToLiteColumn(
     dflt:
       ignoreDefault === 'ignore-default'
         ? null
-        : mapPostgresToLiteDefault(table, column.name, dataType, dflt),
+        : mapPostgresToLiteDefault(table, column.name, metadata, dflt),
     elemPgTypeClass,
   };
 }

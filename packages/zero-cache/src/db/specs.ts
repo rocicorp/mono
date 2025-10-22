@@ -22,9 +22,17 @@ export const pgReplicaIdentitySchema = v.literalUnion(
   PostgresReplicaIdentity.Index,
 );
 
+export const columnMetadataSchema = v.object({
+  upstreamType: v.string(),
+  isNotNull: v.boolean(),
+  isEnum: v.boolean(),
+  isArray: v.boolean(),
+  characterMaxLength: v.number().nullable().optional(),
+});
+
 export const columnSpec = v.object({
   pos: v.number(),
-  dataType: v.string(),
+  metadata: columnMetadataSchema,
   pgTypeClass: pgTypeClassSchema.optional(),
 
   // If the column is an array, this will be the type of the
@@ -32,7 +40,6 @@ export const columnSpec = v.object({
   // this will be null.
   elemPgTypeClass: pgTypeClassSchema.nullable().optional(),
 
-  characterMaximumLength: v.number().nullable().optional(),
   notNull: v.boolean().nullable().optional(),
   dflt: v.string().nullable().optional(),
 });

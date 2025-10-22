@@ -128,7 +128,7 @@ function getReplicatedTables(db: Database): ReplicatedTable[] {
       .sort(byKeys)
       .map(([column, spec]) => ({
         column,
-        upstreamType: spec.dataType.split('|')[0],
+        upstreamType: spec.metadata.upstreamType,
         clientType: clientSchema.get(table)?.zqlSpec[column]?.type ?? null,
       })),
   }));

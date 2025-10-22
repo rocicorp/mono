@@ -69,7 +69,7 @@ export function validate(
         `Column "${col}" in table "${table.name}" has invalid characters.`,
       );
     }
-    warnIfDataTypeSupported(lc, spec.dataType, table.name, col);
+    warnIfDataTypeSupported(lc, spec.metadata, table.name, col);
   }
 }
 

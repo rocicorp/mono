@@ -66,7 +66,7 @@ export function checkClientSchema(
       if (fullSpec.columns[missing]) {
         errors.push(
           `The "${table}"."${missing}" column cannot be synced because it ` +
-            `is of an unsupported data type "${fullSpec.columns[missing].dataType}"`,
+            `is of an unsupported data type "${fullSpec.columns[missing].metadata.upstreamType}"`,
         );
       } else {
         const columns = [...syncedColumns]

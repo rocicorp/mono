@@ -462,7 +462,7 @@ async function copy(
     return (val: string) =>
       liteValue(
         pgParse(val) as PostgresValueType,
-        c.dataType,
+        c.metadata,
         JSON_STRINGIFIED,
       );
   });

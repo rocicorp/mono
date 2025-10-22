@@ -8,14 +8,11 @@ import {
   type ColumnMetadata,
   getTableMetadata,
   hasColumnMetadataTable,
-  metadataToLiteTypeString,
+  liteTypeStringToMetadata,
 } from '../services/change-source/column-metadata.ts';
 import {
   dataTypeToZqlValueType,
-  isArray,
-  isEnum,
   mapLiteDataTypeToZqlSchemaValue,
-  nullableUpstream,
 } from '../types/lite.ts';
 import * as PostgresTypeClass from './postgres-type-class-enum.ts';
 import type {
@@ -73,28 +70,27 @@ export function listTables(db: Database): LiteTableSpec[] {
       tableMetadata = useMetadata ? getTableMetadata(db, col.table) : null;
     }
 
-    // Get dataType from metadata table if available, otherwise use pragma_table_info
-    let dataType: string;
-    let characterMaximumLength: number | null = null;
+    // Get metadata from metadata table if available, otherwise parse from pragma_table_info
+    let metadata: ColumnMetadata;
 
     const colMetadata = tableMetadata?.get(col.name);
     if (colMetadata) {
-      dataType = metadataToLiteTypeString(colMetadata);
-      characterMaximumLength = colMetadata.characterMaxLength ?? null;
+      // Primary path: read structured metadata from metadata table
+      metadata = colMetadata;
     } else {
-      dataType = col.type;
+      // Fallback path: parse pipe-delimited type from SQLite schema
+      metadata = liteTypeStringToMetadata(col.type);
     }
 
-    const elemPgTypeClass = isArray(dataType)
-      ? isEnum(dataType)
+    const elemPgTypeClass = metadata.isArray
+      ? metadata.isEnum
         ? PostgresTypeClass.Enum
         : PostgresTypeClass.Base
       : null;
 
     table.columns[col.name] = {
       pos: Object.keys(table.columns).length + 1,
-      dataType,
-      characterMaximumLength,
+      metadata,
       notNull: col.notNull !== 0,
       dflt: col.dflt,
       elemPgTypeClass,
@@ -193,13 +189,13 @@ export function computeZqlSpecs(
 
     // Only include columns for which the mapped ZQL Value is defined.
     const visibleColumns = Object.entries(fullTable.columns).filter(
-      ([_, {dataType}]) => dataTypeToZqlValueType(dataType),
+      ([_, {metadata}]) => dataTypeToZqlValueType(metadata),
     );
     const notNullColumns = new Set(
       visibleColumns
         .filter(
-          ([col, {dataType}]) =>
-            !nullableUpstream(dataType) || fullTable.primaryKey?.includes(col),
+          ([col, {metadata}]) =>
+            metadata.isNotNull || fullTable.primaryKey?.includes(col),
         )
         .map(([col]) => col),
     );
@@ -248,9 +244,9 @@ export function computeZqlSpecs(
     tableSpecs.set(tableSpec.name, {
       tableSpec,
       zqlSpec: Object.fromEntries(
-        Object.entries(tableSpec.columns).map(([name, {dataType}]) => [
+        Object.entries(tableSpec.columns).map(([name, {metadata}]) => [
           name,
-          mapLiteDataTypeToZqlSchemaValue(dataType),
+          mapLiteDataTypeToZqlSchemaValue(metadata),
         ]),
       ),
     });

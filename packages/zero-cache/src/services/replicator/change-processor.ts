@@ -54,7 +54,6 @@ import {
   deleteTableMetadata,
   hasColumnMetadataTable,
   insertColumnMetadata,
-  liteTypeStringToMetadata,
   renameTableMetadata,
   updateColumnMetadata,
 } from '../change-source/column-metadata.ts';
@@ -540,11 +539,7 @@ class TransactionProcessor {
     // Write column metadata if metadata table exists
     if (hasColumnMetadataTable(this.#db.db)) {
       for (const [columnName, columnSpec] of Object.entries(table.columns)) {
-        const metadata = liteTypeStringToMetadata(
-          columnSpec.dataType,
-          columnSpec.characterMaximumLength,
-        );
-        insertColumnMetadata(this.#db.db, table.name, columnName, metadata);
+        insertColumnMetadata(this.#db.db, table.name, columnName, columnSpec.metadata);
       }
     }
 
@@ -577,11 +572,7 @@ class TransactionProcessor {
 
     // Write column metadata if metadata table exists
     if (hasColumnMetadataTable(this.#db.db)) {
-      const metadata = liteTypeStringToMetadata(
-        spec.dataType,
-        spec.characterMaximumLength,
-      );
-      insertColumnMetadata(this.#db.db, table, name, metadata);
+      insertColumnMetadata(this.#db.db, table, name, spec.metadata);
     }
 
     this.#bumpVersions(table);
@@ -606,14 +597,22 @@ class TransactionProcessor {
     const oldSpec = mapPostgresToLiteColumn(table, msg.old, 'ignore-default');
     const newSpec = mapPostgresToLiteColumn(table, msg.new, 'ignore-default');
 
+    // Helper to compare metadata objects
+    const metadataEqual = (a: typeof oldSpec.metadata, b: typeof newSpec.metadata) =>
+      a.upstreamType === b.upstreamType &&
+      a.isNotNull === b.isNotNull &&
+      a.isEnum === b.isEnum &&
+      a.isArray === b.isArray &&
+      a.characterMaxLength === b.characterMaxLength;
+
     // The only updates that are relevant are the column name and the data type.
-    if (oldName === newName && oldSpec.dataType === newSpec.dataType) {
+    if (oldName === newName && metadataEqual(oldSpec.metadata, newSpec.metadata)) {
       this.#lc.info?.(msg.tag, 'no thing to update', oldSpec, newSpec);
       return;
     }
     // If the data type changes, we have to make a new column with the new data type
     // and copy the values over.
-    if (oldSpec.dataType !== newSpec.dataType) {
+    if (!metadataEqual(oldSpec.metadata, newSpec.metadata)) {
       // Remember (and drop) the indexes that reference the column.
       const indexes = listIndexes(this.#db.db).filter(
         idx => idx.tableName === table && oldName in idx.columns,
@@ -635,14 +634,10 @@ class TransactionProcessor {
 
       // Update metadata if metadata table exists
       if (hasColumnMetadataTable(this.#db.db)) {
-        const newMetadata = liteTypeStringToMetadata(
-          newSpec.dataType,
-          newSpec.characterMaximumLength,
-        );
         // Delete old column metadata
         deleteColumnMetadata(this.#db.db, table, oldName);
         // Insert new column metadata with tmp name
-        insertColumnMetadata(this.#db.db, table, tmpName, newMetadata);
+        insertColumnMetadata(this.#db.db, table, tmpName, newSpec.metadata);
       }
 
       oldName = tmpName;
@@ -654,11 +649,7 @@ class TransactionProcessor {
 
       // Update metadata if metadata table exists
       if (hasColumnMetadataTable(this.#db.db)) {
-        const metadata = liteTypeStringToMetadata(
-          newSpec.dataType,
-          newSpec.characterMaximumLength,
-        );
-        updateColumnMetadata(this.#db.db, table, oldName, newName, metadata);
+        updateColumnMetadata(this.#db.db, table, oldName, newName, newSpec.metadata);
       }
     }
     this.#bumpVersions(table);

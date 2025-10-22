@@ -1,21 +1,16 @@
+import {metadataToLiteTypeString} from '../services/change-source/column-metadata.ts';
 import {id, idList} from '../types/sql.ts';
 import type {ColumnSpec, LiteIndexSpec, LiteTableSpec} from './specs.ts';
 
 export function liteColumnDef(spec: ColumnSpec) {
-  // Remove legacy |TEXT_ARRAY attribute for backwards compatibility
-  // Legacy formats: "text|TEXT_ARRAY", "text[]|TEXT_ARRAY", "text|TEXT_ARRAY[]", "text[]|TEXT_ARRAY[]"
-  const hadTextArray = spec.dataType.includes('|TEXT_ARRAY');
-  const typeWithAttrs = spec.dataType.replace(/\|TEXT_ARRAY(\[\])?/, '');
+  // Dual-write: Generate pipe-delimited type string for SQLite schema (backward compatibility)
+  // This ensures old services can still read from the SQLite schema without the metadata table
+  const typeString = metadataToLiteTypeString(spec.metadata);
 
-  // Only add brackets if we had |TEXT_ARRAY and there are no brackets after removing it
-  // This handles the legacy "text|TEXT_ARRAY" -> "text" -> "text[]" case
-  const needsBrackets = hadTextArray && !typeWithAttrs.includes('[]');
-  const finalType = needsBrackets ? typeWithAttrs + '[]' : typeWithAttrs;
+  let def = id(typeString);
 
-  let def = id(finalType);
-
-  if (spec.characterMaximumLength) {
-    def += `(${spec.characterMaximumLength})`;
+  if (spec.metadata.characterMaxLength) {
+    def += `(${spec.metadata.characterMaxLength})`;
   }
   if (spec.notNull) {
     def += ' NOT NULL';
