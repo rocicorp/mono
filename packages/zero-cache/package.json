@@ -6,6 +6,8 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:pg17": "vitest --project='*17*' run",
+    "test:pg17:watch": "vitest --project='*17*'",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
@@ -59,7 +61,8 @@
     "ws": "^8.18.1",
     "zero-protocol": "0.0.0",
     "zql": "0.0.0",
-    "zqlite": "0.0.0"
+    "zqlite": "0.0.0",
+    "zero-types": "0.0.0"
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",

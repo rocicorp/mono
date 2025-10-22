@@ -103,7 +103,7 @@ import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
 import {ActiveClientsManager} from './active-clients-manager.ts';
-import {ConnectionManager, type ConnectionState} from './connection-manager.ts';
+import {ConnectionManager} from './connection-manager.ts';
 import {ZeroContext} from './context.ts';
 import {
   type BatchMutator,
@@ -132,7 +132,6 @@ import {IVMSourceBranch} from './ivm-branch.ts';
 import {type LogOptions, createLogOptions} from './log-options.ts';
 import {
   DID_NOT_CONNECT_VALUE,
-  type DisconnectReason,
   MetricManager,
   REPORT_INTERVAL_MS,
   type Series,
@@ -150,11 +149,14 @@ import {
   resetBackoff,
 } from './reload-error-handler.ts';
 import {
+  ClientError,
   ServerError,
   isAuthError,
   isBackoffError,
+  isClientError,
   isServerError,
-} from './server-error.ts';
+  type ZeroError,
+} from './error.ts';
 import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {ZeroLogContext} from './zero-log-context.ts';
@@ -162,6 +164,7 @@ import {PokeHandler} from './zero-poke-handler.ts';
 import {ZeroRep} from './zero-rep.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
 import {ConnectionStatus} from './connection-status.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
 
 type PingResult = Enum<typeof PingResult>;
 
@@ -180,16 +183,14 @@ export type TestingContext = {
   logOptions: LogOptions;
   connectStart: () => number | undefined;
   socketResolver: () => Resolver<WebSocket>;
-  connectionState: () => ConnectionState;
+  connectionManager: () => ConnectionManager;
 };
 
-export const onSetConnectionStateSymbol = Symbol();
 export const exposedToTestingSymbol = Symbol();
 export const createLogOptionsSymbol = Symbol();
 
 interface TestZero {
   [exposedToTestingSymbol]?: TestingContext;
-  [onSetConnectionStateSymbol]?: (status: ConnectionStatus) => void;
   [createLogOptionsSymbol]?: (options: {
     consoleLogLevel: LogLevel;
     server: string | null;
@@ -221,6 +222,14 @@ export const PING_TIMEOUT_MS = 5_000;
 export const PULL_TIMEOUT_MS = 5_000;
 
 export const DEFAULT_DISCONNECT_HIDDEN_DELAY_MS = 5_000;
+
+/**
+ * The amount of time we allow for continuous connecting attempts before
+ * transitioning to disconnected state.
+ *
+ * Default to 5 minutes.
+ */
+export const DEFAULT_DISCONNECT_TIMEOUT_MS = 5 * 60 * 1_000;
 
 /**
  * The amount of time we wait for a connection to be established before we
@@ -366,8 +375,6 @@ export class Zero<
   #socket: WebSocket | undefined = undefined;
   #socketResolver = resolver<WebSocket>();
 
-  #connectionStateChangeResolver = resolver<ConnectionStatus>();
-
   /**
    * This resolver is only used for rejections. It is awaited in the connected
    * state (including when waiting for a pong). It is rejected when we get an
@@ -379,23 +386,9 @@ export class Zero<
 
   readonly #visibilityWatcher;
 
-  // We use an accessor pair to allow the subclass to override the setter.
-  readonly #connectionManager = new ConnectionManager();
+  readonly #connectionManager: ConnectionManager;
   readonly #activeClientsManager: Promise<ActiveClientsManager>;
   #inspector: Inspector | undefined;
-
-  #setConnectionStatus(status: ConnectionStatus) {
-    if (!this.#connectionManager.setStatus(status)) {
-      return;
-    }
-
-    this.#connectionStateChangeResolver.resolve(status);
-    this.#connectionStateChangeResolver = resolver<ConnectionStatus>();
-
-    if (TESTING) {
-      asTestZero(this)[onSetConnectionStateSymbol]?.(status);
-    }
-  }
 
   #connectStart: number | undefined = undefined;
   // Set on connect attempt if currently undefined.
@@ -474,6 +467,10 @@ export class Zero<
       enableAnalytics: this.#enableAnalytics,
     });
     const logOptions = this.#logOptions;
+
+    this.#connectionManager = new ConnectionManager({
+      disconnectTimeoutMs: DEFAULT_DISCONNECT_TIMEOUT_MS,
+    });
 
     const {enableLegacyMutators = true, enableLegacyQueries = true} = schema;
 
@@ -770,7 +767,7 @@ export class Zero<
         logOptions: this.#logOptions,
         connectStart: () => this.#connectStart,
         socketResolver: () => this.#socketResolver,
-        connectionState: () => this.#connectionManager.state,
+        connectionManager: () => this.#connectionManager,
       };
     }
   }
@@ -896,6 +893,28 @@ export class Zero<
   }
 
   /**
+   * The schema passed into Zero when it was constructed.
+   *
+   * This can be paired with the inspector API to explore the client cache for
+   * debugging or tooling. The inspector exposes the raw key/value map as well
+   * as the per-table rows that back `zero.query[tableName].run()`.
+   *
+   * ```ts
+   * const inspector = __zero.inspector;
+   * const client = inspector.client;
+   *
+   * console.log('client map:', await client.map());
+   *
+   * for (const tableName of Object.keys(__zero.schema.tables)) {
+   *   console.table(await client.rows(tableName));
+   * }
+   * ```
+   */
+  get schema(): S {
+    return this.#options.schema;
+  }
+
+  /**
    * The client ID for this instance of Zero. Each instance
    * gets a unique client ID.
    */
@@ -982,9 +1001,10 @@ export class Zero<
       if (!this.#connectionManager.is(ConnectionStatus.Disconnected)) {
         this.#disconnect(
           lc,
-          {
-            client: 'ClientClosed',
-          },
+          new ClientError({
+            kind: ClientErrorKind.ClientClosed,
+            message: 'Zero instance closed by user',
+          }),
           CLOSE_CODE_NORMAL,
         );
       }
@@ -998,7 +1018,8 @@ export class Zero<
       lc.error?.('Error closing Zero instance', e);
       throw e;
     } finally {
-      this.#setConnectionStatus(ConnectionStatus.Closed);
+      this.#connectionManager.closed();
+      this.#connectionManager.cleanup();
     }
   }
 
@@ -1113,9 +1134,19 @@ export class Zero<
       });
     }
 
-    const closeKind = wasClean ? 'CleanClose' : 'AbruptClose';
-    this.#connectResolver.reject(new CloseError(closeKind));
-    this.#disconnect(lc, {client: closeKind});
+    const closeError = new ClientError(
+      wasClean
+        ? {
+            kind: ClientErrorKind.CleanClose,
+            message: 'WebSocket connection closed cleanly',
+          }
+        : {
+            kind: ClientErrorKind.AbruptClose,
+            message: 'WebSocket connection closed abruptly',
+          },
+    );
+    this.#connectResolver.reject(closeError);
+    this.#disconnect(lc, closeError);
   };
 
   // An error on the connection is fatal for the connection.
@@ -1141,7 +1172,7 @@ export class Zero<
     this.#rejectMessageError?.reject(error);
     lc.debug?.('Rejecting connect resolver due to error', error);
     this.#connectResolver.reject(error);
-    this.#disconnect(lc, {server: kind});
+    this.#disconnect(lc, error);
 
     if (kind === ErrorKind.VersionNotSupported) {
       this.#onUpdateNeeded({type: kind, message});
@@ -1264,7 +1295,7 @@ export class Zero<
 
     maybeSendDeletedClients();
 
-    this.#setConnectionStatus(ConnectionStatus.Connected);
+    this.#connectionManager.connected();
     this.#connectResolver.resolve();
   }
 
@@ -1273,7 +1304,8 @@ export class Zero<
    * request to the server.
    *
    * {@link #connect} will throw an assertion error if the
-   * {@link #connectionManager} status is not {@link ConnectionState.Disconnected}.
+   * {@link #connectionManager} status is not {@link ConnectionState.Disconnected}
+   * or {@link ConnectionState.Connecting}.
    * Callers MUST check the connection status before calling this method and log
    * an error as needed.
    *
@@ -1290,14 +1322,18 @@ export class Zero<
   ): Promise<void> {
     assert(this.#server);
 
-    // All the callers check this state already.
-    assert(this.#connectionManager.is(ConnectionStatus.Disconnected));
+    // can be called from both disconnected and connecting states.
+    // connecting() handles incrementing attempt counter if already connecting.
+    assert(
+      this.#connectionManager.is(ConnectionStatus.Disconnected) ||
+        this.#connectionManager.is(ConnectionStatus.Connecting),
+    );
 
     const wsid = nanoid();
     lc = addWebSocketIDToLogContext(wsid, lc);
     lc.info?.('Connecting...', {navigatorOnline: navigator?.onLine});
 
-    this.#setConnectionStatus(ConnectionStatus.Connecting);
+    this.#connectionManager.connecting();
 
     // connect() called but connect start time is defined. This should not
     // happen.
@@ -1324,10 +1360,12 @@ export class Zero<
     // Reject connect after a timeout.
     const timeoutID = setTimeout(() => {
       lc.debug?.('Rejecting connect resolver due to timeout');
-      this.#connectResolver.reject(new TimedOutError('Connect'));
-      this.#disconnect(lc, {
-        client: 'ConnectTimeout',
+      const timeoutError = new ClientError({
+        kind: ClientErrorKind.ConnectTimeout,
+        message: `Connection attempt timed out after ${CONNECT_TIMEOUT_MS / 1000} seconds`,
       });
+      this.#connectResolver.reject(timeoutError);
+      this.#disconnect(lc, timeoutError);
     }, CONNECT_TIMEOUT_MS);
     const abortHandler = () => {
       clearTimeout(timeoutID);
@@ -1386,7 +1424,7 @@ export class Zero<
 
   #disconnect(
     lc: ZeroLogContext,
-    reason: DisconnectReason,
+    reason: ZeroError,
     closeCode?: CloseCode,
   ): void {
     if (this.#connectionManager.is(ConnectionStatus.Connecting)) {
@@ -1394,7 +1432,7 @@ export class Zero<
     }
     lc.info?.('disconnecting', {
       navigatorOnline: navigator?.onLine,
-      reason,
+      reason: reason.kind,
       connectStart: this.#connectStart,
       totalToConnectStart: this.#totalToConnectStart,
       connectedAt: this.#connectedAt,
@@ -1406,7 +1444,8 @@ export class Zero<
       connectErrorCount: this.#connectErrorCount,
     });
 
-    switch (this.#connectionManager.state.name) {
+    const connectionState = this.#connectionManager.state.name;
+    switch (connectionState) {
       case ConnectionStatus.Connected: {
         if (this.#connectStart !== undefined) {
           lc.error?.(
@@ -1417,6 +1456,7 @@ export class Zero<
 
         break;
       }
+      case ConnectionStatus.Disconnected:
       case ConnectionStatus.Connecting: {
         this.#metrics.lastConnectError.set(getLastConnectErrorValue(reason));
         this.#metrics.timeToConnectMs.set(DID_NOT_CONNECT_VALUE);
@@ -1429,6 +1469,7 @@ export class Zero<
             `connectErrorCount=${this.#connectErrorCount}`,
           );
         }
+
         // this._connectStart reset below.
         if (this.#connectStart === undefined) {
           lc.error?.(
@@ -1438,9 +1479,6 @@ export class Zero<
 
         break;
       }
-      case ConnectionStatus.Disconnected:
-        lc.error?.('disconnect() called while disconnected');
-        break;
       case ConnectionStatus.Closed:
         lc.error?.('disconnect() called while closed');
         return;
@@ -1449,7 +1487,6 @@ export class Zero<
     this.#socketResolver = resolver();
     lc.debug?.('Creating new connect resolver');
     this.#connectResolver = resolver();
-    this.#setConnectionStatus(ConnectionStatus.Disconnected);
     this.#messageCount = 0;
     this.#connectStart = undefined; // don't reset this._totalToConnectStart
     this.#connectedAt = 0;
@@ -1460,6 +1497,18 @@ export class Zero<
     this.#socket = undefined;
     this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
     this.#pokeHandler.handleDisconnect();
+
+    // we handle a client-side connection timeout by staying in the connecting state
+    const isStillConnecting =
+      reason instanceof ClientError &&
+      (reason.kind === ClientErrorKind.ConnectTimeout ||
+        reason.kind === ClientErrorKind.Hidden);
+
+    if (isStillConnecting) {
+      this.#connectionManager.connecting(reason);
+    } else {
+      this.#connectionManager.disconnected(reason);
+    }
   }
 
   #handlePokeStart(_lc: ZeroLogContext, pokeMessage: PokeStartMessage): void {
@@ -1493,9 +1542,13 @@ export class Zero<
     // async poke above. Only disconnect if we are not already
     // disconnected.
     if (!this.#connectionManager.is(ConnectionStatus.Disconnected)) {
-      this.#disconnect(lc, {
-        client: 'UnexpectedBaseCookie',
-      });
+      this.#disconnect(
+        lc,
+        new ClientError({
+          kind: ClientErrorKind.UnexpectedBaseCookie,
+          message: 'Server returned unexpected base cookie during sync',
+        }),
+      );
     }
   }
 
@@ -1607,6 +1660,12 @@ export class Zero<
 
     if (this.#server === null) {
       this.#lc.info?.('No socket origin provided, not starting connect loop.');
+      this.#connectionManager.disconnected(
+        new ClientError({
+          kind: ClientErrorKind.NoSocketOrigin,
+          message: 'No server socket origin provided',
+        }),
+      );
       return;
     }
 
@@ -1628,13 +1687,14 @@ export class Zero<
     let backoffMs = RUN_LOOP_INTERVAL_MS;
     let additionalConnectParams: Record<string, string> | undefined;
 
-    while (!this.closed) {
+    while (this.#connectionManager.shouldContinueRunLoop()) {
       runLoopCounter++;
       let lc = getLogContext();
       backoffMs = RUN_LOOP_INTERVAL_MS;
 
       try {
         switch (this.#connectionManager.state.name) {
+          case ConnectionStatus.Connecting:
           case ConnectionStatus.Disconnected: {
             if (this.#visibilityWatcher.visibilityState === 'hidden') {
               this.#metrics.setDisconnectedWaitingForVisible();
@@ -1673,13 +1733,6 @@ export class Zero<
             break;
           }
 
-          case ConnectionStatus.Connecting:
-            // Can't get here because Disconnected waits for Connected or
-            // rejection.
-            lc.error?.('unreachable');
-            gotError = true;
-            break;
-
           case ConnectionStatus.Connected: {
             // When connected we wait for whatever happens first out of:
             // - After PING_INTERVAL_MS we send a ping
@@ -1704,7 +1757,7 @@ export class Zero<
               pingTimeoutPromise,
               pingTimeoutAborted,
               this.#visibilityWatcher.waitForHidden(),
-              this.#connectionStateChangeResolver.promise,
+              this.#connectionManager.waitForStateChange(),
               this.#rejectMessageError.promise,
             ]);
 
@@ -1725,9 +1778,13 @@ export class Zero<
                 break;
               }
               case HIDDEN:
-                this.#disconnect(lc, {
-                  client: 'Hidden',
-                });
+                this.#disconnect(
+                  lc,
+                  new ClientError({
+                    kind: ClientErrorKind.Hidden,
+                    message: 'Connection closed because tab was hidden',
+                  }),
+                );
                 this.#setOnline(false);
                 break;
             }
@@ -1773,8 +1830,10 @@ export class Zero<
 
         if (
           isServerError(ex) ||
-          ex instanceof TimedOutError ||
-          ex instanceof CloseError
+          (isClientError(ex) &&
+            (ex.kind === ClientErrorKind.ConnectTimeout ||
+              ex.kind === ClientErrorKind.AbruptClose ||
+              ex.kind === ClientErrorKind.CleanClose))
         ) {
           gotError = true;
         }
@@ -1955,9 +2014,13 @@ export class Zero<
     const delta = performance.now() - t0;
     if (!connected) {
       lc.info?.('ping failed in', delta, 'ms - disconnecting');
-      this.#disconnect(lc, {
-        client: 'PingTimeout',
-      });
+      this.#disconnect(
+        lc,
+        new ClientError({
+          kind: ClientErrorKind.PingTimeout,
+          message: 'Server ping request timed out',
+        }),
+      );
       return PingResult.TimedOut;
     }
 
@@ -2255,14 +2318,6 @@ function addWebSocketIDToLogContext(
 function promiseRace(ps: Promise<unknown>[]): Promise<number> {
   return Promise.race(ps.map((p, i) => p.then(() => i)));
 }
-
-class TimedOutError extends Error {
-  constructor(m: string) {
-    super(`${m} timed out`);
-  }
-}
-
-class CloseError extends Error {}
 
 function assertValidRunOptions(_options?: RunOptions | undefined): void {}
 

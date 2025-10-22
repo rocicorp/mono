@@ -30,7 +30,7 @@ describe('SQLite cost model', () => {
     } as const;
 
     // Create the cost model
-    costModel = createSQLiteCostModel(db, columns);
+    costModel = createSQLiteCostModel(db, {foo: {columns}});
   });
 
   test('table scan ordered by primary key requires no sort', () => {

@@ -3,7 +3,11 @@ import {
   mergeConstraints,
   type PlannerConstraint,
 } from './planner-constraint.ts';
-import type {ConstraintPropagationType, PlannerNode} from './planner-node.ts';
+import type {
+  CostEstimate,
+  JoinOrConnection,
+  PlannerNode,
+} from './planner-node.ts';
 
 /**
  * Represents a join between two data streams (parent and child).
@@ -36,9 +40,6 @@ import type {ConstraintPropagationType, PlannerNode} from './planner-node.ts';
 export class PlannerJoin {
   readonly kind = 'join' as const;
 
-  // ========================================================================
-  // IMMUTABLE STRUCTURE (set during construction, never changes)
-  // ========================================================================
   readonly #parent: PlannerNode;
   readonly #child: PlannerNode;
   readonly #parentConstraint: PlannerConstraint;
@@ -47,9 +48,7 @@ export class PlannerJoin {
   readonly planId: number;
   #output?: PlannerNode | undefined; // Set once during graph construction
 
-  // ========================================================================
-  // MUTABLE PLANNING STATE (changes during plan search)
-  // ========================================================================
+  // Reset between planning attempts
   #type: 'left' | 'flipped';
   #pinned: boolean;
 
@@ -78,6 +77,10 @@ export class PlannerJoin {
   get output(): PlannerNode {
     assert(this.#output !== undefined, 'Output not set');
     return this.#output;
+  }
+
+  closestJoinOrSource(): JoinOrConnection {
+    return 'join';
   }
 
   flipIfNeeded(input: PlannerNode): void {
@@ -119,11 +122,11 @@ export class PlannerJoin {
   propagateConstraints(
     branchPattern: number[],
     constraint: PlannerConstraint | undefined,
-    from: ConstraintPropagationType,
+    from: PlannerNode,
   ): void {
     if (this.#pinned) {
       assert(
-        from === 'pinned' || from === 'terminus',
+        from.pinned,
         'It should be impossible for a pinned join to receive constraints from a non-pinned node',
       );
     }
@@ -134,23 +137,23 @@ export class PlannerJoin {
       this.#child.propagateConstraints(
         branchPattern,
         this.#childConstraint,
-        'pinned',
+        this,
       );
       // A left join forwards constraints to its parent.
-      this.#parent.propagateConstraints(branchPattern, constraint, 'pinned');
+      this.#parent.propagateConstraints(branchPattern, constraint, this);
     }
     if (this.#pinned && this.#type === 'flipped') {
       // A flipped join has no constraints to pass to its child.
       // It is a standalone fetch that is relying on the filters of the child
       // connection to do the heavy work.
-      this.#child.propagateConstraints(branchPattern, undefined, 'pinned');
+      this.#child.propagateConstraints(branchPattern, undefined, this);
       // A flipped join will have constraints to send to its parent.
       // - The constraints its output sent
       // - The constraints its child creates
       this.#parent.propagateConstraints(
         branchPattern,
         mergeConstraints(constraint, this.#parentConstraint),
-        'pinned',
+        this,
       );
     }
     if (!this.#pinned && this.#type === 'left') {
@@ -158,7 +161,7 @@ export class PlannerJoin {
       // Contributing constraints to its child would reduce the child's cost too early
       // causing the child to be picked by the planning algorithm before the parent
       // that is contributing the constraints has been picked.
-      this.#parent.propagateConstraints(branchPattern, constraint, 'unpinned');
+      this.#parent.propagateConstraints(branchPattern, constraint, this);
     }
     if (!this.#pinned && this.#type === 'flipped') {
       // If a join has been flipped that means it has been picked by the planning algorithm.
@@ -170,6 +173,27 @@ export class PlannerJoin {
   reset(): void {
     this.#type = 'left';
     this.#pinned = false;
+  }
+
+  estimateCost(branchPattern?: number[]): CostEstimate {
+    const parentCost = this.#parent.estimateCost(branchPattern);
+    const childCost = this.#child.estimateCost(branchPattern);
+
+    if (this.#parent.closestJoinOrSource() === 'join') {
+      // if the parent is a join, we're in a pipeline rather than nesting of joins.
+      return {
+        baseCardinality: parentCost.baseCardinality,
+        runningCost:
+          parentCost.runningCost +
+          parentCost.baseCardinality * childCost.runningCost,
+      };
+    }
+
+    // if the parent is a source, we're in a nested loop join
+    return {
+      baseCardinality: parentCost.baseCardinality,
+      runningCost: parentCost.runningCost * childCost.runningCost,
+    };
   }
 }
 

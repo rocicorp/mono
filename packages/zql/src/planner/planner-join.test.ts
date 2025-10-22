@@ -2,6 +2,11 @@ import {expect, suite, test} from 'vitest';
 import {UnflippableJoinError} from './planner-join.ts';
 import {CONSTRAINTS, createJoin, expectedCost} from './test/helpers.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
+import type {PlannerNode} from './planner-node.ts';
+
+const pinned = {
+  pinned: true,
+} as PlannerNode;
 
 suite('PlannerJoin', () => {
   test('initial state is left join, unpinned', () => {
@@ -77,9 +82,9 @@ suite('PlannerJoin', () => {
     const {child, join} = createJoin();
 
     join.pin();
-    join.propagateConstraints([0], undefined, 'pinned');
+    join.propagateConstraints([0], undefined, pinned);
 
-    expect(child.estimateCost()).toBe(expectedCost(1));
+    expect(child.estimateCost()).toStrictEqual(expectedCost(1));
   });
 
   test('propagateConstraints() on pinned flipped join sends undefined to child', () => {
@@ -87,9 +92,9 @@ suite('PlannerJoin', () => {
 
     join.flip();
     join.pin();
-    join.propagateConstraints([0], undefined, 'pinned');
+    join.propagateConstraints([0], undefined, pinned);
 
-    expect(child.estimateCost()).toBe(expectedCost(0));
+    expect(child.estimateCost()).toStrictEqual(expectedCost(0));
   });
 
   test('propagateConstraints() on pinned flipped join merges constraints for parent', () => {
@@ -102,8 +107,8 @@ suite('PlannerJoin', () => {
     join.pin();
 
     const outputConstraint: PlannerConstraint = {name: undefined};
-    join.propagateConstraints([0], outputConstraint, 'pinned');
+    join.propagateConstraints([0], outputConstraint, pinned);
 
-    expect(parent.estimateCost()).toBe(expectedCost(2));
+    expect(parent.estimateCost()).toStrictEqual(expectedCost(2));
   });
 });

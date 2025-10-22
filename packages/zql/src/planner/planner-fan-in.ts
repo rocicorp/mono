@@ -1,6 +1,10 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
-import type {ConstraintPropagationType, PlannerNode} from './planner-node.ts';
+import type {
+  CostEstimate,
+  JoinOrConnection,
+  PlannerNode,
+} from './planner-node.ts';
 
 /**
  * A PlannerFanIn node can either be a normal FanIn or UnionFanIn.
@@ -33,6 +37,14 @@ export class PlannerFanIn {
     return this.#type;
   }
 
+  get pinned(): boolean {
+    return false;
+  }
+
+  closestJoinOrSource(): JoinOrConnection {
+    return 'join';
+  }
+
   setOutput(node: PlannerNode): void {
     this.#output = node;
   }
@@ -50,10 +62,52 @@ export class PlannerFanIn {
     this.#type = 'UFI';
   }
 
+  estimateCost(branchPattern?: number[]): CostEstimate {
+    // FanIn always sums costs of its inputs
+    // But it needs to pass the correct branch pattern to each input
+    let totalCost = {
+      baseCardinality: 0,
+      runningCost: 0,
+    };
+
+    if (this.#type === 'FI') {
+      // Normal FanIn: all inputs get the same branch pattern with 0 prepended
+      const updatedPattern =
+        branchPattern === undefined ? undefined : [0, ...branchPattern];
+      let maxBaseCardinality = 0;
+      let maxRunningCost = 0;
+      for (const input of this.#inputs) {
+        const cost = input.estimateCost(updatedPattern);
+        if (cost.baseCardinality > maxBaseCardinality) {
+          maxBaseCardinality = cost.baseCardinality;
+        }
+        if (cost.runningCost > maxRunningCost) {
+          maxRunningCost = cost.runningCost;
+        }
+      }
+
+      totalCost.baseCardinality = maxBaseCardinality;
+      totalCost.runningCost = maxRunningCost;
+    } else {
+      // Union FanIn (UFI): each input gets unique branch pattern
+      let i = 0;
+      for (const input of this.#inputs) {
+        const updatedPattern =
+          branchPattern === undefined ? undefined : [i, ...branchPattern];
+        const cost = input.estimateCost(updatedPattern);
+        totalCost.baseCardinality += cost.baseCardinality;
+        totalCost.runningCost += cost.runningCost;
+        i++;
+      }
+    }
+
+    return totalCost;
+  }
+
   propagateConstraints(
     branchPattern: number[],
     constraint: PlannerConstraint | undefined,
-    from: ConstraintPropagationType,
+    from: PlannerNode,
   ): void {
     if (this.#type === 'FI') {
       const updatedPattern = [0, ...branchPattern];
@@ -65,19 +119,14 @@ export class PlannerFanIn {
        *    to send to their children.
        */
       for (const input of this.#inputs) {
-        // Check if this input is pinned and adjust the 'from' value accordingly
-        const inputFrom =
-          input.kind === 'join' && input.pinned ? 'pinned' : from;
-        input.propagateConstraints(updatedPattern, constraint, inputFrom);
+        input.propagateConstraints(updatedPattern, constraint, from);
       }
       return;
     }
 
     let i = 0;
     for (const input of this.#inputs) {
-      // Check if this input is pinned and adjust the 'from' value accordingly
-      const inputFrom = input.kind === 'join' && input.pinned ? 'pinned' : from;
-      input.propagateConstraints([i, ...branchPattern], constraint, inputFrom);
+      input.propagateConstraints([i, ...branchPattern], constraint, from);
       i++;
     }
   }

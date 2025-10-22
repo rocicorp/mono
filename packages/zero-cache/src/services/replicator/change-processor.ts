@@ -5,9 +5,9 @@ import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {
-  columnDef,
-  createIndexStatement,
-  createTableStatement,
+  createLiteIndexStatement,
+  createLiteTableStatement,
+  liteColumnDef,
 } from '../../db/create.ts';
 import {
   computeZqlSpecs,
@@ -526,7 +526,7 @@ class TransactionProcessor {
   }
   processCreateTable(create: TableCreate) {
     const table = mapPostgresToLite(create.spec);
-    this.#db.db.exec(createTableStatement(table));
+    this.#db.db.exec(createLiteTableStatement(table));
 
     this.#logResetOp(table.name);
     this.#lc.info?.(create.tag, table.name);
@@ -547,7 +547,7 @@ class TransactionProcessor {
     const {name} = msg.column;
     const spec = mapPostgresToLiteColumn(table, msg.column);
     this.#db.db.exec(
-      `ALTER TABLE ${id(table)} ADD ${id(name)} ${columnDef(spec)}`,
+      `ALTER TABLE ${id(table)} ADD ${id(name)} ${liteColumnDef(spec)}`,
     );
 
     this.#bumpVersions(table);
@@ -587,7 +587,7 @@ class TransactionProcessor {
       const stmts = indexes.map(idx => `DROP INDEX IF EXISTS ${id(idx.name)};`);
       const tmpName = `tmp.${newName}`;
       stmts.push(`
-        ALTER TABLE ${id(table)} ADD ${id(tmpName)} ${columnDef(newSpec)};
+        ALTER TABLE ${id(table)} ADD ${id(tmpName)} ${liteColumnDef(newSpec)};
         UPDATE ${id(table)} SET ${id(tmpName)} = ${id(oldName)};
         ALTER TABLE ${id(table)} DROP ${id(oldName)};
         `);
@@ -595,7 +595,7 @@ class TransactionProcessor {
         // Re-create the indexes to reference the new column.
         idx.columns[tmpName] = idx.columns[oldName];
         delete idx.columns[oldName];
-        stmts.push(createIndexStatement(idx));
+        stmts.push(createLiteIndexStatement(idx));
       }
       this.#db.db.exec(stmts.join(''));
       oldName = tmpName;
@@ -628,7 +628,7 @@ class TransactionProcessor {
 
   processCreateIndex(create: IndexCreate) {
     const index = mapPostgresToLiteIndex(create.spec);
-    this.#db.db.exec(createIndexStatement(index));
+    this.#db.db.exec(createLiteIndexStatement(index));
 
     // indexes affect tables visibility (e.g. sync-ability is gated on
     // having a unique index), so reset pipelines to refresh table schemas.

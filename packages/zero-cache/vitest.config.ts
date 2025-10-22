@@ -1,7 +1,5 @@
 import {defineConfig, mergeConfig} from 'vitest/config';
-import config from '../shared/src/tool/vitest-config.ts';
-
-const ci = process.env['CI'] === 'true' || process.env['CI'] === '1';
+import config, {CI} from '../shared/src/tool/vitest-config.ts';
 
 function nameFromURL(url: string) {
   // importer looks like file://....../packages/NAME/... and we want the NAME
@@ -19,7 +17,7 @@ export function configForVersion(version: number, url: string) {
       exclude: [],
       globalSetup: [`../zero-cache/test/pg-${version}.ts`],
       coverage: {
-        enabled: !ci, // Don't run coverage in continuous integration.
+        enabled: !CI, // Don't run coverage in continuous integration.
         reporter: [['html'], ['clover', {file: 'coverage.xml'}]],
         include: ['src/**'],
       },
@@ -39,7 +37,7 @@ export function configForNoPg(url: string) {
       browser: {enabled: false},
       silent: 'passed-only',
       coverage: {
-        enabled: !ci, // Don't run coverage in continuous integration.
+        enabled: !CI, // Don't run coverage in continuous integration.
         reporter: [['html'], ['clover', {file: 'coverage.xml'}]],
         include: ['src/**'],
       },

@@ -673,7 +673,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             intArray: {
               pos: 7,
               characterMaximumLength: null,
-              dataType: 'int4[]|TEXT_ARRAY',
+              dataType: 'int4[]',
               notNull: false,
               dflt: null,
               elemPgTypeClass: 'b',

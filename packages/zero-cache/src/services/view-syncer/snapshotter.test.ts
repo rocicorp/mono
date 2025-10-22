@@ -47,7 +47,7 @@ describe('view-syncer/snapshotter', () => {
         INSERT INTO "my_app.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
           VALUES (1, 1, 1, '01');  
         CREATE TABLE issues(id INT PRIMARY KEY, owner INTEGER, desc TEXT, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
-        CREATE TABLE users(id INT PRIMARY KEY, handle TEXT, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
+        CREATE TABLE users(id INT PRIMARY KEY, handle TEXT UNIQUE, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
         CREATE TABLE comments(id INT PRIMARY KEY, desc TEXT, ignore UNSUPPORTED_TYPE, _0_version TEXT NOT NULL);
 
         INSERT INTO issues(id, owner, desc, ignore, _0_version) VALUES(1, 10, 'foo', 'zzz', '01');
@@ -156,16 +156,61 @@ describe('view-syncer/snapshotter', () => {
             "maxSupportedVersion": 2,
             "minSupportedVersion": 1,
           },
-          "prevValue": {
-            "_0_version": "01",
-            "lock": 1,
-            "maxSupportedVersion": 1,
-            "minSupportedVersion": 1,
-          },
+          "prevValues": [
+            {
+              "_0_version": "01",
+              "lock": 1,
+              "maxSupportedVersion": 1,
+              "minSupportedVersion": 1,
+            },
+          ],
           "rowKey": {
             "lock": 1,
           },
           "table": "my_app.schemaVersions",
+        },
+      ]
+    `);
+  });
+
+  test('multiple prev values', () => {
+    expect(s.current().version).toBe('01');
+
+    replicator.processTransaction(
+      '09',
+      messages.insert('users', {id: 20, handle: 'alice'}),
+    );
+    replicator.processTransaction('09');
+
+    const diff = s.advance(tableSpecs);
+    expect(diff.prev.version).toBe('01');
+    expect(diff.curr.version).toBe('09');
+    expect(diff.changes).toBe(1);
+
+    expect([...diff]).toMatchInlineSnapshot(`
+      [
+        {
+          "nextValue": {
+            "_0_version": "09",
+            "handle": "alice",
+            "id": 20,
+          },
+          "prevValues": [
+            {
+              "_0_version": "01",
+              "handle": "bob",
+              "id": 20,
+            },
+            {
+              "_0_version": "01",
+              "handle": "alice",
+              "id": 10,
+            },
+          ],
+          "rowKey": {
+            "id": 20,
+          },
+          "table": "users",
         },
       ]
     `);
@@ -200,12 +245,14 @@ describe('view-syncer/snapshotter', () => {
             "id": 1,
             "owner": 10,
           },
-          "prevValue": {
-            "_0_version": "01",
-            "desc": "foo",
-            "id": 1,
-            "owner": 10,
-          },
+          "prevValues": [
+            {
+              "_0_version": "01",
+              "desc": "foo",
+              "id": 1,
+              "owner": 10,
+            },
+          ],
           "rowKey": {
             "id": 1,
           },
@@ -213,12 +260,14 @@ describe('view-syncer/snapshotter', () => {
         },
         {
           "nextValue": null,
-          "prevValue": {
-            "_0_version": "01",
-            "desc": "bar",
-            "id": 2,
-            "owner": 10,
-          },
+          "prevValues": [
+            {
+              "_0_version": "01",
+              "desc": "bar",
+              "id": 2,
+              "owner": 10,
+            },
+          ],
           "rowKey": {
             "id": 2,
           },
@@ -226,12 +275,14 @@ describe('view-syncer/snapshotter', () => {
         },
         {
           "nextValue": null,
-          "prevValue": {
-            "_0_version": "01",
-            "desc": "baz",
-            "id": 3,
-            "owner": 20,
-          },
+          "prevValues": [
+            {
+              "_0_version": "01",
+              "desc": "baz",
+              "id": 3,
+              "owner": 20,
+            },
+          ],
           "rowKey": {
             "id": 3,
           },
@@ -244,7 +295,7 @@ describe('view-syncer/snapshotter', () => {
             "id": 4,
             "owner": 20,
           },
-          "prevValue": null,
+          "prevValues": [],
           "rowKey": {
             "id": 4,
           },
@@ -257,7 +308,7 @@ describe('view-syncer/snapshotter', () => {
             "id": 5,
             "owner": 10,
           },
-          "prevValue": null,
+          "prevValues": [],
           "rowKey": {
             "id": 5,
           },
@@ -268,79 +319,85 @@ describe('view-syncer/snapshotter', () => {
 
     // Diff should be reusable as long as advance() hasn't been called.
     expect([...diff1]).toMatchInlineSnapshot(`
-      [
-        {
-          "nextValue": {
-            "_0_version": "09",
-            "desc": "food",
-            "id": 1,
-            "owner": 10,
-          },
-          "prevValue": {
-            "_0_version": "01",
-            "desc": "foo",
-            "id": 1,
-            "owner": 10,
-          },
-          "rowKey": {
-            "id": 1,
-          },
-          "table": "issues",
-        },
-        {
-          "nextValue": null,
-          "prevValue": {
-            "_0_version": "01",
-            "desc": "bar",
-            "id": 2,
-            "owner": 10,
-          },
-          "rowKey": {
-            "id": 2,
-          },
-          "table": "issues",
-        },
-        {
-          "nextValue": null,
-          "prevValue": {
-            "_0_version": "01",
-            "desc": "baz",
-            "id": 3,
-            "owner": 20,
-          },
-          "rowKey": {
-            "id": 3,
-          },
-          "table": "issues",
-        },
-        {
-          "nextValue": {
-            "_0_version": "09",
-            "desc": null,
-            "id": 4,
-            "owner": 20,
-          },
-          "prevValue": null,
-          "rowKey": {
-            "id": 4,
-          },
-          "table": "issues",
-        },
-        {
-          "nextValue": {
-            "_0_version": "09",
-            "desc": "bard",
-            "id": 5,
-            "owner": 10,
-          },
-          "prevValue": null,
-          "rowKey": {
-            "id": 5,
-          },
-          "table": "issues",
-        },
-      ]
-    `);
+            [
+              {
+                "nextValue": {
+                  "_0_version": "09",
+                  "desc": "food",
+                  "id": 1,
+                  "owner": 10,
+                },
+                "prevValues": [
+                  {
+                    "_0_version": "01",
+                    "desc": "foo",
+                    "id": 1,
+                    "owner": 10,
+                  },
+                ],
+                "rowKey": {
+                  "id": 1,
+                },
+                "table": "issues",
+              },
+              {
+                "nextValue": null,
+                "prevValues": [
+                  {
+                    "_0_version": "01",
+                    "desc": "bar",
+                    "id": 2,
+                    "owner": 10,
+                  },
+                ],
+                "rowKey": {
+                  "id": 2,
+                },
+                "table": "issues",
+              },
+              {
+                "nextValue": null,
+                "prevValues": [
+                  {
+                    "_0_version": "01",
+                    "desc": "baz",
+                    "id": 3,
+                    "owner": 20,
+                  },
+                ],
+                "rowKey": {
+                  "id": 3,
+                },
+                "table": "issues",
+              },
+              {
+                "nextValue": {
+                  "_0_version": "09",
+                  "desc": null,
+                  "id": 4,
+                  "owner": 20,
+                },
+                "prevValues": [],
+                "rowKey": {
+                  "id": 4,
+                },
+                "table": "issues",
+              },
+              {
+                "nextValue": {
+                  "_0_version": "09",
+                  "desc": "bard",
+                  "id": 5,
+                  "owner": 10,
+                },
+                "prevValues": [],
+                "rowKey": {
+                  "id": 5,
+                },
+                "table": "issues",
+              },
+            ]
+          `);
 
     // Replicate a second transaction
     replicator.processTransaction(
@@ -363,7 +420,7 @@ describe('view-syncer/snapshotter', () => {
             "id": 2,
             "owner": 10,
           },
-          "prevValue": null,
+          "prevValues": [],
           "rowKey": {
             "id": 2,
           },
@@ -371,12 +428,14 @@ describe('view-syncer/snapshotter', () => {
         },
         {
           "nextValue": null,
-          "prevValue": {
-            "_0_version": "09",
-            "desc": null,
-            "id": 4,
-            "owner": 20,
-          },
+          "prevValues": [
+            {
+              "_0_version": "09",
+              "desc": null,
+              "id": 4,
+              "owner": 20,
+            },
+          ],
           "rowKey": {
             "id": 4,
           },
@@ -384,12 +443,14 @@ describe('view-syncer/snapshotter', () => {
         },
         {
           "nextValue": null,
-          "prevValue": {
-            "_0_version": "09",
-            "desc": "bard",
-            "id": 5,
-            "owner": 10,
-          },
+          "prevValues": [
+            {
+              "_0_version": "09",
+              "desc": "bard",
+              "id": 5,
+              "owner": 10,
+            },
+          ],
           "rowKey": {
             "id": 5,
           },
@@ -423,12 +484,14 @@ describe('view-syncer/snapshotter', () => {
             "id": 1,
             "owner": 10,
           },
-          "prevValue": {
-            "_0_version": "01",
-            "desc": "foo",
-            "id": 1,
-            "owner": 10,
-          },
+          "prevValues": [
+            {
+              "_0_version": "01",
+              "desc": "foo",
+              "id": 1,
+              "owner": 10,
+            },
+          ],
           "rowKey": {
             "id": 1,
           },
@@ -436,12 +499,14 @@ describe('view-syncer/snapshotter', () => {
         },
         {
           "nextValue": null,
-          "prevValue": {
-            "_0_version": "01",
-            "desc": "baz",
-            "id": 3,
-            "owner": 20,
-          },
+          "prevValues": [
+            {
+              "_0_version": "01",
+              "desc": "baz",
+              "id": 3,
+              "owner": 20,
+            },
+          ],
           "rowKey": {
             "id": 3,
           },
@@ -454,12 +519,14 @@ describe('view-syncer/snapshotter', () => {
             "id": 2,
             "owner": 10,
           },
-          "prevValue": {
-            "_0_version": "01",
-            "desc": "bar",
-            "id": 2,
-            "owner": 10,
-          },
+          "prevValues": [
+            {
+              "_0_version": "01",
+              "desc": "bar",
+              "id": 2,
+              "owner": 10,
+            },
+          ],
           "rowKey": {
             "id": 2,
           },
@@ -528,7 +595,7 @@ describe('view-syncer/snapshotter', () => {
             desc: null,
             id: 1,
           },
-          prevValue: null,
+          prevValues: [],
           rowKey: {id: 1},
           table: 'comments',
         });

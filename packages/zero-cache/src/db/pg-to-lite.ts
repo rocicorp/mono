@@ -101,14 +101,18 @@ export function mapPostgresToLiteColumn(
     dflt,
     elemPgTypeClass = null,
   } = column.spec;
+
+  // PostgreSQL includes [] in dataType for array types (e.g., 'int4[]', 'int4[][]').
+  // liteTypeString() appends attributes: "varchar[]|NOT_NULL", "my_enum[][]|TEXT_ENUM"
+  const liteType = liteTypeString(
+    dataType,
+    notNull,
+    (elemPgTypeClass ?? pgTypeClass) === PostgresTypeClass.Enum,
+  );
+
   return {
     pos,
-    dataType: liteTypeString(
-      dataType,
-      notNull,
-      (elemPgTypeClass ?? pgTypeClass) === PostgresTypeClass.Enum,
-      elemPgTypeClass !== null,
-    ),
+    dataType: liteType,
     characterMaximumLength: null,
     // Note: NOT NULL constraints are always ignored for SQLite (replica) tables.
     // 1. They are enforced by the replication stream.

@@ -5,12 +5,6 @@ import type {PlannerJoin} from './planner-join.ts';
 import type {PlannerTerminus} from './planner-terminus.ts';
 
 /**
- * Indicates where a constraint propagation came from.
- * Determines whether downstream nodes get pinned by the propagation.
- */
-export type ConstraintPropagationType = 'pinned' | 'unpinned' | 'terminus';
-
-/**
  * Union of all node types that can appear in the planner graph.
  * All nodes follow the dual-state pattern described above.
  */
@@ -20,3 +14,10 @@ export type PlannerNode =
   | PlannerFanOut
   | PlannerFanIn
   | PlannerTerminus;
+
+export type CostEstimate = {
+  baseCardinality: number;
+  runningCost: number;
+};
+
+export type JoinOrConnection = 'join' | 'connection';

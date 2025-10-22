@@ -1,5 +1,9 @@
 import type {PlannerConstraint} from './planner-constraint.ts';
-import type {ConstraintPropagationType, PlannerNode} from './planner-node.ts';
+import type {
+  CostEstimate,
+  JoinOrConnection,
+  PlannerNode,
+} from './planner-node.ts';
 
 export class PlannerFanOut {
   readonly kind = 'fan-out' as const;
@@ -16,6 +20,11 @@ export class PlannerFanOut {
     return this.#type;
   }
 
+  get pinned(): boolean {
+    // if all of our outputs are pinned, we're pinned
+    return this.#outputs.every(output => output.pinned);
+  }
+
   addOutput(node: PlannerNode): void {
     this.#outputs.push(node);
   }
@@ -24,18 +33,20 @@ export class PlannerFanOut {
     return this.#outputs;
   }
 
+  closestJoinOrSource(): JoinOrConnection {
+    return this.#input.closestJoinOrSource();
+  }
+
   propagateConstraints(
     branchPattern: number[],
     constraint: PlannerConstraint | undefined,
-    from: ConstraintPropagationType,
+    _from: PlannerNode,
   ): void {
-    // Check if the input is pinned and adjust the 'from' value accordingly
-    const inputFrom =
-      (this.#input.kind === 'connection' && this.#input.pinned) ||
-      (this.#input.kind === 'join' && this.#input.pinned)
-        ? 'pinned'
-        : from;
-    this.#input.propagateConstraints(branchPattern, constraint, inputFrom);
+    this.#input.propagateConstraints(branchPattern, constraint, this);
+  }
+
+  estimateCost(branchPattern?: number[]): CostEstimate {
+    return this.#input.estimateCost(branchPattern);
   }
 
   convertToUFO(): void {

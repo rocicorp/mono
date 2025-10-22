@@ -334,7 +334,7 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
-            "allKeys": [
+            "allPotentialPrimaryKeys": [
               [
                 "b",
               ],
@@ -380,6 +380,11 @@ describe('computeZqlSpec', () => {
             "unionKey": [
               "b",
             ],
+            "uniqueKeys": [
+              [
+                "b",
+              ],
+            ],
           },
           "zqlSpec": {
             "a": {
@@ -410,7 +415,7 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
-            "allKeys": [
+            "allPotentialPrimaryKeys": [
               [
                 "b",
               ],
@@ -440,6 +445,11 @@ describe('computeZqlSpec', () => {
             "unionKey": [
               "b",
             ],
+            "uniqueKeys": [
+              [
+                "b",
+              ],
+            ],
           },
           "zqlSpec": {
             "a": {
@@ -465,7 +475,7 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
-            "allKeys": [
+            "allPotentialPrimaryKeys": [
               [
                 "a",
                 "b",
@@ -509,6 +519,17 @@ describe('computeZqlSpec', () => {
               "b",
               "d",
             ],
+            "uniqueKeys": [
+              [
+                "a",
+                "b",
+                "d",
+              ],
+              [
+                "a",
+                "c",
+              ],
+            ],
           },
           "zqlSpec": {
             "a": {
@@ -537,7 +558,7 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
-            "allKeys": [
+            "allPotentialPrimaryKeys": [
               [
                 "a",
                 "b",
@@ -589,6 +610,17 @@ describe('computeZqlSpec', () => {
               "b",
               "d",
             ],
+            "uniqueKeys": [
+              [
+                "a",
+                "b",
+                "d",
+              ],
+              [
+                "a",
+                "c",
+              ],
+            ],
           },
           "zqlSpec": {
             "a": {
@@ -619,7 +651,7 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
-            "allKeys": [
+            "allPotentialPrimaryKeys": [
               [
                 "a",
                 "c",
@@ -670,6 +702,13 @@ describe('computeZqlSpec', () => {
               "a",
               "c",
               "d",
+            ],
+            "uniqueKeys": [
+              [
+                "a",
+                "c",
+                "d",
+              ],
             ],
           },
           "zqlSpec": {
@@ -702,7 +741,7 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
-            "allKeys": [
+            "allPotentialPrimaryKeys": [
               [
                 "b",
               ],
@@ -754,6 +793,15 @@ describe('computeZqlSpec', () => {
               "b",
               "c",
             ],
+            "uniqueKeys": [
+              [
+                "b",
+              ],
+              [
+                "a",
+                "c",
+              ],
+            ],
           },
           "zqlSpec": {
             "a": {
@@ -785,7 +833,7 @@ describe('computeZqlSpec', () => {
       [
         {
           "tableSpec": {
-            "allKeys": [
+            "allPotentialPrimaryKeys": [
               [
                 "c",
               ],
@@ -837,6 +885,15 @@ describe('computeZqlSpec', () => {
               "c",
               "d",
             ],
+            "uniqueKeys": [
+              [
+                "b",
+                "d",
+              ],
+              [
+                "c",
+              ],
+            ],
           },
           "zqlSpec": {
             "a": {
@@ -865,17 +922,20 @@ describe('computeZqlSpec', () => {
           "name" "varchar|NOT_NULL",
           "order" "integer|NOT_NULL",
           "createdAt" "timestamp|NOT_NULL",
-          "updatedAt" "timestamp|NOT_NULL"
+          "updatedAt" "timestamp|NOT_NULL",
+          "title" "text"
       );
       CREATE UNIQUE INDEX funk_name_unique ON funk (name ASC);
       CREATE UNIQUE INDEX funk_order_unique ON funk ("order" ASC);
       CREATE UNIQUE INDEX funk_pkey ON funk (id ASC);
+      CREATE UNIQUE INDEX funk_title_unique ON funk (title ASC);
+      CREATE UNIQUE INDEX funk_name_title_unique ON funk (name ASC, title ASC);
     `),
     ).toMatchInlineSnapshot(`
       [
         {
           "tableSpec": {
-            "allKeys": [
+            "allPotentialPrimaryKeys": [
               [
                 "id",
               ],
@@ -919,6 +979,14 @@ describe('computeZqlSpec', () => {
                 "notNull": false,
                 "pos": 3,
               },
+              "title": {
+                "characterMaximumLength": null,
+                "dataType": "TEXT",
+                "dflt": null,
+                "elemPgTypeClass": null,
+                "notNull": false,
+                "pos": 6,
+              },
               "updatedAt": {
                 "characterMaximumLength": null,
                 "dataType": "timestamp|NOT_NULL",
@@ -937,6 +1005,24 @@ describe('computeZqlSpec', () => {
               "name",
               "order",
             ],
+            "uniqueKeys": [
+              [
+                "name",
+                "title",
+              ],
+              [
+                "name",
+              ],
+              [
+                "order",
+              ],
+              [
+                "id",
+              ],
+              [
+                "title",
+              ],
+            ],
           },
           "zqlSpec": {
             "createdAt": {
@@ -950,6 +1036,9 @@ describe('computeZqlSpec', () => {
             },
             "order": {
               "type": "number",
+            },
+            "title": {
+              "type": "string",
             },
             "updatedAt": {
               "type": "number",

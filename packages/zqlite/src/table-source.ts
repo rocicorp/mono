@@ -36,7 +36,6 @@ import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
 import type {
   Source,
   SourceChange,
-  SourceChangeSet,
   SourceInput,
 } from '../../zql/src/ivm/source.ts';
 import type {Stream} from '../../zql/src/ivm/stream.ts';
@@ -332,37 +331,19 @@ export class TableSource implements Source {
     }
   }
 
-  push(change: SourceChange | SourceChangeSet): void {
+  push(change: SourceChange): void {
     for (const _ of this.genPush(change)) {
       // Nothing to do.
     }
   }
 
-  *genPush(change: SourceChange | SourceChangeSet) {
+  *genPush(change: SourceChange) {
     const exists = (row: Row) =>
       this.#stmts.checkExists.get<{exists: number} | undefined>(
         ...toSQLiteTypes(this.#primaryKey, row, this.#columns),
       )?.exists === 1;
     const setOverlay = (o: Overlay | undefined) => (this.#overlay = o);
     const writeChange = (c: SourceChange) => this.#writeChange(c);
-
-    if (change.type === 'set') {
-      const existing = this.#stmts.getExisting.get<Row | undefined>(
-        ...toSQLiteTypes(this.#primaryKey, change.row, this.#columns),
-      );
-      if (existing !== undefined) {
-        change = {
-          type: 'edit',
-          oldRow: existing,
-          row: change.row,
-        };
-      } else {
-        change = {
-          type: 'add',
-          row: change.row,
-        };
-      }
-    }
 
     yield* genPushAndWriteWithSplitEdit(
       this.#connections,

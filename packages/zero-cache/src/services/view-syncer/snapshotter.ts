@@ -25,6 +25,8 @@ import {
   getReplicationState,
   ZERO_VERSION_COLUMN_NAME as ROW_VERSION,
 } from '../replicator/schema/replication-state.ts';
+import type {PrimaryKey} from '../../../../zero-types/src/schema.ts';
+import type {Row} from '../../../../zero-protocol/src/data.ts';
 
 /**
  * A `Snapshotter` manages the progression of database snapshots for a
@@ -185,8 +187,14 @@ export class Snapshotter {
 
 export type Change = {
   readonly table: string;
-  readonly prevValue: Readonly<RowValue> | null;
-  readonly nextValue: Readonly<RowValue> | null;
+  /**
+   * If this change represents a remove the row to remove,
+   * if nextValue is not null then all rows that have a unique constraint
+   * violation with nextValue.
+   * In both cases these rows should be removed.
+   */
+  readonly prevValues: Readonly<Row>[];
+  readonly nextValue: Readonly<Row> | null;
   readonly rowKey: RowKey;
 };
 
@@ -313,16 +321,23 @@ class Snapshot {
     }
   }
 
-  getRows(table: LiteTableSpecWithKeys) {
+  getRows(table: LiteTableSpecWithKeys, keys: PrimaryKey[], row: RowValue) {
+    const conds = keys.map(key => key.map(c => `${id(c)}=?`));
     const cols = Object.keys(table.columns);
     const cached = this.db.statementCache.get(
-      `SELECT ${cols.map(c => id(c)).join(',')} FROM ${id(table.name)}`,
+      `SELECT ${cols.map(c => id(c)).join(',')} FROM ${id(
+        table.name,
+      )} WHERE ${conds.map(cond => cond.join(' AND ')).join(' OR ')}`,
     );
     cached.statement.safeIntegers(true);
-    return {
-      rows: cached.statement.iterate(),
-      cleanup: () => this.db.statementCache.return(cached),
-    };
+    try {
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      return cached.statement.all<any>(
+        keys.flatMap(key => key.map(column => row[column])),
+      );
+    } finally {
+      this.db.statementCache.return(cached);
+    }
   }
 
   resetToHead(): Snapshot {
@@ -389,18 +404,28 @@ class Diff implements SnapshotDiff {
             const {tableSpec, zqlSpec} = must(this.tables.get(table));
 
             assert(rowKey !== null);
-            let prevValue = this.prev.getRow(tableSpec, rowKey) ?? null;
-            let nextValue =
+            const nextValue =
               op === SET_OP ? this.curr.getRow(tableSpec, rowKey) : null;
+            let prevValues;
+            if (nextValue) {
+              prevValues = this.prev.getRows(
+                tableSpec,
+                tableSpec.uniqueKeys,
+                nextValue,
+              );
+            } else {
+              const prevValue = this.prev.getRow(tableSpec, rowKey);
+              prevValues = prevValue ? [prevValue] : [];
+            }
             if (nextValue === undefined) {
               throw new Error(
                 `Missing value for ${table} ${stringify(rowKey)}`,
               );
             }
             // Sanity check detects if the diff is being accessed after the Snapshots have advanced.
-            this.checkThatDiffIsValid(stateVersion, op, prevValue, nextValue);
+            this.checkThatDiffIsValid(stateVersion, op, prevValues, nextValue);
 
-            if (prevValue === null && nextValue === null) {
+            if (prevValues.length === 0 && nextValue === null) {
               // Filter out no-op changes (e.g. a delete of a row that does not exist in prev).
               // TODO: Consider doing this for deep-equal values.
               continue;
@@ -408,23 +433,34 @@ class Diff implements SnapshotDiff {
 
             if (
               table === this.#permissionsTable &&
-              prevValue.permissions !== nextValue.permissions
+              prevValues.find(
+                prevValue => prevValue.permissions !== nextValue.permissions,
+              )
             ) {
               throw new ResetPipelinesSignal(
-                `Permissions have changed ${prevValue.hash} => ${nextValue.hash}`,
+                `Permissions have changed ${
+                  prevValues.find(
+                    prevValue =>
+                      prevValue.permissions !== nextValue.permissions,
+                  ).hash
+                } => ${nextValue.hash}`,
               );
             }
 
             // Modify the values in place when converting to ZQL rows
             // This is safe since we're the first node in the iterator chain.
-            if (prevValue) {
-              prevValue = fromSQLiteTypes(zqlSpec, prevValue, table);
-            }
-            if (nextValue) {
-              nextValue = fromSQLiteTypes(zqlSpec, nextValue, table);
-            }
+            // TODO Can we get rid of these RowValue casts?
             return {
-              value: {table, prevValue, nextValue, rowKey} satisfies Change,
+              value: {
+                table,
+                prevValues: prevValues.map(prevValue =>
+                  fromSQLiteTypes(zqlSpec, prevValue, table),
+                ),
+                nextValue: nextValue
+                  ? fromSQLiteTypes(zqlSpec, nextValue, table)
+                  : null,
+                rowKey,
+              } satisfies Change,
             };
           }
         } catch (e) {
@@ -444,7 +480,7 @@ class Diff implements SnapshotDiff {
   checkThatDiffIsValid(
     stateVersion: string,
     op: string,
-    prevValue: RowValue,
+    prevValues: RowValue[],
     nextValue: RowValue,
   ) {
     // Sanity checks to detect that the diff is not being accessed after
@@ -455,8 +491,9 @@ class Diff implements SnapshotDiff {
       );
     }
     if (
-      prevValue !== null &&
-      (prevValue[ROW_VERSION] ?? '~') > this.prev.version
+      prevValues.findIndex(
+        prevValue => (prevValue[ROW_VERSION] ?? '~') > this.prev.version,
+      ) !== -1
     ) {
       throw new InvalidDiffError(
         `Diff is no longer valid. prev db has advanced past ${this.prev.version}.`,
