@@ -226,10 +226,7 @@ test('load roundtrip', () => {
   const t = (chunk: Chunk, expected: Commit<Meta> | Error) => {
     {
       if (expected instanceof Error) {
-        expect(() => fromChunk(chunk)).toThrow(
-          expected.constructor,
-          expected.message,
-        );
+        expect(() => fromChunk(chunk), expected.message).toThrow(expected);
       } else {
         const actual = fromChunk(chunk);
         expect(actual).toEqual(expected);
