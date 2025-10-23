@@ -556,8 +556,9 @@ export function ListPage({onReady}: {onReady: () => void}) {
           {issuesResult.type === 'complete' || total || estimatedTotal ? (
             <span className="issue-count">
               {project?.issueCountEstimate
-                ? `${total ?? estimatedTotal} of ${project.issueCountEstimate.toLocaleString()}`
-                : (total ?? estimatedTotal)}
+                ? `${(total ?? estimatedTotal).toLocaleString()} of ${formatIssueCountEstimate(project.issueCountEstimate)}`
+                : (total?.toLocaleString() ??
+                  `${(estimatedTotal < 50 ? estimatedTotal : estimatedTotal - (estimatedTotal % 50)).toLocaleString()}+`)}
             </span>
           ) : null}
         </h1>
@@ -652,4 +653,11 @@ function removeParam(qs: URLSearchParams, key: string, value?: string) {
   const searchParams = new URLSearchParams(qs);
   searchParams.delete(key, value);
   return '?' + searchParams.toString();
+}
+
+function formatIssueCountEstimate(count: number) {
+  if (count < 1000) {
+    return count;
+  }
+  return `${Math.floor(count / 1000).toLocaleString()}k`;
 }
