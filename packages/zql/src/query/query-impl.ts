@@ -27,7 +27,6 @@ import {ArrayView} from '../ivm/array-view.ts';
 import {defaultFormat} from '../ivm/default-format.ts';
 import type {Input} from '../ivm/operator.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
-import {assertNoNotExists} from './assert-no-not-exists.ts';
 import {
   and,
   cmp,
@@ -413,12 +412,6 @@ export abstract class AbstractQuery<
     }
 
     const where = simplifyCondition(cond);
-
-    if (this.#system === 'client') {
-      // We need to do this after the DNF since the DNF conversion might change
-      // an EXISTS to a NOT EXISTS condition (and vice versa).
-      assertNoNotExists(where);
-    }
 
     return this[newQuerySymbol](
       this._delegate,

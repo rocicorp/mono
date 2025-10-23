@@ -55,6 +55,7 @@ export type PushTest = {
   format: Format;
   pushes: Pushes;
   fetchOnPush?: boolean | undefined;
+  enableNotExists?: boolean | undefined;
 };
 
 export function runPushTest(t: PushTest) {
@@ -66,7 +67,11 @@ export function runPushTest(t: PushTest) {
       ]),
     );
 
-    const builderDelegate = new TestBuilderDelegate(sources, true);
+    const builderDelegate = new TestBuilderDelegate(
+      sources,
+      true,
+      t.enableNotExists,
+    );
     const pipeline = buildPipeline(t.ast, builderDelegate, 'query-id');
 
     const finalOutput = makeFinalOutput(pipeline);
