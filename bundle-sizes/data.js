@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1761131740406,
+  "lastUpdate": 1761247533558,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54245,6 +54245,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/4c484b7fa1f3575657808f636164c3ff0d5396bf"
         },
         "date": 1761131728337,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302365,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54477,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111453,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31872,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "greg@roci.dev",
+            "name": "Greg Baker",
+            "username": "grgbkr"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4e1310d3fcc8991eec9fdbd0b69b502a88bd3e9c",
+          "message": "chore(replicache): fix build breaks from chai->jest refactor (#5056)\n\nFix breaks from\nhttps://github.com/rocicorp/mono/commit/4c484b7fa1f3575657808f636164c3ff0d5396bf",
+          "timestamp": "2025-10-23T19:15:36Z",
+          "tree_id": "3de6a39dba11a133cb0689b8fa4a48aada85a107",
+          "url": "https://github.com/rocicorp/mono/commit/4e1310d3fcc8991eec9fdbd0b69b502a88bd3e9c"
+        },
+        "date": 1761247521140,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
