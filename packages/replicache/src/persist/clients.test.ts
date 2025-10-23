@@ -822,9 +822,8 @@ describe('initClientV6', () => {
         expect(clientGroupID2).not.toBe(clientGroupID1);
         expect(clientMap.size).toBe(2);
 
-        expect(client2HeadHash).not.toBe(
+        expect(client2HeadHash, 'Forked so we need a new head').not.toBe(
           clientGroup1.headHash,
-          'Forked so we need a new head',
         );
         expect(client2.refreshHashes).toEqual([client2HeadHash]);
         expect(client2.heartbeatTimestampMs).toBe(10);
@@ -939,9 +938,8 @@ describe('initClientV6', () => {
         expect(clientGroupID2).not.toBe(clientGroupID1);
         expect(clientMap.size).toBe(2);
 
-        expect(client2HeadHash).not.toBe(
+        expect(client2HeadHash, 'Forked so we need a new head').not.toBe(
           client1.headHash,
-          'Forked so we need a new head',
         );
         expect(client2.refreshHashes).toEqual([client2HeadHash]);
         expect(client2.heartbeatTimestampMs).toBe(10);

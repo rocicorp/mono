@@ -1783,7 +1783,7 @@ test('pull mutate options', {retry: 3}, async () => {
   }
 
   // the first one is often off by a few ms
-  expect(log[0]).toBeGreaterThanOrEqual(1000, 1060);
+  expect(log[0], '1060').toBeGreaterThanOrEqual(1000);
   expect(log.slice(1)).toEqual([
     // 1000, checked above
     1030, 1060, 1090, 1120, 1150, 1650, 2150, 2175, 2200, 2225, 2250, 2275,
@@ -1896,37 +1896,37 @@ async function testMemStoreWithCounters<MD extends MutatorDefs>(
   // chance to run persist and the refresh triggered by persist before we continue.
   await vi.advanceTimersByTimeAsync(2000);
 
-  expect(store.readCount).toBeGreaterThan(0, 'readCount');
-  expect(store.writeCount).toBeGreaterThan(0, 'writeCount');
-  expect(store.closeCount).toBe(0, 'closeCount');
+  expect(store.readCount, 'readCount').toBeGreaterThan(0);
+  expect(store.writeCount, 'writeCount').toBeGreaterThan(0);
+  expect(store.closeCount, 'closeCount').toBe(0);
   store.resetCounters();
 
   const b = await rep.query(tx => tx.has('foo'));
   expect(b).toBe(false);
   // When DD31 refresh has pulled enough data into the lazy store
   // to not have to read from the experiment-kv-store
-  expect(store.readCount).toBe(1, 'readCount');
-  expect(store.writeCount).toBe(0, 'writeCount');
-  expect(store.closeCount).toBe(0, 'closeCount');
+  expect(store.readCount, 'readCount').toBe(1);
+  expect(store.writeCount, 'writeCount').toBe(0);
+  expect(store.closeCount, 'closeCount').toBe(0);
   store.resetCounters();
 
   await rep.mutate.addData({foo: 'bar'});
-  expect(store.readCount).toBe(0, 'readCount');
-  expect(store.writeCount).toBe(0, 'writeCount');
-  expect(store.closeCount).toBe(0, 'closeCount');
+  expect(store.readCount, 'readCount').toBe(0);
+  expect(store.writeCount, 'writeCount').toBe(0);
+  expect(store.closeCount, 'closeCount').toBe(0);
   store.resetCounters();
 
   await rep.persist();
 
-  expect(store.readCount).toBe(1, 'readCount');
-  expect(store.writeCount).toBe(1, 'writeCount');
-  expect(store.closeCount).toBe(0, 'closeCount');
+  expect(store.readCount, 'readCount').toBe(1);
+  expect(store.writeCount, 'writeCount').toBe(1);
+  expect(store.closeCount, 'closeCount').toBe(0);
   store.resetCounters();
 
   await rep.close();
-  expect(store.readCount).toBe(0, 'readCount');
-  expect(store.writeCount).toBe(0, 'writeCount');
-  expect(store.closeCount).toBe(1, 'closeCount');
+  expect(store.readCount, 'readCount').toBe(0);
+  expect(store.writeCount, 'writeCount').toBe(0);
+  expect(store.closeCount, 'closeCount').toBe(1);
 }
 
 test('Create KV Store', async () => {

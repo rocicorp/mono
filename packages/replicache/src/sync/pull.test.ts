@@ -744,10 +744,10 @@ describe('maybe end try pull', () => {
         assertObject(result);
         const resp = result;
         expect(syncHead).toBe(resp.syncHead);
-        expect(c.expReplayIDs.length).toBe(
-          resp.replayMutations?.length,
+        expect(
+          c.expReplayIDs.length,
           `${c.name}: expected ${c.expReplayIDs}, got ${resp.replayMutations}`,
-        );
+        ).toBe(resp.replayMutations?.length);
         expect(Object.fromEntries(resp.diffs), c.name).toEqual(
           Object.fromEntries(c.expDiffs),
         );
@@ -768,9 +768,8 @@ describe('maybe end try pull', () => {
         // Check if we set the main head like we should have.
         if (c.expReplayIDs.length === 0) {
           await withRead(store, async read => {
-            expect(syncHead).toBe(
+            expect(syncHead, c.name).toBe(
               await read.getHead(DEFAULT_HEAD_NAME),
-              c.name,
             );
             expect(await read.getHead(SYNC_HEAD_NAME)).toBeUndefined();
           });

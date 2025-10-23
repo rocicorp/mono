@@ -304,6 +304,6 @@ test('try push [DD31]', async () => {
       PUSH_VERSION_DD31,
     );
 
-    expect(pusherResult).toEqual(c.expPusherResult, `name: ${c.name}`);
+    expect(pusherResult, `name: ${c.name}`).toEqual(c.expPusherResult);
   }
 });

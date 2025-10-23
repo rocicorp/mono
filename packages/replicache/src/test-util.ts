@@ -4,6 +4,7 @@ import {
   beforeEach,
   expect,
   vi,
+  type Assertion,
   type Mock,
   type MockInstance,
   type VitestUtils,
@@ -311,9 +312,7 @@ export function expectLogContext(
   expect(args[1]).to.equal(expectedContext);
 }
 
-export async function expectPromiseToReject(
-  p: unknown,
-): Promise<Chai.Assertion> {
+export async function expectPromiseToReject(p: unknown): Promise<Assertion> {
   let e;
   try {
     await p;
