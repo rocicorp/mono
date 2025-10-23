@@ -87,7 +87,7 @@ function select(
   spec: Spec,
   ast: AST,
   format: Format | undefined,
-  correlate?: ((childTable: Table) => SQLQuery),
+  correlate?: (childTable: Table) => SQLQuery,
 ): SQLQuery {
   const table = makeTable(spec, ast.table);
   const selectionSet = related(spec, ast.related ?? [], format, table);

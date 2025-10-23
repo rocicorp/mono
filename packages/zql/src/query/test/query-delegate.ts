@@ -90,11 +90,7 @@ export class QueryDelegateImpl implements QueryDelegate {
     return this.#addQuery({ast, ttl, ...customQueryID}, gotCallback);
   }
 
-  addServerQuery(
-    ast: AST,
-    ttl: TTL,
-    gotCallback?: GotCallback,
-  ): () => void {
+  addServerQuery(ast: AST, ttl: TTL, gotCallback?: GotCallback): () => void {
     return this.#addQuery(
       {ast, name: undefined, args: undefined, ttl},
       gotCallback,

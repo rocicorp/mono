@@ -652,9 +652,7 @@ export abstract class AbstractQuery<
     return this.#completedAST;
   }
 
-  abstract materialize(
-    ttl?: TTL,
-  ): TypedView<HumanReadable<TReturn>>;
+  abstract materialize(ttl?: TTL): TypedView<HumanReadable<TReturn>>;
   abstract materialize<T>(
     factory: ViewFactory<TSchema, TTable, TReturn, T>,
     ttl?: TTL,

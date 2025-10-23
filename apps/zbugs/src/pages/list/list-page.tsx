@@ -595,11 +595,7 @@ const addParam = (
   return '?' + newParams.toString();
 };
 
-function removeParam(
-  qs: URLSearchParams,
-  key: string,
-  value?: string,
-) {
+function removeParam(qs: URLSearchParams, key: string, value?: string) {
   const searchParams = new URLSearchParams(qs);
   searchParams.delete(key, value);
   return '?' + searchParams.toString();

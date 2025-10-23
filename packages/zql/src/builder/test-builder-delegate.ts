@@ -14,10 +14,7 @@ export class TestBuilderDelegate implements BuilderDelegate {
   readonly #shouldLog: boolean;
   readonly #log: SnitchMessage[] = [];
 
-  constructor(
-    sources: Readonly<Record<string, Source>>,
-    shouldLog?: boolean,
-  ) {
+  constructor(sources: Readonly<Record<string, Source>>, shouldLog?: boolean) {
     this.#sources = sources;
     this.#shouldLog = !!shouldLog;
   }

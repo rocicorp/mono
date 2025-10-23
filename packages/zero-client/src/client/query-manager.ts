@@ -226,11 +226,7 @@ export class QueryManager implements InspectorDelegate {
     return this.#add(queryId, normalized, name, args, ttl, gotCallback);
   }
 
-  addLegacy(
-    ast: AST,
-    ttl: TTL,
-    gotCallback?: GotCallback,
-  ): () => void {
+  addLegacy(ast: AST, ttl: TTL, gotCallback?: GotCallback): () => void {
     const normalized = normalizeAST(ast);
     const astHash = hashOfAST(normalized);
     return this.#add(
