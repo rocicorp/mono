@@ -48,6 +48,24 @@ type Anchor = {
 
 type QueryAnchor = {
   anchor: Anchor;
+  /**
+   * Associates an anchor with list query params.  This is for managing the
+   * transition when query params change.  When this happens the list should
+   * scroll to 0, the anchor reset to top, and estimate/total counts reset.
+   * During this transition, some renders has a mix of new list query params and
+   * list results and old anchor (as anchor reset is async via setState), it is
+   * important to:
+   * 1. avoid creating a query with the new query params but the old anchor, as
+   *    that would be loading a query that is not the correct one to display,
+   *    accomplished by using TOP_ANCHOR when
+   *    listContextParams !== queryAnchor.listContextParams
+   * 2. avoid calculating counts based on a mix of new list results and old
+   *    anchor, avoided by not updating counts when
+   *    listContextParams !== queryAnchor.listContextParams
+   * 3. avoid updating anchor for paging based on a mix of new list results and
+   *    old anchor, avoided by not doing paging updates when
+   *    listContextParams !== queryAnchor.listContextParams
+   */
   listContextParams: ListContextParams;
 };
 
