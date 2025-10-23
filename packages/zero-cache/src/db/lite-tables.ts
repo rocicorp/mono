@@ -5,6 +5,10 @@ import * as v from '../../../shared/src/valita.ts';
 import {primaryKeySchema} from '../../../zero-protocol/src/primary-key.ts';
 import type {Database} from '../../../zqlite/src/db.ts';
 import {
+  ColumnMetadataStore,
+  metadataToLiteTypeString,
+} from '../services/change-source/column-metadata.ts';
+import {
   dataTypeToZqlValueType,
   isArray,
   isEnum,
@@ -30,18 +34,20 @@ type ColumnInfo = {
 };
 
 export function listTables(db: Database): LiteTableSpec[] {
+  const metadataStore = ColumnMetadataStore.getInstance(db);
+
   const columns = db
     .prepare(
       `
-      SELECT 
-        m.name as "table", 
-        p.name as name, 
-        p.type as type, 
+      SELECT
+        m.name as "table",
+        p.name as name,
+        p.type as type,
         p."notnull" as "notNull",
         p.dflt_value as "dflt",
-        p.pk as keyPos 
-      FROM sqlite_master as m 
-      LEFT JOIN pragma_table_info(m.name) as p 
+        p.pk as keyPos
+      FROM sqlite_master as m
+      LEFT JOIN pragma_table_info(m.name) as p
       WHERE m.type = 'table'
       AND m.name NOT LIKE 'sqlite_%'
       AND m.name NOT LIKE '_zero.%'
@@ -63,15 +69,35 @@ export function listTables(db: Database): LiteTableSpec[] {
       tables.push(table);
     }
 
-    const elemPgTypeClass = isArray(col.type)
-      ? isEnum(col.type)
-        ? PostgresTypeClass.Enum
-        : PostgresTypeClass.Base
-      : null;
+    // Try to read from metadata table first, fall back to SQLite column type
+    let dataType: string;
+    let elemPgTypeClass:
+      | typeof PostgresTypeClass.Base
+      | typeof PostgresTypeClass.Enum
+      | null;
+
+    const metadata = metadataStore?.getColumn(col.table, col.name);
+    if (metadata) {
+      // Read from metadata table and convert to pipe notation
+      dataType = metadataToLiteTypeString(metadata);
+      elemPgTypeClass = metadata.isArray
+        ? metadata.isEnum
+          ? PostgresTypeClass.Enum
+          : PostgresTypeClass.Base
+        : null;
+    } else {
+      // Fall back to reading from SQLite column type (pipe notation)
+      dataType = col.type;
+      elemPgTypeClass = isArray(col.type)
+        ? isEnum(col.type)
+          ? PostgresTypeClass.Enum
+          : PostgresTypeClass.Base
+        : null;
+    }
 
     table.columns[col.name] = {
       pos: Object.keys(table.columns).length + 1,
-      dataType: col.type,
+      dataType,
       characterMaximumLength: null,
       notNull: col.notNull !== 0,
       dflt: col.dflt,
