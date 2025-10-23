@@ -34,6 +34,7 @@ import type {Source, SourceInput} from '../ivm/source.ts';
 import {Take} from '../ivm/take.ts';
 import {UnionFanIn} from '../ivm/union-fan-in.ts';
 import {UnionFanOut} from '../ivm/union-fan-out.ts';
+import {assertNoNotExists} from './assert-no-not-exists.ts';
 import type {DebugDelegate} from './debug-delegate.ts';
 import {createPredicate, type NoSubqueryCondition} from './filter.ts';
 
@@ -49,6 +50,18 @@ export type StaticQueryParameters = {
 export interface BuilderDelegate {
   readonly applyFiltersAnyway?: boolean | undefined;
   readonly debug?: DebugDelegate | undefined;
+
+  /**
+   * When true, allows NOT EXISTS conditions in queries.
+   * Defaults to false - NOT EXISTS is only supported on the server.
+   *
+   * The client-side query engine cannot support NOT EXISTS because:
+   * 1. Zero only syncs a subset of data to the client
+   * 2. On the client, we can't distinguish between a row not existing vs.
+   *    a row not being synced to the client
+   * 3. NOT EXISTS requires complete knowledge of what doesn't exist
+   */
+  readonly enableNotExists?: boolean | undefined;
 
   /**
    * Called once for each source needed by the AST.
@@ -110,6 +123,12 @@ export function buildPipeline(
   queryID: string,
 ): Input {
   ast = delegate.mapAst ? delegate.mapAst(ast) : ast;
+
+  // Check for NOT EXISTS when not explicitly enabled (defaults to false)
+  if (!delegate.enableNotExists && ast.where) {
+    assertNoNotExists(ast.where);
+  }
+
   return buildPipelineInternal(ast, delegate, queryID, '');
 }
 

@@ -1875,8 +1875,40 @@ test('exists self join', () => {
   `);
 });
 
-test('not exists self join', () => {
+test('not exists throws error when enableNotExists is false', () => {
   const {sources, delegate} = testBuilderDelegate();
+  // delegate has enableNotExists: false by default
+
+  expect(() =>
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        where: {
+          type: 'correlatedSubquery',
+          related: {
+            system: 'client',
+            correlation: {parentField: ['recruiterID'], childField: ['id']},
+            subquery: {
+              table: 'users',
+              alias: 'zsubq_recruiter',
+              orderBy: [['id', 'asc']],
+            },
+          },
+          op: 'NOT EXISTS',
+        },
+      },
+      delegate,
+      'query-id',
+    ),
+  ).toThrowError(
+    'not(exists()) is not supported on the client - see https://bugs.rocicorp.dev/issue/3438',
+  );
+});
+
+test('not exists self join', () => {
+  const {sources} = testBuilderDelegate();
+  const delegate = new TestBuilderDelegate(sources, false, true);
   const sink = new Catch(
     buildPipeline(
       {

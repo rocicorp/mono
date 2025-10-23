@@ -1748,6 +1748,7 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
+      enableNotExists: true,
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -1840,6 +1841,7 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
+      enableNotExists: true,
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -1891,6 +1893,7 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
+      enableNotExists: true,
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -1963,6 +1966,7 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
+      enableNotExists: true,
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -2014,6 +2018,7 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
+      enableNotExists: true,
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -2096,6 +2101,7 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
+      enableNotExists: true,
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -2146,6 +2152,7 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
+      enableNotExists: true,
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -2218,6 +2225,7 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
+      enableNotExists: true,
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -2268,6 +2276,7 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
+      enableNotExists: true,
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -2352,6 +2361,7 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
+      enableNotExists: true,
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -2403,6 +2413,7 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
+      enableNotExists: true,
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -2454,6 +2465,7 @@ suite('NOT EXISTS', () => {
         ],
       ],
       format,
+      enableNotExists: true,
     });
 
     expect(data).toMatchInlineSnapshot(`
