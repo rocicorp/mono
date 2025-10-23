@@ -216,7 +216,10 @@ export function ListPage({onReady}: {onReady: () => void}) {
   }, [listContextParams, queryAnchor]);
 
   useEffect(() => {
-    if (queryAnchor.listContextParams !== listContextParams) {
+    if (
+      queryAnchor.listContextParams !== listContextParams ||
+      anchor.direction !== 'forward'
+    ) {
       return;
     }
     const eTotal = anchor.index + issues.length;
