@@ -4,7 +4,6 @@ import classNames from 'classnames';
 import React, {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -15,7 +14,11 @@ import {useDebouncedCallback} from 'use-debounce';
 import {useLocation, useParams, useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.ts';
-import {queries, type ListContext} from '../../../shared/queries.ts';
+import {
+  queries,
+  type ListContext,
+  type ListContextParams,
+} from '../../../shared/queries.ts';
 import {type IssueRow} from '../../../shared/schema.ts';
 import {Button} from '../../components/button.tsx';
 import {Filter, type Selection} from '../../components/filter.tsx';
@@ -41,6 +44,29 @@ type Anchor = {
   startRow: IssueRow | undefined;
   direction: 'forward' | 'backward';
   index: number;
+};
+
+type QueryAnchor = {
+  anchor: Anchor;
+  /**
+   * Associates an anchor with list query params.  This is for managing the
+   * transition when query params change.  When this happens the list should
+   * scroll to 0, the anchor reset to top, and estimate/total counts reset.
+   * During this transition, some renders has a mix of new list query params and
+   * list results and old anchor (as anchor reset is async via setState), it is
+   * important to:
+   * 1. avoid creating a query with the new query params but the old anchor, as
+   *    that would be loading a query that is not the correct one to display,
+   *    accomplished by using TOP_ANCHOR when
+   *    listContextParams !== queryAnchor.listContextParams
+   * 2. avoid calculating counts based on a mix of new list results and old
+   *    anchor, avoided by not updating counts when
+   *    listContextParams !== queryAnchor.listContextParams
+   * 3. avoid updating anchor for paging based on a mix of new list results and
+   *    old anchor, avoided by not doing paging updates when
+   *    listContextParams !== queryAnchor.listContextParams
+   */
+  listContextParams: ListContextParams;
 };
 
 const TOP_ANCHOR = Object.freeze({
@@ -94,8 +120,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const open = status === 'open' ? true : status === 'closed' ? false : null;
 
-  const [anchor, setAnchor] = useState<Anchor>(TOP_ANCHOR);
-
   const listContextParams = useMemo(
     () =>
       ({
@@ -120,6 +144,11 @@ export function ListPage({onReady}: {onReady: () => void}) {
     ],
   );
 
+  const [queryAnchor, setQueryAnchor] = useState<QueryAnchor>({
+    anchor: TOP_ANCHOR,
+    listContextParams,
+  });
+
   const listRef = useRef<HTMLDivElement>(null);
   const tableWrapperRef = useRef<HTMLDivElement>(null);
   const size = useElementSize(tableWrapperRef);
@@ -132,9 +161,14 @@ export function ListPage({onReady}: {onReady: () => void}) {
       ? Math.max(MIN_PAGE_SIZE, Math.ceil(size?.height / ITEM_SIZE) * 3)
       : MIN_PAGE_SIZE;
     if (newPageSize > pageSize) {
-      setPageSize(pageSize);
+      setPageSize(newPageSize);
     }
   }, [pageSize, size]);
+
+  const anchor =
+    queryAnchor.listContextParams === listContextParams
+      ? queryAnchor.anchor
+      : TOP_ANCHOR;
 
   const q = queries.issueListV2(
     login.loginState?.decoded,
@@ -151,22 +185,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
     anchor.direction,
   );
 
-  // For detecting if the base query, i.e. ignoring pagination parameters, has
-  // changed.
-  const baseQHash = queries
-    .issueListV2(
-      login.loginState?.decoded,
-      listContextParams,
-      z.userID,
-      null, // no limit
-      null, // no start
-      'forward', // fixed direction
-    )
-    .hash();
-
-  const [totalsForBaseQHash, setTotalsForBaseQHash] = useState<
-    unknown | undefined
-  >(undefined);
   const [estimatedTotal, setEstimatedTotal] = useState(0);
   const [total, setTotal] = useState<number | undefined>(undefined);
 
@@ -183,24 +201,25 @@ export function ListPage({onReady}: {onReady: () => void}) {
     }
   }, [issues.length, issuesResult.type, onReady]);
 
-  // useLayoutEffect to avoid a render at the old scroll position which
-  // will cause pages to get to that position to start to be loaded.
-  useLayoutEffect(() => {
-    listRef.current?.scrollTo(0, 0);
-    setAnchor(TOP_ANCHOR);
-  }, [baseQHash]);
-
-  // useLayoutEffect to avoid a 1 frame render of the old counts
-  useLayoutEffect(() => {
-    const eTotal = anchor.index + issues.length;
-    if (baseQHash !== totalsForBaseQHash) {
-      setEstimatedTotal(eTotal);
+  useEffect(() => {
+    if (queryAnchor.listContextParams !== listContextParams) {
+      if (listRef.current) {
+        listRef.current.scrollTop = 0;
+      }
+      setEstimatedTotal(0);
       setTotal(undefined);
-      setTotalsForBaseQHash(baseQHash);
+      setQueryAnchor({
+        anchor: TOP_ANCHOR,
+        listContextParams,
+      });
     }
-    if (anchor.direction !== 'forward') {
+  }, [listContextParams, queryAnchor]);
+
+  useEffect(() => {
+    if (queryAnchor.listContextParams !== listContextParams) {
       return;
     }
+    const eTotal = anchor.index + issues.length;
     if (eTotal > estimatedTotal) {
       setEstimatedTotal(eTotal);
     }
@@ -208,9 +227,8 @@ export function ListPage({onReady}: {onReady: () => void}) {
       setTotal(eTotal);
     }
   }, [
-    baseQHash,
-    totalsForBaseQHash,
-    anchor,
+    listContextParams,
+    queryAnchor,
     issuesResult.type,
     issues,
     estimatedTotal,
@@ -373,6 +391,9 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const virtualItems = virtualizer.getVirtualItems();
   useEffect(() => {
+    if (queryAnchor.listContextParams !== listContextParams) {
+      return;
+    }
     const [firstItem] = virtualItems;
     const lastItem = virtualItems[virtualItems.length - 1];
     if (!lastItem) {
@@ -385,7 +406,10 @@ export function ListPage({onReady}: {onReady: () => void}) {
     ) {
       // oxlint-disable-next-line no-console -- Debug logging in demo app
       console.log('anchoring to top');
-      setAnchor(TOP_ANCHOR);
+      setQueryAnchor({
+        anchor: TOP_ANCHOR,
+        listContextParams,
+      });
       return;
     }
 
@@ -415,7 +439,10 @@ export function ListPage({onReady}: {onReady: () => void}) {
       } as const;
       // oxlint-disable-next-line no-console -- Debug logging in demo app
       console.log('page up', a);
-      setAnchor(a);
+      setQueryAnchor({
+        anchor: a,
+        listContextParams,
+      });
       return;
     }
 
@@ -439,9 +466,19 @@ export function ListPage({onReady}: {onReady: () => void}) {
       } as const;
       // oxlint-disable-next-line no-console -- Debug logging in demo app
       console.log('page down', a);
-      setAnchor(a);
+      setQueryAnchor({
+        anchor: a,
+        listContextParams,
+      });
     }
-  }, [anchor, issues, issuesResult, pageSize, virtualItems]);
+  }, [
+    listContextParams,
+    queryAnchor,
+    issues,
+    issuesResult,
+    pageSize,
+    virtualItems,
+  ]);
 
   const [forceSearchMode, setForceSearchMode] = useState(false);
   const searchMode = forceSearchMode || Boolean(textFilter);
