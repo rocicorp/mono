@@ -100,6 +100,11 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const params = useParams();
   const projectName = must(params.projectName);
 
+  const [projects] = useQuery(queries.allProjects());
+  const project = projects.find(
+    p => p.lowerCaseName === projectName.toLocaleLowerCase(),
+  );
+
   const status = qs.get('status')?.toLowerCase() ?? 'open';
   const creator = qs.get('creator') ?? null;
   const assignee = qs.get('assignee') ?? null;
@@ -487,7 +492,12 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const searchMode = forceSearchMode || Boolean(textFilter);
   const searchBox = useRef<HTMLHeadingElement>(null);
   const startSearchButton = useRef<HTMLButtonElement>(null);
-  useKeypress('/', () => setForceSearchMode(true));
+
+  useKeypress('/', () => {
+    if (project?.supportsSearch) {
+      setForceSearchMode(true);
+    }
+  });
   useClickOutside([searchBox, startSearchButton], () => {
     if (Boolean(textFilter)) {
       setForceSearchMode(false);
@@ -545,17 +555,20 @@ export function ListPage({onReady}: {onReady: () => void}) {
           )}
           {issuesResult.type === 'complete' || total || estimatedTotal ? (
             <span className="issue-count">
-              {total ??
-                `${estimatedTotal < 50 ? estimatedTotal : estimatedTotal - (estimatedTotal % 50)}+`}
+              {project?.issueCountEstimate
+                ? `${total ?? estimatedTotal} of ${project.issueCountEstimate.toLocaleString()}`
+                : (total ?? estimatedTotal)}
             </span>
           ) : null}
         </h1>
-        <Button
-          ref={startSearchButton}
-          className="search-toggle"
-          eventName="Toggle Search"
-          onAction={toggleSearchMode}
-        ></Button>
+        {project?.supportsSearch ? (
+          <Button
+            ref={startSearchButton}
+            className="search-toggle"
+            eventName="Toggle Search"
+            onAction={toggleSearchMode}
+          ></Button>
+        ) : null}
       </div>
       <div className="list-view-filter-container">
         <span className="filter-label">Filtered by:</span>
