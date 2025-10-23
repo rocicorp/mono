@@ -31,7 +31,6 @@ import {mark} from '../../perf-log.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {preload} from '../../zero-preload.ts';
 import {useListContext} from '../../routes.tsx';
-import {ast} from 'zql/src/query/query-impl.ts';
 
 let firstRowRendered = false;
 const ITEM_SIZE = 56;
@@ -136,11 +135,12 @@ export function ListPage({onReady}: {onReady: () => void}) {
     }
   }, [pageSize, size]);
 
-  const prevParamsKeyRef = useRef(listContextParams);
-  const paramsChanged = listContextParams !== prevParamsKeyRef.current;
+  const prevListContextParamsRef = useRef(listContextParams);
+  const listContextParamsChanged =
+    listContextParams !== prevListContextParamsRef.current;
 
-  const effectiveAnchor = paramsChanged ? TOP_ANCHOR : anchor;
-  console.log({anchor, effectiveAnchor}, anchor !== effectiveAnchor);
+  const effectiveAnchor = listContextParamsChanged ? TOP_ANCHOR : anchor;
+  console.log(listContextParamsChanged, anchor, effectiveAnchor);
 
   const q = queries.issueListV2(
     login.loginState?.decoded,
@@ -157,7 +157,8 @@ export function ListPage({onReady}: {onReady: () => void}) {
     effectiveAnchor.direction,
   );
 
-  console.log(q.ast);
+  console.log(q.ast.start);
+  console.log(JSON.stringify(q.ast.where, undefined, 2));
 
   const [estimatedTotal, setEstimatedTotal] = useState(0);
   const [total, setTotal] = useState<number | undefined>(undefined);
@@ -175,21 +176,22 @@ export function ListPage({onReady}: {onReady: () => void}) {
     }
   }, [issues.length, issuesResult.type, onReady]);
 
-  // useLayoutEffect to avoid a render at the old scroll position which
-  // will cause pages to get to that position to start to be loaded.
   useEffect(() => {
-    console.log('scrolling to top', listRef.current);
-    virtualizer.scrollToOffset(0);
-    setEstimatedTotal(0);
-    setTotal(undefined);
-    setAnchor(TOP_ANCHOR);
-  }, [listContextParams]);
-
-  // useLayoutEffect to avoid a 1 frame render of the old counts
-  useEffect(() => {
-    if (issuesResult.type !== 'complete') {
-      return;
+    console.log('listContextParamsChanged effect', listContextParamsChanged);
+    if (listContextParamsChanged) {
+      if (listRef.current) {
+        listRef.current.scrollTop = 0;
+      }
+      setEstimatedTotal(0);
+      setTotal(undefined);
+      console.log('set anchor ', TOP_ANCHOR);
+      setAnchor(TOP_ANCHOR);
+      prevListContextParamsRef.current = listContextParams;
     }
+  }, [listContextParamsChanged, listContextParams]);
+
+  useEffect(() => {
+    if (listContextParamsChanged) return;
     const eTotal = anchor.index + issues.length;
     if (eTotal > estimatedTotal) {
       setEstimatedTotal(eTotal);
@@ -198,6 +200,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       setTotal(eTotal);
     }
   }, [
+    listContextParamsChanged,
     listContextParams,
     anchor,
     issuesResult.type,
@@ -362,19 +365,12 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const virtualItems = virtualizer.getVirtualItems();
   useEffect(() => {
+    if (listContextParamsChanged) return;
     const [firstItem] = virtualItems;
     const lastItem = virtualItems[virtualItems.length - 1];
     if (!lastItem) {
       return;
     }
-
-    console.log(
-      listRef.current?.scrollTop,
-      anchor,
-      virtualItems,
-      [issues[0], issues[1], [issues[2]]],
-      listRef.current?.scrollTop === 0,
-    );
 
     if (
       anchor.index !== 0 &&
@@ -386,7 +382,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       return;
     }
 
-    if (issuesResult.type !== 'complete' || listRef.current?.scrollTop === 0) {
+    if (issuesResult.type !== 'complete') {
       return;
     }
 
@@ -438,7 +434,14 @@ export function ListPage({onReady}: {onReady: () => void}) {
       console.log('page down', a);
       setAnchor(a);
     }
-  }, [anchor, issues, issuesResult, pageSize, virtualItems]);
+  }, [
+    listContextParamsChanged,
+    anchor,
+    issues,
+    issuesResult,
+    pageSize,
+    virtualItems,
+  ]);
 
   const [forceSearchMode, setForceSearchMode] = useState(false);
   const searchMode = forceSearchMode || Boolean(textFilter);
