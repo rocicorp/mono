@@ -47,7 +47,7 @@ export class ReplicacheTest<
 
   constructor(
     options: ReplicacheOptions<MD>,
-    implOptions?: ReplicacheImplOptions | undefined,
+    implOptions?: ReplicacheImplOptions,
   ) {
     let impl: ReplicacheImpl<MD> | undefined = undefined;
     setMakeImplForTest(<M extends MutatorDefs>(ops: ReplicacheOptions<M>) => {

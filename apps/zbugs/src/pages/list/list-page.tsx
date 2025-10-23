@@ -588,7 +588,7 @@ const addParam = (
   qs: URLSearchParams,
   key: string,
   value: string,
-  mode?: 'exclusive' | undefined,
+  mode?: 'exclusive',
 ) => {
   const newParams = new URLSearchParams(qs);
   newParams[mode === 'exclusive' ? 'set' : 'append'](key, value);
@@ -598,7 +598,7 @@ const addParam = (
 function removeParam(
   qs: URLSearchParams,
   key: string,
-  value?: string | undefined,
+  value?: string,
 ) {
   const searchParams = new URLSearchParams(qs);
   searchParams.delete(key, value);

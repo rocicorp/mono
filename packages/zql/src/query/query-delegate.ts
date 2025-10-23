@@ -11,7 +11,7 @@ import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 export type CommitListener = () => void;
 export type GotCallback = (
   got: boolean,
-  error?: ErroredQuery | undefined,
+  error?: ErroredQuery,
 ) => void;
 
 export interface NewQueryDelegate {
@@ -31,13 +31,13 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
   addServerQuery(
     ast: AST,
     ttl: TTL,
-    gotCallback?: GotCallback | undefined,
+    gotCallback?: GotCallback,
   ): () => void;
   addCustomQuery(
     ast: AST,
     customQueryID: CustomQueryID,
     ttl: TTL,
-    gotCallback?: GotCallback | undefined,
+    gotCallback?: GotCallback,
   ): () => void;
   updateServerQuery(ast: AST, ttl: TTL): void;
   updateCustomQuery(customQueryID: CustomQueryID, ttl: TTL): void;

@@ -156,7 +156,7 @@ export class QueryManager implements InspectorDelegate {
    */
   async getQueriesPatch(
     tx: ReadTransaction,
-    lastPatch?: Map<string, UpQueriesPatchOp> | undefined,
+    lastPatch?: Map<string, UpQueriesPatchOp>,
   ): Promise<Map<string, UpQueriesPatchOp>> {
     const existingQueryHashes = new Set<string>();
     const prefix = desiredQueriesPrefixForClient(this.#clientID);
@@ -219,7 +219,7 @@ export class QueryManager implements InspectorDelegate {
     ast: AST,
     {name, args}: CustomQueryID,
     ttl: TTL,
-    gotCallback?: GotCallback | undefined,
+    gotCallback?: GotCallback,
   ): () => void {
     const normalized = normalizeAST(ast);
     const queryId = hashOfNameAndArgs(name, args);
@@ -229,7 +229,7 @@ export class QueryManager implements InspectorDelegate {
   addLegacy(
     ast: AST,
     ttl: TTL,
-    gotCallback?: GotCallback | undefined,
+    gotCallback?: GotCallback,
   ): () => void {
     const normalized = normalizeAST(ast);
     const astHash = hashOfAST(normalized);
@@ -249,7 +249,7 @@ export class QueryManager implements InspectorDelegate {
     name: string | undefined,
     args: readonly ReadonlyJSONValue[] | undefined,
     ttl: TTL,
-    gotCallback?: GotCallback | undefined,
+    gotCallback?: GotCallback,
   ) {
     assert(
       (name === undefined) === (args === undefined),

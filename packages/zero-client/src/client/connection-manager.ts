@@ -117,7 +117,7 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
    *
    * @returns An object containing a promise that resolves on the next state change.
    */
-  connecting(reason?: ZeroError | undefined): {
+  connecting(reason?: ZeroError): {
     nextStatePromise: Promise<void>;
   } {
     // cannot transition from closed to any other status
@@ -202,7 +202,7 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
    *
    * @returns An object containing a promise that resolves on the next state change.
    */
-  disconnected(reason?: ZeroError | undefined): {
+  disconnected(reason?: ZeroError): {
     nextStatePromise: Promise<void>;
   } {
     // cannot transition from closed to any other status

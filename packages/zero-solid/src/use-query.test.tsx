@@ -69,9 +69,8 @@ function newMockZero(
     query: Q,
     factoryOrOptions?:
       | ViewFactory<Schema, QueryTable<Q>, QueryRowType<Q>, T>
-      | MaterializeOptions
-      | undefined,
-    maybeOptions?: MaterializeOptions | undefined,
+      | MaterializeOptions,
+    maybeOptions?: MaterializeOptions,
   ) {
     return materialize(query, queryDelegate, factoryOrOptions, maybeOptions);
   }

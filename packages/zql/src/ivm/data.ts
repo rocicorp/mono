@@ -80,7 +80,7 @@ export type Comparator = (r1: Row, r2: Row) => number;
 
 export function makeComparator(
   order: Ordering,
-  reverse?: boolean | undefined,
+  reverse?: boolean,
 ): Comparator {
   return (a, b) => {
     // Skip destructuring here since it is hot code.

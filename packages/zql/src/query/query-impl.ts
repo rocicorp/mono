@@ -60,9 +60,8 @@ export function materialize<S extends Schema, T, Q>(
   delegate: QueryDelegate,
   factoryOrOptions?:
     | ViewFactory<S, QueryTable<Q>, QueryRowType<Q>, T>
-    | MaterializeOptions
-    | undefined,
-  maybeOptions?: MaterializeOptions | undefined,
+    | MaterializeOptions,
+  maybeOptions?: MaterializeOptions,
 ) {
   if (typeof factoryOrOptions === 'function') {
     return (query as AnyQuery)
@@ -124,7 +123,7 @@ export abstract class AbstractQuery<
     format: Format,
     system: System,
     customQueryID: CustomQueryID | undefined,
-    currentJunction?: string | undefined,
+    currentJunction?: string,
   ) {
     this.#schema = schema;
     this._delegate = delegate;
@@ -215,8 +214,8 @@ export abstract class AbstractQuery<
 
   whereExists = (
     relationship: string,
-    cbOrOptions?: ((q: AnyQuery) => AnyQuery) | ExistsOptions | undefined,
-    options?: ExistsOptions | undefined,
+    cbOrOptions?: ((q: AnyQuery) => AnyQuery) | ExistsOptions,
+    options?: ExistsOptions,
   ): Query<TSchema, TTable, TReturn> => {
     const cb = typeof cbOrOptions === 'function' ? cbOrOptions : undefined;
     const opts = typeof cbOrOptions === 'function' ? options : cbOrOptions;
@@ -436,7 +435,7 @@ export abstract class AbstractQuery<
 
   start = (
     row: Partial<PullRow<TTable, TSchema>>,
-    opts?: {inclusive: boolean} | undefined,
+    opts?: {inclusive: boolean},
   ): Query<TSchema, TTable, TReturn> =>
     this[newQuerySymbol](
       this._delegate,
@@ -509,7 +508,7 @@ export abstract class AbstractQuery<
   protected _exists = (
     relationship: string,
     cb: ((query: AnyQuery) => AnyQuery) | undefined,
-    options?: ExistsOptions | undefined,
+    options?: ExistsOptions,
   ): Condition => {
     cb = cb ?? (q => q);
     const flip = options?.flip ?? false;
@@ -654,11 +653,11 @@ export abstract class AbstractQuery<
   }
 
   abstract materialize(
-    ttl?: TTL | undefined,
+    ttl?: TTL,
   ): TypedView<HumanReadable<TReturn>>;
   abstract materialize<T>(
     factory: ViewFactory<TSchema, TTable, TReturn, T>,
-    ttl?: TTL | undefined,
+    ttl?: TTL,
   ): T;
 
   abstract run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
@@ -689,8 +688,8 @@ export class QueryImpl<
     ast: AST = {table: tableName},
     format: Format = defaultFormat,
     system: System = 'client',
-    customQueryID?: CustomQueryID | undefined,
-    currentJunction?: string | undefined,
+    customQueryID?: CustomQueryID,
+    currentJunction?: string,
   ) {
     super(
       delegate,

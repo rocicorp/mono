@@ -48,7 +48,7 @@ if (REPRO_SEED) {
   });
 }
 
-function createCase(seed?: number | undefined) {
+function createCase(seed?: number) {
   seed = seed ?? Date.now() ^ (Math.random() * 0x100000000);
   const randomizer = generateMersenne53Randomizer(seed);
   const rng = () => randomizer.next();

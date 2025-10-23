@@ -184,7 +184,7 @@ function getSnapshot<TReturn>(
   data: HumanReadable<TReturn>,
   resultType: ResultType,
   refetchFn: () => void,
-  error?: ErroredQuery | undefined,
+  error?: ErroredQuery,
 ): QueryResult<TReturn> {
   if (singular && data === undefined) {
     switch (resultType) {
@@ -450,7 +450,7 @@ class ViewWrapper<
   #onData = (
     snap: Immutable<HumanReadable<TReturn>>,
     resultType: ResultType,
-    error?: ErroredQuery | undefined,
+    error?: ErroredQuery,
   ) => {
     const data =
       snap === undefined

@@ -85,7 +85,7 @@ export class QueryDelegateImpl implements QueryDelegate {
     ast: AST,
     customQueryID: CustomQueryID,
     ttl: TTL,
-    gotCallback?: GotCallback | undefined,
+    gotCallback?: GotCallback,
   ): () => void {
     return this.#addQuery({ast, ttl, ...customQueryID}, gotCallback);
   }
@@ -93,7 +93,7 @@ export class QueryDelegateImpl implements QueryDelegate {
   addServerQuery(
     ast: AST,
     ttl: TTL,
-    gotCallback?: GotCallback | undefined,
+    gotCallback?: GotCallback,
   ): () => void {
     return this.#addQuery(
       {ast, name: undefined, args: undefined, ttl},
@@ -101,7 +101,7 @@ export class QueryDelegateImpl implements QueryDelegate {
     );
   }
 
-  #addQuery(entry: Entry, gotCallback?: GotCallback | undefined) {
+  #addQuery(entry: Entry, gotCallback?: GotCallback) {
     this.addedServerQueries.push(entry);
     this.gotCallbacks.push(gotCallback);
     if (this.callGot) {

@@ -103,7 +103,7 @@ export class VizDelegate implements QueryDelegate {
   flushQueryChanges() {}
   addMetric() {}
 
-  #getNode(input: InputBase, name?: string | undefined) {
+  #getNode(input: InputBase, name?: string) {
     const existing = this.#nodeIds.get(input);
     if (existing) {
       if (name) {
