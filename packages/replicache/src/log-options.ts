@@ -17,7 +17,7 @@ import {
 export function createLogContext(
   logLevel: LogLevel = 'info',
   logSinks: LogSink[] = [consoleLogSink],
-  context?: Context | undefined,
+  context?: Context,
 ): LogContext {
   const logSink =
     logSinks.length === 1 ? logSinks[0] : new TeeLogSink(logSinks);

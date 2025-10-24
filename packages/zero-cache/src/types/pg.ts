@@ -190,9 +190,7 @@ export type PostgresValueType = JSONValue | Uint8Array;
  *
  * @param jsonAsString Keep JSON / JSONB values as strings instead of parsing.
  */
-export const postgresTypeConfig = (
-  jsonAsString?: 'json-as-string' | undefined,
-) => ({
+export const postgresTypeConfig = (jsonAsString?: 'json-as-string') => ({
   // Type the type IDs as `number` so that Typescript doesn't complain about
   // referencing external types during type inference.
   types: {

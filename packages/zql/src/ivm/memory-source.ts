@@ -101,7 +101,7 @@ export class MemorySource implements Source {
     tableName: string,
     columns: Record<string, SchemaValue>,
     primaryKey: PrimaryKey,
-    primaryIndexData?: BTreeSet<Row> | undefined,
+    primaryIndexData?: BTreeSet<Row>,
   ) {
     this.#tableName = tableName;
     this.#columns = columns;
@@ -154,8 +154,8 @@ export class MemorySource implements Source {
 
   connect(
     sort: Ordering,
-    filters?: Condition | undefined,
-    splitEditKeys?: Set<string> | undefined,
+    filters?: Condition,
+    splitEditKeys?: Set<string>,
   ): SourceInput {
     const transformedFilters = transformFilters(filters);
 

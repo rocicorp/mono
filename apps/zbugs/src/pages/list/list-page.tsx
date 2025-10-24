@@ -628,18 +628,14 @@ const addParam = (
   qs: URLSearchParams,
   key: string,
   value: string,
-  mode?: 'exclusive' | undefined,
+  mode?: 'exclusive',
 ) => {
   const newParams = new URLSearchParams(qs);
   newParams[mode === 'exclusive' ? 'set' : 'append'](key, value);
   return '?' + newParams.toString();
 };
 
-function removeParam(
-  qs: URLSearchParams,
-  key: string,
-  value?: string | undefined,
-) {
+function removeParam(qs: URLSearchParams, key: string, value?: string) {
   const searchParams = new URLSearchParams(qs);
   searchParams.delete(key, value);
   return '?' + searchParams.toString();

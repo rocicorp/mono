@@ -43,7 +43,7 @@ export class IVMSourceBranch {
 
   constructor(
     tables: Record<string, TableSchema>,
-    hash?: Hash | undefined,
+    hash?: Hash,
     sources: Map<string, MemorySource | undefined> = new Map(),
   ) {
     this.#tables = tables;
@@ -89,7 +89,7 @@ export class IVMSourceBranch {
   async forkToHead(
     store: LazyStore,
     desiredHead: Hash,
-    readOptions?: ZeroReadOptions | undefined,
+    readOptions?: ZeroReadOptions,
   ): Promise<IVMSourceBranch> {
     const fork = this.fork();
 

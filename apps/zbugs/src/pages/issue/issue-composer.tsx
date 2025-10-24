@@ -17,7 +17,7 @@ import {ProjectPicker} from '../../components/project-picker.tsx';
 
 interface Props {
   /** If id is defined the issue created by the composer. */
-  onDismiss: (created?: {projectName: string; id: string} | undefined) => void;
+  onDismiss: (created?: {projectName: string; id: string}) => void;
   isOpen: boolean;
   projects: ProjectRow[];
   projectName: string;

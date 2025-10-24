@@ -68,7 +68,7 @@ export function compile(
   serverSchema: ServerSchema,
   zqlSchema: Schema,
   ast: AST,
-  format?: Format | undefined,
+  format?: Format,
 ): SQLQuery {
   const spec: Spec = {
     aliasCount: 0,
@@ -87,7 +87,7 @@ function select(
   spec: Spec,
   ast: AST,
   format: Format | undefined,
-  correlate?: ((childTable: Table) => SQLQuery) | undefined,
+  correlate?: (childTable: Table) => SQLQuery,
 ): SQLQuery {
   const table = makeTable(spec, ast.table);
   const selectionSet = related(spec, ast.related ?? [], format, table);
@@ -141,7 +141,7 @@ export function limit(
   return sql`LIMIT ${sqlConvertSingularLiteralArg(limit)}`;
 }
 
-function makeTable(spec: Spec, zql: string, alias?: string | undefined): Table {
+function makeTable(spec: Spec, zql: string, alias?: string): Table {
   alias = alias ?? zql + '_' + spec.aliasCount++;
   return {
     zql,

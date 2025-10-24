@@ -49,7 +49,7 @@ export class ZQLDatabase<S extends Schema, WrappedTransaction>
       tx: TransactionImpl<S, WrappedTransaction>,
       transactionHooks: TransactionProviderHooks,
     ) => Promise<R>,
-    transactionInput?: TransactionProviderInput | undefined,
+    transactionInput?: TransactionProviderInput,
   ): Promise<R> {
     if (!transactionInput) {
       // Icky hack. This is just here to have user not have to do this.

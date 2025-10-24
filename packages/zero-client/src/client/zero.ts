@@ -830,14 +830,14 @@ export class Zero<
   preload(
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     query: Query<S, keyof S['tables'] & string, any>,
-    options?: PreloadOptions | undefined,
+    options?: PreloadOptions,
   ) {
     return query[delegateSymbol](this.#zeroContext).preload(options);
   }
 
   run<Q>(
     query: Q,
-    runOptions?: RunOptions | undefined,
+    runOptions?: RunOptions,
   ): Promise<HumanReadable<QueryRowType<Q>>> {
     return (query as AnyQuery)
       [delegateSymbol](this.#zeroContext)
@@ -846,20 +846,19 @@ export class Zero<
 
   materialize<Q>(
     query: Q,
-    options?: MaterializeOptions | undefined,
+    options?: MaterializeOptions,
   ): TypedView<HumanReadable<QueryRowType<Q>>>;
   materialize<T, Q>(
     query: Q,
     factory: ViewFactory<S, QueryTable<Q>, QueryRowType<Q>, T>,
-    options?: MaterializeOptions | undefined,
+    options?: MaterializeOptions,
   ): T;
   materialize<T, Q>(
     query: Q,
     factoryOrOptions?:
       | ViewFactory<S, QueryTable<Q>, QueryRowType<Q>, T>
-      | MaterializeOptions
-      | undefined,
-    maybeOptions?: MaterializeOptions | undefined,
+      | MaterializeOptions,
+    maybeOptions?: MaterializeOptions,
   ) {
     return materialize(
       query,
@@ -2319,7 +2318,7 @@ function promiseRace(ps: Promise<unknown>[]): Promise<number> {
   return Promise.race(ps.map((p, i) => p.then(() => i)));
 }
 
-function assertValidRunOptions(_options?: RunOptions | undefined): void {}
+function assertValidRunOptions(_options?: RunOptions): void {}
 
 async function makeActiveClientsManager(
   clientGroupID: Promise<string>,

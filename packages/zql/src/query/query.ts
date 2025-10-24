@@ -340,14 +340,14 @@ export interface Query<
 
   whereExists(
     relationship: AvailableRelationships<TTable, TSchema>,
-    options?: ExistsOptions | undefined,
+    options?: ExistsOptions,
   ): Query<TSchema, TTable, TReturn>;
   whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb: (
       q: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
     ) => Query<TSchema, string>,
-    options?: ExistsOptions | undefined,
+    options?: ExistsOptions,
   ): Query<TSchema, TTable, TReturn>;
 
   /**
@@ -365,7 +365,7 @@ export interface Query<
    */
   start(
     row: Partial<PullRow<TTable, TSchema>>,
-    opts?: {inclusive: boolean} | undefined,
+    opts?: {inclusive: boolean},
   ): Query<TSchema, TTable, TReturn>;
 
   /**

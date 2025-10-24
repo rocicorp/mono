@@ -229,7 +229,7 @@ export class LazyRead implements Read {
     // read, or write, from the perdag then we must use _that_
     // transaction's read. Trying to open our own `sourceRead` will
     // cause the outer transaction to auto-commit.
-    sourceRead?: Read | undefined,
+    sourceRead?: Read,
   ) {
     this._heads = heads;
     this._memOnlyChunks = memOnlyChunks;
