@@ -7,6 +7,8 @@ import {useZero} from './zero-provider.tsx';
  * This is useful when you want to update state based on the online status.
  *
  * @returns The online status of the Zero instance.
+ *
+ * @deprecated Use {@link useZeroConnectionState} instead, which provides more detailed connection state.
  */
 export function useZeroOnline(): boolean {
   const zero = useZero();

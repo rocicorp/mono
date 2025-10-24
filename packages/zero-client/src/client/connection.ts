@@ -107,7 +107,7 @@ export class ConnectionSource implements Source<ConnectionState> {
     return this.#connectionManager.state;
   }
 
-  subscribe(listener: (state: ConnectionState) => void): () => void {
-    return this.#connectionManager.subscribe(listener);
+  get subscribe() {
+    return this.#connectionManager.subscribe;
   }
 }

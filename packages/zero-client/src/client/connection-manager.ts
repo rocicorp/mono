@@ -6,6 +6,22 @@ import {ClientErrorKind} from './client-error-kind.ts';
 
 const DEFAULT_TIMEOUT_CHECK_INTERVAL_MS = 1_000;
 
+/**
+ * The current connection state of the Zero instance. It can be one of the following states:
+ *
+ * - `connecting`: The client is actively trying to connect every 5 seconds.
+ *   - `attempt` counts the number of retries within the current retry window,
+ *   - `disconnectAt` is the epoch timestamp when the client will transition to `disconnected` state
+ *   - `reason` is the optional error associated with the connection attempt.
+ * - `disconnected`: The client is now in an "offline" state. It will continue
+ *   to try to connect every 5 seconds.
+ * - `connected`: The client has opened a successful connection to the server.
+ * - `error`: A fatal error occurred. No connection retries will be made until the host
+ *   application calls `connect()` again.
+ *   - `reason` is the `ZeroError` associated with the error state.
+ * - `closed`: The client was shut down (for example via `zero.close()`). This is
+ *   a terminal state, and a new Zero instance must be created to reconnect.
+ */
 export type ConnectionState =
   | {
       name: ConnectionStatus.Disconnected;

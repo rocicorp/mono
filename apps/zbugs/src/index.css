@@ -286,13 +286,15 @@ textarea.autoResize {
   cursor: default;
 }
 
-.offline-status-container {
+.connection-status-container {
   display: flex;
   flex-direction: row;
   align-items: center;
+  margin-bottom: 1rem;
+  user-select: none;
 }
 
-.offline-status-pill {
+.connection-status-pill {
   display: flex;
   flex-direction: row;
   align-items: center;

@@ -122,14 +122,21 @@ export type {
   HumanReadable,
   PullRow,
   Query,
-  Row,
-  RunOptions,
   QueryResultType,
   QueryRowType,
+  Row,
+  RunOptions,
   ZeRow,
 } from '../../zql/src/query/query.ts';
 export {type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
+export type {ConnectionState} from './client/connection-manager.ts';
+export {ConnectionStatus} from './client/connection-status.ts';
+export type {
+  Connection,
+  ConnectionSource,
+  Source,
+} from './client/connection.ts';
 export type {BatchMutator, DBMutator, TableMutator} from './client/crud.ts';
 export type {
   CustomMutatorDefs,

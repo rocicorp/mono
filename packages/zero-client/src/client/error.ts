@@ -19,7 +19,7 @@ abstract class BaseError<
 > extends Error {
   readonly errorBody: T;
   constructor(errorBody: T, options?: ErrorOptions) {
-    super(errorBody.kind + ': ' + errorBody.message, options);
+    super(errorBody.message, options);
     this.errorBody = errorBody;
   }
   get kind(): T['kind'] {

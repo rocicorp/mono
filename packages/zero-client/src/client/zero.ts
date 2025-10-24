@@ -520,8 +520,12 @@ export class Zero<
 
     const lc = new ZeroLogContext(logOptions.logLevel, {}, logSink);
 
-    this.#mutationTracker = new MutationTracker(lc, (upTo: MutationID) =>
-      this.#send(['ackMutationResponses', upTo]),
+    this.#mutationTracker = new MutationTracker(
+      lc,
+      (upTo: MutationID) => this.#send(['ackMutationResponses', upTo]),
+      (error: ZeroError) => {
+        this.#disconnect(lc, error);
+      },
     );
     if (options.mutators) {
       for (const [namespaceOrKey, mutatorOrMutators] of Object.entries(
@@ -728,6 +732,9 @@ export class Zero<
       maxRecentQueries,
       options.queryChangeThrottleMs ?? DEFAULT_QUERY_CHANGE_THROTTLE_MS,
       slowMaterializeThreshold,
+      (error: ZeroError) => {
+        this.#disconnect(lc, error);
+      },
     );
     this.#clientToServer = clientToServer(schema.tables);
 
@@ -2062,6 +2069,8 @@ export class Zero<
   /**
    * A rough heuristic for whether the client is currently online and
    * authenticated.
+   *
+   * @deprecated Use `connection` instead, which provides more detailed connection state.
    */
   get online(): boolean {
     return this.#onlineManager.online;
@@ -2074,6 +2083,8 @@ export class Zero<
    *
    * @param listener - The listener to subscribe to.
    * @returns A function to unsubscribe the listener.
+   *
+   * @deprecated Use `connection` instead, which provides more detailed connection state.
    */
   onOnline = (listener: (online: boolean) => void): (() => void) =>
     this.#onlineManager.subscribe(listener);
