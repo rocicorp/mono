@@ -1,5 +1,5 @@
 {
-  "id": "8bda30ea-8fdf-4fd0-bc08-0de781883055",
+  "id": "77127e52-ab84-4bd3-8d81-40ee49fc6ccf",
   "prevId": "fe7f0a3e-5222-4e2b-bf9b-c0de5ac281c9",
   "version": "7",
   "dialect": "postgresql",
@@ -892,6 +892,18 @@
           "primaryKey": false,
           "notNull": false,
           "default": true
+        },
+        "markURL": {
+          "name": "markURL",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "logoURL": {
+          "name": "logoURL",
+          "type": "varchar",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {

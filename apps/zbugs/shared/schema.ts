@@ -30,6 +30,8 @@ const project = table('project')
     lowerCaseName: string(),
     issueCountEstimate: number().optional(),
     supportsSearch: boolean(),
+    markURL: string().optional(),
+    logoURL: string().optional(),
   })
   .primaryKey('id');
 

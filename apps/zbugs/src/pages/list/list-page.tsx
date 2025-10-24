@@ -659,5 +659,5 @@ function formatIssueCountEstimate(count: number) {
   if (count < 1000) {
     return count;
   }
-  return `${Math.floor(count / 1000).toLocaleString()}k`;
+  return `~${Math.floor(count / 1000).toLocaleString()}k`;
 }

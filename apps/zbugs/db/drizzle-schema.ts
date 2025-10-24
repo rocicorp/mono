@@ -39,6 +39,8 @@ export const project = pgTable(
     lowerCaseName: varchar().default('').notNull(),
     issueCountEstimate: integer(),
     supportsSearch: boolean().default(true),
+    markURL: varchar(),
+    logoURL: varchar(),
   },
   table => [
     uniqueIndex('project_lower_case_name_idx').using(

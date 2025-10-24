@@ -30,6 +30,9 @@ export const Nav = memo(() => {
   const isOnline = useZeroOnline();
 
   const [projects] = useQuery(queries.allProjects());
+  const project = projects.find(
+    p => p.lowerCaseName === projectName.toLocaleLowerCase(),
+  );
 
   const [showIssueModal, setShowIssueModal] = useState(false);
 
@@ -62,9 +65,9 @@ export const Nav = memo(() => {
   return (
     <>
       <div className="nav-container flex flex-col">
-        <Link className="logo-link-container" href="/">
-          <img src={logoURL} className="zero-logo" />
-          <img src={markURL} className="zero-mark" />
+        <Link className="logo-link-container" href={links.list({projectName})}>
+          <img src={project?.logoURL ?? logoURL} className="zero-logo" />
+          <img src={project?.markURL ?? markURL} className="zero-mark" />
         </Link>{' '}
         {/* could not figure out how to add this color to tailwind.config.js */}
         <ButtonWithLoginCheck
