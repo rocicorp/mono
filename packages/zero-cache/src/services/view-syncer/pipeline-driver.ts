@@ -160,6 +160,7 @@ export class PipelineDriver {
 
     if (this.#costModels) {
       const costModel = createSQLiteCostModel(db.db, fullTables);
+      this.#costModels.set(db.db, costModel);
     }
 
     const {replicaVersion} = getSubscriptionState(db);
