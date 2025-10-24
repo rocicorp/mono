@@ -158,11 +158,6 @@ export class PipelineDriver {
       );
     }
 
-    if (this.#costModels) {
-      const costModel = createSQLiteCostModel(db.db, fullTables);
-      this.#costModels.set(db.db, costModel);
-    }
-
     const {replicaVersion} = getSubscriptionState(db);
     this.#replicaVersion = replicaVersion;
   }
@@ -226,6 +221,13 @@ export class PipelineDriver {
       table.setDB(db.db);
     }
     return version;
+  }
+
+  #ensureCostModelExists(db: Database) {
+    if (this.#costModels && !this.#costModels.has(db)) {
+      const costModel = createSQLiteCostModel(db, this.#tableSpecs);
+      this.#costModels.set(db, costModel);
+    }
   }
 
   /**
@@ -332,6 +334,8 @@ export class PipelineDriver {
       ? new Debug()
       : undefined;
 
+    this.#ensureCostModelExists(this.#snapshotter.current().db.db);
+
     const input = buildPipeline(
       query,
       {
@@ -351,7 +355,9 @@ export class PipelineDriver {
         decorateFilterInput: input => input,
       },
       queryID,
-      this.#costModels?.get(this.#snapshotter.current().db.db),
+      this.#costModels
+        ? must(this.#costModels.get(this.#snapshotter.current().db.db))
+        : undefined,
     );
     const schema = input.getSchema();
     input.setOutput({
@@ -546,6 +552,7 @@ export class PipelineDriver {
     for (const table of this.#tables.values()) {
       table.setDB(curr.db.db);
     }
+    this.#ensureCostModelExists(curr.db.db);
     this.#lc.debug?.(`Advanced to ${curr.version}`);
   }
 
