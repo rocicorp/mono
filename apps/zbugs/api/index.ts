@@ -55,7 +55,7 @@ fastify.register(oauthPlugin, {
   },
   startRedirectPath: '/api/login/github',
   callbackUri: req =>
-    `${req.protocol}://${req.hostname}${
+    `${req.hostname.includes('localhost') ? 'http' : 'https'}://${req.hostname}${
       // oxlint-disable-next-line eqeqeq
       req.port != null ? ':' + req.port : ''
     }/api/login/github/callback${
