@@ -360,6 +360,18 @@ export class PlannerConnection {
   getConstraintsForDebug(): Map<string, PlannerConstraint | undefined> {
     return new Map(this.#constraints);
   }
+
+  /**
+   * Get estimated cost for each constraint branch.
+   * Returns a map of constraint key to cost estimate.
+   * Forces cost calculation if not already cached.
+   */
+  getConstraintCostsForDebug(): Map<string, CostEstimate> {
+    // Trigger cost calculation to populate cache
+    this.estimateCost(undefined);
+    // Return copy of cached costs
+    return new Map(this.#cachedConstraintCosts);
+  }
 }
 
 export type ConnectionCostModel = (
