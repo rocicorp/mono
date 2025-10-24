@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {beforeEach, expect, test, vi} from 'vitest';
+import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {
   DID_NOT_CONNECT_VALUE,
   Gauge,
@@ -7,6 +7,7 @@ import {
   type Point,
   REPORT_INTERVAL_MS,
   type Series,
+  shouldReportConnectError,
   State,
 } from './metrics.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
@@ -618,4 +619,33 @@ test('MetricManager.stop', async () => {
 
   await vi.advanceTimersByTimeAsync(REPORT_INTERVAL_MS * 2);
   expect(reporter).not.toBeCalled();
+});
+
+describe('shouldReportConnectError', () => {
+  test.each([
+    ClientErrorKind.Hidden,
+    ClientErrorKind.ClientClosed,
+    ClientErrorKind.UserDisconnect,
+    ClientErrorKind.CleanClose,
+    ClientErrorKind.AbruptClose,
+  ] as const)('returns false for %s', kind => {
+    const error = new ClientError({kind, message: 'transient'});
+    expect(shouldReportConnectError(error)).toBe(false);
+  });
+
+  test('returns true for other client errors', () => {
+    const error = new ClientError({
+      kind: ClientErrorKind.PingTimeout,
+      message: 'timeout',
+    });
+    expect(shouldReportConnectError(error)).toBe(true);
+  });
+
+  test('returns true for server errors', () => {
+    const error = new ServerError({
+      kind: ErrorKind.Internal,
+      message: 'boom',
+    });
+    expect(shouldReportConnectError(error)).toBe(true);
+  });
 });

@@ -363,6 +363,58 @@ describe('onOnlineChange callback', () => {
   });
 });
 
+describe('connect error metrics', () => {
+  test('server error while connected increments connectErrorCount', async () => {
+    const z = zeroForTest({logLevel: 'debug'});
+    try {
+      await z.triggerConnected();
+      await z.waitForConnectionStatus(ConnectionStatus.Connected);
+
+      const initialLogCount = z.testLogSink.messages.length;
+      await z.triggerError(ErrorKind.Internal, 'boom');
+      await z.waitForConnectionStatus(ConnectionStatus.Error);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const newLogs = z.testLogSink.messages.slice(initialLogCount);
+      const disconnectLog = newLogs.find(
+        ([, , args]) => Array.isArray(args) && args[0] === 'disconnecting',
+      );
+      expect(disconnectLog).toBeDefined();
+      const [, , args] = disconnectLog!;
+      const [, payload] = args as [unknown, Record<string, unknown>];
+      expect(payload.connectErrorCount).toBe(1);
+      expect(payload.reason).toBe(ErrorKind.Internal);
+    } finally {
+      await z.close();
+    }
+  });
+
+  test('abrupt close does not increment connectErrorCount', async () => {
+    const z = zeroForTest({logLevel: 'debug'});
+    try {
+      await z.triggerConnected();
+      await z.waitForConnectionStatus(ConnectionStatus.Connected);
+
+      const initialLogCount = z.testLogSink.messages.length;
+      await z.triggerClose();
+      await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+      await vi.advanceTimersByTimeAsync(0);
+
+      const newLogs = z.testLogSink.messages.slice(initialLogCount);
+      const disconnectLog = newLogs.find(
+        ([, , args]) => Array.isArray(args) && args[0] === 'disconnecting',
+      );
+      expect(disconnectLog).toBeDefined();
+      const [, , args] = disconnectLog!;
+      const [, payload] = args as [unknown, Record<string, unknown>];
+      expect(payload.connectErrorCount).toBe(0);
+      expect(payload.reason).toBe(ClientErrorKind.AbruptClose);
+    } finally {
+      await z.close();
+    }
+  });
+});
+
 test('onOnline listener', async () => {
   let online1 = 0;
   let offline1 = 0;

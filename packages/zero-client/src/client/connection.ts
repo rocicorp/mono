@@ -81,7 +81,9 @@ export class ConnectionImpl implements Connection {
       return;
     }
 
-    lc.info?.('Resuming connection from error state');
+    lc.info?.(
+      `Resuming connection from state: ${this.#connectionManager.state.name}`,
+    );
 
     // Transition to connecting, which will trigger the state change resolver
     // and unblock the run loop. Wait for the next state change (connected, disconnected, etc.)

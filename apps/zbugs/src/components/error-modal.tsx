@@ -18,7 +18,7 @@ export function ErrorModal({connectionState}: Props) {
     <Modal isOpen={true} onDismiss={() => {}}>
       <ModalText>
         {connectionState.name === ConnectionStatus.Error
-          ? `An error occurred while connecting to the Zero server. Please try reconnecting.`
+          ? `A fatal error occurred with Zero - please reconnect to the sync server to continue.`
           : `The Zero instance has been closed. This shouldn't happen. Please try refreshing the page and report to the team.`}
       </ModalText>
       <ModalActions>

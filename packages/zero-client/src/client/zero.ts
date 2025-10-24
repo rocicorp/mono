@@ -140,6 +140,7 @@ import {
   REPORT_INTERVAL_MS,
   type Series,
   getLastConnectErrorValue,
+  shouldReportConnectError,
 } from './metrics.ts';
 import {MutationTracker} from './mutation-tracker.ts';
 import type {OnErrorParameters} from './on-error.ts';
@@ -1465,9 +1466,19 @@ export class Zero<
     reason: ZeroError,
     closeCode?: CloseCode,
   ): void {
-    if (this.#connectionManager.is(ConnectionStatus.Connecting)) {
+    if (shouldReportConnectError(reason)) {
       this.#connectErrorCount++;
+      this.#metrics.lastConnectError.set(getLastConnectErrorValue(reason));
+      this.#metrics.timeToConnectMs.set(DID_NOT_CONNECT_VALUE);
+      this.#metrics.setConnectError(reason);
+      if (
+        this.#connectErrorCount % CHECK_CONNECTIVITY_ON_ERROR_FREQUENCY ===
+        1
+      ) {
+        this.#checkConnectivity(`connectErrorCount=${this.#connectErrorCount}`);
+      }
     }
+
     lc.info?.('disconnecting', {
       navigatorOnline: navigator?.onLine,
       reason: reason.kind,
@@ -1491,31 +1502,15 @@ export class Zero<
           );
           // this._connectStart reset below.
         }
-
-        break;
-      }
-      case ConnectionStatus.Disconnected:
-      case ConnectionStatus.Connecting: {
-        this.#metrics.lastConnectError.set(getLastConnectErrorValue(reason));
-        this.#metrics.timeToConnectMs.set(DID_NOT_CONNECT_VALUE);
-        this.#metrics.setConnectError(reason);
-        if (
-          this.#connectErrorCount % CHECK_CONNECTIVITY_ON_ERROR_FREQUENCY ===
-          1
-        ) {
-          this.#checkConnectivity(
-            `connectErrorCount=${this.#connectErrorCount}`,
-          );
-        }
-
         break;
       }
       case ConnectionStatus.Closed:
         lc.error?.('disconnect() called while closed');
         return;
 
+      case ConnectionStatus.Disconnected:
+      case ConnectionStatus.Connecting:
       case ConnectionStatus.Error:
-        lc.debug?.('disconnect() called while in error state; continuing');
         break;
 
       default:
@@ -1864,17 +1859,12 @@ export class Zero<
 
           case ConnectionStatus.Error: {
             // we pause the run loop and wait for a state change
-            // or for a timeout
             lc.info?.(
-              'Run loop paused in error state. Call connect() to resume.',
+              `Run loop paused in error state. Call connect() to resume.`,
               currentState.reason,
             );
 
-            await promiseRace({
-              sleep: sleep(RUN_LOOP_INTERVAL_MS),
-              stateChange: this.#connectionManager.waitForStateChange(),
-            });
-
+            await this.#connectionManager.waitForStateChange();
             break;
           }
 
@@ -1950,10 +1940,7 @@ export class Zero<
             break;
           }
           case ConnectionStatus.Error: {
-            lc.error?.(
-              'Fatal error encountered, transitioning to error state',
-              transition.reason,
-            );
+            lc.debug?.('Fatal error encountered, transitioning to error state');
             this.#setOnline(false);
             this.#connectionManager.error(transition.reason);
             // run loop will enter the error state case and await a state change

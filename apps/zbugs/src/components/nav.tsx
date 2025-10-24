@@ -234,7 +234,7 @@ const ConnectionStatusPill = () => {
         <span>
           {connectionState.name === ConnectionStatus.Disconnected
             ? 'Offline'
-            : 'Connecting...'}
+            : 'Connecting'}
         </span>
       </div>
     </div>
