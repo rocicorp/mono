@@ -105,12 +105,12 @@ describe('ZBugs Query Planner Analysis', () => {
     console.log(planDebugger.format());
   });
 
-  test('issuePreloadV2', () => {
+  test('issuePreloadV2 (AUTO)', () => {
     const planDebugger = new AccumulatorDebugger();
     const userID = 'test-user-id';
     const projectName = 'Zero';
 
-    getPlanAST(
+    const ast = getPlanAST(
       q.issue
         .whereExists('project', p =>
           p.where('lowerCaseName', projectName.toLowerCase()),
@@ -132,8 +132,40 @@ describe('ZBugs Query Planner Analysis', () => {
         .limit(1000),
       planDebugger,
     );
-    console.log('\n=== issuePreloadV2 Query Plan ===');
+    console.log('\n=== AUTO: issuePreloadV2 AST ===');
+    console.log(JSON.stringify(ast, null, 2));
+    console.log('\n=== AUTO: issuePreloadV2 Query Plan ===');
     console.log(planDebugger.format());
+  });
+
+  test('issuePreloadV2 (MANUAL)', () => {
+    const userID = 'test-user-id';
+    const projectName = 'Zero';
+
+    const query = q.issue
+      .whereExists('project', p =>
+        p.where('lowerCaseName', projectName.toLowerCase()),
+        {flip: true},
+      )
+      .related('labels')
+      .related('viewState', q => q.where('userID', userID))
+      .related('creator')
+      .related('assignee')
+      .related('emoji', emoji => emoji.related('creator'))
+      .related('comments', comments =>
+        comments
+          .related('creator')
+          .related('emoji', emoji => emoji.related('creator'))
+          .limit(10)
+          .orderBy('created', 'desc'),
+      )
+      .orderBy('modified', 'desc')
+      .orderBy('id', 'desc')
+      .limit(1000);
+
+    const ast = query.ast;
+    console.log('\n=== MANUAL: issuePreloadV2 AST ===');
+    console.log(JSON.stringify(ast, null, 2));
   });
 
   test('userPref', () => {
@@ -162,11 +194,11 @@ describe('ZBugs Query Planner Analysis', () => {
     console.log(planDebugger.format());
   });
 
-  test('userPickerV2 - creators filter', () => {
+  test('userPickerV2 - creators filter (AUTO)', () => {
     const planDebugger = new AccumulatorDebugger();
     const projectName = 'Zero';
 
-    getPlanAST(
+    const ast = getPlanAST(
       q.user.whereExists('createdIssues', i =>
         i.whereExists('project', p =>
           p.where('lowerCaseName', projectName.toLowerCase()),
@@ -174,11 +206,28 @@ describe('ZBugs Query Planner Analysis', () => {
       ),
       planDebugger,
     );
-    console.log('\n=== userPickerV2 (creators filter) Query Plan ===');
+    console.log('\n=== AUTO: userPickerV2 (creators filter) AST ===');
+    console.log(JSON.stringify(ast, null, 2));
+    console.log('\n=== AUTO: userPickerV2 (creators filter) Query Plan ===');
     console.log(planDebugger.format());
   });
 
-  test.only('userPickerV2 - assignees filter', () => {
+  test('userPickerV2 - creators filter (MANUAL)', () => {
+    const projectName = 'Zero';
+
+    const query = q.user.whereExists('createdIssues', i =>
+      i.whereExists('project', p =>
+        p.where('lowerCaseName', projectName.toLowerCase()),
+        {flip: true},
+      ),
+    );
+
+    const ast = query.ast;
+    console.log('\n=== MANUAL: userPickerV2 (creators filter) AST ===');
+    console.log(JSON.stringify(ast, null, 2));
+  });
+
+  test('userPickerV2 - assignees filter (AUTO)', () => {
     const planDebugger = new AccumulatorDebugger();
     const projectName = 'Zero';
 
@@ -190,17 +239,25 @@ describe('ZBugs Query Planner Analysis', () => {
       ),
       planDebugger,
     );
+    console.log('\n=== AUTO: userPickerV2 (assignees filter) AST ===');
     console.log(JSON.stringify(ast, null, 2));
-    console.log('\n=== userPickerV2 (assignees filter) Query Plan ===');
-    // Note to self:
-    // the greedy algorithm fails to find the best path
-    // I think we should likely do all 2^n combinations of joins.
-    // if n > 12 ....
-    // ask the user to manually plan?
-    // cache the plan?
-    // heuristics to prune the search space???
-
+    console.log('\n=== AUTO: userPickerV2 (assignees filter) Query Plan ===');
     console.log(planDebugger.format());
+  });
+
+  test.only('userPickerV2 - assignees filter (MANUAL)', () => {
+    const projectName = 'Zero';
+
+    const query = q.user.whereExists('assignedIssues', i =>
+      i.whereExists('project', p =>
+        p.where('lowerCaseName', projectName.toLowerCase()),
+        {flip: true},
+      ),
+    );
+
+    const ast = query.ast;
+    console.log('\n=== MANUAL: userPickerV2 (assignees filter) AST ===');
+    console.log(JSON.stringify(ast, null, 2));
   });
 
   test('issueDetail', () => {
@@ -234,13 +291,13 @@ describe('ZBugs Query Planner Analysis', () => {
     console.log(planDebugger.format());
   });
 
-  test('issueListV2 - open issues', () => {
+  test('issueListV2 - open issues (AUTO)', () => {
     const planDebugger = new AccumulatorDebugger();
     const userID = 'test-user-id';
     const projectName = 'Zero';
     const limit = 50;
 
-    getPlanAST(
+    const ast = getPlanAST(
       q.issue
         .whereExists('project', q =>
           q.where('lowerCaseName', projectName.toLowerCase()),
@@ -253,8 +310,32 @@ describe('ZBugs Query Planner Analysis', () => {
         .limit(limit),
       planDebugger,
     );
-    console.log('\n=== issueListV2 (open issues) Query Plan ===');
+    console.log('\n=== AUTO: issueListV2 (open issues) AST ===');
+    console.log(JSON.stringify(ast, null, 2));
+    console.log('\n=== AUTO: issueListV2 (open issues) Query Plan ===');
     console.log(planDebugger.format());
+  });
+
+  test('issueListV2 - open issues (MANUAL)', () => {
+    const userID = 'test-user-id';
+    const projectName = 'Zero';
+    const limit = 50;
+
+    const query = q.issue
+      .whereExists('project', q =>
+        q.where('lowerCaseName', projectName.toLowerCase()),
+        {flip: true},
+      )
+      .related('viewState', q => q.where('userID', userID).one())
+      .related('labels')
+      .where('open', true)
+      .orderBy('modified', 'desc')
+      .orderBy('id', 'desc')
+      .limit(limit);
+
+    const ast = query.ast;
+    console.log('\n=== MANUAL: issueListV2 (open issues) AST ===');
+    console.log(JSON.stringify(ast, null, 2));
   });
 
   test('issueListV2 - with text filter', () => {
@@ -289,14 +370,14 @@ describe('ZBugs Query Planner Analysis', () => {
     console.log(planDebugger.format());
   });
 
-  test('issueListV2 - with creator filter', () => {
+  test('issueListV2 - with creator filter (AUTO)', () => {
     const planDebugger = new AccumulatorDebugger();
     const userID = 'test-user-id';
     const projectName = 'Zero';
     const creatorLogin = 'testuser';
     const limit = 50;
 
-    getPlanAST(
+    const ast = getPlanAST(
       q.issue
         .whereExists('project', q =>
           q.where('lowerCaseName', projectName.toLowerCase()),
@@ -309,18 +390,43 @@ describe('ZBugs Query Planner Analysis', () => {
         .limit(limit),
       planDebugger,
     );
-    console.log('\n=== issueListV2 (with creator filter) Query Plan ===');
+    console.log('\n=== AUTO: issueListV2 (with creator filter) AST ===');
+    console.log(JSON.stringify(ast, null, 2));
+    console.log('\n=== AUTO: issueListV2 (with creator filter) Query Plan ===');
     console.log(planDebugger.format());
   });
 
-  test('issueListV2 - with assignee filter', () => {
+  test('issueListV2 - with creator filter (MANUAL)', () => {
+    const userID = 'test-user-id';
+    const projectName = 'Zero';
+    const creatorLogin = 'testuser';
+    const limit = 50;
+
+    const query = q.issue
+      .whereExists('project', q =>
+        q.where('lowerCaseName', projectName.toLowerCase()),
+        {flip: true},
+      )
+      .related('viewState', q => q.where('userID', userID).one())
+      .related('labels')
+      .whereExists('creator', q => q.where('login', creatorLogin), {flip: true})
+      .orderBy('modified', 'desc')
+      .orderBy('id', 'desc')
+      .limit(limit);
+
+    const ast = query.ast;
+    console.log('\n=== MANUAL: issueListV2 (with creator filter) AST ===');
+    console.log(JSON.stringify(ast, null, 2));
+  });
+
+  test('issueListV2 - with assignee filter (AUTO)', () => {
     const planDebugger = new AccumulatorDebugger();
     const userID = 'test-user-id';
     const projectName = 'Zero';
     const assigneeLogin = 'testuser';
     const limit = 50;
 
-    getPlanAST(
+    const ast = getPlanAST(
       q.issue
         .whereExists('project', q =>
           q.where('lowerCaseName', projectName.toLowerCase()),
@@ -333,18 +439,43 @@ describe('ZBugs Query Planner Analysis', () => {
         .limit(limit),
       planDebugger,
     );
-    console.log('\n=== issueListV2 (with assignee filter) Query Plan ===');
+    console.log('\n=== AUTO: issueListV2 (with assignee filter) AST ===');
+    console.log(JSON.stringify(ast, null, 2));
+    console.log('\n=== AUTO: issueListV2 (with assignee filter) Query Plan ===');
     console.log(planDebugger.format());
   });
 
-  test('issueListV2 - with label filter', () => {
+  test('issueListV2 - with assignee filter (MANUAL)', () => {
+    const userID = 'test-user-id';
+    const projectName = 'Zero';
+    const assigneeLogin = 'testuser';
+    const limit = 50;
+
+    const query = q.issue
+      .whereExists('project', q =>
+        q.where('lowerCaseName', projectName.toLowerCase()),
+        {flip: true},
+      )
+      .related('viewState', q => q.where('userID', userID).one())
+      .related('labels')
+      .whereExists('assignee', q => q.where('login', assigneeLogin), {flip: true})
+      .orderBy('modified', 'desc')
+      .orderBy('id', 'desc')
+      .limit(limit);
+
+    const ast = query.ast;
+    console.log('\n=== MANUAL: issueListV2 (with assignee filter) AST ===');
+    console.log(JSON.stringify(ast, null, 2));
+  });
+
+  test('issueListV2 - with label filter (AUTO)', () => {
     const planDebugger = new AccumulatorDebugger();
     const userID = 'test-user-id';
     const projectName = 'Zero';
     const labelName = 'bug';
     const limit = 50;
 
-    getPlanAST(
+    const ast = getPlanAST(
       q.issue
         .whereExists('project', q =>
           q.where('lowerCaseName', projectName.toLowerCase()),
@@ -357,8 +488,33 @@ describe('ZBugs Query Planner Analysis', () => {
         .limit(limit),
       planDebugger,
     );
-    console.log('\n=== issueListV2 (with label filter) Query Plan ===');
+    console.log('\n=== AUTO: issueListV2 (with label filter) AST ===');
+    console.log(JSON.stringify(ast, null, 2));
+    console.log('\n=== AUTO: issueListV2 (with label filter) Query Plan ===');
     console.log(planDebugger.format());
+  });
+
+  test('issueListV2 - with label filter (MANUAL)', () => {
+    const userID = 'test-user-id';
+    const projectName = 'Zero';
+    const labelName = 'bug';
+    const limit = 50;
+
+    const query = q.issue
+      .whereExists('project', q =>
+        q.where('lowerCaseName', projectName.toLowerCase()),
+        {flip: true},
+      )
+      .related('viewState', q => q.where('userID', userID).one())
+      .related('labels')
+      .whereExists('labels', q => q.where('name', labelName), {flip: true})
+      .orderBy('modified', 'desc')
+      .orderBy('id', 'desc')
+      .limit(limit);
+
+    const ast = query.ast;
+    console.log('\n=== MANUAL: issueListV2 (with label filter) AST ===');
+    console.log(JSON.stringify(ast, null, 2));
   });
 
   test('emojiChange', () => {
