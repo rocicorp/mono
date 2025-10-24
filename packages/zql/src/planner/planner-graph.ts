@@ -1,5 +1,5 @@
 import {assert} from '../../../shared/src/asserts.ts';
-import {UnflippableJoinError, type PlannerJoin} from './planner-join.ts';
+import type {PlannerJoin} from './planner-join.ts';
 import type {PlannerFanOut} from './planner-fan-out.ts';
 import type {PlannerFanIn} from './planner-fan-in.ts';
 import type {PlannerConnection} from './planner-connection.ts';
@@ -22,10 +22,11 @@ type PlanState = {
 };
 
 /**
- * Maximum number of different starting connections to try during multi-start search.
- * Higher values explore more of the search space but take longer.
+ * Maximum number of flippable joins to attempt exhaustive enumeration.
+ * With n flippable joins, we explore 2^n plans.
+ * 12 joins = 4096 plans (~instant), 16 joins = 65536 plans (~1 second)
  */
-const MAX_PLANNING_ATTEMPTS = 6;
+const MAX_FLIPPABLE_JOINS = 16;
 
 export class PlannerGraph {
   // Sources indexed by table name
@@ -88,38 +89,6 @@ export class PlannerGraph {
    */
   setTerminus(terminus: PlannerTerminus): void {
     this.#terminus = terminus;
-  }
-
-  /**
-   * Get all connections that haven't been pinned yet.
-   * These are candidates for selection in the next planning iteration.
-   */
-  getUnpinnedConnections(): PlannerConnection[] {
-    return this.connections.filter(c => !c.pinned);
-  }
-
-  /**
-   * Trigger cost estimation on all unpinned connections and return
-   * them sorted by cost (lowest first).
-   *
-   * This should be called after constraint propagation so connections
-   * have up-to-date constraint information.
-   */
-  getUnpinnedConnectionCosts(): Array<{
-    connection: PlannerConnection;
-    cost: number;
-  }> {
-    const unpinned = this.getUnpinnedConnections();
-    const costs = unpinned.map(connection => ({
-      connection,
-      // Pass undefined to get sum of all branch costs
-      cost: connection.estimateCost(undefined).runningCost,
-    }));
-
-    // Sort by cost ascending (lowest cost first)
-    costs.sort((a, b) => a.cost - b.cost);
-
-    return costs;
   }
 
   /**
@@ -194,12 +163,12 @@ export class PlannerGraph {
    */
   #collectNodeCosts(): Array<{
     node: string;
-    nodeType: 'connection' | 'join' | 'fan-out' | 'fan-in' | 'terminus';
+    nodeType: PlannerNode['kind'];
     costEstimate: CostEstimate;
   }> {
     const costs: Array<{
       node: string;
-      nodeType: 'connection' | 'join' | 'fan-out' | 'fan-in' | 'terminus';
+      nodeType: PlannerNode['kind'];
       costEstimate: CostEstimate;
     }> = [];
 
@@ -322,80 +291,75 @@ export class PlannerGraph {
   }
 
   /**
-   * Main planning algorithm using multi-start greedy search.
+   * Main planning algorithm using exhaustive join flip enumeration.
    *
-   * Tries up to min(connections.length, MAX_PLANNING_ATTEMPTS) different starting connections.
-   * For iteration i, picks costs[i].connection as the root, then continues
-   * with greedy selection of lowest-cost connections.
+   * Enumerates all possible flip patterns for flippable joins (2^n for n flippable joins).
+   * Each pattern represents a different query execution plan. We evaluate the cost of each
+   * plan and select the one with the lowest cost.
    *
-   * Returns the best plan found across all attempts.
+   * Connections are used only for cost estimation - the flip patterns determine the plan.
+   * FanOut/FanIn states (FO/UFO and FI/UFI) are automatically derived from join flip states.
    *
    * @param planDebugger - Optional debugger to receive structured events during planning
    */
   plan(planDebugger?: PlanDebugger): void {
-    const numAttempts = Math.min(
-      this.connections.length,
-      MAX_PLANNING_ATTEMPTS,
-    );
+    // Get all flippable joins
+    const flippableJoins = this.joins.filter(j => j.isFlippable());
+
+    // Safety check: throw if too many flippable joins
+    if (flippableJoins.length > MAX_FLIPPABLE_JOINS) {
+      throw new Error(
+        `Query has ${flippableJoins.length} EXISTS checks in a single RELATED call (or in the top level query), which would require ` +
+          `${2 ** flippableJoins.length} plan evaluations. This may be very slow. ` +
+          `Consider simplifying the query or increasing MAX_FLIPPABLE_JOINS (currently set to ${MAX_FLIPPABLE_JOINS}).`,
+      );
+    }
+
+    const numPatterns = 2 ** flippableJoins.length;
     let bestCost = Infinity;
     let bestPlan: PlanState | undefined = undefined;
     let bestAttemptNumber = -1;
 
-    for (let i = 0; i < numAttempts; i++) {
+    // Enumerate all flip patterns
+    for (let pattern = 0; pattern < numPatterns; pattern++) {
       // Reset to initial state
       this.resetPlanningState();
 
       if (planDebugger) {
         planDebugger.log({
           type: 'attempt-start',
-          attemptNumber: i,
-          totalAttempts: numAttempts,
+          attemptNumber: pattern,
+          totalAttempts: numPatterns,
         });
       }
 
-      // Get initial costs (no propagation yet)
-      let costs = this.getUnpinnedConnectionCosts();
-      if (i >= costs.length) break;
-
-      if (planDebugger) {
-        planDebugger.log({
-          type: 'connection-costs',
-          attemptNumber: i,
-          costs: costs.map(c => ({
-            connection: c.connection.name,
-            cost: c.cost,
-            costEstimate: c.connection.estimateCost(undefined),
-            pinned: c.connection.pinned,
-            constraints: c.connection.getConstraintsForDebug(),
-            constraintCosts: c.connection.getConstraintCostsForDebug(),
-          })),
-        });
-      }
-
-      // Try to pick costs[i] as root for this attempt
       try {
-        let connection = costs[i].connection;
-        connection.pinned = true; // Pin FIRST
-
-        if (planDebugger) {
-          planDebugger.log({
-            type: 'connection-selected',
-            attemptNumber: i,
-            connection: connection.name,
-            cost: costs[i].cost,
-            isRoot: true,
-          });
+        // Apply flip pattern (treat pattern as bitmask)
+        // Bit i set to 1 means flip join i
+        for (let i = 0; i < flippableJoins.length; i++) {
+          if (pattern & (1 << i)) {
+            flippableJoins[i].flip();
+          }
         }
 
-        pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
-        checkAndConvertFOFI(this); // Convert FO/FI to UFO/UFI if joins flipped
-        propagateUnlimitForFlippedJoins(this); // Unlimit children of flipped joins
-        this.propagateConstraints(); // Then propagate
+        // Pin all joins (both flipped and semi)
+        for (const join of this.joins) {
+          join.pin();
+        }
+
+        // Derive FO/UFO and FI/UFI states from join flip states
+        checkAndConvertFOFI(this);
+
+        // Propagate unlimiting for flipped joins
+        propagateUnlimitForFlippedJoins(this);
+
+        // Propagate constraints through the graph
+        this.propagateConstraints();
 
         if (planDebugger) {
           planDebugger.log({
             type: 'constraints-propagated',
-            attemptNumber: i,
+            attemptNumber: pattern,
             connectionConstraints: this.connections.map(c => ({
               connection: c.name,
               constraints: c.getConstraintsForDebug(),
@@ -404,139 +368,54 @@ export class PlannerGraph {
           });
         }
 
-        // Continue with greedy selection
-        while (!this.hasPlan()) {
-          costs = this.getUnpinnedConnectionCosts();
-          if (costs.length === 0) break;
-
-          if (planDebugger) {
-            planDebugger.log({
-              type: 'connection-costs',
-              attemptNumber: i,
-              costs: costs.map(c => ({
-                connection: c.connection.name,
-                cost: c.cost,
-                costEstimate: c.connection.estimateCost(undefined),
-                pinned: c.connection.pinned,
-                constraints: c.connection.getConstraintsForDebug(),
-                constraintCosts: c.connection.getConstraintCostsForDebug(),
-              })),
-            });
-          }
-
-          // Try connections in order until one works
-          let success = false;
-          for (const {connection} of costs) {
-            // Save state before attempting this connection
-            const stateBeforeAttempt = this.capturePlanningSnapshot();
-
-            try {
-              connection.pinned = true; // Pin FIRST
-
-              if (planDebugger) {
-                planDebugger.log({
-                  type: 'connection-selected',
-                  attemptNumber: i,
-                  connection: connection.name,
-                  cost: connection.estimateCost(undefined).runningCost,
-                  isRoot: false,
-                });
-              }
-
-              pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
-              checkAndConvertFOFI(this); // Convert FO/FI to UFO/UFI if joins flipped
-              propagateUnlimitForFlippedJoins(this); // Unlimit children of flipped joins
-              success = true;
-              break; // Success, exit the inner loop
-            } catch (e) {
-              if (e instanceof UnflippableJoinError) {
-                // Restore to state before this attempt
-                this.restorePlanningSnapshot(stateBeforeAttempt);
-                // Try next connection
-                continue;
-              }
-              throw e; // Re-throw other errors
-            }
-          }
-
-          if (!success) {
-            // No connection could be pinned, this plan attempt failed
-            if (planDebugger) {
-              planDebugger.log({
-                type: 'plan-failed',
-                attemptNumber: i,
-                reason:
-                  'No connection could be pinned (all attempts led to unflippable joins)',
-              });
-            }
-            break;
-          }
-
-          // Only propagate after successful connection selection
-          this.propagateConstraints();
-
-          if (planDebugger) {
-            planDebugger.log({
-              type: 'constraints-propagated',
-              attemptNumber: i,
-              connectionConstraints: this.connections.map(c => ({
-                connection: c.name,
-                constraints: c.getConstraintsForDebug(),
-                constraintCosts: c.getConstraintCostsForDebug(),
-              })),
-            });
-          }
+        // Pin all connections (they're now fully constrained)
+        for (const connection of this.connections) {
+          connection.pinned = true;
         }
 
-        // Evaluate this plan (if complete)
-        if (this.hasPlan()) {
-          const totalCost = this.getTotalCost();
+        // Evaluate this plan
+        const totalCost = this.getTotalCost();
 
-          if (planDebugger) {
-            planDebugger.log({
-              type: 'plan-complete',
-              attemptNumber: i,
-              totalCost,
-              nodeCosts: this.#collectNodeCosts(),
-              joinStates: this.joins.map(j => {
-                const info = j.getDebugInfo();
-                return {
-                  join: info.name,
-                  type: info.type,
-                  pinned: info.pinned,
-                };
-              }),
-            });
-          }
+        if (planDebugger) {
+          planDebugger.log({
+            type: 'plan-complete',
+            attemptNumber: pattern,
+            totalCost,
+            nodeCosts: this.#collectNodeCosts(),
+            joinStates: this.joins.map(j => {
+              const info = j.getDebugInfo();
+              return {
+                join: info.name,
+                type: info.type,
+                pinned: info.pinned,
+              };
+            }),
+          });
+        }
 
-          if (totalCost < bestCost) {
-            bestCost = totalCost;
-            bestPlan = this.capturePlanningSnapshot();
-            bestAttemptNumber = i;
-          }
+        // Track best plan
+        if (totalCost < bestCost) {
+          bestCost = totalCost;
+          bestPlan = this.capturePlanningSnapshot();
+          bestAttemptNumber = pattern;
         }
       } catch (e) {
-        if (e instanceof UnflippableJoinError) {
-          // This root connection led to an unreachable path, try next root
-          if (planDebugger) {
-            planDebugger.log({
-              type: 'plan-failed',
-              attemptNumber: i,
-              reason: `Root connection led to unflippable join: ${e.message}`,
-            });
-          }
-          continue;
+        // This flip pattern is invalid (shouldn't happen with proper isFlippable() checks)
+        if (planDebugger) {
+          planDebugger.log({
+            type: 'plan-failed',
+            attemptNumber: pattern,
+            reason: `Flip pattern ${pattern.toString(2)} failed: ${e instanceof Error ? e.message : String(e)}`,
+          });
         }
-        throw e; // Re-throw other errors
+        continue;
       }
     }
 
     // Restore best plan
     if (bestPlan) {
       this.restorePlanningSnapshot(bestPlan);
-      // Propagate constraints to ensure all derived state is consistent.
-      // While we restore constraint maps from the snapshot, propagation
-      // ensures FanOut/FanIn states and any derived values are correct.
+      // Propagate constraints to ensure all derived state is consistent
       this.propagateConstraints();
 
       if (planDebugger) {
@@ -550,47 +429,12 @@ export class PlannerGraph {
           })),
         });
       }
+    } else {
+      // No valid plan found (all patterns failed)
+      throw new Error(
+        'No valid query plan found. This should not happen - check query structure.',
+      );
     }
-  }
-}
-
-/**
- * Traverse from a connection through the graph, pinning and flipping joins as needed.
- *
- * When a connection is selected, we traverse downstream and:
- * - Pin all joins on the path
- * - Flip joins where the connection is the child input
- *
- * This ensures the selected connection runs in the outer loop.
- * FO/FI conversion to UFO/UFI is handled separately by checkAndConvertFOFI.
- */
-function traverseAndPin(from: PlannerNode, node: PlannerNode): void {
-  switch (node.kind) {
-    case 'join':
-      if (node.pinned) {
-        // Already pinned, nothing to do
-        // downstream must also be pinned so stop traversal
-        return;
-      }
-
-      node.flipIfNeeded(from);
-      node.pin();
-      traverseAndPin(node, node.output);
-      return;
-    case 'fan-out':
-      for (const output of node.outputs) {
-        // fan-out will always be the parent input to its outputs
-        // so it will never cause a flip but it will pin them
-        traverseAndPin(node, output);
-      }
-      return;
-    case 'fan-in':
-      traverseAndPin(node, node.output);
-      return;
-    case 'terminus':
-      return;
-    case 'connection':
-      throw new Error('a connection cannot flow to another connection');
   }
 }
 
@@ -598,7 +442,7 @@ function traverseAndPin(from: PlannerNode, node: PlannerNode): void {
  * Check if any joins downstream of a FanOut (before reaching FanIn) are flipped.
  * If so, convert the FO to UFO and the FI to UFI.
  *
- * This must be called after pinAndMaybeFlipJoins and before propagateConstraints.
+ * This must be called after join flipping and before propagateConstraints.
  */
 function checkAndConvertFOFI(graph: PlannerGraph): void {
   for (const fo of graph.fanOuts) {
@@ -657,16 +501,12 @@ function findFIAndCheckFlips(fo: PlannerFanOut): {
   return {fi, hasFlippedJoin};
 }
 
-export function pinAndMaybeFlipJoins(connection: PlannerConnection): void {
-  traverseAndPin(connection, connection.output);
-}
-
 /**
  * Propagate unlimiting to all flipped joins in the graph.
  * When a join is flipped, its child becomes the outer loop and should no longer
  * be limited by EXISTS semantics.
  *
- * This must be called after pinAndMaybeFlipJoins and before propagateConstraints.
+ * This must be called after join flipping and before propagateConstraints.
  */
 function propagateUnlimitForFlippedJoins(graph: PlannerGraph): void {
   for (const join of graph.joins) {
