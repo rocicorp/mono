@@ -47,6 +47,7 @@ import {
 } from './snapshotter.ts';
 import type {ConnectionCostModel} from '../../../../zql/src/planner/planner-connection.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
+import {createSQLiteCostModel} from '../../../../zqlite/src/sqlite-cost-model.ts';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -155,6 +156,10 @@ export class PipelineDriver {
         this.#tableSpecs,
         fullTables,
       );
+    }
+
+    if (this.#costModels) {
+      const costModel = createSQLiteCostModel(db.db, fullTables);
     }
 
     const {replicaVersion} = getSubscriptionState(db);
