@@ -168,7 +168,6 @@ import {ZeroRep} from './zero-rep.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {Subscribable} from '../../../shared/src/subscribable.ts';
-import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 
 export type NoRelations = Record<string, never>;
 
@@ -646,7 +645,7 @@ export class Zero<
     this.#connection = new ConnectionImpl(
       this.#connectionManager,
       this.#lc,
-      () => this.#handleUserDisconnect(),
+      // () => this.#handleUserDisconnect(),
     );
     this.#mutationTracker.setClientIDAndWatch(
       rep.clientID,
@@ -1567,25 +1566,26 @@ export class Zero<
   /**
    * Handles user-initiated disconnection via the connection.disconnect() API.
    */
-  #handleUserDisconnect(): Promise<void> {
-    const lc = this.#lc.withContext('handleUserDisconnect');
+  // TODO(0xcadams): reenable when disconnect is implemented
+  // #handleUserDisconnect(): Promise<void> {
+  //   const lc = this.#lc.withContext('handleUserDisconnect');
 
-    // don't disconnect if already closed
-    if (this.#connectionManager.is(ConnectionStatus.Closed)) {
-      lc.debug?.('Cannot disconnect: Zero instance is already closed');
-      return promiseVoid;
-    }
+  //   // don't disconnect if already closed
+  //   if (this.#connectionManager.is(ConnectionStatus.Closed)) {
+  //     lc.debug?.('Cannot disconnect: Zero instance is already closed');
+  //     return promiseVoid;
+  //   }
 
-    const userDisconnectError = new ClientError({
-      kind: ClientErrorKind.UserDisconnect,
-      message: 'User requested disconnect via connection.disconnect()',
-    });
+  //   const userDisconnectError = new ClientError({
+  //     kind: ClientErrorKind.UserDisconnect,
+  //     message: 'User requested disconnect via connection.disconnect()',
+  //   });
 
-    this.#disconnect(lc, userDisconnectError, CLOSE_CODE_NORMAL);
-    this.#setOnline(false);
+  //   this.#disconnect(lc, userDisconnectError, CLOSE_CODE_NORMAL);
+  //   this.#setOnline(false);
 
-    return promiseVoid;
-  }
+  //   return promiseVoid;
+  // }
 
   #handlePokeStart(_lc: ZeroLogContext, pokeMessage: PokeStartMessage): void {
     this.#abortPingTimeout();

@@ -39,23 +39,24 @@ export interface Connection {
    *
    * @returns A promise that resolves once disconnected.
    */
-  disconnect(): Promise<void>;
+  // TODO(0xcadams): reenable when disconnect is implemented
+  // disconnect(): Promise<void>;
 }
 
 export class ConnectionImpl implements Connection {
   readonly #connectionManager: ConnectionManager;
   readonly #lc: ZeroLogContext;
-  readonly #disconnectCallback: () => Promise<void>;
+  // readonly #disconnectCallback: () => Promise<void>;
   readonly #source: ConnectionSource;
 
   constructor(
     connectionManager: ConnectionManager,
     lc: ZeroLogContext,
-    disconnectCallback: () => Promise<void>,
+    // disconnectCallback: () => Promise<void>,
   ) {
     this.#connectionManager = connectionManager;
     this.#lc = lc;
-    this.#disconnectCallback = disconnectCallback;
+    // this.#disconnectCallback = disconnectCallback;
     this.#source = new ConnectionSource(connectionManager);
   }
 
@@ -88,12 +89,12 @@ export class ConnectionImpl implements Connection {
     await nextStatePromise;
   }
 
-  async disconnect(): Promise<void> {
-    const lc = this.#lc.withContext('disconnect');
-    lc.info?.('User requested disconnect');
+  // async disconnect(): Promise<void> {
+  //   const lc = this.#lc.withContext('disconnect');
+  //   lc.info?.('User requested disconnect');
 
-    await this.#disconnectCallback();
-  }
+  //   await this.#disconnectCallback();
+  // }
 }
 
 export class ConnectionSource implements Source<ConnectionState> {

@@ -27,7 +27,7 @@ describe('ClientError', () => {
     expect(error.errorBody).toBe(body);
     expect(error.kind).toBe(ClientErrorKind.ConnectTimeout);
     expect(error.name).toBe('ClientError');
-    expect(error.message).toBe('ConnectTimeout: connect timeout');
+    expect(error.message).toBe('connect timeout');
     expect(isClientError(error)).toBe(true);
     expect(isServerError(error)).toBe(false);
   });
@@ -70,7 +70,7 @@ describe('ServerError', () => {
     expect(error.errorBody).toBe(body);
     expect(error.kind).toBe(ErrorKind.InvalidPush);
     expect(error.name).toBe('ServerError');
-    expect(error.message).toBe('InvalidPush: invalid push');
+    expect(error.message).toBe('invalid push');
     expect(isServerError(error)).toBe(true);
     expect(isClientError(error)).toBe(false);
   });
@@ -175,7 +175,7 @@ describe('getErrorConnectionTransition', () => {
 
   test('returns error status for fatal client errors', () => {
     const error = new ClientError({
-      kind: ClientErrorKind.NoSocketOrigin,
+      kind: ClientErrorKind.UnexpectedBaseCookie,
       message: 'fatal',
     });
 
@@ -244,9 +244,7 @@ describe('getErrorConnectionTransition', () => {
     expect(result.status).toBe(ConnectionStatus.Error);
     expect(result.reason).toBeInstanceOf(ClientError);
     expect(result.reason?.kind).toBe(ClientErrorKind.Internal);
-    expect(result.reason?.message).toBe(
-      'Internal: Unexpected internal error: boom',
-    );
+    expect(result.reason?.message).toBe('Unexpected internal error: boom');
     expect(result.reason?.errorBody.message).toBe(
       'Unexpected internal error: boom',
     );

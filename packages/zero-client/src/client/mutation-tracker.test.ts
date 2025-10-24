@@ -13,6 +13,7 @@ import {makeReplicacheMutator} from './custom.ts';
 import {toMutationResponseKey} from './keys.ts';
 import {MutationTracker} from './mutation-tracker.ts';
 import type {WriteTransaction} from './replicache-types.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 
 const lc = createSilentLogContext();
 
@@ -23,7 +24,8 @@ describe('MutationTracker', () => {
   const CLIENT_ID = 'test-client-1';
 
   test('tracks a mutation and resolves on success', async () => {
-    const tracker = new MutationTracker(lc, ackMutations);
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const {ephemeralID, serverPromise} = tracker.trackMutation();
     tracker.mutationIDAssigned(ephemeralID, 1);
@@ -40,10 +42,12 @@ describe('MutationTracker', () => {
     tracker.processPushResponse(response);
     const result = await serverPromise;
     expect(result).toEqual({});
+    expect(onFatalError).not.toHaveBeenCalled();
   });
 
   test('tracks a mutation and resolves with error on error', async () => {
-    const tracker = new MutationTracker(lc, ackMutations);
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const {serverPromise, ephemeralID} = tracker.trackMutation();
     tracker.mutationIDAssigned(ephemeralID, 1);
@@ -65,10 +69,12 @@ describe('MutationTracker', () => {
       error: 'app',
       details: '',
     });
+    expect(onFatalError).not.toHaveBeenCalled();
   });
 
-  test('does not resolve mutators for transient errors', async () => {
-    const tracker = new MutationTracker(lc, ackMutations);
+  test('calls onFatalError for unsupportedPushVersion and does not resolve mutations', async () => {
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const {ephemeralID, serverPromise} = tracker.trackMutation();
     tracker.mutationIDAssigned(ephemeralID, 1);
@@ -79,6 +85,8 @@ describe('MutationTracker', () => {
     };
 
     tracker.processPushResponse(response);
+
+    // Mutations should not be resolved
     let called = false;
     void serverPromise.finally(() => {
       called = true;
@@ -86,10 +94,23 @@ describe('MutationTracker', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(tracker.size).toBe(1);
     expect(called).toBe(false);
+
+    // But fatal error callback should have been called
+    expect(onFatalError).toHaveBeenCalledOnce();
+    expect(onFatalError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'ServerError',
+        errorBody: {
+          kind: ErrorKind.Internal,
+          message: 'Unsupported push version',
+        },
+      }),
+    );
   });
 
   test('rejects mutations from other clients', () => {
-    const tracker = new MutationTracker(lc, ackMutations);
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const mutation = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation.ephemeralID, 1);
@@ -116,7 +137,8 @@ describe('MutationTracker', () => {
   });
 
   test('handles multiple concurrent mutations', async () => {
-    const tracker = new MutationTracker(lc, ackMutations);
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const mutation1 = tracker.trackMutation();
     const mutation2 = tracker.trackMutation();
@@ -147,10 +169,12 @@ describe('MutationTracker', () => {
     ]);
     expect(result1).toBe(r1);
     expect(result2).toBe(r2);
+    expect(onFatalError).not.toHaveBeenCalled();
   });
 
   test('mutation tracker size goes down each time a mutation is resolved or rejected', () => {
-    const tracker = new MutationTracker(lc, ackMutations);
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const mutation1 = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation1.ephemeralID, 1);
@@ -179,10 +203,12 @@ describe('MutationTracker', () => {
 
     tracker.processPushResponse(response);
     expect(tracker.size).toBe(0);
+    expect(onFatalError).not.toHaveBeenCalled();
   });
 
   test('mutations are not tracked on rebase', async () => {
-    const mt = new MutationTracker(lc, ackMutations);
+    const onFatalError = vi.fn();
+    const mt = new MutationTracker(lc, ackMutations, onFatalError);
     mt.setClientIDAndWatch(CLIENT_ID, watch);
     const mutator = makeReplicacheMutator(
       createSilentLogContext(),
@@ -223,6 +249,7 @@ describe('MutationTracker', () => {
 
   test('mutation responses, received via poke, are processed', async () => {
     const ackMutations = vi.fn();
+    const onFatalError = vi.fn();
 
     let cb: ((diffs: NoIndexDiff) => void) | undefined;
     const watch = (wcb: (diffs: NoIndexDiff) => void) => {
@@ -231,7 +258,7 @@ describe('MutationTracker', () => {
         cb = undefined;
       };
     };
-    const tracker = new MutationTracker(lc, ackMutations);
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const mutation1 = tracker.trackMutation();
@@ -271,10 +298,12 @@ describe('MutationTracker', () => {
       clientID: CLIENT_ID,
       id: 2,
     });
+    expect(onFatalError).not.toHaveBeenCalled();
   });
 
   test('tracked mutations are resolved on reconnect', async () => {
-    const tracker = new MutationTracker(lc, ackMutations);
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const mutation1 = tracker.trackMutation();
@@ -301,10 +330,12 @@ describe('MutationTracker', () => {
 
     expect(tracker.size).toBe(0);
     await mutation4.serverPromise;
+    expect(onFatalError).not.toHaveBeenCalled();
   });
 
   test('notified whenever the outstanding mutation count goes to 0', () => {
-    const tracker = new MutationTracker(lc, ackMutations);
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     let callCount = 0;
@@ -400,7 +431,8 @@ describe('MutationTracker', () => {
   });
 
   test('mutations can be rejected before a mutation id is assigned', async () => {
-    const tracker = new MutationTracker(lc, ackMutations);
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const {ephemeralID, serverPromise} = tracker.trackMutation();
@@ -415,10 +447,12 @@ describe('MutationTracker', () => {
 
     expect(caught).toMatchInlineSnapshot(`[Error: test error]`);
     expect(tracker.size).toBe(0);
+    expect(onFatalError).not.toHaveBeenCalled();
   });
 
   test('trying to resolve a mutation with an a unassigned ephemeral id throws', () => {
-    const tracker = new MutationTracker(lc, ackMutations);
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     tracker.trackMutation();
@@ -436,7 +470,8 @@ describe('MutationTracker', () => {
   });
 
   test('resolve a mutation a second time with "already processed" error', () => {
-    const tracker = new MutationTracker(lc, ackMutations);
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const {ephemeralID} = tracker.trackMutation();
@@ -483,10 +518,12 @@ describe('MutationTracker', () => {
         ],
       }),
     ).toThrow('ephemeral ID is missing for mutation error: app.');
+    expect(onFatalError).not.toHaveBeenCalled();
   });
 
   test('advancing lmid past outstanding lmid notifies "all mutations applied" listeners', () => {
-    const tracker = new MutationTracker(lc, ackMutations);
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const listener = vi.fn();
@@ -505,10 +542,12 @@ describe('MutationTracker', () => {
     expect(listener).toHaveBeenCalledTimes(2);
     tracker.lmidAdvanced(5);
     expect(listener).toHaveBeenCalledTimes(3);
+    expect(onFatalError).not.toHaveBeenCalled();
   });
 
   test('advancing lmid clears limbo mutations up to that lmid', async () => {
-    const tracker = new MutationTracker(lc, ackMutations);
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const mutation1 = tracker.trackMutation();
@@ -528,6 +567,19 @@ describe('MutationTracker', () => {
         {clientID: CLIENT_ID, id: 3},
       ],
     });
+
+    // Fatal error callback should be called for http errors
+    expect(onFatalError).toHaveBeenCalledOnce();
+    expect(onFatalError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'ServerError',
+        errorBody: {
+          kind: ErrorKind.Internal,
+          message:
+            'Fetch from API server returned non-OK status 500: Internal Server Error',
+        },
+      }),
+    );
 
     tracker.lmidAdvanced(2);
 
@@ -546,7 +598,8 @@ describe('MutationTracker', () => {
   });
 
   test('failed push causes mutations to resolve that are under the current lmid', async () => {
-    const tracker = new MutationTracker(lc, ackMutations);
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const mutation1 = tracker.trackMutation();
@@ -569,6 +622,19 @@ describe('MutationTracker', () => {
       ],
     });
 
+    // Fatal error callback should be called for http errors
+    expect(onFatalError).toHaveBeenCalledOnce();
+    expect(onFatalError).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'ServerError',
+        errorBody: {
+          kind: ErrorKind.Internal,
+          message:
+            'Fetch from API server returned non-OK status 500: Internal Server Error',
+        },
+      }),
+    );
+
     let mutation3Resolved = false;
     void mutation3.serverPromise.finally(() => {
       mutation3Resolved = true;
@@ -579,7 +645,8 @@ describe('MutationTracker', () => {
   });
 
   test('reconnecting puts outstanding mutations in limbo', async () => {
-    const tracker = new MutationTracker(lc, ackMutations);
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const mutation1 = tracker.trackMutation();
@@ -598,10 +665,12 @@ describe('MutationTracker', () => {
       mutation2.serverPromise,
       mutation3.serverPromise,
     ]);
+    expect(onFatalError).not.toHaveBeenCalled();
   });
 
   test('advancing lmid does resolve all mutations before that lmid', () => {
-    const tracker = new MutationTracker(lc, ackMutations);
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const mutation1 = tracker.trackMutation();
@@ -614,5 +683,78 @@ describe('MutationTracker', () => {
     tracker.lmidAdvanced(5);
 
     expect(tracker.size).toBe(0);
+    expect(onFatalError).not.toHaveBeenCalled();
+  });
+
+  describe('fatal error handling', () => {
+    test('calls onFatalError for unsupportedSchemaVersion', () => {
+      const onFatalError = vi.fn();
+      const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+      tracker.setClientIDAndWatch(CLIENT_ID, watch);
+
+      tracker.processPushResponse({
+        error: 'unsupportedSchemaVersion',
+        mutationIDs: [],
+      });
+
+      expect(onFatalError).toHaveBeenCalledOnce();
+      expect(onFatalError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'ServerError',
+          errorBody: {
+            kind: ErrorKind.Internal,
+            message: 'Unsupported schema version',
+          },
+        }),
+      );
+    });
+
+    test('calls onFatalError for http error', () => {
+      const onFatalError = vi.fn();
+      const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+      tracker.setClientIDAndWatch(CLIENT_ID, watch);
+
+      tracker.processPushResponse({
+        error: 'http',
+        status: 404,
+        details: 'Not Found',
+        mutationIDs: [],
+      });
+
+      expect(onFatalError).toHaveBeenCalledOnce();
+      expect(onFatalError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'ServerError',
+          errorBody: {
+            kind: ErrorKind.Internal,
+            message:
+              'Fetch from API server returned non-OK status 404: Not Found',
+          },
+        }),
+      );
+    });
+
+    test('calls onFatalError for zeroPusher error', () => {
+      const onFatalError = vi.fn();
+      const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+      tracker.setClientIDAndWatch(CLIENT_ID, watch);
+
+      tracker.processPushResponse({
+        error: 'zeroPusher',
+        details: 'Custom error message',
+        mutationIDs: [],
+      });
+
+      expect(onFatalError).toHaveBeenCalledOnce();
+      expect(onFatalError).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'ServerError',
+          errorBody: {
+            kind: ErrorKind.Internal,
+            message: 'ZeroPusher error: Custom error message',
+          },
+        }),
+      );
+    });
   });
 });
