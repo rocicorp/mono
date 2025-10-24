@@ -119,6 +119,10 @@ export class PlannerJoin {
     return this.#pinned;
   }
 
+  isFlippable(): boolean {
+    return this.#flippable;
+  }
+
   /**
    * Propagate unlimiting through the child subgraph when this join is flipped.
    * When a join is flipped, the child becomes the outer loop and should produce
