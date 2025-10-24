@@ -51,6 +51,7 @@ export function buildPlanGraph(
     ast.orderBy ?? [],
     ast.where,
     baseConstraints,
+    ast.limit,
   );
   graph.connections.push(connection);
 
@@ -198,6 +199,8 @@ function processCorrelatedSubquery(
   const childConnection = childSource.connect(
     related.subquery.orderBy ?? [],
     related.subquery.where,
+    undefined, // no base constraints for EXISTS/NOT EXISTS
+    condition.op === 'EXISTS' ? 1 : undefined,
   );
   graph.connections.push(childConnection);
 

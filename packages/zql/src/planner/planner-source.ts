@@ -20,6 +20,7 @@ export class PlannerSource {
     sort: Ordering,
     filters: Condition | undefined,
     baseConstraints?: PlannerConstraint,
+    limit?: number,
   ): PlannerConnection {
     return new PlannerConnection(
       this.name,
@@ -27,6 +28,7 @@ export class PlannerSource {
       sort,
       filters,
       baseConstraints,
+      limit,
     );
   }
 }

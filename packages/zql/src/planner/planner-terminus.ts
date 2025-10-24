@@ -28,4 +28,12 @@ export class PlannerTerminus {
     // Terminus starts the cost estimation flow with empty branch pattern
     return this.#input.estimateCost([]);
   }
+
+  /**
+   * Propagate unlimiting when a parent join is flipped.
+   * Terminus doesn't participate in unlimiting.
+   */
+  propagateUnlimitFromFlippedJoin(): void {
+    // No-op: terminus doesn't need to unlimit anything
+  }
 }

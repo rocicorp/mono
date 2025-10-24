@@ -14,7 +14,7 @@ import type {PlanDebugger} from './planner-debug.ts';
  * Captured state of a plan for comparison and restoration.
  */
 type PlanState = {
-  connections: Array<{pinned: boolean}>;
+  connections: Array<{pinned: boolean; limit: number | undefined}>;
   joins: Array<{type: 'semi' | 'flipped'; pinned: boolean}>;
   fanOuts: Array<{type: 'FO' | 'UFO'}>;
   fanIns: Array<{type: 'FI' | 'UFI'}>;
@@ -160,7 +160,10 @@ export class PlannerGraph {
    */
   capturePlanningSnapshot(): PlanState {
     return {
-      connections: this.connections.map(c => ({pinned: c.pinned})),
+      connections: this.connections.map(c => ({
+        pinned: c.pinned,
+        limit: c.limit,
+      })),
       joins: this.joins.map(j => ({type: j.type, pinned: j.pinned})),
       fanOuts: this.fanOuts.map(fo => ({type: fo.type})),
       fanIns: this.fanIns.map(fi => ({type: fi.type})),
@@ -264,11 +267,12 @@ export class PlannerGraph {
   }
 
   /**
-   * Restore connection pinned flags and constraint maps.
+   * Restore connection pinned flags, limits, and constraint maps.
    */
   #restoreConnections(state: PlanState): void {
     for (let i = 0; i < this.connections.length; i++) {
       this.connections[i].pinned = state.connections[i].pinned;
+      this.connections[i].limit = state.connections[i].limit;
       this.connections[i].restoreConstraints(state.connectionConstraints[i]);
     }
   }
@@ -382,6 +386,7 @@ export class PlannerGraph {
 
         pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
         checkAndConvertFOFI(this); // Convert FO/FI to UFO/UFI if joins flipped
+        propagateUnlimitForFlippedJoins(this); // Unlimit children of flipped joins
         this.propagateConstraints(); // Then propagate
 
         if (planDebugger) {
@@ -435,6 +440,7 @@ export class PlannerGraph {
 
               pinAndMaybeFlipJoins(connection); // Then flip/pin joins - might throw
               checkAndConvertFOFI(this); // Convert FO/FI to UFO/UFI if joins flipped
+              propagateUnlimitForFlippedJoins(this); // Unlimit children of flipped joins
               success = true;
               break; // Success, exit the inner loop
             } catch (e) {
@@ -647,4 +653,19 @@ function findFIAndCheckFlips(fo: PlannerFanOut): {
 
 export function pinAndMaybeFlipJoins(connection: PlannerConnection): void {
   traverseAndPin(connection, connection.output);
+}
+
+/**
+ * Propagate unlimiting to all flipped joins in the graph.
+ * When a join is flipped, its child becomes the outer loop and should no longer
+ * be limited by EXISTS semantics.
+ *
+ * This must be called after pinAndMaybeFlipJoins and before propagateConstraints.
+ */
+function propagateUnlimitForFlippedJoins(graph: PlannerGraph): void {
+  for (const join of graph.joins) {
+    if (join.type === 'flipped') {
+      join.propagateUnlimit();
+    }
+  }
 }

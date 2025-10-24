@@ -62,12 +62,31 @@ export class PlannerFanIn {
     this.#type = 'UFI';
   }
 
+  /**
+   * Propagate unlimiting when a parent join is flipped.
+   * Fan-in propagates to all of its inputs.
+   */
+  propagateUnlimitFromFlippedJoin(): void {
+    for (const input of this.#inputs) {
+      if (
+        'propagateUnlimitFromFlippedJoin' in input &&
+        typeof input.propagateUnlimitFromFlippedJoin === 'function'
+      ) {
+        (
+          input as {propagateUnlimitFromFlippedJoin(): void}
+        ).propagateUnlimitFromFlippedJoin();
+      }
+    }
+  }
+
   estimateCost(branchPattern?: number[]): CostEstimate {
     // FanIn always sums costs of its inputs
     // But it needs to pass the correct branch pattern to each input
-    let totalCost = {
+    let totalCost: CostEstimate = {
       baseCardinality: 0,
       runningCost: 0,
+      selectivity: 0,
+      limit: undefined,
     };
 
     if (this.#type === 'FI') {
@@ -76,6 +95,8 @@ export class PlannerFanIn {
         branchPattern === undefined ? undefined : [0, ...branchPattern];
       let maxBaseCardinality = 0;
       let maxRunningCost = 0;
+      // Track complement probability for OR selectivity: P(A OR B) = 1 - (1-A)(1-B)
+      let noMatchProb = 1.0;
       for (const input of this.#inputs) {
         const cost = input.estimateCost(updatedPattern);
         if (cost.baseCardinality > maxBaseCardinality) {
@@ -84,21 +105,49 @@ export class PlannerFanIn {
         if (cost.runningCost > maxRunningCost) {
           maxRunningCost = cost.runningCost;
         }
+
+        // OR branches: combine selectivities assuming independent events
+        // P(A OR B) = 1 - (1-A)(1-B)
+        // Track probability of NO match in any branch
+        noMatchProb *= 1 - cost.selectivity;
+
+        // all inputs should have the same limit.
+        assert(
+          totalCost.limit === undefined || cost.limit === totalCost.limit,
+          'All FanIn inputs should have the same limit',
+        );
+        totalCost.limit = cost.limit;
       }
 
       totalCost.baseCardinality = maxBaseCardinality;
       totalCost.runningCost = maxRunningCost;
+      totalCost.selectivity = 1 - noMatchProb;
     } else {
       // Union FanIn (UFI): each input gets unique branch pattern
       let i = 0;
+      // Track complement probability for OR selectivity: P(A OR B) = 1 - (1-A)(1-B)
+      let noMatchProb = 1.0;
       for (const input of this.#inputs) {
         const updatedPattern =
           branchPattern === undefined ? undefined : [i, ...branchPattern];
         const cost = input.estimateCost(updatedPattern);
         totalCost.baseCardinality += cost.baseCardinality;
         totalCost.runningCost += cost.runningCost;
+
+        // OR branches: combine selectivities assuming independent events
+        // P(A OR B) = 1 - (1-A)(1-B)
+        // Track probability of NO match in any branch
+        noMatchProb *= 1 - cost.selectivity;
+
+        // all inputs should have the same limit.
+        assert(
+          totalCost.limit === undefined || cost.limit === totalCost.limit,
+          'All FanIn inputs should have the same limit',
+        );
+        totalCost.limit = cost.limit;
         i++;
       }
+      totalCost.selectivity = 1 - noMatchProb;
     }
 
     return totalCost;

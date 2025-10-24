@@ -66,12 +66,21 @@ export class PlannerConnection {
   readonly table: string;
   readonly name: string; // Human-readable name for debugging (defaults to table name)
   readonly #baseConstraints: PlannerConstraint | undefined; // Constraints from parent correlation
+  readonly #baseLimit: number | undefined; // Original limit from query structure (never modified)
+  readonly selectivity: number; // Fraction of rows passing filters (1.0 = no filtering)
   #output?: PlannerNode | undefined; // Set once during graph construction
 
   // ========================================================================
   // MUTABLE PLANNING STATE (changes during plan search)
   // ========================================================================
   pinned: boolean;
+
+  /**
+   * Current limit during planning. Can be cleared (set to undefined) when a
+   * parent join is flipped, indicating this connection is now in an outer loop
+   * and should not be limited by EXISTS semantics.
+   */
+  limit: number | undefined;
 
   /**
    * Constraints accumulated from parent joins during planning.
@@ -103,6 +112,7 @@ export class PlannerConnection {
     sort: Ordering,
     filters: Condition | undefined,
     baseConstraints?: PlannerConstraint,
+    limit?: number,
     name?: string,
   ) {
     this.pinned = false;
@@ -112,7 +122,21 @@ export class PlannerConnection {
     this.#filters = filters;
     this.#model = model;
     this.#baseConstraints = baseConstraints;
+    this.#baseLimit = limit;
+    this.limit = limit;
     this.#constraints = new Map();
+
+    // Compute selectivity for EXISTS child connections (baseLimit === 1)
+    // Selectivity = fraction of rows that pass filters
+    if (limit !== undefined && filters) {
+      const costWithFilters = model(table, sort, filters, undefined);
+      const costWithoutFilters = model(table, sort, undefined, undefined);
+      this.selectivity =
+        costWithoutFilters > 0 ? costWithFilters / costWithoutFilters : 1.0;
+    } else {
+      // Root connections or connections without filters
+      this.selectivity = 1.0;
+    }
   }
 
   setOutput(node: PlannerNode): void {
@@ -191,6 +215,8 @@ export class PlannerConnection {
           cost = {
             baseCardinality,
             runningCost: baseCardinality,
+            selectivity: this.selectivity,
+            limit: this.limit,
           };
           this.#cachedConstraintCosts.set(key, cost);
         }
@@ -214,6 +240,8 @@ export class PlannerConnection {
             cost = {
               baseCardinality,
               runningCost: baseCardinality,
+              selectivity: this.selectivity,
+              limit: this.limit,
             };
             this.#cachedConstraintCosts.set(key, cost);
           }
@@ -224,6 +252,8 @@ export class PlannerConnection {
       const ret = {
         baseCardinality: total,
         runningCost: total,
+        selectivity: this.selectivity,
+        limit: this.limit,
       };
 
       // Cache total and mark as clean
@@ -258,15 +288,40 @@ export class PlannerConnection {
     cost = {
       baseCardinality,
       runningCost: baseCardinality,
+      selectivity: this.selectivity,
+      limit: this.limit,
     };
     this.#cachedConstraintCosts.set(key, cost);
 
     return cost;
   }
 
+  /**
+   * Remove the limit from this connection.
+   * Called when a parent join is flipped, making this connection part of an
+   * outer loop that should produce all rows rather than stopping at the limit.
+   */
+  unlimit(): void {
+    if (this.limit !== undefined) {
+      this.limit = undefined;
+      // Limit changes do not impact connection costs.
+      // Limit is taken into account at the join level.
+      // Given that, we do not need to invalidate cost caches here.
+    }
+  }
+
+  /**
+   * Propagate unlimiting when a parent join is flipped.
+   * For connections, we simply remove the limit.
+   */
+  propagateUnlimitFromFlippedJoin(): void {
+    this.unlimit();
+  }
+
   reset() {
     this.#constraints.clear();
     this.pinned = false;
+    this.limit = this.#baseLimit;
     // Clear all cost caches
     this.#cachedTotalCost = undefined;
     this.#cachedConstraintCosts.clear();
@@ -299,7 +354,7 @@ export class PlannerConnection {
   }
 
   /**
-   * Get constraints for debugging purposes.
+   * Get current constraints for debugging.
    * Returns a copy of the constraints map.
    */
   getConstraintsForDebug(): Map<string, PlannerConstraint | undefined> {
