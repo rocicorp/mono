@@ -107,7 +107,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   useEffect(() => {
     if (
-      projectName.toLowerCase() === 'roci' &&
+      projectName.toLocaleLowerCase() === 'roci' &&
       !Cookies.get('onboardingDismissed')
     ) {
       setShowOnboarding(true);
