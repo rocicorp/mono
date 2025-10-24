@@ -73,7 +73,7 @@ describe('ConnectionImpl', () => {
       expect(logSpy).toHaveBeenCalledWith(
         'info',
         {connect: undefined},
-        'Resuming connection from error state',
+        'Resuming connection from state: connecting',
       );
     });
   });
