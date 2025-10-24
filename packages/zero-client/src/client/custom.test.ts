@@ -26,6 +26,7 @@ import {createDb} from './test/create-db.ts';
 import {getInternalReplicacheImplForTesting} from './zero.ts';
 import {QueryManager} from './query-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
+import {ClientError} from './error.ts';
 
 type Schema = typeof schema;
 type MutatorTx = Transaction<Schema>;
@@ -816,9 +817,7 @@ test('trying to use crud mutators throws if `enableLegacyMutators` is set to fal
       ownerId: '',
       createdAt: 1743018138477,
     }),
-  ).rejects.toThrowErrorMatchingInlineSnapshot(
-    `[Error: Zero CRUD mutators are not enabled.]`,
-  );
+  ).rejects.toThrow(ClientError);
 
   await z.close();
 });

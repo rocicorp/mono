@@ -23,6 +23,7 @@ let rafStub: MockInstance<(cb: FrameRequestCallback) => number>;
 const UNUSED_RAF_ARG = 10;
 
 const ackMutationResponses = () => {};
+const onFatalError = () => {};
 
 const schema = createSchema({
   tables: [
@@ -65,7 +66,7 @@ describe('poke handler', () => {
       clientID,
       schema,
       logContext,
-      new MutationTracker(logContext, ackMutationResponses),
+      new MutationTracker(logContext, ackMutationResponses, onFatalError),
     );
     expect(rafStub).toHaveBeenCalledTimes(0);
 
@@ -174,7 +175,7 @@ describe('poke handler', () => {
       clientID,
       schema,
       logContext,
-      new MutationTracker(logContext, ackMutationResponses),
+      new MutationTracker(logContext, ackMutationResponses, onFatalError),
     );
     expect(rafStub).toHaveBeenCalledTimes(0);
 
@@ -289,7 +290,7 @@ describe('poke handler', () => {
       clientID,
       schema,
       logContext,
-      new MutationTracker(logContext, ackMutationResponses),
+      new MutationTracker(logContext, ackMutationResponses, onFatalError),
     );
 
     expect(rafStub).toHaveBeenCalledTimes(0);
@@ -440,7 +441,7 @@ describe('poke handler', () => {
       clientID,
       schema,
       logContext,
-      new MutationTracker(logContext, ackMutationResponses),
+      new MutationTracker(logContext, ackMutationResponses, onFatalError),
     );
 
     expect(rafStub).toHaveBeenCalledTimes(0);
@@ -622,7 +623,7 @@ describe('poke handler', () => {
       clientID,
       schema,
       logContext,
-      new MutationTracker(logContext, ackMutationResponses),
+      new MutationTracker(logContext, ackMutationResponses, onFatalError),
     );
 
     expect(rafStub).toHaveBeenCalledTimes(0);
@@ -833,7 +834,7 @@ describe('poke handler', () => {
           clientID,
           schema,
           logContext,
-          new MutationTracker(logContext, ackMutationResponses),
+          new MutationTracker(logContext, ackMutationResponses, onFatalError),
         );
 
         expect(onPokeErrorStub).toHaveBeenCalledTimes(0);
@@ -854,7 +855,7 @@ describe('poke handler', () => {
       clientID,
       schema,
       logContext,
-      new MutationTracker(logContext, ackMutationResponses),
+      new MutationTracker(logContext, ackMutationResponses, onFatalError),
     );
     expect(rafStub).toHaveBeenCalledTimes(0);
 
@@ -961,7 +962,7 @@ describe('poke handler', () => {
       clientID,
       schema,
       logContext,
-      new MutationTracker(logContext, ackMutationResponses),
+      new MutationTracker(logContext, ackMutationResponses, onFatalError),
     );
     expect(rafStub).toHaveBeenCalledTimes(0);
 
@@ -1082,7 +1083,7 @@ describe('poke handler', () => {
       clientID,
       schema,
       logContext,
-      new MutationTracker(logContext, ackMutationResponses),
+      new MutationTracker(logContext, ackMutationResponses, onFatalError),
     );
     expect(rafStub).toHaveBeenCalledTimes(0);
 
@@ -1151,7 +1152,7 @@ describe('poke handler', () => {
       clientID,
       schema,
       logContext,
-      new MutationTracker(logContext, ackMutationResponses),
+      new MutationTracker(logContext, ackMutationResponses, onFatalError),
     );
     expect(rafStub).toHaveBeenCalledTimes(0);
 
@@ -1593,7 +1594,11 @@ describe('mutation tracker interactions', () => {
     const replicachePokeStub = vi.fn();
     const clientID = 'c1';
     const logContext = new LogContext('error');
-    const tracker = new MutationTracker(logContext, ackMutationResponses);
+    const tracker = new MutationTracker(
+      logContext,
+      ackMutationResponses,
+      onFatalError,
+    );
     const spy = vi.spyOn(tracker, 'lmidAdvanced');
     tracker.setClientIDAndWatch(clientID, () => () => {});
     const pokeHandler = new PokeHandler(
@@ -1638,7 +1643,11 @@ describe('mutation tracker interactions', () => {
     const replicachePokeStub = vi.fn();
     const clientID = 'c1';
     const logContext = new LogContext('error');
-    const tracker = new MutationTracker(logContext, ackMutationResponses);
+    const tracker = new MutationTracker(
+      logContext,
+      ackMutationResponses,
+      onFatalError,
+    );
 
     tracker.setClientIDAndWatch(clientID, () => () => {});
     const pokeHandler = new PokeHandler(

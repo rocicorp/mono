@@ -3,7 +3,7 @@ import type {
   EphemeralID,
   MutationTrackingData,
 } from '../../../replicache/src/replicache-options.ts';
-import {assert} from '../../../shared/src/asserts.ts';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {emptyObject} from '../../../shared/src/sentinels.ts';
 import {
   mutationResultSchema,
@@ -20,6 +20,8 @@ import {MUTATIONS_KEY_PREFIX} from './keys.ts';
 import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';
+import {ServerError, type ZeroError} from './error.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 
 type ErrorType =
   | MutationError
@@ -48,11 +50,16 @@ export class MutationTracker {
   readonly #lc: ZeroLogContext;
 
   readonly #ackMutations: (upTo: MutationID) => void;
+  readonly #onFatalError: (error: ZeroError) => void;
   #clientID: string | undefined;
   #largestOutstandingMutationID: number;
   #currentMutationID: number;
 
-  constructor(lc: ZeroLogContext, ackMutations: (upTo: MutationID) => void) {
+  constructor(
+    lc: ZeroLogContext,
+    ackMutations: (upTo: MutationID) => void,
+    onFatalError: (error: ZeroError) => void,
+  ) {
     this.#lc = lc.withContext('MutationTracker');
     this.#outstandingMutations = new Map();
     this.#ephemeralIDsByMutationID = new Map();
@@ -60,6 +67,7 @@ export class MutationTracker {
     this.#largestOutstandingMutationID = 0;
     this.#currentMutationID = 0;
     this.#ackMutations = ackMutations;
+    this.#onFatalError = onFatalError;
   }
 
   setClientIDAndWatch(
@@ -158,8 +166,39 @@ export class MutationTracker {
         'Received an error response when pushing mutations',
         response,
       );
+      const fatalError = this.#fatalErrorFromPushError(response);
+      if (fatalError) {
+        this.#onFatalError(fatalError);
+      }
     } else {
       this.#processPushOk(response);
+    }
+  }
+
+  #fatalErrorFromPushError(error: PushError): ZeroError | undefined {
+    switch (error.error) {
+      case 'unsupportedPushVersion':
+        return new ServerError({
+          kind: ErrorKind.Internal,
+          message: `Unsupported push version`,
+        });
+      case 'unsupportedSchemaVersion':
+        return new ServerError({
+          kind: ErrorKind.Internal,
+          message: `Unsupported schema version`,
+        });
+      case 'http':
+        return new ServerError({
+          kind: ErrorKind.Internal,
+          message: `Fetch from API server returned non-OK status ${error.status}: ${error.details ?? 'unknown'}`,
+        });
+      case 'zeroPusher':
+        return new ServerError({
+          kind: ErrorKind.Internal,
+          message: `ZeroPusher error: ${error.details ?? 'unknown'}`,
+        });
+      default:
+        unreachable(error);
     }
   }
 

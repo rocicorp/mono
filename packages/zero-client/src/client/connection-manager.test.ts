@@ -1,11 +1,20 @@
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
-import type {ConnectionState} from './connection-manager.ts';
-import {ConnectionManager} from './connection-manager.ts';
-import {ConnectionStatus} from './connection-status.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
+import type {ConnectionState} from './connection-manager.ts';
+import {
+  ConnectionManager,
+  throwIfConnectionError,
+} from './connection-manager.ts';
+import {ConnectionStatus} from './connection-status.ts';
 import {ClientError} from './error.ts';
+import {assert} from '../../../shared/src/asserts.ts';
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
+
+const sharedDisconnectError = new ClientError({
+  kind: ClientErrorKind.DisconnectTimeout,
+  message: 'Disconnect timed out',
+});
 
 describe('ConnectionManager', () => {
   beforeEach(() => {
@@ -97,7 +106,7 @@ describe('ConnectionManager', () => {
       });
 
       vi.setSystemTime(DEFAULT_TIMEOUT_MS / 2);
-      manager.disconnected();
+      manager.disconnected(sharedDisconnectError);
       expect(manager.is(ConnectionStatus.Disconnected)).toBe(true);
 
       const listener = subscribe(manager);
@@ -256,11 +265,15 @@ describe('ConnectionManager', () => {
       });
       const listener = subscribe(manager);
 
-      manager.disconnected();
+      manager.disconnected(sharedDisconnectError);
 
-      expect(manager.state).toEqual({name: ConnectionStatus.Disconnected});
+      expect(manager.state).toEqual({
+        name: ConnectionStatus.Disconnected,
+        reason: sharedDisconnectError,
+      });
       expect(listener).toHaveBeenCalledWith({
         name: ConnectionStatus.Disconnected,
+        reason: sharedDisconnectError,
       });
     });
 
@@ -273,7 +286,7 @@ describe('ConnectionManager', () => {
       manager.connected();
 
       vi.setSystemTime(8 * 60 * 1000);
-      manager.disconnected();
+      manager.disconnected(sharedDisconnectError);
       expect(manager.is(ConnectionStatus.Disconnected)).toBe(true);
 
       vi.setSystemTime(8 * 60 * 1000);
@@ -286,10 +299,10 @@ describe('ConnectionManager', () => {
       const manager = new ConnectionManager({
         disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
       });
-      manager.disconnected();
+      manager.disconnected(sharedDisconnectError);
 
       const listener = subscribe(manager);
-      manager.disconnected();
+      manager.disconnected(sharedDisconnectError);
 
       expect(listener).not.toHaveBeenCalled();
     });
@@ -301,7 +314,7 @@ describe('ConnectionManager', () => {
       manager.closed();
 
       const listener = subscribe(manager);
-      manager.disconnected();
+      manager.disconnected(sharedDisconnectError);
 
       expect(listener).not.toHaveBeenCalled();
       expect(manager.is(ConnectionStatus.Closed)).toBe(true);
@@ -317,16 +330,26 @@ describe('ConnectionManager', () => {
 
       manager.closed();
 
-      expect(manager.state).toEqual({name: ConnectionStatus.Closed});
+      expect(manager.state.name).toEqual(ConnectionStatus.Closed);
+      assert(manager.state.name === ConnectionStatus.Closed);
+      expect(manager.state.reason.kind).toEqual(ClientErrorKind.ClientClosed);
       expect(manager.shouldContinueRunLoop()).toBe(false);
-      expect(listener).toHaveBeenCalledWith({name: ConnectionStatus.Closed});
+      expect(listener).toHaveBeenCalledWith({
+        name: ConnectionStatus.Closed,
+        reason: new ClientError({
+          kind: ClientErrorKind.ClientClosed,
+          message: 'Zero was explicitly closed by calling zero.close()',
+        }),
+      });
 
       listener.mockClear();
       manager.connecting();
       manager.connected();
-      manager.disconnected();
+      manager.disconnected(sharedDisconnectError);
 
-      expect(manager.state).toEqual({name: ConnectionStatus.Closed});
+      expect(manager.state.name).toEqual(ConnectionStatus.Closed);
+      assert(manager.state.name === ConnectionStatus.Closed);
+      expect(manager.state.reason.kind).toEqual(ClientErrorKind.ClientClosed);
       expect(listener).not.toHaveBeenCalled();
     });
 
@@ -360,9 +383,12 @@ describe('ConnectionManager', () => {
 
       vi.advanceTimersByTime(200);
       expect(manager.is(ConnectionStatus.Disconnected)).toBe(true);
-      expect(listener).toHaveBeenCalledWith({
-        name: ConnectionStatus.Disconnected,
-      });
+      expect(listener).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: ConnectionStatus.Disconnected,
+          reason: expect.any(ClientError),
+        }),
+      );
     });
 
     test('uses the configured timeout check interval', () => {
@@ -392,11 +418,33 @@ describe('ConnectionManager', () => {
       });
       const listener = subscribe(manager);
 
-      manager.disconnected();
+      manager.disconnected(sharedDisconnectError);
       listener.mockClear();
 
       vi.advanceTimersByTime(1_000);
 
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    test('timeout check handles being in non-connecting state gracefully', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: 1_000,
+        timeoutCheckIntervalMs: 100,
+      });
+      const listener = subscribe(manager);
+
+      // Let the timeout happen naturally (transitions to Disconnected)
+      vi.advanceTimersByTime(1_100);
+      expect(manager.is(ConnectionStatus.Disconnected)).toBe(true);
+
+      listener.mockClear();
+
+      // Advance more time to let the interval fire again
+      // The checkTimeout should see we're not in Connecting state and do nothing
+      vi.advanceTimersByTime(1_000);
+
+      // Should still be disconnected, no additional state changes
+      expect(manager.is(ConnectionStatus.Disconnected)).toBe(true);
       expect(listener).not.toHaveBeenCalled();
     });
   });
@@ -414,7 +462,7 @@ describe('ConnectionManager', () => {
       manager.connected();
       expect(manager.shouldContinueRunLoop()).toBe(true);
 
-      manager.disconnected();
+      manager.disconnected(sharedDisconnectError);
       expect(manager.shouldContinueRunLoop()).toBe(true);
 
       manager.closed();
@@ -443,8 +491,11 @@ describe('ConnectionManager', () => {
 
       // Connection lost, transition to disconnected
       vi.setSystemTime(60_000);
-      manager.disconnected();
-      expect(manager.state).toEqual({name: ConnectionStatus.Disconnected});
+      manager.disconnected(sharedDisconnectError);
+      expect(manager.state).toEqual({
+        name: ConnectionStatus.Disconnected,
+        reason: sharedDisconnectError,
+      });
 
       // Reconnection succeeds (can transition directly from disconnected to connected)
       vi.setSystemTime(65_000);
@@ -458,6 +509,7 @@ describe('ConnectionManager', () => {
       });
       expect(listener).toHaveBeenNthCalledWith(2, {
         name: ConnectionStatus.Disconnected,
+        reason: sharedDisconnectError,
       });
       expect(listener).toHaveBeenNthCalledWith(3, {
         name: ConnectionStatus.Connected,
@@ -474,7 +526,9 @@ describe('ConnectionManager', () => {
       const waitForChange = manager.waitForStateChange();
       manager.connected();
 
-      await expect(waitForChange).resolves.toBeUndefined();
+      await expect(waitForChange).resolves.toEqual({
+        name: ConnectionStatus.Connected,
+      });
     });
 
     test('transition nextStatePromise resolves after subsequent state change', async () => {
@@ -487,7 +541,9 @@ describe('ConnectionManager', () => {
       const {nextStatePromise} = manager.connecting();
       manager.connected();
 
-      await expect(nextStatePromise).resolves.toBeUndefined();
+      await expect(nextStatePromise).resolves.toEqual({
+        name: ConnectionStatus.Connected,
+      });
     });
 
     test('transition nextStatePromise resolves on closed', async () => {
@@ -498,7 +554,10 @@ describe('ConnectionManager', () => {
       const {nextStatePromise} = manager.connected();
       manager.closed();
 
-      await expect(nextStatePromise).resolves.toBeUndefined();
+      const nextState = await nextStatePromise;
+      expect(nextState.name).toEqual(ConnectionStatus.Closed);
+      assert(nextState.name === ConnectionStatus.Closed);
+      expect(nextState.reason.kind).toEqual(ClientErrorKind.ClientClosed);
     });
 
     test('waitForStateChange reuses promise until resolved, then creates a new one', async () => {
@@ -518,13 +577,18 @@ describe('ConnectionManager', () => {
       expect(firstResolved).toBe(false);
 
       manager.connected();
-      await expect(first).resolves.toBeUndefined();
+      await expect(first).resolves.toEqual({
+        name: ConnectionStatus.Connected,
+      });
 
       const third = manager.waitForStateChange();
       expect(third).not.toBe(first);
 
-      manager.disconnected();
-      await expect(third).resolves.toBeUndefined();
+      manager.disconnected(sharedDisconnectError);
+      await expect(third).resolves.toEqual({
+        name: ConnectionStatus.Disconnected,
+        reason: sharedDisconnectError,
+      });
     });
 
     test('error nextStatePromise resolves when transitioning from connected to connecting', async () => {
@@ -535,7 +599,33 @@ describe('ConnectionManager', () => {
       const {nextStatePromise} = manager.connected();
       manager.connecting();
 
-      await expect(nextStatePromise).resolves.toBeUndefined();
+      await expect(nextStatePromise).resolves.toEqual(
+        expect.objectContaining({
+          name: ConnectionStatus.Connecting,
+          attempt: 1,
+        }),
+      );
+    });
+
+    test('error nextStatePromise resolves when transitioning out of error', async () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+      const errorDetail = new ClientError({
+        kind: ClientErrorKind.ConnectTimeout,
+        message: 'connect timeout',
+      });
+
+      const {nextStatePromise} = manager.error(errorDetail);
+
+      manager.connecting();
+
+      await expect(nextStatePromise).resolves.toEqual(
+        expect.objectContaining({
+          name: ConnectionStatus.Connecting,
+          attempt: 1,
+        }),
+      );
     });
 
     test('cleanup resolves pending waiters', async () => {
@@ -546,7 +636,184 @@ describe('ConnectionManager', () => {
       const waitPromise = manager.waitForStateChange();
       manager.cleanup();
 
-      await expect(waitPromise).resolves.toBeUndefined();
+      await expect(waitPromise).resolves.toEqual(
+        expect.objectContaining({
+          name: ConnectionStatus.Connecting,
+        }),
+      );
+    });
+  });
+
+  describe('isInTerminalState', () => {
+    test('returns true only for error state', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+      const errorDetail = new ClientError({
+        kind: ClientErrorKind.ConnectTimeout,
+        message: 'connect timeout',
+      });
+
+      expect(manager.isInTerminalState()).toBe(false);
+
+      manager.connected();
+      expect(manager.isInTerminalState()).toBe(false);
+
+      manager.error(errorDetail);
+      expect(manager.isInTerminalState()).toBe(true);
+    });
+  });
+
+  describe('error', () => {
+    test('transitions to error state and pauses run loop', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+      const listener = subscribe(manager);
+      const errorDetail = new ClientError({
+        kind: ClientErrorKind.Internal,
+        message: 'internal error',
+      });
+
+      manager.error(errorDetail);
+
+      expect(manager.state).toEqual({
+        name: ConnectionStatus.Error,
+        reason: errorDetail,
+      });
+      expect(manager.isInTerminalState()).toBe(true);
+      expect(listener).toHaveBeenCalledWith({
+        name: ConnectionStatus.Error,
+        reason: errorDetail,
+      });
+    });
+
+    test('is no-op when already in error state', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+      const firstError = new ClientError({
+        kind: ClientErrorKind.Internal,
+        message: 'first error',
+      });
+      const secondError = new ClientError({
+        kind: ClientErrorKind.NoSocketOrigin,
+        message: 'second error',
+      });
+
+      manager.error(firstError);
+      const listener = subscribe(manager);
+      manager.error(secondError);
+
+      expect(manager.state).toEqual({
+        name: ConnectionStatus.Error,
+        reason: firstError,
+      });
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    test('is no-op when closed', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+      manager.closed();
+
+      const listener = subscribe(manager);
+      const errorDetail = new ClientError({
+        kind: ClientErrorKind.Internal,
+        message: 'error after closed',
+      });
+      manager.error(errorDetail);
+
+      expect(listener).not.toHaveBeenCalled();
+      expect(manager.is(ConnectionStatus.Closed)).toBe(true);
+    });
+
+    test('stops timeout checking when transitioning to error', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: 5_000,
+        timeoutCheckIntervalMs: 100,
+      });
+      const listener = subscribe(manager);
+      const errorDetail = new ClientError({
+        kind: ClientErrorKind.Internal,
+        message: 'error',
+      });
+
+      manager.error(errorDetail);
+      listener.mockClear();
+
+      // Advance time - timeout interval should not fire
+      vi.advanceTimersByTime(10_000);
+
+      expect(listener).not.toHaveBeenCalled();
+      expect(manager.is(ConnectionStatus.Error)).toBe(true);
+    });
+  });
+
+  describe('throwIfConnectionError', () => {
+    test('does nothing when state is connecting without reason', () => {
+      const state: ConnectionState = {
+        name: ConnectionStatus.Connecting,
+        attempt: 1,
+        disconnectAt: 1_000,
+      };
+
+      expect(() => throwIfConnectionError(state)).not.toThrow();
+    });
+
+    test('throws when state is closed with non-tolerated client error reason', () => {
+      const reason = new ClientError({
+        kind: ClientErrorKind.Internal,
+        message: 'internal failure',
+      });
+      const state: ConnectionState = {
+        name: ConnectionStatus.Closed,
+        reason,
+      };
+
+      expect(() => throwIfConnectionError(state)).toThrow(reason);
+    });
+
+    test('does nothing when connecting due to tolerated timeout reason', () => {
+      const reason = new ClientError({
+        kind: ClientErrorKind.ConnectTimeout,
+        message: 'connect timeout',
+      });
+      const state: ConnectionState = {
+        name: ConnectionStatus.Connecting,
+        attempt: 2,
+        disconnectAt: 2_000,
+        reason,
+      };
+
+      expect(() => throwIfConnectionError(state)).not.toThrow();
+    });
+
+    test('does nothing when disconnected due to clean close', () => {
+      const reason = new ClientError({
+        kind: ClientErrorKind.CleanClose,
+        message: 'clean close',
+      });
+      const state: ConnectionState = {
+        name: ConnectionStatus.Disconnected,
+        reason,
+      };
+
+      expect(() => throwIfConnectionError(state)).not.toThrow();
+    });
+
+    test('throws when disconnected due to non-tolerated client error', () => {
+      const reason = new ClientError({
+        kind: ClientErrorKind.Internal,
+        message: 'disconnect internal',
+      });
+      const state: ConnectionState = {
+        name: ConnectionStatus.Disconnected,
+        reason,
+      };
+
+      expect(() => throwIfConnectionError(state)).toThrow(reason);
     });
   });
 });

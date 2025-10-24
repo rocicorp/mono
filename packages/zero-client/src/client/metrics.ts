@@ -1,5 +1,11 @@
 import type {MaybePromise} from '../../../shared/src/types.ts';
-import {isServerError, type ZeroError, type ZeroErrorKind} from './error.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
+import {
+  isClientError,
+  isServerError,
+  type ZeroError,
+  type ZeroErrorKind,
+} from './error.ts';
 import {MetricName} from './metric-name.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
 
@@ -30,6 +36,30 @@ function camelToSnake(kind: ZeroErrorKind): string {
     .split(/\.?(?=[A-Z])/)
     .join('_')
     .toLowerCase();
+}
+
+/**
+ * Returns whether an error should be reported in metrics and
+ * increment the connect error count.
+ *
+ * Returns `true` for all server errors and client errors that represent actual
+ * connection problems. Returns `false` for expected client-side disconnections
+ * (user disconnect, client closed, hidden tab, clean/abrupt close).
+ */
+export function shouldReportConnectError(reason: ZeroError): boolean {
+  if (!isClientError(reason)) {
+    return true;
+  }
+  switch (reason.kind) {
+    case ClientErrorKind.Hidden:
+    case ClientErrorKind.ClientClosed:
+    case ClientErrorKind.UserDisconnect:
+    case ClientErrorKind.CleanClose:
+    case ClientErrorKind.AbruptClose:
+      return false;
+    default:
+      return true;
+  }
 }
 
 type MetricsReporter = (metrics: Series[]) => MaybePromise<void>;

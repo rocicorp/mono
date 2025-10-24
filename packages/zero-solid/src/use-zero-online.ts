@@ -5,13 +5,7 @@ import {useZero} from './use-zero.ts';
  * Tracks the online status of the current Zero instance.
  *
  * @returns An accessor — call `online()` to get a reactive `boolean`.
- *
- * @example
- * const online = useZeroOnline();
- *
- * <span>
- *   {online() ? 'Online' : 'Offline'}
- * </span>
+ * @deprecated Use {@link useZeroConnectionState} instead, which provides more detailed connection state.
  */
 export function useZeroOnline(): Accessor<boolean> {
   const zero = useZero()();

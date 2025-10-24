@@ -112,11 +112,15 @@ export interface ZeroOptions<
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes.
    *
-   * @deprecated Use `onOnline` on the Zero instance instead. e.g.
+   * @deprecated Use `connection.state.subscribe` on the Zero instance instead. e.g.
    * ```ts
    * const zero = new Zero({...});
-   * zero.onOnline((online) => { ... });
+   * zero.connection.state.subscribe((state) => {
+   *   console.log('Connection state:', state.name);
+   * });
    * ```
+   *
+   * Or use a hook like {@link useZeroConnectionState} to subscribe to state changes.
    */
   onOnlineChange?: ((online: boolean) => void) | undefined;
 
