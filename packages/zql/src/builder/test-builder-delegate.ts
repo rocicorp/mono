@@ -13,13 +13,16 @@ export class TestBuilderDelegate implements BuilderDelegate {
   readonly #storage: Record<string, MemoryStorage> = {};
   readonly #shouldLog: boolean;
   readonly #log: SnitchMessage[] = [];
+  readonly enableNotExists: boolean;
 
   constructor(
     sources: Readonly<Record<string, Source>>,
     shouldLog?: boolean | undefined,
+    enableNotExists?: boolean | undefined,
   ) {
     this.#sources = sources;
     this.#shouldLog = !!shouldLog;
+    this.enableNotExists = !!enableNotExists;
   }
 
   getSource(tableName: string): Source | undefined {

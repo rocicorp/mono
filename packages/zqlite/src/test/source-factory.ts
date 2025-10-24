@@ -183,6 +183,7 @@ export function newQueryDelegate(
     assertValidRunOptions() {},
     flushQueryChanges() {},
     defaultQueryComplete: true,
+    enableNotExists: true, // Allow NOT EXISTS in tests
     addMetric() {},
   };
 }
