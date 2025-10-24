@@ -47,6 +47,7 @@ import {
   type Schema,
 } from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
+  boolean,
   number,
   string,
   table,
@@ -2048,6 +2049,73 @@ test('smokeTest', async () => {
     await r.mutate.issues.insert({id: 'c', value: 6});
     expect(calls.length).eq(0);
   }
+});
+
+test('passing server null allows queries without WS connection', async () => {
+  const r = zeroForTest({
+    server: null,
+    schema: createSchema({
+      tables: [
+        table('tasks')
+          .columns({
+            id: string(),
+            title: string(),
+            completed: boolean(),
+          })
+          .primaryKey('id'),
+      ],
+    }),
+  });
+
+  // Queries should still work locally
+  const view = r.query.tasks.materialize();
+  const calls: Array<Array<unknown>> = [];
+  const unsubscribe = view.addListener(c => {
+    calls.push([...c]);
+  });
+
+  // Initial hydration call with empty data
+  expect(calls.length).eq(1);
+  expect(calls[0]).toEqual([]);
+
+  // Mutations should work locally
+  await r.mutate.tasks.insert({id: 't1', title: 'Task 1', completed: false});
+  await r.mutate.tasks.insert({id: 't2', title: 'Task 2', completed: true});
+
+  // Verify listener was called for each mutation
+  expect(calls.length).eq(3);
+  expect(calls[1]).toEqual([
+    {id: 't1', title: 'Task 1', completed: false, [refCountSymbol]: 1},
+  ]);
+  expect(calls[2]).toEqual([
+    {id: 't1', title: 'Task 1', completed: false, [refCountSymbol]: 1},
+    {id: 't2', title: 'Task 2', completed: true, [refCountSymbol]: 1},
+  ]);
+
+  calls.length = 0;
+
+  // Update mutation should work
+  await r.mutate.tasks.update({id: 't1', completed: true});
+  expect(calls.length).eq(1);
+  expect(calls[0]).toEqual([
+    {id: 't1', title: 'Task 1', completed: true, [refCountSymbol]: 1},
+    {id: 't2', title: 'Task 2', completed: true, [refCountSymbol]: 1},
+  ]);
+
+  calls.length = 0;
+
+  // Delete mutation should work
+  await r.mutate.tasks.delete({id: 't2'});
+  expect(calls.length).eq(1);
+  expect(calls[0]).toEqual([
+    {id: 't1', title: 'Task 1', completed: true, [refCountSymbol]: 1},
+  ]);
+
+  unsubscribe();
+
+  // Verify connection state indicates no server connection
+  // The connection status should be in Error state when server is null
+  expect(r.connectionStatus).toBe(ConnectionStatus.Error);
 });
 
 // TODO: Reenable metrics

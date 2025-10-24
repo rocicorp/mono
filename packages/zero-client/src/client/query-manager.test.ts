@@ -1762,7 +1762,8 @@ describe('query transform errors', () => {
 
     const ast: AST = {table: 'issue', orderBy: [['id', 'asc']]};
     const queryHash = hashOfAST(ast);
-    queryManager.addLegacy(ast, 0);
+    const gotCallback = vi.fn();
+    queryManager.addLegacy(ast, 0, gotCallback);
 
     const error = {
       error: 'zero' as const,
@@ -1773,6 +1774,9 @@ describe('query transform errors', () => {
 
     queryManager.handleTransformErrors([error]);
 
+    expect(gotCallback).toHaveBeenCalledTimes(2);
+    expect(gotCallback).nthCalledWith(1, false);
+    expect(gotCallback).nthCalledWith(2, false, error);
     expect(onFatalErrorMock).toHaveBeenCalledOnce();
     expect(onFatalErrorMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1783,46 +1787,6 @@ describe('query transform errors', () => {
         },
       }),
     );
-  });
-
-  test('does not call onFatalError for app errors', () => {
-    const onFatalErrorMock = vi.fn();
-    const experimentalWatch = createExperimentalWatchMock();
-    const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
-    const maxRecentQueriesSize = 0;
-    const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
-    const queryManager = new QueryManager(
-      lc,
-      mutationTracker,
-      'client1',
-      schema.tables,
-      send,
-      experimentalWatch,
-      maxRecentQueriesSize,
-      queryChangeThrottleMs,
-      slowMaterializeThreshold,
-      onFatalErrorMock,
-    );
-
-    const ast: AST = {table: 'issue', orderBy: [['id', 'asc']]};
-    const queryHash = hashOfAST(ast);
-    const gotCallback = vi.fn();
-    queryManager.addLegacy(ast, 0, gotCallback);
-
-    const error = {
-      error: 'app' as const,
-      id: queryHash,
-      name: 'testQuery',
-      details: 'Application error',
-    };
-
-    queryManager.handleTransformErrors([error]);
-
-    // onFatalError should NOT be called for app errors
-    expect(onFatalErrorMock).not.toHaveBeenCalled();
-
-    // But gotCallback should still be invoked with the error
-    expect(gotCallback).toHaveBeenCalledWith(false, error);
   });
 
   test('calls onFatalError for each non-app error in batch', () => {

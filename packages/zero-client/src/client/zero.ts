@@ -1769,7 +1769,7 @@ export class Zero<
             }
 
             // If hidden, we wait for the tab to become visible before trying again.
-            // or for a terminal state change (e.g. an error)
+            // or for a state change (e.g. an error)
             const visibilityResult = await promiseRace({
               visible: this.#visibilityWatcher.waitForVisible(),
               stateChange: this.#connectionManager.waitForStateChange(),
