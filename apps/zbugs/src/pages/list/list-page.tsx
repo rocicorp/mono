@@ -36,7 +36,7 @@ import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {preload} from '../../zero-preload.ts';
-import {useListContext} from '../../routes.tsx';
+import {isGigabugs, useListContext} from '../../routes.tsx';
 import InfoIcon from '../../assets/images/icon-info.svg?react';
 
 let firstRowRendered = false;
@@ -106,10 +106,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
-    if (
-      projectName.toLocaleLowerCase() === 'roci' &&
-      !Cookies.get('onboardingDismissed')
-    ) {
+    if (isGigabugs(projectName) && !Cookies.get('onboardingDismissed')) {
       setShowOnboarding(true);
     }
   }, [projectName]);
@@ -571,11 +568,11 @@ export function ListPage({onReady}: {onReady: () => void}) {
             <>
               <span className="issue-count">
                 {project?.issueCountEstimate
-                  ? `${(total ?? estimatedTotal).toLocaleString()} of ${formatIssueCountEstimate(project.issueCountEstimate)}`
+                  ? `${(total ?? roundEstimatedTotal(estimatedTotal)).toLocaleString()} of ${formatIssueCountEstimate(project.issueCountEstimate)}`
                   : (total?.toLocaleString() ??
-                    `${(estimatedTotal < 50 ? estimatedTotal : estimatedTotal - (estimatedTotal % 50)).toLocaleString()}+`)}
+                    `${roundEstimatedTotal(estimatedTotal).toLocaleString()}+`)}
               </span>
-              {projectName.toLowerCase() === 'roci' && (
+              {isGigabugs(projectName) && (
                 <button
                   className="info-button"
                   onClick={() => setShowOnboarding(true)}
@@ -680,6 +677,12 @@ const addParam = (
   newParams[mode === 'exclusive' ? 'set' : 'append'](key, value);
   return '?' + newParams.toString();
 };
+
+function roundEstimatedTotal(estimatedTotal: number) {
+  return estimatedTotal < 50
+    ? estimatedTotal
+    : estimatedTotal - (estimatedTotal % 50);
+}
 
 function removeParam(qs: URLSearchParams, key: string, value?: string) {
   const searchParams = new URLSearchParams(qs);

@@ -68,3 +68,7 @@ export function useListContext() {
   }
   return context;
 }
+
+export function isGigabugs(projectName: string) {
+  return projectName.toLocaleLowerCase() === 'roci';
+}

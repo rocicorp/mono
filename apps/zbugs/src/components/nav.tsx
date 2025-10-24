@@ -9,7 +9,7 @@ import logoGigabugsURL from '../assets/images/logo-gigabugs.svg';
 import markURL from '../assets/images/mark.svg';
 import {useLogin} from '../hooks/use-login.tsx';
 import {IssueComposer} from '../pages/issue/issue-composer.tsx';
-import {links, useListContext} from '../routes.tsx';
+import {isGigabugs, links, useListContext} from '../routes.tsx';
 import {AvatarImage} from './avatar-image.tsx';
 import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
 import {Button} from './button.tsx';
@@ -69,7 +69,7 @@ export const Nav = memo(() => {
         <Link className="logo-link-container" href={links.list({projectName})}>
           <img
             src={
-              (project?.logoURL ?? projectName.toLocaleLowerCase() === 'roci')
+              (project?.logoURL ?? isGigabugs(projectName))
                 ? logoGigabugsURL
                 : logoURL
             }
