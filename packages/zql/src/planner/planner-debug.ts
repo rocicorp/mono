@@ -150,6 +150,16 @@ export class AccumulatorDebugger implements PlanDebugger {
 }
 
 /**
+ * Format a constraint object as a human-readable string.
+ */
+function formatConstraint(constraint: PlannerConstraint | undefined): string {
+  if (!constraint) return '{}';
+  const keys = Object.keys(constraint);
+  if (keys.length === 0) return '{}';
+  return '{' + keys.join(', ') + '}';
+}
+
+/**
  * Format a single debug event as a human-readable string.
  */
 function formatEvent(event: PlanDebugEvent): string {
@@ -160,11 +170,27 @@ function formatEvent(event: PlanDebugEvent): string {
     case 'connection-costs': {
       const lines = [`[Attempt ${event.attemptNumber + 1}] Connection costs:`];
       for (const c of event.costs) {
-        const constraintKeys = Array.from(c.constraints.keys());
+        // Format the main connection info
+        // const limitStr = c.costEstimate.limit !== undefined
+        //   ? c.costEstimate.limit.toString()
+        //   : 'none';
         lines.push(
-          `  ${c.connection}: cost=${c.cost.toFixed(2)}, ` +
-            `constraints=[${constraintKeys.join(', ') || 'none'}]`,
+          `  ${c.connection}: cost=${c.cost.toFixed(2)}, `,
+          // `selectivity=${c.costEstimate.selectivity.toFixed(3)}, ` +
+          // `limit=${limitStr}`,
         );
+
+        // Format each branch's constraints
+        if (c.constraints.size === 0) {
+          lines.push(`    Branch [none]: {}`);
+        } else {
+          for (const [branchKey, constraint] of c.constraints) {
+            const branchLabel = branchKey === '' ? 'none' : branchKey;
+            lines.push(
+              `    Branch [${branchLabel}]: ${formatConstraint(constraint)}`,
+            );
+          }
+        }
       }
       return lines.join('\n');
     }
@@ -180,10 +206,19 @@ function formatEvent(event: PlanDebugEvent): string {
         `[Attempt ${event.attemptNumber + 1}] Constraints propagated:`,
       ];
       for (const c of event.connectionConstraints) {
-        const constraintKeys = Array.from(c.constraints.keys());
-        lines.push(
-          `  ${c.connection}: [${constraintKeys.join(', ') || 'none'}]`,
-        );
+        lines.push(`  ${c.connection}:`);
+
+        // Format each branch's constraints
+        if (c.constraints.size === 0) {
+          lines.push(`    Branch [none]: {}`);
+        } else {
+          for (const [branchKey, constraint] of c.constraints) {
+            const branchLabel = branchKey === '' ? 'none' : branchKey;
+            lines.push(
+              `    Branch [${branchLabel}]: ${formatConstraint(constraint)}`,
+            );
+          }
+        }
       }
       return lines.join('\n');
     }
