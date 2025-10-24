@@ -1,8 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
 import {ZERO_VERSION_COLUMN_NAME} from '../services/replicator/schema/constants.ts';
 import {
-  dataTypeToZqlValueType,
   liteTypeString,
+  liteTypeToZqlValueType,
   upstreamDataType,
   type LiteTypeString,
 } from '../types/lite.ts';
@@ -33,7 +33,7 @@ export function warnIfDataTypeSupported(
   table: string,
   column: string,
 ) {
-  if (dataTypeToZqlValueType(liteTypeString) === undefined) {
+  if (liteTypeToZqlValueType(liteTypeString) === undefined) {
     lc.warn?.(
       `\n\nWARNING: zero does not yet support the "${upstreamDataType(
         liteTypeString,
@@ -74,7 +74,7 @@ export function mapPostgresToLiteDefault(
     );
   }
   if (SIMPLE_TOKEN_EXPRESSION_REGEX.test(defaultExpression)) {
-    if (dataTypeToZqlValueType(dataType) === 'boolean') {
+    if (liteTypeToZqlValueType(dataType) === 'boolean') {
       return defaultExpression === 'true' ? '1' : '0';
     }
     return defaultExpression;
@@ -102,12 +102,14 @@ export function mapPostgresToLiteColumn(
     elemPgTypeClass = null,
   } = column.spec;
 
-  // PostgreSQL includes [] in dataType for array types (e.g., 'int4[]', 'int4[][]').
-  // liteTypeString() appends attributes: "varchar[]|NOT_NULL", "my_enum[][]|TEXT_ENUM"
+  // PostgreSQL includes [] in dataType for array types (e.g., 'int4[]',
+  // 'int4[][]'). liteTypeString() appends attributes:
+  // "varchar[]|NOT_NULL|TEXT_ARRAY", "my_enum[][]|TEXT_ENUM|TEXT_ARRAY"
   const liteType = liteTypeString(
     dataType,
     notNull,
     (elemPgTypeClass ?? pgTypeClass) === PostgresTypeClass.Enum,
+    elemPgTypeClass !== null,
   );
 
   return {

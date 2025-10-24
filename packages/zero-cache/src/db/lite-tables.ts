@@ -9,9 +9,9 @@ import {
   metadataToLiteTypeString,
 } from '../services/change-source/column-metadata.ts';
 import {
-  dataTypeToZqlValueType,
   isArray,
   isEnum,
+  liteTypeToZqlValueType,
   mapLiteDataTypeToZqlSchemaValue,
   nullableUpstream,
 } from '../types/lite.ts';
@@ -197,7 +197,7 @@ export function computeZqlSpecs(
 
     // Only include columns for which the mapped ZQL Value is defined.
     const visibleColumns = Object.entries(fullTable.columns).filter(
-      ([_, {dataType}]) => dataTypeToZqlValueType(dataType),
+      ([, {dataType}]) => liteTypeToZqlValueType(dataType),
     );
     const notNullColumns = new Set(
       visibleColumns

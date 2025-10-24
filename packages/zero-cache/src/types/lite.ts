@@ -4,7 +4,7 @@ import type {
   SchemaValue,
   ValueType,
 } from '../../../zero-schema/src/table-schema.ts';
-import type {LiteTableSpec} from '../db/specs.ts';
+import type {ColumnSpec, LiteTableSpec} from '../db/specs.ts';
 import {
   dataTypeToZqlValueType as upstreamDataTypeToZqlValueType,
   type PostgresValueType,
@@ -80,7 +80,7 @@ export function liteValue(
   if (val instanceof Uint8Array || val === null) {
     return val;
   }
-  const valueType = dataTypeToZqlValueType(pgType);
+  const valueType = liteTypeToZqlValueType(pgType);
   if (valueType === 'json') {
     if (jsonFormat === JSON_STRINGIFIED && typeof val === 'string') {
       // JSON and JSONB values are already strings if the JSON was not parsed.
@@ -122,7 +122,7 @@ export function mapLiteDataTypeToZqlSchemaValue(
 }
 
 function mapLiteDataTypeToZqlValueType(dataType: LiteTypeString): ValueType {
-  const type = dataTypeToZqlValueType(dataType);
+  const type = liteTypeToZqlValueType(dataType);
   if (type === undefined) {
     throw new Error(`Unsupported data type ${dataType}`);
   }
@@ -141,15 +141,11 @@ export const TEXT_ARRAY_ATTRIBUTE = '|TEXT_ARRAY';
  * but nonetheless determines how higher level logic handles the data.
  *
  * The format of the type string is the original upstream type, followed
- * by any number of attributes, each of which begins with the `|` character,
- * and optionally ending with `[]` to indicate an array type.
+ * by any number of attributes, each of which begins with the `|` character.
  * The current list of attributes are:
  * * `|NOT_NULL` to indicate that the upstream column does not allow nulls
  * * `|TEXT_ENUM` to indicate an enum that should be treated as a string
- * * `[]` suffix to indicate an array type
- *
- * Note: The legacy `|TEXT_ARRAY` attribute is still supported for backwards
- * compatibility but new data uses the `[]` suffix instead.
+ * * `|TEXT_ARRAY` to indicate an array
  *
  * Examples:
  * * `int8`
@@ -158,9 +154,14 @@ export const TEXT_ARRAY_ATTRIBUTE = '|TEXT_ARRAY';
  * * `timestamp with time zone|NOT_NULL`
  * * `nomz|TEXT_ENUM`
  * * `nomz|NOT_NULL|TEXT_ENUM`
- * * `int8[]`
- * * `int8|NOT_NULL[]`
- * * `nomz|TEXT_ENUM[]`
+ * * `int8[]` - Legacy (read support)
+ * * `int8[]|TEXT_ARRAY`
+ * * `int8|TEXT_ARRAY[]` - Legacy (read support)
+ * * `int8[]|TEXT_ARRAY[]` - Legacy (read support)
+ * * `int8|NOT_NULL[]` - Legacy (read support)
+ * * `nomz[]|TEXT_ENUM|TEXT_ARRAY`
+ * * `nomz|TEXT_ENUM[]` - Legacy (read support)
+ * * `nomz|TEXT_ENUM|TEXT_ARRAY[]` - Legacy (read support)
  */
 export type LiteTypeString = string;
 
@@ -171,13 +172,18 @@ export function liteTypeString(
   upstreamDataType: string,
   notNull: boolean | null | undefined,
   textEnum: boolean,
+  textArray: boolean,
 ): LiteTypeString {
   let typeString = upstreamDataType;
+  assert(typeString.indexOf('|') === -1, 'Upstream type should not contain |');
   if (notNull) {
     typeString += NOT_NULL_ATTRIBUTE;
   }
   if (textEnum) {
     typeString += TEXT_ENUM_ATTRIBUTE;
+  }
+  if (textArray) {
+    typeString += TEXT_ARRAY_ATTRIBUTE;
   }
   return typeString;
 }
@@ -197,7 +203,7 @@ export function nullableUpstream(liteTypeString: LiteTypeString) {
  *
  * For types not supported by ZQL, returns `undefined`.
  */
-export function dataTypeToZqlValueType(
+export function liteTypeToZqlValueType(
   liteTypeString: LiteTypeString,
 ): ValueType | undefined {
   return upstreamDataTypeToZqlValueType(
@@ -214,6 +220,16 @@ export function isEnum(liteTypeString: LiteTypeString) {
 export function isArray(liteTypeString: LiteTypeString) {
   return (
     liteTypeString.includes(TEXT_ARRAY_ATTRIBUTE) ||
+    // Before we added `|TEXT_ARRAY`, we just used `[]` suffix to indicate arrays.
     liteTypeString.includes('[]')
   );
+}
+
+export function assertValidLiteColumnSpec(spec: ColumnSpec) {
+  const {dataType} = spec;
+  assert(dataType.includes(TEXT_ARRAY_ATTRIBUTE) === dataType.includes('[]'));
+  assert(dataType.includes('[]') === (spec.elemPgTypeClass !== null));
+
+  // and no [] after |
+  assert(!/^.+\|.*\[\]/.test(dataType), `Invalid dataType ${dataType}`);
 }
