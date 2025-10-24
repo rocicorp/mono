@@ -5,7 +5,6 @@ import {useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import {useQuery, useZeroOnline} from '@rocicorp/zero/react';
 import logoURL from '../assets/images/logo.svg';
-import logoGigabugsURL from '../assets/images/logo-gigabugs.svg';
 import markURL from '../assets/images/mark.svg';
 import {useLogin} from '../hooks/use-login.tsx';
 import {IssueComposer} from '../pages/issue/issue-composer.tsx';
