@@ -3,7 +3,7 @@ import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {Database} from './db.ts';
 import {createSQLiteCostModel} from './sqlite-cost-model.ts';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
-import type {LiteTableSpec} from '../../zero-cache/src/db/specs.ts';
+import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
 
 describe('SQLite cost model', () => {
   let db: Database;
@@ -15,7 +15,11 @@ describe('SQLite cost model', () => {
 
     // CREATE TABLE foo (a, b, c) with proper types
     // Note: SQLite needs explicit types for computeZqlSpecs to work properly
-    db.exec('CREATE TABLE foo (a INTEGER PRIMARY KEY, b INTEGER, c INTEGER)');
+    // Need both PRIMARY KEY (for NOT NULL constraint) and UNIQUE INDEX (for computeZqlSpecs)
+    db.exec(`
+      CREATE TABLE foo (a INTEGER PRIMARY KEY, b INTEGER, c INTEGER);
+      CREATE UNIQUE INDEX foo_a_unique ON foo(a);
+    `);
 
     // Insert 2,000 rows
     const stmt = db.prepare('INSERT INTO foo (a, b, c) VALUES (?, ?, ?)');
@@ -27,11 +31,11 @@ describe('SQLite cost model', () => {
     db.exec('ANALYZE');
 
     // Get table specs using computeZqlSpecs
-    const fullTables = new Map<string, LiteTableSpec>();
-    computeZqlSpecs(lc, db, new Map(), fullTables);
+    const tableSpecs = new Map<string, LiteAndZqlSpec>();
+    computeZqlSpecs(lc, db, tableSpecs);
 
     // Create the cost model
-    costModel = createSQLiteCostModel(db, fullTables);
+    costModel = createSQLiteCostModel(db, tableSpecs);
   });
 
   test('table scan ordered by primary key requires no sort', () => {
