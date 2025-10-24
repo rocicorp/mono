@@ -10,7 +10,7 @@ import {
 import {makeGetPlanAST, pick} from '../helpers/planner.ts';
 import {computeZqlSpecs} from '../../../zero-cache/src/db/lite-tables.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {LiteTableSpec} from '../../../zero-cache/src/db/specs.ts';
+import type {LiteAndZqlSpec} from '../../../zero-cache/src/db/specs.ts';
 
 const pgContent = await getChinook();
 
@@ -29,10 +29,10 @@ describe('Chinook planner tests', () => {
     dbs.sqlite.exec('ANALYZE;');
 
     // Get table specs using computeZqlSpecs
-    const fullTables = new Map<string, LiteTableSpec>();
-    computeZqlSpecs(createSilentLogContext(), dbs.sqlite, new Map(), fullTables);
+    const tableSpecs = new Map<string, LiteAndZqlSpec>();
+    computeZqlSpecs(createSilentLogContext(), dbs.sqlite, tableSpecs);
 
-    costModel = createSQLiteCostModel(dbs.sqlite, fullTables);
+    costModel = createSQLiteCostModel(dbs.sqlite, tableSpecs);
 
     getPlanAST = makeGetPlanAST(mapper, costModel);
   });

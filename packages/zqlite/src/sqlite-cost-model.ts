@@ -7,9 +7,7 @@ import type {Database, Statement} from './db.ts';
 import {compile} from './internal/sql.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
-import type {LiteTableSpec} from '../../zero-cache/src/db/specs.ts';
-import {mapLiteDataTypeToZqlSchemaValue} from '../../zero-cache/src/types/lite.ts';
-import type {SchemaValue} from '../../zero-schema/src/table-schema.ts';
+import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
 
 /**
  * Loop information returned by SQLite's scanstatus API.
@@ -29,12 +27,12 @@ interface ScanstatusLoop {
  * SQLite query planner's analysis.
  *
  * @param db Database instance for preparing statements
- * @param fullTables Map of table names to their full table specs
+ * @param tableSpecs Map of table names to their table specs with ZQL schemas
  * @returns ConnectionCostModel function for use with the planner
  */
 export function createSQLiteCostModel(
   db: Database,
-  fullTables: Map<string, LiteTableSpec>,
+  tableSpecs: Map<string, LiteAndZqlSpec>,
 ): ConnectionCostModel {
   return (
     tableName: string,
@@ -50,18 +48,11 @@ export function createSQLiteCostModel(
       : undefined;
 
     // Build the SQL query using the same logic as actual queries
-    // Convert ColumnSpec to SchemaValue for buildSelectQuery
-    const tableSpec = must(fullTables.get(tableName));
-    const columns: Record<string, SchemaValue> = Object.fromEntries(
-      Object.entries(tableSpec.columns).map(([name, {dataType}]) => [
-        name,
-        mapLiteDataTypeToZqlSchemaValue(dataType),
-      ]),
-    );
+    const {zqlSpec} = must(tableSpecs.get(tableName));
 
     const query = buildSelectQuery(
       tableName,
-      columns,
+      zqlSpec,
       constraint,
       noSubqueryFilters,
       sort,

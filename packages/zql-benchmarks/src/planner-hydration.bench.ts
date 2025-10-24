@@ -16,7 +16,7 @@ import type {Query} from '../../zql/src/query/query.ts';
 import {expect, test} from 'vitest';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import type {LiteTableSpec} from '../../zero-cache/src/db/specs.ts';
+import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
 
 const pgContent = await getChinook();
 
@@ -30,11 +30,11 @@ const {dbs, delegates, queries} = await bootstrap({
 dbs.sqlite.exec('ANALYZE;');
 
 // Get table specs using computeZqlSpecs
-const fullTables = new Map<string, LiteTableSpec>();
-computeZqlSpecs(createSilentLogContext(), dbs.sqlite, new Map(), fullTables);
+const tableSpecs = new Map<string, LiteAndZqlSpec>();
+computeZqlSpecs(createSilentLogContext(), dbs.sqlite, tableSpecs);
 
 // Create SQLite cost model
-const costModel = createSQLiteCostModel(dbs.sqlite, fullTables);
+const costModel = createSQLiteCostModel(dbs.sqlite, tableSpecs);
 
 // Create name mappers
 const clientToServerMapper = clientToServer(schema.tables);
