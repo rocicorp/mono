@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1761292646612,
+  "lastUpdate": 1761293819053,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54333,6 +54333,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/3a2082e5ca6c131a8af7f55a0921de74a7353862"
         },
         "date": 1761292634082,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302365,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54477,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111453,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31872,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "198982749+Copilot@users.noreply.github.com",
+            "name": "Copilot",
+            "username": "Copilot"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "789ce3e3da33d4495e3dcde1262cd3b8c37d8a37",
+          "message": "chore: Remove unnecessary `| undefined` from optional parameters (#5054)\n\n## Problem\n\nTypeScript optional parameters implicitly include `undefined` in their\ntype, making the explicit `| undefined` annotation redundant. This\ntriggered 90 oxlint warnings across the codebase:\n\n```\n⚠ typescript-eslint(no-duplicate-type-constituents): Explicit undefined is unnecessary on an optional parameter.\n```\n\nFor example:\n```typescript\nfunction name(arg0: Type0, arg1?: Type1 | undefined): ReturnType {\n  // ...\n}\n```\n\n## Solution\n\nRemoved the explicit `| undefined` from all optional parameters, as the\n`?` modifier already makes them optional and allows `undefined`:\n\n```typescript\nfunction name(arg0: Type0, arg1?: Type1): ReturnType {\n  // ...\n}\n```\n\n## Changes\n\n- **40 files** modified across 13 packages\n- **90 instances** of redundant `| undefined` removed\n- Affects function parameters, method signatures, and type definitions\n- Total oxlint warnings reduced from 2,758 to 2,668\n\n## Verification\n\n✅ All `no-duplicate-type-constituents` warnings resolved  \n✅ TypeScript type checking passes for all modified packages  \n✅ Tests pass (zql: 848 tests, zero-server: 205 tests)  \n✅ Code properly formatted with prettier\n\nThis is purely a code cleanup change with no functional impact -\nTypeScript's behavior for optional parameters remains identical.\n\n<!-- START COPILOT CODING AGENT SUFFIX -->\n\n\n\n<details>\n\n<summary>Original prompt</summary>\n\n> We have a lot of functions that look like this:\n> \n> \n> ```ts\n> function name(arg0: Type0, arg1?: Type1 | undefined): ReturnType {\n> ```\n> \n> The `| undefined` is not needed for optional arguments.\n> \n> You can see these \"warnings\" from oxlint:\n> \n> ```\n> Explicit undefined is unnecessary on an optional\nparameter.oxc(typescript-eslint(no-duplicate-type-constituents))\n> ```\n> \n> Can you remove these `| undefined` and run oxlint to make sure there\nare no more of these warnings?\n\n\n</details>\n\n\n\n<!-- START COPILOT CODING AGENT TIPS -->\n---\n\n💡 You can make Copilot smarter by setting up custom instructions,\ncustomizing its development environment and configuring Model Context\nProtocol (MCP) servers. Learn more [Copilot coding agent\ntips](https://gh.io/copilot-coding-agent-tips) in the docs.\n\n---------\n\nCo-authored-by: copilot-swe-agent[bot] <198982749+Copilot@users.noreply.github.com>\nCo-authored-by: arv <45845+arv@users.noreply.github.com>\nCo-authored-by: Erik Arvidsson <arv@roci.dev>",
+          "timestamp": "2025-10-24T08:06:41Z",
+          "tree_id": "6c760f75cac28eb844d0d3f432cec4ddca364922",
+          "url": "https://github.com/rocicorp/mono/commit/789ce3e3da33d4495e3dcde1262cd3b8c37d8a37"
+        },
+        "date": 1761293807124,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
