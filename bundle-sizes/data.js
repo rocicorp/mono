@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1761247533558,
+  "lastUpdate": 1761292646612,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54289,6 +54289,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/4e1310d3fcc8991eec9fdbd0b69b502a88bd3e9c"
         },
         "date": 1761247521140,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302365,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54477,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111453,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31872,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3a2082e5ca6c131a8af7f55a0921de74a7353862",
+          "message": "chore: Fix check-types and deps (#5060)\n\nThe check-types scripts in several package.json files were incorrectly\ncombining multiple tsconfig files in a single tsc command. This has been\ncorrected to run separate tsc commands for each tsconfig file.\n\nAdditionally, the replicache-doc package.json has been updated to depend\non replicache so that turbo can correctly manage its build order.",
+          "timestamp": "2025-10-24T07:48:17Z",
+          "tree_id": "c5923c5ced828a62d9a71f49a5420e96b8a7cf79",
+          "url": "https://github.com/rocicorp/mono/commit/3a2082e5ca6c131a8af7f55a0921de74a7353862"
+        },
+        "date": 1761292634082,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
