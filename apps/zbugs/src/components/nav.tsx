@@ -4,6 +4,8 @@ import {memo, useCallback, useEffect, useMemo, useState} from 'react';
 import {useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import {useQuery, useZeroOnline} from '@rocicorp/zero/react';
+import logoURL from '../assets/images/logo.svg';
+import logoGigabugsURL from '../assets/images/logo-gigabugs.svg';
 import markURL from '../assets/images/mark.svg';
 import {useLogin} from '../hooks/use-login.tsx';
 import {IssueComposer} from '../pages/issue/issue-composer.tsx';
@@ -15,11 +17,6 @@ import {Link} from './link.tsx';
 import {queries, type ListContext} from '../../shared/queries.ts';
 import {ZERO_PROJECT_NAME} from '../../shared/schema.ts';
 import {ProjectPicker} from './project-picker.tsx';
-
-import logoURL from '../assets/images/logo.svg';
-// @ts-expect-error
-// oxlint-disable-next-line no-unused-vars
-import logoGigabugsURL from '../assets/images/logo-gigabugs.svg';
 
 export const Nav = memo(() => {
   const search = useSearch();
@@ -70,7 +67,14 @@ export const Nav = memo(() => {
     <>
       <div className="nav-container flex flex-col">
         <Link className="logo-link-container" href={links.list({projectName})}>
-          <img src={project?.logoURL ?? logoURL} className="zero-logo" />
+          <img
+            src={
+              (project?.logoURL ?? projectName.toLocaleLowerCase() === 'roci')
+                ? logoGigabugsURL
+                : logoURL
+            }
+            className="zero-logo"
+          />
           <img src={project?.markURL ?? markURL} className="zero-mark" />
         </Link>{' '}
         {/* could not figure out how to add this color to tailwind.config.js */}
