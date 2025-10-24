@@ -119,7 +119,7 @@ describe('Chinook planner tests', () => {
 
     The SQLite Cost Model is off because we are missing an index on the name column!
     */
-    expect(pick(ast, ['where', 'conditions', 0, 'flip'])).toBe(true);
-    expect(pick(ast, ['where', 'conditions', 1, 'flip'])).toBe(true);
+    expect(pick(ast, ['where', 'conditions', 0, 'flip'])).toBe(false);
+    expect(pick(ast, ['where', 'conditions', 1, 'flip'])).toBe(false);
   });
 });

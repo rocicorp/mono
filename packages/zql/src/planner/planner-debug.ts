@@ -1,5 +1,5 @@
 import type {PlannerConstraint} from './planner-constraint.ts';
-import type {CostEstimate} from './planner-node.ts';
+import type {CostEstimate, JoinType, NodeType} from './planner-node.ts';
 
 /**
  * Structured debug events emitted during query planning.
@@ -63,12 +63,12 @@ export type PlanCompleteEvent = {
   totalCost: number;
   nodeCosts: Array<{
     node: string;
-    nodeType: 'connection' | 'join' | 'fan-out' | 'fan-in' | 'terminus';
+    nodeType: NodeType;
     costEstimate: CostEstimate;
   }>;
   joinStates: Array<{
     join: string;
-    type: 'semi' | 'flipped';
+    type: JoinType;
     pinned: boolean;
   }>;
 };
@@ -91,7 +91,7 @@ export type BestPlanSelectedEvent = {
   totalCost: number;
   joinStates: Array<{
     join: string;
-    type: 'semi' | 'flipped';
+    type: JoinType;
   }>;
 };
 
