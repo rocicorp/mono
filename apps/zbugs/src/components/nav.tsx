@@ -29,7 +29,6 @@ export const Nav = memo(() => {
   const [isMobile, setIsMobile] = useState(false);
   const [showUserPanel, setShowUserPanel] = useState(false); // State to control visibility of user-panel-mobile
   const [user] = useQuery(queries.user(login.loginState?.decoded.sub ?? ''));
-  const connectionState = useZeroConnectionState();
 
   const [projects] = useQuery(queries.allProjects());
 
@@ -186,10 +185,8 @@ export const Nav = memo(() => {
           }
         }}
       />
-      {(connectionState.name === ConnectionStatus.Error ||
-        connectionState.name === ConnectionStatus.Closed) && (
-        <ErrorModal connectionState={connectionState} />
-      )}
+
+      <ErrorModal />
     </>
   );
 });
@@ -197,6 +194,7 @@ export const Nav = memo(() => {
 const ConnectionStatusPill = () => {
   const connectionState = useZeroConnectionState();
 
+  // we wait to show the connecting status until after a short delay to avoid flickering
   const [shouldShowConnecting, setShouldShowConnecting] = useState(false);
   useEffect(() => {
     const timeout = setTimeout(() => {
