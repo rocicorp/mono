@@ -28,6 +28,7 @@ export type ConnectionCostsEvent = {
     costEstimate: CostEstimate;
     pinned: boolean;
     constraints: Map<string, PlannerConstraint | undefined>;
+    constraintCosts: Map<string, CostEstimate>;
   }>;
 };
 
@@ -51,6 +52,7 @@ export type ConstraintsPropagatedEvent = {
   connectionConstraints: Array<{
     connection: string;
     constraints: Map<string, PlannerConstraint | undefined>;
+    constraintCosts: Map<string, CostEstimate>;
   }>;
 };
 
@@ -180,14 +182,22 @@ function formatEvent(event: PlanDebugEvent): string {
           // `limit=${limitStr}`,
         );
 
-        // Format each branch's constraints
+        // Format each branch's constraints with costs
         if (c.constraints.size === 0) {
-          lines.push(`    Branch [none]: {}`);
+          const cost = c.constraintCosts.get('');
+          const costStr = cost
+            ? ` cost=${cost.baseCardinality.toFixed(2)}`
+            : '';
+          lines.push(`    Branch [none]: {}${costStr}`);
         } else {
           for (const [branchKey, constraint] of c.constraints) {
             const branchLabel = branchKey === '' ? 'none' : branchKey;
+            const cost = c.constraintCosts.get(branchKey);
+            const costStr = cost
+              ? ` cost=${cost.baseCardinality.toFixed(2)}`
+              : '';
             lines.push(
-              `    Branch [${branchLabel}]: ${formatConstraint(constraint)}`,
+              `    Branch [${branchLabel}]: ${formatConstraint(constraint)}${costStr}`,
             );
           }
         }
@@ -208,14 +218,22 @@ function formatEvent(event: PlanDebugEvent): string {
       for (const c of event.connectionConstraints) {
         lines.push(`  ${c.connection}:`);
 
-        // Format each branch's constraints
+        // Format each branch's constraints with costs
         if (c.constraints.size === 0) {
-          lines.push(`    Branch [none]: {}`);
+          const cost = c.constraintCosts.get('');
+          const costStr = cost
+            ? ` cost=${cost.baseCardinality.toFixed(2)}`
+            : '';
+          lines.push(`    Branch [none]: {}${costStr}`);
         } else {
           for (const [branchKey, constraint] of c.constraints) {
             const branchLabel = branchKey === '' ? 'none' : branchKey;
+            const cost = c.constraintCosts.get(branchKey);
+            const costStr = cost
+              ? ` cost=${cost.baseCardinality.toFixed(2)}`
+              : '';
             lines.push(
-              `    Branch [${branchLabel}]: ${formatConstraint(constraint)}`,
+              `    Branch [${branchLabel}]: ${formatConstraint(constraint)}${costStr}`,
             );
           }
         }

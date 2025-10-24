@@ -365,6 +365,7 @@ export class PlannerGraph {
             costEstimate: c.connection.estimateCost(undefined),
             pinned: c.connection.pinned,
             constraints: c.connection.getConstraintsForDebug(),
+            constraintCosts: c.connection.getConstraintCostsForDebug(),
           })),
         });
       }
@@ -396,6 +397,7 @@ export class PlannerGraph {
             connectionConstraints: this.connections.map(c => ({
               connection: c.name,
               constraints: c.getConstraintsForDebug(),
+              constraintCosts: c.getConstraintCostsForDebug(),
             })),
           });
         }
@@ -415,6 +417,7 @@ export class PlannerGraph {
                 costEstimate: c.connection.estimateCost(undefined),
                 pinned: c.connection.pinned,
                 constraints: c.connection.getConstraintsForDebug(),
+                constraintCosts: c.connection.getConstraintCostsForDebug(),
               })),
             });
           }
@@ -477,6 +480,7 @@ export class PlannerGraph {
               connectionConstraints: this.connections.map(c => ({
                 connection: c.name,
                 constraints: c.getConstraintsForDebug(),
+                constraintCosts: c.getConstraintCostsForDebug(),
               })),
             });
           }
