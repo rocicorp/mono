@@ -1,6 +1,7 @@
 import {useQuery} from '@rocicorp/zero/react';
 import {useVirtualizer} from '@tanstack/react-virtual';
 import classNames from 'classnames';
+import Cookies from 'js-cookie';
 import React, {
   useCallback,
   useEffect,
@@ -24,6 +25,7 @@ import {Button} from '../../components/button.tsx';
 import {Filter, type Selection} from '../../components/filter.tsx';
 import {IssueLink} from '../../components/issue-link.tsx';
 import {Link} from '../../components/link.tsx';
+import {OnboardingModal} from '../../components/onboarding-modal.tsx';
 import {RelativeTime} from '../../components/relative-time.tsx';
 import {useClickOutside} from '../../hooks/use-click-outside.ts';
 import {useElementSize} from '../../hooks/use-element-size.ts';
@@ -35,6 +37,7 @@ import {mark} from '../../perf-log.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
 import {preload} from '../../zero-preload.ts';
 import {useListContext} from '../../routes.tsx';
+import InfoIcon from '../../assets/images/icon-info.svg?react';
 
 let firstRowRendered = false;
 const ITEM_SIZE = 56;
@@ -99,6 +102,17 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const params = useParams();
   const projectName = must(params.projectName);
+
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    if (
+      projectName.toLowerCase() === 'roci' &&
+      !Cookies.get('onboardingDismissed')
+    ) {
+      setShowOnboarding(true);
+    }
+  }, [projectName]);
 
   const [projects] = useQuery(queries.allProjects());
   const project = projects.find(
@@ -554,12 +568,24 @@ export function ListPage({onReady}: {onReady: () => void}) {
             <span className="list-view-title">{title}</span>
           )}
           {issuesResult.type === 'complete' || total || estimatedTotal ? (
-            <span className="issue-count">
-              {project?.issueCountEstimate
-                ? `${(total ?? estimatedTotal).toLocaleString()} of ${formatIssueCountEstimate(project.issueCountEstimate)}`
-                : (total?.toLocaleString() ??
-                  `${(estimatedTotal < 50 ? estimatedTotal : estimatedTotal - (estimatedTotal % 50)).toLocaleString()}+`)}
-            </span>
+            <>
+              <span className="issue-count">
+                {project?.issueCountEstimate
+                  ? `${(total ?? estimatedTotal).toLocaleString()} of ${formatIssueCountEstimate(project.issueCountEstimate)}`
+                  : (total?.toLocaleString() ??
+                    `${(estimatedTotal < 50 ? estimatedTotal : estimatedTotal - (estimatedTotal % 50)).toLocaleString()}+`)}
+              </span>
+              {projectName.toLowerCase() === 'roci' && (
+                <button
+                  className="info-button"
+                  onClick={() => setShowOnboarding(true)}
+                  aria-label="Show onboarding information"
+                  title="Show onboarding information"
+                >
+                  <InfoIcon />
+                </button>
+              )}
+            </>
           ) : null}
         </h1>
         <Button
@@ -633,6 +659,13 @@ export function ListPage({onReady}: {onReady: () => void}) {
           </div>
         ) : null}
       </div>
+      <OnboardingModal
+        isOpen={showOnboarding}
+        onDismiss={() => {
+          Cookies.set('onboardingDismissed', 'true', {expires: 365});
+          setShowOnboarding(false);
+        }}
+      />
     </>
   );
 }
