@@ -562,14 +562,13 @@ export function ListPage({onReady}: {onReady: () => void}) {
             </span>
           ) : null}
         </h1>
-        {project?.supportsSearch ? (
-          <Button
-            ref={startSearchButton}
-            className="search-toggle"
-            eventName="Toggle Search"
-            onAction={toggleSearchMode}
-          ></Button>
-        ) : null}
+        <Button
+          ref={startSearchButton}
+          style={{visibility: project?.supportsSearch ? 'visible' : 'hidden'}}
+          className="search-toggle"
+          eventName="Toggle Search"
+          onAction={toggleSearchMode}
+        ></Button>
       </div>
       <div className="list-view-filter-container">
         <span className="filter-label">Filtered by:</span>
