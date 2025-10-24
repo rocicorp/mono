@@ -192,6 +192,14 @@ describe('ZBugs Query Planner Analysis', () => {
     );
     console.log(JSON.stringify(ast, null, 2));
     console.log('\n=== userPickerV2 (assignees filter) Query Plan ===');
+    // Note to self:
+    // the greedy algorithm fails to find the best path
+    // I think we should likely do all 2^n combinations of joins.
+    // if n > 12 ....
+    // ask the user to manually plan?
+    // cache the plan?
+    // heuristics to prune the search space???
+
     console.log(planDebugger.format());
   });
 
