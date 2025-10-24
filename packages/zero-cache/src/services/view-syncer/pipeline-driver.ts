@@ -45,6 +45,8 @@ import {
   Snapshotter,
   type SnapshotDiff,
 } from './snapshotter.ts';
+import type {ConnectionCostModel} from '../../../../zql/src/planner/planner-connection.ts';
+import type {Database} from '../../../../zqlite/src/db.ts';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -96,6 +98,7 @@ export class PipelineDriver {
   readonly #shardID: ShardID;
   readonly #logConfig: LogConfig;
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
+  readonly #costModels: WeakMap<Database, ConnectionCostModel> | undefined;
   #streamer: Streamer | null = null;
   #replicaVersion: string | null = null;
   #permissions: LoadedPermissions | null = null;
@@ -122,6 +125,7 @@ export class PipelineDriver {
     storage: ClientGroupStorage,
     clientGroupID: string,
     inspectorDelegate: InspectorDelegate,
+    enablePlanner?: boolean,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;
@@ -129,6 +133,7 @@ export class PipelineDriver {
     this.#shardID = shardID;
     this.#logConfig = logConfig;
     this.#inspectorDelegate = inspectorDelegate;
+    this.#costModels = enablePlanner ? new WeakMap() : undefined;
   }
 
   /**
@@ -340,6 +345,7 @@ export class PipelineDriver {
         decorateFilterInput: input => input,
       },
       queryID,
+      this.#costModels?.get(this.#snapshotter.current().db.db),
     );
     const schema = input.getSchema();
     input.setOutput({
