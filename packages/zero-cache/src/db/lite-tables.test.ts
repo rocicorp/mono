@@ -1,6 +1,10 @@
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../zqlite/src/db.ts';
+import {
+  ColumnMetadataStore,
+  CREATE_COLUMN_METADATA_TABLE,
+} from '../services/change-source/column-metadata.ts';
 import {computeZqlSpecs, listIndexes, listTables} from './lite-tables.ts';
 import type {LiteIndexSpec, LiteTableSpec} from './specs.ts';
 
@@ -1047,5 +1051,181 @@ describe('computeZqlSpec', () => {
         },
       ]
     `);
+  });
+});
+
+describe('metadata table integration', () => {
+  test('fallback: reads from column types when metadata table does not exist', () => {
+    const db = new Database(createSilentLogContext(), ':memory:');
+
+    // Create table with pipe notation in column types
+    db.exec(`
+      CREATE TABLE users (
+        id "int8|NOT_NULL" PRIMARY KEY,
+        name "varchar",
+        tags "text[]|NOT_NULL",
+        status "user_status|TEXT_ENUM"
+      );
+    `);
+
+    // Metadata table doesn't exist, should read from column types
+    const tables = listTables(db);
+
+    expect(tables).toHaveLength(1);
+    expect(tables[0].columns.id.dataType).toBe('int8|NOT_NULL');
+    expect(tables[0].columns.name.dataType).toBe('varchar');
+    expect(tables[0].columns.tags.dataType).toBe('text[]|NOT_NULL');
+    expect(tables[0].columns.status.dataType).toBe('user_status|TEXT_ENUM');
+  });
+
+  test('reads from metadata table when available', () => {
+    const db = new Database(createSilentLogContext(), ':memory:');
+
+    // Create metadata table
+    db.exec(CREATE_COLUMN_METADATA_TABLE);
+
+    // Create table with plain SQLite types (no pipe notation)
+    db.exec(`
+      CREATE TABLE users (
+        id INTEGER PRIMARY KEY,
+        name TEXT,
+        tags TEXT,
+        status TEXT
+      );
+    `);
+
+    // Populate metadata table
+    const store = ColumnMetadataStore.getInstance(db);
+    expect(store).toBeDefined();
+
+    store!.insert('users', 'id', {
+      upstreamType: 'int8',
+      isNotNull: true,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    });
+
+    store!.insert('users', 'name', {
+      upstreamType: 'varchar',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    });
+
+    store!.insert('users', 'tags', {
+      upstreamType: 'text[]',
+      isNotNull: true,
+      isEnum: false,
+      isArray: true,
+      characterMaxLength: null,
+    });
+
+    store!.insert('users', 'status', {
+      upstreamType: 'user_status',
+      isNotNull: false,
+      isEnum: true,
+      isArray: false,
+      characterMaxLength: null,
+    });
+
+    // Should read from metadata table
+    const tables = listTables(db);
+
+    expect(tables).toHaveLength(1);
+    expect(tables[0].columns.id.dataType).toBe('int8|NOT_NULL');
+    expect(tables[0].columns.name.dataType).toBe('varchar');
+    expect(tables[0].columns.tags.dataType).toBe('text[]|NOT_NULL');
+    expect(tables[0].columns.status.dataType).toBe('user_status|TEXT_ENUM');
+    expect(tables[0].columns.tags.elemPgTypeClass).toBe('b');
+    expect(tables[0].columns.status.elemPgTypeClass).toBe(null);
+  });
+
+  test('partial metadata: reads from metadata table for some columns, fallback for others', () => {
+    const db = new Database(createSilentLogContext(), ':memory:');
+
+    // Create metadata table
+    db.exec(CREATE_COLUMN_METADATA_TABLE);
+
+    // Create table with pipe notation
+    db.exec(`
+      CREATE TABLE users (
+        id "int8|NOT_NULL" PRIMARY KEY,
+        name "varchar",
+        email "varchar"
+      );
+    `);
+
+    // Populate metadata for only some columns
+    const store = ColumnMetadataStore.getInstance(db);
+    expect(store).toBeDefined();
+
+    // Only add metadata for 'id' and 'name', not 'email'
+    store!.insert('users', 'id', {
+      upstreamType: 'int4', // Different from column type!
+      isNotNull: true,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    });
+
+    store!.insert('users', 'name', {
+      upstreamType: 'text', // Different from column type!
+      isNotNull: true,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    });
+
+    const tables = listTables(db);
+
+    expect(tables).toHaveLength(1);
+    // These should come from metadata table
+    expect(tables[0].columns.id.dataType).toBe('int4|NOT_NULL');
+    expect(tables[0].columns.name.dataType).toBe('text|NOT_NULL');
+    // This should fall back to column type
+    expect(tables[0].columns.email.dataType).toBe('varchar');
+  });
+
+  test('enum arrays with metadata table', () => {
+    const db = new Database(createSilentLogContext(), ':memory:');
+
+    // Create metadata table
+    db.exec(CREATE_COLUMN_METADATA_TABLE);
+
+    // Create table
+    db.exec(`
+      CREATE TABLE posts (
+        id INTEGER PRIMARY KEY,
+        statuses TEXT
+      );
+    `);
+
+    // Populate metadata for enum array
+    const store = ColumnMetadataStore.getInstance(db);
+    store!.insert('posts', 'id', {
+      upstreamType: 'int8',
+      isNotNull: true,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    });
+
+    store!.insert('posts', 'statuses', {
+      upstreamType: 'status[]',
+      isNotNull: true,
+      isEnum: true,
+      isArray: true,
+      characterMaxLength: null,
+    });
+
+    const tables = listTables(db);
+
+    expect(tables).toHaveLength(1);
+    expect(tables[0].columns.statuses.dataType).toBe(
+      'status[]|NOT_NULL|TEXT_ENUM',
+    );
+    expect(tables[0].columns.statuses.elemPgTypeClass).toBe('e');
   });
 });

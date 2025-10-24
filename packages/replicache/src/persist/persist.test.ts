@@ -955,7 +955,7 @@ async function setupPersistTest() {
         // Persisted chunks is a superset of chunks passed to
         // chunksPersisted
         expect([...persistedChunkHashes]).toEqual(
-          expect.arrayContaining(chunksPersistedSpy.mock.calls[0][0]),
+          expect.arrayContaining([...chunksPersistedSpy.mock.calls[0][0]]),
         );
         break;
       case PersistedExpectation.Locals:

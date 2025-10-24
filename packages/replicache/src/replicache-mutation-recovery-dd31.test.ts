@@ -454,7 +454,7 @@ describe('DD31', () => {
     await rep.recoverMutations();
 
     const pushCalls = fetchMock.calls(pushURL);
-    expect(pushCalls.length).toBe(1, "didn't call push");
+    expect(pushCalls.length, "didn't call push").toBe(1);
     expect(await pushCalls[0].request.json()).toEqual({
       profileID,
       clientGroupID: client1.clientGroupID,

@@ -1004,10 +1004,9 @@ test('subscription with error in body', async () => {
       },
       onError(err) {
         expect(err).toBeInstanceOf(Error);
-        expect(err).toHaveProperty(
+        expect(err, `Error for ${errorCounter} is incorrect`).toHaveProperty(
           'message',
           letters[errorCounter++] + ' is undefined',
-          `Error for ${errorCounter} is incorrect`,
         );
       },
     },

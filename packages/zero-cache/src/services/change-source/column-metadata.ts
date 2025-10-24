@@ -55,8 +55,13 @@ export const CREATE_COLUMN_METADATA_TABLE = `
 /**
  * Efficient column metadata store that prepares all statements upfront.
  * Use this class to avoid re-preparing statements on every operation.
+ *
+ * Access via `ColumnMetadataStore.getInstance(db)`, which returns `undefined`
+ * if the metadata table doesn't exist yet.
  */
 export class ColumnMetadataStore {
+  static #instances = new WeakMap<Database, ColumnMetadataStore>();
+
   readonly #insertStmt: Statement;
   readonly #updateStmt: Statement;
   readonly #deleteColumnStmt: Statement;
@@ -66,7 +71,7 @@ export class ColumnMetadataStore {
   readonly #getTableStmt: Statement;
   readonly #hasTableStmt: Statement;
 
-  constructor(db: Database) {
+  private constructor(db: Database) {
     this.#insertStmt = db.prepare(`
       INSERT INTO "_zero.column_metadata"
         (table_name, column_name, upstream_type, is_not_null, is_enum, is_array, character_max_length)
@@ -117,6 +122,30 @@ export class ColumnMetadataStore {
       SELECT 1 FROM sqlite_master
       WHERE type = 'table' AND name = '_zero.column_metadata'
     `);
+  }
+
+  /**
+   * Gets the singleton instance of ColumnMetadataStore for the given database.
+   * Returns `undefined` if the metadata table doesn't exist yet.
+   */
+  static getInstance(db: Database): ColumnMetadataStore | undefined {
+    // Check if table exists
+    const tableExists = db
+      .prepare(
+        `SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_zero.column_metadata'`,
+      )
+      .get();
+
+    if (!tableExists) {
+      return undefined;
+    }
+
+    let instance = ColumnMetadataStore.#instances.get(db);
+    if (!instance) {
+      instance = new ColumnMetadataStore(db);
+      ColumnMetadataStore.#instances.set(db, instance);
+    }
+    return instance;
   }
 
   insert(

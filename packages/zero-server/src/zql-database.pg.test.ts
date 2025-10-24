@@ -10,7 +10,7 @@ import {zeroPostgresJS} from './adapters/postgresjs.ts';
 let sql: PostgresDB;
 
 beforeEach(async () => {
-  sql = await testDBs.create('zero-pg-web');
+  sql = await testDBs.create('zql-database-test');
   await sql.unsafe(`
     CREATE SCHEMA IF NOT EXISTS zero_0;
     ${getClientsTableDefinition('zero_0')}

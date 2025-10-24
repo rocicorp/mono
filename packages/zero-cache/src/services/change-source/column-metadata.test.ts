@@ -16,7 +16,12 @@ function createTestDb(): Database {
 }
 
 function createTestStore(): ColumnMetadataStore {
-  return new ColumnMetadataStore(createTestDb());
+  const db = createTestDb();
+  const store = ColumnMetadataStore.getInstance(db);
+  if (!store) {
+    throw new Error('Failed to create metadata store - table should exist');
+  }
+  return store;
 }
 
 describe('column-metadata', () => {
