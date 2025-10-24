@@ -36,6 +36,13 @@
       "when": 1760142579459,
       "tag": "0004_status_all_index_changes_for_gigabugs",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1761322242588,
+      "tag": "0005_project_config_options",
+      "breakpoints": true
     }
   ]
 }

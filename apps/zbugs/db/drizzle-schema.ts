@@ -37,6 +37,10 @@ export const project = pgTable(
     name: varchar().notNull(),
     // Populated from name by trigger
     lowerCaseName: varchar().default('').notNull(),
+    issueCountEstimate: integer(),
+    supportsSearch: boolean().default(true),
+    markURL: varchar(),
+    logoURL: varchar(),
   },
   table => [
     uniqueIndex('project_lower_case_name_idx').using(

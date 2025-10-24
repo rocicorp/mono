@@ -1,5 +1,4 @@
 import {Modal} from './modal.tsx';
-import {Link} from './link.tsx';
 import {Button} from './button.tsx';
 
 export function OnboardingModal({
@@ -17,35 +16,30 @@ export function OnboardingModal({
       className="onboarding-modal"
     >
       <p className="opening-text">
-        Welcome. This is the bug tracker for the{' '}
-        <Link href="https://zero.rocicorp.dev">Zero project</Link>. It is also a
-        live production Zero-based product. You can click around and get a feel
-        for the performance that Zero provides.
+        Welcome to <strong>Gigabugs</strong>, a demo bug tracker built with{' '}
+        <strong>Zero</strong>.
       </p>
-      <p>Some things to try:</p>
-
-      <h2>Create an issue</h2>
-      <p>Click on New Issue in the sidebar to open a new issue.</p>
-      <p className="aside">
-        Please note that this is our place of work so we'd appreciate if you add
-        test content, to just delete afterwards.
-      </p>
-
-      <h2>Quickly navigate between issues</h2>
       <p>
-        Use the <span className="keyboard-keys">J</span> &amp;{' '}
-        <span className="keyboard-keys">K</span> keys. (Try holding them down
-        🏎️💨)
+        It’s populated with <strong>240 thousand issues</strong> and{' '}
+        <strong>2.5 million rows</strong> so that you can see how fast Zero is,
+        even as the dataset grows.
       </p>
-
-      <h2>Search &amp; filter</h2>
+      <p>Things to try:</p>
+      <h2>Clear cache and reload</h2>
+      <p>Zero's query-driven sync enables fast loads even from a cold cache.</p>
+      <h2>Instant interactions</h2>
       <p>
-        In the list view, press <span className="keyboard-keys">/</span> search
-        or use the filter picker.
+        Click anything. Choose any filter. Create an issue or comment. Most
+        interactions respond instantly.
       </p>
-
-      <h2>Test live syncing</h2>
-      <p>Open two windows and watch changes sync live.</p>
+      <h2>Infinite scroll</h2>
+      <p>
+        Perfectly buttery infinite scroll. Because it’s fun! (Or open and issue
+        and hold down <span className="keyboard-keys">J</span> /{' '}
+        <span className="keyboard-keys">K</span> 🏎️💨)
+      </p>
+      <h2>Live sync</h2>
+      <p>Open two windows and watch changes sync between them.</p>
 
       <Button
         className="onboarding-modal-accept"

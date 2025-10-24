@@ -28,6 +28,10 @@ const project = table('project')
     id: string(),
     name: string(),
     lowerCaseName: string(),
+    issueCountEstimate: number().optional(),
+    supportsSearch: boolean(),
+    markURL: string().optional(),
+    logoURL: string().optional(),
   })
   .primaryKey('id');
 

@@ -463,6 +463,40 @@ textarea.autoResize {
   top: -2px;
 }
 
+.info-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background-color: var(--color-text-primary);
+  border: none;
+  cursor: pointer;
+  margin-left: 0.5rem;
+  vertical-align: middle;
+  position: relative;
+  top: -2px;
+  transition:
+    opacity 0.2s ease,
+    transform 0.1s ease;
+}
+
+.info-button:hover {
+  opacity: 0.8;
+  transform: scale(1.05);
+}
+
+.info-button:active {
+  transform: scale(0.95);
+}
+
+.info-button svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  color: var(--color-background);
+}
+
 /* Filtering */
 
 .list-view-filter-container {
@@ -991,7 +1025,8 @@ textarea.autoResize {
 
   .opening-text {
     padding-top: 4.5rem;
-    background: transparent url(assets/images/logo.svg) no-repeat center top;
+    background: transparent url(assets/images/logo-gigabugs-crop.svg) no-repeat
+      center top;
     background-size: 50%;
   }
 
@@ -1552,18 +1587,82 @@ textarea.autoResize {
     .onboarding-modal {
       margin: 0;
       padding: 0;
+      height: 100vh;
+      height: 100dvh; /* Use dynamic viewport height on mobile */
+      max-height: 100vh;
+      max-height: 100dvh;
+      width: 100vw;
+      border-radius: 0; /* No rounded corners on mobile */
+      display: flex;
+      flex-direction: column;
 
       .modal-container {
-        padding: 2rem;
-        overflow-y: scroll;
+        padding: 1.5rem 1.5rem 0 1.5rem;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+        flex: 1;
+        /* Add padding at the bottom to account for fixed button */
+        padding-bottom: 5rem;
       }
 
       .opening-text {
-        padding-top: 3.5rem;
+        padding-top: 3rem;
+        background-size: 40%; /* Slightly smaller logo on mobile */
       }
 
       h2 {
-        margin: 1rem 0;
+        margin: 1rem 0 0.5rem;
+        font-size: 1.25rem; /* Slightly smaller headings on mobile */
+      }
+
+      p {
+        margin: 0 0 0.75rem;
+        font-size: 0.9375rem; /* Slightly smaller text on mobile */
+      }
+
+      .onboarding-modal-accept {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        margin: 0;
+        width: 100%;
+        text-align: center;
+        border-radius: 0;
+        padding: 1rem 1.5rem;
+        box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.3);
+      }
+    }
+  }
+}
+
+/* Extra small devices (iPhone SE, etc) */
+@media (max-width: 400px) {
+  #root-modal {
+    .onboarding-modal {
+      .modal-container {
+        padding: 1rem 1rem 0 1rem;
+        padding-bottom: 5rem;
+      }
+
+      .opening-text {
+        padding-top: 2.5rem;
+        background-size: 35%;
+      }
+
+      h2 {
+        font-size: 1.125rem;
+      }
+
+      .keyboard-keys {
+        height: 1.4rem;
+        width: 1.4rem;
+        line-height: 1.3rem;
+        font-size: 0.875rem;
+      }
+
+      .onboarding-modal-accept {
+        padding: 0.875rem 1rem;
       }
     }
   }
