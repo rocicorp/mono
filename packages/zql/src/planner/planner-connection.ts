@@ -64,6 +64,7 @@ export class PlannerConnection {
   readonly #filters: Condition | undefined;
   readonly #model: ConnectionCostModel;
   readonly table: string;
+  readonly name: string; // Human-readable name for debugging (defaults to table name)
   readonly #baseConstraints: PlannerConstraint | undefined; // Constraints from parent correlation
   #output?: PlannerNode | undefined; // Set once during graph construction
 
@@ -102,9 +103,11 @@ export class PlannerConnection {
     sort: Ordering,
     filters: Condition | undefined,
     baseConstraints?: PlannerConstraint,
+    name?: string,
   ) {
     this.pinned = false;
     this.table = table;
+    this.name = name ?? table;
     this.#sort = sort;
     this.#filters = filters;
     this.#model = model;
@@ -293,6 +296,14 @@ export class PlannerConnection {
     this.#cachedTotalCost = undefined;
     this.#cachedConstraintCosts.clear();
     this.#costDirty = true;
+  }
+
+  /**
+   * Get constraints for debugging purposes.
+   * Returns a copy of the constraints map.
+   */
+  getConstraintsForDebug(): Map<string, PlannerConstraint | undefined> {
+    return new Map(this.#constraints);
   }
 }
 

@@ -10,6 +10,7 @@ import type {
 import {planIdSymbol} from '../../../zero-protocol/src/ast.ts';
 import type {ConnectionCostModel} from './planner-connection.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
+import type {PlanDebugger} from './planner-debug.ts';
 import {PlannerFanIn} from './planner-fan-in.ts';
 import {PlannerFanOut} from './planner-fan-out.ts';
 import {PlannerGraph} from './planner-graph.ts';
@@ -257,16 +258,20 @@ function extractConstraint(
   return Object.fromEntries(fields.map(field => [field, undefined]));
 }
 
-function planRecursively(plans: Plans): void {
+function planRecursively(plans: Plans, planDebugger?: PlanDebugger): void {
   for (const subPlan of Object.values(plans.subPlans)) {
-    planRecursively(subPlan);
+    planRecursively(subPlan, planDebugger);
   }
-  plans.plan.plan();
+  plans.plan.plan(planDebugger);
 }
 
-export function planQuery(ast: AST, model: ConnectionCostModel): AST {
+export function planQuery(
+  ast: AST,
+  model: ConnectionCostModel,
+  planDebugger?: PlanDebugger,
+): AST {
   const plans = buildPlanGraph(ast, model);
-  planRecursively(plans);
+  planRecursively(plans, planDebugger);
   return applyPlansToAST(ast, plans);
 }
 

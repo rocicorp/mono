@@ -20,4 +20,8 @@ export type CostEstimate = {
   runningCost: number;
 };
 
+export type NodeType = PlannerNode['kind'];
+
 export type JoinOrConnection = 'join' | 'connection';
+
+export type JoinType = PlannerJoin['type'];
