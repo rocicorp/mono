@@ -15,7 +15,7 @@ import {formatPgInternalConvert} from '../../../z2s/src/sql.ts';
 import {initialSync} from '../../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
-import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
+import type {AppQueryError} from '../../../zero-protocol/src/custom-queries.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
@@ -740,7 +740,7 @@ function gatherRows(
       _format: Format,
       onDestroy: () => void,
       _onTransactionCommit: (cb: () => void) => void,
-      _queryComplete: true | ErroredQuery | Promise<true>,
+      _queryComplete: true | AppQueryError | Promise<true>,
     ) => {
       const schema = input.getSchema();
       for (const node of input.fetch({})) {

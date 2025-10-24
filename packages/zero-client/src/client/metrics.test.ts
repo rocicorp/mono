@@ -11,8 +11,10 @@ import {
   State,
 } from './metrics.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import {ClientError, ServerError, type ZeroError} from './error.ts';
+import {ClientError, type ZeroError} from './error.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 
 beforeEach(() => {
   vi.useFakeTimers({now: 0});
@@ -418,9 +420,10 @@ test('MetricManager v2 connect metrics', async () => {
       name: 'lce server Unauthorized',
       reportMetrics: metricsManager => {
         metricsManager.setConnectError(
-          new ServerError({
+          new ProtocolError({
             kind: ErrorKind.Unauthorized,
             message: 'Unauthorized',
+            origin: ErrorOrigin.Server,
           }),
         );
       },
@@ -642,7 +645,7 @@ describe('shouldReportConnectError', () => {
   });
 
   test('returns true for server errors', () => {
-    const error = new ServerError({
+    const error = new ProtocolError({
       kind: ErrorKind.Internal,
       message: 'boom',
     });

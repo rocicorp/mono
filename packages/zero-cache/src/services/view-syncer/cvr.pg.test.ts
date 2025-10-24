@@ -415,7 +415,7 @@ describe('view-syncer/cvr', () => {
         },
       }),
     ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: {"kind":"InvalidConnectionRequest","message":"Provided schema does not match previous schema"}]`,
+      `[ProtocolError: Provided schema does not match previous schema]`,
     );
   });
 

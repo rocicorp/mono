@@ -1,6 +1,6 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Immutable} from '../../../shared/src/immutable.ts';
-import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
+import type {AppQueryError} from '../../../zero-protocol/src/custom-queries.ts';
 import type {TTL} from '../query/ttl.ts';
 import type {Listener, ResultType, TypedView} from '../query/typed-view.ts';
 import type {Change} from './change.ts';
@@ -34,13 +34,13 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   #dirty = false;
   #resultType: ResultType = 'unknown';
-  #error: ErroredQuery | undefined;
+  #error: AppQueryError | undefined;
   readonly #updateTTL: (ttl: TTL) => void;
 
   constructor(
     input: Input,
     format: Format,
-    queryComplete: true | ErroredQuery | Promise<true>,
+    queryComplete: true | AppQueryError | Promise<true>,
     updateTTL: (ttl: TTL) => void,
   ) {
     this.#input = input;

@@ -8,7 +8,7 @@ import {
 import {hasOwn} from '../../shared/src/has-own.ts';
 import {type JSONValue} from '../../shared/src/json.ts';
 import {must} from '../../shared/src/must.ts';
-import {pgToZqlStringTypeMap} from '../../zero-cache/src/types/pg.ts';
+import {pgToZqlStringTypeMap} from '../../zero-cache/src/types/pg-data-type.ts';
 import type {
   AST,
   Condition,

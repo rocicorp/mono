@@ -10,7 +10,7 @@ import {
   type Mock,
 } from 'vitest';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
-import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
+import type {AppQueryError} from '../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {type AbstractQuery} from '../../zql/src/query/query-impl.ts';
 import type {ResultType} from '../../zql/src/query/typed-view.ts';
@@ -647,11 +647,11 @@ describe('useSuspenseQuery', () => {
 
       const view = materializeSpy.mock.results[0].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (snap: unknown, resultType: ResultType, error?: AppQueryError) => void
         >;
       };
 
-      const error: ErroredQuery = {
+      const error: AppQueryError = {
         error: 'app',
         id: 'test-error-1',
         name: 'Query failed',
@@ -689,11 +689,11 @@ describe('useSuspenseQuery', () => {
 
       const view = materializeSpy.mock.results[0].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (snap: unknown, resultType: ResultType, error?: AppQueryError) => void
         >;
       };
 
-      const error: ErroredQuery = {
+      const error: AppQueryError = {
         error: 'app',
         id: 'test-error-2',
         name: 'Query failed',
@@ -731,12 +731,12 @@ describe('useSuspenseQuery', () => {
 
       const view = materializeSpy.mock.results[0].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (snap: unknown, resultType: ResultType, error?: AppQueryError) => void
         >;
       };
 
       // First emit error
-      const error: ErroredQuery = {
+      const error: AppQueryError = {
         error: 'app',
         id: 'temp-failure',
         name: 'Temporary failure',
@@ -781,11 +781,11 @@ describe('useSuspenseQuery', () => {
 
       const view = materializeSpy.mock.results[0].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (snap: unknown, resultType: ResultType, error?: AppQueryError) => void
         >;
       };
 
-      const error: ErroredQuery = {
+      const error: AppQueryError = {
         error: 'app',
         id: 'partial-failure',
         name: 'Partial failure',
@@ -825,12 +825,12 @@ describe('useSuspenseQuery', () => {
 
       const view = materializeSpy.mock.results[0].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (snap: unknown, resultType: ResultType, error?: AppQueryError) => void
         >;
       };
 
       // Emit error immediately
-      const error: ErroredQuery = {
+      const error: AppQueryError = {
         error: 'zero',
         id: 'immediate-error',
         name: 'Immediate error',
@@ -870,11 +870,11 @@ describe('useSuspenseQuery', () => {
 
       const view = materializeSpy.mock.results[0].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (snap: unknown, resultType: ResultType, error?: AppQueryError) => void
         >;
       };
 
-      const httpError: ErroredQuery = {
+      const httpError: AppQueryError = {
         error: 'http',
         status: 500,
         id: 'q1',
@@ -922,7 +922,7 @@ describe('useSuspenseQuery', () => {
       // First materialize call
       const firstView = materializeSpy.mock.results[0].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (snap: unknown, resultType: ResultType, error?: AppQueryError) => void
         >;
         destroy: Mock;
       };
@@ -933,7 +933,7 @@ describe('useSuspenseQuery', () => {
       });
 
       // Emit error
-      const error: ErroredQuery = {
+      const error: AppQueryError = {
         error: 'app',
         id: 'test-error',
         name: 'Query failed',
@@ -957,7 +957,7 @@ describe('useSuspenseQuery', () => {
       // Second materialize call creates new view
       const secondView = materializeSpy.mock.results[1].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (snap: unknown, resultType: ResultType, error?: AppQueryError) => void
         >;
       };
 
@@ -1007,7 +1007,7 @@ describe('useSuspenseQuery', () => {
       // First materialize call
       const firstView = materializeSpy.mock.results[0].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (snap: unknown, resultType: ResultType, error?: AppQueryError) => void
         >;
         destroy: Mock;
       };
@@ -1016,7 +1016,7 @@ describe('useSuspenseQuery', () => {
       });
 
       // First error
-      const error1: ErroredQuery = {
+      const error1: AppQueryError = {
         error: 'app',
         id: 'error-1',
         name: 'First failure',
@@ -1033,7 +1033,7 @@ describe('useSuspenseQuery', () => {
       // Second view also fails
       const secondView = materializeSpy.mock.results[1].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (snap: unknown, resultType: ResultType, error?: AppQueryError) => void
         >;
         destroy: Mock;
       };
@@ -1041,7 +1041,7 @@ describe('useSuspenseQuery', () => {
         secondView.listeners.clear();
       });
 
-      const error2: ErroredQuery = {
+      const error2: AppQueryError = {
         error: 'http',
         status: 503,
         id: 'error-2',
@@ -1061,7 +1061,7 @@ describe('useSuspenseQuery', () => {
       // Third view succeeds
       const thirdView = materializeSpy.mock.results[2].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (snap: unknown, resultType: ResultType, error?: AppQueryError) => void
         >;
       };
       thirdView.listeners.forEach(cb => cb({success: true}, 'complete'));
@@ -1100,7 +1100,7 @@ describe('useSuspenseQuery', () => {
 
       const view = materializeSpy.mock.results[0].value as {
         listeners: Set<
-          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+          (snap: unknown, resultType: ResultType, error?: AppQueryError) => void
         >;
       };
 

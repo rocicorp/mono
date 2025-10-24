@@ -4,7 +4,7 @@ import {assertArray, unreachable} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {stringCompare} from '../../../shared/src/string-compare.ts';
-import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
+import type {AppQueryError} from '../../../zero-protocol/src/custom-queries.ts';
 import type {ResultType} from '../query/typed-view.ts';
 import {ArrayView} from './array-view.ts';
 import type {Change} from './change.ts';
@@ -1799,7 +1799,7 @@ test('listeners receive error when queryComplete rejects - plural', async () => 
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
   ms.push({row: {a: 2, b: 'b'}, type: 'add'});
 
-  const testError: ErroredQuery = {
+  const testError: AppQueryError = {
     error: 'app',
     id: 'test-error-1',
     name: 'Query execution failed',
@@ -1817,7 +1817,7 @@ test('listeners receive error when queryComplete rejects - plural', async () => 
 
   let receivedData: unknown;
   let receivedResultType: ResultType | undefined;
-  let receivedError: ErroredQuery | undefined;
+  let receivedError: AppQueryError | undefined;
 
   view.addListener((data, resultType, error) => {
     receivedData = data;
@@ -1855,7 +1855,7 @@ test('listeners receive error when queryComplete rejects - singular', async () =
   );
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
 
-  const testError: ErroredQuery = {
+  const testError: AppQueryError = {
     error: 'zero',
     id: 'singular-error',
     name: 'Singular query failed',
@@ -1873,7 +1873,7 @@ test('listeners receive error when queryComplete rejects - singular', async () =
 
   let receivedData: unknown;
   let receivedResultType: ResultType | undefined;
-  let receivedError: ErroredQuery | undefined;
+  let receivedError: AppQueryError | undefined;
 
   view.addListener((data, resultType, error) => {
     receivedData = data;
@@ -1905,7 +1905,7 @@ test('all listeners receive error when queryComplete rejects', async () => {
   );
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
 
-  const testError: ErroredQuery = {
+  const testError: AppQueryError = {
     error: 'http',
     id: 'query-1',
     name: 'query-1',
@@ -1924,8 +1924,8 @@ test('all listeners receive error when queryComplete rejects', async () => {
 
   const listener1Results: ResultType[] = [];
   const listener2Results: ResultType[] = [];
-  const listener1Errors: (ErroredQuery | undefined)[] = [];
-  const listener2Errors: (ErroredQuery | undefined)[] = [];
+  const listener1Errors: (AppQueryError | undefined)[] = [];
+  const listener2Errors: (AppQueryError | undefined)[] = [];
 
   view.addListener((_data, resultType, error) => {
     listener1Results.push(resultType);
@@ -1960,7 +1960,7 @@ test('listeners added after error still receive error state', async () => {
   );
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
 
-  const testError: ErroredQuery = {
+  const testError: AppQueryError = {
     error: 'app',
     id: 'late-listener-error',
     name: 'Error before listener',
@@ -1981,7 +1981,7 @@ test('listeners added after error still receive error state', async () => {
 
   // Add listener after error
   let receivedResultType: ResultType | undefined;
-  let receivedError: ErroredQuery | undefined;
+  let receivedError: AppQueryError | undefined;
 
   view.addListener((_data, resultType, error) => {
     receivedResultType = resultType;
@@ -2003,7 +2003,7 @@ test('error state persists through flush operations', async () => {
   );
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
 
-  const testError: ErroredQuery = {
+  const testError: AppQueryError = {
     error: 'app',
     id: 'persistent-error',
     name: 'Persistent error',

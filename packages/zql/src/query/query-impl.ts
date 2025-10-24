@@ -14,7 +14,7 @@ import {
   type SimpleOperator,
   type System,
 } from '../../../zero-protocol/src/ast.ts';
-import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
+import type {AppQueryError} from '../../../zero-protocol/src/custom-queries.ts';
 import type {Row as IVMRow} from '../../../zero-protocol/src/data.ts';
 import {
   hashOfAST,
@@ -743,7 +743,7 @@ export class QueryImpl<
       ? hashOfNameAndArgs(this.customQueryID.name, this.customQueryID.args)
       : this.hash();
     const queryCompleteResolver = resolver<true>();
-    let queryComplete: boolean | ErroredQuery = delegate.defaultQueryComplete;
+    let queryComplete: boolean | AppQueryError = delegate.defaultQueryComplete;
     const updateTTL = (newTTL: TTL) => {
       this.customQueryID
         ? delegate.updateCustomQuery(this.customQueryID, newTTL)
@@ -914,7 +914,7 @@ function arrayViewFactory<
   format: Format,
   onDestroy: () => void,
   onTransactionCommit: (cb: () => void) => void,
-  queryComplete: true | ErroredQuery | Promise<true>,
+  queryComplete: true | AppQueryError | Promise<true>,
   updateTTL: (ttl: TTL) => void,
 ): TypedView<HumanReadable<TReturn>> {
   const v = new ArrayView<HumanReadable<TReturn>>(

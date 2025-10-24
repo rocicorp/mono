@@ -1,8 +1,8 @@
 import {deepEqual} from '../../../../shared/src/json.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
-import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {RowID, RowRecord} from './schema/types.ts';
+import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
 
 /**
  * KeyColumns track the key columns used to reference rows in the CVR.
@@ -66,7 +66,7 @@ export class KeyColumns {
           // the replica, this CVR should have ideally been rejected via the
           // schema versioning mechanism. However, since there is no guarantee
           // of that protection, this sanity check here drops the CVR entirely.
-          throw new ErrorForClient({
+          throw new ProtocolError({
             kind: ErrorKind.ClientNotFound,
             message: `CVR contains key column "${col}" that is no longer in the replica`,
           });

@@ -14,12 +14,16 @@ import {
 } from '../../../zero-protocol/src/protocol-version.ts';
 import {upstreamSchema, type Upstream} from '../../../zero-protocol/src/up.ts';
 import {
-  ErrorWithLevel,
-  findErrorForClient,
+  ProtocolErrorWithLevel,
   getLogLevel,
-} from '../types/error-for-client.ts';
+} from '../types/error-with-level.ts';
 import type {Source} from '../types/streams.ts';
 import type {ConnectParams} from './connect-params.ts';
+import {
+  isProtocolError,
+  type ProtocolError,
+} from '../../../zero-protocol/src/error.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 
 export type HandlerResult =
   | {
@@ -130,6 +134,7 @@ export class Connection {
         }. The ${
           this.#protocolVersion > PROTOCOL_VERSION ? 'server' : 'client'
         } must be updated to a newer release.`,
+        origin: ErrorOrigin.ZeroCache,
       });
     } else {
       const connectedMessage: ConnectedMessage = [
@@ -182,7 +187,11 @@ export class Connection {
     } catch (e) {
       this.#lc.warn?.(`failed to parse message "${data}": ${String(e)}`);
       this.#closeWithError(
-        {kind: ErrorKind.InvalidMessage, message: String(e)},
+        {
+          kind: ErrorKind.InvalidMessage,
+          message: String(e),
+          origin: ErrorOrigin.ZeroCache,
+        },
         e,
       );
       return;
@@ -233,7 +242,7 @@ export class Connection {
       }
       case 'transient': {
         for (const error of result.errors) {
-          this.sendError(error);
+          void this.sendError(error);
         }
       }
     }
@@ -284,17 +293,22 @@ export class Connection {
   }
 
   #closeWithThrown(e: unknown) {
-    const errorBody = findErrorForClient(e)?.errorBody ?? {
+    const errorBody = findProtocolError(e)?.errorBody ?? {
       kind: ErrorKind.Internal,
       message: String(e),
+      origin: ErrorOrigin.ZeroCache,
     };
 
     this.#closeWithError(errorBody, e);
   }
 
   #closeWithError(errorBody: ErrorBody, thrown?: unknown) {
-    this.sendError(errorBody, thrown);
-    this.close(`client error: ${errorBody.kind}`, errorBody);
+    void this.sendError(errorBody, thrown).finally(() => {
+      this.close(
+        `${errorBody.kind} (${errorBody.origin}): ${errorBody.message}`,
+        errorBody,
+      );
+    });
   }
 
   #lastDownstreamMsgTime = Date.now();
@@ -315,7 +329,7 @@ export class Connection {
   }
 
   sendError(errorBody: ErrorBody, thrown?: unknown) {
-    sendError(this.#lc, this.#ws, errorBody, thrown);
+    return sendError(this.#lc, this.#ws, errorBody, thrown);
   }
 }
 
@@ -336,7 +350,16 @@ export function send(
       dropped: data,
     });
     if (callback !== 'ignore-backpressure') {
-      callback(new ErrorWithLevel('websocket closed', 'info'));
+      callback(
+        new ProtocolErrorWithLevel(
+          {
+            kind: ErrorKind.Internal,
+            message: 'WebSocket closed',
+            origin: ErrorOrigin.ZeroCache,
+          },
+          'info',
+        ),
+      );
     }
   }
 }
@@ -350,5 +373,24 @@ export function sendError(
   lc = lc.withContext('errorKind', errorBody.kind);
   const logLevel = thrown ? getLogLevel(thrown) : 'info';
   lc[logLevel]?.('Sending error on WebSocket', errorBody, thrown ?? '');
-  send(lc, ws, ['error', errorBody], 'ignore-backpressure');
+  return new Promise<void>(resolve => {
+    send(lc, ws, ['error', errorBody], err => {
+      if (err) {
+        // this means that the client doesn't know why the connection is closing
+        // so we log an error here
+        lc.error?.('Failed to send error frame on WebSocket', errorBody, err);
+      }
+      resolve();
+    });
+  });
+}
+
+export function findProtocolError(error: unknown): ProtocolError | undefined {
+  if (isProtocolError(error)) {
+    return error;
+  }
+  if (error instanceof Error && error.cause) {
+    return findProtocolError(error.cause);
+  }
+  return undefined;
 }

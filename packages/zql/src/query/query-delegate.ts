@@ -6,10 +6,10 @@ import type {MetricsDelegate} from './metrics-delegate.ts';
 import type {CustomQueryID} from './named.ts';
 import type {Query, RunOptions} from './query.ts';
 import type {TTL} from './ttl.ts';
-import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
+import type {AppQueryError} from '../../../zero-protocol/src/custom-queries.ts';
 
 export type CommitListener = () => void;
-export type GotCallback = (got: boolean, error?: ErroredQuery) => void;
+export type GotCallback = (got: boolean, error?: AppQueryError) => void;
 
 export interface NewQueryDelegate {
   newQuery<

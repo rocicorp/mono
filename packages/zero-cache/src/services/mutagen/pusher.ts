@@ -1,35 +1,31 @@
 import type {LogContext} from '@rocicorp/logger';
 import {groupBy} from '../../../../shared/src/arrays.ts';
-import {assert} from '../../../../shared/src/asserts.ts';
+import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
-import * as v from '../../../../shared/src/valita.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {
   pushResponseSchema,
   type MutationID,
   type PushBody,
-  type PushError,
   type PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
 import {fetchFromAPIServer, compileUrlPattern} from '../../custom/fetch.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {recordMutation} from '../../server/anonymous-otel-start.ts';
-import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {upstreamSchema} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
-import {Subscription, type Result} from '../../types/subscription.ts';
+import {Subscription} from '../../types/subscription.ts';
 import type {HandlerResult, StreamResult} from '../../workers/connection.ts';
 import type {RefCountedService, Service} from '../service.ts';
-
-type Fatal = {
-  error: 'forClient';
-  cause: ErrorForClient;
-  mutationIDs: PushError['mutationIDs'];
-};
+import {
+  isProtocolError,
+  type PushFailedBody,
+} from '../../../../zero-protocol/src/error.ts';
+import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 
 export interface Pusher extends RefCountedService {
   readonly pushURL: string | undefined;
@@ -293,12 +289,11 @@ class PushWorker {
    * 2. If the push succeeds, we look for any mutation failure that should cause the connection to terminate
    *  and terminate the connection for those clients.
    */
-  #fanOutResponses(response: PushResponse | Fatal) {
-    const responses: Promise<Result>[] = [];
+  #fanOutResponses(response: PushResponse) {
     const connectionTerminations: (() => void)[] = [];
 
     // if the entire push failed, send that to the client.
-    if ('error' in response) {
+    if ('kind' in response || 'error' in response) {
       this.#lc.warn?.(
         'The server behind ZERO_PUSH_URL returned a push error.',
         response,
@@ -315,28 +310,46 @@ class PushWorker {
 
         // We do not resolve mutations on the client if the push fails
         // as those mutations will be retried.
-        if (
-          response.error === 'unsupportedPushVersion' ||
-          response.error === 'unsupportedSchemaVersion'
-        ) {
-          client.downstream.fail(
-            new ErrorForClient({
-              kind: ErrorKind.InvalidPush,
-              message: response.error,
-            }),
-          );
-        } else if (response.error === 'forClient') {
-          client.downstream.fail(response.cause);
+        if ('error' in response) {
+          // This error code path will eventually be removed when we
+          // no longer support the legacy push error format.
+          const pushFailedBody: PushFailedBody =
+            response.error === 'http'
+              ? {
+                  kind: ErrorKind.PushFailed,
+                  origin: ErrorOrigin.ZeroCache,
+                  type: 'http',
+                  status: response.status,
+                  bodyPreview: response.details,
+                  mutationIDs,
+                  message: `Fetch from API server returned non-OK status ${response.status}`,
+                }
+              : response.error === 'unsupportedPushVersion'
+                ? {
+                    kind: ErrorKind.PushFailed,
+                    origin: ErrorOrigin.Server,
+                    type: 'unsupportedPushVersion',
+                    mutationIDs,
+                    message: `Unsupported push version`,
+                  }
+                : {
+                    kind: ErrorKind.PushFailed,
+                    origin: ErrorOrigin.Server,
+                    type: 'internal',
+                    mutationIDs,
+                    message:
+                      response.error === 'zeroPusher'
+                        ? response.details
+                        : response.error === 'unsupportedSchemaVersion'
+                          ? 'Unsupported schema version'
+                          : 'An unknown error occurred while pushing to the API server',
+                  };
+
+          this.#streamFatalError(client.downstream, pushFailedBody);
+        } else if ('kind' in response) {
+          this.#streamFatalError(client.downstream, response);
         } else {
-          responses.push(
-            client.downstream.push([
-              'pushResponse',
-              {
-                ...response,
-                mutationIDs,
-              },
-            ]).result,
-          );
+          unreachable(response);
         }
       }
     } else {
@@ -348,7 +361,7 @@ class PushWorker {
           continue;
         }
 
-        let failure: ErrorForClient | undefined;
+        let failure: PushFailedBody | undefined;
         let i = 0;
         for (; i < mutations.length; i++) {
           const m = mutations[i];
@@ -358,11 +371,21 @@ class PushWorker {
               m.result,
             );
           }
+          // This error code path will eventually be removed,
+          // keeping this for backwards compatibility, but the server
+          // should now return a PushFailedBody with the mutationIDs
           if ('error' in m.result && m.result.error === 'oooMutation') {
-            failure = new ErrorForClient({
-              kind: ErrorKind.InvalidPush,
+            failure = {
+              kind: ErrorKind.PushFailed,
+              origin: ErrorOrigin.Server,
+              type: 'oooMutation',
               message: 'mutation was out of order',
-            });
+              details: m.result.details,
+              mutationIDs: mutations.map(m => ({
+                clientID: m.id.clientID,
+                id: m.id.id,
+              })),
+            };
             break;
           }
         }
@@ -374,7 +397,9 @@ class PushWorker {
         }
 
         if (failure) {
-          connectionTerminations.push(() => client.downstream.fail(failure));
+          connectionTerminations.push(() =>
+            this.#streamFatalError(client.downstream, failure),
+          );
         }
       }
     }
@@ -382,7 +407,7 @@ class PushWorker {
     connectionTerminations.forEach(cb => cb());
   }
 
-  async #processPush(entry: PusherEntry): Promise<PushResponse | Fatal> {
+  async #processPush(entry: PusherEntry): Promise<PushResponse> {
     this.#customMutations.add(entry.push.mutations.length, {
       clientGroupID: entry.push.clientGroupID,
     });
@@ -405,8 +430,17 @@ class PushWorker {
       'mutations',
     );
 
+    let mutationIDs: MutationID[] = [];
+
     try {
-      const response = await fetchFromAPIServer(
+      mutationIDs = entry.push.mutations.map(m => ({
+        id: m.id,
+        clientID: m.clientID,
+      }));
+
+      return await fetchFromAPIServer(
+        pushResponseSchema,
+        'push',
         this.#lc,
         url,
         this.#pushURLPatterns,
@@ -421,50 +455,39 @@ class PushWorker {
         },
         entry.push,
       );
-
-      if (!response.ok) {
-        return {
-          error: 'http',
-          status: response.status,
-          details: await response.text(),
-          mutationIDs: entry.push.mutations.map(m => ({
-            id: m.id,
-            clientID: m.clientID,
-          })),
-        };
-      }
-
-      const json = await response.json();
-      try {
-        return v.parse(json, pushResponseSchema);
-      } catch (e) {
-        this.#lc.error?.('failed to parse push response', JSON.stringify(json));
-        throw e;
-      }
     } catch (e) {
-      const mutationIDs = entry.push.mutations.map(m => ({
-        id: m.id,
-        clientID: m.clientID,
-      }));
-
       this.#lc.error?.('failed to push', e);
-      if (e instanceof ErrorForClient) {
+
+      if (isProtocolError(e) && e.errorBody.kind === ErrorKind.PushFailed) {
         return {
-          error: 'forClient',
-          cause: e,
+          ...e.errorBody,
           mutationIDs,
-        };
+        } as const satisfies PushFailedBody;
       }
 
-      // We do not kill the pusher on error.
-      // If the user's API server is down, the mutations will never be acknowledged
-      // and the client will eventually retry.
       return {
-        error: 'zeroPusher',
-        details: String(e),
+        kind: ErrorKind.PushFailed,
+        origin: ErrorOrigin.ZeroCache,
+        type: 'internal',
+        message:
+          e instanceof Error
+            ? e.message
+            : 'An unknown error occurred while pushing to the API server',
         mutationIDs,
-      };
+      } as const satisfies PushFailedBody;
     }
+  }
+
+  #streamFatalError(
+    downstream: Subscription<Downstream>,
+    errorBody: PushFailedBody,
+  ): void {
+    const {result} = downstream.push(['error', errorBody]);
+    void result
+      .catch(err => {
+        this.#lc.warn?.('fatal error delivery was not acknowledged', err);
+      })
+      .finally(() => downstream.cancel());
   }
 }
 

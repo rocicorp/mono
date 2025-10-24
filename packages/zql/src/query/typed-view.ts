@@ -1,5 +1,5 @@
 import type {Immutable} from '../../../shared/src/immutable.ts';
-import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
+import type {AppQueryError} from '../../../zero-protocol/src/custom-queries.ts';
 import type {TTL} from './ttl.ts';
 
 export type ResultType = 'unknown' | 'complete' | 'error';
@@ -12,7 +12,7 @@ export type ResultType = 'unknown' | 'complete' | 'error';
 export type Listener<T> = (
   data: Immutable<T>,
   resultType: ResultType,
-  error?: ErroredQuery,
+  error?: AppQueryError,
 ) => void;
 
 export type TypedView<T> = {

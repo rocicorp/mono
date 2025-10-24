@@ -4,7 +4,7 @@ import {deepClone} from '../../shared/src/deep-clone.ts';
 import type {Immutable} from '../../shared/src/immutable.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
-import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
+import type {AppQueryError} from '../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {AbstractQuery} from '../../zql/src/query/query-impl.ts';
@@ -184,7 +184,7 @@ function getSnapshot<TReturn>(
   data: HumanReadable<TReturn>,
   resultType: ResultType,
   refetchFn: () => void,
-  error?: ErroredQuery,
+  error?: AppQueryError | undefined,
 ): QueryResult<TReturn> {
   if (singular && data === undefined) {
     switch (resultType) {
@@ -243,7 +243,7 @@ function getSnapshot<TReturn>(
 
 function makeError(
   refetch: () => void,
-  error: ErroredQuery,
+  error: AppQueryError,
 ): QueryErrorDetails {
   return {
     type: 'error',
@@ -450,7 +450,7 @@ class ViewWrapper<
   #onData = (
     snap: Immutable<HumanReadable<TReturn>>,
     resultType: ResultType,
-    error?: ErroredQuery,
+    error?: AppQueryError | undefined,
   ) => {
     const data =
       snap === undefined

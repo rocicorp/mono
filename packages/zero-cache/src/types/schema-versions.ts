@@ -1,16 +1,16 @@
+import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import {ErrorForClient} from './error-for-client.ts';
 
 export type SchemaVersions = {
   readonly minSupportedVersion: number;
   readonly maxSupportedVersion: number;
 };
 
-export function throwErrorForClientIfSchemaVersionNotSupported(
+export function throwProtocolErrorIfSchemaVersionNotSupported(
   schemaVersion: number,
   schemaVersions: SchemaVersions,
 ) {
-  const error = getErrorForClientIfSchemaVersionNotSupported(
+  const error = getProtocolErrorIfSchemaVersionNotSupported(
     schemaVersion,
     schemaVersions,
   );
@@ -19,7 +19,7 @@ export function throwErrorForClientIfSchemaVersionNotSupported(
   }
 }
 
-export function getErrorForClientIfSchemaVersionNotSupported(
+export function getProtocolErrorIfSchemaVersionNotSupported(
   schemaVersion: number,
   schemaVersions: SchemaVersions,
 ) {
@@ -28,7 +28,7 @@ export function getErrorForClientIfSchemaVersionNotSupported(
     schemaVersion < minSupportedVersion ||
     schemaVersion > maxSupportedVersion
   ) {
-    return new ErrorForClient({
+    return new ProtocolError({
       kind: ErrorKind.SchemaVersionNotSupported,
       message: `Schema version ${schemaVersion} is not in range of supported schema versions [${minSupportedVersion}, ${maxSupportedVersion}].`,
     });

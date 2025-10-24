@@ -17,6 +17,7 @@ import type {
 } from '../services/view-syncer/view-syncer.ts';
 import type {ConnectParams} from './connect-params.ts';
 import type {HandlerResult, MessageHandler} from './connection.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 
 const tracer = trace.getTracer('syncer-ws-server', version);
 
@@ -100,6 +101,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
                     message:
                       `clientGroupID in mutation "${clientGroupID}" does not match ` +
                       `clientGroupID of connection "${this.#clientGroupID}`,
+                    origin: ErrorOrigin.ZeroCache,
                   },
                 } satisfies HandlerResult,
               ];
@@ -144,7 +146,11 @@ export class SyncerWsMessageHandler implements MessageHandler {
                   this.#pusher !== undefined,
                 );
                 if (maybeError !== undefined) {
-                  errors.push({kind: maybeError[0], message: maybeError[1]});
+                  errors.push({
+                    kind: maybeError[0],
+                    message: maybeError[1],
+                    origin: ErrorOrigin.ZeroCache,
+                  });
                 }
               }
               if (errors.length > 0) {

@@ -24,7 +24,6 @@ import {
   compareTTL,
   DEFAULT_TTL_MS,
 } from '../../../../zql/src/query/ttl.ts';
-import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {rowIDString} from '../../types/row-key.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
@@ -45,6 +44,7 @@ import {
   type RowRecord,
 } from './schema/types.ts';
 import {ttlClockAsNumber, type TTLClock} from './ttl-clock.ts';
+import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
 
 export type RowUpdate = {
   version?: string; // Undefined for an unref.
@@ -279,7 +279,7 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
           this._cvr.clientSchema,
         )}`,
       );
-      throw new ErrorForClient({
+      throw new ProtocolError({
         kind: 'InvalidConnectionRequest',
         message: `Provided schema does not match previous schema`,
       });

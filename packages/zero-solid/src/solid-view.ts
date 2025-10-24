@@ -16,7 +16,7 @@ import {
 } from '../../zero-client/src/mod.js';
 import {idSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
-import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
+import type {AppQueryError} from '../../zero-protocol/src/custom-queries.ts';
 
 export type QueryResultDetails = Readonly<
   | {
@@ -75,7 +75,7 @@ export class SolidView implements Output {
     onTransactionCommit: (cb: () => void) => void,
     format: Format,
     onDestroy: () => void,
-    queryComplete: true | ErroredQuery | Promise<true>,
+    queryComplete: true | AppQueryError | Promise<true>,
     updateTTL: (ttl: TTL) => void,
     setState: SetStoreFunction<State>,
     refetch: () => void,
@@ -123,13 +123,13 @@ export class SolidView implements Output {
         .then(() => {
           this.#setState(prev => [prev[0], COMPLETE]);
         })
-        .catch((error: ErroredQuery) => {
+        .catch((error: AppQueryError) => {
           this.#setState(prev => [prev[0], this.#makeError(error)]);
         });
     }
   }
 
-  #makeError(error: ErroredQuery): QueryErrorDetails {
+  #makeError(error: AppQueryError): QueryErrorDetails {
     return {
       type: 'error',
       refetch: this.#refetch,
@@ -291,7 +291,7 @@ export function createSolidViewFactory(
     format: Format,
     onDestroy: () => void,
     onTransactionCommit: (cb: () => void) => void,
-    queryComplete: true | ErroredQuery | Promise<true>,
+    queryComplete: true | AppQueryError | Promise<true>,
     updateTTL: (ttl: TTL) => void,
   ) {
     return new SolidView(

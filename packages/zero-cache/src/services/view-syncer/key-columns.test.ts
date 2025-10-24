@@ -143,7 +143,7 @@ describe('key columns', () => {
         {id: 'single-key', no: 'compound', key: 'here'},
       ),
     ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: {"kind":"ClientNotFound","message":"CVR contains key column \\"issueID\\" that is no longer in the replica"}]`,
+      `[ProtocolError: CVR contains key column "issueID" that is no longer in the replica]`,
     );
   });
 });

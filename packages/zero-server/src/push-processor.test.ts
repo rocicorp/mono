@@ -1,4 +1,4 @@
-import {describe, expect, test, vi} from 'vitest';
+import {assert, describe, expect, test, vi} from 'vitest';
 import * as v from '../../shared/src/valita.ts';
 import {type PushBody} from '../../zero-protocol/src/push.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
@@ -7,6 +7,8 @@ import {PushProcessor} from './push-processor.ts';
 import {PostgresJSConnection} from './adapters/postgresjs.ts';
 import {ZQLDatabase} from './zql-database.ts';
 import type postgres from 'postgres';
+import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
 describe('PushProcessor', () => {
   const body = {
     pushVersion: 1,
@@ -92,17 +94,24 @@ describe('PushProcessor', () => {
     `);
   });
 
-  test('invalid params throw', async () => {
+  test('invalid params return parse error', async () => {
     const processor = new PushProcessor(
       new ZQLDatabase(new PostgresJSConnection(mockPgClient), mockSchema),
     );
 
     const invalidParams: Record<string, string> = {
-      // Missing schema and clientGroupID
+      // Missing schema and appID
     };
 
-    await expect(
-      processor.process(mockMutators, invalidParams, body),
-    ).rejects.toThrow('Missing property schema');
+    const result = await processor.process(mockMutators, invalidParams, body);
+
+    assert('kind' in result, 'expected push failed response');
+
+    expect(result).toMatchObject({
+      kind: ErrorKind.PushFailed,
+      origin: ErrorOrigin.Server,
+      type: 'parse',
+      message: expect.stringContaining('Missing property schema'),
+    });
   });
 });
