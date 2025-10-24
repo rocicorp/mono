@@ -1875,8 +1875,133 @@ test('exists self join', () => {
   `);
 });
 
+test('not exists restrictions', () => {
+  const {delegate} = testBuilderDelegate();
+  // delegate has enableNotExists: false by default
+
+  // Direct NOT EXISTS in where clause
+  expect(() =>
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        where: {
+          type: 'correlatedSubquery',
+          related: {
+            system: 'client',
+            correlation: {parentField: ['recruiterID'], childField: ['id']},
+            subquery: {
+              table: 'users',
+              alias: 'zsubq_recruiter',
+              orderBy: [['id', 'asc']],
+            },
+          },
+          op: 'NOT EXISTS',
+        },
+      },
+      delegate,
+      'query-id',
+    ),
+  ).toThrowError(
+    'not(exists()) is not supported on the client - see https://bugs.rocicorp.dev/issue/3438',
+  );
+
+  // NOT EXISTS nested in AND/OR branches
+  expect(() =>
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        where: {
+          type: 'and',
+          conditions: [
+            {
+              type: 'simple',
+              op: '=',
+              left: {type: 'column', name: 'name'},
+              right: {type: 'literal', value: 'aaron'},
+            },
+            {
+              type: 'or',
+              conditions: [
+                {
+                  type: 'simple',
+                  op: '>',
+                  left: {type: 'column', name: 'id'},
+                  right: {type: 'literal', value: 1},
+                },
+                {
+                  type: 'correlatedSubquery',
+                  related: {
+                    system: 'client',
+                    correlation: {
+                      parentField: ['recruiterID'],
+                      childField: ['id'],
+                    },
+                    subquery: {
+                      table: 'users',
+                      alias: 'zsubq_recruiter',
+                      orderBy: [['id', 'asc']],
+                    },
+                  },
+                  op: 'NOT EXISTS',
+                },
+              ],
+            },
+          ],
+        },
+      },
+      delegate,
+      'query-id',
+    ),
+  ).toThrowError(
+    'not(exists()) is not supported on the client - see https://bugs.rocicorp.dev/issue/3438',
+  );
+
+  // NOT EXISTS in nested subquery's where clause
+  expect(() =>
+    buildPipeline(
+      {
+        table: 'users',
+        orderBy: [['id', 'asc']],
+        related: [
+          {
+            correlation: {parentField: ['recruiterID'], childField: ['id']},
+            subquery: {
+              table: 'users',
+              alias: 'zsubq_recruiter',
+              orderBy: [['id', 'asc']],
+              where: {
+                type: 'correlatedSubquery',
+                related: {
+                  system: 'client',
+                  correlation: {
+                    parentField: ['id'],
+                    childField: ['recruiterID'],
+                  },
+                  subquery: {
+                    table: 'users',
+                    alias: 'zsubq_recruiter2',
+                    orderBy: [['id', 'asc']],
+                  },
+                },
+                op: 'NOT EXISTS',
+              },
+            },
+          },
+        ],
+      },
+      delegate,
+      'query-id',
+    ),
+  ).toThrowError(
+    'not(exists()) is not supported on the client - see https://bugs.rocicorp.dev/issue/3438',
+  );
+});
+
 test('not exists self join', () => {
-  const {sources, delegate} = testBuilderDelegate();
+  const {sources} = testBuilderDelegate();
+  const delegate = new TestBuilderDelegate(sources, false, true);
   const sink = new Catch(
     buildPipeline(
       {

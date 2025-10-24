@@ -1846,18 +1846,6 @@ describe('exists', () => {
       `);
   });
 
-  test('negated existence - client', () => {
-    const issueQuery = newQuery(mockDelegate, schema, 'issue');
-
-    expect(() =>
-      issueQuery.where(({not, exists}) => not(exists('comments'))),
-    ).toThrowError(
-      new Error(
-        'not(exists()) is not supported on the client - see https://bugs.rocicorp.dev/issue/3438',
-      ),
-    );
-  });
-
   test('negated existence over junction edge - permission', () => {
     const issueQuery = staticQuery(schema, 'issue');
 
@@ -1924,18 +1912,6 @@ describe('exists', () => {
         },
       }
     `,
-    );
-  });
-
-  test('negated existence over junction edge - client', () => {
-    const issueQuery = newQuery(mockDelegate, schema, 'issue');
-
-    expect(() =>
-      issueQuery.where(({not, exists}) => not(exists('labels'))),
-    ).toThrowError(
-      new Error(
-        'not(exists()) is not supported on the client - see https://bugs.rocicorp.dev/issue/3438',
-      ),
     );
   });
 

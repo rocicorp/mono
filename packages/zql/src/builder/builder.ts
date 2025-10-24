@@ -1,4 +1,4 @@
-import {assert} from '../../../shared/src/asserts.ts';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {
@@ -49,6 +49,19 @@ export type StaticQueryParameters = {
 export interface BuilderDelegate {
   readonly applyFiltersAnyway?: boolean | undefined;
   readonly debug?: DebugDelegate | undefined;
+
+  /**
+   * When true, allows NOT EXISTS conditions in queries.
+   * Defaults to false.
+   *
+   * We only set this to true on the server.
+   * The client-side query engine cannot support NOT EXISTS because:
+   * 1. Zero only syncs a subset of data to the client
+   * 2. On the client, we can't distinguish between a row not existing vs.
+   *    a row not being synced to the client
+   * 3. NOT EXISTS requires complete knowledge of what doesn't exist
+   */
+  readonly enableNotExists?: boolean | undefined;
 
   /**
    * Called once for each source needed by the AST.
@@ -193,6 +206,35 @@ function isParameter(value: ValuePosition): value is Parameter {
 const EXISTS_LIMIT = 3;
 const PERMISSIONS_EXISTS_LIMIT = 1;
 
+/**
+ * Checks if a condition tree contains any NOT EXISTS operations.
+ * Recursively checks AND/OR branches but does not recurse into nested subqueries
+ * (those are checked when buildPipelineInternal processes them).
+ */
+function assertNoNotExists(condition: Condition): void {
+  switch (condition.type) {
+    case 'simple':
+      return;
+
+    case 'correlatedSubquery':
+      if (condition.op === 'NOT EXISTS') {
+        throw new Error(
+          'not(exists()) is not supported on the client - see https://bugs.rocicorp.dev/issue/3438',
+        );
+      }
+      return;
+
+    case 'and':
+    case 'or':
+      for (const c of condition.conditions) {
+        assertNoNotExists(c);
+      }
+      return;
+    default:
+      unreachable(condition);
+  }
+}
+
 function buildPipelineInternal(
   ast: AST,
   delegate: BuilderDelegate,
@@ -205,6 +247,10 @@ function buildPipelineInternal(
     throw new Error(`Source not found: ${ast.table}`);
   }
   ast = uniquifyCorrelatedSubqueryConditionAliases(ast);
+
+  if (!delegate.enableNotExists && ast.where) {
+    assertNoNotExists(ast.where);
+  }
 
   const csqConditions = gatherCorrelatedSubqueryQueryConditions(ast.where);
   const splitEditKeys: Set<string> = partitionKey
