@@ -67,13 +67,7 @@ export const Nav = memo(() => {
     <>
       <div className="nav-container flex flex-col">
         <Link className="logo-link-container" href={links.list({projectName})}>
-          <img
-            src={
-              project?.logoURL ??
-              (projectName.toLowerCase() === 'roci' ? logoGigabugsURL : logoURL)
-            }
-            className="zero-logo"
-          />
+          <img src={project?.logoURL ?? logoURL} className="zero-logo" />
           <img src={project?.markURL ?? markURL} className="zero-mark" />
         </Link>{' '}
         {/* could not figure out how to add this color to tailwind.config.js */}
