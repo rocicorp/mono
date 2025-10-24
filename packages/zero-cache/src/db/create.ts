@@ -1,18 +1,15 @@
+import {assertValidLiteColumnSpec} from '../types/lite.ts';
 import {id, idList} from '../types/sql.ts';
 import type {ColumnSpec, LiteIndexSpec, LiteTableSpec} from './specs.ts';
 
+/**
+ * `spec` always comes from `mapPostgresToLiteColumn` so we only need to support
+ * the output of that function.
+ */
 export function liteColumnDef(spec: ColumnSpec) {
-  // Remove legacy |TEXT_ARRAY attribute for backwards compatibility
-  // Legacy formats: "text|TEXT_ARRAY", "text[]|TEXT_ARRAY", "text|TEXT_ARRAY[]", "text[]|TEXT_ARRAY[]"
-  const hadTextArray = spec.dataType.includes('|TEXT_ARRAY');
-  const typeWithAttrs = spec.dataType.replace(/\|TEXT_ARRAY(\[\])?/, '');
+  assertValidLiteColumnSpec(spec);
 
-  // Only add brackets if we had |TEXT_ARRAY and there are no brackets after removing it
-  // This handles the legacy "text|TEXT_ARRAY" -> "text" -> "text[]" case
-  const needsBrackets = hadTextArray && !typeWithAttrs.includes('[]');
-  const finalType = needsBrackets ? typeWithAttrs + '[]' : typeWithAttrs;
-
-  let def = id(finalType);
+  let def = id(spec.dataType);
 
   if (spec.characterMaximumLength) {
     def += `(${spec.characterMaximumLength})`;
