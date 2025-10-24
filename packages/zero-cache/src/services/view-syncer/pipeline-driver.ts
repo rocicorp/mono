@@ -325,6 +325,7 @@ export class PipelineDriver {
       query,
       {
         debug: debugDelegate,
+        enableNotExists: true, // Server-side can handle NOT EXISTS
         getSource: name => this.#getSource(name),
         createStorage: () => this.#createStorage(),
         decorateSourceInput: (input: SourceInput, _queryID: string): Input =>

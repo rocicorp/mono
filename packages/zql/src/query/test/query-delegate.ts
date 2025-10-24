@@ -44,6 +44,7 @@ export class QueryDelegateImpl implements QueryDelegate {
   synchronouslyCallNextGotCallback = false;
   callGot = false;
   readonly defaultQueryComplete = false;
+  readonly enableNotExists = true; // Allow NOT EXISTS in tests
 
   constructor({
     sources = makeSources(),
