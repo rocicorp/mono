@@ -8,6 +8,9 @@ import {
   NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
 import {makeGetPlanAST, pick} from '../helpers/planner.ts';
+import {computeZqlSpecs} from '../../../zero-cache/src/db/lite-tables.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {LiteAndZqlSpec} from '../../../zero-cache/src/db/specs.ts';
 
 const pgContent = await getChinook();
 
@@ -25,25 +28,11 @@ describe('Chinook planner tests', () => {
     mapper = clientToServer(schema.tables);
     dbs.sqlite.exec('ANALYZE;');
 
-    costModel = createSQLiteCostModel(
-      dbs.sqlite,
-      Object.fromEntries(
-        Object.entries(schema.tables).map(([k, v]) => [
-          'serverName' in v ? v.serverName : k,
-          {
-            columns: Object.fromEntries(
-              Object.entries(v.columns).map(([colName, col]) => [
-                'serverName' in col ? col.serverName : colName,
-                {
-                  ...col,
-                },
-              ]),
-            ),
-            primaryKey: v.primaryKey,
-          },
-        ]),
-      ),
-    );
+    // Get table specs using computeZqlSpecs
+    const tableSpecs = new Map<string, LiteAndZqlSpec>();
+    computeZqlSpecs(createSilentLogContext(), dbs.sqlite, tableSpecs);
+
+    costModel = createSQLiteCostModel(dbs.sqlite, tableSpecs);
 
     getPlanAST = makeGetPlanAST(mapper, costModel);
   });

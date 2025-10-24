@@ -45,6 +45,9 @@ import {
   Snapshotter,
   type SnapshotDiff,
 } from './snapshotter.ts';
+import type {ConnectionCostModel} from '../../../../zql/src/planner/planner-connection.ts';
+import type {Database} from '../../../../zqlite/src/db.ts';
+import {createSQLiteCostModel} from '../../../../zqlite/src/sqlite-cost-model.ts';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -96,6 +99,7 @@ export class PipelineDriver {
   readonly #shardID: ShardID;
   readonly #logConfig: LogConfig;
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
+  readonly #costModels: WeakMap<Database, ConnectionCostModel> | undefined;
   #streamer: Streamer | null = null;
   #replicaVersion: string | null = null;
   #permissions: LoadedPermissions | null = null;
@@ -122,6 +126,7 @@ export class PipelineDriver {
     storage: ClientGroupStorage,
     clientGroupID: string,
     inspectorDelegate: InspectorDelegate,
+    enablePlanner?: boolean,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;
@@ -129,6 +134,7 @@ export class PipelineDriver {
     this.#shardID = shardID;
     this.#logConfig = logConfig;
     this.#inspectorDelegate = inspectorDelegate;
+    this.#costModels = enablePlanner ? new WeakMap() : undefined;
   }
 
   /**
@@ -215,6 +221,13 @@ export class PipelineDriver {
       table.setDB(db.db);
     }
     return version;
+  }
+
+  #ensureCostModelExists(db: Database) {
+    if (this.#costModels && !this.#costModels.has(db)) {
+      const costModel = createSQLiteCostModel(db, this.#tableSpecs);
+      this.#costModels.set(db, costModel);
+    }
   }
 
   /**
@@ -321,6 +334,8 @@ export class PipelineDriver {
       ? new Debug()
       : undefined;
 
+    this.#ensureCostModelExists(this.#snapshotter.current().db.db);
+
     const input = buildPipeline(
       query,
       {
@@ -340,6 +355,9 @@ export class PipelineDriver {
         decorateFilterInput: input => input,
       },
       queryID,
+      this.#costModels
+        ? must(this.#costModels.get(this.#snapshotter.current().db.db))
+        : undefined,
     );
     const schema = input.getSchema();
     input.setOutput({
@@ -534,6 +552,7 @@ export class PipelineDriver {
     for (const table of this.#tables.values()) {
       table.setDB(curr.db.db);
     }
+    this.#ensureCostModelExists(curr.db.db);
     this.#lc.debug?.(`Advanced to ${curr.version}`);
   }
 
