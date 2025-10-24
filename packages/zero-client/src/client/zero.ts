@@ -1508,13 +1508,6 @@ export class Zero<
           );
         }
 
-        // this._connectStart reset below.
-        if (this.#connectStart === undefined) {
-          lc.error?.(
-            'disconnect() called while connecting but connect start time is undefined.',
-          );
-        }
-
         break;
       }
       case ConnectionStatus.Closed:
