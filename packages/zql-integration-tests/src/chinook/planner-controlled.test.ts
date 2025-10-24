@@ -330,7 +330,7 @@ test('ors anded one after the other', () => {
 
   const planned = planQuery(ast, costModel);
 
-  // With uniform costs, planner should keep original order (no flips)
+  // The exhaustive planner finds the optimal flip pattern
   // Check first OR: album and genre
   expect(
     pick(planned, ['where', 'conditions', 0, 'conditions', 0, 'flip']),
@@ -339,9 +339,10 @@ test('ors anded one after the other', () => {
     pick(planned, ['where', 'conditions', 0, 'conditions', 1, 'flip']),
   ).toBe(false);
   // Check second OR: invoiceLines and mediaType
+  // The exhaustive planner flips invoiceLines for better cost
   expect(
     pick(planned, ['where', 'conditions', 1, 'conditions', 0, 'flip']),
-  ).toBe(false);
+  ).toBe(true);
   expect(
     pick(planned, ['where', 'conditions', 1, 'conditions', 1, 'flip']),
   ).toBe(false);
