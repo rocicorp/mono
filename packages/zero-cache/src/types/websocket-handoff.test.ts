@@ -20,7 +20,10 @@ describe('types/websocket-handoff', () => {
     port = randInt(10000, 20000);
     server = new Server();
     server.listen(port);
-    wss = new WebSocketServer({noServer: true});
+    wss = new WebSocketServer({
+      noServer: true,
+      perMessageDeflate: true,
+    });
   });
 
   afterEach(() => {
@@ -177,5 +180,80 @@ describe('types/websocket-handoff', () => {
     expect(new TextEncoder().encode(error.reason).length).toBeLessThanOrEqual(
       123,
     );
+  });
+
+  test('compression enabled', async () => {
+    const [parent, child] = inProcChannel();
+
+    installWebSocketHandoff(
+      lc,
+      () => ({
+        payload: {foo: 'bar'},
+        sender: child,
+      }),
+      server,
+      {noServer: true, perMessageDeflate: true},
+    );
+
+    installWebSocketReceiver(
+      lc,
+      wss,
+      ws => {
+        ws.close();
+      },
+      parent,
+    );
+
+    const {promise, resolve} = resolver<string | undefined>();
+    const ws = new WebSocket(`ws://localhost:${port}/`);
+    ws.on('open', () => {
+      // Check that permessage-deflate extension was negotiated
+      const extensions = ws.extensions;
+      resolve(extensions);
+    });
+
+    const extensions = await promise;
+    expect(extensions).toContain('permessage-deflate');
+  });
+
+  test('compression disabled', async () => {
+    const [parent, child] = inProcChannel();
+
+    // Create a separate WSS without compression for this test
+    const wssNoCompression = new WebSocketServer({
+      noServer: true,
+    });
+
+    installWebSocketHandoff(
+      lc,
+      () => ({
+        payload: {foo: 'bar'},
+        sender: child,
+      }),
+      server,
+      {noServer: true},
+    );
+
+    installWebSocketReceiver(
+      lc,
+      wssNoCompression,
+      ws => {
+        ws.close();
+      },
+      parent,
+    );
+
+    const {promise, resolve} = resolver<string | undefined>();
+    const ws = new WebSocket(`ws://localhost:${port}/`);
+    ws.on('open', () => {
+      // Check that permessage-deflate extension was NOT negotiated
+      const extensions = ws.extensions;
+      resolve(extensions);
+    });
+
+    const extensions = await promise;
+    expect(extensions).not.toContain('permessage-deflate');
+
+    wssNoCompression.close();
   });
 });
