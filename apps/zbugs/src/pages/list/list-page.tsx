@@ -262,10 +262,15 @@ export function ListPage({onReady}: {onReady: () => void}) {
   }, [login.loginState?.decoded, issuesResult.type, z]);
 
   let title;
+  let shortTitle;
   if (creator || assignee || labels.length > 0 || textFilter) {
     title = 'Filtered Issues';
+    shortTitle = 'Filtered';
   } else {
-    title = status.slice(0, 1).toUpperCase() + status.slice(1) + ' Issues';
+    const statusCapitalized =
+      status.slice(0, 1).toUpperCase() + status.slice(1);
+    title = statusCapitalized + ' Issues';
+    shortTitle = statusCapitalized;
   }
 
   const [location] = useLocation();
@@ -562,7 +567,14 @@ export function ListPage({onReady}: {onReady: () => void}) {
               )}
             </div>
           ) : (
-            <span className="list-view-title">{title}</span>
+            <>
+              <span className="list-view-title list-view-title-full">
+                {title}
+              </span>
+              <span className="list-view-title list-view-title-short">
+                {shortTitle}
+              </span>
+            </>
           )}
           {issuesResult.type === 'complete' || total || estimatedTotal ? (
             <>
