@@ -222,6 +222,136 @@ benchmarkQuery(
     .related('creator', creator => creator.one()),
 );
 
+// issueList queries with various filters
+
+// issueList - basic list with project filter
+benchmarkQuery(
+  'issueList - roci project, no filters',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {flip: true})
+    .related('viewState', q => q.where('userID', 'test-user'))
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc')
+    .limit(50),
+);
+
+// issueList - with open filter
+benchmarkQuery(
+  'issueList - roci project, open only',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {flip: true})
+    .where('open', true)
+    .related('viewState', q => q.where('userID', 'test-user'))
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc')
+    .limit(50),
+);
+
+// issueList - with creator filter
+benchmarkQuery(
+  'issueList - roci project, creator filter',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {flip: true})
+    .whereExists('creator', q => q.where('login', 'arv'), {flip: true})
+    .related('viewState', q => q.where('userID', 'test-user'))
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc')
+    .limit(50),
+);
+
+// issueList - with assignee filter
+benchmarkQuery(
+  'issueList - roci project, assignee filter',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {flip: true})
+    .whereExists('assignee', q => q.where('login', 'arv'), {flip: true})
+    .related('viewState', q => q.where('userID', 'test-user'))
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc')
+    .limit(50),
+);
+
+// issueList - with single label filter
+benchmarkQuery(
+  'issueList - roci project, single label',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {flip: true})
+    .whereExists('labels', q => q.where('name', 'bug'), {flip: true})
+    .related('viewState', q => q.where('userID', 'test-user'))
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc')
+    .limit(50),
+);
+
+// issueList - with multiple label filters
+benchmarkQuery(
+  'issueList - roci project, multiple labels',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {flip: true})
+    .whereExists('labels', q => q.where('name', 'bug'), {flip: true})
+    .whereExists('labels', q => q.where('name', 'high-priority'), {flip: true})
+    .related('viewState', q => q.where('userID', 'test-user'))
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc')
+    .limit(50),
+);
+
+// issueList - with text filter (title search)
+// benchmarkQuery(
+//   'issueList - roci project, text filter',
+//   builder.issue
+//     .whereExists(
+//       'project',
+//       p => p.where('lowerCaseName', 'roci'),
+//       {flip: true},
+//     )
+//     .where(({or, cmp, exists}) =>
+//       or(
+//         cmp('title', 'ILIKE', '%sync%'),
+//         cmp('description', 'ILIKE', '%sync%'),
+//         exists('comments', q => q.where('body', 'ILIKE', '%sync%')),
+//       ),
+//     )
+//     .related('viewState', q => q.where('userID', 'test-user'))
+//     .related('labels')
+//     .orderBy('modified', 'desc')
+//     .orderBy('id', 'desc')
+//     .limit(50),
+// );
+
+// issueList - complex filter combination (open + creator + label)
+benchmarkQuery(
+  'issueList - roci project, complex filters',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {flip: true})
+    .where('open', true)
+    .whereExists('creator', q => q.where('login', 'arv'), {flip: true})
+    .whereExists('labels', q => q.where('name', 'bug'), {flip: true})
+    .related('viewState', q => q.where('userID', 'test-user'))
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc')
+    .limit(50),
+);
+
+// issueList - sorted by created instead of modified
+benchmarkQuery(
+  'issueList - roci project, sorted by created',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {flip: true})
+    .related('viewState', q => q.where('userID', 'test-user'))
+    .related('labels')
+    .orderBy('created', 'desc')
+    .orderBy('id', 'desc')
+    .limit(50),
+);
+
 // Check if JSON output is requested via environment variable
 const format = process.env.BENCH_OUTPUT_FORMAT;
 
