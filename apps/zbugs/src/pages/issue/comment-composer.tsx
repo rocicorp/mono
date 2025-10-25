@@ -9,6 +9,7 @@ import {useLogin} from '../../hooks/use-login.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
 import {maxCommentLength} from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
+import {GigabugsPromo} from '../../components/gigabugs-promo.tsx';
 
 export function CommentComposer({
   id,
@@ -117,12 +118,7 @@ export function CommentComposer({
             Cancel
           </Button>
         ) : null}
-        <p className="aside">
-          Testing Zero? Please make sure to delete your comment after.
-          <br />
-          Want a faster response?{' '}
-          <a href="https://discord.rocicorp.dev/">Join us on Discord &rarr;</a>
-        </p>
+        <GigabugsPromo />
       </div>
     </div>
   );

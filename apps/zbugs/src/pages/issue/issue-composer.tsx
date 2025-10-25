@@ -12,15 +12,13 @@ import {
   MAX_ISSUE_TITLE_LENGTH,
 } from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
-import {type ProjectRow} from '../../../shared/schema.ts';
-import {ProjectPicker} from '../../components/project-picker.tsx';
+import {GigabugsPromo} from '../../components/gigabugs-promo.tsx';
 
 interface Props {
   /** If id is defined the issue created by the composer. */
-  onDismiss: (created?: {projectName: string; id: string}) => void;
+  onDismiss: (createdID?: string) => void;
   isOpen: boolean;
-  projects: ProjectRow[];
-  projectName: string;
+  projectID: string;
 }
 
 const focusInput = (input: HTMLInputElement | null) => {
@@ -29,22 +27,7 @@ const focusInput = (input: HTMLInputElement | null) => {
   }
 };
 
-export function IssueComposer({
-  isOpen,
-  onDismiss,
-  projects,
-  projectName,
-}: Props) {
-  const [project, setProject] = useState(
-    projects.find(p => p.lowerCaseName === projectName.toLocaleLowerCase()),
-  );
-  useEffect(() => {
-    if (project === undefined) {
-      setProject(
-        projects.find(p => p.lowerCaseName === projectName.toLocaleLowerCase()),
-      );
-    }
-  }, [projects, project]);
+export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState<string>('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -74,21 +57,18 @@ export function IssueComposer({
   }, [description]);
 
   const handleSubmit = () => {
-    if (!project) {
-      return;
-    }
     const id = nanoid();
 
     z.mutate.issue.create({
       id,
-      projectID: project?.id,
+      projectID,
       title,
       description: description ?? '',
       created: Date.now(),
       modified: Date.now(),
     });
     reset();
-    onDismiss({id, projectName: project?.name ?? projectName});
+    onDismiss(id);
   };
 
   const reset = () => {
@@ -96,7 +76,7 @@ export function IssueComposer({
     setDescription('');
   };
 
-  const canSave = () => title.trim().length > 0 && project !== undefined;
+  const canSave = () => title.trim().length > 0;
 
   const isDirty = useCallback(
     () => title.trim().length > 0 || description.trim().length > 0,
@@ -127,16 +107,6 @@ export function IssueComposer({
       isDirty={isDirty}
     >
       <ModalBody>
-        <div
-          className="w-full px-4"
-          style={{width: 'fit-content', marginBottom: '1rem'}}
-        >
-          <ProjectPicker
-            projects={projects}
-            selectedProjectName={project?.name}
-            onChange={value => setProject(value)}
-          ></ProjectPicker>
-        </div>
         <div className="flex items-center w-full px-4">
           <input
             className="new-issue-title"
@@ -162,15 +132,8 @@ export function IssueComposer({
           </ImageUploadArea>
         </div>
         <div className="w-full px-4 mt-4">
-          <p className="aside">
-            Testing Zero? Please make sure to delete your issue after.
-            <br />
-            Want a faster response?{' '}
-            <a href="https://discord.rocicorp.dev/">
-              Join us on Discord &rarr;
-            </a>
-          </p>
-        </div>{' '}
+          <GigabugsPromo onNavigate={() => onDismiss()} />
+        </div>
       </ModalBody>
       <ModalActions>
         <Button
