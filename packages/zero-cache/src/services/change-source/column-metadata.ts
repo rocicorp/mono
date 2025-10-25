@@ -10,7 +10,8 @@
  */
 
 import type {Database, Statement} from '../../../../zqlite/src/db.ts';
-import type {LiteTableSpec} from '../../db/specs.ts';
+import type {ColumnSpec, LiteTableSpec} from '../../db/specs.ts';
+import * as PostgresTypeClass from '../../db/postgres-type-class-enum.ts';
 import {
   upstreamDataType,
   nullableUpstream,
@@ -284,7 +285,7 @@ export function liteTypeStringToMetadata(
  * This is a compatibility helper for the migration period.
  */
 export function metadataToLiteTypeString(metadata: ColumnMetadata): string {
-  const {upstreamType, isNotNull, isEnum} = metadata;
+  const {upstreamType, isNotNull, isEnum, isArray} = metadata;
 
   let typeString = upstreamType;
   if (isNotNull) {
@@ -293,5 +294,26 @@ export function metadataToLiteTypeString(metadata: ColumnMetadata): string {
   if (isEnum) {
     typeString += '|TEXT_ENUM';
   }
+  if (isArray) {
+    typeString += '|TEXT_ARRAY';
+  }
   return typeString;
+}
+
+/**
+ * Converts PostgreSQL ColumnSpec to structured ColumnMetadata.
+ * Used during replication to populate the metadata table from upstream schema.
+ */
+export function pgColumnSpecToMetadata(spec: ColumnSpec): ColumnMetadata {
+  const {dataType, notNull, pgTypeClass, elemPgTypeClass, characterMaximumLength} = spec;
+  const isArray = dataType.includes('[]');
+  const isEnum = (elemPgTypeClass ?? pgTypeClass) === PostgresTypeClass.Enum;
+
+  return {
+    upstreamType: dataType,
+    isNotNull: notNull ?? false,
+    isEnum,
+    isArray,
+    characterMaxLength: characterMaximumLength ?? null,
+  };
 }

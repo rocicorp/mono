@@ -1136,7 +1136,7 @@ describe('metadata table integration', () => {
     expect(tables).toHaveLength(1);
     expect(tables[0].columns.id.dataType).toBe('int8|NOT_NULL');
     expect(tables[0].columns.name.dataType).toBe('varchar');
-    expect(tables[0].columns.tags.dataType).toBe('text[]|NOT_NULL');
+    expect(tables[0].columns.tags.dataType).toBe('text[]|NOT_NULL|TEXT_ARRAY');
     expect(tables[0].columns.status.dataType).toBe('user_status|TEXT_ENUM');
     expect(tables[0].columns.tags.elemPgTypeClass).toBe('b');
     expect(tables[0].columns.status.elemPgTypeClass).toBe(null);
@@ -1224,7 +1224,7 @@ describe('metadata table integration', () => {
 
     expect(tables).toHaveLength(1);
     expect(tables[0].columns.statuses.dataType).toBe(
-      'status[]|NOT_NULL|TEXT_ENUM',
+      'status[]|NOT_NULL|TEXT_ENUM|TEXT_ARRAY',
     );
     expect(tables[0].columns.statuses.elemPgTypeClass).toBe('e');
   });
