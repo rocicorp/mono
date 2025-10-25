@@ -134,13 +134,13 @@ benchmarkQuery('allProjects', builder.project);
 
 // labelsForProject query
 benchmarkQuery(
-  'labelsForProject - zero',
+  'labelsForProject - roci',
   builder.label.whereExists('project', q => q.where('lowerCaseName', 'roci')),
 );
 
 // issuePreloadV2 query - simplified version
 benchmarkQuery(
-  'issuePreloadV2 - zero project',
+  'issuePreloadV2 - roci project',
   builder.issue
     .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
       flip: true,
