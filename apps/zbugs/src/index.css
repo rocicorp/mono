@@ -1596,11 +1596,11 @@ textarea.autoResize {
 
   .add-filter-modal {
     position: fixed;
-    top: 50%;
+    top: 12rem;
     left: 50%;
-    transform: translate(-50%, -50%);
-    max-height: 80vh;
-    max-height: 80dvh;
+    transform: translateX(-50%);
+    max-height: calc(100vh - 14rem);
+    max-height: calc(100dvh - 14rem);
     overflow-y: auto;
   }
 
