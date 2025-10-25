@@ -106,7 +106,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const [showOnboarding, setShowOnboarding] = useState(false);
 
   useEffect(() => {
-    if (isGigabugs(projectName) && !Cookies.get('onboardingDismissed')) {
+    if (isGigabugs(projectName) /*&& !Cookies.get('onboardingDismissed')*/) {
       setShowOnboarding(true);
     }
   }, [projectName]);
