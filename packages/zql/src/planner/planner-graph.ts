@@ -144,9 +144,11 @@ export class PlannerGraph {
 
   /**
    * Calculate total cost of the current plan.
+   * Total cost includes both startup cost (one-time, e.g., sorting) and running cost.
    */
   getTotalCost(): number {
-    return must(this.#terminus).estimateCost().runningCost;
+    const estimate = must(this.#terminus).estimateCost();
+    return estimate.startupCost + estimate.runningCost;
   }
 
   /**
