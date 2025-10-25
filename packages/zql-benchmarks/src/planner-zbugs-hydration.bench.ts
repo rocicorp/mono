@@ -6,7 +6,7 @@ import {
 } from '../../zero-schema/src/name-mapper.ts';
 import {planQuery} from '../../zql/src/planner/planner-builder.ts';
 import {mapAST} from '../../zero-protocol/src/ast.ts';
-import type {AST} from '../../zero-protocol/src/ast.ts';
+import type {AST, Condition} from '../../zero-protocol/src/ast.ts';
 import {QueryImpl} from '../../zql/src/query/query-impl.ts';
 import {defaultFormat} from '../../zql/src/ivm/default-format.ts';
 import type {Query} from '../../zql/src/query/query.ts';
@@ -23,9 +23,6 @@ import {testLogConfig} from '../../otel/src/test-log-config.ts';
 const db = new Database(
   createSilentLogContext(),
   '/Users/mlaw/workspace/mono/apps/zbugs/zbugs-replica.db',
-  {
-    readonly: true,
-  },
 );
 const lc = createSilentLogContext();
 
@@ -45,6 +42,37 @@ const serverToClientMapper = serverToClient(schema.tables);
 
 // Create SQLite delegate
 const delegate = newQueryDelegate(lc, testLogConfig, db, schema);
+
+// Helper to set flip to false in all correlated subquery conditions
+function setFlipToFalse(condition: Condition): Condition {
+  if (condition.type === 'correlatedSubquery') {
+    return {
+      ...condition,
+      flip: false,
+      related: {
+        ...condition.related,
+        subquery: setFlipToFalseInAST(condition.related.subquery),
+      },
+    };
+  } else if (condition.type === 'and' || condition.type === 'or') {
+    return {
+      ...condition,
+      conditions: condition.conditions.map(setFlipToFalse),
+    };
+  }
+  return condition;
+}
+
+function setFlipToFalseInAST(ast: AST): AST {
+  return {
+    ...ast,
+    where: ast.where ? setFlipToFalse(ast.where) : undefined,
+    related: ast.related?.map(r => ({
+      ...r,
+      subquery: setFlipToFalseInAST(r.subquery),
+    })),
+  };
+}
 
 // Helper to create a query from an AST
 function createQuery<TTable extends keyof typeof schema.tables & string>(
@@ -72,7 +100,10 @@ function benchmarkQuery<TTable extends keyof typeof schema.tables & string>(
   // Map to server names, plan, then map back to client names
   const mappedAST = mapAST(unplannedAST, clientToServerMapper);
 
-  const plannedServerAST = planQuery(mappedAST, costModel);
+  // Deep copy mappedAST and set flip to false for all correlated subqueries
+  const mappedASTCopy = setFlipToFalseInAST(mappedAST);
+
+  const plannedServerAST = planQuery(mappedASTCopy, costModel);
   const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
 
   const tableName = unplannedAST.table as TTable;
@@ -104,14 +135,14 @@ benchmarkQuery('allProjects', builder.project);
 // labelsForProject query
 benchmarkQuery(
   'labelsForProject - zero',
-  builder.label.whereExists('project', q => q.where('lowerCaseName', 'zero')),
+  builder.label.whereExists('project', q => q.where('lowerCaseName', 'roci')),
 );
 
 // issuePreloadV2 query - simplified version
 benchmarkQuery(
   'issuePreloadV2 - zero project',
   builder.issue
-    .whereExists('project', p => p.where('lowerCaseName', 'zero'), {
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
       flip: true,
     })
     .related('labels')
@@ -143,7 +174,7 @@ benchmarkQuery(
 benchmarkQuery(
   'userPickerV2 - creators filter',
   builder.user.whereExists('createdIssues', i =>
-    i.whereExists('project', p => p.where('lowerCaseName', 'zero'), {
+    i.whereExists('project', p => p.where('lowerCaseName', 'roci'), {
       flip: true,
     }),
   ),
@@ -153,7 +184,7 @@ benchmarkQuery(
 benchmarkQuery(
   'userPickerV2 - assignees filter',
   builder.user.whereExists('assignedIssues', i =>
-    i.whereExists('project', p => p.where('lowerCaseName', 'zero'), {
+    i.whereExists('project', p => p.where('lowerCaseName', 'roci'), {
       flip: true,
     }),
   ),
