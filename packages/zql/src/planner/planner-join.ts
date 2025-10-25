@@ -223,8 +223,11 @@ export class PlannerJoin {
       return {
         baseCardinality: parentCost.baseCardinality,
         runningCost:
-          parentCost.runningCost +
-          scanEst * (childCost.startupCost + childCost.runningCost),
+          this.#type === 'flipped'
+            ? childCost.startupCost +
+              childCost.runningCost * (parentCost.startupCost + scanEst)
+            : parentCost.runningCost +
+              scanEst * (childCost.startupCost + childCost.runningCost),
         startupCost: parentCost.startupCost,
         selectivity: parentCost.selectivity,
         limit: parentCost.limit,
