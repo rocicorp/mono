@@ -18,6 +18,7 @@ import {Database} from '../../zqlite/src/db.ts';
 import {newQueryDelegate} from '../../zqlite/src/test/source-factory.ts';
 import {schema, builder} from './schema.ts';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
+// import {AccumulatorDebugger} from '../../zql/src/planner/planner-debug.ts';
 
 // Open the zbugs SQLite database
 const db = new Database(
@@ -103,8 +104,13 @@ function benchmarkQuery<TTable extends keyof typeof schema.tables & string>(
   // Deep copy mappedAST and set flip to false for all correlated subqueries
   const mappedASTCopy = setFlipToFalseInAST(mappedAST);
 
-  const plannedServerAST = planQuery(mappedASTCopy, costModel);
+  // const dbg = new AccumulatorDebugger();
+
+  const plannedServerAST = planQuery(mappedASTCopy, costModel /*dbg*/);
   const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
+
+  // console.log('Planned ast', JSON.stringify(plannedClientAST, null, 2));
+  // console.log(dbg.format());
 
   const tableName = unplannedAST.table as TTable;
   const unplannedQuery = createQuery(tableName, unplannedAST);
@@ -250,6 +256,10 @@ benchmarkQuery(
 );
 
 // issueList - with creator filter
+// ok... so and should not add
+// it should just take parent cardinality?
+// since that's the cost to probe with _both_ constraints
+// we do not probe twice in and
 benchmarkQuery(
   'issueList - roci project, creator filter',
   builder.issue
@@ -302,28 +312,28 @@ benchmarkQuery(
     .limit(50),
 );
 
-// issueList - with text filter (title search)
-// benchmarkQuery(
-//   'issueList - roci project, text filter',
-//   builder.issue
-//     .whereExists(
-//       'project',
-//       p => p.where('lowerCaseName', 'roci'),
-//       {flip: true},
-//     )
-//     .where(({or, cmp, exists}) =>
-//       or(
-//         cmp('title', 'ILIKE', '%sync%'),
-//         cmp('description', 'ILIKE', '%sync%'),
-//         exists('comments', q => q.where('body', 'ILIKE', '%sync%')),
-//       ),
-//     )
-//     .related('viewState', q => q.where('userID', 'test-user'))
-//     .related('labels')
-//     .orderBy('modified', 'desc')
-//     .orderBy('id', 'desc')
-//     .limit(50),
-// );
+// // issueList - with text filter (title search)
+// // benchmarkQuery(
+// //   'issueList - roci project, text filter',
+// //   builder.issue
+// //     .whereExists(
+// //       'project',
+// //       p => p.where('lowerCaseName', 'roci'),
+// //       {flip: true},
+// //     )
+// //     .where(({or, cmp, exists}) =>
+// //       or(
+// //         cmp('title', 'ILIKE', '%sync%'),
+// //         cmp('description', 'ILIKE', '%sync%'),
+// //         exists('comments', q => q.where('body', 'ILIKE', '%sync%')),
+// //       ),
+// //     )
+// //     .related('viewState', q => q.where('userID', 'test-user'))
+// //     .related('labels')
+// //     .orderBy('modified', 'desc')
+// //     .orderBy('id', 'desc')
+// //     .limit(50),
+// // );
 
 // issueList - complex filter combination (open + creator + label)
 benchmarkQuery(
