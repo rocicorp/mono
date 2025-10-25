@@ -46,10 +46,8 @@ export function createMutators(authData: AuthData | undefined) {
     issue: {
       async create(
         tx: MutatorTx,
-        args: CreateIssueArgs,
-        //{id, title, description, created, modified, projectID}: CreateIssueArgs,
+        {id, title, description, created, modified, projectID}: CreateIssueArgs,
       ) {
-        const {id, title, description, created, modified, projectID} = args;
         assertIsLoggedIn(authData);
         const creatorID = authData.sub;
         await tx.mutate.issue.insert({

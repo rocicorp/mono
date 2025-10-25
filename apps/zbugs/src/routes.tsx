@@ -1,7 +1,5 @@
 import type {ListContext} from '../shared/queries.ts';
 import {createContext, useContext, useMemo, useState} from 'react';
-import {ZERO_PROJECT_NAME} from '../shared/schema.ts';
-import {useParams} from 'wouter';
 
 // TODO: Use exports instead of a Record
 export const links = {
@@ -69,16 +67,6 @@ export function useListContext() {
     throw new Error('useListContext must be used within a ListContextProvider');
   }
   return context;
-}
-
-export function useProjectName() {
-  const params = useParams();
-  return params.projectName ?? ZERO_PROJECT_NAME;
-}
-
-export function useIsGigabugs() {
-  const projectName = useProjectName();
-  return isGigabugs(projectName);
 }
 
 export function isGigabugs(projectName: string) {

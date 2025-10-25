@@ -9,12 +9,13 @@ import logoGigabugsURL from '../assets/images/logo-gigabugs.svg';
 import markURL from '../assets/images/mark.svg';
 import {useLogin} from '../hooks/use-login.tsx';
 import {IssueComposer} from '../pages/issue/issue-composer.tsx';
-import {isGigabugs, links, useListContext, useProjectName} from '../routes.tsx';
+import {isGigabugs, links, useListContext} from '../routes.tsx';
 import {AvatarImage} from './avatar-image.tsx';
 import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
 import {Button} from './button.tsx';
 import {Link} from './link.tsx';
 import {queries, type ListContext} from '../../shared/queries.ts';
+import {ZERO_PROJECT_NAME} from '../../shared/schema.ts';
 import {ProjectPicker} from './project-picker.tsx';
 import {ConnectionStatus} from '@rocicorp/zero';
 import {ErrorModal} from './error-modal.tsx';
@@ -24,7 +25,7 @@ export const Nav = memo(() => {
   const qs = useMemo(() => new URLSearchParams(search), [search]);
   const {listContext} = useListContext();
   const status = getStatus(listContext);
-  const projectName = useProjectName();
+  const projectName = listContext?.params.projectName ?? ZERO_PROJECT_NAME;
   const login = useLogin();
   const [isMobile, setIsMobile] = useState(false);
   const [showUserPanel, setShowUserPanel] = useState(false); // State to control visibility of user-panel-mobile
@@ -184,18 +185,17 @@ export const Nav = memo(() => {
           )}
         </div>
       </div>
-      {project && (
-        <IssueComposer
-          projectID={project.id}
-          isOpen={showIssueModal}
-          onDismiss={createdID => {
-            setShowIssueModal(false);
-            if (createdID) {
-              navigate(links.issue({projectName, id: createdID}));
-            }
-          }}
-        />
-      )}
+      <IssueComposer
+        projects={projects}
+        projectName={projectName}
+        isOpen={showIssueModal}
+        onDismiss={created => {
+          setShowIssueModal(false);
+          if (created) {
+            navigate(links.issue(created));
+          }
+        }}
+      />
 
       <ErrorModal />
     </>

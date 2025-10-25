@@ -9,7 +9,6 @@ import {useLogin} from '../../hooks/use-login.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
 import {maxCommentLength} from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
-import {useIsGigabugs} from '../../routes.tsx';
 
 export function CommentComposer({
   id,
@@ -68,8 +67,6 @@ export function CommentComposer({
     return () => cleanupFns.forEach(fn => fn());
   }, [currentBody]);
 
-  const isGigabugs = useIsGigabugs();
-
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     setCurrentBody(e.target.value);
   };
@@ -120,16 +117,12 @@ export function CommentComposer({
             Cancel
           </Button>
         ) : null}
-        {!isGigabugs && (
-          <p className="aside">
-            Testing Zero? Try <a href="/p/roci">Gigabugs</a> instead.
-            <br />
-            Want a faster response?{' '}
-            <a href="https://discord.rocicorp.dev/">
-              Join us on Discord &rarr;
-            </a>
-          </p>
-        )}
+        <p className="aside">
+          Testing Zero? Please make sure to delete your comment after.
+          <br />
+          Want a faster response?{' '}
+          <a href="https://discord.rocicorp.dev/">Join us on Discord &rarr;</a>
+        </p>
       </div>
     </div>
   );

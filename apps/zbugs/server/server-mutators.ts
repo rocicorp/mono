@@ -26,13 +26,9 @@ export function createServerMutators(
     issue: {
       ...mutators.issue,
 
-      async create(
-        tx: MutatorTx,
-        {id, projectID, title, description}: CreateIssueArgs,
-      ) {
+      async create(tx: MutatorTx, {id, title, description}: CreateIssueArgs) {
         await mutators.issue.create(tx, {
           id,
-          projectID,
           title,
           description,
           created: Date.now(),
