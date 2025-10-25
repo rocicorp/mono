@@ -575,7 +575,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
               {isGigabugs(projectName) && (
                 <button
                   className="info-button"
-                  onClick={() => setShowOnboarding(true)}
+                  onMouseDown={() => setShowOnboarding(true)}
                   aria-label="Show onboarding information"
                   title="Show onboarding information"
                 >
