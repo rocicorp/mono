@@ -18,13 +18,13 @@ export function OnboardingModal({
       <p className="opening-text">
         A demo bug tracker built with <a href="https://zerosync.dev">Zero</a>.
         Contains <strong>240 thousand issues</strong> and{' '}
-        <strong>2.5 million rows</strong>, so you can Zero on a realistic
-        dataset. Featuring:
+        <strong>2.5 million rows</strong> to demonstrate real-world performance.
+        Also features:
       </p>
       <h2>Fast startup</h2>
       <p>
         Clear your cache and reload. Zero provides precise control over what's
-        synced, for quick loads even with an empty cache.
+        synced, for quick starts even on an empty cache.
       </p>
       <h2>Instant UX</h2>
       <p>
@@ -34,7 +34,7 @@ export function OnboardingModal({
       </p>
       <h2>Infinite scroll</h2>
       <p>
-        Perfect, buttery scrolling. Or open and issue and hold down{' '}
+        Perfect, buttery scrolling. Or open an issue and hold down{' '}
         <span className="keyboard-keys">J</span> /{' '}
         <span className="keyboard-keys">K</span> 🏎️💨.
       </p>
