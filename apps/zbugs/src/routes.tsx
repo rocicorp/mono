@@ -73,7 +73,6 @@ export function useListContext() {
 
 export function useProjectName() {
   const params = useParams();
-  console.log('params in useProjectName', params, params.projectName);
   return params.projectName ?? ZERO_PROJECT_NAME;
 }
 

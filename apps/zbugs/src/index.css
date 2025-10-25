@@ -398,6 +398,10 @@ textarea.autoResize {
     position: relative;
     top: -4px;
   }
+
+  .list-view-title-short {
+    display: none;
+  }
 }
 
 .list-view-header.search-mode {
@@ -1474,6 +1478,10 @@ textarea.autoResize {
     width: 85vw;
   }
 
+  #root-modal .onboarding-modal {
+    margin-top: 0;
+  }
+
   .nav-item {
     padding: 0.375rem 0.75rem;
   }
@@ -1539,6 +1547,14 @@ textarea.autoResize {
 
   .app-container {
     padding: 1.5rem;
+  }
+
+  .list-view-header .list-view-title-full {
+    display: none;
+  }
+
+  .list-view-header .list-view-title-short {
+    display: inline;
   }
 
   .primary-nav {

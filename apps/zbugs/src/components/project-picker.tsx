@@ -1,11 +1,23 @@
 import type {ProjectRow} from '../../shared/schema.ts';
 import projectIcon from '../assets/icons/project-box.svg';
+import rocketIcon from '../assets/icons/icon-rocket.svg';
+import zeroMarkIcon from '../assets/images/mark.svg';
 import {Combobox} from './combobox.tsx';
 
 interface Props {
   onChange: (selectedValue: ProjectRow) => void;
   projects: ProjectRow[];
   selectedProjectName?: string | undefined;
+}
+
+function getProjectIcon(project: ProjectRow): string {
+  if (project.name === 'Zero') {
+    return zeroMarkIcon;
+  }
+  if (project.name === 'Roci') {
+    return rocketIcon;
+  }
+  return projectIcon;
 }
 
 export function ProjectPicker({
@@ -32,7 +44,7 @@ export function ProjectPicker({
       items={reorderedProjects.map(p => ({
         text: p.name,
         value: p,
-        icon: projectIcon,
+        icon: getProjectIcon(p),
       }))}
       selectedValue={projects.find(p => p.lowerCaseName === lowerCaseName)}
       onChange={onChange}
