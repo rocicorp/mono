@@ -107,7 +107,7 @@ export class PlannerFanIn {
         if (cost.runningCost > maxRunningCost) {
           maxRunningCost = cost.runningCost;
         }
-        // FI runs branches in parallel (conceptually), so startup cost is the max
+        // FI fetches from the root only once, so take the max startup cost
         if (cost.startupCost > maxStartupCost) {
           maxStartupCost = cost.startupCost;
         }
@@ -140,7 +140,7 @@ export class PlannerFanIn {
         const cost = input.estimateCost(updatedPattern);
         totalCost.baseCardinality += cost.baseCardinality;
         totalCost.runningCost += cost.runningCost;
-        // UFI runs branches sequentially, so startup costs add up
+        // UFI runs all branches, so startup costs add up
         totalCost.startupCost += cost.startupCost;
 
         // OR branches: combine selectivities assuming independent events

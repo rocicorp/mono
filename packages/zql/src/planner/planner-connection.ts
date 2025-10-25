@@ -252,8 +252,7 @@ export class PlannerConnection {
             this.#cachedConstraintCosts.set(key, cost);
           }
           totalCardinality += cost.baseCardinality;
-          // For multiple branches, startup cost happens once per branch
-          // (they run sequentially in UFI mode, or max in FI mode - we conservatively use max here)
+          // TODO: if no branch pattern is specified, should we sum startup costs?
           maxStartupCost = Math.max(maxStartupCost, cost.startupCost);
         }
       }
