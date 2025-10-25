@@ -1,4 +1,3 @@
-/* oxlint-disable arrow-body-style */
 import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
@@ -37,8 +36,18 @@ import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {completedAST, newQuery} from '../../../zql/src/query/query-impl.ts';
-import {type Query, type Row} from '../../../zql/src/query/query.ts';
+import {
+  materializeImpl,
+  newQuery,
+  preloadImpl,
+  runImpl,
+} from '../../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import {
+  type AnyQuery,
+  type Query,
+  type Row,
+} from '../../../zql/src/query/query.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
@@ -452,7 +461,7 @@ const permissions = must(
   }),
 );
 
-let queryDelegate: QueryDelegate;
+let queryDelegate: QueryDelegate<unknown>;
 let replica: Database;
 function toDbType(type: ValueType) {
   switch (type) {
@@ -534,6 +543,20 @@ beforeEach(() => {
     flushQueryChanges() {},
     defaultQueryComplete: true,
     addMetric() {},
+    // oxlint-disable-next-line no-explicit-any
+    materialize(query: AnyQuery, factory?: any, options?: any) {
+      // oxlint-disable-next-line no-explicit-any
+      return materializeImpl(query, this, factory, options) as any;
+    },
+    withContext(q) {
+      return asQueryInternals(q);
+    },
+    run(query, options) {
+      return runImpl(query, this, options);
+    },
+    preload(query, options) {
+      return preloadImpl(query, this, options);
+    },
   };
 
   for (const table of Object.values(schema.tables)) {
@@ -918,7 +941,7 @@ function runReadQueryWithPermissions(
   const updatedAst = bindStaticParameters(
     transformQuery(
       new LogContext('debug'),
-      completedAST(query),
+      asQueryInternals(query).completedAST,
       permissions,
       authData,
     ),
@@ -1537,16 +1560,14 @@ describe('read permissions against nested paths', () => {
 // maps over nodes, drops all information from `row` except the id
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
 function toIdsOnly(nodes: CaughtNode[]): any[] {
-  return nodes.map(node => {
-    return {
-      id: node.row.id,
-      ...Object.fromEntries(
-        Object.entries(node.relationships)
-          .filter(([k]) => !k.startsWith('zsubq_'))
-          .map(([k, v]) => [k, toIdsOnly(Array.isArray(v) ? v : [...v])]),
-      ),
-    };
-  });
+  return nodes.map(node => ({
+    id: node.row.id,
+    ...Object.fromEntries(
+      Object.entries(node.relationships)
+        .filter(([k]) => !k.startsWith('zsubq_'))
+        .map(([k, v]) => [k, toIdsOnly(Array.isArray(v) ? v : [...v])]),
+    ),
+  }));
 }
 
 // TODO (mlaw): test that `exists` does not provide an oracle

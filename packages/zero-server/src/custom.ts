@@ -18,6 +18,12 @@ import type {
   TableCRUD,
   TransactionBase,
 } from '../../zql/src/mutate/custom.ts';
+import type {
+  HumanReadable,
+  Query,
+  RunOptions,
+} from '../../zql/src/query/query.ts';
+import {asRunnableQuery} from '../../zql/src/query/runnable-query.ts';
 import {getServerSchema} from './schema.ts';
 
 interface ServerTransaction<S extends Schema, TWrappedTransaction>
@@ -65,10 +71,19 @@ export class TransactionImpl<S extends Schema, TWrappedTransaction>
     this.mutate = mutate;
     this.query = query;
   }
+
+  run<TTable extends keyof S['tables'] & string, TReturn, TContext>(
+    query: Query<S, TTable, TReturn, TContext>,
+    options?: RunOptions,
+  ): Promise<HumanReadable<TReturn>> {
+    return asRunnableQuery(query).run(options);
+  }
 }
 
 const dbTxSymbol = Symbol();
+
 const serverSchemaSymbol = Symbol();
+
 type WithHiddenTxAndSchema = {
   [dbTxSymbol]: DBTransaction<unknown>;
   [serverSchemaSymbol]: ServerSchema;

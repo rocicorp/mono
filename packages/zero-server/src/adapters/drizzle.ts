@@ -58,7 +58,7 @@ export class DrizzleConnection<
       fn(
         new DrizzleInternalTransaction(
           drizzleTx,
-        ) as unknown as DBTransaction<TTransaction>,
+        ) as DBTransaction<TTransaction>,
       ),
     );
   }

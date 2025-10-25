@@ -11,7 +11,7 @@ import {
   newQueryDelegate,
 } from './test/source-factory.ts';
 
-let queryDelegate: QueryDelegate;
+let queryDelegate: QueryDelegate<unknown>;
 
 const lc = createSilentLogContext();
 
@@ -90,8 +90,9 @@ test('row type', () => {
   const query = newQuery(queryDelegate, schema, 'issue')
     .whereExists('labels', q => q.where('name', '=', 'bug'))
     .related('labels');
-  type RT = ReturnType<typeof query.run>;
-  expectTypeOf<RT>().toEqualTypeOf<
+
+  const rows = queryDelegate.run(query);
+  expectTypeOf(rows).toEqualTypeOf<
     Promise<
       {
         readonly id: string;
@@ -111,7 +112,11 @@ test('row type', () => {
 
 test('basic query', async () => {
   const query = newQuery(queryDelegate, schema, 'issue');
-  const data = mapResultToClientNames(await query.run(), schema, 'issue');
+  const data = mapResultToClientNames(
+    await queryDelegate.run(query),
+    schema,
+    'issue',
+  );
   expect(data).toMatchInlineSnapshot(`
     [
       {
@@ -143,9 +148,12 @@ test('basic query', async () => {
 });
 
 test('null compare', async () => {
-  let rows = await newQuery(queryDelegate, schema, 'issue')
-    .where('ownerId', 'IS', null)
-    .run();
+  let query = newQuery(queryDelegate, schema, 'issue').where(
+    'ownerId',
+    'IS',
+    null,
+  );
+  let rows = await queryDelegate.run(query);
   expect(mapResultToClientNames(rows, schema, 'issue')).toMatchInlineSnapshot(`
     [
       {
@@ -159,9 +167,12 @@ test('null compare', async () => {
     ]
   `);
 
-  rows = await newQuery(queryDelegate, schema, 'issue')
-    .where('ownerId', 'IS NOT', null)
-    .run();
+  query = newQuery(queryDelegate, schema, 'issue').where(
+    'ownerId',
+    'IS NOT',
+    null,
+  );
+  rows = await queryDelegate.run(query);
 
   expect(rows).toMatchInlineSnapshot(`
     [
@@ -191,7 +202,11 @@ test('or', async () => {
   const query = newQuery(queryDelegate, schema, 'issue').where(({or, cmp}) =>
     or(cmp('ownerId', '=', '0001'), cmp('ownerId', '=', '0002')),
   );
-  const data = mapResultToClientNames(await query.run(), schema, 'issue');
+  const data = mapResultToClientNames(
+    await queryDelegate.run(query),
+    schema,
+    'issue',
+  );
   expect(data).toMatchInlineSnapshot(`
     [
       {
@@ -219,7 +234,7 @@ test('where exists retracts when an edit causes a row to no longer match', () =>
     .whereExists('labels', q => q.where('name', '=', 'bug'))
     .related('labels');
 
-  const view = query.materialize();
+  const view = queryDelegate.materialize(query);
 
   expect(view.data).toMatchInlineSnapshot(`[]`);
 
@@ -300,7 +315,11 @@ test('schema applied `one`', async () => {
     .related('owner')
     .related('comments', q => q.related('author').related('revisions'))
     .where('id', '=', '0001');
-  const data = mapResultToClientNames(await query.run(), schema, 'issue');
+  const data = mapResultToClientNames(
+    await queryDelegate.run(query),
+    schema,
+    'issue',
+  );
   expect(data).toMatchInlineSnapshot(`
     [
       {

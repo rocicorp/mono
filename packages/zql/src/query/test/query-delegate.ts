@@ -6,18 +6,31 @@ import {
 } from '../../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import type {FilterInput} from '../../ivm/filter-operators.ts';
 import {MemoryStorage} from '../../ivm/memory-storage.ts';
 import type {Input} from '../../ivm/operator.ts';
 import type {Source, SourceInput} from '../../ivm/source.ts';
 import {createSource} from '../../ivm/test/source-factory.ts';
+import type {ViewFactory} from '../../ivm/view.ts';
 import type {CustomQueryID} from '../named.ts';
 import type {
   CommitListener,
   GotCallback,
   QueryDelegate,
+  WithContext,
 } from '../query-delegate.ts';
+import {materializeImpl, preloadImpl, runImpl} from '../query-impl.ts';
+import {type QueryInternals} from '../query-internals.ts';
+import type {
+  HumanReadable,
+  MaterializeOptions,
+  PreloadOptions,
+  Query,
+  RunOptions,
+} from '../query.ts';
 import type {TTL} from '../ttl.ts';
+import type {TypedView} from '../typed-view.ts';
 import {
   commentSchema,
   issueLabelSchema,
@@ -35,7 +48,9 @@ type Entry = {
   args: readonly ReadonlyJSONValue[] | undefined;
   ttl: TTL;
 };
-export class QueryDelegateImpl implements QueryDelegate {
+export class QueryDelegateImpl<TContext = undefined>
+  implements QueryDelegate<TContext>
+{
   readonly #sources: Record<string, Source> = makeSources();
   readonly #commitListeners: Set<CommitListener> = new Set();
 
@@ -44,17 +59,34 @@ export class QueryDelegateImpl implements QueryDelegate {
   synchronouslyCallNextGotCallback = false;
   callGot = false;
   readonly defaultQueryComplete = false;
+  readonly #context: TContext | undefined;
   readonly enableNotExists = true; // Allow NOT EXISTS in tests
 
   constructor({
     sources = makeSources(),
     callGot = false,
+    context,
   }: {
     sources?: Record<string, Source> | undefined;
     callGot?: boolean | undefined;
+    context?: TContext | undefined;
   } = {}) {
     this.#sources = sources;
     this.callGot = callGot;
+    this.#context = context;
+  }
+
+  withContext<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+  >(
+    query: Query<TSchema, TTable, TReturn, TContext>,
+  ): QueryInternals<TSchema, TTable, TReturn, TContext> {
+    assert('withContext' in query);
+    return (
+      query as WithContext<TSchema, TTable, TReturn, TContext>
+    ).withContext(this.#context as TContext);
   }
 
   flushQueryChanges() {}
@@ -166,6 +198,67 @@ export class QueryDelegateImpl implements QueryDelegate {
   }
 
   addMetric() {}
+
+  materialize<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+    TContext,
+  >(
+    query: Query<TSchema, TTable, TReturn, TContext>,
+    factory?: undefined,
+    options?: MaterializeOptions,
+  ): TypedView<HumanReadable<TReturn>>;
+
+  materialize<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+    TContext,
+    T,
+  >(
+    query: Query<TSchema, TTable, TReturn, TContext>,
+    factory: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
+    options?: MaterializeOptions,
+  ): T;
+
+  materialize<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+    T,
+  >(
+    query: Query<TSchema, TTable, TReturn, TContext>,
+    factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
+    options?: MaterializeOptions,
+  ): T {
+    return materializeImpl(query, this, factory, options);
+  }
+
+  run<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+  >(
+    query: Query<TSchema, TTable, TReturn, TContext>,
+    options?: RunOptions,
+  ): Promise<HumanReadable<TReturn>> {
+    return runImpl(query, this, options);
+  }
+
+  preload<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+  >(
+    query: Query<TSchema, TTable, TReturn, TContext>,
+    options?: PreloadOptions,
+  ): {
+    cleanup: () => void;
+    complete: Promise<void>;
+  } {
+    return preloadImpl(query, this, options);
+  }
 }
 
 function makeSources() {

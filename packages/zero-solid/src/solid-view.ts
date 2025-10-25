@@ -1,4 +1,5 @@
 import {produce, reconcile, type SetStoreFunction} from 'solid-js/store';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {
   applyChange,
   type Change,
@@ -7,16 +8,15 @@ import {
   type Input,
   type Node,
   type Output,
-  type Query,
+  type QueryInternals,
   type Schema,
   type Stream,
   type TTL,
   type ViewChange,
   type ViewFactory,
 } from '../../zero-client/src/mod.js';
-import {idSymbol} from '../../zql/src/ivm/view-apply-change.ts';
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
+import {idSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 
 export type QueryResultDetails = Readonly<
   | {
@@ -285,8 +285,9 @@ export function createSolidViewFactory(
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
+    TContext,
   >(
-    _query: Query<TSchema, TTable, TReturn>,
+    _query: QueryInternals<TSchema, TTable, TReturn, TContext>,
     input: Input,
     format: Format,
     onDestroy: () => void,
@@ -306,7 +307,13 @@ export function createSolidViewFactory(
     );
   }
 
-  solidViewFactory satisfies ViewFactory<Schema, string, unknown, unknown>;
+  solidViewFactory satisfies ViewFactory<
+    Schema,
+    string,
+    unknown,
+    unknown,
+    unknown
+  >;
 
   return solidViewFactory;
 }

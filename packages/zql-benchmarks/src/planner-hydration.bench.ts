@@ -1,19 +1,20 @@
 import {bench, run, summary} from 'mitata';
-import {bootstrap} from '../../zql-integration-tests/src/helpers/runner.ts';
-import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
-import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
-import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
+import {expect, test} from 'vitest';
+import type {AST} from '../../zero-protocol/src/ast.ts';
+import {mapAST} from '../../zero-protocol/src/ast.ts';
 import {
   clientToServer,
   serverToClient,
 } from '../../zero-schema/src/name-mapper.ts';
-import {planQuery} from '../../zql/src/planner/planner-builder.ts';
-import {mapAST} from '../../zero-protocol/src/ast.ts';
-import type {AST} from '../../zero-protocol/src/ast.ts';
-import {QueryImpl} from '../../zql/src/query/query-impl.ts';
+import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
+import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
+import {bootstrap} from '../../zql-integration-tests/src/helpers/runner.ts';
 import {defaultFormat} from '../../zql/src/ivm/default-format.ts';
+import {planQuery} from '../../zql/src/planner/planner-builder.ts';
+import {QueryImpl} from '../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {Query} from '../../zql/src/query/query.ts';
-import {expect, test} from 'vitest';
+import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
 
 const pgContent = await getChinook();
 
@@ -71,7 +72,7 @@ function benchmarkQuery<TTable extends keyof typeof schema.tables & string>(
   name: string,
   query: Query<typeof schema, TTable>,
 ) {
-  const unplannedAST = query.ast;
+  const unplannedAST = asQueryInternals(query).ast;
 
   // Map to server names, plan, then map back to client names
   const mappedAST = mapAST(unplannedAST, clientToServerMapper);

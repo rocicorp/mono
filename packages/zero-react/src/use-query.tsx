@@ -3,11 +3,16 @@ import React, {useSyncExternalStore} from 'react';
 import {deepClone} from '../../shared/src/deep-clone.ts';
 import type {Immutable} from '../../shared/src/immutable.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {
+  formatForQuery,
+  hashForQuery,
+  materializeQuery,
+} from '../../zero-client/src/client/bindings.ts';
+import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
-import {AbstractQuery} from '../../zql/src/query/query-impl.ts';
 import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
@@ -82,8 +87,9 @@ export function useQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
+  TContext,
 >(
-  query: Query<TSchema, TTable, TReturn>,
+  query: Query<TSchema, TTable, TReturn, TContext>,
   options?: UseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -94,12 +100,7 @@ export function useQuery<
     ({enabled = true, ttl = DEFAULT_TTL_MS} = options);
   }
 
-  const view = viewStore.getView(
-    useZero(),
-    query as AbstractQuery<TSchema, TTable, TReturn>,
-    enabled,
-    ttl,
-  );
+  const view = viewStore.getView(useZero(), query, enabled, ttl);
   // https://react.dev/reference/react/useSyncExternalStore
   return useSyncExternalStore(
     view.subscribeReactInternals,
@@ -112,8 +113,9 @@ export function useSuspenseQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
+  TContext,
 >(
-  query: Query<TSchema, TTable, TReturn>,
+  query: Query<TSchema, TTable, TReturn, TContext>,
   options?: UseSuspenseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -129,12 +131,7 @@ export function useSuspenseQuery<
     } = options);
   }
 
-  const view = viewStore.getView(
-    useZero(),
-    query as AbstractQuery<TSchema, TTable, TReturn>,
-    enabled,
-    ttl,
-  );
+  const view = viewStore.getView(useZero(), query, enabled, ttl);
   // https://react.dev/reference/react/useSyncExternalStore
   const snapshot = useSyncExternalStore(
     view.subscribeReactInternals,
@@ -184,7 +181,7 @@ function getSnapshot<TReturn>(
   data: HumanReadable<TReturn>,
   resultType: ResultType,
   refetchFn: () => void,
-  error?: ErroredQuery | undefined,
+  error?: ErroredQuery,
 ): QueryResult<TReturn> {
   if (singular && data === undefined) {
     switch (resultType) {
@@ -267,7 +264,7 @@ function makeError(
 declare const TESTING: boolean;
 
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-type ViewWrapperAny = ViewWrapper<any, any, any>;
+type ViewWrapperAny = ViewWrapper<any, any, any, any, any>;
 
 const allViews = new WeakMap<ViewStore, Map<string, ViewWrapperAny>>();
 
@@ -339,9 +336,11 @@ export class ViewStore {
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
+    MD extends CustomMutatorDefs | undefined,
+    TContext,
   >(
-    zero: Zero<TSchema>,
-    query: Query<TSchema, TTable, TReturn>,
+    zero: Zero<TSchema, MD, TContext>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
     enabled: boolean,
     ttl: TTL,
   ): {
@@ -353,7 +352,7 @@ export class ViewStore {
     complete: boolean;
     nonEmpty: boolean;
   } {
-    const {format} = query;
+    const format = formatForQuery(zero, query);
     if (!enabled) {
       return {
         getSnapshot: () => getDefaultSnapshot(format.singular),
@@ -366,9 +365,12 @@ export class ViewStore {
       };
     }
 
-    const hash = query.hash() + zero.clientID;
+    const hash = hashForQuery(zero, query) + zero.clientID;
     let existing = this.#views.get(hash);
     if (!existing) {
+      // Pass queryInternals directly to ViewWrapper.
+      // materialize() will call delegate.withContext() again, but for already-resolved
+      // queries (from getQueryInternals), withContext() is a no-op that returns `this`.
       existing = new ViewWrapper(zero, query, format, ttl, view => {
         const currentView = this.#views.get(hash);
         if (currentView && currentView !== view) {
@@ -381,7 +383,7 @@ export class ViewStore {
     } else {
       existing.updateTTL(ttl);
     }
-    return existing as ViewWrapper<TSchema, TTable, TReturn>;
+    return existing as ViewWrapper<TSchema, TTable, TReturn, MD, TContext>;
   }
 }
 
@@ -416,11 +418,15 @@ class ViewWrapper<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
+  MD extends CustomMutatorDefs | undefined,
+  TContext,
 > {
-  #zero: Zero<TSchema>;
+  #zero: Zero<TSchema, MD, TContext>;
   #view: TypedView<HumanReadable<TReturn>> | undefined;
   readonly #onDematerialized;
-  readonly #query: Query<TSchema, TTable, TReturn>;
+  // Store as QueryInternals because getView() passes the resolved queryInternals.
+  // We use materializeQueryInternals() which accepts QueryInternals directly.
+  readonly #query: Query<TSchema, TTable, TReturn, TContext>;
   readonly #format: Format;
   #snapshot: QueryResult<TReturn>;
   #reactInternals: Set<() => void>;
@@ -431,11 +437,13 @@ class ViewWrapper<
   #nonEmptyResolver = resolver<void>();
 
   constructor(
-    zero: Zero<TSchema>,
-    query: Query<TSchema, TTable, TReturn>,
+    zero: Zero<TSchema, MD, TContext>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
     format: Format,
     ttl: TTL,
-    onDematerialized: (view: ViewWrapper<TSchema, TTable, TReturn>) => void,
+    onDematerialized: (
+      view: ViewWrapper<TSchema, TTable, TReturn, MD, TContext>,
+    ) => void,
   ) {
     this.#zero = zero;
     this.#query = query;
@@ -499,7 +507,16 @@ class ViewWrapper<
       return;
     }
 
-    this.#view = this.#zero.materialize(this.#query, {ttl: this.#ttl});
+    // Call materializeQueryInternals to avoid redundant withContext() call.
+    // getView() already resolved the query via getQueryInternals(), so we can
+    // pass the resolved queryInternals directly. This helper will use
+    // materializeImpl which detects it's already resolved and skips withContext().
+    //
+    // We can't use the public Zero.materialize() API because it always calls
+    // withContext() on the query parameter, which would be redundant.
+    this.#view = materializeQuery(this.#zero, this.#query, undefined, {
+      ttl: this.#ttl,
+    });
     this.#view.addListener(this.#onData);
   };
 

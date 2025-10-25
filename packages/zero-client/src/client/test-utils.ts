@@ -29,6 +29,7 @@ import type {
 } from '../../../zero-protocol/src/push.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {PullRow, Query} from '../../../zql/src/query/query.ts';
 import type {ConnectionState} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
@@ -95,7 +96,8 @@ export class MockSocket extends EventTarget {
 export class TestZero<
   const S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
-> extends Zero<S, MD> {
+  Context = unknown,
+> extends Zero<S, MD, Context> {
   pokeIDCounter = 0;
 
   #connectionStatusResolvers: Set<{
@@ -121,7 +123,7 @@ export class TestZero<
     return this[exposedToTestingSymbol].connectStart;
   }
 
-  constructor(options: ZeroOptions<S, MD>) {
+  constructor(options: ZeroOptions<S, MD, Context>) {
     super(options);
 
     // Subscribe to connection manager to handle connection state change notifications
@@ -248,18 +250,17 @@ export class TestZero<
   async triggerGotQueriesPatch(
     q: Query<S, keyof S['tables'] & string>,
   ): Promise<void> {
-    q.hash();
     await this.triggerPoke(null, '1', {
       gotQueriesPatch: [
         {
           op: 'put',
-          hash: q.hash(),
+          hash: asQueryInternals(q).hash(),
         },
       ],
     });
   }
 
-  declare [exposedToTestingSymbol]: TestingContext;
+  declare [exposedToTestingSymbol]: TestingContext<Context>;
 
   get pusher() {
     assert(TESTING);
@@ -274,6 +275,11 @@ export class TestZero<
   set reload(r: () => void) {
     assert(TESTING);
     this[exposedToTestingSymbol].setReload(r);
+  }
+
+  get queryDelegate() {
+    assert(TESTING);
+    return this[exposedToTestingSymbol].queryDelegate();
   }
 
   persist(): Promise<void> {
@@ -291,7 +297,7 @@ export class TestZero<
       gotQueriesPatch: [
         {
           op: 'put',
-          hash: q.hash(),
+          hash: asQueryInternals(q).hash(),
         },
       ],
     });

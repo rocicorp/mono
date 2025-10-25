@@ -105,6 +105,8 @@ export async function definePermissions<TAuthDataShape, TSchema extends Schema>(
     string,
     ExpressionBuilder<Schema, string>
   >;
+  // Create a StaticQuery for each table in the schema to use its
+  // ExpressionBuilder for compiling permissions.
   for (const name of Object.keys(schema.tables)) {
     expressionBuilders[name] = new StaticQuery(
       schema,
