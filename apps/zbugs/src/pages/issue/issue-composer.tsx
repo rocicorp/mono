@@ -116,6 +116,7 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
             onChange={e => setTitle(e.target.value)}
             onKeyDown={handleKeyDown}
             maxLength={MAX_ISSUE_TITLE_LENGTH}
+            tabIndex={1}
           />
         </div>
         <div className="w-full px-4">
@@ -128,6 +129,7 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
               placeholder="Add description..."
               maxLength={MAX_ISSUE_DESCRIPTION_LENGTH}
               ref={textareaRef}
+              tabIndex={2}
             ></textarea>
           </ImageUploadArea>
         </div>
@@ -141,6 +143,7 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
           eventName="New issue confirm"
           onAction={handleSubmit}
           disabled={!canSave()}
+          tabIndex={3}
         >
           Save Issue
         </Button>{' '}
