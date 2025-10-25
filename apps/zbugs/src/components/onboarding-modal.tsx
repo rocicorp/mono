@@ -16,27 +16,27 @@ export function OnboardingModal({
       className="onboarding-modal"
     >
       <p className="opening-text">
-        Welcome to <strong>Gigabugs</strong>, a demo bug tracker built with{' '}
-        <strong>Zero</strong>.
+        A demo bug tracker built with <a href="https://zerosync.dev">Zero</a>.
+        Contains <strong>240 thousand issues</strong> and{' '}
+        <strong>2.5 million rows</strong>, so you can Zero on a realistic
+        dataset. Featuring:
       </p>
+      <h2>Fast startup</h2>
       <p>
-        It’s populated with <strong>240 thousand issues</strong> and{' '}
-        <strong>2.5 million rows</strong> so that you can see how fast Zero is,
-        even as the dataset grows.
+        Clear your cache and reload. Zero provides precise control over what's
+        synced, for quick loads even with an empty cache.
       </p>
-      <p>Things to try:</p>
-      <h2>Clear cache and reload</h2>
-      <p>Zero's query-driven sync enables fast loads even from a cold cache.</p>
-      <h2>Instant interactions</h2>
+      <h2>Instant UX</h2>
       <p>
-        Click anything. Choose any filter. Create an issue or comment. Most
-        interactions respond instantly.
+        Click anything. Choose some filters. Create an issue. Zero's queries use
+        previously synced data if possible, making interactions instant by
+        default.
       </p>
       <h2>Infinite scroll</h2>
       <p>
-        Perfectly buttery infinite scroll. Because it’s fun! (Or open and issue
-        and hold down <span className="keyboard-keys">J</span> /{' '}
-        <span className="keyboard-keys">K</span> 🏎️💨)
+        Perfect, buttery scrolling. Or open and issue and hold down{' '}
+        <span className="keyboard-keys">J</span> /{' '}
+        <span className="keyboard-keys">K</span> 🏎️💨.
       </p>
       <h2>Live sync</h2>
       <p>Open two windows and watch changes sync between them.</p>
