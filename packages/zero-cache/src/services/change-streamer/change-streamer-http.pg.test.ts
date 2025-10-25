@@ -4,6 +4,7 @@ import Fastify from 'fastify';
 import {beforeEach, describe, expect, type MockedFunction, vi} from 'vitest';
 import WebSocket from 'ws';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import type {ZeroConfig} from '../../config/zero-config.ts';
 import {getConnectionURI, type PgTest, test} from '../../test/db.ts';
 import {type PostgresDB} from '../../types/pg.ts';
 import {inProcChannel} from '../../types/processes.ts';
@@ -21,6 +22,14 @@ import type {Downstream, SubscriberContext} from './change-streamer.ts';
 import {PROTOCOL_VERSION} from './change-streamer.ts';
 import {setupCDCTables} from './schema/tables.ts';
 import {type SnapshotMessage} from './snapshot.ts';
+
+function createTestConfig(overrides?: Partial<ZeroConfig>) {
+  return {
+    websocketCompression: false,
+    websocketCompressionOptions: undefined,
+    ...overrides,
+  } as ZeroConfig;
+}
 
 const SHARD_ID = {
   appID: 'foo',
@@ -84,6 +93,7 @@ describe('change-streamer/http', () => {
     // different behavior for ws.close().
     const server = new ChangeStreamerHttpServer(
       lc,
+      createTestConfig(),
       {port: 0},
       parent,
       {subscribe: subscribeFn.mockResolvedValue(downstream)},
@@ -129,6 +139,7 @@ describe('change-streamer/http', () => {
     const [parent] = inProcChannel();
     const server = new ChangeStreamerHttpServer(
       lc,
+      createTestConfig(),
       {port: 0},
       parent,
       {subscribe: vi.fn()},
