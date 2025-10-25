@@ -34,8 +34,6 @@ export const Nav = memo(() => {
   const project = projects.find(
     p => p.lowerCaseName === projectName.toLocaleLowerCase(),
   );
-  console.log('projectName', projectName);
-  console.log('project', project);
 
   const [showIssueModal, setShowIssueModal] = useState(false);
 
