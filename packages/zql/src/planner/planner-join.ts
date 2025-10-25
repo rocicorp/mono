@@ -223,6 +223,7 @@ export class PlannerJoin {
       return {
         baseCardinality: parentCost.baseCardinality,
         runningCost: parentCost.runningCost + scanEst * childCost.runningCost,
+        startupCost: parentCost.startupCost,
         selectivity: parentCost.selectivity,
         limit: parentCost.limit,
       };
@@ -232,6 +233,7 @@ export class PlannerJoin {
     return {
       baseCardinality: parentCost.baseCardinality,
       runningCost: scanEst * childCost.runningCost,
+      startupCost: parentCost.startupCost,
       selectivity: parentCost.selectivity,
       limit: parentCost.limit,
     };
