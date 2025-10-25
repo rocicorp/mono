@@ -2,16 +2,24 @@ import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {Database} from './db.ts';
 import {createSQLiteCostModel} from './sqlite-cost-model.ts';
+import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
+import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
 
 describe('SQLite cost model', () => {
   let db: Database;
   let costModel: ReturnType<typeof createSQLiteCostModel>;
 
   beforeEach(() => {
-    db = new Database(createSilentLogContext(), ':memory:');
+    const lc = createSilentLogContext();
+    db = new Database(lc, ':memory:');
 
-    // CREATE TABLE foo (a, b, c);
-    db.exec('CREATE TABLE foo (a PRIMARY KEY, b, c)');
+    // CREATE TABLE foo (a, b, c) with proper types
+    // Note: SQLite needs explicit types for computeZqlSpecs to work properly
+    // Need both PRIMARY KEY (for NOT NULL constraint) and UNIQUE INDEX (for computeZqlSpecs)
+    db.exec(`
+      CREATE TABLE foo (a INTEGER PRIMARY KEY, b INTEGER, c INTEGER);
+      CREATE UNIQUE INDEX foo_a_unique ON foo(a);
+    `);
 
     // Insert 2,000 rows
     const stmt = db.prepare('INSERT INTO foo (a, b, c) VALUES (?, ?, ?)');
@@ -22,34 +30,41 @@ describe('SQLite cost model', () => {
     // Run ANALYZE to populate statistics
     db.exec('ANALYZE');
 
-    // Define column types
-    const columns = {
-      a: {type: 'number'},
-      b: {type: 'number'},
-      c: {type: 'number'},
-    } as const;
+    // Get table specs using computeZqlSpecs
+    const tableSpecs = new Map<string, LiteAndZqlSpec>();
+    computeZqlSpecs(lc, db, tableSpecs);
 
     // Create the cost model
-    costModel = createSQLiteCostModel(db, {foo: {columns}});
+    costModel = createSQLiteCostModel(db, tableSpecs);
   });
 
   test('table scan ordered by primary key requires no sort', () => {
     // SELECT * FROM foo ORDER BY a
     // Ordered by primary key, so no sort needed - expected cost is just the table scan (~2000 rows)
-    const scanCost = costModel('foo', [['a', 'asc']], undefined, undefined);
+    const {baseCardinality} = costModel(
+      'foo',
+      [['a', 'asc']],
+      undefined,
+      undefined,
+    );
     // Expected: (SQLite estimate) = 1920
-    expect(scanCost).toBe(1920);
+    expect(baseCardinality).toBe(1920);
   });
 
   test('table scan ordered by non-indexed column includes sort cost', () => {
     // SELECT * FROM foo ORDER BY b
     // Table scan (~2000 rows) + sort loop (~2000 rows) - expected cost is 3840
-    const sortedCost = costModel('foo', [['b', 'asc']], undefined, undefined);
-    expect(sortedCost).toBe(3840);
+    const {startupCost, baseCardinality} = costModel(
+      'foo',
+      [['b', 'asc']],
+      undefined,
+      undefined,
+    );
+    expect(startupCost + baseCardinality).toBe(3840);
   });
 
   test('primary key lookup via condition', () => {
-    const pkLookupCost = costModel(
+    const {baseCardinality} = costModel(
       'foo',
       [['a', 'asc']],
       {
@@ -60,23 +75,20 @@ describe('SQLite cost model', () => {
       },
       undefined,
     );
-    expect(pkLookupCost).toBe(1);
+    expect(baseCardinality).toBe(1);
   });
 
   test('primary key lookup via constraint', () => {
-    const pkLookupCostViaConstraint = costModel(
-      'foo',
-      [['a', 'asc']],
-      undefined,
-      {a: undefined},
-    );
-    expect(pkLookupCostViaConstraint).toBe(1);
+    const {baseCardinality} = costModel('foo', [['a', 'asc']], undefined, {
+      a: undefined,
+    });
+    expect(baseCardinality).toBe(1);
   });
 
   test('range check on primary key', () => {
     // SELECT * FROM foo WHERE a > 1 ORDER BY a
     // Should use primary key index for range scan
-    const pkRangeCost = costModel(
+    const {baseCardinality} = costModel(
       'foo',
       [['a', 'asc']],
       {
@@ -88,13 +100,13 @@ describe('SQLite cost model', () => {
       undefined,
     );
     // With primary key index, range scan should be efficient
-    expect(pkRangeCost).toBe(480);
+    expect(baseCardinality).toBe(480);
   });
 
   test('range check on non-indexed column', () => {
     // SELECT * FROM foo WHERE b > 2 ORDER BY a
     // Requires full table scan since b is not indexed
-    const nonIndexedRangeCost = costModel(
+    const {baseCardinality} = costModel(
       'foo',
       [['a', 'asc']],
       {
@@ -106,13 +118,13 @@ describe('SQLite cost model', () => {
       undefined,
     );
     // Full table scan with some filtering selectivity factored in
-    expect(nonIndexedRangeCost).toBe(1792);
+    expect(baseCardinality).toBe(1792);
   });
 
   test('equality check on non-indexed column', () => {
     // SELECT * FROM foo WHERE b = 2 ORDER BY a
     // Requires full table scan since b is not indexed
-    const nonIndexedEqualityCost = costModel(
+    const {baseCardinality} = costModel(
       'foo',
       [['a', 'asc']],
       {
@@ -126,6 +138,46 @@ describe('SQLite cost model', () => {
     // Full table scan with some filtering selectivity factored in
     // much higher cost the PK lookup which is what we expect.
     // not quite as high as a full table scan. Why?
-    expect(nonIndexedEqualityCost).toBe(480);
+    expect(baseCardinality).toBe(480);
+  });
+
+  test('startup cost for index scan is zero', () => {
+    // SELECT * FROM foo ORDER BY a
+    // Uses primary key index - no sort needed, so startup cost should be 0
+    const {startupCost, baseCardinality} = costModel(
+      'foo',
+      [['a', 'asc']],
+      undefined,
+      undefined,
+    );
+    expect(startupCost).toBe(0);
+    expect(baseCardinality).toBe(1920);
+  });
+
+  test('startup cost for sort is non-zero', () => {
+    // SELECT * FROM foo ORDER BY b
+    // Requires sort - startup cost should be non-zero
+    const {startupCost, baseCardinality} = costModel(
+      'foo',
+      [['b', 'asc']],
+      undefined,
+      undefined,
+    );
+    // Startup cost is the sort operation
+    expect(startupCost).toBe(1920);
+    // Base cardinality is the scan cost
+    expect(baseCardinality).toBe(1920);
+  });
+
+  test('total cost with sort matches old behavior', () => {
+    // Verify that startupCost + baseCardinality equals the old total cost
+    const {startupCost, baseCardinality} = costModel(
+      'foo',
+      [['b', 'asc']],
+      undefined,
+      undefined,
+    );
+    // Old behavior: total cost was 3840
+    expect(startupCost + baseCardinality).toBe(3840);
   });
 });

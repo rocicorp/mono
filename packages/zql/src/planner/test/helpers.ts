@@ -41,15 +41,20 @@ export const CONSTRAINTS = {
  * Simple cost model for testing.
  * Base cost of 100, reduced by 10 per constraint.
  * Ignores sort and filters for simplicity.
+ * Returns zero startup cost for all queries (no sorting simulated).
  */
 export const simpleCostModel: ConnectionCostModel = (
   _table: string,
   _sort: Ordering,
   _filters: Condition | undefined,
   constraint: PlannerConstraint | undefined,
-): number => {
+): {startupCost: number; baseCardinality: number} => {
   const constraintCount = constraint ? Object.keys(constraint).length : 0;
-  return Math.max(1, 100 - constraintCount * 10);
+  const baseCardinality = Math.max(1, 100 - constraintCount * 10);
+  return {
+    startupCost: 0,
+    baseCardinality,
+  };
 };
 
 /**
@@ -60,6 +65,7 @@ export function expectedCost(constraintCount: number): CostEstimate {
   return {
     baseCardinality: c,
     runningCost: c,
+    startupCost: 0,
     selectivity: 1.0,
     limit: undefined,
   };
@@ -69,6 +75,7 @@ export function multCost(base: CostEstimate, factor: number): CostEstimate {
   return {
     baseCardinality: base.baseCardinality * factor,
     runningCost: base.runningCost * factor,
+    startupCost: base.startupCost,
     selectivity: base.selectivity,
     limit: base.limit,
   };
