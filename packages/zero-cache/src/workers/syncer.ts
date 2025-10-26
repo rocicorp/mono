@@ -3,7 +3,7 @@ import {resolver} from '@rocicorp/resolver';
 import {type JWTPayload} from 'jose';
 import {pid} from 'node:process';
 import {MessagePort} from 'node:worker_threads';
-import {WebSocketServer, type WebSocket} from 'ws';
+import {WebSocketServer, type WebSocket, type ServerOptions} from 'ws';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {tokenConfigOptions, verifyToken} from '../auth/jwt.ts';
@@ -35,6 +35,31 @@ import {
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
 };
+
+function getWebSocketServerOptions(config: ZeroConfig): ServerOptions {
+  const options: ServerOptions = {
+    noServer: true,
+  };
+
+  if (config.websocketCompression) {
+    options.perMessageDeflate = true;
+
+    if (config.websocketCompressionOptions) {
+      try {
+        const compressionOptions = JSON.parse(
+          config.websocketCompressionOptions,
+        );
+        options.perMessageDeflate = compressionOptions;
+      } catch (e) {
+        throw new Error(
+          `Failed to parse ZERO_WEBSOCKET_COMPRESSION_OPTIONS: ${String(e)}. Expected valid JSON.`,
+        );
+      }
+    }
+  }
+
+  return options;
+}
 
 /**
  * The Syncer worker receives websocket handoffs for "/sync" connections
@@ -85,7 +110,7 @@ export class Syncer implements SingletonService {
       this.#pushers = new ServiceRunner(lc, pusherFactory, p => p.hasRefs());
     }
     this.#parent = parent;
-    this.#wss = new WebSocketServer({noServer: true});
+    this.#wss = new WebSocketServer(getWebSocketServerOptions(config));
 
     installWebSocketReceiver(
       lc,
