@@ -130,6 +130,7 @@ export default async function runWorker(
 
   const changeStreamerWebServer = new ChangeStreamerHttpServer(
     lc,
+    config,
     {port},
     parent,
     changeStreamer,

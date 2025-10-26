@@ -501,6 +501,31 @@ export const zeroOptions = {
     ],
   },
 
+  websocketCompression: {
+    type: v.boolean().default(false),
+    desc: [
+      'Enable WebSocket per-message deflate compression.',
+      '',
+      'Compression can reduce bandwidth usage for sync traffic but',
+      'increases CPU usage on both client and server. Disabled by default.',
+      '',
+      'See: https://github.com/websockets/ws#websocket-compression',
+    ],
+  },
+
+  websocketCompressionOptions: {
+    type: v.string().optional(),
+    desc: [
+      'JSON string containing WebSocket compression options.',
+      '',
+      'Only used if websocketCompression is enabled.',
+      '',
+      'Example: \\{"zlibDeflateOptions":\\{"level":3\\},"threshold":1024\\}',
+      '',
+      'See https://github.com/websockets/ws/blob/master/doc/ws.md#new-websocketserveroptions-callback for available options.',
+    ],
+  },
+
   litestream: {
     executable: {
       type: v.string().optional(),

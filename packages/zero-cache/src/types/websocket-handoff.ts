@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {IncomingMessage, Server} from 'node:http';
 import {Socket} from 'node:net';
-import {WebSocketServer, type WebSocket} from 'ws';
+import {WebSocketServer, type WebSocket, type ServerOptions} from 'ws';
 import {assert} from '../../../shared/src/asserts.ts';
 import {serializableSubset, type IncomingMessageSubset} from './http.ts';
 import {
@@ -51,8 +51,13 @@ export type WebSocketHandoffHandler = (
 export function createWebSocketHandoffHandler<P>(
   lc: LogContext,
   handoff: WebSocketHandoff<P>,
+  serverOptions?: ServerOptions,
 ): WebSocketHandoffHandler {
-  const wss = new WebSocketServer({noServer: true});
+  const wss = new WebSocketServer(
+    serverOptions ?? {
+      noServer: true,
+    },
+  );
   return (message: IncomingMessageSubset, socket: Socket, head: Buffer) => {
     let sent = false;
 
@@ -103,8 +108,9 @@ export function installWebSocketHandoff<P>(
   lc: LogContext,
   handoff: WebSocketHandoff<P>,
   source: Server | Worker,
+  serverOptions?: ServerOptions,
 ) {
-  const handle = createWebSocketHandoffHandler(lc, handoff);
+  const handle = createWebSocketHandoffHandler(lc, handoff, serverOptions);
 
   if (source instanceof Server) {
     // handoff messages from an HTTP server
