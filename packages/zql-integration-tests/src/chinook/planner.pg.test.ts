@@ -55,7 +55,7 @@ describe('Chinook planner tests', () => {
     );
 
     expect(pick(ast, ['where', 'conditions', 0, 'flip'])).toBe(true);
-    expect(pick(ast, ['where', 'conditions', 1, 'flip'])).toBe(false);
+    expect(pick(ast, ['where', 'conditions', 1, 'flip'])).toBe(true);
   });
 
   test('playlist with track', () => {
@@ -70,15 +70,7 @@ describe('Chinook planner tests', () => {
 
   test('tracks with playlist', () => {
     const ast = getPlanAST(queries.sqlite.track.whereExists('playlists'));
-
-    // TODO:
-    // This is where SELECTIVITY_PLAN.md would help.
-    // We assume a selectivity of 1 on playlist_track and playlist
-    // because there are no filters.
-    // but a track may not be part of a playlist!
-    // If many tracks are not part of any playlist
-    // then flipping would be better.
-    expect(pick(ast, ['where', 'flip'])).toBe(false);
+    expect(pick(ast, ['where', 'flip'])).toBe(true);
   });
 
   test('has album a or album b', () => {

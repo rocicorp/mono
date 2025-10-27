@@ -384,9 +384,10 @@ export class PlannerConnection {
   }
 }
 
+export type CostModelCost = {startupCost: number; baseCardinality: number};
 export type ConnectionCostModel = (
   table: string,
   sort: Ordering,
   filters: Condition | undefined,
   constraint: PlannerConstraint | undefined,
-) => {startupCost: number; baseCardinality: number};
+) => CostModelCost;
