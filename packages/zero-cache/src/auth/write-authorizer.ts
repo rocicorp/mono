@@ -1,16 +1,16 @@
-import type {SQLQuery} from '@databases/sql';
-import type {MaybePromise} from '@opentelemetry/resources';
-import {LogContext} from '@rocicorp/logger';
-import type {JWTPayload} from 'jose';
-import {tmpdir} from 'node:os';
+import type { SQLQuery } from '@databases/sql';
+import type { MaybePromise } from '@opentelemetry/resources';
+import { LogContext } from '@rocicorp/logger';
+import type { JWTPayload } from 'jose';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
-import {pid} from 'node:process';
-import {assert} from '../../../shared/src/asserts.ts';
-import type {JSONValue} from '../../../shared/src/json.ts';
-import {must} from '../../../shared/src/must.ts';
-import {randInt} from '../../../shared/src/rand.ts';
+import { pid } from 'node:process';
+import { assert } from '../../../shared/src/asserts.ts';
+import type { JSONValue } from '../../../shared/src/json.ts';
+import { must } from '../../../shared/src/must.ts';
+import { randInt } from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
-import type {Condition} from '../../../zero-protocol/src/ast.ts';
+import type { Condition } from '../../../zero-protocol/src/ast.ts';
 import {
   primaryKeyValueSchema,
   type PrimaryKeyValue,
@@ -22,15 +22,15 @@ import type {
   UpdateOp,
   UpsertOp,
 } from '../../../zero-protocol/src/push.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import type {Policy} from '../../../zero-schema/src/compiled-permissions.ts';
-import type {BuilderDelegate} from '../../../zql/src/builder/builder.ts';
+import type { Schema } from '../../../zero-schema/src/builder/schema-builder.ts';
+import type { Policy } from '../../../zero-schema/src/compiled-permissions.ts';
+import type { BuilderDelegate } from '../../../zql/src/builder/builder.ts';
 import {
   bindStaticParameters,
   buildPipeline,
 } from '../../../zql/src/builder/builder.ts';
-import {simplifyCondition} from '../../../zql/src/query/expression.ts';
-import type {Query} from '../../../zql/src/query/query.ts';
+import { simplifyCondition } from '../../../zql/src/query/expression.ts';
+import type { Query } from '../../../zql/src/query/query.ts';
 import {
   asStaticQuery,
   staticQuery,
@@ -39,17 +39,17 @@ import {
   DatabaseStorage,
   type ClientGroupStorage,
 } from '../../../zqlite/src/database-storage.ts';
-import {Database} from '../../../zqlite/src/db.ts';
-import {compile, sql} from '../../../zqlite/src/internal/sql.ts';
+import { Database } from '../../../zqlite/src/db.ts';
+import { compile, sql } from '../../../zqlite/src/internal/sql.ts';
 import {
   fromSQLiteTypes,
   TableSource,
 } from '../../../zqlite/src/table-source.ts';
-import type {LogConfig, ZeroConfig} from '../config/zero-config.ts';
-import {computeZqlSpecs} from '../db/lite-tables.ts';
-import type {LiteAndZqlSpec} from '../db/specs.ts';
-import {StatementRunner} from '../db/statements.ts';
-import {mapLiteDataTypeToZqlSchemaValue} from '../types/lite.ts';
+import type { LogConfig, ZeroConfig } from '../config/zero-config.ts';
+import { computeZqlSpecs } from '../db/lite-tables.ts';
+import type { LiteAndZqlSpec } from '../db/specs.ts';
+import { StatementRunner } from '../db/statements.ts';
+import { mapLiteDataTypeToZqlSchemaValue } from '../types/lite.ts';
 import {
   getSchema,
   reloadPermissionsIfChanged,

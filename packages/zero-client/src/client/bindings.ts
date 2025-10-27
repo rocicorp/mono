@@ -1,11 +1,3 @@
-/**
- * Internal APIs for framework bindings (React, Vue, Svelte, etc.).
- * These APIs are not intended for end users.
- *
- * @module
- * @internal
- */
-
 import type {CustomMutatorDefs} from '../../../zero-client/src/client/custom.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {Format, ViewFactory} from '../../../zql/src/ivm/view.ts';

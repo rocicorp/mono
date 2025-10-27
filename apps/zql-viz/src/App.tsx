@@ -20,6 +20,7 @@ import {
 import * as zero from '../../../packages/zero-client/src/mod.ts';
 import {mapAST} from '../../../packages/zero-protocol/src/ast.ts';
 import {clientToServer} from '../../../packages/zero-schema/src/name-mapper.ts';
+import {asQueryInternals} from '../../../packages/zql/src/query/query-internals.ts';
 import {VizDelegate} from './query-delegate.ts';
 
 type AnyQuery = zero.Query<any, any, any>;
@@ -207,8 +208,7 @@ function App() {
         throw new Error('Failed to capture the query definition');
       }
       const vizDelegate = new VizDelegate(capturedSchema);
-      // capturedQuery = capturedQuery.withDelegate(vizDelegate);
-      (await vizDelegate.run(capturedQuery)) as any;
+      await vizDelegate.run(capturedQuery);
       const graph = vizDelegate.getGraph();
       const mapper = clientToServer(capturedSchema.tables);
 
@@ -224,7 +224,7 @@ function App() {
               'Authorization': `Basic ${credentials}`,
             },
             body: JSON.stringify({
-              ast: mapAST(capturedQuery.ast, mapper),
+              ast: mapAST(asQueryInternals(capturedQuery).completedAST, mapper),
             }),
           });
 
@@ -240,7 +240,9 @@ function App() {
       }
 
       setResult({
-        ast: capturedQuery?.ast,
+        ast: capturedQuery
+          ? asQueryInternals(capturedQuery).completedAST
+          : undefined,
         graph,
         remoteRunResult,
       });

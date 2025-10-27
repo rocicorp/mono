@@ -419,9 +419,9 @@ describe('rebasing custom mutators', () => {
           ) => {
             await tx.mutate.issue.insert(args);
             // query main. The issue should not be there yet.
-            expect(await z.run(z.query.issue)).length(0);
+            expect(await z.run(z.query.issue)).toHaveLength(0);
             // but it is in this tx
-            expect(await tx.run(tx.query.issue)).length(1);
+            expect(await tx.run(tx.query.issue)).toHaveLength(1);
 
             mutationRun = true;
           },
