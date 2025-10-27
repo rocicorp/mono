@@ -1,9 +1,10 @@
-import {readFileSync} from 'fs';
-import {join} from 'path';
 import type {IncomingMessage, ServerResponse} from 'http';
 
-export default function handler(
-  req: IncomingMessage & {query?: Record<string, string | string[]>},
+export default async function handler(
+  req: IncomingMessage & {
+    query?: Record<string, string | string[]>;
+    headers: IncomingMessage['headers'];
+  },
   res: ServerResponse,
 ) {
   try {
@@ -11,16 +12,17 @@ export default function handler(
     const pathParts = (req.query?.path as string[]) || [];
     const projectName = pathParts[0]?.toLowerCase() || '';
 
-    // Read the index.html file from the dist directory
-    // In production, files are in the .vercel/output directory
-    let html: string;
-    try {
-      // Try production path first
-      html = readFileSync(join(process.cwd(), 'index.html'), 'utf-8');
-    } catch {
-      // Fallback to dev path
-      html = readFileSync(join(process.cwd(), 'dist', 'index.html'), 'utf-8');
+    // Get the host from the request to fetch index.html
+    const host = req.headers.host || 'bugs.rocicorp.dev';
+    const protocol = host.includes('localhost') ? 'http' : 'https';
+    const indexUrl = `${protocol}://${host}/index.html`;
+
+    // Fetch the index.html file
+    const response = await fetch(indexUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch index.html: ${response.statusText}`);
     }
+    let html = await response.text();
 
     // Check if this is the Roci project
     const isRoci = projectName === 'roci';
