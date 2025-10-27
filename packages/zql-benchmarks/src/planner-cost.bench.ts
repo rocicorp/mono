@@ -98,17 +98,14 @@ summary(() => {
       ),
     ),
   );
-});
 
-// Nested exists (depth testing)
-summary(() => {
   benchmarkPlanning(
     'Nested 2 levels: track > album > artist',
     queries.sqlite.track.whereExists('album', q => q.whereExists('artist')),
   );
 
   benchmarkPlanning(
-    'Nested 3 levels: playlist > tracks > album > artist',
+    'Nested 4 levels: playlist > tracks > album > artist',
     queries.sqlite.playlist.whereExists('tracks', q =>
       q.whereExists('album', q2 => q2.whereExists('artist')),
     ),
@@ -122,10 +119,7 @@ summary(() => {
         .whereExists('artist', q2 => q2.where('name', 'Aerosmith')),
     ),
   );
-});
 
-// Complex queries (10 exists)
-summary(() => {
   benchmarkPlanning(
     '10 exists (AND)',
     queries.sqlite.track
@@ -158,10 +152,7 @@ summary(() => {
       ),
     ),
   );
-});
 
-// Very complex queries (12 exists)
-summary(() => {
   benchmarkPlanning(
     '12 exists (AND)',
     queries.sqlite.track

@@ -24,9 +24,18 @@ type PlanState = {
 /**
  * Maximum number of flippable joins to attempt exhaustive enumeration.
  * With n flippable joins, we explore 2^n plans.
- * 12 joins = 4096 plans (~400ms), 13 joins = 8192 plans (~1 second)
+ * 10 joins = 1024 plans (~100-200ms), 12 joins = 4096 plans (~400ms - 1 second)
  */
 const MAX_FLIPPABLE_JOINS = 13;
+
+/**
+ * Cached information about FanOut→FanIn relationships.
+ * Computed once during planning to avoid redundant BFS traversals.
+ */
+type FOFIInfo = {
+  fi: PlannerFanIn | undefined;
+  joinsBetween: PlannerJoin[];
+};
 
 export class PlannerGraph {
   // Sources indexed by table name
@@ -315,6 +324,9 @@ export class PlannerGraph {
       );
     }
 
+    // Build FO→FI cache once to avoid redundant BFS traversals in each iteration
+    const fofiCache = buildFOFICache(this);
+
     const numPatterns = 2 ** flippableJoins.length;
     let bestCost = Infinity;
     let bestPlan: PlanState | undefined = undefined;
@@ -348,7 +360,7 @@ export class PlannerGraph {
         }
 
         // Derive FO/UFO and FI/UFI states from join flip states
-        checkAndConvertFOFI(this);
+        checkAndConvertFOFI(fofiCache);
 
         // Propagate unlimiting for flipped joins
         propagateUnlimitForFlippedJoins(this);
@@ -439,33 +451,45 @@ export class PlannerGraph {
 }
 
 /**
+ * Build cache of FO→FI relationships and joins between them.
+ * Called once at the start of planning to avoid redundant BFS traversals.
+ */
+function buildFOFICache(graph: PlannerGraph): Map<PlannerFanOut, FOFIInfo> {
+  const cache = new Map<PlannerFanOut, FOFIInfo>();
+
+  for (const fo of graph.fanOuts) {
+    const info = findFIAndJoins(fo);
+    cache.set(fo, info);
+  }
+
+  return cache;
+}
+
+/**
  * Check if any joins downstream of a FanOut (before reaching FanIn) are flipped.
  * If so, convert the FO to UFO and the FI to UFI.
  *
  * This must be called after join flipping and before propagateConstraints.
  */
-function checkAndConvertFOFI(graph: PlannerGraph): void {
-  for (const fo of graph.fanOuts) {
-    const {fi, hasFlippedJoin} = findFIAndCheckFlips(fo);
-    if (fi && hasFlippedJoin) {
+function checkAndConvertFOFI(fofiCache: Map<PlannerFanOut, FOFIInfo>): void {
+  for (const [fo, info] of fofiCache) {
+    const hasFlippedJoin = info.joinsBetween.some(j => j.type === 'flipped');
+    if (info.fi && hasFlippedJoin) {
       fo.convertToUFO();
-      fi.convertToUFI();
+      info.fi.convertToUFI();
     }
   }
 }
 
 /**
- * Traverse from a FanOut through its outputs to find the corresponding FanIn,
- * checking if any joins along the way are flipped.
+ * Traverse from a FanOut through its outputs to find the corresponding FanIn
+ * and collect all joins along the way.
  */
-function findFIAndCheckFlips(fo: PlannerFanOut): {
-  fi: PlannerFanIn | undefined;
-  hasFlippedJoin: boolean;
-} {
-  let hasFlippedJoin = false;
+function findFIAndJoins(fo: PlannerFanOut): FOFIInfo {
+  const joinsBetween: PlannerJoin[] = [];
   let fi: PlannerFanIn | undefined = undefined;
 
-  // BFS through FO outputs to find FI
+  // BFS through FO outputs to find FI and collect joins
   const queue: PlannerNode[] = [...fo.outputs];
   const visited = new Set<PlannerNode>();
 
@@ -476,9 +500,7 @@ function findFIAndCheckFlips(fo: PlannerFanOut): {
 
     switch (node.kind) {
       case 'join':
-        if (node.type === 'flipped') {
-          hasFlippedJoin = true;
-        }
+        joinsBetween.push(node);
         queue.push(node.output);
         break;
       case 'fan-out':
@@ -498,7 +520,7 @@ function findFIAndCheckFlips(fo: PlannerFanOut): {
     }
   }
 
-  return {fi, hasFlippedJoin};
+  return {fi, joinsBetween};
 }
 
 /**
