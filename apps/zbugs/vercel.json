@@ -1,4 +1,17 @@
 {
+  "redirects": [
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "gigabugs.rocicorp.dev"
+        }
+      ],
+      "destination": "https://bugs.rocicorp.dev/p/roci",
+      "permanent": true
+    }
+  ],
   "rewrites": [
     {
       "source": "/api/(.*)",
