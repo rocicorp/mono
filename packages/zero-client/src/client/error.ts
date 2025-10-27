@@ -130,6 +130,8 @@ export function getErrorConnectionTransition(ex: unknown) {
       case ErrorKind.VersionNotSupported:
       case ErrorKind.SchemaVersionNotSupported:
       case ErrorKind.Internal:
+      case ErrorKind.PushFailed:
+      case ErrorKind.TransformFailed:
         return {status: ConnectionStatus.Error, reason: ex} as const;
 
       // Errors that should continue with backoff/retry

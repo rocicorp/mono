@@ -12,7 +12,7 @@ import {
   type MutationOk,
   type PushError,
   type PushOk,
-  type PushResponse,
+  type PushResponseBody,
 } from '../../../zero-protocol/src/push.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
 import type {ReplicacheImpl} from '../../../replicache/src/impl.ts';
@@ -160,7 +160,7 @@ export class MutationTracker {
     }
   }
 
-  processPushResponse(response: PushResponse): void {
+  processPushResponse(response: PushResponseBody): void {
     if ('error' in response) {
       this.#lc.error?.(
         'Received an error response when pushing mutations',

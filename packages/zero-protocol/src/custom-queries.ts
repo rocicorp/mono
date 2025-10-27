@@ -1,6 +1,7 @@
 import {jsonSchema} from '../../shared/src/json-schema.ts';
 import * as v from '../../shared/src/valita.ts';
 import {astSchema} from './ast.ts';
+import {transformFailedBodySchema} from './error.ts';
 
 export const transformRequestBodySchema = v.array(
   v.object({
@@ -24,18 +25,28 @@ export const appQueryErrorSchema = v.object({
   details: jsonSchema,
 });
 
+/** @deprecated zero errors are now represented as ['error', { ... }] messages */
 export const zeroErrorSchema = v.object({
+  /** @deprecated */
   error: v.literal('zero'),
+  /** @deprecated */
   id: v.string(),
+  /** @deprecated */
   name: v.string(),
+  /** @deprecated */
   details: jsonSchema,
 });
-
+/** @deprecated http errors are now represented as ['error', { ... }] messages */
 export const httpQueryErrorSchema = v.object({
+  /** @deprecated */
   error: v.literal('http'),
+  /** @deprecated */
   id: v.string(),
+  /** @deprecated */
   name: v.string(),
+  /** @deprecated */
   status: v.number(),
+  /** @deprecated */
   details: jsonSchema,
 });
 
@@ -45,8 +56,6 @@ export const erroredQuerySchema = v.union(
   zeroErrorSchema,
 );
 export type ErroredQuery = v.Infer<typeof erroredQuerySchema>;
-export type AppQueryError = v.Infer<typeof appQueryErrorSchema>;
-export type HttpQueryError = v.Infer<typeof httpQueryErrorSchema>;
 
 export const transformResponseBodySchema = v.array(
   v.union(transformedQuerySchema, erroredQuerySchema),
@@ -66,10 +75,19 @@ export const transformErrorMessageSchema = v.tuple([
 ]);
 export type TransformErrorMessage = v.Infer<typeof transformErrorMessageSchema>;
 
-export const transformResponseMessageSchema = v.tuple([
+const transformFailedMessageSchema = v.tuple([
+  v.literal('transformFailed'),
+  transformFailedBodySchema,
+]);
+const transformOkMessageSchema = v.tuple([
   v.literal('transformed'),
   transformResponseBodySchema,
 ]);
+
+export const transformResponseMessageSchema = v.union(
+  transformOkMessageSchema,
+  transformFailedMessageSchema,
+);
 export type TransformResponseMessage = v.Infer<
   typeof transformResponseMessageSchema
 >;

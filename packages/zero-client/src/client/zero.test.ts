@@ -2348,22 +2348,6 @@ test('Disconnect on error', async () => {
   expect(r.connectionStatus).toBe(ConnectionStatus.Error);
 });
 
-// TODO(0xcadams): reenable when disconnect is implemented
-// test('connection.disconnect resolves while in error state', async () => {
-//   const r = zeroForTest();
-//   await r.triggerConnected();
-//   await r.triggerError(ErrorKind.InvalidMessage, 'Disconnect test');
-//   await r.waitForConnectionStatus(ConnectionStatus.Error);
-
-//   const result = await Promise.race([
-//     r.connection.disconnect().then(() => 'resolved'),
-//     vi.advanceTimersByTimeAsync(0).then(() => 'timeout'),
-//   ]);
-
-//   expect(result).toBe('resolved');
-//   expect(r.connectionStatus).toBe(ConnectionStatus.Error);
-// });
-
 test('No backoff on errors', async () => {
   const r = zeroForTest();
   await r.triggerConnected();
