@@ -352,7 +352,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     if (issueArrayIndex < 0 || issueArrayIndex >= issues.length) {
       return (
         <div
-          className={classNames('row')}
+          className={classNames('row', 'skeleton-shimmer')}
           style={{
             ...style,
           }}
@@ -407,7 +407,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   };
 
   const virtualizer = useVirtualizer({
-    count: total ?? estimatedTotal,
+    count: total ?? estimatedTotal + 10,
     estimateSize: () => ITEM_SIZE,
     overscan: 5,
     getScrollElement: () => listRef.current,
