@@ -295,7 +295,7 @@ suite('buildPlanGraph', () => {
 
   suite('limit assignment', () => {
     test('simple EXISTS child connection has limit=1', () => {
-      const ast = builder.users.whereExists('posts').ast;
+      const ast = completedAST(builder.users.whereExists('posts'));
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       expect(plans.plan.connections).toHaveLength(2);
@@ -347,9 +347,9 @@ suite('buildPlanGraph', () => {
     });
 
     test('AND with multiple EXISTS - each child has limit=1', () => {
-      const ast = builder.users
-        .whereExists('posts')
-        .whereExists('comments').ast;
+      const ast = completedAST(
+        builder.users.whereExists('posts').whereExists('comments'),
+      );
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       expect(plans.plan.connections).toHaveLength(3);
@@ -376,9 +376,11 @@ suite('buildPlanGraph', () => {
     });
 
     test('OR with EXISTS branches - each child has limit=1', () => {
-      const ast = builder.users.where(({or, exists}) =>
-        or(exists('posts'), exists('comments')),
-      ).ast;
+      const ast = completedAST(
+        builder.users.where(({or, exists}) =>
+          or(exists('posts'), exists('comments')),
+        ),
+      );
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       expect(plans.plan.connections).toHaveLength(3);
@@ -405,9 +407,9 @@ suite('buildPlanGraph', () => {
     });
 
     test('nested EXISTS - both levels have limit=1', () => {
-      const ast = builder.users.whereExists('posts', q =>
-        q.whereExists('comments'),
-      ).ast;
+      const ast = completedAST(
+        builder.users.whereExists('posts', q => q.whereExists('comments')),
+      );
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       // Main plan has all three connections (users, posts, comments)
@@ -439,7 +441,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('root connection gets ast.limit', () => {
-      const ast = builder.users.limit(10).ast;
+      const ast = completedAST(builder.users.limit(10));
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       expect(plans.plan.connections).toHaveLength(1);
@@ -451,7 +453,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('root with limit and EXISTS - separate limits', () => {
-      const ast = builder.users.limit(10).whereExists('posts').ast;
+      const ast = completedAST(builder.users.limit(10).whereExists('posts'));
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       expect(plans.plan.connections).toHaveLength(2);
@@ -473,7 +475,9 @@ suite('buildPlanGraph', () => {
     });
 
     test('related subPlan root gets its own limit', () => {
-      const ast = builder.users.related('posts', q => q.limit(10)).ast;
+      const ast = completedAST(
+        builder.users.related('posts', q => q.limit(10)),
+      );
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       // Main plan should have only users connection
