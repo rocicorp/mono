@@ -5,11 +5,15 @@
       "destination": "/api"
     },
     {
-      "source": "/issue/(.*)",
+      "source": "/p/roci/:path*",
+      "destination": "/roci.html"
+    },
+    {
+      "source": "/p/:path*",
       "destination": "/index.html"
     },
     {
-      "source": "/p/(.*)",
+      "source": "/issue/(.*)",
       "destination": "/index.html"
     }
   ]
