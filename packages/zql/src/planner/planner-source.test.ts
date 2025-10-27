@@ -13,7 +13,6 @@ suite('PlannerSource', () => {
     const connection = source.connect([['id', 'asc']], undefined);
 
     expect(connection.kind).toBe('connection');
-    expect(connection.pinned).toBe(false);
   });
 
   test('connect() with simple condition', () => {

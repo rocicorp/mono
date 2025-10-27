@@ -71,7 +71,6 @@ export type PlanCompleteEvent = {
   joinStates: Array<{
     join: string;
     type: JoinType;
-    pinned: boolean;
   }>;
 };
 

@@ -5,19 +5,8 @@ import {
   createConnection,
   expectedCost,
 } from './test/helpers.ts';
-import type {PlannerNode} from './planner-node.ts';
-
-const unpinned = {
-  pinned: false,
-} as PlannerNode;
 
 suite('PlannerConnection', () => {
-  test('initial state is unpinned', () => {
-    const connection = createConnection();
-
-    expect(connection.pinned).toBe(false);
-  });
-
   test('estimateCost() with no constraints returns base cost', () => {
     const connection = createConnection();
 
@@ -33,7 +22,7 @@ suite('PlannerConnection', () => {
   test('estimateCost() with constraints reduces cost', () => {
     const connection = createConnection();
 
-    connection.propagateConstraints([0], CONSTRAINTS.userId, unpinned);
+    connection.propagateConstraints([0], CONSTRAINTS.userId);
 
     expect(connection.estimateCost()).toStrictEqual(expectedCost(1));
   });
@@ -41,11 +30,10 @@ suite('PlannerConnection', () => {
   test('multiple constraints reduce cost further', () => {
     const connection = createConnection();
 
-    connection.propagateConstraints(
-      [0],
-      {userId: undefined, postId: undefined},
-      unpinned,
-    );
+    connection.propagateConstraints([0], {
+      userId: undefined,
+      postId: undefined,
+    });
 
     expect(connection.estimateCost()).toStrictEqual(expectedCost(2));
   });
@@ -53,8 +41,8 @@ suite('PlannerConnection', () => {
   test('multiple branch patterns sum costs', () => {
     const connection = createConnection();
 
-    connection.propagateConstraints([0], CONSTRAINTS.userId, unpinned);
-    connection.propagateConstraints([1], CONSTRAINTS.postId, unpinned);
+    connection.propagateConstraints([0], CONSTRAINTS.userId);
+    connection.propagateConstraints([1], CONSTRAINTS.postId);
 
     const ec = expectedCost(1);
     expect(connection.estimateCost()).toStrictEqual({
@@ -66,20 +54,10 @@ suite('PlannerConnection', () => {
     });
   });
 
-  test('reset() clears pinned state', () => {
-    const connection = createConnection();
-
-    connection.pinned = true;
-    expect(connection.pinned).toBe(true);
-
-    connection.reset();
-    expect(connection.pinned).toBe(false);
-  });
-
   test('reset() clears propagated constraints', () => {
     const connection = createConnection();
 
-    connection.propagateConstraints([0], CONSTRAINTS.userId, unpinned);
+    connection.propagateConstraints([0], CONSTRAINTS.userId);
     expect(connection.estimateCost()).toStrictEqual(expectedCost(1));
 
     connection.reset();

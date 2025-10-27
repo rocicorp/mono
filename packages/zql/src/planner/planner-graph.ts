@@ -14,8 +14,8 @@ import type {PlanDebugger} from './planner-debug.ts';
  * Captured state of a plan for comparison and restoration.
  */
 type PlanState = {
-  connections: Array<{pinned: boolean; limit: number | undefined}>;
-  joins: Array<{type: 'semi' | 'flipped'; pinned: boolean}>;
+  connections: Array<{limit: number | undefined}>;
+  joins: Array<{type: 'semi' | 'flipped'}>;
   fanOuts: Array<{type: 'FO' | 'UFO'}>;
   fanIns: Array<{type: 'FI' | 'UFI'}>;
   connectionConstraints: Array<Map<string, PlannerConstraint | undefined>>;
@@ -114,13 +114,6 @@ export class PlannerGraph {
   }
 
   /**
-   * Check if all connections have been pinned (planning is complete).
-   */
-  hasPlan(): boolean {
-    return this.connections.every(c => c.pinned);
-  }
-
-  /**
    * Calculate total cost of the current plan.
    * Total cost includes both startup cost (one-time, e.g., sorting) and running cost.
    */
@@ -141,10 +134,9 @@ export class PlannerGraph {
   capturePlanningSnapshot(): PlanState {
     return {
       connections: this.connections.map(c => ({
-        pinned: c.pinned,
         limit: c.limit,
       })),
-      joins: this.joins.map(j => ({type: j.type, pinned: j.pinned})),
+      joins: this.joins.map(j => ({type: j.type})),
       fanOuts: this.fanOuts.map(fo => ({type: fo.type})),
       fanIns: this.fanIns.map(fi => ({type: fi.type})),
       connectionConstraints: this.connections.map(c => c.captureConstraints()),
@@ -251,7 +243,6 @@ export class PlannerGraph {
    */
   #restoreConnections(state: PlanState): void {
     for (let i = 0; i < this.connections.length; i++) {
-      this.connections[i].pinned = state.connections[i].pinned;
       this.connections[i].limit = state.connections[i].limit;
       this.connections[i].restoreConstraints(state.connectionConstraints[i]);
     }
@@ -271,9 +262,6 @@ export class PlannerGraph {
       // Apply target state
       if (targetState.type === 'flipped') {
         join.flip();
-      }
-      if (targetState.pinned) {
-        join.pin();
       }
     }
   }
@@ -354,11 +342,6 @@ export class PlannerGraph {
           }
         }
 
-        // Pin all joins (both flipped and semi)
-        for (const join of this.joins) {
-          join.pin();
-        }
-
         // Derive FO/UFO and FI/UFI states from join flip states
         checkAndConvertFOFI(fofiCache);
 
@@ -380,11 +363,6 @@ export class PlannerGraph {
           });
         }
 
-        // Pin all connections (they're now fully constrained)
-        for (const connection of this.connections) {
-          connection.pinned = true;
-        }
-
         // Evaluate this plan
         const totalCost = this.getTotalCost();
 
@@ -399,7 +377,6 @@ export class PlannerGraph {
               return {
                 join: info.name,
                 type: info.type,
-                pinned: info.pinned,
               };
             }),
           });

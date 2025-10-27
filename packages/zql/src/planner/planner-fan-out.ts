@@ -20,11 +20,6 @@ export class PlannerFanOut {
     return this.#type;
   }
 
-  get pinned(): boolean {
-    // if all of our outputs are pinned, we're pinned
-    return this.#outputs.every(output => output.pinned);
-  }
-
   addOutput(node: PlannerNode): void {
     this.#outputs.push(node);
   }
