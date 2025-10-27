@@ -1,10 +1,7 @@
 import {createComputed, createSignal, onCleanup, type Accessor} from 'solid-js';
 import {createStore} from 'solid-js/store';
 import type {ClientID} from '../../replicache/src/sync/ids.ts';
-import {
-  hashForQuery,
-  materializeQuery,
-} from '../../zero-client/src/client/bindings.ts';
+import {bindingsForZero} from '../../zero-client/src/client/bindings.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {HumanReadable, Query} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
@@ -96,7 +93,8 @@ export function useQuery<
       const currentRefetchKey = refetchKey(); // depend on refetchKey to force re-evaluation
       const {clientID} = zero;
       const query = querySignal();
-      const queryHash = hashForQuery(zero, query);
+      const bindings = bindingsForZero(zero);
+      const queryHash = bindings.hash(query);
       const ttl = normalize(options)?.ttl ?? DEFAULT_TTL_MS;
       if (
         !prevView ||
@@ -108,8 +106,7 @@ export function useQuery<
         if (prevView) {
           prevView.destroy();
         }
-        view = materializeQuery(
-          zero,
+        view = bindings.materialize(
           query,
           createSolidViewFactory(setState, refetch),
           {ttl},

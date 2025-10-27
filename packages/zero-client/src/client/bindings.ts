@@ -30,7 +30,7 @@ export function registerZeroDelegate<
   zeroDelegates.set(zero, delegate);
 }
 
-export function mustGetDelegate<
+function mustGetDelegate<
   TSchema extends Schema,
   MD extends CustomMutatorDefs | undefined,
   TContext,
@@ -43,90 +43,81 @@ export function mustGetDelegate<
 }
 
 /**
- * Materialize an already-resolved QueryInternals without redundant withContext() calls.
- *
- * Bindings should:
- * 1. Call `getQueryInternals(query, zero.context)` to resolve named queries
- * 2. Extract `format` and call `hash()` from the resolved QueryInternals
- * 3. Call this function with the resolved QueryInternals
- *
- * This avoids double-resolution: once for getting format/hash in the binding,
- * and again inside materialize(). The materializeImpl function detects that
- * the query is already resolved (via queryInternalsTag) and skips withContext().
+ * Bindings interface for Zero instances, providing methods to materialize queries
+ * and extract query metadata.
  *
  * @internal This API is for bindings only, not end users.
  */
-export function materializeQuery<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
-  MD extends CustomMutatorDefs | undefined,
-  TContext,
->(
-  zero: Zero<TSchema, MD, TContext>,
-  query: Query<TSchema, TTable, TReturn, TContext>,
-  factory?: undefined,
-  options?: MaterializeOptions,
-): TypedView<HumanReadable<TReturn>>;
+export interface BindingsForZero<TSchema extends Schema, TContext> {
+  /**
+   * Materialize a query into a reactive view without a custom factory.
+   * Returns a TypedView that automatically updates when underlying data changes.
+   */
+  materialize<TTable extends keyof TSchema['tables'] & string, TReturn>(
+    query: Query<TSchema, TTable, TReturn, TContext>,
+    factory?: undefined,
+    options?: MaterializeOptions,
+  ): TypedView<HumanReadable<TReturn>>;
 
-export function materializeQuery<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
-  MD extends CustomMutatorDefs | undefined,
-  TContext,
-  T,
->(
-  zero: Zero<TSchema, MD, TContext>,
-  query: Query<TSchema, TTable, TReturn, TContext>,
-  factory: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
-  options?: MaterializeOptions,
-): T;
+  /**
+   * Materialize a query into a reactive view using a custom factory.
+   * The factory can transform the view into a framework-specific reactive object.
+   */
+  materialize<TTable extends keyof TSchema['tables'] & string, TReturn, T>(
+    query: Query<TSchema, TTable, TReturn, TContext>,
+    factory: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
+    options?: MaterializeOptions,
+  ): T;
 
-export function materializeQuery<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
-  MD extends CustomMutatorDefs | undefined,
-  TContext,
-  T,
->(
-  zero: Zero<TSchema, MD, TContext>,
-  query: Query<TSchema, TTable, TReturn, TContext>,
-  factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
-  options?: MaterializeOptions,
-) {
-  // Get the QueryDelegate from the WeakMap that was populated by Zero's constructor.
-  const delegate = mustGetDelegate(zero);
-  return delegate.materialize(query, factory, options);
+  /**
+   * Compute the hash of a query for caching and deduplication purposes.
+   */
+  hash<TTable extends keyof TSchema['tables'] & string, TReturn>(
+    query: Query<TSchema, TTable, TReturn, TContext>,
+  ): string;
+
+  /**
+   * Get the format/schema of a query's result set.
+   */
+  format<TTable extends keyof TSchema['tables'] & string, TReturn>(
+    query: Query<TSchema, TTable, TReturn, TContext>,
+  ): Format;
 }
 
-export function hashForQuery<
+/**
+ * Create a bindings object for a Zero instance.
+ * This provides low-level access to query materialization and metadata extraction.
+ *
+ * @internal This API is for bindings only, not end users.
+ */
+export function bindingsForZero<
   TSchema extends Schema,
   MD extends CustomMutatorDefs | undefined,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
   TContext,
->(
-  zero: Zero<TSchema, MD, TContext>,
-  query: Query<TSchema, TTable, TReturn, TContext>,
-): string {
+>(zero: Zero<TSchema, MD, TContext>): BindingsForZero<TSchema, TContext> {
   const delegate = mustGetDelegate(zero);
-  const queryInternals = delegate.withContext(query);
-  return queryInternals.hash();
-}
 
-export function formatForQuery<
-  TSchema extends Schema,
-  MD extends CustomMutatorDefs | undefined,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
-  TContext,
->(
-  zero: Zero<TSchema, MD, TContext>,
-  query: Query<TSchema, TTable, TReturn, TContext>,
-): Format {
-  const delegate = mustGetDelegate(zero);
-  const queryInternals = delegate.withContext(query);
-  return queryInternals.format;
+  return {
+    materialize<TTable extends keyof TSchema['tables'] & string, TReturn, T>(
+      query: Query<TSchema, TTable, TReturn, TContext>,
+      factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
+      options?: MaterializeOptions,
+    ) {
+      return delegate.materialize(query, factory, options);
+    },
+
+    hash<TTable extends keyof TSchema['tables'] & string, TReturn>(
+      query: Query<TSchema, TTable, TReturn, TContext>,
+    ): string {
+      const queryInternals = delegate.withContext(query);
+      return queryInternals.hash();
+    },
+
+    format<TTable extends keyof TSchema['tables'] & string, TReturn>(
+      query: Query<TSchema, TTable, TReturn, TContext>,
+    ): Format {
+      const queryInternals = delegate.withContext(query);
+      return queryInternals.format;
+    },
+  };
 }

@@ -4,9 +4,8 @@ import {deepClone} from '../../shared/src/deep-clone.ts';
 import type {Immutable} from '../../shared/src/immutable.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {
-  formatForQuery,
-  hashForQuery,
-  materializeQuery,
+  bindingsForZero,
+  type BindingsForZero,
 } from '../../zero-client/src/client/bindings.ts';
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
@@ -352,7 +351,8 @@ export class ViewStore {
     complete: boolean;
     nonEmpty: boolean;
   } {
-    const format = formatForQuery(zero, query);
+    const bindings = bindingsForZero(zero);
+    const format = bindings.format(query);
     if (!enabled) {
       return {
         getSnapshot: () => getDefaultSnapshot(format.singular),
@@ -365,13 +365,13 @@ export class ViewStore {
       };
     }
 
-    const hash = hashForQuery(zero, query) + zero.clientID;
+    const hash = bindings.hash(query) + zero.clientID;
     let existing = this.#views.get(hash);
     if (!existing) {
       // Pass queryInternals directly to ViewWrapper.
       // materialize() will call delegate.withContext() again, but for already-resolved
       // queries (from getQueryInternals), withContext() is a no-op that returns `this`.
-      existing = new ViewWrapper(zero, query, format, ttl, view => {
+      existing = new ViewWrapper(bindings, query, format, ttl, view => {
         const currentView = this.#views.get(hash);
         if (currentView && currentView !== view) {
           // we replaced the view with a new one already.
@@ -421,7 +421,6 @@ class ViewWrapper<
   MD extends CustomMutatorDefs | undefined,
   TContext,
 > {
-  #zero: Zero<TSchema, MD, TContext>;
   #view: TypedView<HumanReadable<TReturn>> | undefined;
   readonly #onDematerialized;
   // Store as QueryInternals because getView() passes the resolved queryInternals.
@@ -435,9 +434,10 @@ class ViewWrapper<
   #completeResolver = resolver<void>();
   #nonEmpty = false;
   #nonEmptyResolver = resolver<void>();
+  readonly #bindings: BindingsForZero<TSchema, TContext>;
 
   constructor(
-    zero: Zero<TSchema, MD, TContext>,
+    bindings: BindingsForZero<TSchema, TContext>,
     query: Query<TSchema, TTable, TReturn, TContext>,
     format: Format,
     ttl: TTL,
@@ -445,7 +445,7 @@ class ViewWrapper<
       view: ViewWrapper<TSchema, TTable, TReturn, MD, TContext>,
     ) => void,
   ) {
-    this.#zero = zero;
+    this.#bindings = bindings;
     this.#query = query;
     this.#format = format;
     this.#ttl = ttl;
@@ -514,7 +514,7 @@ class ViewWrapper<
     //
     // We can't use the public Zero.materialize() API because it always calls
     // withContext() on the query parameter, which would be redundant.
-    this.#view = materializeQuery(this.#zero, this.#query, undefined, {
+    this.#view = this.#bindings.materialize(this.#query, undefined, {
       ttl: this.#ttl,
     });
     this.#view.addListener(this.#onData);
