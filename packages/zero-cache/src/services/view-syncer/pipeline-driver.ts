@@ -223,11 +223,17 @@ export class PipelineDriver {
     return version;
   }
 
-  #ensureCostModelExists(db: Database) {
-    if (this.#costModels && !this.#costModels.has(db)) {
+  #ensureCostModelExistsIfEnabled(db: Database) {
+    let existing = this.#costModels?.get(db);
+    if (existing) {
+      return existing;
+    }
+    if (this.#costModels) {
       const costModel = createSQLiteCostModel(db, this.#tableSpecs);
       this.#costModels.set(db, costModel);
+      return costModel;
     }
+    return undefined;
   }
 
   /**
@@ -334,7 +340,9 @@ export class PipelineDriver {
       ? new Debug()
       : undefined;
 
-    this.#ensureCostModelExists(this.#snapshotter.current().db.db);
+    const costModel = this.#ensureCostModelExistsIfEnabled(
+      this.#snapshotter.current().db.db,
+    );
 
     const input = buildPipeline(
       query,
@@ -355,9 +363,7 @@ export class PipelineDriver {
         decorateFilterInput: input => input,
       },
       queryID,
-      this.#costModels
-        ? must(this.#costModels.get(this.#snapshotter.current().db.db))
-        : undefined,
+      costModel,
     );
     const schema = input.getSchema();
     input.setOutput({
@@ -552,7 +558,7 @@ export class PipelineDriver {
     for (const table of this.#tables.values()) {
       table.setDB(curr.db.db);
     }
-    this.#ensureCostModelExists(curr.db.db);
+    this.#ensureCostModelExistsIfEnabled(curr.db.db);
     this.#lc.debug?.(`Advanced to ${curr.version}`);
   }
 
