@@ -8,7 +8,6 @@ import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
 import {must} from '../../../shared/src/must.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {CostModelCost} from '../../../zql/src/planner/planner-connection.ts';
-import {AccumulatorDebugger} from '../../../zql/src/planner/planner-debug.ts';
 
 describe('one join', () => {
   test('no changes in cost', () => {
@@ -330,7 +329,6 @@ test('ors anded one after the other', () => {
       or(exists('invoiceLines'), exists('mediaType')),
     ).ast;
 
-  // All tables have similar cost, so no flips should occur
   const costModel = makeCostModel({
     track: 10000,
     album: 10000,
@@ -351,7 +349,7 @@ test('ors anded one after the other', () => {
   ).toBe(false);
 
   // Check second OR: invoiceLines and mediaType
-  // invoice lines do flip since they make track very cheap
+  // flipping invoice lines is actually cheaper due to the FK from invoiceLine -> track
   expect(
     pick(planned, ['where', 'conditions', 1, 'conditions', 0, 'flip']),
   ).toBe(true);
