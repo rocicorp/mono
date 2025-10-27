@@ -368,9 +368,6 @@ export class ViewStore {
     const hash = bindings.hash(query) + zero.clientID;
     let existing = this.#views.get(hash);
     if (!existing) {
-      // Pass queryInternals directly to ViewWrapper.
-      // materialize() will call delegate.withContext() again, but for already-resolved
-      // queries (from getQueryInternals), withContext() is a no-op that returns `this`.
       existing = new ViewWrapper(bindings, query, format, ttl, view => {
         const currentView = this.#views.get(hash);
         if (currentView && currentView !== view) {
@@ -423,8 +420,6 @@ class ViewWrapper<
 > {
   #view: TypedView<HumanReadable<TReturn>> | undefined;
   readonly #onDematerialized;
-  // Store as QueryInternals because getView() passes the resolved queryInternals.
-  // We use materializeQueryInternals() which accepts QueryInternals directly.
   readonly #query: Query<TSchema, TTable, TReturn, TContext>;
   readonly #format: Format;
   #snapshot: QueryResult<TReturn>;
