@@ -7,7 +7,7 @@ import type {Database, Statement} from './db.ts';
 import {compile} from './internal/sql.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
-import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
+import type {SchemaValue} from '../../zero-types/src/schema-value.ts';
 
 /**
  * Loop information returned by SQLite's scanstatus API.
@@ -32,7 +32,7 @@ interface ScanstatusLoop {
  */
 export function createSQLiteCostModel(
   db: Database,
-  tableSpecs: Map<string, LiteAndZqlSpec>,
+  tableSpecs: Map<string, {zqlSpec: Record<string, SchemaValue>}>,
 ): ConnectionCostModel {
   return (
     tableName: string,
