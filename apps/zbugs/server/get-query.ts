@@ -10,11 +10,14 @@ import {queries as sharedQueries} from '../shared/queries.ts';
 // queryName is more like an API name that should be stable between
 // clients and servers.
 
-export function getQuery(name: string, args: ReadonlyJSONValue): AnyQuery {
+export function getQuery(
+  name: string,
+  args: ReadonlyJSONValue | undefined,
+): AnyQuery {
   if (name in sharedQueries) {
-    // Type assertion needed: sharedQueries contains NamedQueryFunction types with
-    // different argument types. TypeScript can't verify all accept the args type,
-    // but this is safe since all queries accept JSON-serializable input.
+    // Cast is necessary because TypeScript sees a union of incompatible
+    // function signatures (each with different parameter types based on
+    // validators). At runtime, all queries accept ReadonlyJSONValue or undefined.
     const f = sharedQueries[
       name as keyof typeof sharedQueries
     ] as AnyNamedQueryFunction;
