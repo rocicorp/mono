@@ -24,9 +24,9 @@ type PlanState = {
 /**
  * Maximum number of flippable joins to attempt exhaustive enumeration.
  * With n flippable joins, we explore 2^n plans.
- * 12 joins = 4096 plans (~instant), 16 joins = 65536 plans (~1 second)
+ * 12 joins = 4096 plans (~400ms), 13 joins = 8192 plans (~1 second)
  */
-const MAX_FLIPPABLE_JOINS = 16;
+const MAX_FLIPPABLE_JOINS = 13;
 
 export class PlannerGraph {
   // Sources indexed by table name
