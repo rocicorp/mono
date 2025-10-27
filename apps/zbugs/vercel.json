@@ -9,8 +9,8 @@
       "destination": "/index.html"
     },
     {
-      "source": "/p/(.*)",
-      "destination": "/index.html"
+      "source": "/p/:path*",
+      "destination": "/api/p/:path*"
     }
   ]
 }

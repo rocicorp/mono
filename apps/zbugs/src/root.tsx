@@ -1,43 +1,12 @@
-import {useEffect, useState} from 'react';
+import {useState} from 'react';
 import {Redirect, Route, Switch} from 'wouter';
 import {Nav} from './components/nav.tsx';
 import {useSoftNav} from './hooks/use-softnav.ts';
 import {ErrorPage} from './pages/error/error-page.tsx';
 import {IssuePage, IssueRedirect} from './pages/issue/issue-page.tsx';
 import {ListPage} from './pages/list/list-page.tsx';
-import {
-  isGigabugs,
-  links,
-  ListContextProvider,
-  routes,
-  useProjectName,
-} from './routes.tsx';
+import {links, ListContextProvider, routes} from './routes.tsx';
 import {ZERO_PROJECT_NAME} from '../shared/schema.ts';
-
-function OGImageUpdater() {
-  const projectName = useProjectName();
-
-  useEffect(() => {
-    const ogImage = isGigabugs(projectName)
-      ? 'https://bugs.rocicorp.dev/og-gigabugs.png'
-      : 'https://bugs.rocicorp.dev/og-image.png';
-
-    // Update OG image meta tags
-    const ogImageTag = document.querySelector('meta[property="og:image"]');
-    if (ogImageTag) {
-      ogImageTag.setAttribute('content', ogImage);
-    }
-
-    const twitterImageTag = document.querySelector(
-      'meta[name="twitter:image"]',
-    );
-    if (twitterImageTag) {
-      twitterImageTag.setAttribute('content', ogImage);
-    }
-  }, [projectName]);
-
-  return null;
-}
 
 export function Root() {
   const [contentReady, setContentReady] = useState(false);
@@ -46,7 +15,6 @@ export function Root() {
 
   return (
     <ListContextProvider>
-      <OGImageUpdater />
       <div
         className="app-container flex p-8"
         style={{visibility: contentReady ? 'visible' : 'hidden'}}
