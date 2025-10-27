@@ -120,6 +120,7 @@ export default function runWorker(
         operatorStorage.createClientGroupStorage(id),
         id,
         inspectorDelegate,
+        config.enableQueryPlanner,
       ),
       sub,
       drainCoordinator,

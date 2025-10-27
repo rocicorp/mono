@@ -345,6 +345,20 @@ export const zeroOptions = {
     ],
   },
 
+  enableQueryPlanner: {
+    type: v.boolean().default(false),
+    desc: [
+      `Enable the query planner for optimizing ZQL queries.`,
+      ``,
+      `The query planner analyzes and optimizes query execution by determining`,
+      `the most efficient join strategies. This feature`,
+      `is being gradually rolled out and may improve performance for complex`,
+      `queries that make use of WHERE EXISTS.`,
+      ``,
+      `When disabled (default), queries use the standard execution path.`,
+    ],
+  },
+
   change: {
     db: {
       type: v.string().optional(),

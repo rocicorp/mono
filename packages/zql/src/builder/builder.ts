@@ -34,6 +34,8 @@ import type {Source, SourceInput} from '../ivm/source.ts';
 import {Take} from '../ivm/take.ts';
 import {UnionFanIn} from '../ivm/union-fan-in.ts';
 import {UnionFanOut} from '../ivm/union-fan-out.ts';
+import {planQuery} from '../planner/planner-builder.ts';
+import type {ConnectionCostModel} from '../planner/planner-connection.ts';
 import type {DebugDelegate} from './debug-delegate.ts';
 import {createPredicate, type NoSubqueryCondition} from './filter.ts';
 
@@ -121,8 +123,12 @@ export function buildPipeline(
   ast: AST,
   delegate: BuilderDelegate,
   queryID: string,
+  costModel?: ConnectionCostModel,
 ): Input {
   ast = delegate.mapAst ? delegate.mapAst(ast) : ast;
+  if (costModel) {
+    ast = planQuery(ast, costModel);
+  }
   return buildPipelineInternal(ast, delegate, queryID, '');
 }
 

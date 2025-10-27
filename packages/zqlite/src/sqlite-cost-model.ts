@@ -7,7 +7,7 @@ import type {Database, Statement} from './db.ts';
 import {compile} from './internal/sql.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
-import type {TableSchema} from '../../zero-protocol/src/client-schema.ts';
+import type {SchemaValue} from '../../zero-types/src/schema-value.ts';
 
 /**
  * Loop information returned by SQLite's scanstatus API.
@@ -27,12 +27,12 @@ interface ScanstatusLoop {
  * SQLite query planner's analysis.
  *
  * @param db Database instance for preparing statements
- * @param columns Column definitions for the table
+ * @param tableSpecs Map of table names to their table specs with ZQL schemas
  * @returns ConnectionCostModel function for use with the planner
  */
 export function createSQLiteCostModel(
   db: Database,
-  tableSchemas: Record<string, TableSchema>,
+  tableSpecs: Map<string, {zqlSpec: Record<string, SchemaValue>}>,
 ): ConnectionCostModel {
   return (
     tableName: string,
@@ -48,9 +48,11 @@ export function createSQLiteCostModel(
       : undefined;
 
     // Build the SQL query using the same logic as actual queries
+    const {zqlSpec} = must(tableSpecs.get(tableName));
+
     const query = buildSelectQuery(
       tableName,
-      tableSchemas[tableName].columns,
+      zqlSpec,
       constraint,
       noSubqueryFilters,
       sort,
