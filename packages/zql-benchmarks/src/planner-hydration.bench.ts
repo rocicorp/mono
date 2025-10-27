@@ -14,6 +14,9 @@ import {QueryImpl} from '../../zql/src/query/query-impl.ts';
 import {defaultFormat} from '../../zql/src/ivm/default-format.ts';
 import type {Query} from '../../zql/src/query/query.ts';
 import {expect, test} from 'vitest';
+import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
 
 const pgContent = await getChinook();
 
@@ -26,26 +29,12 @@ const {dbs, delegates, queries} = await bootstrap({
 // Run ANALYZE to populate SQLite statistics for cost model
 dbs.sqlite.exec('ANALYZE;');
 
+// Get table specs using computeZqlSpecs
+const tableSpecs = new Map<string, LiteAndZqlSpec>();
+computeZqlSpecs(createSilentLogContext(), dbs.sqlite, tableSpecs);
+
 // Create SQLite cost model
-const costModel = createSQLiteCostModel(
-  dbs.sqlite,
-  Object.fromEntries(
-    Object.entries(schema.tables).map(([k, v]) => [
-      'serverName' in v ? v.serverName : k,
-      {
-        columns: Object.fromEntries(
-          Object.entries(v.columns).map(([colName, col]) => [
-            'serverName' in col ? col.serverName : colName,
-            {
-              ...col,
-            },
-          ]),
-        ),
-        primaryKey: v.primaryKey,
-      },
-    ]),
-  ),
-);
+const costModel = createSQLiteCostModel(dbs.sqlite, tableSpecs);
 
 // Create name mappers
 const clientToServerMapper = clientToServer(schema.tables);

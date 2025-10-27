@@ -345,6 +345,20 @@ export const zeroOptions = {
     ],
   },
 
+  enableQueryPlanner: {
+    type: v.boolean().default(false),
+    desc: [
+      `Enable the query planner for optimizing ZQL queries.`,
+      ``,
+      `The query planner analyzes and optimizes query execution by determining`,
+      `the most efficient join strategies. This feature`,
+      `is being gradually rolled out and may improve performance for complex`,
+      `queries that make use of WHERE EXISTS.`,
+      ``,
+      `When disabled (default), queries use the standard execution path.`,
+    ],
+  },
+
   change: {
     db: {
       type: v.string().optional(),
@@ -498,6 +512,31 @@ export const zeroOptions = {
       `/statz endpoint.`,
       '',
       'A password is optional in development mode but {bold required in production} mode.',
+    ],
+  },
+
+  websocketCompression: {
+    type: v.boolean().default(false),
+    desc: [
+      'Enable WebSocket per-message deflate compression.',
+      '',
+      'Compression can reduce bandwidth usage for sync traffic but',
+      'increases CPU usage on both client and server. Disabled by default.',
+      '',
+      'See: https://github.com/websockets/ws#websocket-compression',
+    ],
+  },
+
+  websocketCompressionOptions: {
+    type: v.string().optional(),
+    desc: [
+      'JSON string containing WebSocket compression options.',
+      '',
+      'Only used if websocketCompression is enabled.',
+      '',
+      'Example: \\{"zlibDeflateOptions":\\{"level":3\\},"threshold":1024\\}',
+      '',
+      'See https://github.com/websockets/ws/blob/master/doc/ws.md#new-websocketserveroptions-callback for available options.',
     ],
   },
 
