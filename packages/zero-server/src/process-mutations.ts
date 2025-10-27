@@ -76,7 +76,7 @@ export function handleMutationRequest(
   ) => Promise<MutationResponse>,
   queryString: URLSearchParams | Record<string, string>,
   body: ReadonlyJSONValue,
-  logLevel?: LogLevel | undefined,
+  logLevel?: LogLevel,
 ): Promise<PushResponse>;
 export function handleMutationRequest(
   cb: (
@@ -84,7 +84,7 @@ export function handleMutationRequest(
     mutation: CustomMutation,
   ) => Promise<MutationResponse>,
   request: Request,
-  logLevel?: LogLevel | undefined,
+  logLevel?: LogLevel,
 ): Promise<PushResponse>;
 export async function handleMutationRequest(
   cb: (
@@ -93,7 +93,7 @@ export async function handleMutationRequest(
   ) => Promise<MutationResponse>,
   queryOrQueryString: Request | URLSearchParams | Record<string, string>,
   body?: ReadonlyJSONValue | LogLevel,
-  logLevel?: LogLevel | undefined,
+  logLevel?: LogLevel,
 ): Promise<PushResponse> {
   if (logLevel === undefined) {
     if (queryOrQueryString instanceof Request && typeof body === 'string') {

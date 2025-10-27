@@ -1,16 +1,16 @@
 import {describe, expect, test} from 'vitest';
+import type {ValueType} from '../../../zero-protocol/src/client-schema.ts';
 import type {LiteTableSpec} from '../db/specs.ts';
 import {
-  dataTypeToZqlValueType,
   JSON_PARSED,
   JSON_STRINGIFIED,
   liteRow,
+  liteTypeToZqlValueType,
   liteValue,
   type JSONFormat,
   type LiteTypeString,
 } from './lite.ts';
 import type {RowValue} from './row-key.ts';
-import type {ValueType} from '../../../zero-protocol/src/client-schema.ts';
 
 describe('types/lite', () => {
   test.each([
@@ -241,20 +241,25 @@ describe('dataTypeToZqlValueType', () => {
     ['bool', 'boolean'],
     ['boolean', 'boolean'],
     ['json', 'json'],
-    ['int[]|NOT_NULL', 'json'],
-    ['float[]', 'json'],
-    ['bool[]', 'json'],
-    ['json[]', 'json'],
-    ['f[]|TEXT_ENUM', 'json'],
-    ['b[]', 'json'],
-    ['int|TEXT_ARRAY', 'json'],
-    ['float|TEXT_ARRAY', 'json'],
-    ['bool|TEXT_ARRAY', 'json'],
-    ['json|TEXT_ARRAY', 'json'],
+    ['int[]|NOT_NULL', 'json'], // Legacy
+    ['float[]', 'json'], // Legacy
+    ['bool[]', 'json'], // Legacy
+    ['json[]', 'json'], // Legacy
+    ['f[]|TEXT_ENUM', 'json'], // Legacy
+    ['f[]|TEXT_ENUM|TEXT_ARRAY', 'json'],
+    ['b[]', 'json'], // Legacy
+    ['int|TEXT_ARRAY', 'json'], // Legacy
+    ['float|TEXT_ARRAY', 'json'], // Legacy
+    ['bool|TEXT_ARRAY', 'json'], // Legacy
+    ['json|TEXT_ARRAY', 'json'], // Legacy
+    ['int[]|TEXT_ARRAY', 'json'],
+    ['float[]|TEXT_ARRAY', 'json'],
+    ['bool[]|TEXT_ARRAY', 'json'],
+    ['json[]|TEXT_ARRAY', 'json'],
   ] satisfies [LiteTypeString, ValueType][])(
     'dataTypeToZqlValueType: %s => %s',
     (pgType, zqlType) => {
-      expect(dataTypeToZqlValueType(pgType)).toBe(zqlType);
+      expect(liteTypeToZqlValueType(pgType)).toBe(zqlType);
     },
   );
 });

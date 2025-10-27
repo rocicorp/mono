@@ -76,6 +76,7 @@ function benchmarkQuery<TTable extends keyof typeof schema.tables & string>(
 
   // Map to server names, plan, then map back to client names
   const mappedAST = mapAST(unplannedAST, clientToServerMapper);
+
   const plannedServerAST = planQuery(mappedAST, costModel);
   const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
 

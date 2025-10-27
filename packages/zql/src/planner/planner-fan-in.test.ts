@@ -6,6 +6,10 @@ import {
   expectedCost,
 } from './test/helpers.ts';
 import type {PlannerNode} from './planner-node.ts';
+import {PlannerSource} from './planner-source.ts';
+import type {ConnectionCostModel} from './planner-connection.ts';
+import type {Ordering} from '../../../zero-protocol/src/ast.ts';
+import {PlannerFanIn} from './planner-fan-in.ts';
 
 const unpinned = {
   pinned: false,
@@ -63,5 +67,75 @@ suite('PlannerFanIn', () => {
     fanIn.setOutput(output);
 
     expect(fanIn.output).toBe(output);
+  });
+
+  suite('OR selectivity calculation', () => {
+    // Helper to create a connection with a specific selectivity
+    function createSelectiveConnection(
+      tableName: string,
+      selectivityPercent: number,
+    ) {
+      const costModel: ConnectionCostModel = (
+        _table: string,
+        _sort: Ordering,
+        filters,
+        _constraint,
+      ): number => (filters ? selectivityPercent : 100);
+
+      return new PlannerSource(tableName, costModel).connect(
+        [['id', 'asc']],
+        {
+          type: 'simple',
+          left: {type: 'column', name: 'x'},
+          op: '=',
+          right: {type: 'literal', value: 1},
+        },
+        undefined,
+        1, // limit triggers selectivity calculation
+      );
+    }
+
+    test.each([
+      {type: 'FI' as const, convert: false},
+      {type: 'UFI' as const, convert: true},
+    ])(
+      '$type combines selectivities using independent probability',
+      ({convert}) => {
+        const connectionA = createSelectiveConnection('branchA', 50); // 50% selective
+        const connectionB = createSelectiveConnection('branchB', 30); // 30% selective
+
+        expect(connectionA.selectivity).toBe(0.5);
+        expect(connectionB.selectivity).toBe(0.3);
+
+        const fanIn = new PlannerFanIn([connectionA, connectionB]);
+        if (convert) fanIn.convertToUFI();
+
+        // P(A OR B) = 1 - (1-0.5)(1-0.3) = 1 - (0.5)(0.7) = 0.65
+        expect(fanIn.estimateCost([]).selectivity).toBeCloseTo(0.65, 10);
+      },
+    );
+
+    test('three OR branches combine correctly', () => {
+      const connectionA = createSelectiveConnection('branchA', 50);
+      const connectionB = createSelectiveConnection('branchB', 40);
+      const connectionC = createSelectiveConnection('branchC', 60);
+
+      const fanIn = new PlannerFanIn([connectionA, connectionB, connectionC]);
+
+      // P(A OR B OR C) = 1 - (1-0.5)(1-0.4)(1-0.6) = 1 - 0.12 = 0.88
+      expect(fanIn.estimateCost([]).selectivity).toBeCloseTo(0.88, 10);
+    });
+
+    test('selectivity never exceeds 1.0 with high individual selectivities', () => {
+      const connectionA = createSelectiveConnection('branchA', 99);
+      const connectionB = createSelectiveConnection('branchB', 99);
+
+      const fanIn = new PlannerFanIn([connectionA, connectionB]);
+
+      // P(A OR B) = 1 - (1-0.99)(1-0.99) = 0.9999
+      const selectivity = fanIn.estimateCost([]).selectivity;
+      expect(selectivity).toBeCloseTo(0.9999, 10);
+      expect(selectivity).toBeLessThanOrEqual(1.0);
+    });
   });
 });

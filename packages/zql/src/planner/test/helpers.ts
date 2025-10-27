@@ -60,6 +60,8 @@ export function expectedCost(constraintCount: number): CostEstimate {
   return {
     baseCardinality: c,
     runningCost: c,
+    selectivity: 1.0,
+    limit: undefined,
   };
 }
 
@@ -67,6 +69,8 @@ export function multCost(base: CostEstimate, factor: number): CostEstimate {
   return {
     baseCardinality: base.baseCardinality * factor,
     runningCost: base.runningCost * factor,
+    selectivity: base.selectivity,
+    limit: base.limit,
   };
 }
 

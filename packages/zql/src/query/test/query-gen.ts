@@ -17,7 +17,7 @@ export function generateQuery(
   data: Dataset,
   rng: Rng,
   faker: Faker,
-  serverSchema?: ServerSchema | undefined,
+  serverSchema?: ServerSchema,
 ): AnyQuery {
   return augmentQuery(
     schema,
@@ -35,7 +35,7 @@ export function generateShrinkableQuery(
   data: Dataset,
   rng: Rng,
   faker: Faker,
-  serverSchema?: ServerSchema | undefined,
+  serverSchema?: ServerSchema,
 ): [AnyQuery, Generation[]] {
   const generations: Generation[] = [];
   const q = augmentQuery(

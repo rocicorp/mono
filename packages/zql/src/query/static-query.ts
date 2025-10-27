@@ -45,8 +45,8 @@ export class StaticQuery<
     ast: AST,
     format: Format,
     system: System = 'permissions',
-    customQueryID?: CustomQueryID | undefined,
-    currentJunction?: string | undefined,
+    customQueryID?: CustomQueryID,
+    currentJunction?: string,
   ) {
     super(
       schema,

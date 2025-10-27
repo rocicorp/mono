@@ -155,6 +155,13 @@ export type {
 export {RootNamedQuery} from '../../zql/src/query/root-named-query.ts';
 export {type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
+export type {ConnectionState} from './client/connection-manager.ts';
+export {ConnectionStatus} from './client/connection-status.ts';
+export type {
+  Connection,
+  ConnectionSource,
+  Source,
+} from './client/connection.ts';
 export type {BatchMutator, DBMutator, TableMutator} from './client/crud.ts';
 export type {
   CustomMutatorDefs,

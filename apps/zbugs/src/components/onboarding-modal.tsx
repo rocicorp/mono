@@ -1,5 +1,4 @@
 import {Modal} from './modal.tsx';
-import {Link} from './link.tsx';
 import {Button} from './button.tsx';
 
 export function OnboardingModal({
@@ -17,35 +16,30 @@ export function OnboardingModal({
       className="onboarding-modal"
     >
       <p className="opening-text">
-        Welcome. This is the bug tracker for the{' '}
-        <Link href="https://zero.rocicorp.dev">Zero project</Link>. It is also a
-        live production Zero-based product. You can click around and get a feel
-        for the performance that Zero provides.
+        A demo bug tracker built with <a href="https://zerosync.dev">Zero</a>.
+        Contains <strong>240 thousand issues</strong> and{' '}
+        <strong>2.5 million rows</strong> to demonstrate real-world performance.
+        Also features:
       </p>
-      <p>Some things to try:</p>
-
-      <h2>Create an issue</h2>
-      <p>Click on New Issue in the sidebar to open a new issue.</p>
-      <p className="aside">
-        Please note that this is our place of work so we'd appreciate if you add
-        test content, to just delete afterwards.
-      </p>
-
-      <h2>Quickly navigate between issues</h2>
+      <h2>Fast startup</h2>
       <p>
-        Use the <span className="keyboard-keys">J</span> &amp;{' '}
-        <span className="keyboard-keys">K</span> keys. (Try holding them down
-        🏎️💨)
+        Clear your cache and reload. Zero provides precise control over what's
+        synced, for quick starts even on an empty cache.
       </p>
-
-      <h2>Search &amp; filter</h2>
+      <h2>Instant UX</h2>
       <p>
-        In the list view, press <span className="keyboard-keys">/</span> search
-        or use the filter picker.
+        Click anything. Choose some filters. Create an issue. Zero's queries use
+        previously synced data if possible, making interactions instant by
+        default.
       </p>
-
-      <h2>Test live syncing</h2>
-      <p>Open two windows and watch changes sync live.</p>
+      <h2>Infinite scroll</h2>
+      <p>
+        Perfect, buttery scrolling. Or open an issue and hold down{' '}
+        <span className="keyboard-keys">J</span> /{' '}
+        <span className="keyboard-keys">K</span> 🏎️💨.
+      </p>
+      <h2>Live sync</h2>
+      <p>Open two windows and watch changes sync between them.</p>
 
       <Button
         className="onboarding-modal-accept"

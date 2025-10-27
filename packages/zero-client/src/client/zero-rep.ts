@@ -75,7 +75,7 @@ export class ZeroRep<TContext> implements ZeroOption {
 
   getTxData = (
     desiredHead: Hash,
-    readOptions?: ZeroReadOptions | undefined,
+    readOptions?: ZeroReadOptions,
   ): Promise<TxData> | undefined => {
     // getTxData requires some extensive testing for complete confidence
     // that it will not break. Do not enable `getTxData` unless the user

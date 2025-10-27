@@ -270,10 +270,7 @@ export type DropDatabaseOptions = {
  * @param dbName The name of the database to drop.
  * @param opts Options for dropping the database.
  */
-export async function dropDatabase(
-  dbName: string,
-  opts?: DropDatabaseOptions | undefined,
-) {
+export async function dropDatabase(dbName: string, opts?: DropDatabaseOptions) {
   const logContext = createLogContext(opts?.logLevel, opts?.logSinks, {
     dropDatabase: undefined,
   });
@@ -291,9 +288,7 @@ export async function dropDatabase(
  * Returns an object with the names of the successfully dropped databases
  * and any errors encountered while dropping.
  */
-export async function dropAllDatabases(
-  opts?: DropDatabaseOptions | undefined,
-): Promise<{
+export async function dropAllDatabases(opts?: DropDatabaseOptions): Promise<{
   dropped: string[];
   errors: unknown[];
 }> {
@@ -315,9 +310,7 @@ export async function dropAllDatabases(
  *
  * @deprecated Use `dropAllDatabases` instead.
  */
-export function deleteAllReplicacheData(
-  opts?: DropDatabaseOptions | undefined,
-) {
+export function deleteAllReplicacheData(opts?: DropDatabaseOptions) {
   return dropAllDatabases(opts);
 }
 

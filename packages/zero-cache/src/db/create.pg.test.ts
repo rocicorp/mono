@@ -2,11 +2,11 @@ import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {test} from '../test/db.ts';
-import {createLiteTableStatement, liteColumnDef} from './create.ts';
+import {createLiteTableStatement} from './create.ts';
 import {listTables} from './lite-tables.ts';
 import {mapPostgresToLite} from './pg-to-lite.ts';
 import * as PostgresTypeClass from './postgres-type-class-enum.ts';
-import {type ColumnSpec, type LiteTableSpec, type TableSpec} from './specs.ts';
+import {type LiteTableSpec, type TableSpec} from './specs.ts';
 
 describe('tables/create', () => {
   type Case = {
@@ -331,7 +331,7 @@ describe('tables/create', () => {
           },
           tags: {
             pos: 2,
-            dataType: 'varchar[]',
+            dataType: 'varchar[]|TEXT_ARRAY',
             characterMaximumLength: null,
             notNull: false,
             elemPgTypeClass: 'b',
@@ -339,7 +339,7 @@ describe('tables/create', () => {
           },
           nums: {
             pos: 3,
-            dataType: 'int4[]',
+            dataType: 'int4[]|TEXT_ARRAY',
             characterMaximumLength: null,
             notNull: false,
             elemPgTypeClass: 'b',
@@ -347,7 +347,7 @@ describe('tables/create', () => {
           },
           enums: {
             pos: 4,
-            dataType: 'my_type[]|TEXT_ENUM',
+            dataType: 'my_type[]|TEXT_ENUM|TEXT_ARRAY',
             characterMaximumLength: null,
             notNull: false,
             elemPgTypeClass: 'e',
@@ -426,7 +426,7 @@ describe('tables/create', () => {
           },
           matrix: {
             pos: 2,
-            dataType: 'int4[][]',
+            dataType: 'int4[][]|TEXT_ARRAY',
             characterMaximumLength: null,
             notNull: false,
             elemPgTypeClass: 'b',
@@ -434,7 +434,7 @@ describe('tables/create', () => {
           },
           enum_matrix: {
             pos: 3,
-            dataType: 'my_type[][]|TEXT_ENUM',
+            dataType: 'my_type[][]|TEXT_ENUM|TEXT_ARRAY',
             characterMaximumLength: null,
             notNull: false,
             elemPgTypeClass: 'e',
@@ -442,7 +442,7 @@ describe('tables/create', () => {
           },
           text_3d: {
             pos: 4,
-            dataType: 'text[][][]',
+            dataType: 'text[][][]|TEXT_ARRAY',
             characterMaximumLength: null,
             notNull: false,
             elemPgTypeClass: 'b',
@@ -474,116 +474,6 @@ describe('tables/create', () => {
 
       const tables = listTables(db);
       expect(tables).toEqual(expect.arrayContaining([c.liteTableSpec]));
-    });
-  });
-
-  // Regression tests for array type SQL generation bug
-  // Original issue: Legacy data with "text[]|TEXT_ARRAY" was generating malformed SQL like:
-  //   SQLite: "text[]|TEXT_ARRAY"[] (attribute not removed + double brackets)
-  describe('columnDef - legacy array format handling', () => {
-    test('handles legacy text[]|TEXT_ARRAY format for SQLite', () => {
-      const spec = {
-        pos: 1,
-        dataType: 'text[]|TEXT_ARRAY', // Legacy format
-        characterMaximumLength: null,
-        notNull: false,
-        dflt: null,
-        elemPgTypeClass: PostgresTypeClass.Base,
-      } as const;
-
-      // SQLite should get "text[]" (not "text[]|TEXT_ARRAY"[])
-      const sqliteResult = liteColumnDef(spec);
-      expect(sqliteResult).toBe('"text[]"');
-    });
-
-    test('handles legacy text|TEXT_ARRAY format', () => {
-      const spec = {
-        pos: 1,
-        dataType: 'text|TEXT_ARRAY', // Legacy format without brackets
-        characterMaximumLength: null,
-        notNull: false,
-        dflt: null,
-        elemPgTypeClass: PostgresTypeClass.Base,
-      } as const;
-
-      // SQLite should get "text[]"
-      const sqliteResult = liteColumnDef(spec);
-      expect(sqliteResult).toBe('"text[]"');
-    });
-
-    test('handles legacy text|TEXT_ARRAY[] format', () => {
-      const spec = {
-        pos: 1,
-        dataType: 'text|TEXT_ARRAY[]', // Legacy format with trailing []
-        characterMaximumLength: null,
-        notNull: false,
-        dflt: null,
-        elemPgTypeClass: PostgresTypeClass.Base,
-      } as const;
-
-      // SQLite should get "text[]"
-      const sqliteResult = liteColumnDef(spec);
-      expect(sqliteResult).toBe('"text[]"');
-    });
-
-    test('handles legacy text[]|TEXT_ARRAY[] format', () => {
-      const spec = {
-        pos: 1,
-        dataType: 'text[]|TEXT_ARRAY[]', // Legacy format with both [] and trailing []
-        characterMaximumLength: null,
-        notNull: false,
-        dflt: null,
-        elemPgTypeClass: PostgresTypeClass.Base,
-      } satisfies ColumnSpec;
-
-      // SQLite should get "text[]"
-      const sqliteResult = liteColumnDef(spec);
-      expect(sqliteResult).toBe('"text[]"');
-    });
-
-    test('handles new text[] format', () => {
-      const spec = {
-        pos: 1,
-        dataType: 'text[]', // New format (no |TEXT_ARRAY)
-        characterMaximumLength: null,
-        notNull: false,
-        dflt: null,
-        elemPgTypeClass: PostgresTypeClass.Base,
-      } as const;
-
-      // SQLite should get "text[]"
-      const sqliteResult = liteColumnDef(spec);
-      expect(sqliteResult).toBe('"text[]"');
-    });
-
-    test('handles new text[][] format', () => {
-      const spec = {
-        pos: 1,
-        dataType: 'text[][]', // New format (no |TEXT_ARRAY)
-        characterMaximumLength: null,
-        notNull: false,
-        dflt: null,
-        elemPgTypeClass: PostgresTypeClass.Base,
-      } as const;
-
-      // SQLite should get "text[]"
-      const sqliteResult = liteColumnDef(spec);
-      expect(sqliteResult).toBe('"text[][]"');
-    });
-
-    test('handles new text|NOT_NULL[] format', () => {
-      const spec = {
-        pos: 1,
-        dataType: 'text|NOT_NULL[]', // New format with attributes
-        characterMaximumLength: null,
-        notNull: false,
-        dflt: null,
-        elemPgTypeClass: PostgresTypeClass.Base,
-      } as const;
-
-      // SQLite should get "text|NOT_NULL[]"
-      const sqliteResult = liteColumnDef(spec);
-      expect(sqliteResult).toBe('"text|NOT_NULL[]"');
     });
   });
 });

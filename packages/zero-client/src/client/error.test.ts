@@ -3,12 +3,14 @@ import {describe, expect, test} from 'vitest';
 import {
   ClientError,
   ServerError,
+  getBackoffParams,
+  getErrorConnectionTransition,
   isAuthError,
-  isBackoffError,
   isClientError,
   isServerError,
 } from './error.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
+import {ConnectionStatus} from './connection-status.ts';
 import type {BackoffBody, ErrorBody} from '../../../zero-protocol/src/error.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 
@@ -25,7 +27,7 @@ describe('ClientError', () => {
     expect(error.errorBody).toBe(body);
     expect(error.kind).toBe(ClientErrorKind.ConnectTimeout);
     expect(error.name).toBe('ClientError');
-    expect(error.message).toBe('ConnectTimeout: connect timeout');
+    expect(error.message).toBe('connect timeout');
     expect(isClientError(error)).toBe(true);
     expect(isServerError(error)).toBe(false);
   });
@@ -68,7 +70,7 @@ describe('ServerError', () => {
     expect(error.errorBody).toBe(body);
     expect(error.kind).toBe(ErrorKind.InvalidPush);
     expect(error.name).toBe('ServerError');
-    expect(error.message).toBe('InvalidPush: invalid push');
+    expect(error.message).toBe('invalid push');
     expect(isServerError(error)).toBe(true);
     expect(isClientError(error)).toBe(false);
   });
@@ -119,12 +121,10 @@ describe('isAuthError', () => {
 
     expect(isAuthError(serverError)).toBe(false);
     expect(isAuthError(clientError)).toBe(false);
-    expect(isAuthError(new Error('boom'))).toBe(false);
-    expect(isAuthError(undefined)).toBe(false);
   });
 });
 
-describe('isBackoffError', () => {
+describe('getBackoffParams', () => {
   const backoffKinds: ReadonlyArray<BackoffBody['kind']> = [
     ErrorKind.Rebalance,
     ErrorKind.Rehome,
@@ -139,7 +139,7 @@ describe('isBackoffError', () => {
     };
     const error = new ServerError(body);
 
-    expect(isBackoffError(error)).toBe(body);
+    expect(getBackoffParams(error)).toBe(body);
   });
 
   test('returns undefined for non-backoff errors', () => {
@@ -152,9 +152,101 @@ describe('isBackoffError', () => {
       message: 'client closed',
     });
 
-    expect(isBackoffError(serverError)).toBeUndefined();
-    expect(isBackoffError(clientError)).toBeUndefined();
-    expect(isBackoffError(new Error('boom'))).toBeUndefined();
-    expect(isBackoffError(undefined)).toBeUndefined();
+    expect(getBackoffParams(serverError)).toBeUndefined();
+    expect(getBackoffParams(clientError)).toBeUndefined();
+  });
+});
+
+describe('getErrorConnectionTransition', () => {
+  test.each([
+    ClientErrorKind.AbruptClose,
+    ClientErrorKind.CleanClose,
+    ClientErrorKind.ConnectTimeout,
+    ClientErrorKind.Hidden,
+    ClientErrorKind.PingTimeout,
+  ] as const)('returns null status for retryable client error %s', kind => {
+    const error = new ClientError({kind, message: 'retry'});
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: null,
+      reason: error,
+    });
+  });
+
+  test('returns error status for fatal client errors', () => {
+    const error = new ClientError({
+      kind: ClientErrorKind.UnexpectedBaseCookie,
+      message: 'fatal',
+    });
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: ConnectionStatus.Error,
+      reason: error,
+    });
+  });
+
+  test('returns disconnected status for disconnect timeout', () => {
+    const error = new ClientError({
+      kind: ClientErrorKind.DisconnectTimeout,
+      message: 'disconnect',
+    });
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: ConnectionStatus.Disconnected,
+      reason: error,
+    });
+  });
+
+  test('returns closed status for client closed', () => {
+    const error = new ClientError({
+      kind: ClientErrorKind.ClientClosed,
+      message: 'closed',
+    });
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: ConnectionStatus.Closed,
+      reason: error,
+    });
+  });
+
+  test('returns error status for fatal server errors', () => {
+    const error = new ServerError({
+      kind: ErrorKind.InvalidPush,
+      message: 'invalid push',
+    });
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: ConnectionStatus.Error,
+      reason: error,
+    });
+  });
+
+  test.each([
+    ErrorKind.Rebalance,
+    ErrorKind.Rehome,
+    ErrorKind.ServerOverloaded,
+    ErrorKind.AuthInvalidated,
+    ErrorKind.Unauthorized,
+    ErrorKind.MutationRateLimited,
+    ErrorKind.MutationFailed,
+  ] as const)('returns null status for non-fatal server error %s', kind => {
+    const error = new ServerError({kind, message: 'non-fatal'});
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: null,
+      reason: error,
+    });
+  });
+
+  test('wraps unknown errors as internal client error', () => {
+    const result = getErrorConnectionTransition(new Error('boom'));
+
+    expect(result.status).toBe(ConnectionStatus.Error);
+    expect(result.reason).toBeInstanceOf(ClientError);
+    expect(result.reason?.kind).toBe(ClientErrorKind.Internal);
+    expect(result.reason?.message).toBe('Unexpected internal error: boom');
+    expect(result.reason?.errorBody.message).toBe(
+      'Unexpected internal error: boom',
+    );
   });
 });

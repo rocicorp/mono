@@ -18,6 +18,12 @@ export type PlannerNode =
 export type CostEstimate = {
   baseCardinality: number;
   runningCost: number;
+  selectivity: number;
+  limit: number | undefined;
 };
 
+export type NodeType = PlannerNode['kind'];
+
 export type JoinOrConnection = 'join' | 'connection';
+
+export type JoinType = PlannerJoin['type'];

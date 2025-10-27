@@ -71,7 +71,9 @@ describe('Chinook planner tests', () => {
 
   test('playlist with track', () => {
     const ast = getPlanAST(queries.sqlite.playlist.whereExists('tracks'));
-    expect(pick(ast, ['where', 'flip'])).toBe(true);
+    // No flip because:
+    // all playlists have a track so we must scan all playlists!
+    expect(pick(ast, ['where', 'flip'])).toBe(false);
     expect(pick(ast, ['where', 'related', 'subquery', 'where', 'flip'])).toBe(
       false,
     );
@@ -80,22 +82,51 @@ describe('Chinook planner tests', () => {
   test('tracks with playlist', () => {
     const ast = getPlanAST(queries.sqlite.track.whereExists('playlists'));
 
-    // playlist table is smaller. Should be flipped.
-    expect(pick(ast, ['where', 'flip'])).toBe(true);
+    // TODO:
+    // This is where SELECTIVITY_PLAN.md would help.
+    // We assume a selectivity of 1 on playlist_track and playlist
+    // because there are no filters.
+    // but a track may not be part of a playlist!
+    // If many tracks are not part of any playlist
+    // then flipping would be better.
+    expect(pick(ast, ['where', 'flip'])).toBe(false);
   });
 
   test('has album a or album b', () => {
-    // These will flip when we handle limits properly.
-    const ast = getPlanAST(
-      queries.sqlite.track.where(({or, exists}) =>
+    const query = queries.sqlite.track
+      .where(({or, exists}) =>
         or(
           exists('album', q => q.where('title', 'Big Ones')),
           exists('album', q => q.where('title', 'Greatest Hits')),
         ),
-      ),
-    );
+      )
+      .limit(10);
 
-    // hmm...
+    const ast = getPlanAST(query);
+
+    /*
+    For album with title="Big Ones":
+    - costWithoutFilters = cost of all albums = ~347
+    - costWithFilters = cost of albums matching the filter
+
+    If selectivity = 0.250, then:
+    costWithFilters = 0.250 × 347 ≈ 87
+
+    So the cost model is estimating that ~87 albums match the title filter, when in reality probably only 1-2 do.
+
+    If only 1-2 albums out of 347 match (selectivity ~0.3%):
+    scanEst = 10 / 0.003 = 3,333 tracks
+
+    In the flipped plan (Attempts 1-2):
+      - Album connections cost 80 each currently (with selectivity=0.25)
+      - If selectivity was correct (~0.003), album cost would be ~1-2
+      - Track connection (child) costs 44 (with its limit applied somehow)
+      - Join cost: albumRows * trackCost = 1 * 44 = 44 per branch
+      - Total via UFI: 44 + 44 = 88
+
+
+    The SQLite Cost Model is off because we are missing an index on the name column!
+    */
     expect(pick(ast, ['where', 'conditions', 0, 'flip'])).toBe(false);
     expect(pick(ast, ['where', 'conditions', 1, 'flip'])).toBe(false);
   });

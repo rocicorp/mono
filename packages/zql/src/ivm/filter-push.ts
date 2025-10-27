@@ -8,7 +8,7 @@ export function filterPush(
   change: Change,
   output: Output,
   pusher: InputBase,
-  predicate?: ((row: Row) => boolean) | undefined,
+  predicate?: (row: Row) => boolean,
 ) {
   if (!predicate) {
     output.push(change, pusher);

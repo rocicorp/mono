@@ -160,7 +160,7 @@ export function setSingleProcessMode(enabled: boolean = true): void {
  */
 export function childWorker(
   modulePath: string,
-  env?: NodeJS.ProcessEnv | undefined,
+  env?: NodeJS.ProcessEnv,
   ...args: string[]
 ): Worker {
   const ext = path.extname(import.meta.url);

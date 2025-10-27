@@ -205,9 +205,9 @@ export class TableSource implements Source {
 
   connect(
     sort: Ordering,
-    filters?: Condition | undefined,
-    splitEditKeys?: Set<string> | undefined,
-    debug?: DebugDelegate | undefined,
+    filters?: Condition,
+    splitEditKeys?: Set<string>,
+    debug?: DebugDelegate,
   ) {
     const transformedFilters = transformFilters(filters);
     const input: SourceInput = {

@@ -21,6 +21,7 @@ import {
   type MakeCustomMutatorInterfaces,
   type MutatorResult,
 } from './custom.ts';
+import {ClientError} from './error.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {QueryManager} from './query-manager.ts';
 import type {WriteTransaction} from './replicache-types.ts';
@@ -820,9 +821,7 @@ test('trying to use crud mutators throws if `enableLegacyMutators` is set to fal
       ownerId: '',
       createdAt: 1743018138477,
     }),
-  ).rejects.toThrowErrorMatchingInlineSnapshot(
-    `[Error: Zero CRUD mutators are not enabled.]`,
-  );
+  ).rejects.toThrow(ClientError);
 
   await z.close();
 });

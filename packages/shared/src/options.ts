@@ -306,7 +306,7 @@ export type ParseOptions = {
   logger?: OptionalLogger;
 
   /** Defaults to `process.exit` */
-  exit?: (code?: number | string | null | undefined) => never;
+  exit?: (code?: number | string | null) => never;
 };
 
 export function parseOptions<T extends Options>(

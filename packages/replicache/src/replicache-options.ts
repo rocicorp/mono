@@ -292,7 +292,7 @@ export interface ZeroOption {
    */
   getTxData(
     desiredHead: Hash,
-    readOptions?: ZeroReadOptions | undefined,
+    readOptions?: ZeroReadOptions,
   ): Promise<ZeroTxData> | undefined;
 
   /**

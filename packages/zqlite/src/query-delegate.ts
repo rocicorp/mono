@@ -42,7 +42,7 @@ export class QueryDelegateImpl<TContext> implements QueryDelegate<TContext> {
     lc: LogContext,
     db: Database,
     schema: Schema,
-    logConfig?: LogConfig | undefined,
+    logConfig?: LogConfig,
   ) {
     this.#lc = lc.withContext('class', 'QueryDelegateImpl');
     this.#db = db;

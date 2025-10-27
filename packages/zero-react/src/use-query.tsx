@@ -458,7 +458,7 @@ class ViewWrapper<
   #onData = (
     snap: Immutable<HumanReadable<TReturn>>,
     resultType: ResultType,
-    error?: ErroredQuery | undefined,
+    error?: ErroredQuery,
   ) => {
     const data =
       snap === undefined

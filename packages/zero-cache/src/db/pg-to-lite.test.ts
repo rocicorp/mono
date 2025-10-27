@@ -337,7 +337,7 @@ test.each([
     },
     {
       pos: 8,
-      dataType: 'int4[]',
+      dataType: 'int4[]|TEXT_ARRAY',
       characterMaximumLength: null,
       notNull: false,
       dflt: null,
@@ -355,7 +355,7 @@ test.each([
     },
     {
       pos: 9,
-      dataType: 'my_enum[]|TEXT_ENUM',
+      dataType: 'my_enum[]|TEXT_ENUM|TEXT_ARRAY',
       characterMaximumLength: null,
       notNull: false,
       dflt: null,
@@ -373,7 +373,7 @@ test.each([
     },
     {
       pos: 10,
-      dataType: 'int4[][]',
+      dataType: 'int4[][]|TEXT_ARRAY',
       characterMaximumLength: null,
       notNull: false,
       dflt: null,
@@ -391,7 +391,7 @@ test.each([
     },
     {
       pos: 11,
-      dataType: 'my_enum[][]|TEXT_ENUM',
+      dataType: 'my_enum[][]|TEXT_ENUM|TEXT_ARRAY',
       characterMaximumLength: null,
       notNull: false,
       dflt: null,

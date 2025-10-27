@@ -61,7 +61,7 @@ export class Take implements Operator {
     input: Input,
     storage: Storage,
     limit: number,
-    partitionKey?: PartitionKey | undefined,
+    partitionKey?: PartitionKey,
   ) {
     assert(limit >= 0, 'Limit must be non-negative');
     assertOrderingIncludesPK(

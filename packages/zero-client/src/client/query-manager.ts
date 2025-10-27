@@ -11,6 +11,7 @@ import {
 } from '../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import type {UpQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import {
   hashOfAST,
@@ -26,6 +27,7 @@ import type {ClientMetricMap} from '../../../zql/src/query/metrics-delegate.ts';
 import type {CustomQueryID} from '../../../zql/src/query/named.ts';
 import type {GotCallback} from '../../../zql/src/query/query-delegate.ts';
 import {clampTTL, compareTTL, type TTL} from '../../../zql/src/query/ttl.ts';
+import {ServerError, type ZeroError} from './error.ts';
 import type {InspectorDelegate} from './inspector/inspector.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
@@ -58,6 +60,7 @@ export class QueryManager implements InspectorDelegate {
   readonly #clientToServer: NameMapper;
   readonly #serverToClient: NameMapper;
   readonly #send: (change: ChangeDesiredQueriesMessage) => void;
+  readonly #onFatalError: (error: ZeroError) => void;
   readonly #queries: Map<QueryHash, Entry> = new Map();
   readonly #recentQueriesMaxSize: number;
   readonly #recentQueries: Set<string> = new Set();
@@ -82,6 +85,7 @@ export class QueryManager implements InspectorDelegate {
     recentQueriesMaxSize: number,
     queryChangeThrottleMs: number,
     slowMaterializeThreshold: number,
+    onFatalError: (error: ZeroError) => void,
   ) {
     this.#lc = lc.withContext('QueryManager');
     this.#clientID = clientID;
@@ -92,7 +96,7 @@ export class QueryManager implements InspectorDelegate {
     this.#mutationTracker = mutationTracker;
     this.#queryChangeThrottleMs = queryChangeThrottleMs;
     this.#slowMaterializeThreshold = slowMaterializeThreshold;
-
+    this.#onFatalError = onFatalError;
     this.#mutationTracker.onAllMutationsApplied(() => {
       if (this.#pendingRemovals.length === 0) {
         return;
@@ -156,7 +160,7 @@ export class QueryManager implements InspectorDelegate {
    */
   async getQueriesPatch(
     tx: ReadTransaction,
-    lastPatch?: Map<string, UpQueriesPatchOp> | undefined,
+    lastPatch?: Map<string, UpQueriesPatchOp>,
   ): Promise<Map<string, UpQueriesPatchOp>> {
     const existingQueryHashes = new Set<string>();
     const prefix = desiredQueriesPrefixForClient(this.#clientID);
@@ -212,6 +216,18 @@ export class QueryManager implements InspectorDelegate {
       if (entry) {
         entry.gotCallbacks.forEach(callback => callback(false, error));
       }
+      // this is included for backwards compatibility with the legacy query transform error
+      if (error.error !== 'app') {
+        this.#onFatalError(
+          new ServerError({
+            kind: ErrorKind.Internal,
+            message:
+              error.error === 'http'
+                ? `HTTP error transforming queries`
+                : `Unknown error transforming queries`,
+          }),
+        );
+      }
     }
   }
 
@@ -219,18 +235,14 @@ export class QueryManager implements InspectorDelegate {
     ast: AST,
     {name, args}: CustomQueryID,
     ttl: TTL,
-    gotCallback?: GotCallback | undefined,
+    gotCallback?: GotCallback,
   ): () => void {
     const normalized = normalizeAST(ast);
     const queryId = hashOfNameAndArgs(name, args);
     return this.#add(queryId, normalized, name, args, ttl, gotCallback);
   }
 
-  addLegacy(
-    ast: AST,
-    ttl: TTL,
-    gotCallback?: GotCallback | undefined,
-  ): () => void {
+  addLegacy(ast: AST, ttl: TTL, gotCallback?: GotCallback): () => void {
     const normalized = normalizeAST(ast);
     const astHash = hashOfAST(normalized);
     return this.#add(
@@ -249,7 +261,7 @@ export class QueryManager implements InspectorDelegate {
     name: string | undefined,
     args: readonly ReadonlyJSONValue[] | undefined,
     ttl: TTL,
-    gotCallback?: GotCallback | undefined,
+    gotCallback?: GotCallback,
   ) {
     assert(
       (name === undefined) === (args === undefined),

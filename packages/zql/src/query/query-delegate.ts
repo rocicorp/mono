@@ -17,10 +17,7 @@ import type {TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
 export type CommitListener = () => void;
-export type GotCallback = (
-  got: boolean,
-  error?: ErroredQuery | undefined,
-) => void;
+export type GotCallback = (got: boolean, error?: ErroredQuery) => void;
 
 export interface NewQueryDelegate {
   newQuery<
@@ -50,17 +47,13 @@ export interface QueryDelegate<TContext>
     query: Query<TSchema, TTable, TReturn, TContext>,
   ): QueryInternals<TSchema, TTable, TReturn, TContext>;
 
-  addServerQuery(
-    ast: AST,
-    ttl: TTL,
-    gotCallback?: GotCallback | undefined,
-  ): () => void;
+  addServerQuery(ast: AST, ttl: TTL, gotCallback?: GotCallback): () => void;
 
   addCustomQuery(
     ast: AST,
     customQueryID: CustomQueryID,
     ttl: TTL,
-    gotCallback?: GotCallback | undefined,
+    gotCallback?: GotCallback,
   ): () => void;
 
   updateServerQuery(ast: AST, ttl: TTL): void;

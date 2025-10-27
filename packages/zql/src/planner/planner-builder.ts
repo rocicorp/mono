@@ -10,6 +10,7 @@ import type {
 import {planIdSymbol} from '../../../zero-protocol/src/ast.ts';
 import type {ConnectionCostModel} from './planner-connection.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
+import type {PlanDebugger} from './planner-debug.ts';
 import {PlannerFanIn} from './planner-fan-in.ts';
 import {PlannerFanOut} from './planner-fan-out.ts';
 import {PlannerGraph} from './planner-graph.ts';
@@ -50,6 +51,7 @@ export function buildPlanGraph(
     ast.orderBy ?? [],
     ast.where,
     baseConstraints,
+    ast.limit,
   );
   graph.connections.push(connection);
 
@@ -197,6 +199,8 @@ function processCorrelatedSubquery(
   const childConnection = childSource.connect(
     related.subquery.orderBy ?? [],
     related.subquery.where,
+    undefined, // no base constraints for EXISTS/NOT EXISTS
+    condition.op === 'EXISTS' ? 1 : undefined,
   );
   graph.connections.push(childConnection);
 
@@ -257,16 +261,20 @@ function extractConstraint(
   return Object.fromEntries(fields.map(field => [field, undefined]));
 }
 
-function planRecursively(plans: Plans): void {
+function planRecursively(plans: Plans, planDebugger?: PlanDebugger): void {
   for (const subPlan of Object.values(plans.subPlans)) {
-    planRecursively(subPlan);
+    planRecursively(subPlan, planDebugger);
   }
-  plans.plan.plan();
+  plans.plan.plan(planDebugger);
 }
 
-export function planQuery(ast: AST, model: ConnectionCostModel): AST {
+export function planQuery(
+  ast: AST,
+  model: ConnectionCostModel,
+  planDebugger?: PlanDebugger,
+): AST {
   const plans = buildPlanGraph(ast, model);
-  planRecursively(plans);
+  planRecursively(plans, planDebugger);
   return applyPlansToAST(ast, plans);
 }
 

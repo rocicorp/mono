@@ -17,8 +17,8 @@ export class TestBuilderDelegate implements BuilderDelegate {
 
   constructor(
     sources: Readonly<Record<string, Source>>,
-    shouldLog?: boolean | undefined,
-    enableNotExists?: boolean | undefined,
+    shouldLog?: boolean,
+    enableNotExists?: boolean,
   ) {
     this.#sources = sources;
     this.#shouldLog = !!shouldLog;

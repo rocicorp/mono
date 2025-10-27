@@ -1,6 +1,7 @@
 import {useQuery} from '@rocicorp/zero/react';
 import {useVirtualizer} from '@tanstack/react-virtual';
 import classNames from 'classnames';
+import Cookies from 'js-cookie';
 import React, {
   useCallback,
   useEffect,
@@ -20,10 +21,12 @@ import {
   type ListContextParams,
 } from '../../../shared/queries.ts';
 import {type IssueRow} from '../../../shared/schema.ts';
+import InfoIcon from '../../assets/images/icon-info.svg?react';
 import {Button} from '../../components/button.tsx';
 import {Filter, type Selection} from '../../components/filter.tsx';
 import {IssueLink} from '../../components/issue-link.tsx';
 import {Link} from '../../components/link.tsx';
+import {OnboardingModal} from '../../components/onboarding-modal.tsx';
 import {RelativeTime} from '../../components/relative-time.tsx';
 import {useClickOutside} from '../../hooks/use-click-outside.ts';
 import {useElementSize} from '../../hooks/use-element-size.ts';
@@ -33,7 +36,7 @@ import {useZero} from '../../hooks/use-zero.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
-import {useListContext} from '../../routes.tsx';
+import {isGigabugs, useListContext} from '../../routes.tsx';
 import {preload} from '../../zero-preload.ts';
 
 let firstRowRendered = false;
@@ -99,6 +102,19 @@ export function ListPage({onReady}: {onReady: () => void}) {
 
   const params = useParams();
   const projectName = must(params.projectName);
+
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    if (isGigabugs(projectName) && !Cookies.get('onboardingDismissed')) {
+      setShowOnboarding(true);
+    }
+  }, [projectName]);
+
+  const [projects] = useQuery(queries.allProjects());
+  const project = projects.find(
+    p => p.lowerCaseName === projectName.toLocaleLowerCase(),
+  );
 
   const status = qs.get('status')?.toLowerCase() ?? 'open';
   const creator = qs.get('creator') ?? null;
@@ -245,10 +261,15 @@ export function ListPage({onReady}: {onReady: () => void}) {
   }, [login.loginState?.decoded, issuesResult.type, z]);
 
   let title;
+  let shortTitle;
   if (creator || assignee || labels.length > 0 || textFilter) {
     title = 'Filtered Issues';
+    shortTitle = 'Filtered';
   } else {
-    title = status.slice(0, 1).toUpperCase() + status.slice(1) + ' Issues';
+    const statusCapitalized =
+      status.slice(0, 1).toUpperCase() + status.slice(1);
+    title = statusCapitalized + ' Issues';
+    shortTitle = statusCapitalized;
   }
 
   const [location] = useLocation();
@@ -486,7 +507,12 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const searchMode = forceSearchMode || Boolean(textFilter);
   const searchBox = useRef<HTMLHeadingElement>(null);
   const startSearchButton = useRef<HTMLButtonElement>(null);
-  useKeypress('/', () => setForceSearchMode(true));
+
+  useKeypress('/', () => {
+    if (project?.supportsSearch) {
+      setForceSearchMode(true);
+    }
+  });
   useClickOutside([searchBox, startSearchButton], () => {
     if (Boolean(textFilter)) {
       setForceSearchMode(false);
@@ -540,17 +566,39 @@ export function ListPage({onReady}: {onReady: () => void}) {
               )}
             </div>
           ) : (
-            <span className="list-view-title">{title}</span>
+            <>
+              <span className="list-view-title list-view-title-full">
+                {title}
+              </span>
+              <span className="list-view-title list-view-title-short">
+                {shortTitle}
+              </span>
+            </>
           )}
           {issuesResult.type === 'complete' || total || estimatedTotal ? (
-            <span className="issue-count">
-              {total ??
-                `${estimatedTotal < 50 ? estimatedTotal : estimatedTotal - (estimatedTotal % 50)}+`}
-            </span>
+            <>
+              <span className="issue-count">
+                {project?.issueCountEstimate
+                  ? `${(total ?? roundEstimatedTotal(estimatedTotal)).toLocaleString()} of ${formatIssueCountEstimate(project.issueCountEstimate)}`
+                  : (total?.toLocaleString() ??
+                    `${roundEstimatedTotal(estimatedTotal).toLocaleString()}+`)}
+              </span>
+              {isGigabugs(projectName) && (
+                <button
+                  className="info-button"
+                  onMouseDown={() => setShowOnboarding(true)}
+                  aria-label="Show onboarding information"
+                  title="Show onboarding information"
+                >
+                  <InfoIcon />
+                </button>
+              )}
+            </>
           ) : null}
         </h1>
         <Button
           ref={startSearchButton}
+          style={{visibility: project?.supportsSearch ? 'visible' : 'hidden'}}
           className="search-toggle"
           eventName="Toggle Search"
           onAction={toggleSearchMode}
@@ -619,6 +667,13 @@ export function ListPage({onReady}: {onReady: () => void}) {
           </div>
         ) : null}
       </div>
+      <OnboardingModal
+        isOpen={showOnboarding}
+        onDismiss={() => {
+          Cookies.set('onboardingDismissed', 'true', {expires: 365});
+          setShowOnboarding(false);
+        }}
+      />
     </>
   );
 }
@@ -634,8 +689,21 @@ const addParam = (
   return '?' + newParams.toString();
 };
 
+function roundEstimatedTotal(estimatedTotal: number) {
+  return estimatedTotal < 50
+    ? estimatedTotal
+    : estimatedTotal - (estimatedTotal % 50);
+}
+
 function removeParam(qs: URLSearchParams, key: string, value?: string) {
   const searchParams = new URLSearchParams(qs);
   searchParams.delete(key, value);
   return '?' + searchParams.toString();
+}
+
+function formatIssueCountEstimate(count: number) {
+  if (count < 1000) {
+    return count;
+  }
+  return `~${Math.floor(count / 1000).toLocaleString()}k`;
 }

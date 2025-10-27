@@ -240,7 +240,7 @@ function buildPipelineInternal(
   delegate: BuilderDelegate,
   queryID: string,
   name: string,
-  partitionKey?: CompoundKey | undefined,
+  partitionKey?: CompoundKey,
 ): Input {
   const source = delegate.getSource(ast.table);
   if (!source) {

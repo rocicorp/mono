@@ -163,7 +163,7 @@ export class VizDelegate implements QueryDelegate<unknown> {
     return asQueryInternals(query);
   }
 
-  #getNode(input: InputBase, name?: string | undefined) {
+  #getNode(input: InputBase, name?: string) {
     const existing = this.#nodeIds.get(input);
     if (existing) {
       if (name) {

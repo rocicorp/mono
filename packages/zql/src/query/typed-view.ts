@@ -12,7 +12,7 @@ export type ResultType = 'unknown' | 'complete' | 'error';
 export type Listener<T> = (
   data: Immutable<T>,
   resultType: ResultType,
-  error?: ErroredQuery | undefined,
+  error?: ErroredQuery,
 ) => void;
 
 export type TypedView<T> = {
