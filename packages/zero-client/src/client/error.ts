@@ -1,60 +1,65 @@
 import {unreachable} from '../../../shared/src/asserts.ts';
 import type {Expand} from '../../../shared/src/expand.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import type {BackoffBody, ErrorBody} from '../../../zero-protocol/src/error.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
+import {
+  type BackoffBody,
+  type ErrorBody,
+  ProtocolError,
+} from '../../../zero-protocol/src/error.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
 
-export type ZeroError = ServerError | ClientError;
+export type ZeroError = ProtocolError | ClientError;
 export type ZeroErrorBody = Expand<ErrorBody | ClientErrorBody>;
 export type ZeroErrorKind = Expand<ErrorKind | ClientErrorKind>;
 
 export type ClientErrorBody = {
   kind: ClientErrorKind;
+  origin: typeof ErrorOrigin.Client;
   message: string;
 };
-
-abstract class BaseError<
-  T extends ErrorBody | ClientErrorBody,
-  Name extends T extends ErrorBody ? 'ServerError' : 'ClientError',
-> extends Error {
-  readonly errorBody: T;
-  constructor(errorBody: T, options?: ErrorOptions) {
-    super(errorBody.message, options);
-    this.errorBody = errorBody;
-  }
-  get kind(): T['kind'] {
-    return this.errorBody.kind;
-  }
-  abstract get name(): Name;
-}
-
-/**
- * Represents an error sent by server as part of Zero protocol.
- */
-export class ServerError extends BaseError<ErrorBody, 'ServerError'> {
-  get name() {
-    return 'ServerError' as const;
-  }
-}
 
 /**
  * Represents an error encountered by the client.
  */
-export class ClientError extends BaseError<ClientErrorBody, 'ClientError'> {
-  get name() {
-    return 'ClientError' as const;
+export class ClientError<
+  const T extends Omit<ClientErrorBody, 'origin'> = Omit<
+    ClientErrorBody,
+    'origin'
+  >,
+> extends ProtocolError<T> {
+  constructor(errorBody: T, options?: ErrorOptions) {
+    super({...errorBody, origin: ErrorOrigin.Client}, options);
+    this.name = 'ClientError';
   }
 }
 
-export function isServerError(ex: unknown): ex is ServerError {
-  return ex instanceof ServerError;
+export function isServerError(ex: unknown): ex is ProtocolError<ErrorBody> {
+  return (
+    ex instanceof ProtocolError && ex.errorBody.origin !== ErrorOrigin.Client
+  );
 }
 
-export function isAuthError(ex: unknown): ex is ServerError & {
+export function isAuthError(ex: unknown): ex is ProtocolError & {
   kind: ErrorKind.AuthInvalidated | ErrorKind.Unauthorized;
 } {
-  return isServerError(ex) && isAuthErrorKind(ex.kind);
+  if (isServerError(ex)) {
+    if (isAuthErrorKind(ex.kind)) {
+      return true;
+    }
+    if (
+      (ex.errorBody.kind === ErrorKind.PushFailed ||
+        ex.errorBody.kind === ErrorKind.TransformFailed) &&
+      ex.errorBody.reason === ErrorReason.Http &&
+      (ex.errorBody.status === 401 || ex.errorBody.status === 403)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function isAuthErrorKind(
@@ -114,6 +119,11 @@ export function getErrorConnectionTransition(ex: unknown) {
       default:
         unreachable(ex.kind);
     }
+  }
+
+  // TODO(0xcadams): change this once we have a proper auth error handling flow
+  if (isAuthError(ex)) {
+    return {status: null, reason: ex} as const;
   }
 
   if (isServerError(ex)) {

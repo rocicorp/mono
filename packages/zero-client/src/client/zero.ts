@@ -42,7 +42,10 @@ import type {DeleteClientsBody} from '../../../zero-protocol/src/delete-clients.
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {downstreamSchema} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import type {ErrorMessage} from '../../../zero-protocol/src/error.ts';
+import {
+  ProtocolError,
+  type ErrorMessage,
+} from '../../../zero-protocol/src/error.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
 import type {PingMessage} from '../../../zero-protocol/src/ping.ts';
 import type {
@@ -154,7 +157,6 @@ import {
 } from './reload-error-handler.ts';
 import {
   ClientError,
-  ServerError,
   getBackoffParams,
   getErrorConnectionTransition,
   isAuthError,
@@ -523,7 +525,7 @@ export class Zero<
     this.#mutationTracker = new MutationTracker(
       lc,
       (upTo: MutationID) => this.#send(['ackMutationResponses', upTo]),
-      (error: ZeroError) => {
+      error => {
         this.#disconnect(lc, error);
       },
     );
@@ -1202,7 +1204,7 @@ export class Zero<
     }
 
     lc.info?.(`${kind}: ${message}}`);
-    const error = new ServerError(downMessage[1]);
+    const error = new ProtocolError(downMessage[1]);
     lc.error?.(`${error.kind}:\n\n${error.errorBody.message}`, error);
 
     lc.debug?.('Rejecting connect resolver due to error', error);
@@ -1501,7 +1503,7 @@ export class Zero<
         break;
       }
       case ConnectionStatus.Closed:
-        lc.error?.('disconnect() called while closed');
+        lc.debug?.('disconnect() called while closed');
         return;
 
       case ConnectionStatus.Disconnected:
