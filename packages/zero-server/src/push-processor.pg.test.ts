@@ -1,19 +1,23 @@
-import {beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect, test, assert} from 'vitest';
 import {
   getClientsTableDefinition,
   getMutationsTableDefinition,
 } from '../../zero-cache/src/services/change-source/pg/schema/shard.ts';
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
-
 import {zip} from '../../shared/src/arrays.ts';
-import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
+import {
+  MutationAlreadyProcessedError,
+  OutOfOrderMutation,
+} from '../../zero-cache/src/services/mutagen/error.ts';
 import type {MutationResult, PushBody} from '../../zero-protocol/src/push.ts';
 import {customMutatorKey} from '../../zql/src/mutate/custom.ts';
+import {ApplicationError} from './error.ts';
 import {PostgresJSConnection} from './adapters/postgresjs.ts';
-import {OutOfOrderMutation} from './process-mutations.ts';
 import {PushProcessor} from './push-processor.ts';
 import {ZQLDatabase} from './zql-database.ts';
+import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
 
 let pg: PostgresDB;
 const params = {
@@ -70,17 +74,17 @@ describe('out of order mutation', () => {
     );
     const result = await processor.process(mutators, params, makePush(15));
 
+    assert('kind' in result, 'expected push failed response');
+
     expect(result).toEqual({
-      mutations: [
+      kind: ErrorKind.PushFailed,
+      origin: ErrorOrigin.Server,
+      type: 'oooMutation',
+      message: 'Client cid sent mutation ID 15 but expected 1',
+      mutationIDs: [
         {
-          id: {
-            clientID: 'cid',
-            id: 15,
-          },
-          result: {
-            details: 'Client cid sent mutation ID 15 but expected 1',
-            error: 'oooMutation',
-          },
+          clientID: 'cid',
+          id: 15,
         },
       ],
     });
@@ -111,17 +115,19 @@ describe('out of order mutation', () => {
       ],
     });
 
-    expect(await processor.process(mutators, params, makePush(3))).toEqual({
-      mutations: [
+    const result = await processor.process(mutators, params, makePush(3));
+
+    assert('kind' in result, 'expected push failed response');
+
+    expect(result).toEqual({
+      kind: ErrorKind.PushFailed,
+      origin: ErrorOrigin.Server,
+      type: 'oooMutation',
+      message: 'Client cid sent mutation ID 3 but expected 2',
+      mutationIDs: [
         {
-          id: {
-            clientID: 'cid',
-            id: 3,
-          },
-          result: {
-            details: 'Client cid sent mutation ID 3 but expected 2',
-            error: 'oooMutation',
-          },
+          clientID: 'cid',
+          id: 3,
         },
       ],
     });
@@ -216,7 +222,9 @@ test('lmid still moves forward if the mutator implementation throws', async () =
         },
         result: {
           error: 'app',
-          details: 'application error',
+          details: {
+            message: 'application error',
+          },
         },
       },
     ],
@@ -229,7 +237,9 @@ test('lmid still moves forward if the mutator implementation throws', async () =
       mutationID: 3n,
       result: {
         error: 'app',
-        details: 'application error',
+        details: {
+          message: 'application error',
+        },
       },
     },
   ]);
@@ -258,7 +268,9 @@ test('processes all mutations, even if all mutations throw app errors', async ()
       },
       result: {
         error: 'app',
-        details: 'application error',
+        details: {
+          message: 'application error',
+        },
       },
     })),
   });
@@ -272,7 +284,9 @@ test('processes all mutations, even if all mutations throw app errors', async ()
       mutationID: BigInt(i + 1),
       result: {
         error: 'app',
-        details: 'application error',
+        details: {
+          message: 'application error',
+        },
       },
     })),
   );
@@ -340,7 +354,9 @@ test('processes all mutations, even if all mutations have been seen before', asy
         "clientID": "cid",
         "mutationID": 5n,
         "result": {
-          "details": "application error",
+          "details": {
+            "message": "application error",
+          },
           "error": "app",
         },
       },
@@ -349,7 +365,9 @@ test('processes all mutations, even if all mutations have been seen before', asy
         "clientID": "cid",
         "mutationID": 6n,
         "result": {
-          "details": "application error",
+          "details": {
+            "message": "application error",
+          },
           "error": "app",
         },
       },
@@ -358,7 +376,9 @@ test('processes all mutations, even if all mutations have been seen before', asy
         "clientID": "cid",
         "mutationID": 7n,
         "result": {
-          "details": "application error",
+          "details": {
+            "message": "application error",
+          },
           "error": "app",
         },
       },
@@ -367,7 +387,9 @@ test('processes all mutations, even if all mutations have been seen before', asy
         "clientID": "cid",
         "mutationID": 8n,
         "result": {
-          "details": "application error",
+          "details": {
+            "message": "application error",
+          },
           "error": "app",
         },
       },
@@ -389,7 +411,7 @@ test('continues processing if all mutations throw in error mode with "MutationAl
       throw new MutationAlreadyProcessedError('cid', 1, 2);
     }
 
-    throw new Error('application error');
+    throw new ApplicationError('application error');
   };
   const processor = new PushProcessor(db);
 
@@ -433,32 +455,26 @@ test('bails processing if all mutations throw in error mode with "OutOfOrderMuta
       throw new OutOfOrderMutation('cid', 1, 2);
     }
 
-    throw new Error('application error');
+    throw new ApplicationError('application error');
   };
   const processor = new PushProcessor(db);
 
-  expect(
-    await processor.process(
-      mutators,
-      params,
-      makePush(
-        Array.from({length: 4}, (_, i) => i + 1),
-        Array(4).fill('foo|bar'),
-      ),
+  const response = await processor.process(
+    mutators,
+    params,
+    makePush(
+      Array.from({length: 4}, (_, i) => i + 1),
+      Array(4).fill('foo|bar'),
     ),
-  ).toEqual({
-    mutations: [
-      {
-        id: {
-          clientID: 'cid',
-          id: 1,
-        },
-        result: {
-          details: 'Client cid sent mutation ID 1 but expected 2',
-          error: 'oooMutation',
-        },
-      },
-    ],
+  );
+
+  assert('kind' in response, 'expected push failed response');
+
+  expect(response).toMatchObject({
+    kind: ErrorKind.PushFailed,
+    origin: ErrorOrigin.Server,
+    type: 'oooMutation',
+    message: 'Client cid sent mutation ID 1 but expected 2',
   });
 
   await checkClientsTable(pg, undefined);
@@ -479,20 +495,30 @@ test('bails processing if a mutation throws an unknown error in error mode', asy
       throw new Error('unknown');
     }
 
-    throw new Error('application error');
+    throw new ApplicationError('application error');
   };
   const processor = new PushProcessor(db);
 
-  await expect(
-    processor.process(
-      mutators,
-      params,
-      makePush(
-        Array.from({length: 4}, (_, i) => i + 1),
-        Array(4).fill('foo|bar'),
-      ),
+  const response = await processor.process(
+    mutators,
+    params,
+    makePush(
+      Array.from({length: 4}, (_, i) => i + 1),
+      Array(4).fill('foo|bar'),
     ),
-  ).rejects.toThrow('unknown');
+  );
+
+  assert('kind' in response, 'expected push failed response');
+
+  expect(response).toMatchObject({
+    kind: ErrorKind.PushFailed,
+    origin: ErrorOrigin.Server,
+    type: 'database',
+    message: 'Failed to open database transaction: unknown',
+    details: {
+      name: 'DatabaseTransactionError',
+    },
+  });
   // These are not written since error mode fails too
   await checkClientsTable(pg, undefined);
   await checkMutationsTable(pg, []);
@@ -507,45 +533,35 @@ test('stops processing mutations as soon as it hits an out of order mutation', a
     }),
   );
 
-  expect(
-    await processor.process(
-      mutators,
-      params,
-      makePush(
-        [1, 2, 5, 4],
-        [
-          customMutatorKey('foo', 'bar'),
-          customMutatorKey('foo', 'bar'),
-          customMutatorKey('foo', 'bar'),
-          customMutatorKey('foo', 'bar'),
-        ],
-      ),
+  const response = await processor.process(
+    mutators,
+    params,
+    makePush(
+      [1, 2, 5, 4],
+      [
+        customMutatorKey('foo', 'bar'),
+        customMutatorKey('foo', 'bar'),
+        customMutatorKey('foo', 'bar'),
+        customMutatorKey('foo', 'bar'),
+      ],
     ),
-  ).toEqual({
-    mutations: [
+  );
+
+  assert('kind' in response, 'expected push failed response');
+
+  expect(response).toMatchObject({
+    kind: ErrorKind.PushFailed,
+    origin: ErrorOrigin.Server,
+    type: 'oooMutation',
+    message: 'Client cid sent mutation ID 5 but expected 3',
+    mutationIDs: [
       {
-        id: {
-          clientID: 'cid',
-          id: 1,
-        },
-        result: {},
+        clientID: 'cid',
+        id: 5,
       },
       {
-        id: {
-          clientID: 'cid',
-          id: 2,
-        },
-        result: {},
-      },
-      {
-        id: {
-          clientID: 'cid',
-          id: 5,
-        },
-        result: {
-          details: 'Client cid sent mutation ID 5 but expected 3',
-          error: 'oooMutation',
-        },
+        clientID: 'cid',
+        id: 4,
       },
     ],
   });
@@ -563,7 +579,7 @@ test('a mutation throws an app error then an ooo mutation error', async () => {
   // oxlint-disable-next-line require-await
   db.transaction = async () => {
     if (c.c++ === 0) {
-      throw new Error('application error');
+      throw new ApplicationError('application error');
     }
     throw new OutOfOrderMutation('cid', 1, 2);
   };
@@ -571,25 +587,19 @@ test('a mutation throws an app error then an ooo mutation error', async () => {
 
   // We should still catch and correctly report errors
   // even when running in error mode
-  expect(
-    await processor.process(
-      mutators,
-      params,
-      makePush(1, customMutatorKey('foo', 'baz')),
-    ),
-  ).toEqual({
-    mutations: [
-      {
-        id: {
-          clientID: 'cid',
-          id: 1,
-        },
-        result: {
-          details: 'Client cid sent mutation ID 1 but expected 2',
-          error: 'oooMutation',
-        },
-      },
-    ],
+  const response = await processor.process(
+    mutators,
+    params,
+    makePush(1, customMutatorKey('foo', 'baz')),
+  );
+
+  assert('kind' in response, 'expected push failed response');
+
+  expect(response).toMatchObject({
+    kind: ErrorKind.PushFailed,
+    origin: ErrorOrigin.Server,
+    type: 'oooMutation',
+    message: 'Client cid sent mutation ID 1 but expected 2',
   });
 
   // These are empty since the error mode fails too
@@ -608,7 +618,7 @@ test('mutation throws an app error then an already processed error', async () =>
   // oxlint-disable-next-line require-await
   db.transaction = async () => {
     if (c.c++ === 0) {
-      throw new Error('application error');
+      throw new ApplicationError('application error');
     }
     throw new MutationAlreadyProcessedError('cid', 1, 2);
   };
@@ -616,13 +626,15 @@ test('mutation throws an app error then an already processed error', async () =>
 
   // We should still catch and correctly report errors
   // even when running in error mode
-  expect(
-    await processor.process(
-      mutators,
-      params,
-      makePush(1, customMutatorKey('foo', 'baz')),
-    ),
-  ).toEqual({
+  const response = await processor.process(
+    mutators,
+    params,
+    makePush(1, customMutatorKey('foo', 'baz')),
+  );
+
+  // When MutationAlreadyProcessedError is thrown during error retry,
+  // it returns a mutation response (not a server error)
+  expect(response).toEqual({
     mutations: [
       {
         id: {
@@ -630,9 +642,9 @@ test('mutation throws an app error then an already processed error', async () =>
           id: 1,
         },
         result: {
+          error: 'alreadyProcessed',
           details:
             'Ignoring mutation from cid with ID 1 as it was already processed. Expected: 2',
-          error: 'alreadyProcessed',
         },
       },
     ],
@@ -699,38 +711,42 @@ test('mutators with and without namespaces', async () => {
       makePush(3, customMutatorKey('namespaced', 'reject')),
     ),
   ).toMatchInlineSnapshot(`
-    {
-      "mutations": [
-        {
-          "id": {
-            "clientID": "cid",
-            "id": 3,
-          },
-          "result": {
-            "details": "application error",
-            "error": "app",
-          },
-        },
-      ],
-    }
-  `);
-  expect(await processor.process(mutators, params, makePush(4, 'topReject')))
-    .toMatchInlineSnapshot(`
           {
             "mutations": [
               {
                 "id": {
                   "clientID": "cid",
-                  "id": 4,
+                  "id": 3,
                 },
                 "result": {
-                  "details": "application error",
+                  "details": {
+                    "message": "application error",
+                  },
                   "error": "app",
                 },
               },
             ],
           }
         `);
+  expect(await processor.process(mutators, params, makePush(4, 'topReject')))
+    .toMatchInlineSnapshot(`
+                    {
+                      "mutations": [
+                        {
+                          "id": {
+                            "clientID": "cid",
+                            "id": 4,
+                          },
+                          "result": {
+                            "details": {
+                              "message": "application error",
+                            },
+                            "error": "app",
+                          },
+                        },
+                      ],
+                    }
+                  `);
 
   await checkClientsTable(pg, 4);
   await checkMutationsTable(pg, [
@@ -740,7 +756,9 @@ test('mutators with and without namespaces', async () => {
       mutationID: 3n,
       result: {
         error: 'app',
-        details: 'application error',
+        details: {
+          message: 'application error',
+        },
       },
     },
     {
@@ -749,7 +767,9 @@ test('mutators with and without namespaces', async () => {
       mutationID: 4n,
       result: {
         error: 'app',
-        details: 'application error',
+        details: {
+          message: 'application error',
+        },
       },
     },
   ]);

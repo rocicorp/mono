@@ -31,6 +31,7 @@ import {
   recordConnectionAttempted,
   setActiveClientGroupsGetter,
 } from '../server/anonymous-otel-start.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
@@ -167,16 +168,18 @@ export class Syncer implements SingletonService {
             `Received auth token ${auth} for clientID ${clientID}, decoded: ${JSON.stringify(decodedToken)}`,
           );
         } catch (e) {
-          sendError(
+          void sendError(
             this.#lc,
             ws,
             {
               kind: ErrorKind.AuthInvalidated,
               message: `Failed to decode auth token: ${String(e)}`,
+              origin: ErrorOrigin.ZeroCache,
             },
             e,
-          );
-          ws.close(3000, 'Failed to decode JWT');
+          ).finally(() => {
+            ws.close(3000, 'Failed to decode JWT');
+          });
           return;
         }
       } else {

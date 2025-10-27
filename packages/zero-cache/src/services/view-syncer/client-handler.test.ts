@@ -9,7 +9,6 @@ import type {
   PokeStartMessage,
 } from '../../../../zero-protocol/src/poke.ts';
 import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
-import {ErrorForClient} from '../../types/error-for-client.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {
   ClientHandler,
@@ -18,6 +17,7 @@ import {
   type Patch,
   type PokeHandler,
 } from './client-handler.ts';
+import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
 
 const APP_ID = 'zapp';
 const SHARD_NUM = 6;
@@ -644,8 +644,8 @@ describe('view-syncer/client-handler', () => {
     subscription.cancel();
 
     expect(received).toEqual([]);
-    expect(e).toBeInstanceOf(ErrorForClient);
-    expect((e as unknown as ErrorForClient).errorBody).toEqual({
+    expect(e).toBeInstanceOf(ProtocolError);
+    expect((e as unknown as ProtocolError).errorBody).toEqual({
       kind: ErrorKind.SchemaVersionNotSupported,
       message:
         'Schema version 1 is not in range of supported schema versions [2, 3].',

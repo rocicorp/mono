@@ -8,3 +8,15 @@ export class MutationAlreadyProcessedError extends Error {
     assert(received < actual);
   }
 }
+
+export class OutOfOrderMutation extends Error {
+  constructor(
+    clientID: string,
+    receivedMutationID: number,
+    lastMutationID: number | bigint,
+  ) {
+    super(
+      `Client ${clientID} sent mutation ID ${receivedMutationID} but expected ${lastMutationID}`,
+    );
+  }
+}

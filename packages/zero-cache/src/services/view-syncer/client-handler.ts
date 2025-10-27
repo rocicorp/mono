@@ -23,9 +23,9 @@ import {
   getOrCreateCounter,
   getOrCreateHistogram,
 } from '../../observability/metrics.ts';
-import {getLogLevel} from '../../types/error-for-client.ts';
+import {getLogLevel} from '../../types/error-with-level.ts';
 import {
-  getErrorForClientIfSchemaVersionNotSupported,
+  getProtocolErrorIfSchemaVersionNotSupported,
   type SchemaVersions,
 } from '../../types/schema-versions.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
@@ -42,6 +42,7 @@ import {
   type RowID,
 } from './schema/types.ts';
 import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts';
+import type {TransformFailedBody} from '../../../../zero-protocol/src/error.ts';
 
 export type PutRowPatch = {
   type: 'row';
@@ -192,7 +193,7 @@ export class ClientHandler {
     const lc = this.#lc.withContext('pokeID', pokeID);
 
     if (schemaVersions && this.#schemaVersion) {
-      const schemaVersionError = getErrorForClientIfSchemaVersionNotSupported(
+      const schemaVersionError = getProtocolErrorIfSchemaVersionNotSupported(
         this.#schemaVersion,
         schemaVersions,
       );
@@ -370,8 +371,12 @@ export class ClientHandler {
     await this.#push(['deleteClients', deleteClientsBody]);
   }
 
-  sendQueryTransformErrors(errors: ErroredQuery[]) {
+  sendQueryTransformApplicationErrors(errors: ErroredQuery[]) {
     void this.#push(['transformError', errors]);
+  }
+
+  sendQueryTransformFailedError(error: TransformFailedBody) {
+    void this.#push(['error', error]);
   }
 
   sendInspectResponse(lc: LogContext, response: InspectDownBody): void {

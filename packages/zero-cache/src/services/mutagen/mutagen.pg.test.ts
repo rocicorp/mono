@@ -372,7 +372,7 @@ describe('processMutation', {timeout: 15000}, () => {
         TEST_SCHEMA_VERSION,
       ),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[Error: {"kind":"InvalidPush","message":"Push contains unexpected mutation id 3 for client 123. Expected mutation id 2."}]`,
+      `[ProtocolError: Push contains unexpected mutation id 3 for client 123. Expected mutation id 2.]`,
     );
 
     await expectTables(db, {
@@ -429,7 +429,7 @@ describe('processMutation', {timeout: 15000}, () => {
         true,
       ),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[Error: {"kind":"InvalidPush","message":"Push contains unexpected mutation id 3 for client 123. Expected mutation id 2."}]`,
+      `[ProtocolError: Push contains unexpected mutation id 3 for client 123. Expected mutation id 2.]`,
     );
 
     // check that we hit our retry logic for unexpected mutation id when CRUD and Custom are enabled.
@@ -486,7 +486,7 @@ describe('processMutation', {timeout: 15000}, () => {
         1,
       ),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[Error: {"kind":"SchemaVersionNotSupported","message":"Schema version 1 is not in range of supported schema versions [2, 3]."}]`,
+      `[ProtocolError: Schema version 1 is not in range of supported schema versions [2, 3].]`,
     );
 
     await expectTables(db, {
@@ -542,7 +542,7 @@ describe('processMutation', {timeout: 15000}, () => {
         4,
       ),
     ).rejects.toThrowErrorMatchingInlineSnapshot(
-      `[Error: {"kind":"SchemaVersionNotSupported","message":"Schema version 4 is not in range of supported schema versions [2, 3]."}]`,
+      `[ProtocolError: Schema version 4 is not in range of supported schema versions [2, 3].]`,
     );
 
     await expectTables(db, {
