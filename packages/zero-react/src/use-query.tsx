@@ -506,14 +506,6 @@ class ViewWrapper<
     if (this.#view) {
       return;
     }
-
-    // Call materializeQueryInternals to avoid redundant withContext() call.
-    // getView() already resolved the query via getQueryInternals(), so we can
-    // pass the resolved queryInternals directly. This helper will use
-    // materializeImpl which detects it's already resolved and skips withContext().
-    //
-    // We can't use the public Zero.materialize() API because it always calls
-    // withContext() on the query parameter, which would be redundant.
     this.#view = this.#bindings.materialize(this.#query, undefined, {
       ttl: this.#ttl,
     });
