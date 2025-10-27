@@ -1,9 +1,46 @@
+import {readFileSync} from 'fs';
+import {join} from 'path';
 import type {IncomingMessage, ServerResponse} from 'http';
 
-export default async function handler(
+// Cache the HTML content to avoid reading the file on every request
+let cachedHtml: string | null = null;
+
+function getIndexHtml(): string {
+  if (cachedHtml) {
+    return cachedHtml;
+  }
+
+  // Try different possible locations for index.html in Vercel deployment
+  const possiblePaths = [
+    // Vercel build output location
+    join(process.cwd(), '.vercel', 'output', 'static', 'index.html'),
+    // Alternative Vercel location
+    join(process.cwd(), 'public', 'index.html'),
+    // Local dev
+    join(process.cwd(), 'index.html'),
+    // Built output
+    join(process.cwd(), 'dist', 'index.html'),
+  ];
+
+  for (const path of possiblePaths) {
+    try {
+      cachedHtml = readFileSync(path, 'utf-8');
+      console.log(`Successfully loaded index.html from: ${path}`);
+      return cachedHtml;
+    } catch {
+      // Try next path
+    }
+  }
+
+  throw new Error(
+    'Could not find index.html in any expected location: ' +
+      possiblePaths.join(', '),
+  );
+}
+
+export default function handler(
   req: IncomingMessage & {
     query?: Record<string, string | string[]>;
-    headers: IncomingMessage['headers'];
   },
   res: ServerResponse,
 ) {
@@ -12,17 +49,8 @@ export default async function handler(
     const pathParts = (req.query?.path as string[]) || [];
     const projectName = pathParts[0]?.toLowerCase() || '';
 
-    // Get the host from the request to fetch index.html
-    const host = req.headers.host || 'bugs.rocicorp.dev';
-    const protocol = host.includes('localhost') ? 'http' : 'https';
-    const indexUrl = `${protocol}://${host}/index.html`;
-
-    // Fetch the index.html file
-    const response = await fetch(indexUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch index.html: ${response.statusText}`);
-    }
-    let html = await response.text();
+    // Get the base HTML
+    let html = getIndexHtml();
 
     // Check if this is the Roci project
     const isRoci = projectName === 'roci';
@@ -42,6 +70,6 @@ export default async function handler(
   } catch (error) {
     console.error('Error serving HTML:', error);
     res.statusCode = 500;
-    res.end('Internal Server Error');
+    res.end(`Internal Server Error: ${error}`);
   }
 }

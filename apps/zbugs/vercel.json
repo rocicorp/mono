@@ -5,12 +5,16 @@
       "destination": "/api"
     },
     {
-      "source": "/issue/(.*)",
-      "destination": "/index.html"
+      "source": "/p/:projectName/issue/:issueId",
+      "destination": "/api/p/:projectName/issue/:issueId"
     },
     {
       "source": "/p/:path*",
       "destination": "/api/p/:path*"
+    },
+    {
+      "source": "/issue/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
