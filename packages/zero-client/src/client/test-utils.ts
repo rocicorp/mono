@@ -29,8 +29,8 @@ import type {
 } from '../../../zero-protocol/src/push.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {PullRow, Query} from '../../../zql/src/query/query.ts';
+import {bindingsForZero} from './bindings.ts';
 import type {ConnectionState} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import type {CustomMutatorDefs} from './custom.ts';
@@ -254,7 +254,7 @@ export class TestZero<
       gotQueriesPatch: [
         {
           op: 'put',
-          hash: asQueryInternals(q).hash(),
+          hash: bindingsForZero(this).hash(q),
         },
       ],
     });
@@ -297,7 +297,7 @@ export class TestZero<
       gotQueriesPatch: [
         {
           op: 'put',
-          hash: asQueryInternals(q).hash(),
+          hash: bindingsForZero(this as unknown as Zero<TSchema, MD>).hash(q),
         },
       ],
     });

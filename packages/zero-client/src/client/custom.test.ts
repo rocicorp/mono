@@ -12,9 +12,9 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {must} from '../../../shared/src/must.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {Row} from '../../../zql/src/query/query.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
+import {bindingsForZero} from './bindings.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {
   TransactionImpl,
@@ -364,7 +364,7 @@ describe('rebasing custom mutators', () => {
       const rep = getInternalReplicacheImplForTesting(z);
 
       expect(
-        await rep.query(tx => tx.has(`g/${asQueryInternals(q).hash()}`)),
+        await rep.query(tx => tx.has(`g/${bindingsForZero(z).hash(q)}`)),
       ).toEqual(true);
     });
 

@@ -7,9 +7,9 @@ import {
   type InspectQueriesDown,
 } from '../../../../zero-protocol/src/inspect-down.ts';
 import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
-import {asQueryInternals} from '../../../../zql/src/query/query-internals.ts';
 import {schema} from '../../../../zql/src/query/test/test-schemas.ts';
 import {nanoid} from '../../util/nanoid.ts';
+import {bindingsForZero} from '../bindings.ts';
 import type {CustomMutatorDefs} from '../custom.ts';
 import {MockSocket, TestZero, zeroForTest} from '../test-utils.ts';
 import type {Inspector} from './inspector.ts';
@@ -353,7 +353,7 @@ describe('query metrics', () => {
         value: [
           {
             clientID: z.clientID,
-            queryID: asQueryInternals(issueQuery).hash(),
+            queryID: bindingsForZero(z).hash(issueQuery),
             ast: {
               table: 'issue',
               orderBy: [['id', 'desc']],
@@ -373,7 +373,7 @@ describe('query metrics', () => {
 
     const queries = await queriesP;
     expect(queries).toHaveLength(1);
-    expect(asQueryInternals(issueQuery).hash()).toBe(queries[0].id);
+    expect(bindingsForZero(z).hash(issueQuery)).toBe(queries[0].id);
 
     // We should have metrics for all.. even if empty
     expect(queries[0].metrics).toMatchInlineSnapshot(`
@@ -589,7 +589,7 @@ describe('query metrics', () => {
         value: [
           {
             clientID: z.clientID,
-            queryID: asQueryInternals(issueQuery).hash(),
+            queryID: bindingsForZero(z).hash(issueQuery),
             ast: {
               table: 'issue',
               orderBy: [['id', 'desc']],
@@ -612,7 +612,7 @@ describe('query metrics', () => {
 
     const queries = await queriesP;
     expect(queries).toHaveLength(1);
-    expect(asQueryInternals(issueQuery).hash()).toBe(queries[0].id);
+    expect(bindingsForZero(z).hash(issueQuery)).toBe(queries[0].id);
 
     const {metrics} = queries[0];
     expect(metrics).toMatchInlineSnapshot(`
@@ -699,7 +699,7 @@ test('clientZQL', async () => {
       value: [
         {
           clientID: z.clientID,
-          queryID: asQueryInternals(issueQuery).hash(),
+          queryID: bindingsForZero(z).hash(issueQuery),
           ast: {
             table: 'issues',
             where: {
@@ -725,7 +725,7 @@ test('clientZQL', async () => {
 
   const queries = await queriesP;
   expect(queries).toHaveLength(1);
-  expect(queries[0].id).toBe(asQueryInternals(issueQuery).hash());
+  expect(queries[0].id).toBe(bindingsForZero(z).hash(issueQuery));
   expect(queries[0].clientZQL).toBe(
     "issue.where('ownerId', 'arv').orderBy('id', 'asc')",
   );

@@ -27,3 +27,6 @@ export type ViewFactory<
   queryComplete: true | ErroredQuery | Promise<true>,
   updateTTL: (ttl: TTL) => void,
 ) => T;
+
+// oxlint-disable-next-line no-explicit-any
+export type AnyViewFactory = ViewFactory<Schema, any, any, any, any>;

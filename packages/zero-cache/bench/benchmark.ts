@@ -5,6 +5,7 @@ import {assert} from '../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {Source} from '../../zql/src/ivm/source.ts';
+import type {AnyViewFactory} from '../../zql/src/ivm/view.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {
   materializeImpl,
@@ -87,12 +88,11 @@ export function bench(opts: Options) {
     addMetric() {},
     materialize(
       query: AnyQuery,
-      // oxlint-disable-next-line no-explicit-any
-      factory: any,
+
+      factory?: AnyViewFactory,
       options?: MaterializeOptions,
     ) {
-      // oxlint-disable-next-line no-explicit-any
-      return materializeImpl(query, this, factory, options) as any;
+      return materializeImpl(query, this, factory, options);
     },
     run(query, options) {
       return runImpl(query, this, options);

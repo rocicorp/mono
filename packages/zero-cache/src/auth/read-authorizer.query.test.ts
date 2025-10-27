@@ -34,6 +34,7 @@ import {
 import {Catch, type CaughtNode} from '../../../zql/src/ivm/catch.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
+import type {AnyViewFactory} from '../../../zql/src/ivm/view.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {
@@ -45,6 +46,7 @@ import {
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import {
   type AnyQuery,
+  type MaterializeOptions,
   type Query,
   type Row,
 } from '../../../zql/src/query/query.ts';
@@ -543,10 +545,12 @@ beforeEach(() => {
     flushQueryChanges() {},
     defaultQueryComplete: true,
     addMetric() {},
-    // oxlint-disable-next-line no-explicit-any
-    materialize(query: AnyQuery, factory?: any, options?: any) {
-      // oxlint-disable-next-line no-explicit-any
-      return materializeImpl(query, this, factory, options) as any;
+    materialize(
+      query: AnyQuery,
+      factory?: AnyViewFactory,
+      options?: MaterializeOptions,
+    ) {
+      return materializeImpl(query, this, factory, options);
     },
     withContext(q) {
       return asQueryInternals(q);
