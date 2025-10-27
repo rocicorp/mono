@@ -2,7 +2,7 @@ import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {Value} from '../../../zero-protocol/src/data.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../../../zero-types/src/format.ts';
-import type {QueryInternals} from '../query/query-internals.ts';
+import type {Query} from '../query/query.ts';
 import type {TTL} from '../query/ttl.ts';
 import type {Input} from './operator.ts';
 
@@ -19,7 +19,7 @@ export type ViewFactory<
   TContext,
   T,
 > = (
-  query: QueryInternals<TSchema, TTable, TReturn, TContext>,
+  query: Query<TSchema, TTable, TReturn, TContext>,
   input: Input,
   format: Format,
   onDestroy: () => void,

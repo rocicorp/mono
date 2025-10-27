@@ -11,7 +11,7 @@ import {
   number,
   string,
   table,
-  type QueryInternals,
+  type Query,
 } from '../../zero/src/zero.ts';
 import type {Change} from '../../zql/src/ivm/change.ts';
 import {Join} from '../../zql/src/ivm/join.ts';
@@ -2529,12 +2529,7 @@ test('factory', () => {
   ]);
 
   const view: SolidView = createSolidViewFactory(setState)(
-    undefined as unknown as QueryInternals<
-      typeof schema,
-      'test',
-      TestReturn,
-      unknown
-    >,
+    undefined as unknown as Query<typeof schema, 'test', TestReturn, unknown>,
     ms.connect([
       ['b', 'asc'],
       ['a', 'asc'],

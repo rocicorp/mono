@@ -655,9 +655,7 @@ export function materializeImpl<
   TContext,
   T,
 >(
-  query:
-    | Query<TSchema, TTable, TReturn, TContext>
-    | QueryInternals<TSchema, TTable, TReturn, TContext>,
+  query: Query<TSchema, TTable, TReturn, TContext>,
   delegate: QueryDelegate<TContext>,
   factory: ViewFactory<
     TSchema,
@@ -671,18 +669,8 @@ export function materializeImpl<
 ): T {
   let ttl: TTL = options?.ttl ?? DEFAULT_TTL_MS;
 
-  // If query is already a resolved QueryInternals, use it directly.
-  // Otherwise, resolve it via delegate.withContext().
-  const qi =
-    queryInternalsTag in query
-      ? (query as QueryInternals<TSchema, TTable, TReturn, TContext>)
-      : delegate.withContext(
-          query as Query<TSchema, TTable, TReturn, TContext>,
-        );
-
-  const ast = qi.completedAST;
-  const format = qi.format;
-  const customQueryID = qi.customQueryID;
+  const qi = delegate.withContext(query);
+  const {completedAST, format, customQueryID} = qi;
   const queryHash = qi.hash();
 
   const queryID = customQueryID
@@ -692,7 +680,7 @@ export function materializeImpl<
   let queryComplete: boolean | ErroredQuery = delegate.defaultQueryComplete;
   const updateTTL = customQueryID
     ? (newTTL: TTL) => delegate.updateCustomQuery(customQueryID, newTTL)
-    : (newTTL: TTL) => delegate.updateServerQuery(ast, newTTL);
+    : (newTTL: TTL) => delegate.updateServerQuery(completedAST, newTTL);
 
   const gotCallback: GotCallback = (got, error) => {
     if (error) {
@@ -706,7 +694,7 @@ export function materializeImpl<
         'query-materialization-end-to-end',
         performance.now() - t0,
         queryID,
-        ast,
+        completedAST,
       );
       queryComplete = true;
       queryCompleteResolver.resolve(true);
@@ -723,14 +711,14 @@ export function materializeImpl<
   const t0 = performance.now();
 
   const removeAddedQuery = customQueryID
-    ? delegate.addCustomQuery(ast, customQueryID, ttl, gotCallback)
-    : delegate.addServerQuery(ast, ttl, gotCallback);
+    ? delegate.addCustomQuery(completedAST, customQueryID, ttl, gotCallback)
+    : delegate.addServerQuery(completedAST, ttl, gotCallback);
 
-  const input = buildPipeline(ast, delegate, queryID);
+  const input = buildPipeline(completedAST, delegate, queryID);
 
   const view = delegate.batchViewUpdates(() =>
     (factory ?? arrayViewFactory)(
-      qi,
+      query,
       input,
       format,
       onDestroy,

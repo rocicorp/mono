@@ -2,18 +2,18 @@ import {produce, reconcile, type SetStoreFunction} from 'solid-js/store';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {
   applyChange,
+  type AnyViewFactory,
   type Change,
   type Entry,
   type Format,
   type Input,
   type Node,
   type Output,
-  type QueryInternals,
+  type Query,
   type Schema,
   type Stream,
   type TTL,
   type ViewChange,
-  type ViewFactory,
 } from '../../zero-client/src/mod.js';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import {idSymbol} from '../../zql/src/ivm/view-apply-change.ts';
@@ -287,7 +287,7 @@ export function createSolidViewFactory(
     TReturn,
     TContext,
   >(
-    _query: QueryInternals<TSchema, TTable, TReturn, TContext>,
+    _query: Query<TSchema, TTable, TReturn, TContext>,
     input: Input,
     format: Format,
     onDestroy: () => void,
@@ -307,13 +307,7 @@ export function createSolidViewFactory(
     );
   }
 
-  solidViewFactory satisfies ViewFactory<
-    Schema,
-    string,
-    unknown,
-    unknown,
-    unknown
-  >;
+  solidViewFactory satisfies AnyViewFactory;
 
   return solidViewFactory;
 }

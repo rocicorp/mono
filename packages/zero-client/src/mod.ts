@@ -101,7 +101,13 @@ export {
   applyChange,
   type ViewChange,
 } from '../../zql/src/ivm/view-apply-change.ts';
-export type {Entry, Format, View, ViewFactory} from '../../zql/src/ivm/view.ts';
+export type {
+  AnyViewFactory,
+  Entry,
+  Format,
+  View,
+  ViewFactory,
+} from '../../zql/src/ivm/view.ts';
 export type {
   DeleteID,
   InsertValue,
