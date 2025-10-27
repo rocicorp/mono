@@ -42,6 +42,7 @@ import InfoIcon from '../../assets/images/icon-info.svg?react';
 let firstRowRendered = false;
 const ITEM_SIZE = 56;
 const MIN_PAGE_SIZE = 100;
+const NUM_ROWS_FOR_LOADING_SKELETON = 10;
 
 type Anchor = {
   startRow: IssueRow | undefined;
@@ -407,7 +408,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   };
 
   const virtualizer = useVirtualizer({
-    count: total ?? estimatedTotal + 10,
+    count: total ?? estimatedTotal + NUM_ROWS_FOR_LOADING_SKELETON,
     estimateSize: () => ITEM_SIZE,
     overscan: 5,
     getScrollElement: () => listRef.current,
