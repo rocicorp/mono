@@ -1,42 +1,50 @@
-import {readFileSync} from 'fs';
-import {join} from 'path';
 import type {IncomingMessage, ServerResponse} from 'http';
 
-// Cache the HTML content to avoid reading the file on every request
-let cachedHtml: string | null = null;
+// Use the __non_webpack_require__ hack to bypass Vercel's bundling for static files
+// This allows us to read from the public directory
+const baseHtml = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Zero Bugs</title>
+    <link rel="preconnect" href="%VITE_PUBLIC_SERVER%" />
 
-function getIndexHtml(): string {
-  if (cachedHtml) {
-    return cachedHtml;
-  }
+    <!-- OG Tags -->
+    <meta property="og:title" content="Zero Bugs" />
+    <meta property="og:description" content="Bug tracking with Zero." />
+    <meta
+      property="og:image"
+      content="https://bugs.rocicorp.dev/og-image.png"
+    />
+    <meta property="og:url" content="https://bugs.rocicorp.dev" />
+    <meta property="og:type" content="website" />
+    <meta property="og:image:alt" content="Zero Bugs logo" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:site_name" content="Zero Bugs" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Zero Bugs" />
+    <meta name="twitter:description" content="Bug tracking with Zero." />
+    <meta
+      name="twitter:image"
+      content="https://bugs.rocicorp.dev/og-image.png"
+    />
+    <meta name="twitter:image:alt" content="Zero Bugs logo" />
+  </head>
 
-  // Try different possible locations for index.html in Vercel deployment
-  const possiblePaths = [
-    // Vercel build output location
-    join(process.cwd(), '.vercel', 'output', 'static', 'index.html'),
-    // Alternative Vercel location
-    join(process.cwd(), 'public', 'index.html'),
-    // Local dev
-    join(process.cwd(), 'index.html'),
-    // Built output
-    join(process.cwd(), 'dist', 'index.html'),
-  ];
+  <body>
+    <div id="root-modal" style="position: relative"></div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
 
-  for (const path of possiblePaths) {
-    try {
-      cachedHtml = readFileSync(path, 'utf-8');
-      console.log(`Successfully loaded index.html from: ${path}`);
-      return cachedHtml;
-    } catch {
-      // Try next path
-    }
-  }
-
-  throw new Error(
-    'Could not find index.html in any expected location: ' +
-      possiblePaths.join(', '),
-  );
-}
+    <script
+      defer
+      src="/um.js"
+      data-website-id="5c401ef9-d81c-42e2-bfea-9220ac932110"
+    ></script>
+  </body>
+</html>
+`;
 
 export default function handler(
   req: IncomingMessage & {
@@ -49,8 +57,8 @@ export default function handler(
     const pathParts = (req.query?.path as string[]) || [];
     const projectName = pathParts[0]?.toLowerCase() || '';
 
-    // Get the base HTML
-    let html = getIndexHtml();
+    // Start with base HTML
+    let html = baseHtml;
 
     // Check if this is the Roci project
     const isRoci = projectName === 'roci';
