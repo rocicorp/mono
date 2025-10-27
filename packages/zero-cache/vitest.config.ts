@@ -8,13 +8,11 @@ function nameFromURL(url: string) {
 
 export function configForVersion(version: number, url: string) {
   const name = nameFromURL(url);
-  return mergeConfig(config, {
+  const merged = mergeConfig(config, {
     test: {
       name: `${name}/pg-${version}`,
       browser: {enabled: false},
       silent: 'passed-only',
-      include: ['src/**/*.pg.test.?(c|m)[jt]s?(x)'],
-      exclude: [],
       globalSetup: [`../zero-cache/test/pg-${version}.ts`],
       coverage: {
         enabled: !CI, // Don't run coverage in continuous integration.
@@ -25,6 +23,10 @@ export function configForVersion(version: number, url: string) {
       hookTimeout: 20000,
     },
   });
+  // Override include to only pg tests (mergeConfig merges arrays, we want to replace)
+  merged.test.include = ['src/**/*.pg.test.?(c|m)[jt]s?(x)'];
+  merged.test.exclude = [];
+  return merged;
 }
 
 export function configForNoPg(url: string) {
