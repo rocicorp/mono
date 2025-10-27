@@ -20,7 +20,7 @@ function OGImageUpdater() {
   useEffect(() => {
     const ogImage = isGigabugs(projectName)
       ? 'https://zero.rocicorp.dev/api/og?title=Gigabugs&subtitle=2.5%20Million%20Row%20Sync%20Demo&logo=zero'
-      : 'https://bugs.rocicorp.dev/og-image.png';
+      : `${window.location.origin}/og-image.png`;
 
     // Update OG image meta tags
     const ogImageTag = document.querySelector('meta[property="og:image"]');
@@ -69,7 +69,6 @@ export function Root() {
 
   return (
     <ListContextProvider>
-      <OGImageUpdater />
       <div
         className="app-container flex p-8"
         style={{visibility: contentReady ? 'visible' : 'hidden'}}
@@ -85,6 +84,7 @@ export function Root() {
             <IssueRedirect></IssueRedirect>
           </Route>
           <Route path="/p/:projectName" nest>
+            <OGImageUpdater />
             <div className="primary-nav w-48 shrink-0 grow-0">
               <Nav />
             </div>
