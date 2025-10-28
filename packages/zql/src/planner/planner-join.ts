@@ -10,6 +10,24 @@ import type {
 } from './planner-node.ts';
 
 /**
+ * Semi-join overhead multiplier.
+ *
+ * Semi-joins represent correlated subqueries (EXISTS checks) which have
+ * execution overhead compared to flipped joins, even when logical row counts
+ * are identical. This overhead comes from:
+ * - Need to execute a separate correlation check for each parent row
+ * - Cannot leverage combined constraint checking as effectively as flipped joins
+ *
+ * A multiplier of 1.5 means semi-joins are estimated to be ~50% more expensive
+ * than equivalent flipped joins, which empirically matches observed performance
+ * differences in production workloads (e.g., 1.7x in zbugs benchmarks).
+ *
+ * Flipped joins have a different overhead in that they become unlimited. This
+ * is accounted for when propagating unlimits rather than here.
+ */
+const SEMI_JOIN_OVERHEAD_MULTIPLIER = 1.5;
+
+/**
  * Represents a join between two data streams (parent and child).
  *
  * # Dual-State Pattern
@@ -184,14 +202,19 @@ export class PlannerJoin {
 
     if (this.#parent.closestJoinOrSource() === 'join') {
       // if the parent is a join, we're in a pipeline rather than nesting of joins.
+      const pipelineCost =
+        this.#type === 'flipped'
+          ? childCost.startupCost +
+            childCost.runningCost *
+              (parentCost.startupCost + parentCost.runningCost)
+          : parentCost.runningCost +
+            SEMI_JOIN_OVERHEAD_MULTIPLIER *
+              scanEst *
+              (childCost.startupCost + childCost.runningCost);
+
       return {
         baseCardinality: parentCost.baseCardinality,
-        runningCost:
-          this.#type === 'flipped'
-            ? childCost.startupCost +
-              childCost.runningCost * (parentCost.startupCost + scanEst)
-            : parentCost.runningCost +
-              scanEst * (childCost.startupCost + childCost.runningCost),
+        runningCost: pipelineCost,
         startupCost: parentCost.startupCost,
         selectivity: parentCost.selectivity,
         limit: parentCost.limit,
@@ -199,12 +222,17 @@ export class PlannerJoin {
     }
 
     // if the parent is a source, we're in a nested loop join
+    const nestedLoopCost =
+      this.#type === 'flipped'
+        ? childCost.runningCost *
+          (parentCost.startupCost + parentCost.runningCost)
+        : SEMI_JOIN_OVERHEAD_MULTIPLIER *
+          scanEst *
+          (childCost.startupCost + childCost.runningCost);
+
     return {
       baseCardinality: parentCost.baseCardinality,
-      runningCost:
-        this.#type === 'flipped'
-          ? childCost.runningCost * (parentCost.startupCost + scanEst)
-          : scanEst * (childCost.startupCost + childCost.runningCost),
+      runningCost: nestedLoopCost,
       startupCost: parentCost.startupCost,
       selectivity: parentCost.selectivity,
       limit: parentCost.limit,
