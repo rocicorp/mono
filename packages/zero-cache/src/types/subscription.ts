@@ -132,7 +132,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
    * eventual {@link Result} of the `value`.
    *
    * If there is an existing unconsumed message and the Subscription has a
-   * {@link Options.coalesce coalesce} function, the specified `value` will be coalesced
+   * {@link Options#coalesce coalesce} function, the specified `value` will be coalesced
    * with the pending message. In this case, the result of the pending message
    * is resolved to `coalesced`, regardless of the `coalesce` function implementation.
    *
