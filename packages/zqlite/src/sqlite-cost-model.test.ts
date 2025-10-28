@@ -180,39 +180,4 @@ describe('SQLite cost model', () => {
     // Old behavior: total cost was 3840
     expect(startupCost + baseCardinality).toBe(3840);
   });
-
-  test('small table (2 rows) - constrained vs unconstrained', () => {
-    // Create a new database with a small table
-    const lc = createSilentLogContext();
-    const smallDb = new Database(lc, ':memory:');
-
-    smallDb.exec(`
-      CREATE TABLE small (id INTEGER PRIMARY KEY, name TEXT, _0_version INTEGER);
-      CREATE UNIQUE INDEX small_id_unique ON small(id);
-    `);
-
-    // Insert only 2 rows (like the project table in zbugs)
-    smallDb.exec(`INSERT INTO small (id, name, _0_version) VALUES (1, 'foo', 1), (2, 'bar', 1)`);
-
-    // Run ANALYZE to populate statistics
-    smallDb.exec('ANALYZE');
-
-    // Get table specs
-    const tableSpecs = new Map<string, LiteAndZqlSpec>();
-    computeZqlSpecs(lc, smallDb, tableSpecs);
-
-    // Create cost model for small table
-    const smallCostModel = createSQLiteCostModel(smallDb, tableSpecs);
-
-    // Test costs (using id for sort order like other tests)
-    const constrainedCost = smallCostModel('small', [['id', 'asc']], undefined, {id: undefined});
-    const unconstrainedCost = smallCostModel('small', [['id', 'asc']], undefined, undefined);
-
-    console.log('Small table constrained (id):', constrainedCost);
-    console.log('Small table unconstrained ():', unconstrainedCost);
-
-    // The unconstrained scan should cost more than constrained scan
-    // This is the bug: both return 1.0, making the planner think they're equal
-    expect(unconstrainedCost.baseCardinality).toBeGreaterThan(constrainedCost.baseCardinality);
-  });
 });

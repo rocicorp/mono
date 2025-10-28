@@ -13,7 +13,7 @@ import type {
  * Semi-join overhead multiplier.
  *
  * Semi-joins represent correlated subqueries (EXISTS checks) which have
- * execution overhead compared to regular joins, even when logical row counts
+ * execution overhead compared to flipped joins, even when logical row counts
  * are identical. This overhead comes from:
  * - Need to execute a separate correlation check for each parent row
  * - Cannot leverage combined constraint checking as effectively as flipped joins
@@ -21,6 +21,9 @@ import type {
  * A multiplier of 1.5 means semi-joins are estimated to be ~50% more expensive
  * than equivalent flipped joins, which empirically matches observed performance
  * differences in production workloads (e.g., 1.7x in zbugs benchmarks).
+ *
+ * Flipped joins have a different overhead in that they become unlimited. This
+ * is accounted for when propagating unlimits rather than here.
  */
 const SEMI_JOIN_OVERHEAD_MULTIPLIER = 1.5;
 
