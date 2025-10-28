@@ -218,6 +218,62 @@ The cost of the above would be the size of the issue table + the cost to create 
 
 Limits are never provided to the cost estimator as we can never know how many rows will be filtered out before fulfilling a limit.
 
+### Cost Components
+
+Each node in the planner graph returns a `CostEstimate` object with multiple components:
+
+```ts
+type CostEstimate = {
+  baseCardinality: number; // Estimated number of output rows
+  runningCost: number; // Cost that scales with outer loop iterations
+  startupCost: number; // One-time cost (e.g., sorting, building temp tables)
+  selectivity: number; // Fraction of rows that pass filters (0-1)
+  limit: number | undefined; // Result limit if present
+};
+```
+
+**Component Semantics:**
+
+- **`startupCost`**: One-time initialization costs that don't scale with the number of times a node is executed. Examples:
+  - Building a temporary B-tree for sorting by an unindexed column
+  - Creating hash tables for joins
+  - Reading table statistics
+
+- **`runningCost`**: Costs that scale with how many times the node executes in nested loops. For a connection scanning 100 rows:
+  - Executed once in outer loop: `runningCost = 100`
+  - Executed 1000 times in inner loop: total cost = `1000 × 100 = 100,000`
+
+- **`baseCardinality`**: The logical number of output rows. Used by parent joins to estimate their loop counts.
+
+- **`selectivity`**: The fraction of input rows that survive filters (0.0 to 1.0). Used to estimate how many rows will satisfy a limit clause.
+
+**Total Cost Calculation:**
+
+The total cost of a plan is: `startupCost + runningCost`
+
+Startup costs accumulate additively while running costs multiply through nested loops.
+
+### Semi-Join Overhead
+
+Semi-joins (representing `EXISTS` checks) have inherent execution overhead compared to flipped joins, even when they scan the same number of rows logically. This overhead comes from:
+
+1. **Correlated execution**: Each parent row requires a separate correlation check
+2. **Limited index utilization**: Cannot leverage combined constraint checking as effectively as regular joins
+3. **Query planner limitations**: Database engines may not optimize correlated subqueries as well as regular joins
+
+To account for this, the planner applies a **semi-join overhead multiplier** (currently 1.5×) to `scanEst` for semi-joins. This ensures that when two plans have the same logical row counts but differ in join strategy, the planner correctly prefers flipped joins.
+
+**Example Impact:**
+
+Consider a query where both approaches scan 1 row:
+
+- Semi-join: `{baseCardinality: 1.5, runningCost: 1.5}`
+- Flipped join: `{baseCardinality: 1.0, runningCost: 1.0}`
+
+The overhead propagates through nested joins, making the difference more significant in complex queries. In production workloads, this correctly models the 1.5-1.7× performance difference observed between semi-joins and flipped joins.
+
+See `planner-join.ts` for the implementation and `SEMI_JOIN_OVERHEAD_MULTIPLIER` constant.
+
 ### Cost Estimation with Branch Patterns
 
 The `estimateCost()` method accepts an optional branch pattern parameter:
