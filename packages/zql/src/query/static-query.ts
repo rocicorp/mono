@@ -35,8 +35,6 @@ export class StaticQuery<
   TReturn = PullRow<TTable, TSchema>,
   TContext = unknown,
 > extends AbstractQuery<TSchema, TTable, TReturn, TContext> {
-  readonly #schema: TSchema;
-
   constructor(
     schema: TSchema,
     tableName: TTable,
@@ -54,34 +52,21 @@ export class StaticQuery<
       system,
       customQueryID,
       currentJunction,
+      (tableName, ast, format, _customQueryID, _currentJunction) =>
+        new StaticQuery(
+          schema,
+          tableName,
+          ast,
+          format,
+          system,
+          customQueryID,
+          currentJunction,
+        ),
     );
-    this.#schema = schema;
   }
 
   expressionBuilder() {
     return new ExpressionBuilder(this._exists);
-  }
-
-  protected _newQuerySymbol<
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-    TContext,
-  >(
-    tableName: TTable,
-    ast: AST,
-    format: Format,
-    customQueryID: CustomQueryID | undefined,
-    currentJunction: string | undefined,
-  ): StaticQuery<TSchema, TTable, TReturn, TContext> {
-    return new StaticQuery(
-      this.#schema,
-      tableName,
-      ast,
-      format,
-      'permissions',
-      customQueryID,
-      currentJunction,
-    );
   }
 }
 

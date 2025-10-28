@@ -89,6 +89,18 @@ export function staticParam(
 // oxlint-disable-next-line no-explicit-any
 type GetFilterTypeAny = GetFilterType<any, any, any>;
 
+type NewQueryFunction<TSchema extends Schema, TContext> = <
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+>(
+  this: unknown,
+  tableName: TTable,
+  ast: AST,
+  format: Format,
+  customQueryID: CustomQueryID | undefined,
+  currentJunction: string | undefined,
+) => Query<TSchema, TTable, TReturn, TContext>;
+
 export abstract class AbstractQuery<
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
@@ -110,6 +122,7 @@ export abstract class AbstractQuery<
   readonly #system: System;
   readonly #currentJunction: string | undefined;
   readonly customQueryID: CustomQueryID | undefined;
+  readonly #newQuery: NewQueryFunction<TSchema, TContext>;
 
   constructor(
     schema: TSchema,
@@ -118,7 +131,8 @@ export abstract class AbstractQuery<
     format: Format,
     system: System,
     customQueryID: CustomQueryID | undefined,
-    currentJunction?: string,
+    currentJunction: string | undefined,
+    newQuery: NewQueryFunction<TSchema, TContext>,
   ) {
     this.#schema = schema;
     this.#tableName = tableName;
@@ -127,6 +141,7 @@ export abstract class AbstractQuery<
     this.#system = system;
     this.#currentJunction = currentJunction;
     this.customQueryID = customQueryID;
+    this.#newQuery = newQuery;
   }
 
   withContext(
@@ -139,7 +154,7 @@ export abstract class AbstractQuery<
     name: string,
     args: ReadonlyArray<ReadonlyJSONValue>,
   ): Query<TSchema, TTable, TReturn, TContext> {
-    return this._newQuerySymbol(
+    return this.#newQuery(
       this.#tableName,
       this.#ast,
       this.format,
@@ -162,20 +177,8 @@ export abstract class AbstractQuery<
     return this.#hash;
   }
 
-  // TODO(arv): Put this in the delegate?
-  protected abstract _newQuerySymbol<
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-  >(
-    table: TTable,
-    ast: AST,
-    format: Format,
-    customQueryID: CustomQueryID | undefined,
-    currentJunction: string | undefined,
-  ): AbstractQuery<TSchema, TTable, TReturn, TContext>;
-
   one = (): Query<TSchema, TTable, TReturn | undefined, TContext> =>
-    this._newQuerySymbol(
+    this.#newQuery(
       this.#tableName,
       {
         ...this.#ast,
@@ -216,7 +219,7 @@ export abstract class AbstractQuery<
     assert(related, 'Invalid relationship');
     if (isOneHop(related)) {
       const {destSchema, destField, sourceField, cardinality} = related[0];
-      const q: AnyQuery = this._newQuerySymbol(
+      const q: AnyQuery = this.#newQuery(
         destSchema,
         {
           table: destSchema,
@@ -249,7 +252,7 @@ export abstract class AbstractQuery<
         'The source and destination of a relationship must have the same number of fields',
       );
 
-      return this._newQuerySymbol(
+      return this.#newQuery(
         this.#tableName,
         {
           ...this.#ast,
@@ -286,7 +289,7 @@ export abstract class AbstractQuery<
       const junctionSchema = firstRelation.destSchema;
       const sq = asQueryInternals(
         cb(
-          this._newQuerySymbol(
+          this.#newQuery(
             destSchema,
             {
               table: destSchema,
@@ -307,7 +310,7 @@ export abstract class AbstractQuery<
       assert(isCompoundKey(secondRelation.sourceField), 'Invalid relationship');
       assert(isCompoundKey(secondRelation.destField), 'Invalid relationship');
 
-      return this._newQuerySymbol(
+      return this.#newQuery(
         this.#tableName,
         {
           ...this.#ast,
@@ -391,7 +394,7 @@ export abstract class AbstractQuery<
       assertNoNotExists(where);
     }
 
-    return this._newQuerySymbol(
+    return this.#newQuery(
       this.#tableName,
       {
         ...this.#ast,
@@ -407,7 +410,7 @@ export abstract class AbstractQuery<
     row: Partial<PullRow<TTable, TSchema>>,
     opts?: {inclusive: boolean},
   ): Query<TSchema, TTable, TReturn, TContext> =>
-    this._newQuerySymbol(
+    this.#newQuery(
       this.#tableName,
       {
         ...this.#ast,
@@ -435,7 +438,7 @@ export abstract class AbstractQuery<
       );
     }
 
-    return this._newQuerySymbol(
+    return this.#newQuery(
       this.#tableName,
       {
         ...this.#ast,
@@ -457,7 +460,7 @@ export abstract class AbstractQuery<
           this.#currentJunction,
       );
     }
-    return this._newQuerySymbol(
+    return this.#newQuery(
       this.#tableName,
       {
         ...this.#ast,
@@ -485,7 +488,7 @@ export abstract class AbstractQuery<
       assert(isCompoundKey(destField), 'Invalid relationship');
 
       const sq = cb(
-        this._newQuerySymbol(
+        this.#newQuery(
           destTableName,
           {
             table: destTableName,
@@ -523,7 +526,7 @@ export abstract class AbstractQuery<
       const {destSchema} = secondRelation;
       const junctionSchema = firstRelation.destSchema;
       const queryToDest = cb(
-        this._newQuerySymbol(
+        this.#newQuery(
           destSchema,
           {
             table: destSchema,
@@ -803,10 +806,6 @@ export class QueryImpl<
   extends AbstractQuery<TSchema, TTable, TReturn, TContext>
   implements Query<TSchema, TTable, TReturn, TContext>
 {
-  readonly #schema: TSchema;
-  readonly #delegate: QueryDelegate<TContext> | undefined;
-  readonly #system: System;
-
   constructor(
     delegate: QueryDelegate<TContext> | undefined,
     schema: TSchema,
@@ -825,71 +824,19 @@ export class QueryImpl<
       system,
       customQueryID,
       currentJunction,
-    );
-    this.#schema = schema;
-    this.#delegate = delegate;
-    this.#system = system;
-  }
-
-  protected _newQuerySymbol<
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-  >(
-    tableName: TTable,
-    ast: AST,
-    format: Format,
-    customQueryID: CustomQueryID | undefined,
-    currentJunction: string | undefined,
-  ): QueryImpl<TSchema, TTable, TReturn, TContext> {
-    return new QueryImpl(
-      this.#delegate,
-      this.#schema,
-      tableName,
-      ast,
-      format,
-      this.#system,
-      customQueryID,
-      currentJunction,
+      (tableName, ast, format, customQueryID, currentJunction) =>
+        new QueryImpl(
+          delegate,
+          schema,
+          tableName,
+          ast,
+          format,
+          system,
+          customQueryID,
+          currentJunction,
+        ),
     );
   }
-
-  // materialize<T>(
-  //   factoryOrOptions?:
-  //     | ViewFactory<TSchema, TTable, TReturn, TContext, T>
-  //     | MaterializeOptions,
-  //   maybeOptions?: MaterializeOptions,
-  // ): T | TypedView<HumanReadable<TReturn>> {
-  //   const delegate = must(
-  //     this.#delegate,
-  //     'materialize requires a query delegate to be set',
-  //   );
-  //   if (typeof factoryOrOptions === 'function') {
-  //     const factory = factoryOrOptions;
-  //     const options = maybeOptions;
-  //     return delegate.materialize(this, factory, options);
-  //   }
-
-  //   return delegate.materialize(this, undefined, maybeOptions);
-  // }
-
-  // run(options?: RunOptions): Promise<HumanReadable<TReturn>> {
-  //   const delegate = must(
-  //     this.#delegate,
-  //     'run requires a query delegate to be set',
-  //   );
-  //   return delegate.run(this, options);
-  // }
-
-  // preload(options?: PreloadOptions): {
-  //   cleanup: () => void;
-  //   complete: Promise<void>;
-  // } {
-  //   const delegate = must(
-  //     this.#delegate,
-  //     'preload requires a query delegate to be set',
-  //   );
-  //   return delegate.preload(this, options);
-  // }
 }
 
 function addPrimaryKeys(
