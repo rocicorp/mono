@@ -3,6 +3,7 @@ import * as v from '../../shared/src/valita.ts';
 import {mutationIDSchema} from './mutation-id.ts';
 import {ErrorKind} from './error-kind.ts';
 import {ErrorOrigin} from './error-origin.ts';
+import {ErrorReason} from './error-reason.ts';
 
 const basicErrorKindSchema = v.literalUnion(
   ErrorKind.AuthInvalidated,
@@ -47,7 +48,7 @@ const backoffBodySchema = v.object({
   // The parameters will only be added to the immediately following
   // reconnect, and not after that.
   reconnectParams: v.record(v.string()).optional(),
-  origin: v.literalUnion(ErrorOrigin.ZeroCache).optional(),
+  origin: v.literal(ErrorOrigin.ZeroCache).optional(),
 });
 
 const pushFailedErrorKindSchema = v.literal(ErrorKind.PushFailed);
@@ -70,23 +71,27 @@ const pushFailedBaseSchema = v.object({
 export const pushFailedBodySchema = v.union(
   pushFailedBaseSchema.extend({
     origin: v.literal(ErrorOrigin.Server),
-    type: v.literalUnion(
-      'database',
-      'parse',
-      'oooMutation',
-      'unsupportedPushVersion',
-      'internal',
+    reason: v.literalUnion(
+      ErrorReason.Database,
+      ErrorReason.Parse,
+      ErrorReason.OutOfOrderMutation,
+      ErrorReason.UnsupportedPushVersion,
+      ErrorReason.Internal,
     ),
   }),
   pushFailedBaseSchema.extend({
     origin: v.literal(ErrorOrigin.ZeroCache),
-    type: v.literal('http'),
+    reason: v.literal(ErrorReason.Http),
     status: v.number(),
     bodyPreview: v.string().optional(),
   }),
   pushFailedBaseSchema.extend({
     origin: v.literal(ErrorOrigin.ZeroCache),
-    type: v.literalUnion('timeout', 'parse', 'internal'),
+    reason: v.literalUnion(
+      ErrorReason.Timeout,
+      ErrorReason.Parse,
+      ErrorReason.Internal,
+    ),
   }),
 );
 
@@ -100,17 +105,25 @@ const transformFailedBaseSchema = v.object({
 export const transformFailedBodySchema = v.union(
   transformFailedBaseSchema.extend({
     origin: v.literal(ErrorOrigin.Server),
-    type: v.literalUnion('database', 'parse', 'internal'),
+    reason: v.literalUnion(
+      ErrorReason.Database,
+      ErrorReason.Parse,
+      ErrorReason.Internal,
+    ),
   }),
   transformFailedBaseSchema.extend({
     origin: v.literal(ErrorOrigin.ZeroCache),
-    type: v.literal('http'),
+    reason: v.literal(ErrorReason.Http),
     status: v.number(),
     bodyPreview: v.string().optional(),
   }),
   transformFailedBaseSchema.extend({
     origin: v.literal(ErrorOrigin.ZeroCache),
-    type: v.literalUnion('timeout', 'parse', 'internal'),
+    reason: v.literalUnion(
+      ErrorReason.Timeout,
+      ErrorReason.Parse,
+      ErrorReason.Internal,
+    ),
   }),
 );
 
