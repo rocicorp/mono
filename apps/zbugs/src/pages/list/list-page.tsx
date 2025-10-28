@@ -42,7 +42,7 @@ import InfoIcon from '../../assets/images/icon-info.svg?react';
 let firstRowRendered = false;
 const ITEM_SIZE = 56;
 const MIN_PAGE_SIZE = 100;
-const NUM_ROWS_FOR_LOADING_SKELETON = 10;
+const NUM_ROWS_FOR_LOADING_SKELETON = 1;
 
 type Anchor = {
   startRow: IssueRow | undefined;
@@ -491,10 +491,10 @@ export function ListPage({onReady}: {onReady: () => void}) {
       } as const;
       // oxlint-disable-next-line no-console -- Debug logging in demo app
       console.log('page down', a);
-      setQueryAnchor({
-        anchor: a,
-        listContextParams,
-      });
+      // setQueryAnchor({
+      //   anchor: a,
+      //   listContextParams,
+      // });
     }
   }, [
     listContextParams,
