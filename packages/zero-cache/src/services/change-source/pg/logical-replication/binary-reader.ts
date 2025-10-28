@@ -6,7 +6,10 @@ const textDecoder = new TextDecoder();
 // https://www.postgresql.org/docs/14/protocol-message-types.html
 export class BinaryReader {
   _p = 0;
-  constructor(private _b: Uint8Array) {}
+  private _b: Uint8Array;
+  constructor(_b: Uint8Array) {
+    this._b = _b;
+  }
 
   readUint8() {
     this.checkSize(1);
