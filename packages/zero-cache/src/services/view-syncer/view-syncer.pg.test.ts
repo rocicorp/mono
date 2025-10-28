@@ -31,7 +31,7 @@ import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
-import {ErrorForClient} from '../../types/error-for-client.ts';
+import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {cvrSchema} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
@@ -68,6 +68,8 @@ import {
   USERS_QUERY,
 } from './view-syncer-test-util.ts';
 import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
+import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';
 
 describe('view-syncer/service', () => {
   let storageDB: Database;
@@ -1101,7 +1103,19 @@ describe('view-syncer/service', () => {
 
     // test cases where custom query transforms fail
     test('http transform call fails', async () => {
-      mockFetchImpl(() => Promise.reject(JSON.stringify({})));
+      mockFetchImpl(() =>
+        Promise.reject(
+          new ProtocolError({
+            kind: ErrorKind.TransformFailed,
+            message: 'Fetch from API server returned non-OK status 500',
+            origin: ErrorOrigin.ZeroCache,
+            queryIDs: ['custom-1', 'custom-2'],
+            reason: ErrorReason.HTTP,
+            status: 500,
+            bodyPreview: '{ "error": "Internal Server Error" }',
+          }),
+        ),
+      );
       const client = connect(SYNC_CONTEXT, [
         {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
         {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
@@ -1109,63 +1123,8 @@ describe('view-syncer/service', () => {
 
       await nextPoke(client);
       stateChanges.push({state: 'version-ready'});
-      expect(await nextPoke(client)).toMatchInlineSnapshot(`
-        [
-          [
-            "transformError",
-            [
-              {
-                "details": "{}",
-                "error": "zero",
-                "id": "custom-1",
-                "name": "named-query-1",
-              },
-              {
-                "details": "{}",
-                "error": "zero",
-                "id": "custom-2",
-                "name": "named-query-2",
-              },
-            ],
-          ],
-          [
-            "pokeStart",
-            {
-              "baseCookie": "00:01",
-              "pokeID": "01",
-              "schemaVersions": {
-                "maxSupportedVersion": 3,
-                "minSupportedVersion": 2,
-              },
-            },
-          ],
-          [
-            "pokePart",
-            {
-              "gotQueriesPatch": [
-                {
-                  "hash": "custom-1",
-                  "op": "del",
-                },
-                {
-                  "hash": "custom-2",
-                  "op": "del",
-                },
-              ],
-              "lastMutationIDChanges": {
-                "foo": 42,
-              },
-              "pokeID": "01",
-            },
-          ],
-          [
-            "pokeEnd",
-            {
-              "cookie": "01",
-              "pokeID": "01",
-            },
-          ],
-        ]
+      await expect(nextPoke(client)).rejects.toMatchInlineSnapshot(`
+        [ProtocolError: Fetch from API server returned non-OK status 500]
       `);
     });
 
@@ -1182,65 +1141,8 @@ describe('view-syncer/service', () => {
 
       await nextPoke(client);
       stateChanges.push({state: 'version-ready'});
-      expect(await nextPoke(client)).toMatchInlineSnapshot(`
-        [
-          [
-            "transformError",
-            [
-              {
-                "details": "{}",
-                "error": "http",
-                "id": "custom-1",
-                "name": "named-query-1",
-                "status": 500,
-              },
-              {
-                "details": "{}",
-                "error": "http",
-                "id": "custom-2",
-                "name": "named-query-2",
-                "status": 500,
-              },
-            ],
-          ],
-          [
-            "pokeStart",
-            {
-              "baseCookie": "00:01",
-              "pokeID": "01",
-              "schemaVersions": {
-                "maxSupportedVersion": 3,
-                "minSupportedVersion": 2,
-              },
-            },
-          ],
-          [
-            "pokePart",
-            {
-              "gotQueriesPatch": [
-                {
-                  "hash": "custom-1",
-                  "op": "del",
-                },
-                {
-                  "hash": "custom-2",
-                  "op": "del",
-                },
-              ],
-              "lastMutationIDChanges": {
-                "foo": 42,
-              },
-              "pokeID": "01",
-            },
-          ],
-          [
-            "pokeEnd",
-            {
-              "cookie": "01",
-              "pokeID": "01",
-            },
-          ],
-        ]
+      await expect(nextPoke(client)).rejects.toMatchInlineSnapshot(`
+        [ProtocolError: Fetch from API server returned non-OK status 500]
       `);
     });
 
@@ -1258,10 +1160,18 @@ describe('view-syncer/service', () => {
           name: 'named-query-2',
           details: 'brrrr',
         },
+        {
+          error: 'http',
+          id: 'custom-3',
+          name: 'named-query-3',
+          status: 500,
+          details: '{ "error": "Internal Server Error" }',
+        },
       ] satisfies TransformResponseBody);
       const client = connect(SYNC_CONTEXT, [
         {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
         {op: 'put', hash: 'custom-2', name: 'named-query-2', args: ['thing']},
+        {op: 'put', hash: 'custom-3', name: 'named-query-3', args: ['thing']},
       ]);
 
       await nextPoke(client);
@@ -1283,6 +1193,13 @@ describe('view-syncer/service', () => {
                 "id": "custom-2",
                 "name": "named-query-2",
               },
+              {
+                "details": "{ "error": "Internal Server Error" }",
+                "error": "http",
+                "id": "custom-3",
+                "name": "named-query-3",
+                "status": 500,
+              },
             ],
           ],
           [
@@ -1308,6 +1225,10 @@ describe('view-syncer/service', () => {
                   "hash": "custom-2",
                   "op": "del",
                 },
+                {
+                  "hash": "custom-3",
+                  "op": "del",
+                },
               ],
               "lastMutationIDChanges": {
                 "foo": 42,
@@ -1323,7 +1244,7 @@ describe('view-syncer/service', () => {
             },
           ],
         ]
-      `);
+                  `);
     });
 
     test('some individual queries fail', async () => {
@@ -2176,11 +2097,12 @@ describe('view-syncer/service', () => {
     stateChanges.push({state: 'version-ready'});
 
     const dequeuePromise = client.dequeue();
-    await expect(dequeuePromise).rejects.toBeInstanceOf(ErrorForClient);
+    await expect(dequeuePromise).rejects.toBeInstanceOf(ProtocolError);
     await expect(dequeuePromise).rejects.toHaveProperty('errorBody', {
       kind: ErrorKind.SchemaVersionNotSupported,
       message:
         'Schema version 1 is not in range of supported schema versions [2, 3].',
+      origin: ErrorOrigin.ZeroCache,
     });
   });
 
@@ -2227,11 +2149,12 @@ describe('view-syncer/service', () => {
     stateChanges.push({state: 'version-ready'});
 
     const dequeuePromise = client.dequeue();
-    await expect(dequeuePromise).rejects.toBeInstanceOf(ErrorForClient);
+    await expect(dequeuePromise).rejects.toBeInstanceOf(ProtocolError);
     await expect(dequeuePromise).rejects.toHaveProperty('errorBody', {
       kind: ErrorKind.SchemaVersionNotSupported,
       message:
         'The "foo" table does not exist or is not one of the replicated tables: "comments","issueLabels","issues","labels","users".',
+      origin: ErrorOrigin.ZeroCache,
     });
   });
 
@@ -2264,11 +2187,12 @@ describe('view-syncer/service', () => {
     }
     // Make sure it's the SchemaVersionNotSupported error that gets
     // propagated, and not any error related to the bad query.
-    expect(err).toBeInstanceOf(ErrorForClient);
-    expect((err as ErrorForClient).errorBody).toEqual({
+    expect(err).toBeInstanceOf(ProtocolError);
+    expect((err as ProtocolError).errorBody).toEqual({
       kind: ErrorKind.SchemaVersionNotSupported,
       message:
         'Schema version 1 is not in range of supported schema versions [2, 3].',
+      origin: ErrorOrigin.ZeroCache,
     });
   });
 
@@ -2759,11 +2683,12 @@ describe('view-syncer/service', () => {
     // client2 still has a supported version and is sent a poke with the
     // updated schemaVersions range
     const dequeuePromise = client1.dequeue();
-    await expect(dequeuePromise).rejects.toBeInstanceOf(ErrorForClient);
+    await expect(dequeuePromise).rejects.toBeInstanceOf(ProtocolError);
     await expect(dequeuePromise).rejects.toHaveProperty('errorBody', {
       kind: ErrorKind.SchemaVersionNotSupported,
       message:
         'Schema version 2 is not in range of supported schema versions [3, 3].',
+      origin: ErrorOrigin.ZeroCache,
     });
 
     expect(await nextPoke(client2)).toMatchInlineSnapshot(`
@@ -3008,11 +2933,12 @@ describe('view-syncer/service', () => {
     stateChanges.push({state: 'version-ready'});
 
     const dequeuePromise = client.dequeue();
-    await expect(dequeuePromise).rejects.toBeInstanceOf(ErrorForClient);
+    await expect(dequeuePromise).rejects.toBeInstanceOf(ProtocolError);
     await expect(dequeuePromise).rejects.toHaveProperty('errorBody', {
       kind: ErrorKind.SchemaVersionNotSupported,
       message:
         'The "issues"."owner" column does not exist or is not one of the replicated columns: "big","id","json","parent","title".',
+      origin: ErrorOrigin.ZeroCache,
     });
   });
 
@@ -3592,10 +3518,11 @@ describe('view-syncer/service', () => {
     } catch (e) {
       result = e;
     }
-    expect(result).toBeInstanceOf(ErrorForClient);
-    expect((result as ErrorForClient).errorBody).toEqual({
+    expect(result).toBeInstanceOf(ProtocolError);
+    expect((result as ProtocolError).errorBody).toEqual({
       kind: ErrorKind.ClientNotFound,
       message: 'Cannot sync from older replica: CVR=101, DB=01',
+      origin: ErrorOrigin.ZeroCache,
     } satisfies ErrorBody);
   });
 
@@ -3611,10 +3538,11 @@ describe('view-syncer/service', () => {
     } catch (e) {
       result = e;
     }
-    expect(result).toBeInstanceOf(ErrorForClient);
-    expect((result as ErrorForClient).errorBody).toEqual({
+    expect(result).toBeInstanceOf(ProtocolError);
+    expect((result as ProtocolError).errorBody).toEqual({
       kind: ErrorKind.ClientNotFound,
       message: 'Client not found',
+      origin: ErrorOrigin.ZeroCache,
     } satisfies ErrorBody);
   });
 
@@ -3715,10 +3643,11 @@ describe('view-syncer/service', () => {
     } catch (e) {
       result = e;
     }
-    expect(result).toBeInstanceOf(ErrorForClient);
-    expect((result as ErrorForClient).errorBody).toEqual({
+    expect(result).toBeInstanceOf(ProtocolError);
+    expect((result as ProtocolError).errorBody).toEqual({
       kind: ErrorKind.InvalidConnectionRequestBaseCookie,
       message: 'CVR is at version 07',
+      origin: ErrorOrigin.ZeroCache,
     } satisfies ErrorBody);
   });
 

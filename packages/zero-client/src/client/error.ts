@@ -6,6 +6,7 @@ import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {
   type BackoffBody,
   type ErrorBody,
+  isProtocolError,
   ProtocolError,
 } from '../../../zero-protocol/src/error.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
@@ -29,16 +30,25 @@ export class ClientError<
     ClientErrorBody,
     'origin'
   >,
-> extends ProtocolError<{origin: typeof ErrorOrigin.Client} & T> {
+> extends Error {
+  readonly errorBody: {origin: typeof ErrorOrigin.Client} & T;
+
   constructor(errorBody: T, options?: ErrorOptions) {
-    super({...errorBody, origin: ErrorOrigin.Client}, options);
+    super(errorBody.message, options);
     this.name = 'ClientError';
+    this.errorBody = {...errorBody, origin: ErrorOrigin.Client};
+  }
+
+  get kind(): T['kind'] {
+    return this.errorBody.kind;
   }
 }
 
 export function isServerError(ex: unknown): ex is ProtocolError<ErrorBody> {
   return (
-    ex instanceof ProtocolError && ex.errorBody.origin !== ErrorOrigin.Client
+    isProtocolError(ex) &&
+    (ex.errorBody.origin === ErrorOrigin.Server ||
+      ex.errorBody.origin === ErrorOrigin.ZeroCache)
   );
 }
 
@@ -46,7 +56,7 @@ export function isAuthError(ex: unknown): ex is ProtocolError & {
   kind: ErrorKind.AuthInvalidated | ErrorKind.Unauthorized;
 } {
   if (isServerError(ex)) {
-    if (isAuthErrorKind(ex.kind)) {
+    if (isAuthErrorKind(ex.errorBody.kind)) {
       return true;
     }
     if (
@@ -80,8 +90,10 @@ export function getBackoffParams(error: ZeroError): BackoffBody | undefined {
   return undefined;
 }
 
-export function isClientError(ex: unknown): ex is ClientError {
-  return ex instanceof ClientError;
+export function isClientError(ex: unknown): ex is ClientError<ClientErrorBody> {
+  return (
+    ex instanceof ClientError && ex.errorBody.origin === ErrorOrigin.Client
+  );
 }
 
 export const NO_STATUS_TRANSITION = 'NO_STATUS_TRANSITION';

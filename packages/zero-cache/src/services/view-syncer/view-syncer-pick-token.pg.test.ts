@@ -1,7 +1,7 @@
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {ErrorForClient} from '../../types/error-for-client.ts';
 import {pickToken} from './view-syncer.ts';
+import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
 
 describe('pickToken', () => {
   const lc = createSilentLogContext();
@@ -21,13 +21,13 @@ describe('pickToken', () => {
   test('previous token exists, new token is undefined', () => {
     expect(() =>
       pickToken(lc, {decoded: {sub: 'foo', iat: 1}, raw: ''}, undefined),
-    ).toThrowError(ErrorForClient);
+    ).toThrowError(ProtocolError);
   });
 
   test('previous token has a subject, new token does not', () => {
     expect(() =>
       pickToken(lc, {decoded: {sub: 'foo'}, raw: ''}, {decoded: {}, raw: ''}),
-    ).toThrowError(ErrorForClient);
+    ).toThrowError(ProtocolError);
   });
 
   test('previous token has a subject, new token has a different subject', () => {
@@ -37,7 +37,7 @@ describe('pickToken', () => {
         {decoded: {sub: 'foo', iat: 1}, raw: ''},
         {decoded: {sub: 'bar', iat: 1}, raw: ''},
       ),
-    ).toThrowError(ErrorForClient);
+    ).toThrowError(ProtocolError);
   });
 
   test('previous token has a subject, new token has the same subject', () => {
@@ -77,7 +77,7 @@ describe('pickToken', () => {
         {decoded: {sub: 'foo', iat: 123}, raw: ''},
         {decoded: {iat: 123}, raw: ''},
       ),
-    ).toThrowError(ErrorForClient);
+    ).toThrowError(ProtocolError);
   });
 
   test('previous token has no subject, new token has no subject', () => {
@@ -106,7 +106,7 @@ describe('pickToken', () => {
         {decoded: {sub: 'foo', iat: 1}, raw: ''},
         {decoded: {sub: 'foo'}, raw: ''},
       ),
-    ).toThrowError(ErrorForClient);
+    ).toThrowError(ProtocolError);
   });
 
   test('previous token has an issued at time, new token has a greater issued at time', () => {

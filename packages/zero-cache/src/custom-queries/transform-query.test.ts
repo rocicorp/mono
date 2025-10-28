@@ -17,8 +17,13 @@ import type {
   TransformResponseBody,
 } from '../../../zero-protocol/src/custom-queries.ts';
 import type {TransformedAndHashed} from '../auth/read-authorizer.ts';
-import {ErrorForClient} from '../types/error-for-client.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {
+  ProtocolError,
+  type TransformFailedBody,
+} from '../../../zero-protocol/src/error.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 
 // Mock the fetch functions
 vi.mock('../custom/fetch.ts');
@@ -142,15 +147,11 @@ describe('CustomQueryTransformer', () => {
   });
 
   test('should transform queries successfully and return TransformedAndHashed array', async () => {
-    const mockSuccessResponse = new Response(
-      JSON.stringify([
-        'transformed',
-        mockQueryResponses,
-      ] satisfies TransformResponseMessage),
-      {status: 200},
-    );
-
-    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse);
+    // Mock now returns the parsed response directly, not a Response object
+    mockFetchFromAPIServer.mockResolvedValue([
+      'transformed',
+      mockQueryResponses,
+    ] satisfies TransformResponseMessage);
 
     const transformer = new CustomQueryTransformer(
       lc,
@@ -168,6 +169,8 @@ describe('CustomQueryTransformer', () => {
 
     // Verify the API was called correctly
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      expect.anything(), // validator (transformResponseMessageSchema)
+      'transform', // source
       lc,
       pullUrl,
       [expectUrlPatternMatching(pullUrl)],
@@ -187,23 +190,19 @@ describe('CustomQueryTransformer', () => {
   });
 
   test('should handle errored queries in response', async () => {
-    const mockMixedResponse = new Response(
-      JSON.stringify([
-        'transformed',
-        [
-          mockQueryResponses[0],
-          {
-            error: 'app',
-            id: 'query2',
-            name: 'getPostsByUser',
-            details: 'Query syntax error',
-          },
-        ],
-      ] satisfies TransformResponseMessage),
-      {status: 200},
-    );
-
-    mockFetchFromAPIServer.mockResolvedValue(mockMixedResponse);
+    // Mock now returns the parsed response directly
+    mockFetchFromAPIServer.mockResolvedValue([
+      'transformed',
+      [
+        mockQueryResponses[0],
+        {
+          error: 'app',
+          id: 'query2',
+          name: 'getPostsByUser',
+          details: 'Query syntax error',
+        },
+      ],
+    ] satisfies TransformResponseMessage);
 
     const transformer = new CustomQueryTransformer(
       lc,
@@ -230,15 +229,19 @@ describe('CustomQueryTransformer', () => {
     ]);
   });
 
-  test('should return HttpError when fetch response is not ok', async () => {
-    const mockErrorResponse = new Response(
-      'Bad Request: Invalid query format',
-      {
-        status: 400,
-      },
-    );
+  test('should return TransformFailedBody when fetch response is not ok', async () => {
+    // HTTP errors now throw ProtocolError from fetchFromAPIServer
+    const httpError = new ProtocolError({
+      kind: ErrorKind.TransformFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.HTTP,
+      status: 400,
+      bodyPreview: 'Bad Request: Invalid query format',
+      message: 'Fetch from API server returned non-OK status 400',
+      queryIDs: [],
+    });
 
-    mockFetchFromAPIServer.mockResolvedValue(mockErrorResponse);
+    mockFetchFromAPIServer.mockRejectedValue(httpError);
 
     const transformer = new CustomQueryTransformer(
       lc,
@@ -254,31 +257,21 @@ describe('CustomQueryTransformer', () => {
       undefined,
     );
 
-    expect(result).toEqual([
-      {
-        details: 'Bad Request: Invalid query format',
-        error: 'http',
-        id: 'query1',
-        name: 'getUserById',
-        status: 400,
-      },
-      {
-        details: 'Bad Request: Invalid query format',
-        error: 'http',
-        id: 'query2',
-        name: 'getPostsByUser',
-        status: 400,
-      },
-    ]);
+    // Should return TransformFailedBody with queryIDs filled in
+    expect(result).toEqual({
+      kind: ErrorKind.TransformFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.HTTP,
+      status: 400,
+      bodyPreview: 'Bad Request: Invalid query format',
+      message: 'Fetch from API server returned non-OK status 400',
+      queryIDs: ['query1', 'query2'],
+    });
   });
 
   test('should handle empty queries array', async () => {
-    const mockSuccessResponse = new Response(
-      JSON.stringify(['transformed', []]),
-      {status: 200},
-    );
-
-    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse);
+    // Mock now returns the parsed response directly
+    mockFetchFromAPIServer.mockResolvedValue(['transformed', []]);
 
     const transformer = new CustomQueryTransformer(
       lc,
@@ -296,13 +289,10 @@ describe('CustomQueryTransformer', () => {
 
   test('should not fetch cached responses', async () => {
     const mockSuccessResponse = () =>
-      new Response(
-        JSON.stringify([
-          'transformed',
-          [mockQueryResponses[0]],
-        ] satisfies TransformResponseMessage),
-        {status: 200},
-      );
+      [
+        'transformed',
+        [mockQueryResponses[0]],
+      ] satisfies TransformResponseMessage;
 
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
@@ -332,13 +322,10 @@ describe('CustomQueryTransformer', () => {
 
   test('should cache successful responses for 5 seconds', async () => {
     const mockSuccessResponse = () =>
-      new Response(
-        JSON.stringify([
-          'transformed',
-          [mockQueryResponses[0]],
-        ] satisfies TransformResponseMessage),
-        {status: 200},
-      );
+      [
+        'transformed',
+        [mockQueryResponses[0]],
+      ] satisfies TransformResponseMessage;
 
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
@@ -369,22 +356,16 @@ describe('CustomQueryTransformer', () => {
 
   test('should handle mixed cached and uncached queries', async () => {
     const mockResponse1 = () =>
-      new Response(
-        JSON.stringify([
-          'transformed',
-          [mockQueryResponses[0]],
-        ] satisfies TransformResponseMessage),
-        {status: 200},
-      );
+      [
+        'transformed',
+        [mockQueryResponses[0]],
+      ] satisfies TransformResponseMessage;
 
     const mockResponse2 = () =>
-      new Response(
-        JSON.stringify([
-          'transformed',
-          [mockQueryResponses[1]],
-        ] satisfies TransformResponseMessage),
-        {status: 200},
-      );
+      [
+        'transformed',
+        [mockQueryResponses[1]],
+      ] satisfies TransformResponseMessage;
 
     mockFetchFromAPIServer
       .mockResolvedValueOnce(mockResponse1())
@@ -403,6 +384,8 @@ describe('CustomQueryTransformer', () => {
     await transformer.transform(headerOptions, [mockQueries[0]], undefined);
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
     expect(mockFetchFromAPIServer).toHaveBeenLastCalledWith(
+      expect.anything(), // validator
+      'transform', // source
       lc,
       'https://api.example.com/pull',
       [expectUrlPatternMatching('https://api.example.com/pull')],
@@ -419,6 +402,8 @@ describe('CustomQueryTransformer', () => {
     );
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
     expect(mockFetchFromAPIServer).toHaveBeenLastCalledWith(
+      expect.anything(), // validator
+      'transform', // source
       lc,
       pullUrl,
       [expectUrlPatternMatching(pullUrl)],
@@ -437,13 +422,10 @@ describe('CustomQueryTransformer', () => {
 
   test('should not forward cookies if forwardCookies is false', async () => {
     const mockSuccessResponse = () =>
-      new Response(
-        JSON.stringify([
-          'transformed',
-          [mockQueryResponses[0]],
-        ] satisfies TransformResponseMessage),
-        {status: 200},
-      );
+      [
+        'transformed',
+        [mockQueryResponses[0]],
+      ] satisfies TransformResponseMessage;
 
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
@@ -464,6 +446,8 @@ describe('CustomQueryTransformer', () => {
     );
 
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      expect.anything(), // validator
+      'transform', // source
       lc,
       pullUrl,
       [expectUrlPatternMatching(pullUrl)],
@@ -477,13 +461,10 @@ describe('CustomQueryTransformer', () => {
 
   test('should forward cookies if forwardCookies is true', async () => {
     const mockSuccessResponse = () =>
-      new Response(
-        JSON.stringify([
-          'transformed',
-          [mockQueryResponses[0]],
-        ] satisfies TransformResponseMessage),
-        {status: 200},
-      );
+      [
+        'transformed',
+        [mockQueryResponses[0]],
+      ] satisfies TransformResponseMessage;
 
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
@@ -504,6 +485,8 @@ describe('CustomQueryTransformer', () => {
     );
 
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      expect.anything(), // validator
+      'transform', // source
       lc,
       pullUrl,
       [expectUrlPatternMatching(pullUrl)],
@@ -517,20 +500,17 @@ describe('CustomQueryTransformer', () => {
 
   test('should not cache error responses', async () => {
     const mockErrorResponse = () =>
-      new Response(
-        JSON.stringify([
-          'transformed',
-          [
-            {
-              error: 'app',
-              id: 'query1',
-              name: 'getUserById',
-              details: 'Query syntax error',
-            },
-          ],
-        ] satisfies TransformResponseMessage),
-        {status: 200},
-      );
+      [
+        'transformed',
+        [
+          {
+            error: 'app',
+            id: 'query1',
+            name: 'getUserById',
+            details: 'Query syntax error',
+          },
+        ],
+      ] satisfies TransformResponseMessage;
 
     mockFetchFromAPIServer.mockResolvedValue(mockErrorResponse());
 
@@ -567,13 +547,10 @@ describe('CustomQueryTransformer', () => {
 
   test('should use cache key based on header options and query id', async () => {
     const mockSuccessResponse = () =>
-      new Response(
-        JSON.stringify([
-          'transformed',
-          [mockQueryResponses[0]],
-        ] satisfies TransformResponseMessage),
-        {status: 200},
-      );
+      [
+        'transformed',
+        [mockQueryResponses[0]],
+      ] satisfies TransformResponseMessage;
 
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
@@ -613,13 +590,10 @@ describe('CustomQueryTransformer', () => {
     const customUrl = 'https://custom-api.example.com/transform';
 
     const mockSuccessResponse = () =>
-      new Response(
-        JSON.stringify([
-          'transformed',
-          [mockQueryResponses[0]],
-        ] satisfies TransformResponseMessage),
-        {status: 200},
-      );
+      [
+        'transformed',
+        [mockQueryResponses[0]],
+      ] satisfies TransformResponseMessage;
 
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
@@ -638,6 +612,8 @@ describe('CustomQueryTransformer', () => {
 
     // Verify custom URL was used instead of default
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      expect.anything(), // validator
+      'transform', // source
       lc,
       customUrl,
       [expectUrlPatternMatching(pullUrl)], // Pattern still compiled from config
@@ -649,13 +625,10 @@ describe('CustomQueryTransformer', () => {
 
   test('should use default URL when userQueryURL is undefined', async () => {
     const mockSuccessResponse = () =>
-      new Response(
-        JSON.stringify([
-          'transformed',
-          [mockQueryResponses[0]],
-        ] satisfies TransformResponseMessage),
-        {status: 200},
-      );
+      [
+        'transformed',
+        [mockQueryResponses[0]],
+      ] satisfies TransformResponseMessage;
 
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
 
@@ -672,6 +645,8 @@ describe('CustomQueryTransformer', () => {
 
     // Verify default URL from config was used
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      expect.anything(), // validator
+      'transform', // source
       lc,
       pullUrl,
       [expectUrlPatternMatching(pullUrl)],
@@ -684,6 +659,7 @@ describe('CustomQueryTransformer', () => {
   test('should reject disallowed custom URL', async () => {
     const disallowedUrl = 'https://malicious.com/endpoint';
 
+    // fetchFromAPIServer will throw a regular Error (not ProtocolError) for disallowed URLs
     mockFetchFromAPIServer.mockRejectedValue(
       new Error(
         `URL "${disallowedUrl}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
@@ -707,18 +683,19 @@ describe('CustomQueryTransformer', () => {
       userQueryURL,
     );
 
-    // Verify the disallowed URL caused an error
-    expect(result).toEqual([
-      {
-        error: 'zero',
-        details: `URL "${disallowedUrl}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
-        id: 'query1',
-        name: 'getUserById',
-      },
-    ]);
+    // Should return TransformFailedBody with the error message
+    expect(result).toEqual({
+      kind: ErrorKind.TransformFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.Internal,
+      message: `URL "${disallowedUrl}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
+      queryIDs: ['query1'],
+    });
 
     // Verify the disallowed URL was attempted to be used
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      expect.anything(), // validator
+      'transform', // source
       lc,
       disallowedUrl,
       [expectUrlPatternMatching(pullUrl)], // Pattern still compiled from config
@@ -728,16 +705,16 @@ describe('CustomQueryTransformer', () => {
     );
   });
 
-  test('should re-throw ErrorForClient exceptions', async () => {
-    const errorForClient = new ErrorForClient(
-      {
-        kind: ErrorKind.AuthInvalidated,
-        message: 'Authentication token expired',
-      },
-      'error',
-    );
+  test('should handle ProtocolError with TransformFailed kind', async () => {
+    const protocolError = new ProtocolError({
+      kind: ErrorKind.TransformFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.Timeout,
+      message: 'Request timed out',
+      queryIDs: [], // Will be overridden with actual queryIDs
+    });
 
-    mockFetchFromAPIServer.mockRejectedValue(errorForClient);
+    mockFetchFromAPIServer.mockRejectedValue(protocolError);
 
     const transformer = new CustomQueryTransformer(
       lc,
@@ -748,13 +725,25 @@ describe('CustomQueryTransformer', () => {
       mockShard,
     );
 
-    // This should re-throw the ErrorForClient exception
-    await expect(
-      transformer.transform(headerOptions, [mockQueries[0]], undefined),
-    ).rejects.toThrow(errorForClient);
+    // Should return TransformFailedBody with queryIDs filled in
+    const result = await transformer.transform(
+      headerOptions,
+      [mockQueries[0]],
+      undefined,
+    );
+
+    expect(result).toEqual({
+      kind: ErrorKind.TransformFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.Timeout,
+      message: 'Request timed out',
+      queryIDs: ['query1'],
+    });
 
     // Verify the API was called
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      expect.anything(), // validator
+      'transform', // source
       lc,
       pullUrl,
       [expectUrlPatternMatching(pullUrl)],
@@ -764,7 +753,7 @@ describe('CustomQueryTransformer', () => {
     );
   });
 
-  test('should convert non-ErrorForClient exceptions to error responses', async () => {
+  test('should convert non-ProtocolError exceptions to error responses', async () => {
     const genericError = new Error('Network timeout');
 
     mockFetchFromAPIServer.mockRejectedValue(genericError);
@@ -786,17 +775,18 @@ describe('CustomQueryTransformer', () => {
     );
 
     // Verify it returns an error response instead of throwing
-    expect(result).toEqual([
-      {
-        error: 'zero',
-        details: 'Network timeout',
-        id: 'query1',
-        name: 'getUserById',
-      },
-    ]);
+    expect(result).toEqual({
+      kind: ErrorKind.TransformFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.Internal,
+      message: 'Network timeout',
+      queryIDs: ['query1'],
+    });
 
     // Verify the API was called
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
+      expect.anything(), // validator
+      'transform', // source
       lc,
       pullUrl,
       [expectUrlPatternMatching(pullUrl)],
@@ -804,5 +794,62 @@ describe('CustomQueryTransformer', () => {
       headerOptions,
       ['transform', [{id: 'query1', name: 'getUserById', args: [123]}]],
     );
+  });
+
+  test('should pass through transformFailed response from API server', async () => {
+    // API server returns 200 OK but with a transformFailed message
+    const transformFailedBody: TransformFailedBody = {
+      kind: ErrorKind.TransformFailed,
+      origin: ErrorOrigin.Server,
+      reason: ErrorReason.Parse,
+      message: 'Unable to transform query due to invalid schema',
+      queryIDs: ['query1', 'query2'],
+    };
+
+    mockFetchFromAPIServer.mockResolvedValue([
+      'transformFailed',
+      transformFailedBody,
+    ] satisfies TransformResponseMessage);
+
+    const transformer = new CustomQueryTransformer(
+      lc,
+      {url: [pullUrl], forwardCookies: false},
+      mockShard,
+    );
+
+    const result = await transformer.transform(
+      headerOptions,
+      mockQueries,
+      undefined,
+    );
+
+    // Should return transformFailedBody when transformFailed response is received
+    expect(result).toEqual(transformFailedBody);
+  });
+
+  test('should handle non-Error exceptions', async () => {
+    // Some libraries or code might throw non-Error objects
+    // e.g., throw "connection failed" or throw {code: 500}
+    mockFetchFromAPIServer.mockRejectedValue('string error thrown');
+
+    const transformer = new CustomQueryTransformer(
+      lc,
+      {url: [pullUrl], forwardCookies: false},
+      mockShard,
+    );
+
+    const result = await transformer.transform(
+      headerOptions,
+      [mockQueries[0]],
+      undefined,
+    );
+
+    expect(result).toEqual({
+      kind: ErrorKind.TransformFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.Internal,
+      message: 'An unknown error occurred while transforming queries.',
+      queryIDs: ['query1'],
+    });
   });
 });

@@ -23,9 +23,9 @@ import {
   getOrCreateCounter,
   getOrCreateHistogram,
 } from '../../observability/metrics.ts';
-import {getLogLevel} from '../../types/error-for-client.ts';
+import {getLogLevel} from '../../types/error-with-level.ts';
 import {
-  getErrorForClientIfSchemaVersionNotSupported,
+  getProtocolErrorIfSchemaVersionNotSupported,
   type SchemaVersions,
 } from '../../types/schema-versions.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
@@ -42,6 +42,12 @@ import {
   type RowID,
 } from './schema/types.ts';
 import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts';
+import {
+  ProtocolError,
+  toProtocolError,
+  type TransformFailedBody,
+} from '../../../../zero-protocol/src/error.ts';
+import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 
 export type PutRowPatch = {
   type: 'row';
@@ -176,7 +182,7 @@ export class ClientHandler {
       `view-syncer closing connection with error: ${String(e)}`,
       e,
     );
-    this.#downstream.fail(e instanceof Error ? e : new Error(String(e)));
+    this.#downstream.fail(toProtocolError(e, ErrorOrigin.ZeroCache));
   }
 
   close(reason: string) {
@@ -192,7 +198,7 @@ export class ClientHandler {
     const lc = this.#lc.withContext('pokeID', pokeID);
 
     if (schemaVersions && this.#schemaVersion) {
-      const schemaVersionError = getErrorForClientIfSchemaVersionNotSupported(
+      const schemaVersionError = getProtocolErrorIfSchemaVersionNotSupported(
         this.#schemaVersion,
         schemaVersions,
       );
@@ -318,7 +324,7 @@ export class ClientHandler {
             this.#pokedRows.add(1);
           }
         } catch (e) {
-          this.#downstream.fail(e instanceof Error ? e : new Error(String(e)));
+          this.#downstream.fail(toProtocolError(e, ErrorOrigin.ZeroCache));
         }
       },
 
@@ -370,8 +376,12 @@ export class ClientHandler {
     await this.#push(['deleteClients', deleteClientsBody]);
   }
 
-  sendQueryTransformErrors(errors: ErroredQuery[]) {
+  sendQueryTransformApplicationErrors(errors: ErroredQuery[]) {
     void this.#push(['transformError', errors]);
+  }
+
+  sendQueryTransformFailedError(error: TransformFailedBody) {
+    this.fail(new ProtocolError(error));
   }
 
   sendInspectResponse(lc: LogContext, response: InspectDownBody): void {
