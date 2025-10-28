@@ -5,7 +5,10 @@ import {
 import type {FormatConfig, SQLItem, SQLQuery} from '@databases/sql';
 import baseSql, {SQLItemType} from '@databases/sql';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
-import {isPgNumberType, isPgStringType} from '../../zero-cache/src/types/pg.ts';
+import {
+  isPgNumberType,
+  isPgStringType,
+} from '../../zero-cache/src/types/pg-data-type.ts';
 import type {LiteralValue} from '../../zero-protocol/src/ast.ts';
 import type {ServerColumnSchema} from '../../zero-schema/src/server-schema.ts';
 
