@@ -160,6 +160,7 @@ import {
   getBackoffParams,
   getErrorConnectionTransition,
   isAuthError,
+  isClientError,
   isServerError,
   NO_STATUS_TRANSITION,
   type ZeroError,
@@ -1835,7 +1836,7 @@ export class Zero<
           case ConnectionStatus.Error: {
             // we pause the run loop and wait for a state change
             lc.info?.(
-              `Run loop paused in error state. Call connect() to resume.`,
+              `Run loop paused in error state. Call zero.connection.connect() to resume.`,
               currentState.reason,
             );
 
@@ -1851,7 +1852,13 @@ export class Zero<
             unreachable(currentState);
         }
       } catch (ex) {
-        if (!this.#connectionManager.is(ConnectionStatus.Connected)) {
+        const isClientClosedError =
+          isClientError(ex) && ex.kind === ClientErrorKind.ClientClosed;
+
+        if (
+          !this.#connectionManager.is(ConnectionStatus.Connected) &&
+          !isClientClosedError
+        ) {
           const level = isAuthError(ex) ? 'warn' : 'error';
           const kind = isServerError(ex) ? ex.kind : 'Unknown Error';
           lc[level]?.('Failed to connect', ex, kind, {
