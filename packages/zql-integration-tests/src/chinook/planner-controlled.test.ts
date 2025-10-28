@@ -15,8 +15,9 @@ describe('one join', () => {
     const unplanned = builder.track.whereExists('album').ast;
     const planned = planQuery(unplanned, costModel);
 
-    // All plans are same cost, use original order
-    expect(planned).toEqual(unplanned);
+    // With semi-join overhead, planner now prefers flipped joins even when base costs are equal
+    // This is expected: flipped joins are more efficient than semi-joins for equal row counts
+    expect(pick(planned, ['where', 'flip'])).toBe(true);
   });
 
   test('track.exists(album): track is more expensive', () => {
@@ -190,11 +191,12 @@ describe('double nested exists', () => {
       costModel,
     );
 
-    // join order: album -> artist -> track
+    // join order: artist -> album -> track
+    // With semi-join overhead, planner now flips both joins to avoid overhead
     expect(pick(planned, ['where', 'flip'])).toBe(true);
     expect(
       pick(planned, ['where', 'related', 'subquery', 'where', 'flip']),
-    ).toBe(false);
+    ).toBe(true);
   });
 });
 

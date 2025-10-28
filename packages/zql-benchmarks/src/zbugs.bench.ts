@@ -97,9 +97,6 @@ function benchmarkQuery<TTable extends keyof typeof schema.tables & string>(
   // oxlint-disable-next-line no-explicit-any
   query: Query<typeof schema, TTable, any>,
 ) {
-  if (name !== 'issueList - roci project, multiple labels') {
-    return;
-  }
   const unplannedAST = query.ast;
 
   // Map to server names, plan, then map back to client names

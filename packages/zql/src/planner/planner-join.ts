@@ -10,6 +10,21 @@ import type {
 } from './planner-node.ts';
 
 /**
+ * Semi-join overhead multiplier.
+ *
+ * Semi-joins represent correlated subqueries (EXISTS checks) which have
+ * execution overhead compared to regular joins, even when logical row counts
+ * are identical. This overhead comes from:
+ * - Need to execute a separate correlation check for each parent row
+ * - Cannot leverage combined constraint checking as effectively as flipped joins
+ *
+ * A multiplier of 1.5 means semi-joins are estimated to be ~50% more expensive
+ * than equivalent flipped joins, which empirically matches observed performance
+ * differences in production workloads (e.g., 1.7x in zbugs benchmarks).
+ */
+const SEMI_JOIN_OVERHEAD_MULTIPLIER = 1.5;
+
+/**
  * Represents a join between two data streams (parent and child).
  *
  * # Dual-State Pattern
@@ -184,14 +199,28 @@ export class PlannerJoin {
 
     if (this.#parent.closestJoinOrSource() === 'join') {
       // if the parent is a join, we're in a pipeline rather than nesting of joins.
+      const pipelineCost =
+        this.#type === 'flipped'
+          ? childCost.startupCost +
+            childCost.runningCost * (parentCost.startupCost + scanEst)
+          : parentCost.runningCost +
+            scanEst * (childCost.startupCost + childCost.runningCost);
+
+      // Apply semi-join overhead multiplier to account for correlated subquery execution cost
+      // Inflate both runningCost and baseCardinality so the overhead propagates through joins
+      const adjustedPipelineCost =
+        this.#type === 'semi'
+          ? pipelineCost * SEMI_JOIN_OVERHEAD_MULTIPLIER
+          : pipelineCost;
+
+      const adjustedBaseCardinality =
+        this.#type === 'semi'
+          ? parentCost.baseCardinality * SEMI_JOIN_OVERHEAD_MULTIPLIER
+          : parentCost.baseCardinality;
+
       return {
-        baseCardinality: parentCost.baseCardinality,
-        runningCost:
-          this.#type === 'flipped'
-            ? childCost.startupCost +
-              childCost.runningCost * (parentCost.startupCost + scanEst)
-            : parentCost.runningCost +
-              scanEst * (childCost.startupCost + childCost.runningCost),
+        baseCardinality: adjustedBaseCardinality,
+        runningCost: adjustedPipelineCost,
         startupCost: parentCost.startupCost,
         selectivity: parentCost.selectivity,
         limit: parentCost.limit,
@@ -199,12 +228,26 @@ export class PlannerJoin {
     }
 
     // if the parent is a source, we're in a nested loop join
+    const nestedLoopCost =
+      this.#type === 'flipped'
+        ? childCost.runningCost * (parentCost.startupCost + scanEst)
+        : scanEst * (childCost.startupCost + childCost.runningCost);
+
+    // Apply semi-join overhead multiplier to account for correlated subquery execution cost
+    // Inflate both runningCost and baseCardinality so the overhead propagates through joins
+    const adjustedNestedLoopCost =
+      this.#type === 'semi'
+        ? nestedLoopCost * SEMI_JOIN_OVERHEAD_MULTIPLIER
+        : nestedLoopCost;
+
+    const adjustedBaseCardinality =
+      this.#type === 'semi'
+        ? parentCost.baseCardinality * SEMI_JOIN_OVERHEAD_MULTIPLIER
+        : parentCost.baseCardinality;
+
     return {
-      baseCardinality: parentCost.baseCardinality,
-      runningCost:
-        this.#type === 'flipped'
-          ? childCost.runningCost * (parentCost.startupCost + scanEst)
-          : scanEst * (childCost.startupCost + childCost.runningCost),
+      baseCardinality: adjustedBaseCardinality,
+      runningCost: adjustedNestedLoopCost,
       startupCost: parentCost.startupCost,
       selectivity: parentCost.selectivity,
       limit: parentCost.limit,
