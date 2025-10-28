@@ -1,5 +1,14 @@
 import {describe, expect, test} from 'vitest';
-
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
+import {
+  ProtocolError,
+  type BackoffBody,
+  type ErrorBody,
+} from '../../../zero-protocol/src/error.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
+import {ConnectionStatus} from './connection-status.ts';
 import {
   ClientError,
   getBackoffParams,
@@ -7,16 +16,8 @@ import {
   isAuthError,
   isClientError,
   isServerError,
+  NO_STATUS_TRANSITION,
 } from './error.ts';
-import {ClientErrorKind} from './client-error-kind.ts';
-import {ConnectionStatus} from './connection-status.ts';
-import {
-  ProtocolError,
-  type BackoffBody,
-  type ErrorBody,
-} from '../../../zero-protocol/src/error.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 
 describe('ClientError', () => {
   test('exposes error body and metadata', () => {
@@ -141,7 +142,7 @@ describe('isAuthError', () => {
     const error = new ProtocolError({
       kind: ErrorKind.PushFailed,
       origin: ErrorOrigin.ZeroCache,
-      type: 'http',
+      reason: ErrorReason.HTTP,
       status: 401,
       message: 'Unauthorized',
       mutationIDs: [],
@@ -154,7 +155,7 @@ describe('isAuthError', () => {
     const error = new ProtocolError({
       kind: ErrorKind.PushFailed,
       origin: ErrorOrigin.ZeroCache,
-      type: 'http',
+      reason: ErrorReason.HTTP,
       status: 403,
       message: 'Forbidden',
       mutationIDs: [],
@@ -167,7 +168,7 @@ describe('isAuthError', () => {
     const error = new ProtocolError({
       kind: ErrorKind.TransformFailed,
       origin: ErrorOrigin.ZeroCache,
-      type: 'http',
+      reason: ErrorReason.HTTP,
       status: 401,
       message: 'Unauthorized',
       queries: [],
@@ -180,7 +181,7 @@ describe('isAuthError', () => {
     const error = new ProtocolError({
       kind: ErrorKind.TransformFailed,
       origin: ErrorOrigin.ZeroCache,
-      type: 'http',
+      reason: ErrorReason.HTTP,
       status: 403,
       message: 'Forbidden',
       queries: [],
@@ -193,7 +194,7 @@ describe('isAuthError', () => {
     const error = new ProtocolError({
       kind: ErrorKind.PushFailed,
       origin: ErrorOrigin.ZeroCache,
-      type: 'http',
+      reason: ErrorReason.HTTP,
       status: 500,
       message: 'Internal Server Error',
       mutationIDs: [],
@@ -206,7 +207,7 @@ describe('isAuthError', () => {
     const error = new ProtocolError({
       kind: ErrorKind.PushFailed,
       origin: ErrorOrigin.ZeroCache,
-      type: 'internal',
+      reason: ErrorReason.Internal,
       message: 'Internal error',
       mutationIDs: [],
     });
@@ -266,7 +267,7 @@ describe('getErrorConnectionTransition', () => {
     });
 
     expect(getErrorConnectionTransition(error)).toEqual({
-      status: null,
+      status: NO_STATUS_TRANSITION,
       reason: error,
     });
   });
@@ -336,7 +337,7 @@ describe('getErrorConnectionTransition', () => {
     });
 
     expect(getErrorConnectionTransition(error)).toEqual({
-      status: null,
+      status: NO_STATUS_TRANSITION,
       reason: error,
     });
   });
@@ -368,14 +369,14 @@ describe('getErrorConnectionTransition', () => {
     const error = new ProtocolError({
       kind: ErrorKind.PushFailed,
       origin: ErrorOrigin.ZeroCache,
-      type: 'http',
+      reason: ErrorReason.HTTP,
       status: 401,
       message: 'Unauthorized',
       mutationIDs: [],
     });
 
     expect(getErrorConnectionTransition(error)).toEqual({
-      status: null,
+      status: NO_STATUS_TRANSITION,
       reason: error,
     });
   });

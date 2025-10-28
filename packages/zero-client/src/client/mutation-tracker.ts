@@ -24,6 +24,7 @@ import {MUTATIONS_KEY_PREFIX} from './keys.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ProtocolError} from '../../../zero-protocol/src/error.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 
 type ErrorType =
   | MutationError
@@ -183,7 +184,7 @@ export class MutationTracker {
         return new ProtocolError({
           kind: ErrorKind.PushFailed,
           origin: ErrorOrigin.ZeroCache,
-          type: 'internal',
+          reason: ErrorReason.Internal,
           message: `Unsupported push version`,
           mutationIDs: [],
         });
@@ -191,7 +192,7 @@ export class MutationTracker {
         return new ProtocolError({
           kind: ErrorKind.PushFailed,
           origin: ErrorOrigin.ZeroCache,
-          type: 'internal',
+          reason: ErrorReason.Internal,
           message: `Unsupported schema version`,
           mutationIDs: [],
         });
@@ -199,7 +200,7 @@ export class MutationTracker {
         return new ProtocolError({
           kind: ErrorKind.PushFailed,
           origin: ErrorOrigin.ZeroCache,
-          type: 'http',
+          reason: ErrorReason.HTTP,
           status: error.status,
           message: `Fetch from API server returned non-OK status ${error.status}: ${error.details ?? 'unknown'}`,
           mutationIDs: [],
@@ -208,7 +209,7 @@ export class MutationTracker {
         return new ProtocolError({
           kind: ErrorKind.PushFailed,
           origin: ErrorOrigin.ZeroCache,
-          type: 'internal',
+          reason: ErrorReason.Internal,
           message: `ZeroPusher error: ${error.details ?? 'unknown'}`,
           mutationIDs: [],
         });
@@ -341,7 +342,7 @@ export class MutationTracker {
         new ProtocolError({
           kind: ErrorKind.InvalidPush,
           origin: ErrorOrigin.Server,
-          type: 'oooMutation',
+          reason: ErrorReason.Internal,
           message: 'Server reported an out-of-order mutation',
           details: error.details,
         }),

@@ -52,7 +52,7 @@ export function isAuthError(ex: unknown): ex is ProtocolError & {
     if (
       (ex.errorBody.kind === ErrorKind.PushFailed ||
         ex.errorBody.kind === ErrorKind.TransformFailed) &&
-      ex.errorBody.reason === ErrorReason.Http &&
+      ex.errorBody.reason === ErrorReason.HTTP &&
       (ex.errorBody.status === 401 || ex.errorBody.status === 403)
     ) {
       return true;
@@ -84,6 +84,8 @@ export function isClientError(ex: unknown): ex is ClientError {
   return ex instanceof ClientError;
 }
 
+export const NO_STATUS_TRANSITION = 'NO_STATUS_TRANSITION';
+
 /**
  * Returns the status to transition to, or null if the error
  * indicates that the connection should continue in the current state.
@@ -99,7 +101,7 @@ export function getErrorConnectionTransition(ex: unknown) {
       case ClientErrorKind.PullTimeout:
       case ClientErrorKind.Hidden:
       case ClientErrorKind.NoSocketOrigin:
-        return {status: null, reason: ex} as const;
+        return {status: NO_STATUS_TRANSITION, reason: ex} as const;
 
       // Fatal errors that should transition to error state
       case ClientErrorKind.UnexpectedBaseCookie:
@@ -123,7 +125,7 @@ export function getErrorConnectionTransition(ex: unknown) {
 
   // TODO(0xcadams): change this once we have a proper auth error handling flow
   if (isAuthError(ex)) {
-    return {status: null, reason: ex} as const;
+    return {status: NO_STATUS_TRANSITION, reason: ex} as const;
   }
 
   if (isServerError(ex)) {
@@ -147,18 +149,18 @@ export function getErrorConnectionTransition(ex: unknown) {
       case ErrorKind.Rebalance:
       case ErrorKind.Rehome:
       case ErrorKind.ServerOverloaded:
-        return {status: null, reason: ex} as const;
+        return {status: NO_STATUS_TRANSITION, reason: ex} as const;
 
       // Auth errors will eventually transition to needs-auth state
       // For now, treat them as non-fatal so we can retry
       case ErrorKind.AuthInvalidated:
       case ErrorKind.Unauthorized:
-        return {status: null, reason: ex} as const;
+        return {status: NO_STATUS_TRANSITION, reason: ex} as const;
 
       // Mutation-specific errors don't affect connection state
       case ErrorKind.MutationRateLimited:
       case ErrorKind.MutationFailed:
-        return {status: null, reason: ex} as const;
+        return {status: NO_STATUS_TRANSITION, reason: ex} as const;
 
       default:
         unreachable(ex.kind);

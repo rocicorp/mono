@@ -13,6 +13,7 @@ import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/chang
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import type {UpQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import {
@@ -226,7 +227,7 @@ export class QueryManager implements InspectorDelegate {
               ? {
                   kind: ErrorKind.TransformFailed,
                   origin: ErrorOrigin.ZeroCache,
-                  type: 'http',
+                  reason: ErrorReason.HTTP,
                   message: `HTTP ${error.status} transforming queries`,
                   status: error.status,
                   queryIDs: [],
@@ -234,7 +235,7 @@ export class QueryManager implements InspectorDelegate {
               : {
                   kind: ErrorKind.TransformFailed,
                   origin: ErrorOrigin.ZeroCache,
-                  type: 'internal',
+                  reason: ErrorReason.Internal,
                   message: `Unknown error transforming queries`,
                   queryIDs: [],
                 },

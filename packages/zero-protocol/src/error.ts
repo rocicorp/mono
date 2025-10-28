@@ -81,7 +81,7 @@ export const pushFailedBodySchema = v.union(
   }),
   pushFailedBaseSchema.extend({
     origin: v.literal(ErrorOrigin.ZeroCache),
-    reason: v.literal(ErrorReason.Http),
+    reason: v.literal(ErrorReason.HTTP),
     status: v.number(),
     bodyPreview: v.string().optional(),
   }),
@@ -113,7 +113,7 @@ export const transformFailedBodySchema = v.union(
   }),
   transformFailedBaseSchema.extend({
     origin: v.literal(ErrorOrigin.ZeroCache),
-    reason: v.literal(ErrorReason.Http),
+    reason: v.literal(ErrorReason.HTTP),
     status: v.number(),
     bodyPreview: v.string().optional(),
   }),

@@ -161,6 +161,7 @@ import {
   getErrorConnectionTransition,
   isAuthError,
   isServerError,
+  NO_STATUS_TRANSITION,
   type ZeroError,
 } from './error.ts';
 import {getServer} from './server-option.ts';
@@ -1541,7 +1542,7 @@ export class Zero<
       case ConnectionStatus.Closed:
         this.#connectionManager.closed();
         break;
-      case null:
+      case NO_STATUS_TRANSITION:
         this.#connectionManager.connecting(transition.reason);
         break;
       default:
@@ -1870,7 +1871,7 @@ export class Zero<
         const transition = getErrorConnectionTransition(ex);
 
         switch (transition.status) {
-          case null: {
+          case NO_STATUS_TRANSITION: {
             // We continue the loop because the error does not indicate
             // a need to transition to a new state and we should continue retrying
 
