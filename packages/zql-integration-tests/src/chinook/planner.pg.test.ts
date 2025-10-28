@@ -8,6 +8,9 @@ import {
   NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
 import {makeGetPlanAST, pick} from '../helpers/planner.ts';
+import {computeZqlSpecs} from '../../../zero-cache/src/db/lite-tables.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {LiteAndZqlSpec} from '../../../zero-cache/src/db/specs.ts';
 
 const pgContent = await getChinook();
 
@@ -25,25 +28,11 @@ describe('Chinook planner tests', () => {
     mapper = clientToServer(schema.tables);
     dbs.sqlite.exec('ANALYZE;');
 
-    costModel = createSQLiteCostModel(
-      dbs.sqlite,
-      Object.fromEntries(
-        Object.entries(schema.tables).map(([k, v]) => [
-          'serverName' in v ? v.serverName : k,
-          {
-            columns: Object.fromEntries(
-              Object.entries(v.columns).map(([colName, col]) => [
-                'serverName' in col ? col.serverName : colName,
-                {
-                  ...col,
-                },
-              ]),
-            ),
-            primaryKey: v.primaryKey,
-          },
-        ]),
-      ),
-    );
+    // Get table specs using computeZqlSpecs
+    const tableSpecs = new Map<string, LiteAndZqlSpec>();
+    computeZqlSpecs(createSilentLogContext(), dbs.sqlite, tableSpecs);
+
+    costModel = createSQLiteCostModel(dbs.sqlite, tableSpecs);
 
     getPlanAST = makeGetPlanAST(mapper, costModel);
   });
@@ -66,7 +55,7 @@ describe('Chinook planner tests', () => {
     );
 
     expect(pick(ast, ['where', 'conditions', 0, 'flip'])).toBe(true);
-    expect(pick(ast, ['where', 'conditions', 1, 'flip'])).toBe(false);
+    expect(pick(ast, ['where', 'conditions', 1, 'flip'])).toBe(true);
   });
 
   test('playlist with track', () => {
@@ -81,15 +70,7 @@ describe('Chinook planner tests', () => {
 
   test('tracks with playlist', () => {
     const ast = getPlanAST(queries.sqlite.track.whereExists('playlists'));
-
-    // TODO:
-    // This is where SELECTIVITY_PLAN.md would help.
-    // We assume a selectivity of 1 on playlist_track and playlist
-    // because there are no filters.
-    // but a track may not be part of a playlist!
-    // If many tracks are not part of any playlist
-    // then flipping would be better.
-    expect(pick(ast, ['where', 'flip'])).toBe(false);
+    expect(pick(ast, ['where', 'flip'])).toBe(true);
   });
 
   test('has album a or album b', () => {

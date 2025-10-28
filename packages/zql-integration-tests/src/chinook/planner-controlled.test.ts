@@ -2,22 +2,24 @@
 import {describe, expect, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
-import type {AST, Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
+import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
 import {planQuery} from '../../../zql/src/planner/planner-builder.ts';
+import type {CostModelCost} from '../../../zql/src/planner/planner-connection.ts';
 import type {PlannerConstraint} from '../../../zql/src/planner/planner-constraint.ts';
 import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {pick} from '../helpers/planner.ts';
 import {builder} from './schema.ts';
 
-function ast(q: AnyQuery): AST {
-  return queryWithContext(q, undefined).completedAST;
+function ast(q: AnyQuery) {
+  return queryWithContext(q, undefined).ast;
 }
 
 describe('one join', () => {
   test('no changes in cost', () => {
-    const costModel = () => 10;
+    const costModel = () => ({startupCost: 0, baseCardinality: 10});
     const unplanned = ast(builder.track.whereExists('album'));
+
     const planned = planQuery(unplanned, costModel);
 
     // All plans are same cost, use original order
@@ -98,7 +100,7 @@ describe('two joins via or', () => {
       _sort: Ordering,
       _filters: Condition | undefined,
       constraint: PlannerConstraint | undefined,
-    ) => {
+    ): CostModelCost => {
       if (table === 'album') {
         if (constraint !== undefined) {
           // fetching album by id
@@ -106,9 +108,9 @@ describe('two joins via or', () => {
             constraint.hasOwnProperty('id'),
             'Expected constraint to have id',
           );
-          return 1;
+          return {startupCost: 0, baseCardinality: 1};
         }
-        return 2; // only 2 albums with the name 'Outlaw Blues'
+        return {startupCost: 0, baseCardinality: 2}; // only 2 albums with the name 'Outlaw Blues'
       }
 
       if (table === 'invoiceLine') {
@@ -121,23 +123,23 @@ describe('two joins via or', () => {
           // TODO: We cannot get this to flip one and not the other without incorporating
           // limits and selectivity into the cost model. For now, just return a low cost to
           // simulate the track quickly matching invoices and returning early.
-          return 0.1;
+          return {startupCost: 0, baseCardinality: 0.1};
         }
 
-        return 10_000;
+        return {startupCost: 0, baseCardinality: 10_000};
       }
 
       if (table === 'track') {
         if (constraint !== undefined) {
           if (constraint.hasOwnProperty('id')) {
-            return 1;
+            return {startupCost: 0, baseCardinality: 1};
           }
           if (constraint.hasOwnProperty('albumId')) {
-            return 10;
+            return {startupCost: 0, baseCardinality: 10};
           }
           throw new Error('Unexpected constraint on track');
         }
-        return 1_000;
+        return {startupCost: 0, baseCardinality: 1_000};
       }
 
       throw new Error(`Unexpected table: ${table}`);
@@ -278,7 +280,7 @@ describe('related calls get plans', () => {
       _sort: Ordering,
       _filters: Condition | undefined,
       constraint: PlannerConstraint | undefined,
-    ) => {
+    ): CostModelCost => {
       // Force `.related('tracks')` to be more expensive
       if (table === 'track') {
         assert(
@@ -287,11 +289,20 @@ describe('related calls get plans', () => {
         );
         // if we flip to do genre, we can reduce the cost.
         if (constraint?.hasOwnProperty('genreId')) {
-          return 1;
+          return {
+            baseCardinality: 1,
+            startupCost: 0,
+          };
         }
-        return 10_000;
+        return {
+          baseCardinality: 10_000,
+          startupCost: 0,
+        };
       }
-      return 10;
+      return {
+        baseCardinality: 10,
+        startupCost: 0,
+      };
     };
 
     const planned = planQuery(unplanned, costModel);
@@ -377,25 +388,37 @@ function makeCostModel(costs: Record<string, number>) {
     _sort: Ordering,
     _filters: Condition | undefined,
     constraint: PlannerConstraint | undefined,
-  ) => {
+  ): CostModelCost => {
     constraint = constraint ?? {};
     if ('id' in constraint) {
       // Primary key constraint, very fast
-      return 1;
+      return {
+        startupCost: 0,
+        baseCardinality: 1,
+      };
     }
 
     if (table === 'invoiceLine' && 'trackId' in constraint) {
       // not many invoices lines per track
-      return 100;
+      return {
+        startupCost: 0,
+        baseCardinality: 100,
+      };
     }
 
     if (table === 'track' && 'albumId' in constraint) {
       // not many tracks per album
-      return 10;
+      return {
+        startupCost: 0,
+        baseCardinality: 10,
+      };
     }
 
     const ret =
       must(costs[table]) / (Object.keys(constraint).length * 100 || 1);
-    return ret;
+    return {
+      startupCost: 0,
+      baseCardinality: ret,
+    };
   };
 }

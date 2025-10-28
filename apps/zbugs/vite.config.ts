@@ -32,6 +32,7 @@ export default defineConfig({
       input: {
         main: '/index.html',
         debug: '/debug.html',
+        roci: '/roci.html',
       },
     },
   },

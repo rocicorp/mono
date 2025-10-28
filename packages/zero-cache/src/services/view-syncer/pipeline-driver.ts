@@ -45,6 +45,9 @@ import {
   Snapshotter,
   type SnapshotDiff,
 } from './snapshotter.ts';
+import type {ConnectionCostModel} from '../../../../zql/src/planner/planner-connection.ts';
+import type {Database} from '../../../../zqlite/src/db.ts';
+import {createSQLiteCostModel} from '../../../../zqlite/src/sqlite-cost-model.ts';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -96,6 +99,7 @@ export class PipelineDriver {
   readonly #shardID: ShardID;
   readonly #logConfig: LogConfig;
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
+  readonly #costModels: WeakMap<Database, ConnectionCostModel> | undefined;
   #streamer: Streamer | null = null;
   #replicaVersion: string | null = null;
   #permissions: LoadedPermissions | null = null;
@@ -122,6 +126,7 @@ export class PipelineDriver {
     storage: ClientGroupStorage,
     clientGroupID: string,
     inspectorDelegate: InspectorDelegate,
+    enablePlanner?: boolean,
   ) {
     this.#lc = lc.withContext('clientGroupID', clientGroupID);
     this.#snapshotter = snapshotter;
@@ -129,6 +134,7 @@ export class PipelineDriver {
     this.#shardID = shardID;
     this.#logConfig = logConfig;
     this.#inspectorDelegate = inspectorDelegate;
+    this.#costModels = enablePlanner ? new WeakMap() : undefined;
   }
 
   /**
@@ -215,6 +221,19 @@ export class PipelineDriver {
       table.setDB(db.db);
     }
     return version;
+  }
+
+  #ensureCostModelExistsIfEnabled(db: Database) {
+    let existing = this.#costModels?.get(db);
+    if (existing) {
+      return existing;
+    }
+    if (this.#costModels) {
+      const costModel = createSQLiteCostModel(db, this.#tableSpecs);
+      this.#costModels.set(db, costModel);
+      return costModel;
+    }
+    return undefined;
   }
 
   /**
@@ -321,6 +340,10 @@ export class PipelineDriver {
       ? new Debug()
       : undefined;
 
+    const costModel = this.#ensureCostModelExistsIfEnabled(
+      this.#snapshotter.current().db.db,
+    );
+
     const input = buildPipeline(
       query,
       {
@@ -340,6 +363,7 @@ export class PipelineDriver {
         decorateFilterInput: input => input,
       },
       queryID,
+      costModel,
     );
     const schema = input.getSchema();
     input.setOutput({
@@ -534,6 +558,7 @@ export class PipelineDriver {
     for (const table of this.#tables.values()) {
       table.setDB(curr.db.db);
     }
+    this.#ensureCostModelExistsIfEnabled(curr.db.db);
     this.#lc.debug?.(`Advanced to ${curr.version}`);
   }
 

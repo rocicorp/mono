@@ -42,6 +42,7 @@ import {preload} from '../../zero-preload.ts';
 let firstRowRendered = false;
 const ITEM_SIZE = 56;
 const MIN_PAGE_SIZE = 100;
+const NUM_ROWS_FOR_LOADING_SKELETON = 1;
 
 type Anchor = {
   startRow: IssueRow | undefined;
@@ -351,7 +352,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     if (issueArrayIndex < 0 || issueArrayIndex >= issues.length) {
       return (
         <div
-          className={classNames('row')}
+          className={classNames('row', 'skeleton-shimmer')}
           style={{
             ...style,
           }}
@@ -406,7 +407,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   };
 
   const virtualizer = useVirtualizer({
-    count: total ?? estimatedTotal,
+    count: total ?? estimatedTotal + NUM_ROWS_FOR_LOADING_SKELETON,
     estimateSize: () => ITEM_SIZE,
     overscan: 5,
     getScrollElement: () => listRef.current,

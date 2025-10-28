@@ -1,12 +1,66 @@
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
 import {Redirect, Route, Switch} from 'wouter';
 import {Nav} from './components/nav.tsx';
 import {useSoftNav} from './hooks/use-softnav.ts';
 import {ErrorPage} from './pages/error/error-page.tsx';
 import {IssuePage, IssueRedirect} from './pages/issue/issue-page.tsx';
 import {ListPage} from './pages/list/list-page.tsx';
-import {links, ListContextProvider, routes} from './routes.tsx';
+import {
+  isGigabugs,
+  links,
+  ListContextProvider,
+  routes,
+  useProjectName,
+} from './routes.tsx';
 import {ZERO_PROJECT_NAME} from '../shared/schema.ts';
+
+function OGImageUpdater() {
+  const projectName = useProjectName();
+
+  useEffect(() => {
+    const ogImage = isGigabugs(projectName)
+      ? 'https://zero.rocicorp.dev/api/og?title=Gigabugs&subtitle=2.5%20Million%20Row%20Sync%20Demo&logo=zero'
+      : `${window.location.origin}/og-image.png`;
+
+    // Update OG image meta tags
+    const ogImageTag = document.querySelector('meta[property="og:image"]');
+    if (ogImageTag) {
+      ogImageTag.setAttribute('content', ogImage);
+    }
+
+    const twitterImageTag = document.querySelector(
+      'meta[name="twitter:image"]',
+    );
+    if (twitterImageTag) {
+      twitterImageTag.setAttribute('content', ogImage);
+    }
+
+    // Update alt text
+    const ogImageAlt = document.querySelector('meta[property="og:image:alt"]');
+    if (ogImageAlt) {
+      ogImageAlt.setAttribute(
+        'content',
+        isGigabugs(projectName)
+          ? 'Gigabugs - 2.5 Million Row Sync Demo'
+          : 'Zero Bugs logo',
+      );
+    }
+
+    const twitterImageAlt = document.querySelector(
+      'meta[name="twitter:image:alt"]',
+    );
+    if (twitterImageAlt) {
+      twitterImageAlt.setAttribute(
+        'content',
+        isGigabugs(projectName)
+          ? 'Gigabugs - 2.5 Million Row Sync Demo'
+          : 'Zero Bugs logo',
+      );
+    }
+  }, [projectName]);
+
+  return null;
+}
 
 export function Root() {
   const [contentReady, setContentReady] = useState(false);
@@ -30,6 +84,7 @@ export function Root() {
             <IssueRedirect></IssueRedirect>
           </Route>
           <Route path="/p/:projectName" nest>
+            <OGImageUpdater />
             <div className="primary-nav w-48 shrink-0 grow-0">
               <Nav />
             </div>

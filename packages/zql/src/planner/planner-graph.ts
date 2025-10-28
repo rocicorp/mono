@@ -144,9 +144,11 @@ export class PlannerGraph {
 
   /**
    * Calculate total cost of the current plan.
+   * Total cost includes both startup cost (one-time, e.g., sorting) and running cost.
    */
   getTotalCost(): number {
-    return must(this.#terminus).estimateCost().runningCost;
+    const estimate = must(this.#terminus).estimateCost();
+    return estimate.startupCost + estimate.runningCost;
   }
 
   /**
@@ -365,6 +367,7 @@ export class PlannerGraph {
             costEstimate: c.connection.estimateCost(undefined),
             pinned: c.connection.pinned,
             constraints: c.connection.getConstraintsForDebug(),
+            constraintCosts: c.connection.getConstraintCostsForDebug(),
           })),
         });
       }
@@ -396,6 +399,7 @@ export class PlannerGraph {
             connectionConstraints: this.connections.map(c => ({
               connection: c.name,
               constraints: c.getConstraintsForDebug(),
+              constraintCosts: c.getConstraintCostsForDebug(),
             })),
           });
         }
@@ -415,6 +419,7 @@ export class PlannerGraph {
                 costEstimate: c.connection.estimateCost(undefined),
                 pinned: c.connection.pinned,
                 constraints: c.connection.getConstraintsForDebug(),
+                constraintCosts: c.connection.getConstraintCostsForDebug(),
               })),
             });
           }
@@ -477,6 +482,7 @@ export class PlannerGraph {
               connectionConstraints: this.connections.map(c => ({
                 connection: c.name,
                 constraints: c.getConstraintsForDebug(),
+                constraintCosts: c.getConstraintCostsForDebug(),
               })),
             });
           }

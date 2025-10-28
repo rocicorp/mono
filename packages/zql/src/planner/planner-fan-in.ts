@@ -85,6 +85,7 @@ export class PlannerFanIn {
     let totalCost: CostEstimate = {
       baseCardinality: 0,
       runningCost: 0,
+      startupCost: 0,
       selectivity: 0,
       limit: undefined,
     };
@@ -95,6 +96,7 @@ export class PlannerFanIn {
         branchPattern === undefined ? undefined : [0, ...branchPattern];
       let maxBaseCardinality = 0;
       let maxRunningCost = 0;
+      let maxStartupCost = 0;
       // Track complement probability for OR selectivity: P(A OR B) = 1 - (1-A)(1-B)
       let noMatchProb = 1.0;
       for (const input of this.#inputs) {
@@ -104,6 +106,10 @@ export class PlannerFanIn {
         }
         if (cost.runningCost > maxRunningCost) {
           maxRunningCost = cost.runningCost;
+        }
+        // FI fetches from the root only once, so take the max startup cost
+        if (cost.startupCost > maxStartupCost) {
+          maxStartupCost = cost.startupCost;
         }
 
         // OR branches: combine selectivities assuming independent events
@@ -121,6 +127,7 @@ export class PlannerFanIn {
 
       totalCost.baseCardinality = maxBaseCardinality;
       totalCost.runningCost = maxRunningCost;
+      totalCost.startupCost = maxStartupCost;
       totalCost.selectivity = 1 - noMatchProb;
     } else {
       // Union FanIn (UFI): each input gets unique branch pattern
@@ -133,6 +140,8 @@ export class PlannerFanIn {
         const cost = input.estimateCost(updatedPattern);
         totalCost.baseCardinality += cost.baseCardinality;
         totalCost.runningCost += cost.runningCost;
+        // UFI runs all branches, so startup costs add up
+        totalCost.startupCost += cost.startupCost;
 
         // OR branches: combine selectivities assuming independent events
         // P(A OR B) = 1 - (1-A)(1-B)
