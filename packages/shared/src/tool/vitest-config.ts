@@ -38,7 +38,7 @@ export default defineConfig({
       return undefined;
     },
     include: ['src/**/*.{test,spec}{,.node}.?(c|m)[jt]s?(x)'],
-    silent: 'passed-only',
+    onlyFailed: true,
     browser: {
       enabled: true,
       provider: 'playwright',

@@ -12,7 +12,7 @@ export function configForVersion(version: number, url: string) {
     test: {
       name: `${name}/pg-${version}`,
       browser: {enabled: false},
-      silent: 'passed-only',
+      onlyFailed: true,
       globalSetup: [`../zero-cache/test/pg-${version}.ts`],
       coverage: {
         enabled: !CI, // Don't run coverage in continuous integration.
@@ -37,7 +37,7 @@ export function configForNoPg(url: string) {
       include: ['src/**/*.test.?(c|m)[jt]s?(x)'],
       exclude: ['src/**/*.pg.test.?(c|m)[jt]s?(x)'],
       browser: {enabled: false},
-      silent: 'passed-only',
+      onlyFailed: true,
       coverage: {
         enabled: !CI, // Don't run coverage in continuous integration.
         reporter: [['html'], ['clover', {file: 'coverage.xml'}]],
@@ -60,7 +60,7 @@ export function configForCustomPg(url: string) {
         test: {
           name: `${name}/custom-pg`,
           browser: {enabled: false},
-          silent: 'passed-only',
+          onlyFailed: true,
           include: ['src/**/*.pg.test.?(c|m)[jt]s?(x)'],
           exclude: [],
           provide: {
