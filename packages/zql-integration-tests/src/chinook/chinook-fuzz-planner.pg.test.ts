@@ -7,6 +7,7 @@ import type {LiteAndZqlSpec} from '../../../zero-cache/src/db/specs.ts';
 import {Debug} from '../../../zql/src/builder/debug-delegate.ts';
 import {ast, QueryImpl} from '../../../zql/src/query/query-impl.ts';
 import {planQuery} from '../../../zql/src/planner/planner-builder.ts';
+import {AccumulatorDebugger} from '../../../zql/src/planner/planner-debug.ts';
 import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
 import {mapAST} from '../../../zero-protocol/src/ast.ts';
 import {
@@ -61,6 +62,55 @@ test('manual: track.whereExists(album).whereExists(genre)', async () => {
 test('manual: album.whereExists(tracks)', async () => {
   const query = builder.album.whereExists('tracks');
   await runManualCase(query);
+});
+
+test('debug: album.whereExists(tracks)', async () => {
+  const query = builder.album.whereExists('tracks');
+  const queryAst = ast(query);
+
+  // Run without planning
+  const debugUnplanned = new Debug();
+  const unplannedQuery = new QueryImpl(
+    {
+      ...harness.delegates.sqlite,
+      debug: debugUnplanned,
+    },
+    schema,
+    queryAst.table,
+    queryAst,
+    query.format,
+  );
+  await unplannedQuery.run();
+  const unplannedRowCount = getTotalRowCount(debugUnplanned);
+
+  // Run with planning and debug tracing
+  const planDebugger = new AccumulatorDebugger();
+  const mappedAST = mapAST(queryAst, clientToServerMapper);
+  const plannedServerAST = planQuery(mappedAST, costModel, planDebugger);
+  const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
+
+  console.log('\n=== PLANNER DEBUG TRACE ===');
+  console.log(planDebugger.format());
+  console.log('===========================\n');
+
+  const debugPlanned = new Debug();
+  const plannedQuery = new QueryImpl(
+    {
+      ...harness.delegates.sqlite,
+      debug: debugPlanned,
+    },
+    schema,
+    plannedClientAST.table,
+    plannedClientAST,
+    query.format,
+  );
+  await plannedQuery.run();
+  const plannedRowCount = getTotalRowCount(debugPlanned);
+
+  console.log(`Unplanned rows: ${unplannedRowCount}`);
+  console.log(`Planned rows: ${plannedRowCount}`);
+  console.log(`Unplanned row counts:`, debugUnplanned.getVendedRowCounts());
+  console.log(`Planned row counts:`, debugPlanned.getVendedRowCounts());
 });
 
 // Fuzz tests (disabled for now - queries may be too complex)
