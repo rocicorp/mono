@@ -4,7 +4,7 @@ import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {Format} from '../ivm/view.ts';
 import type {CustomQueryID} from './named.ts';
-import type {NoContext, Query} from './query.ts';
+import type {Query} from './query.ts';
 
 export const queryInternalsTag = Symbol('QueryInternals');
 export const withContextTag = Symbol('WithContext');
@@ -22,7 +22,7 @@ export interface QueryInternals<
   TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
-  TContext = NoContext,
+  TContext,
 > {
   readonly [queryInternalsTag]: true;
 

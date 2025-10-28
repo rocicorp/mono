@@ -32,8 +32,8 @@ import {makeSchemaQuery} from './query.ts';
  * writing data that the Zero client does, so that mutator functions can be
  * shared across client and server.
  */
-export class ZQLDatabase<S extends Schema, WrappedTransaction>
-  implements Database<TransactionImpl<S, WrappedTransaction>>
+export class ZQLDatabase<S extends Schema, WrappedTransaction, TContext>
+  implements Database<TransactionImpl<S, WrappedTransaction, TContext>>
 {
   readonly connection: DBConnection<WrappedTransaction>;
   readonly #mutate: (
@@ -43,7 +43,7 @@ export class ZQLDatabase<S extends Schema, WrappedTransaction>
   readonly #query: (
     dbTransaction: DBTransaction<WrappedTransaction>,
     serverSchema: ServerSchema,
-  ) => SchemaQuery<S>;
+  ) => SchemaQuery<S, TContext>;
   readonly #schema: S;
 
   constructor(connection: DBConnection<WrappedTransaction>, schema: S) {
@@ -55,7 +55,7 @@ export class ZQLDatabase<S extends Schema, WrappedTransaction>
 
   transaction<R>(
     callback: (
-      tx: TransactionImpl<S, WrappedTransaction>,
+      tx: TransactionImpl<S, WrappedTransaction, TContext>,
       transactionHooks: TransactionProviderHooks,
     ) => MaybePromise<R>,
     transactionInput?: TransactionProviderInput,

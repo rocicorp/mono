@@ -7,18 +7,14 @@ import type {Schema} from '../../zero-types/src/schema.ts';
 import type {DBTransaction} from '../../zql/src/mutate/custom.ts';
 import type {CustomQueryID} from '../../zql/src/query/named.ts';
 import {AbstractQuery} from '../../zql/src/query/query-impl.ts';
-import type {
-  HumanReadable,
-  NoContext,
-  PullRow,
-} from '../../zql/src/query/query.ts';
+import type {HumanReadable, PullRow} from '../../zql/src/query/query.ts';
 import type {TypedView} from '../../zql/src/query/typed-view.ts';
 
 export class ZPGQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
-  TContext = NoContext,
+  TContext = unknown,
 > extends AbstractQuery<TSchema, TTable, TReturn, TContext> {
   readonly #dbTransaction: DBTransaction<unknown>;
   readonly #schema: TSchema;

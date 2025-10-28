@@ -6,7 +6,6 @@ import {withContextTag} from './query-internals.ts';
 import type {
   AnyQuery,
   AvailableRelationships,
-  CoreQuery,
   DestTableName,
   ExistsOptions,
   GetFilterType,
@@ -85,20 +84,20 @@ export class ChainedQuery<
   whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb: (
-      q: CoreQuery<
+      q: Query<
         TSchema,
         DestTableName<TTable, TSchema, TRelationship>,
         TContext
       >,
-    ) => CoreQuery<TSchema, string, TContext>,
+    ) => Query<TSchema, string, TContext>,
     options?: ExistsOptions,
   ): ChainedQuery<TSchema, TTable, TReturn, TContext>;
   whereExists(
     relationship: AvailableRelationships<TTable, TSchema>,
     cbOrOptions?:
       | ((
-          q: CoreQuery<TSchema, string, TContext>,
-        ) => CoreQuery<TSchema, string, TContext>)
+          q: Query<TSchema, string, TContext>,
+        ) => Query<TSchema, string, TContext>)
       | ExistsOptions,
     options?: ExistsOptions,
   ): ChainedQuery<TSchema, TTable, TReturn, TContext> {
@@ -121,11 +120,11 @@ export class ChainedQuery<
   ): ChainedQuery<TSchema, TTable, TReturn & Record<string, unknown>, TContext>;
   related<
     TRelationship extends AvailableRelationships<TTable, TSchema>,
-    TSub extends CoreQuery<TSchema, string, unknown>,
+    TSub extends Query<TSchema, string, unknown>,
   >(
     relationship: TRelationship,
     cb: (
-      q: CoreQuery<
+      q: Query<
         TSchema,
         DestTableName<TTable, TSchema, TRelationship>,
         TContext
@@ -135,8 +134,8 @@ export class ChainedQuery<
   related(
     relationship: AvailableRelationships<TTable, TSchema>,
     cb?: (
-      q: CoreQuery<TSchema, string, TContext>,
-    ) => CoreQuery<TSchema, string, TContext>,
+      q: Query<TSchema, string, TContext>,
+    ) => Query<TSchema, string, TContext>,
   ): ChainedQuery<
     TSchema,
     TTable,

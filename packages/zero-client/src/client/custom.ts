@@ -73,6 +73,7 @@ export type CustomMutatorImpl<
 export type MakeCustomMutatorInterfaces<
   S extends Schema,
   MD extends CustomMutatorDefs,
+  TContext,
 > = {
   readonly [NamespaceOrName in keyof MD]: MD[NamespaceOrName] extends (
     tx: Transaction<S>,
@@ -82,28 +83,33 @@ export type MakeCustomMutatorInterfaces<
     : {
         readonly [P in keyof MD[NamespaceOrName]]: MakeCustomMutatorInterface<
           S,
-          MD[NamespaceOrName][P]
+          MD[NamespaceOrName][P],
+          TContext
         >;
       };
 };
 
-export type MakeCustomMutatorInterface<S extends Schema, F> = F extends (
-  tx: ClientTransaction<S>,
+export type MakeCustomMutatorInterface<
+  TSchema extends Schema,
+  F,
+  TContext,
+> = F extends (
+  tx: ClientTransaction<TSchema, TContext>,
   ...args: infer Args
 ) => Promise<void>
   ? (...args: Args) => MutatorResult
   : never;
 
-export class TransactionImpl<S extends Schema, TContext>
-  implements ClientTransaction<S>
+export class TransactionImpl<TSchema extends Schema, TContext>
+  implements ClientTransaction<TSchema, TContext>
 {
   readonly location = 'client';
-  readonly mutate: SchemaCRUD<S>;
-  readonly query: SchemaQuery<S>;
+  readonly mutate: SchemaCRUD<TSchema>;
+  readonly query: SchemaQuery<TSchema, TContext>;
   readonly #repTx: WriteTransaction;
   readonly #zeroContext: ZeroContext<TContext>;
 
-  constructor(lc: ZeroLogContext, repTx: WriteTransaction, schema: S) {
+  constructor(lc: ZeroLogContext, repTx: WriteTransaction, schema: TSchema) {
     must(repTx.reason === 'initial' || repTx.reason === 'rebase');
     const txData = must(
       (repTx as WriteTransactionImpl)[zeroData],
@@ -146,8 +152,8 @@ export class TransactionImpl<S extends Schema, TContext>
     return (this.#repTx as WriteTransactionImpl)[zeroData]?.token;
   }
 
-  run<TTable extends keyof S['tables'] & string, TReturn, TContext>(
-    query: Query<S, TTable, TReturn, TContext>,
+  run<TTable extends keyof TSchema['tables'] & string, TReturn, TContext>(
+    query: Query<TSchema, TTable, TReturn, TContext>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return this.#zeroContext.run(query, options);
@@ -198,9 +204,9 @@ function assertValidRunOptions(options: RunOptions | undefined): void {
   );
 }
 
-function makeSchemaQuery<S extends Schema, TContext>(
+function makeSchemaQuery<TSchema extends Schema, TContext>(
   lc: ZeroLogContext,
-  schema: S,
+  schema: TSchema,
   ivmBranch: IVMSourceBranch,
   context: TContext,
 ) {
@@ -209,7 +215,7 @@ function makeSchemaQuery<S extends Schema, TContext>(
   return new Proxy(
     {},
     {
-      get(target: Record<string, Query<S, string>>, prop: string) {
+      get(target: Record<string, Query<TSchema, string>>, prop: string) {
         if (prop in target) {
           return target[prop];
         }
@@ -218,7 +224,7 @@ function makeSchemaQuery<S extends Schema, TContext>(
         return target[prop];
       },
     },
-  ) as SchemaQuery<S>;
+  ) as SchemaQuery<TSchema, TContext>;
 }
 
 function newZeroContext<TContext>(

@@ -6,15 +6,13 @@ import type {Format} from '../ivm/view.ts';
 import {ExpressionBuilder} from './expression.ts';
 import type {CustomQueryID} from './named.ts';
 import {AbstractQuery} from './query-impl.ts';
-import type {HumanReadable, NoContext, PullRow, Query} from './query.ts';
-
-import type {TypedView} from './typed-view.ts';
+import type {PullRow, Query} from './query.ts';
 
 export function staticQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
-  TContext = NoContext,
+  TContext = unknown,
 >(
   schema: TSchema,
   tableName: TTable,
@@ -35,7 +33,7 @@ export class StaticQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
-  TContext = NoContext,
+  TContext = unknown,
 > extends AbstractQuery<TSchema, TTable, TReturn, TContext> {
   readonly #schema: TSchema;
 
@@ -84,21 +82,6 @@ export class StaticQuery<
       customQueryID,
       currentJunction,
     );
-  }
-
-  materialize(): TypedView<HumanReadable<TReturn>> {
-    throw new Error('StaticQuery cannot be materialized');
-  }
-
-  run(): Promise<HumanReadable<TReturn>> {
-    return Promise.reject(new Error('StaticQuery cannot be run'));
-  }
-
-  preload(): {
-    cleanup: () => void;
-    complete: Promise<void>;
-  } {
-    throw new Error('StaticQuery cannot be preloaded');
   }
 }
 

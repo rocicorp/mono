@@ -67,7 +67,11 @@ test('argument types are preserved on the generated mutator interface', () => {
     },
   } as const;
 
-  type MutatorsInterface = MakeCustomMutatorInterfaces<Schema, typeof mutators>;
+  type MutatorsInterface = MakeCustomMutatorInterfaces<
+    Schema,
+    typeof mutators,
+    unknown
+  >;
 
   expectTypeOf<MutatorsInterface>().toEqualTypeOf<{
     readonly issue: {

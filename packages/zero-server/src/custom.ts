@@ -26,8 +26,11 @@ import type {
 import {asRunnableQuery} from '../../zql/src/query/runnable-query.ts';
 import {getServerSchema} from './schema.ts';
 
-interface ServerTransaction<S extends Schema, TWrappedTransaction>
-  extends TransactionBase<S> {
+interface ServerTransaction<
+  TSchema extends Schema,
+  TWrappedTransaction,
+  TContext,
+> extends TransactionBase<TSchema, TContext> {
   readonly location: 'server';
   readonly reason: 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
@@ -47,23 +50,26 @@ export type CustomMutatorImpl<TDBTransaction, TArgs = any> = (
   args: TArgs,
 ) => Promise<void>;
 
-export class TransactionImpl<S extends Schema, TWrappedTransaction>
-  implements ServerTransaction<S, TWrappedTransaction>
+export class TransactionImpl<
+  TSchema extends Schema,
+  TWrappedTransaction,
+  TContext,
+> implements ServerTransaction<TSchema, TWrappedTransaction, TContext>
 {
   readonly location = 'server';
   readonly reason = 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
   readonly clientID: string;
   readonly mutationID: number;
-  readonly mutate: SchemaCRUD<S>;
-  readonly query: SchemaQuery<S>;
+  readonly mutate: SchemaCRUD<TSchema>;
+  readonly query: SchemaQuery<TSchema, TContext>;
 
   constructor(
     dbTransaction: DBTransaction<TWrappedTransaction>,
     clientID: string,
     mutationID: number,
-    mutate: SchemaCRUD<S>,
-    query: SchemaQuery<S>,
+    mutate: SchemaCRUD<TSchema>,
+    query: SchemaQuery<TSchema, TContext>,
   ) {
     this.dbTransaction = dbTransaction;
     this.clientID = clientID;
@@ -72,8 +78,8 @@ export class TransactionImpl<S extends Schema, TWrappedTransaction>
     this.query = query;
   }
 
-  run<TTable extends keyof S['tables'] & string, TReturn, TContext>(
-    query: Query<S, TTable, TReturn, TContext>,
+  run<TTable extends keyof TSchema['tables'] & string, TReturn, TContext>(
+    query: Query<TSchema, TTable, TReturn, TContext>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return asRunnableQuery(query).run(options);
@@ -90,21 +96,22 @@ type WithHiddenTxAndSchema = {
 };
 
 export async function makeServerTransaction<
-  S extends Schema,
+  TSchema extends Schema,
   TWrappedTransaction,
+  TContext,
 >(
   dbTransaction: DBTransaction<TWrappedTransaction>,
   clientID: string,
   mutationID: number,
-  schema: S,
+  schema: TSchema,
   mutate: (
     dbTransaction: DBTransaction<TWrappedTransaction>,
     serverSchema: ServerSchema,
-  ) => SchemaCRUD<S>,
+  ) => SchemaCRUD<TSchema>,
   query: (
     dbTransaction: DBTransaction<TWrappedTransaction>,
     serverSchema: ServerSchema,
-  ) => SchemaQuery<S>,
+  ) => SchemaQuery<TSchema, TContext>,
 ) {
   const serverSchema = await getServerSchema(dbTransaction, schema);
   return new TransactionImpl(

@@ -89,7 +89,6 @@ import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import {
   type HumanReadable,
   type MaterializeOptions,
-  NoContext,
   type PreloadOptions,
   type PullRow,
   type Query,
@@ -303,7 +302,7 @@ type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
 export class Zero<
   const S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
-  TContext = NoContext,
+  TContext = unknown,
 > {
   readonly version = version;
 
@@ -854,6 +853,23 @@ export class Zero<
     return createLogOptions(options);
   }
 
+  /**
+   * Preloads data for a query into the cache, without keeping it in memory.
+   *
+   * This function is useful when you want to populate the cache ahead of time,
+   * for example after login, to avoid a flash of loading screen on the next page.
+   *
+   * Returns an object with two properties:
+   * - `complete`: a Promise that resolves when the data is loaded
+   * - `cleanup`: a function that can be called to cancel the preload
+   *
+   * @example
+   * ```ts
+   * const {complete, cleanup} = zero.preload(userQuery);
+   * await complete;
+   * // Now the data is cached and can be used immediately
+   * ```
+   */
   preload<
     TTable extends keyof S['tables'] & string,
     TReturn extends PullRow<TTable, S>,
@@ -861,6 +877,26 @@ export class Zero<
     return this.#zeroContext.preload(query, options);
   }
 
+  /**
+   * Executes a query once and returns the results.
+   *
+   * By default, waits for any pending data to sync before running the query.
+   * This ensures fresh results from the server. Use `{type: 'unknown'}` to
+   * run immediately with whatever data is available locally.
+   *
+   * @param query - The query to execute
+   * @param runOptions - Options controlling query execution
+   * @returns A Promise resolving to the query results
+   *
+   * @example
+   * ```ts
+   * // Wait for server sync
+   * const users = await zero.run(userQuery);
+   *
+   * // Run with local data only
+   * const cachedUsers = await zero.run(userQuery, {type: 'unknown'});
+   * ```
+   */
   run<TTable extends keyof S['tables'] & string, TReturn>(
     query: Query<S, TTable, TReturn, TContext>,
     runOptions?: RunOptions,
@@ -872,6 +908,30 @@ export class Zero<
     return this.#options.context as TContext;
   }
 
+  /**
+   * Creates a materialized view of a query that stays synchronized with the database.
+   *
+   * The materialized view automatically updates when the underlying data changes.
+   * When done with the view, call `view.destroy()` to clean up subscriptions.
+   *
+   * Optionally accepts a factory function to create a custom view implementation.
+   *
+   * @param query - The query to materialize
+   * @param factory - Optional factory function to create a custom view
+   * @param options - Options controlling view behavior
+   * @returns A TypedView that stays synchronized with the data
+   *
+   * @example
+   * ```ts
+   * // Create a standard view
+   * const view = zero.materialize(userQuery);
+   * console.log(view.data); // Current query results
+   * view.destroy(); // Clean up when done
+   *
+   * // Create a custom view
+   * const customView = zero.materialize(userQuery, (query) => new MyCustomView(query));
+   * ```
+   */
   materialize<TTable extends keyof S['tables'] & string, TReturn>(
     query: Query<S, TTable, TReturn, TContext>,
     options?: MaterializeOptions,
@@ -973,8 +1033,8 @@ export class Zero<
    */
   readonly mutate: MD extends CustomMutatorDefs
     ? S['enableLegacyMutators'] extends false
-      ? MakeCustomMutatorInterfaces<S, MD>
-      : DeepMerge<DBMutator<S>, MakeCustomMutatorInterfaces<S, MD>>
+      ? MakeCustomMutatorInterfaces<S, MD, TContext>
+      : DeepMerge<DBMutator<S>, MakeCustomMutatorInterfaces<S, MD, TContext>>
     : DBMutator<S>;
 
   /**

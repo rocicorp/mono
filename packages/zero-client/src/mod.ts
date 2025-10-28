@@ -148,7 +148,6 @@ export type {
 export type {QueryInternals} from '../../zql/src/query/query-internals.ts';
 export type {
   AnyQuery,
-  CoreQuery,
   HumanReadable,
   PullRow,
   Query,

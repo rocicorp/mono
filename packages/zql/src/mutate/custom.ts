@@ -7,7 +7,6 @@ import type {
 } from '../../../zero-schema/src/table-schema.ts';
 import type {
   HumanReadable,
-  NoContext,
   PullRow,
   Query,
   RunOptions,
@@ -18,7 +17,7 @@ type ClientID = string;
 export type Location = 'client' | 'server';
 export type TransactionReason = 'optimistic' | 'rebase' | 'authoritative';
 
-export interface TransactionBase<S extends Schema> {
+export interface TransactionBase<S extends Schema, TContext> {
   readonly location: Location;
   readonly clientID: ClientID;
   /**
@@ -32,20 +31,27 @@ export interface TransactionBase<S extends Schema> {
   readonly reason: TransactionReason;
 
   readonly mutate: SchemaCRUD<S>;
-  readonly query: SchemaQuery<S>;
+  readonly query: SchemaQuery<S, TContext>;
 
-  run<TTable extends keyof S['tables'] & string, TReturn, TContext>(
+  run<TTable extends keyof S['tables'] & string, TReturn>(
     query: Query<S, TTable, TReturn, TContext>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>>;
 }
 
-export type Transaction<S extends Schema, TWrappedTransaction = unknown> =
-  | ServerTransaction<S, TWrappedTransaction>
-  | ClientTransaction<S>;
+export type Transaction<
+  S extends Schema,
+  TWrappedTransaction = unknown,
+  TContext = unknown,
+> =
+  | ServerTransaction<S, TWrappedTransaction, TContext>
+  | ClientTransaction<S, TContext>;
 
-export interface ServerTransaction<S extends Schema, TWrappedTransaction>
-  extends TransactionBase<S> {
+export interface ServerTransaction<
+  S extends Schema,
+  TWrappedTransaction,
+  TContext,
+> extends TransactionBase<S, TContext> {
   readonly location: 'server';
   readonly reason: 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
@@ -56,8 +62,8 @@ export interface ServerTransaction<S extends Schema, TWrappedTransaction>
  * allows reading and writing to the database and IVM at the head
  * at which the mutator is being applied.
  */
-export interface ClientTransaction<S extends Schema>
-  extends TransactionBase<S> {
+export interface ClientTransaction<S extends Schema, TContext>
+  extends TransactionBase<S, TContext> {
   readonly location: 'client';
   readonly reason: 'optimistic' | 'rebase';
 }
@@ -115,7 +121,7 @@ export type TableCRUD<S extends TableSchema> = {
   delete: (id: DeleteID<S>) => Promise<void>;
 };
 
-export type SchemaQuery<S extends Schema, TContext = NoContext> = {
+export type SchemaQuery<S extends Schema, TContext> = {
   readonly [K in keyof S['tables'] & string]: Query<
     S,
     K,

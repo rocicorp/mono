@@ -5,12 +5,12 @@ import type {DBTransaction, SchemaQuery} from '../../zql/src/mutate/custom.ts';
 import type {Query} from '../../zql/src/query/query.ts';
 import {ZPGQuery} from './zpg-query.ts';
 
-export function makeSchemaQuery<S extends Schema>(
+export function makeSchemaQuery<S extends Schema, TContext>(
   schema: S,
 ): (
   dbTransaction: DBTransaction<unknown>,
   serverSchema: ServerSchema,
-) => SchemaQuery<S> {
+) => SchemaQuery<S, TContext> {
   class SchemaQueryHandler {
     readonly #dbTransaction: DBTransaction<unknown>;
     readonly #serverSchema: ServerSchema;
@@ -55,5 +55,5 @@ export function makeSchemaQuery<S extends Schema>(
     new Proxy(
       {},
       new SchemaQueryHandler(dbTransaction, serverSchema),
-    ) as SchemaQuery<S>;
+    ) as SchemaQuery<S, TContext>;
 }

@@ -14,7 +14,7 @@ describe('makeSchemaQuery', () => {
   let queryProvider: (
     tx: DBTransaction<unknown>,
     serverSchema: ServerSchema,
-  ) => SchemaQuery<typeof schema>;
+  ) => SchemaQuery<typeof schema, unknown>;
 
   beforeEach(async () => {
     pg = await testDBs.create('makeSchemaQuery-test');

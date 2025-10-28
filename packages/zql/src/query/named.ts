@@ -1,17 +1,16 @@
-/* oxlint-disable @typescript-eslint/no-explicit-any */
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {SchemaQuery} from '../mutate/custom.ts';
 import type {NamedQueryFunction} from './define-query.ts';
 import {newQuery} from './query-impl.ts';
 import {asQueryInternals} from './query-internals.ts';
-import {type Query} from './query.ts';
+import {type AnyQuery, type Query} from './query.ts';
 
 export type QueryFn<
   TContext,
   TTakesContext extends boolean,
   TArg extends ReadonlyJSONValue[],
-  TReturnQuery extends Query<any, any, any>,
+  TReturnQuery extends AnyQuery,
 > = TTakesContext extends false
   ? {(...args: TArg): TReturnQuery}
   : {(context: TContext, ...args: TArg): TReturnQuery};
@@ -21,7 +20,7 @@ export type SyncedQuery<
   TContext,
   TTakesContext extends boolean,
   TArg extends ReadonlyJSONValue[],
-  TReturnQuery extends Query<any, any, any>,
+  TReturnQuery extends AnyQuery,
 > = QueryFn<TContext, TTakesContext, TArg, TReturnQuery> & {
   queryName: TName;
   parse: ParseFn<TArg> | undefined;
@@ -46,13 +45,14 @@ function normalizeParser<T extends ReadonlyJSONValue[]>(
 export function syncedQuery<
   TName extends string,
   TArg extends ReadonlyJSONValue[],
-  TReturnQuery extends Query<any, any, any>,
+  TReturnQuery extends AnyQuery,
 >(
   name: TName,
   parser: ParseFn<TArg> | HasParseFn<TArg> | undefined,
   fn: QueryFn<unknown, false, TArg, TReturnQuery>,
 ): SyncedQuery<TName, unknown, false, TArg, TReturnQuery> {
   const impl = syncedQueryImpl(name, fn, false);
+  // oxlint-disable-next-line no-explicit-any
   const ret: any = (...args: TArg) => impl(undefined, args);
   ret.queryName = name;
   ret.parse = normalizeParser(parser);
@@ -67,13 +67,14 @@ export function syncedQueryWithContext<
   TName extends string,
   TContext,
   TArg extends ReadonlyJSONValue[],
-  TReturnQuery extends Query<any, any, any>,
+  TReturnQuery extends AnyQuery,
 >(
   name: TName,
   parser: ParseFn<TArg> | HasParseFn<TArg> | undefined,
   fn: QueryFn<TContext, true, TArg, TReturnQuery>,
 ): SyncedQuery<TName, TContext, true, TArg, TReturnQuery> {
   const impl = syncedQueryImpl(name, fn, true);
+  // oxlint-disable-next-line no-explicit-any
   const ret: any = (context: TContext, ...args: TArg) => impl(context, args);
   ret.queryName = name;
   ret.parse = normalizeParser(parser);
@@ -85,7 +86,8 @@ function syncedQueryImpl<
   TName extends string,
   TContext,
   TArg extends ReadonlyJSONValue[],
-  TReturnQuery extends Query<any, any, any>,
+  TReturnQuery extends AnyQuery,
+  // oxlint-disable-next-line no-explicit-any
 >(name: TName, fn: any, takesContext: boolean) {
   return (context: TContext, args: TArg) => {
     const q = takesContext ? fn(context, ...args) : fn(...args);
@@ -93,22 +95,27 @@ function syncedQueryImpl<
   };
 }
 
+// oxlint-disable-next-line no-explicit-any
 export function withValidation<F extends SyncedQuery<any, any, any, any, any>>(
   fn: F,
+  // oxlint-disable-next-line no-explicit-any
 ): F extends SyncedQuery<infer N, infer C, any, infer A, infer R>
   ? SyncedQuery<N, C, true, A, R>
   : never;
 
 export function withValidation<
+  // oxlint-disable-next-line no-explicit-any
   F extends NamedQueryFunction<any, any, any, any, any, any, any>,
 >(fn: F): F;
 
 export function withValidation<
-  F extends
-    | SyncedQuery<any, any, any, any, any>
+  F extends // oxlint-disable-next-line no-explicit-any
+  | SyncedQuery<any, any, any, any, any>
+    // oxlint-disable-next-line no-explicit-any
     | NamedQueryFunction<any, any, any, any, any, any, any>,
 >(
   fn: F,
+  // oxlint-disable-next-line no-explicit-any
 ): F extends SyncedQuery<infer N, infer C, any, infer A, infer R>
   ? SyncedQuery<N, C, true, A, R>
   : F {
@@ -118,8 +125,10 @@ export function withValidation<
     if (!parse) {
       throw new Error('ret does not have a parse function defined');
     }
+    // oxlint-disable-next-line no-explicit-any
     const ret: any = (context: unknown, ...args: unknown[]) => {
       const parsed = parse(args);
+      // oxlint-disable-next-line no-explicit-any
       return fn.takesContext ? fn(context, ...parsed) : (fn as any)(...parsed);
     };
     ret.queryName = fn.queryName;
@@ -130,6 +139,7 @@ export function withValidation<
   }
 
   // Otherwise this is a NamedQueryFunction which always validates.
+  // oxlint-disable-next-line no-explicit-any
   return fn as any;
 }
 
@@ -165,13 +175,8 @@ function makeQueryBuilders<S extends Schema, TContext>(
   return new Proxy(
     {},
     {
-      get: (
-        target: Record<
-          string,
-          Omit<Query<S, string, any>, 'materialize' | 'preload'>
-        >,
-        prop: string,
-      ) => {
+      // oxlint-disable-next-line no-explicit-any
+      get: (target: Record<string, Query<S, string, any>>, prop: string) => {
         if (prop in target) {
           return target[prop];
         }
@@ -185,5 +190,5 @@ function makeQueryBuilders<S extends Schema, TContext>(
         return q;
       },
     },
-  ) as SchemaQuery<S>;
+  ) as SchemaQuery<S, TContext>;
 }

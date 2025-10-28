@@ -1,7 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {must} from '../../../shared/src/must.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import {
   SUBQ_PREFIX,
@@ -42,7 +41,6 @@ import {
   type QueryInternals,
 } from './query-internals.ts';
 import {
-  NoContext,
   type AnyQuery,
   type ExistsOptions,
   type GetFilterType,
@@ -60,7 +58,7 @@ export function newQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
-  TContext = NoContext,
+  TContext = unknown,
 >(
   delegate: QueryDelegate<TContext> | undefined,
   schema: TSchema,
@@ -95,7 +93,7 @@ export abstract class AbstractQuery<
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn = PullRow<TTable, TSchema>,
-    TContext = NoContext,
+    TContext = unknown,
   >
   implements
     Query<TSchema, TTable, TReturn, TContext>,
@@ -106,7 +104,7 @@ export abstract class AbstractQuery<
 
   readonly #schema: TSchema;
   readonly #tableName: TTable;
-  readonly _ast: AST;
+  readonly #ast: AST;
   readonly format: Format;
   #hash: string = '';
   readonly #system: System;
@@ -124,25 +122,12 @@ export abstract class AbstractQuery<
   ) {
     this.#schema = schema;
     this.#tableName = tableName;
-    this._ast = ast;
+    this.#ast = ast;
     this.format = format;
     this.#system = system;
     this.#currentJunction = currentJunction;
     this.customQueryID = customQueryID;
   }
-
-  // withDelegate(
-  //   delegate: QueryDelegate<TContext>,
-  // ): Query<TSchema, TTable, TReturn, TContext> {
-  //   return this._newQuerySymbol(
-  //     this.#tableName,
-  //     this._ast,
-  //     this.format,
-  //     this.customQueryID,
-  //     this.#currentJunction,
-
-  //   );
-  // }
 
   withContext(
     _ctx: TContext,
@@ -156,7 +141,7 @@ export abstract class AbstractQuery<
   ): Query<TSchema, TTable, TReturn, TContext> {
     return this._newQuerySymbol(
       this.#tableName,
-      this._ast,
+      this.#ast,
       this.format,
       {
         name,
@@ -167,7 +152,7 @@ export abstract class AbstractQuery<
   }
 
   get ast() {
-    return this._ast;
+    return this.#ast;
   }
 
   hash(): string {
@@ -193,7 +178,7 @@ export abstract class AbstractQuery<
     this._newQuerySymbol(
       this.#tableName,
       {
-        ...this._ast,
+        ...this.#ast,
         limit: 1,
       },
       {
@@ -267,9 +252,9 @@ export abstract class AbstractQuery<
       return this._newQuerySymbol(
         this.#tableName,
         {
-          ...this._ast,
+          ...this.#ast,
           related: [
-            ...(this._ast.related ?? []),
+            ...(this.#ast.related ?? []),
             {
               system: this.#system,
               correlation: {
@@ -278,7 +263,7 @@ export abstract class AbstractQuery<
               },
               subquery: addPrimaryKeysToAst(
                 this.#schema.tables[destSchema],
-                sq._ast,
+                sq.#ast,
               ),
             },
           ],
@@ -325,9 +310,9 @@ export abstract class AbstractQuery<
       return this._newQuerySymbol(
         this.#tableName,
         {
-          ...this._ast,
+          ...this.#ast,
           related: [
-            ...(this._ast.related ?? []),
+            ...(this.#ast.related ?? []),
             {
               system: this.#system,
               correlation: {
@@ -393,7 +378,7 @@ export abstract class AbstractQuery<
       cond = cmp(fieldOrExpressionFactory, opOrValue, value);
     }
 
-    const existingWhere = this._ast.where;
+    const existingWhere = this.#ast.where;
     if (existingWhere) {
       cond = and(existingWhere, cond);
     }
@@ -409,7 +394,7 @@ export abstract class AbstractQuery<
     return this._newQuerySymbol(
       this.#tableName,
       {
-        ...this._ast,
+        ...this.#ast,
         where,
       },
       this.format,
@@ -425,7 +410,7 @@ export abstract class AbstractQuery<
     this._newQuerySymbol(
       this.#tableName,
       {
-        ...this._ast,
+        ...this.#ast,
         start: {
           row,
           exclusive: !opts?.inclusive,
@@ -453,7 +438,7 @@ export abstract class AbstractQuery<
     return this._newQuerySymbol(
       this.#tableName,
       {
-        ...this._ast,
+        ...this.#ast,
         limit,
       },
       this.format,
@@ -475,8 +460,8 @@ export abstract class AbstractQuery<
     return this._newQuerySymbol(
       this.#tableName,
       {
-        ...this._ast,
-        orderBy: [...(this._ast.orderBy ?? []), [field as string, direction]],
+        ...this.#ast,
+        orderBy: [...(this.#ast.orderBy ?? []), [field as string, direction]],
       },
       this.format,
       this.customQueryID,
@@ -521,7 +506,7 @@ export abstract class AbstractQuery<
           },
           subquery: addPrimaryKeysToAst(
             this.#schema.tables[destTableName],
-            sq._ast,
+            sq.#ast,
           ),
         },
         op: 'EXISTS',
@@ -577,7 +562,7 @@ export abstract class AbstractQuery<
                 subquery: addPrimaryKeysToAst(
                   this.#schema.tables[destSchema],
                   (queryToDest as QueryImpl<Schema, string, unknown, unknown>)
-                    ._ast,
+                    .#ast,
                 ),
               },
               op: 'EXISTS',
@@ -603,49 +588,34 @@ export abstract class AbstractQuery<
     if (!this.#completedAST) {
       const finalOrderBy = addPrimaryKeys(
         this.#schema.tables[this.#tableName],
-        this._ast.orderBy,
+        this.#ast.orderBy,
       );
-      if (this._ast.start) {
-        const {row} = this._ast.start;
+      if (this.#ast.start) {
+        const {row} = this.#ast.start;
         const narrowedRow: Writable<IVMRow> = {};
         for (const [field] of finalOrderBy) {
           narrowedRow[field] = row[field];
         }
         this.#completedAST = {
-          ...this._ast,
+          ...this.#ast,
           start: {
-            ...this._ast.start,
+            ...this.#ast.start,
             row: narrowedRow,
           },
           orderBy: finalOrderBy,
         };
       } else {
         this.#completedAST = {
-          ...this._ast,
+          ...this.#ast,
           orderBy: addPrimaryKeys(
             this.#schema.tables[this.#tableName],
-            this._ast.orderBy,
+            this.#ast.orderBy,
           ),
         };
       }
     }
     return this.#completedAST;
   }
-
-  abstract materialize(
-    options?: MaterializeOptions,
-  ): TypedView<HumanReadable<TReturn>>;
-  abstract materialize<T>(
-    factory: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
-    options?: MaterializeOptions,
-  ): T;
-
-  abstract run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
-
-  abstract preload(options?: PreloadOptions): {
-    cleanup: () => void;
-    complete: Promise<void>;
-  };
 }
 
 export function materializeImpl<
@@ -825,11 +795,14 @@ export function preloadImpl<
 }
 
 export class QueryImpl<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn = PullRow<TTable, TSchema>,
-  TContext = NoContext,
-> extends AbstractQuery<TSchema, TTable, TReturn, TContext> {
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn = PullRow<TTable, TSchema>,
+    TContext = unknown,
+  >
+  extends AbstractQuery<TSchema, TTable, TReturn, TContext>
+  implements Query<TSchema, TTable, TReturn, TContext>
+{
   readonly #schema: TSchema;
   readonly #delegate: QueryDelegate<TContext> | undefined;
   readonly #system: System;
@@ -880,43 +853,43 @@ export class QueryImpl<
     );
   }
 
-  materialize<T>(
-    factoryOrOptions?:
-      | ViewFactory<TSchema, TTable, TReturn, TContext, T>
-      | MaterializeOptions,
-    maybeOptions?: MaterializeOptions,
-  ): T | TypedView<HumanReadable<TReturn>> {
-    const delegate = must(
-      this.#delegate,
-      'materialize requires a query delegate to be set',
-    );
-    if (typeof factoryOrOptions === 'function') {
-      const factory = factoryOrOptions;
-      const options = maybeOptions;
-      return delegate.materialize(this, factory, options);
-    }
+  // materialize<T>(
+  //   factoryOrOptions?:
+  //     | ViewFactory<TSchema, TTable, TReturn, TContext, T>
+  //     | MaterializeOptions,
+  //   maybeOptions?: MaterializeOptions,
+  // ): T | TypedView<HumanReadable<TReturn>> {
+  //   const delegate = must(
+  //     this.#delegate,
+  //     'materialize requires a query delegate to be set',
+  //   );
+  //   if (typeof factoryOrOptions === 'function') {
+  //     const factory = factoryOrOptions;
+  //     const options = maybeOptions;
+  //     return delegate.materialize(this, factory, options);
+  //   }
 
-    return delegate.materialize(this, undefined, maybeOptions);
-  }
+  //   return delegate.materialize(this, undefined, maybeOptions);
+  // }
 
-  run(options?: RunOptions): Promise<HumanReadable<TReturn>> {
-    const delegate = must(
-      this.#delegate,
-      'run requires a query delegate to be set',
-    );
-    return delegate.run(this, options);
-  }
+  // run(options?: RunOptions): Promise<HumanReadable<TReturn>> {
+  //   const delegate = must(
+  //     this.#delegate,
+  //     'run requires a query delegate to be set',
+  //   );
+  //   return delegate.run(this, options);
+  // }
 
-  preload(options?: PreloadOptions): {
-    cleanup: () => void;
-    complete: Promise<void>;
-  } {
-    const delegate = must(
-      this.#delegate,
-      'preload requires a query delegate to be set',
-    );
-    return delegate.preload(this, options);
-  }
+  // preload(options?: PreloadOptions): {
+  //   cleanup: () => void;
+  //   complete: Promise<void>;
+  // } {
+  //   const delegate = must(
+  //     this.#delegate,
+  //     'preload requires a query delegate to be set',
+  //   );
+  //   return delegate.preload(this, options);
+  // }
 }
 
 function addPrimaryKeys(
