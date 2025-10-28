@@ -202,7 +202,8 @@ export class PlannerJoin {
       const pipelineCost =
         this.#type === 'flipped'
           ? childCost.startupCost +
-            childCost.runningCost * (parentCost.startupCost + scanEst)
+            childCost.runningCost *
+              (parentCost.startupCost + parentCost.runningCost)
           : parentCost.runningCost +
             SEMI_JOIN_OVERHEAD_MULTIPLIER *
               scanEst *
@@ -220,7 +221,8 @@ export class PlannerJoin {
     // if the parent is a source, we're in a nested loop join
     const nestedLoopCost =
       this.#type === 'flipped'
-        ? childCost.runningCost * (parentCost.startupCost + scanEst)
+        ? childCost.runningCost *
+          (parentCost.startupCost + parentCost.runningCost)
         : SEMI_JOIN_OVERHEAD_MULTIPLIER *
           scanEst *
           (childCost.startupCost + childCost.runningCost);
