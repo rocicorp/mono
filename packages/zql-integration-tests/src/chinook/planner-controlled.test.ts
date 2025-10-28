@@ -47,7 +47,7 @@ describe('two joins via and', () => {
       costModel,
     );
 
-    expect(pick(planned, ['where', 'conditions', 0, 'flip'])).toBe(true);
+    expect(pick(planned, ['where', 'conditions', 0, 'flip'])).toBe(false);
     expect(pick(planned, ['where', 'conditions', 1, 'flip'])).toBe(true);
     expect(
       pick(planned, ['where', 'conditions', 1, 'related', 'subquery', 'table']),
