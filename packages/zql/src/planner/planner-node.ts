@@ -18,6 +18,7 @@ export type PlannerNode =
 export type CostEstimate = {
   baseCardinality: number;
   runningCost: number;
+  startupCost: number;
   selectivity: number;
   limit: number | undefined;
 };

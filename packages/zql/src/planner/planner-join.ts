@@ -218,7 +218,13 @@ export class PlannerJoin {
       // if the parent is a join, we're in a pipeline rather than nesting of joins.
       return {
         baseCardinality: parentCost.baseCardinality,
-        runningCost: parentCost.runningCost + scanEst * childCost.runningCost,
+        runningCost:
+          this.#type === 'flipped'
+            ? childCost.startupCost +
+              childCost.runningCost * (parentCost.startupCost + scanEst)
+            : parentCost.runningCost +
+              scanEst * (childCost.startupCost + childCost.runningCost),
+        startupCost: parentCost.startupCost,
         selectivity: parentCost.selectivity,
         limit: parentCost.limit,
       };
@@ -227,7 +233,11 @@ export class PlannerJoin {
     // if the parent is a source, we're in a nested loop join
     return {
       baseCardinality: parentCost.baseCardinality,
-      runningCost: scanEst * childCost.runningCost,
+      runningCost:
+        this.#type === 'flipped'
+          ? childCost.runningCost * (parentCost.startupCost + scanEst)
+          : scanEst * (childCost.startupCost + childCost.runningCost),
+      startupCost: parentCost.startupCost,
       selectivity: parentCost.selectivity,
       limit: parentCost.limit,
     };
