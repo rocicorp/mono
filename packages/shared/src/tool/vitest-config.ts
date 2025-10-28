@@ -1,4 +1,5 @@
 import {makeDefine} from '../build.ts';
+import {playwright} from '@vitest/browser-playwright';
 import {defineConfig} from 'vitest/config';
 
 export const CI = process.env['CI'] === 'true' || process.env['CI'] === '1';
@@ -41,7 +42,7 @@ export default defineConfig({
     onlyFailed: true,
     browser: {
       enabled: true,
-      provider: 'playwright',
+      provider: playwright(),
       headless: true,
       screenshotFailures: false,
       instances: [
