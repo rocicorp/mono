@@ -56,7 +56,9 @@ suite('PlannerJoin', () => {
   });
 
   test('propagateConstraints() on semi-join sends constraints to child', () => {
-    const {child} = createJoin();
+    const {child, join} = createJoin();
+
+    join.propagateConstraints([0], undefined);
 
     expect(child.estimateCost()).toStrictEqual(expectedCost(1));
   });
