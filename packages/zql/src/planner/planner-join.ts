@@ -50,7 +50,6 @@ export class PlannerJoin {
 
   // Reset between planning attempts
   #type: 'semi' | 'flipped';
-  #pinned: boolean;
 
   constructor(
     parent: PlannerNode,
@@ -61,7 +60,6 @@ export class PlannerJoin {
     planId: number,
   ) {
     this.#type = 'semi';
-    this.#pinned = false;
     this.#parent = parent;
     this.#child = child;
     this.#childConstraint = childConstraint;
@@ -84,7 +82,6 @@ export class PlannerJoin {
   }
 
   flipIfNeeded(input: PlannerNode): void {
-    assert(this.#pinned === false, 'Cannot flip a pinned join');
     if (input === this.#child) {
       this.flip();
     } else {
@@ -97,7 +94,6 @@ export class PlannerJoin {
 
   flip(): void {
     assert(this.#type === 'semi', 'Can only flip a semi-join');
-    assert(this.#pinned === false, 'Cannot flip a pinned join');
     if (!this.#flippable) {
       throw new UnflippableJoinError(
         'Cannot flip a non-flippable join (e.g., NOT EXISTS)',
@@ -109,14 +105,8 @@ export class PlannerJoin {
   get type(): 'semi' | 'flipped' {
     return this.#type;
   }
-
-  pin(): void {
-    assert(this.#pinned === false, 'Cannot pin a pinned join');
-    this.#pinned = true;
-  }
-
-  get pinned(): boolean {
-    return this.#pinned;
+  isFlippable(): boolean {
+    return this.#flippable;
   }
 
   /**
@@ -150,18 +140,10 @@ export class PlannerJoin {
   propagateConstraints(
     branchPattern: number[],
     constraint: PlannerConstraint | undefined,
-    from: PlannerNode,
   ): void {
-    if (this.#pinned) {
-      assert(
-        from.pinned,
-        'It should be impossible for a pinned join to receive constraints from a non-pinned node',
-      );
-    }
-
-    if (this.#pinned && this.#type === 'semi') {
+    if (this.#type === 'semi') {
       // A semi-join always has constraints for its child.
-      // They are defined by the correlated between parent and child.
+      // They are defined by the correlation between parent and child.
       this.#child.propagateConstraints(
         branchPattern,
         this.#childConstraint,
@@ -169,8 +151,7 @@ export class PlannerJoin {
       );
       // A semi-join forwards constraints to its parent.
       this.#parent.propagateConstraints(branchPattern, constraint, this);
-    }
-    if (this.#pinned && this.#type === 'flipped') {
+    } else if (this.#type === 'flipped') {
       // A flipped join has no constraints to pass to its child.
       // It is a standalone fetch that is relying on the filters of the child
       // connection to do the heavy work.
@@ -184,23 +165,10 @@ export class PlannerJoin {
         this,
       );
     }
-    if (!this.#pinned && this.#type === 'semi') {
-      // If a join is not pinned, it cannot contribute constraints to its child.
-      // Contributing constraints to its child would reduce the child's cost too early
-      // causing the child to be picked by the planning algorithm before the parent
-      // that is contributing the constraints has been picked.
-      this.#parent.propagateConstraints(branchPattern, constraint, this);
-    }
-    if (!this.#pinned && this.#type === 'flipped') {
-      // If a join has been flipped that means it has been picked by the planning algorithm.
-      // If it has been picked, it must be pinned.
-      throw new Error('Impossible to be flipped and not pinned');
-    }
   }
 
   reset(): void {
     this.#type = 'semi';
-    this.#pinned = false;
   }
 
   estimateCost(branchPattern?: number[]): CostEstimate {
@@ -259,13 +227,11 @@ export class PlannerJoin {
   getDebugInfo(): {
     name: string;
     type: 'semi' | 'flipped';
-    pinned: boolean;
     planId: number;
   } {
     return {
       name: this.getName(),
       type: this.#type,
-      pinned: this.#pinned,
       planId: this.planId,
     };
   }

@@ -37,10 +37,6 @@ export class PlannerFanIn {
     return this.#type;
   }
 
-  get pinned(): boolean {
-    return false;
-  }
-
   closestJoinOrSource(): JoinOrConnection {
     return 'join';
   }
@@ -90,10 +86,11 @@ export class PlannerFanIn {
       limit: undefined,
     };
 
+    branchPattern = branchPattern ?? [];
+
     if (this.#type === 'FI') {
       // Normal FanIn: all inputs get the same branch pattern with 0 prepended
-      const updatedPattern =
-        branchPattern === undefined ? undefined : [0, ...branchPattern];
+      const updatedPattern = [0, ...branchPattern];
       let maxBaseCardinality = 0;
       let maxRunningCost = 0;
       let maxStartupCost = 0;
@@ -135,8 +132,7 @@ export class PlannerFanIn {
       // Track complement probability for OR selectivity: P(A OR B) = 1 - (1-A)(1-B)
       let noMatchProb = 1.0;
       for (const input of this.#inputs) {
-        const updatedPattern =
-          branchPattern === undefined ? undefined : [i, ...branchPattern];
+        const updatedPattern = [i, ...branchPattern];
         const cost = input.estimateCost(updatedPattern);
         totalCost.baseCardinality += cost.baseCardinality;
         totalCost.runningCost += cost.runningCost;
