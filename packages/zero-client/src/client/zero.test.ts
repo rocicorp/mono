@@ -61,7 +61,7 @@ import type {WSString} from './http-string.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import type {QueryManager} from './query-manager.ts';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.ts';
-import {ClientError, isServerError, ServerError} from './error.ts';
+import {ClientError, isServerError} from './error.ts';
 import {
   MockSocket,
   storageMock,
@@ -84,6 +84,8 @@ import {
 import {ConnectionStatus} from './connection-status.ts';
 import type {ConnectionState} from './connection-manager.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
+import {ProtocolError} from '../../../zero-protocol/src/error.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 
 const startTime = 1678829450000;
 
@@ -212,7 +214,11 @@ describe('onOnlineChange callback', () => {
     await z.triggerConnected();
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
-    await z.triggerError(ErrorKind.InvalidMessage, 'aaa');
+    await z.triggerError({
+      kind: ErrorKind.InvalidMessage,
+      message: 'aaa',
+      origin: ErrorOrigin.Server,
+    });
     await z.waitForConnectionStatus(ConnectionStatus.Error);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(false);
@@ -235,7 +241,10 @@ describe('onOnlineChange callback', () => {
     await z.triggerConnected();
     await vi.advanceTimersByTimeAsync(0);
     const BACKOFF_MS = RUN_LOOP_INTERVAL_MS * 10;
-    await z.triggerError(ErrorKind.ServerOverloaded, 'slow down', {
+    await z.triggerError({
+      kind: ErrorKind.ServerOverloaded,
+      message: 'slow down',
+      origin: ErrorOrigin.ZeroCache,
       minBackoffMs: BACKOFF_MS,
     });
     await z.waitForConnectionStatus(ConnectionStatus.Connecting);
@@ -260,7 +269,10 @@ describe('onOnlineChange callback', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     const BACKOFF_MS = 10;
-    await z.triggerError(ErrorKind.Rehome, 'rehomed', {
+    await z.triggerError({
+      kind: ErrorKind.Rehome,
+      message: 'rehomed',
+      origin: ErrorOrigin.ZeroCache,
       maxBackoffMs: BACKOFF_MS,
       reconnectParams: {
         reason: 'rehomed',
@@ -295,7 +307,11 @@ describe('onOnlineChange callback', () => {
     await z.triggerConnected();
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
-    await z.triggerError(ErrorKind.Unauthorized, 'bbb');
+    await z.triggerError({
+      kind: ErrorKind.Unauthorized,
+      message: 'bbb',
+      origin: ErrorOrigin.ZeroCache,
+    });
     await z.waitForConnectionStatus(ConnectionStatus.Connecting);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
@@ -317,7 +333,11 @@ describe('onOnlineChange callback', () => {
     const {z, getOnlineCount, getOfflineCount} = getNewZero();
     await z.triggerConnected();
     await vi.advanceTimersByTimeAsync(0);
-    await z.triggerError(ErrorKind.Unauthorized, 'ccc');
+    await z.triggerError({
+      kind: ErrorKind.Unauthorized,
+      message: 'ccc',
+      origin: ErrorOrigin.ZeroCache,
+    });
     await z.waitForConnectionStatus(ConnectionStatus.Connecting);
     await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
@@ -327,7 +347,11 @@ describe('onOnlineChange callback', () => {
     expect(getOfflineCount()).toBe(0);
     const reconnectingSocket = z.socket;
     await reconnectingSocket;
-    await z.triggerError(ErrorKind.Unauthorized, 'ddd');
+    await z.triggerError({
+      kind: ErrorKind.Unauthorized,
+      message: 'ddd',
+      origin: ErrorOrigin.ZeroCache,
+    });
     await z.waitForConnectionStatus(ConnectionStatus.Connecting);
     await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
     await vi.advanceTimersByTimeAsync(0);
@@ -372,7 +396,11 @@ describe('connect error metrics', () => {
       await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
       const initialLogCount = z.testLogSink.messages.length;
-      await z.triggerError(ErrorKind.Internal, 'boom');
+      await z.triggerError({
+        kind: ErrorKind.Internal,
+        message: 'boom',
+        origin: ErrorOrigin.ZeroCache,
+      });
       await z.waitForConnectionStatus(ConnectionStatus.Error);
       await vi.advanceTimersByTimeAsync(0);
 
@@ -459,7 +487,11 @@ test('onOnline listener', async () => {
 
   // Unsubscribe the first listener and trigger an error to go offline.
   unsubscribe1();
-  await z.triggerError(ErrorKind.InvalidMessage, 'oops');
+  await z.triggerError({
+    kind: ErrorKind.InvalidMessage,
+    message: 'oops',
+    origin: ErrorOrigin.Server,
+  });
   await z.waitForConnectionStatus(ConnectionStatus.Error);
   await vi.advanceTimersByTimeAsync(0);
   expect(z.online).toBe(false);
@@ -2204,7 +2236,11 @@ test('Authentication', async () => {
     expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
       expectedAuthToken,
     );
-    await r.triggerError(ErrorKind.Unauthorized, 'auth error ' + authCounter);
+    await r.triggerError({
+      kind: ErrorKind.Unauthorized,
+      message: 'auth error ' + authCounter,
+      origin: ErrorOrigin.ZeroCache,
+    });
     expect(r.connectionStatus).toBe(ConnectionStatus.Connecting);
     await vi.advanceTimersByTimeAsync(tickMS);
     expect(log).length(1);
@@ -2261,7 +2297,11 @@ test('Authentication', async () => {
   }
 
   {
-    await r.triggerError(ErrorKind.Unauthorized, 'auth error ' + authCounter);
+    await r.triggerError({
+      kind: ErrorKind.Unauthorized,
+      message: 'auth error ' + authCounter,
+      origin: ErrorOrigin.ZeroCache,
+    });
     currentSocket = await r.socket;
 
     // wait the full timeout period and we should be disconnected now
@@ -2290,7 +2330,11 @@ test('throttles reauth on rapid auth errors', async () => {
   const initialAuthTime = authCallTimes.shift();
   expect(initialAuthTime).toBe(startTime);
 
-  await r.triggerError(ErrorKind.Unauthorized, 'first auth error');
+  await r.triggerError({
+    kind: ErrorKind.Unauthorized,
+    message: 'first auth error',
+    origin: ErrorOrigin.ZeroCache,
+  });
   await r.waitForConnectionStatus(ConnectionStatus.Connecting);
   await vi.advanceTimersByTimeAsync(0);
   expect(authCallTimes).length(1);
@@ -2301,7 +2345,11 @@ test('throttles reauth on rapid auth errors', async () => {
   await r.triggerConnected();
   await r.waitForConnectionStatus(ConnectionStatus.Connected);
 
-  await r.triggerError(ErrorKind.Unauthorized, 'second auth error');
+  await r.triggerError({
+    kind: ErrorKind.Unauthorized,
+    message: 'second auth error',
+    origin: ErrorOrigin.ZeroCache,
+  });
   await r.waitForConnectionStatus(ConnectionStatus.Connecting);
   await vi.advanceTimersByTimeAsync(0);
   expect(authCallTimes).length(1);
@@ -2331,7 +2379,11 @@ test(ErrorKind.AuthInvalidated, async () => {
     'auth-token-1',
   );
 
-  await r.triggerError(ErrorKind.AuthInvalidated, 'auth error');
+  await r.triggerError({
+    kind: ErrorKind.AuthInvalidated,
+    message: 'auth error',
+    origin: ErrorOrigin.ZeroCache,
+  });
   await r.waitForConnectionStatus(ConnectionStatus.Connecting);
 
   const reconnectingSocket = await r.socket;
@@ -2344,7 +2396,11 @@ test('Disconnect on error', async () => {
   const r = zeroForTest();
   await r.triggerConnected();
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
-  await r.triggerError(ErrorKind.InvalidMessage, 'Bad message');
+  await r.triggerError({
+    kind: ErrorKind.InvalidMessage,
+    message: 'Bad message',
+    origin: ErrorOrigin.ZeroCache,
+  });
   expect(r.connectionStatus).toBe(ConnectionStatus.Error);
 });
 
@@ -2355,7 +2411,11 @@ test('No backoff on errors', async () => {
   let currentSocket = await r.socket;
 
   const step = async (delta: number, message: string) => {
-    await r.triggerError(ErrorKind.InvalidMessage, message);
+    await r.triggerError({
+      kind: ErrorKind.InvalidMessage,
+      message,
+      origin: ErrorOrigin.Server,
+    });
     expect(r.connectionStatus).toBe(ConnectionStatus.Error);
 
     const nextSocketPromise = r.socket;
@@ -2533,7 +2593,11 @@ test('socketOrigin', async () => {
 
 test('Logs errors in connect', async () => {
   const r = zeroForTest({});
-  await r.triggerError(ErrorKind.InvalidMessage, 'bad-message');
+  await r.triggerError({
+    kind: ErrorKind.InvalidMessage,
+    message: 'bad-message',
+    origin: ErrorOrigin.ZeroCache,
+  });
   expect(r.connectionStatus).toBe(ConnectionStatus.Error);
   await vi.advanceTimersByTimeAsync(0);
 
@@ -2590,7 +2654,11 @@ async function testWaitsForConnection(
   const r = zeroForTest();
 
   const log: ('resolved' | 'rejected')[] = [];
-  await r.triggerError(ErrorKind.InvalidMessage, 'Bad message');
+  await r.triggerError({
+    kind: ErrorKind.InvalidMessage,
+    message: 'Bad message',
+    origin: ErrorOrigin.ZeroCache,
+  });
   expect(r.connectionStatus).toBe(ConnectionStatus.Error);
 
   fn(r).then(
@@ -2609,7 +2677,11 @@ async function testWaitsForConnection(
   await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS);
   await reconnectPromise;
 
-  await r.triggerError(ErrorKind.InvalidMessage, 'Bad message');
+  await r.triggerError({
+    kind: ErrorKind.InvalidMessage,
+    message: 'Bad message',
+    origin: ErrorOrigin.ZeroCache,
+  });
   await tickAFewTimes(vi);
   expect(log).toEqual(['rejected']);
 }
@@ -2650,7 +2722,11 @@ test('VersionNotSupported default handler', async () => {
   const r = zeroForTest(undefined, false);
   r.reload = fake;
 
-  await r.triggerError(ErrorKind.VersionNotSupported, 'server test message');
+  await r.triggerError({
+    kind: ErrorKind.VersionNotSupported,
+    message: 'server test message',
+    origin: ErrorOrigin.ZeroCache,
+  });
   await vi.advanceTimersToNextTimerAsync();
   await promise;
   expect(r.connectionStatus).toBe(ConnectionStatus.Error);
@@ -2669,7 +2745,11 @@ test('VersionNotSupported custom onUpdateNeeded handler', async () => {
   });
   const r = zeroForTest({onUpdateNeeded: fake});
 
-  await r.triggerError(ErrorKind.VersionNotSupported, 'server test message');
+  await r.triggerError({
+    kind: ErrorKind.VersionNotSupported,
+    message: 'server test message',
+    origin: ErrorOrigin.ZeroCache,
+  });
   await promise;
   expect(r.connectionStatus).toBe(ConnectionStatus.Error);
 
@@ -2690,10 +2770,11 @@ test('SchemaVersionNotSupported default handler', async () => {
   const r = zeroForTest(undefined, false);
   r.reload = fake;
 
-  await r.triggerError(
-    ErrorKind.SchemaVersionNotSupported,
-    'server test message',
-  );
+  await r.triggerError({
+    kind: ErrorKind.SchemaVersionNotSupported,
+    message: 'server test message',
+    origin: ErrorOrigin.ZeroCache,
+  });
   await vi.advanceTimersToNextTimerAsync();
   await promise;
   expect(r.connectionStatus).toBe(ConnectionStatus.Error);
@@ -2712,10 +2793,11 @@ test('SchemaVersionNotSupported custom onUpdateNeeded handler', async () => {
   });
   const r = zeroForTest({onUpdateNeeded: fake});
 
-  await r.triggerError(
-    ErrorKind.SchemaVersionNotSupported,
-    'server test message',
-  );
+  await r.triggerError({
+    kind: ErrorKind.SchemaVersionNotSupported,
+    message: 'server test message',
+    origin: ErrorOrigin.ZeroCache,
+  });
   await promise;
   expect(r.connectionStatus).toBe(ConnectionStatus.Error);
 
@@ -2736,7 +2818,11 @@ test('ClientNotFound default handler', async () => {
   const r = zeroForTest(undefined, false);
   r.reload = fake;
 
-  await r.triggerError(ErrorKind.ClientNotFound, 'server test message');
+  await r.triggerError({
+    kind: ErrorKind.ClientNotFound,
+    message: 'server test message',
+    origin: ErrorOrigin.ZeroCache,
+  });
   await vi.advanceTimersToNextTimerAsync();
   await promise;
   expect(r.connectionStatus).toBe(ConnectionStatus.Error);
@@ -2754,7 +2840,11 @@ test('ClientNotFound custom onClientStateNotFound handler', async () => {
     resolve();
   });
   const r = zeroForTest({onClientStateNotFound: fake});
-  await r.triggerError(ErrorKind.ClientNotFound, 'server test message');
+  await r.triggerError({
+    kind: ErrorKind.ClientNotFound,
+    message: 'server test message',
+    origin: ErrorOrigin.ZeroCache,
+  });
   await promise;
   expect(r.connectionStatus).toBe(ConnectionStatus.Error);
 
@@ -2770,10 +2860,11 @@ test('server ahead', async () => {
   const r = zeroForTest();
   r.reload = resolve;
 
-  await r.triggerError(
-    ErrorKind.InvalidConnectionRequestBaseCookie,
-    'unexpected BaseCookie',
-  );
+  await r.triggerError({
+    kind: ErrorKind.InvalidConnectionRequestBaseCookie,
+    message: 'unexpected BaseCookie',
+    origin: ErrorOrigin.ZeroCache,
+  });
 
   await vi.waitUntil(() => storage[RELOAD_REASON_STORAGE_KEY]);
 
@@ -3030,7 +3121,11 @@ describe('Disconnect on hide', () => {
 
 test(ErrorKind.InvalidConnectionRequest, async () => {
   const r = zeroForTest({});
-  await r.triggerError(ErrorKind.InvalidConnectionRequest, 'test');
+  await r.triggerError({
+    kind: ErrorKind.InvalidConnectionRequest,
+    message: 'test',
+    origin: ErrorOrigin.ZeroCache,
+  });
   expect(r.connectionStatus).toBe(ConnectionStatus.Error);
   await vi.advanceTimersByTimeAsync(0);
   const msg = r.testLogSink.messages.at(-1);
@@ -4169,7 +4264,11 @@ test('onError is called on error', async () => {
   await z.triggerConnected();
   expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
 
-  await z.triggerError(ErrorKind.MutationRateLimited, 'test');
+  await z.triggerError({
+    kind: ErrorKind.MutationRateLimited,
+    message: 'test',
+    origin: ErrorOrigin.ZeroCache,
+  });
 
   expect(onErrorSpy).toBeCalledTimes(1);
   expect(onErrorSpy.mock.calls).toMatchInlineSnapshot(`
@@ -4193,13 +4292,18 @@ test('onError includes server error reason', async () => {
   expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
 
   const serverMessage = 'table missing on remote';
-  await z.triggerError(ErrorKind.VersionNotSupported, serverMessage);
+  await z.triggerError({
+    kind: ErrorKind.VersionNotSupported,
+    message: serverMessage,
+    origin: ErrorOrigin.ZeroCache,
+  });
 
   expect(onErrorSpy).toBeCalledTimes(1);
   const [errorMessage, errorObject] = onErrorSpy.mock.calls[0];
   expect(errorMessage).toContain('VersionNotSupported');
   expect(errorMessage).toContain(serverMessage);
-  expect(errorObject).toBeInstanceOf(ServerError);
+  expect(errorObject).toBeInstanceOf(ProtocolError);
+  expect(errorObject.errorBody.origin).toBe(ErrorOrigin.ZeroCache);
 });
 
 test('We should send a deleteClient when a Zero instance is closed', async () => {

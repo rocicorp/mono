@@ -10,6 +10,7 @@ import {
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {MockSocket, tickAFewTimes, zeroForTest} from './test-utils.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 
 const startTime = 1678829450000;
 
@@ -47,7 +48,11 @@ test('connection stays alive on rate limit error', async () => {
   // reset mock socket messages to clear `initConnection` message
   mockSocket.messages.length = 0;
   await z.pusher(pushReq, 'test-request-id');
-  await z.triggerError(ErrorKind.MutationRateLimited, 'Rate limit exceeded');
+  await z.triggerError({
+    kind: ErrorKind.MutationRateLimited,
+    message: 'Rate limit exceeded',
+    origin: ErrorOrigin.Server,
+  });
 
   expect(mockSocket.messages).toHaveLength(1);
   expect(mockSocket.closed).toBe(false);
@@ -72,7 +77,11 @@ test('a mutation after a rate limit error causes limited mutations to be resent'
   mockSocket.messages.length = 0;
 
   await z.mutate.issue.insert({id: 'a', value: 1});
-  await z.triggerError(ErrorKind.MutationRateLimited, 'Rate limit exceeded');
+  await z.triggerError({
+    kind: ErrorKind.MutationRateLimited,
+    message: 'Rate limit exceeded',
+    origin: ErrorOrigin.Server,
+  });
 
   await tickAFewTimes(vi, 0);
   expect(mockSocket.messages).toHaveLength(1);
@@ -84,7 +93,11 @@ test('a mutation after a rate limit error causes limited mutations to be resent'
 
   // now send another mutation
   await z.mutate.issue.insert({id: 'b', value: 2});
-  await z.triggerError(ErrorKind.MutationRateLimited, 'Rate limit exceeded');
+  await z.triggerError({
+    kind: ErrorKind.MutationRateLimited,
+    message: 'Rate limit exceeded',
+    origin: ErrorOrigin.Server,
+  });
   await tickAFewTimes(vi, 0);
 
   // two mutations should be sent in separate push messages
@@ -134,7 +147,11 @@ test('previously confirmed mutations are not resent after a rate limit error', a
 
   // now send another mutation but rate limit it
   await z.mutate.issue.insert({id: 'b', value: 2});
-  await z.triggerError(ErrorKind.MutationRateLimited, 'Rate limit exceeded');
+  await z.triggerError({
+    kind: ErrorKind.MutationRateLimited,
+    message: 'Rate limit exceeded',
+    origin: ErrorOrigin.Server,
+  });
   await tickAFewTimes(vi);
 
   // Only the new mutation should have been sent. The first was confirmed by a poke response.
@@ -147,7 +164,11 @@ test('previously confirmed mutations are not resent after a rate limit error', a
 
   // Send another mutation. This and the last rate limited mutation should be sent
   await z.mutate.issue.insert({id: 'c', value: 3});
-  await z.triggerError(ErrorKind.MutationRateLimited, 'Rate limit exceeded');
+  await z.triggerError({
+    kind: ErrorKind.MutationRateLimited,
+    message: 'Rate limit exceeded',
+    origin: ErrorOrigin.Server,
+  });
   await tickAFewTimes(vi);
 
   expect(

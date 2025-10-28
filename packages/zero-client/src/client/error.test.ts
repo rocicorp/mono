@@ -1,18 +1,23 @@
 import {describe, expect, test} from 'vitest';
-
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
+import {
+  ProtocolError,
+  type BackoffBody,
+  type ErrorBody,
+} from '../../../zero-protocol/src/error.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
+import {ConnectionStatus} from './connection-status.ts';
 import {
   ClientError,
-  ServerError,
   getBackoffParams,
   getErrorConnectionTransition,
   isAuthError,
   isClientError,
   isServerError,
+  NO_STATUS_TRANSITION,
 } from './error.ts';
-import {ClientErrorKind} from './client-error-kind.ts';
-import {ConnectionStatus} from './connection-status.ts';
-import type {BackoffBody, ErrorBody} from '../../../zero-protocol/src/error.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 
 describe('ClientError', () => {
   test('exposes error body and metadata', () => {
@@ -24,7 +29,10 @@ describe('ClientError', () => {
     const error = new ClientError(body);
 
     expect(error).toBeInstanceOf(Error);
-    expect(error.errorBody).toBe(body);
+    expect(error.errorBody).toStrictEqual({
+      ...body,
+      origin: ErrorOrigin.Client,
+    });
     expect(error.kind).toBe(ClientErrorKind.ConnectTimeout);
     expect(error.name).toBe('ClientError');
     expect(error.message).toBe('connect timeout');
@@ -42,7 +50,10 @@ describe('ClientError', () => {
     const error = new ClientError(body, {cause});
 
     expect(error.cause).toBe(cause);
-    expect(error.errorBody).toBe(body);
+    expect(error.errorBody).toStrictEqual({
+      ...body,
+      origin: ErrorOrigin.Client,
+    });
     expect(error.kind).toBe(ClientErrorKind.AbruptClose);
   });
 
@@ -62,14 +73,15 @@ describe('ServerError', () => {
     const body: ErrorBody = {
       kind: ErrorKind.InvalidPush,
       message: 'invalid push',
+      origin: ErrorOrigin.Server,
     };
 
-    const error = new ServerError(body);
+    const error = new ProtocolError(body);
 
     expect(error).toBeInstanceOf(Error);
     expect(error.errorBody).toBe(body);
     expect(error.kind).toBe(ErrorKind.InvalidPush);
-    expect(error.name).toBe('ServerError');
+    expect(error.name).toBe('ProtocolError');
     expect(error.message).toBe('invalid push');
     expect(isServerError(error)).toBe(true);
     expect(isClientError(error)).toBe(false);
@@ -80,9 +92,10 @@ describe('ServerError', () => {
     const body: ErrorBody = {
       kind: ErrorKind.Unauthorized,
       message: 'unauthorized',
+      origin: ErrorOrigin.Server,
     };
 
-    const error = new ServerError(body, {cause});
+    const error = new ProtocolError(body, {cause});
 
     expect(error.cause).toBe(cause);
     expect(error.errorBody).toBe(body);
@@ -90,13 +103,13 @@ describe('ServerError', () => {
   });
 
   test('has useful stack trace', () => {
-    const error = new ServerError({
+    const error = new ProtocolError({
       kind: ErrorKind.InvalidPush,
       message: 'invalid push',
     });
 
     expect(error.stack).toBeDefined();
-    expect(error.stack).toContain('ServerError');
+    expect(error.stack).toContain('ProtocolError');
   });
 });
 
@@ -104,15 +117,20 @@ describe('isAuthError', () => {
   test.each([ErrorKind.AuthInvalidated, ErrorKind.Unauthorized] as const)(
     'returns true for %s server errors',
     kind => {
-      const error = new ServerError({kind, message: 'auth'});
+      const error = new ProtocolError({
+        kind,
+        message: 'auth',
+        origin: ErrorOrigin.Server,
+      });
       expect(isAuthError(error)).toBe(true);
     },
   );
 
   test('returns false for non-auth errors and non-server errors', () => {
-    const serverError = new ServerError({
+    const serverError = new ProtocolError({
       kind: ErrorKind.InvalidPush,
       message: 'not auth',
+      origin: ErrorOrigin.Server,
     });
     const clientError = new ClientError({
       kind: ClientErrorKind.Hidden,
@@ -121,6 +139,83 @@ describe('isAuthError', () => {
 
     expect(isAuthError(serverError)).toBe(false);
     expect(isAuthError(clientError)).toBe(false);
+  });
+
+  test('returns true for PushFailed with HTTP 401 status', () => {
+    const error = new ProtocolError({
+      kind: ErrorKind.PushFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.HTTP,
+      status: 401,
+      message: 'Unauthorized',
+      mutationIDs: [],
+    });
+
+    expect(isAuthError(error)).toBe(true);
+  });
+
+  test('returns true for PushFailed with HTTP 403 status', () => {
+    const error = new ProtocolError({
+      kind: ErrorKind.PushFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.HTTP,
+      status: 403,
+      message: 'Forbidden',
+      mutationIDs: [],
+    });
+
+    expect(isAuthError(error)).toBe(true);
+  });
+
+  test('returns true for TransformFailed with HTTP 401 status', () => {
+    const error = new ProtocolError({
+      kind: ErrorKind.TransformFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.HTTP,
+      status: 401,
+      message: 'Unauthorized',
+      queries: [],
+    });
+
+    expect(isAuthError(error)).toBe(true);
+  });
+
+  test('returns true for TransformFailed with HTTP 403 status', () => {
+    const error = new ProtocolError({
+      kind: ErrorKind.TransformFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.HTTP,
+      status: 403,
+      message: 'Forbidden',
+      queries: [],
+    });
+
+    expect(isAuthError(error)).toBe(true);
+  });
+
+  test('returns false for PushFailed with non-auth HTTP status', () => {
+    const error = new ProtocolError({
+      kind: ErrorKind.PushFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.HTTP,
+      status: 500,
+      message: 'Internal Server Error',
+      mutationIDs: [],
+    });
+
+    expect(isAuthError(error)).toBe(false);
+  });
+
+  test('returns false for PushFailed with non-http type', () => {
+    const error = new ProtocolError({
+      kind: ErrorKind.PushFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.Internal,
+      message: 'Internal error',
+      mutationIDs: [],
+    });
+
+    expect(isAuthError(error)).toBe(false);
   });
 });
 
@@ -136,16 +231,18 @@ describe('getBackoffParams', () => {
       kind,
       message: 'backoff',
       minBackoffMs: 100,
+      origin: ErrorOrigin.ZeroCache,
     };
-    const error = new ServerError(body);
+    const error = new ProtocolError(body);
 
     expect(getBackoffParams(error)).toBe(body);
   });
 
   test('returns undefined for non-backoff errors', () => {
-    const serverError = new ServerError({
+    const serverError = new ProtocolError({
       kind: ErrorKind.InvalidPush,
       message: 'not backoff',
+      origin: ErrorOrigin.Server,
     });
     const clientError = new ClientError({
       kind: ClientErrorKind.ClientClosed,
@@ -165,10 +262,13 @@ describe('getErrorConnectionTransition', () => {
     ClientErrorKind.Hidden,
     ClientErrorKind.PingTimeout,
   ] as const)('returns null status for retryable client error %s', kind => {
-    const error = new ClientError({kind, message: 'retry'});
+    const error = new ClientError({
+      kind,
+      message: 'retry',
+    });
 
     expect(getErrorConnectionTransition(error)).toEqual({
-      status: null,
+      status: NO_STATUS_TRANSITION,
       reason: error,
     });
   });
@@ -210,9 +310,10 @@ describe('getErrorConnectionTransition', () => {
   });
 
   test('returns error status for fatal server errors', () => {
-    const error = new ServerError({
+    const error = new ProtocolError({
       kind: ErrorKind.InvalidPush,
       message: 'invalid push',
+      origin: ErrorOrigin.Server,
     });
 
     expect(getErrorConnectionTransition(error)).toEqual({
@@ -230,10 +331,14 @@ describe('getErrorConnectionTransition', () => {
     ErrorKind.MutationRateLimited,
     ErrorKind.MutationFailed,
   ] as const)('returns null status for non-fatal server error %s', kind => {
-    const error = new ServerError({kind, message: 'non-fatal'});
+    const error = new ProtocolError({
+      kind,
+      message: 'non-fatal',
+      origin: ErrorOrigin.Server,
+    });
 
     expect(getErrorConnectionTransition(error)).toEqual({
-      status: null,
+      status: NO_STATUS_TRANSITION,
       reason: error,
     });
   });
@@ -248,5 +353,32 @@ describe('getErrorConnectionTransition', () => {
     expect(result.reason?.errorBody.message).toBe(
       'Unexpected internal error: boom',
     );
+  });
+
+  test('wraps string errors as internal client error', () => {
+    const result = getErrorConnectionTransition('string error');
+
+    expect(result.status).toBe(ConnectionStatus.Error);
+    expect(result.reason).toBeInstanceOf(ClientError);
+    expect(result.reason?.kind).toBe(ClientErrorKind.Internal);
+    expect(result.reason?.message).toBe(
+      'Unexpected internal error: string error',
+    );
+  });
+
+  test('returns null status for auth errors via HTTP status codes', () => {
+    const error = new ProtocolError({
+      kind: ErrorKind.PushFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.HTTP,
+      status: 401,
+      message: 'Unauthorized',
+      mutationIDs: [],
+    });
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: NO_STATUS_TRANSITION,
+      reason: error,
+    });
   });
 });

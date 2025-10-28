@@ -1732,11 +1732,11 @@ describe('query transform errors', () => {
     expect(onFatalErrorMock).toHaveBeenCalledOnce();
     expect(onFatalErrorMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'ServerError',
-        errorBody: {
-          kind: ErrorKind.Internal,
-          message: 'HTTP error transforming queries',
-        },
+        name: 'ProtocolError',
+        errorBody: expect.objectContaining({
+          kind: ErrorKind.TransformFailed,
+          message: 'HTTP 500 transforming queries',
+        }),
       }),
     );
   });
@@ -1780,11 +1780,11 @@ describe('query transform errors', () => {
     expect(onFatalErrorMock).toHaveBeenCalledOnce();
     expect(onFatalErrorMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'ServerError',
-        errorBody: {
-          kind: ErrorKind.Internal,
+        name: 'ProtocolError',
+        errorBody: expect.objectContaining({
+          kind: ErrorKind.TransformFailed,
           message: 'Unknown error transforming queries',
-        },
+        }),
       }),
     );
   });
@@ -1838,11 +1838,11 @@ describe('query transform errors', () => {
     expect(onFatalErrorMock).toHaveBeenCalledOnce();
     expect(onFatalErrorMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'ServerError',
-        errorBody: {
-          kind: ErrorKind.Internal,
-          message: 'HTTP error transforming queries',
-        },
+        name: 'ProtocolError',
+        errorBody: expect.objectContaining({
+          kind: ErrorKind.TransformFailed,
+          message: 'HTTP 500 transforming queries',
+        }),
       }),
     );
   });

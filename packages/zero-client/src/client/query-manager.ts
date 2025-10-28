@@ -12,6 +12,9 @@ import {
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
+import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import type {UpQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import {
   hashOfAST,
@@ -27,7 +30,7 @@ import type {ClientMetricMap} from '../../../zql/src/query/metrics-delegate.ts';
 import type {CustomQueryID} from '../../../zql/src/query/named.ts';
 import type {GotCallback} from '../../../zql/src/query/query-delegate.ts';
 import {clampTTL, compareTTL, type TTL} from '../../../zql/src/query/ttl.ts';
-import {ServerError, type ZeroError} from './error.ts';
+import {type ZeroError} from './error.ts';
 import type {InspectorDelegate} from './inspector/inspector.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
@@ -219,13 +222,24 @@ export class QueryManager implements InspectorDelegate {
       // this is included for backwards compatibility with the legacy query transform error
       if (error.error !== 'app') {
         this.#onFatalError(
-          new ServerError({
-            kind: ErrorKind.Internal,
-            message:
-              error.error === 'http'
-                ? `HTTP error transforming queries`
-                : `Unknown error transforming queries`,
-          }),
+          new ProtocolError(
+            error.error === 'http'
+              ? {
+                  kind: ErrorKind.TransformFailed,
+                  origin: ErrorOrigin.ZeroCache,
+                  reason: ErrorReason.HTTP,
+                  message: `HTTP ${error.status} transforming queries`,
+                  status: error.status,
+                  queryIDs: [],
+                }
+              : {
+                  kind: ErrorKind.TransformFailed,
+                  origin: ErrorOrigin.ZeroCache,
+                  reason: ErrorReason.Internal,
+                  message: `Unknown error transforming queries`,
+                  queryIDs: [],
+                },
+          ),
         );
       }
     }
