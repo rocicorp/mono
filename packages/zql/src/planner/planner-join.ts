@@ -204,23 +204,13 @@ export class PlannerJoin {
           ? childCost.startupCost +
             childCost.runningCost * (parentCost.startupCost + scanEst)
           : parentCost.runningCost +
-            scanEst * (childCost.startupCost + childCost.runningCost);
-
-      // Apply semi-join overhead multiplier to account for correlated subquery execution cost
-      // Inflate both runningCost and baseCardinality so the overhead propagates through joins
-      const adjustedPipelineCost =
-        this.#type === 'semi'
-          ? pipelineCost * SEMI_JOIN_OVERHEAD_MULTIPLIER
-          : pipelineCost;
-
-      const adjustedBaseCardinality =
-        this.#type === 'semi'
-          ? parentCost.baseCardinality * SEMI_JOIN_OVERHEAD_MULTIPLIER
-          : parentCost.baseCardinality;
+            SEMI_JOIN_OVERHEAD_MULTIPLIER *
+              scanEst *
+              (childCost.startupCost + childCost.runningCost);
 
       return {
-        baseCardinality: adjustedBaseCardinality,
-        runningCost: adjustedPipelineCost,
+        baseCardinality: parentCost.baseCardinality,
+        runningCost: pipelineCost,
         startupCost: parentCost.startupCost,
         selectivity: parentCost.selectivity,
         limit: parentCost.limit,
@@ -231,23 +221,13 @@ export class PlannerJoin {
     const nestedLoopCost =
       this.#type === 'flipped'
         ? childCost.runningCost * (parentCost.startupCost + scanEst)
-        : scanEst * (childCost.startupCost + childCost.runningCost);
-
-    // Apply semi-join overhead multiplier to account for correlated subquery execution cost
-    // Inflate both runningCost and baseCardinality so the overhead propagates through joins
-    const adjustedNestedLoopCost =
-      this.#type === 'semi'
-        ? nestedLoopCost * SEMI_JOIN_OVERHEAD_MULTIPLIER
-        : nestedLoopCost;
-
-    const adjustedBaseCardinality =
-      this.#type === 'semi'
-        ? parentCost.baseCardinality * SEMI_JOIN_OVERHEAD_MULTIPLIER
-        : parentCost.baseCardinality;
+        : SEMI_JOIN_OVERHEAD_MULTIPLIER *
+          scanEst *
+          (childCost.startupCost + childCost.runningCost);
 
     return {
-      baseCardinality: adjustedBaseCardinality,
-      runningCost: adjustedNestedLoopCost,
+      baseCardinality: parentCost.baseCardinality,
+      runningCost: nestedLoopCost,
       startupCost: parentCost.startupCost,
       selectivity: parentCost.selectivity,
       limit: parentCost.limit,
