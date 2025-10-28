@@ -22,9 +22,9 @@ vi.mock('@opentelemetry/api-logs', () => ({
 }));
 
 vi.mock('@opentelemetry/sdk-node', () => ({
-  NodeSDK: vi.fn().mockImplementation(() => ({
-    start: vi.fn(),
-  })),
+  NodeSDK: class NodeSDK {
+    start = vi.fn();
+  },
 }));
 
 vi.mock('@opentelemetry/auto-instrumentations-node', () => ({

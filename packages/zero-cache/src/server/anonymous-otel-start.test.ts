@@ -92,18 +92,28 @@ describe('Anonymous Telemetry Integration Tests', () => {
       shutdown: vi.fn().mockResolvedValue(undefined),
     };
 
-    // Mock metric reader
-    mockMetricReader = vi.fn();
+    // Mock metric reader - create object that will be returned by constructor
+    mockMetricReader = {
+      shutdown: vi.fn().mockResolvedValue(undefined),
+    };
 
-    // Mock exporter
-    mockExporter = vi.fn();
+    // Mock exporter - create object that will be returned by constructor
+    mockExporter = {
+      export: vi.fn(),
+      shutdown: vi.fn().mockResolvedValue(undefined),
+    };
 
-    // Setup mocks
-    vi.mocked(OTLPMetricExporter).mockImplementation(() => mockExporter);
-    vi.mocked(PeriodicExportingMetricReader).mockImplementation(
-      () => mockMetricReader,
-    );
-    vi.mocked(MeterProvider).mockImplementation(() => mockMeterProvider);
+    // Setup mocks - return the mock objects from constructors
+    // Must use regular functions (not arrow) to work with 'new'
+    vi.mocked(OTLPMetricExporter).mockImplementation(function () {
+      return mockExporter;
+    });
+    vi.mocked(PeriodicExportingMetricReader).mockImplementation(function () {
+      return mockMetricReader;
+    });
+    vi.mocked(MeterProvider).mockImplementation(function () {
+      return mockMeterProvider;
+    });
 
     // Clear environment variables that might affect telemetry
     delete process.env.ZERO_UPSTREAM_DB;

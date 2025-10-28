@@ -32,19 +32,32 @@ vi.mock('../db/lite-tables.ts', () => ({
   mustGetTableSpec: vi.fn(),
 }));
 
+// Create mocked constructors in hoisted scope
+const {MemoryStorageMock, TableSourceMock, DebugMock} = vi.hoisted(() => ({
+  MemoryStorageMock: vi.fn(function (this: unknown) {
+    return this ?? {};
+  }),
+  TableSourceMock: vi.fn(function (this: unknown) {
+    return this ?? {};
+  }),
+  DebugMock: vi.fn(function (this: unknown) {
+    return this ?? {};
+  }),
+}));
+
 // Mock MemoryStorage
 vi.mock('../../../zql/src/ivm/memory-storage.ts', () => ({
-  MemoryStorage: vi.fn(),
+  MemoryStorage: MemoryStorageMock,
 }));
 
 // Mock TableSource
 vi.mock('../../../zqlite/src/table-source.ts', () => ({
-  TableSource: vi.fn(),
+  TableSource: TableSourceMock,
 }));
 
 // Mock Debug
 vi.mock('../../../zql/src/builder/debug-delegate.ts', () => ({
-  Debug: vi.fn(),
+  Debug: DebugMock,
 }));
 
 describe('analyzeQuery', () => {
@@ -247,8 +260,12 @@ describe('analyzeQuery', () => {
 
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(mustGetTableSpec).mockReturnValue(mockTableSpec as any);
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(TableSource).mockImplementation(() => ({}) as any);
+    // Mock TableSource to return an empty object when called as constructor
+    // Must use regular function (not arrow) to work with 'new'
+    vi.mocked(TableSource).mockImplementation(function () {
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      return {} as any;
+    });
 
     const mockResult: AnalyzeQueryResult = {
       warnings: [],
@@ -298,8 +315,13 @@ describe('analyzeQuery', () => {
 
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     vi.mocked(mustGetTableSpec).mockReturnValue(mockTableSpec as any);
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    vi.mocked(TableSource).mockImplementation(() => mockTableSource as any);
+    // Mock TableSource to return mockTableSource when called as constructor
+    // Must use regular function (not arrow) to work with 'new'
+    // When a constructor explicitly returns an object, that becomes the instance
+    vi.mocked(TableSource).mockImplementation(function () {
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      return mockTableSource as any;
+    });
     vi.mocked(explainQueries).mockReturnValue({});
 
     const mockResult: AnalyzeQueryResult = {
