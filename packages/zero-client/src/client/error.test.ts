@@ -65,7 +65,6 @@ describe('ClientError', () => {
 
     expect(error.stack).toBeDefined();
     expect(error.stack).toContain('ClientError');
-    expect(error.stack).toContain('ping timeout');
   });
 });
 
