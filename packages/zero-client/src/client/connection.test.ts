@@ -77,20 +77,4 @@ describe('ConnectionImpl', () => {
       );
     });
   });
-
-  // TODO(0xcadams): reenable when disconnect is implemented
-  // describe('disconnect', () => {
-  //   test('calls disconnect callback and logs', async () => {
-  //     const connection = new ConnectionImpl(manager, lc, disconnectCallback);
-
-  //     await connection.disconnect();
-
-  //     expect(disconnectCallback).toHaveBeenCalledTimes(1);
-  //     expect(logSpy).toHaveBeenCalledWith(
-  //       'info',
-  //       {disconnect: undefined},
-  //       'User requested disconnect',
-  //     );
-  //   });
-  // });
 });

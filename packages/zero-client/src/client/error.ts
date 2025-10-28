@@ -5,13 +5,14 @@ import type {BackoffBody, ErrorBody} from '../../../zero-protocol/src/error.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
 
+export type ZeroError = ServerError | ClientError;
+export type ZeroErrorBody = Expand<ErrorBody | ClientErrorBody>;
+export type ZeroErrorKind = Expand<ErrorKind | ClientErrorKind>;
+
 export type ClientErrorBody = {
   kind: ClientErrorKind;
   message: string;
 };
-
-export type ZeroErrorBody = Expand<ErrorBody | ClientErrorBody>;
-export type ZeroErrorKind = Expand<ErrorKind | ClientErrorKind>;
 
 abstract class BaseError<
   T extends ErrorBody | ClientErrorBody,
@@ -45,8 +46,6 @@ export class ClientError extends BaseError<ClientErrorBody, 'ClientError'> {
     return 'ClientError' as const;
   }
 }
-
-export type ZeroError = ServerError | ClientError;
 
 export function isServerError(ex: unknown): ex is ServerError {
   return ex instanceof ServerError;
@@ -130,6 +129,8 @@ export function getErrorConnectionTransition(ex: unknown) {
       case ErrorKind.VersionNotSupported:
       case ErrorKind.SchemaVersionNotSupported:
       case ErrorKind.Internal:
+      case ErrorKind.PushFailed:
+      case ErrorKind.TransformFailed:
         return {status: ConnectionStatus.Error, reason: ex} as const;
 
       // Errors that should continue with backoff/retry

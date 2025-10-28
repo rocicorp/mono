@@ -297,6 +297,10 @@ class PushWorker {
     const responses: Promise<Result>[] = [];
     const connectionTerminations: (() => void)[] = [];
 
+    if ('kind' in response) {
+      throw new Error('Push failed - stub not implemented yet');
+    }
+
     // if the entire push failed, send that to the client.
     if ('error' in response) {
       this.#lc.warn?.(

@@ -138,6 +138,10 @@ export class CustomQueryTransformer {
     const body = await response.json();
     const msg = v.parse(body, transformResponseMessageSchema);
 
+    if (msg[0] === 'transformFailed') {
+      throw new Error('Transform failed - stub not implemented yet');
+    }
+
     const newResponses = msg[1].map(transformed => {
       if ('error' in transformed) {
         return transformed;

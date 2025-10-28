@@ -1,5 +1,6 @@
 import * as v from '../../shared/src/valita.ts';
-import {mutationIDSchema, mutationResponseSchema} from './push.ts';
+import {mutationIDSchema} from './mutation-id.ts';
+import {mutationResponseSchema} from './push.ts';
 
 /**
  * Mutation results are stored ephemerally in the client

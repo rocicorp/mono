@@ -643,11 +643,7 @@ export class Zero<
     this.#server = server;
     this.userID = userID;
     this.#lc = lc.withContext('clientID', rep.clientID);
-    this.#connection = new ConnectionImpl(
-      this.#connectionManager,
-      this.#lc,
-      // () => this.#handleUserDisconnect(),
-    );
+    this.#connection = new ConnectionImpl(this.#connectionManager, this.#lc);
     this.#mutationTracker.setClientIDAndWatch(
       rep.clientID,
       rep.experimentalWatch.bind(rep),
@@ -1550,30 +1546,6 @@ export class Zero<
         unreachable(transition);
     }
   }
-
-  /**
-   * Handles user-initiated disconnection via the connection.disconnect() API.
-   */
-  // TODO(0xcadams): reenable when disconnect is implemented
-  // #handleUserDisconnect(): Promise<void> {
-  //   const lc = this.#lc.withContext('handleUserDisconnect');
-
-  //   // don't disconnect if already closed
-  //   if (this.#connectionManager.is(ConnectionStatus.Closed)) {
-  //     lc.debug?.('Cannot disconnect: Zero instance is already closed');
-  //     return promiseVoid;
-  //   }
-
-  //   const userDisconnectError = new ClientError({
-  //     kind: ClientErrorKind.UserDisconnect,
-  //     message: 'User requested disconnect via connection.disconnect()',
-  //   });
-
-  //   this.#disconnect(lc, userDisconnectError, CLOSE_CODE_NORMAL);
-  //   this.#setOnline(false);
-
-  //   return promiseVoid;
-  // }
 
   #handlePokeStart(_lc: ZeroLogContext, pokeMessage: PokeStartMessage): void {
     this.#abortPingTimeout();

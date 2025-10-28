@@ -55,6 +55,8 @@ export {
   type TransformResponseMessage,
 } from '../../zero-protocol/src/custom-queries.ts';
 export {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
+export {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
+export {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
 export {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
 export {
   createSchema,
@@ -130,6 +132,7 @@ export type {
 } from '../../zql/src/query/query.ts';
 export {type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
+export {ClientErrorKind} from './client/client-error-kind.ts';
 export type {ConnectionState} from './client/connection-manager.ts';
 export {ConnectionStatus} from './client/connection-status.ts';
 export type {
@@ -145,6 +148,8 @@ export type {
   MakeCustomMutatorInterfaces,
   MutatorResult as PromiseWithServerResult,
 } from './client/custom.ts';
+export {ClientError} from './client/error.ts';
+export type {ZeroError, ZeroErrorBody, ZeroErrorKind} from './client/error.ts';
 export type {ClientGroup as InspectorClientGroup} from './client/inspector/client-group.ts';
 export type {Client as InspectorClient} from './client/inspector/client.ts';
 export type {Inspector} from './client/inspector/inspector.ts';
