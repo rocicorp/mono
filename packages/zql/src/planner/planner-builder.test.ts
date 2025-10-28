@@ -512,23 +512,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('flip: true forces join to be flipped and not flippable', () => {
-      const ast = {
-        table: 'users',
-        where: {
-          type: 'correlatedSubquery' as const,
-          op: 'EXISTS' as const,
-          flip: true,
-          related: {
-            correlation: {
-              parentField: ['id'],
-              childField: ['userId'],
-            },
-            subquery: {
-              table: 'posts',
-            },
-          },
-        },
-      } as const;
+      const ast = builder.users.whereExists('posts', {flip: true}).ast;
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       expect(plans.plan.joins).toHaveLength(1);
@@ -541,23 +525,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('flip: false forces join to stay semi and not be flippable', () => {
-      const ast = {
-        table: 'users',
-        where: {
-          type: 'correlatedSubquery' as const,
-          op: 'EXISTS' as const,
-          flip: false,
-          related: {
-            correlation: {
-              parentField: ['id'],
-              childField: ['userId'],
-            },
-            subquery: {
-              table: 'posts',
-            },
-          },
-        },
-      } as const;
+      const ast = builder.users.whereExists('posts', {flip: false}).ast;
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       expect(plans.plan.joins).toHaveLength(1);
@@ -601,56 +569,10 @@ suite('buildPlanGraph', () => {
     });
 
     test('multiple joins with mixed flip settings', () => {
-      const ast = {
-        table: 'users',
-        where: {
-          type: 'and' as const,
-          conditions: [
-            {
-              type: 'correlatedSubquery' as const,
-              op: 'EXISTS' as const,
-              flip: true, // Force flip
-              related: {
-                correlation: {
-                  parentField: ['id'],
-                  childField: ['userId'],
-                },
-                subquery: {
-                  table: 'posts',
-                },
-              },
-            },
-            {
-              type: 'correlatedSubquery' as const,
-              op: 'EXISTS' as const,
-              flip: false, // Force semi
-              related: {
-                correlation: {
-                  parentField: ['id'],
-                  childField: ['userId'],
-                },
-                subquery: {
-                  table: 'comments',
-                },
-              },
-            },
-            {
-              type: 'correlatedSubquery' as const,
-              op: 'EXISTS' as const,
-              flip: undefined, // Let planner decide
-              related: {
-                correlation: {
-                  parentField: ['id'],
-                  childField: ['userId'],
-                },
-                subquery: {
-                  table: 'likes',
-                },
-              },
-            },
-          ],
-        },
-      } as const;
+      const ast = builder.users
+        .whereExists('posts', {flip: true}) // Force flip
+        .whereExists('comments', {flip: false}) // Force semi
+        .whereExists('likes').ast; // Let planner decide (flip: undefined)
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       expect(plans.plan.joins).toHaveLength(3);
@@ -669,23 +591,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('reset() restores join to initial type', () => {
-      const ast = {
-        table: 'users',
-        where: {
-          type: 'correlatedSubquery' as const,
-          op: 'EXISTS' as const,
-          flip: true,
-          related: {
-            correlation: {
-              parentField: ['id'],
-              childField: ['userId'],
-            },
-            subquery: {
-              table: 'posts',
-            },
-          },
-        },
-      } as const;
+      const ast = builder.users.whereExists('posts', {flip: true}).ast;
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       const join = plans.plan.joins[0];
