@@ -29,7 +29,7 @@ export class ClientError<
     ClientErrorBody,
     'origin'
   >,
-> extends ProtocolError<T> {
+> extends ProtocolError<{origin: typeof ErrorOrigin.Client} & T> {
   constructor(errorBody: T, options?: ErrorOptions) {
     super({...errorBody, origin: ErrorOrigin.Client}, options);
     this.name = 'ClientError';

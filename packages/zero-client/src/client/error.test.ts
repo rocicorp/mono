@@ -24,13 +24,15 @@ describe('ClientError', () => {
     const body = {
       kind: ClientErrorKind.ConnectTimeout,
       message: 'connect timeout',
-      origin: ErrorOrigin.Client,
     } as const;
 
     const error = new ClientError(body);
 
     expect(error).toBeInstanceOf(Error);
-    expect(error.errorBody).toStrictEqual(body);
+    expect(error.errorBody).toStrictEqual({
+      ...body,
+      origin: ErrorOrigin.Client,
+    });
     expect(error.kind).toBe(ClientErrorKind.ConnectTimeout);
     expect(error.name).toBe('ClientError');
     expect(error.message).toBe('connect timeout');
@@ -43,13 +45,15 @@ describe('ClientError', () => {
     const body = {
       kind: ClientErrorKind.AbruptClose,
       message: 'connection closed',
-      origin: ErrorOrigin.Client,
     } as const;
 
     const error = new ClientError(body, {cause});
 
     expect(error.cause).toBe(cause);
-    expect(error.errorBody).toStrictEqual(body);
+    expect(error.errorBody).toStrictEqual({
+      ...body,
+      origin: ErrorOrigin.Client,
+    });
     expect(error.kind).toBe(ClientErrorKind.AbruptClose);
   });
 
@@ -244,7 +248,6 @@ describe('getBackoffParams', () => {
     const clientError = new ClientError({
       kind: ClientErrorKind.ClientClosed,
       message: 'client closed',
-      origin: ErrorOrigin.Client,
     });
 
     expect(getBackoffParams(serverError)).toBeUndefined();
@@ -263,7 +266,6 @@ describe('getErrorConnectionTransition', () => {
     const error = new ClientError({
       kind,
       message: 'retry',
-      origin: ErrorOrigin.Client,
     });
 
     expect(getErrorConnectionTransition(error)).toEqual({
