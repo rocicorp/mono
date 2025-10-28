@@ -80,7 +80,10 @@ suite('PlannerFanIn', () => {
         _sort: Ordering,
         filters,
         _constraint,
-      ): number => (filters ? selectivityPercent : 100);
+      ): {startupCost: number; baseCardinality: number} => ({
+        startupCost: 0,
+        baseCardinality: filters ? selectivityPercent : 100,
+      });
 
       return new PlannerSource(tableName, costModel).connect(
         [['id', 'asc']],
