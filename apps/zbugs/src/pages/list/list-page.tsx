@@ -491,10 +491,10 @@ export function ListPage({onReady}: {onReady: () => void}) {
       } as const;
       // oxlint-disable-next-line no-console -- Debug logging in demo app
       console.log('page down', a);
-      // setQueryAnchor({
-      //   anchor: a,
-      //   listContextParams,
-      // });
+      setQueryAnchor({
+        anchor: a,
+        listContextParams,
+      });
     }
   }, [
     listContextParams,
