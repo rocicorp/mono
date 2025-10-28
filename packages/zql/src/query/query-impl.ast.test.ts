@@ -34,7 +34,7 @@ describe('building the AST', () => {
         ],
         "table": "issue",
         "where": {
-          "flip": false,
+          "flip": undefined,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -59,7 +59,7 @@ describe('building the AST', () => {
               ],
               "table": "issueLabel",
               "where": {
-                "flip": false,
+                "flip": undefined,
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
@@ -1675,7 +1675,7 @@ describe('exists', () => {
         ],
         "table": "issue",
         "where": {
-          "flip": false,
+          "flip": undefined,
           "op": "EXISTS",
           "related": {
             "correlation": {
@@ -1718,7 +1718,7 @@ describe('exists', () => {
           ],
           "table": "issue",
           "where": {
-            "flip": false,
+            "flip": undefined,
             "op": "EXISTS",
             "related": {
               "correlation": {
@@ -2065,7 +2065,7 @@ describe('exists', () => {
               ],
               "table": "issueLabel",
               "where": {
-                "flip": false,
+                "flip": undefined,
                 "op": "EXISTS",
                 "related": {
                   "correlation": {
@@ -2478,7 +2478,7 @@ describe('exists', () => {
         "where": {
           "conditions": [
             {
-              "flip": false,
+              "flip": undefined,
               "op": "EXISTS",
               "related": {
                 "correlation": {
@@ -2516,7 +2516,7 @@ describe('exists', () => {
               "type": "correlatedSubquery",
             },
             {
-              "flip": false,
+              "flip": undefined,
               "op": "EXISTS",
               "related": {
                 "correlation": {

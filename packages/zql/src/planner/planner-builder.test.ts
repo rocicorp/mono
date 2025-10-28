@@ -492,4 +492,208 @@ suite('buildPlanGraph', () => {
       expect(postsConnection.limit).toBe(10);
     });
   });
+
+  suite('manual flip flag respects user intent', () => {
+    test('flip: undefined allows planner to decide (join is flippable)', () => {
+      // When flip is not specified, it should be undefined and the join should be flippable
+      const ast = builder.users.whereExists('posts').ast;
+      const plans = buildPlanGraph(ast, simpleCostModel);
+
+      expect(plans.plan.joins).toHaveLength(1);
+      const join = plans.plan.joins[0];
+
+      // Join should be flippable (planner can decide)
+      expect(join.isFlippable()).toBe(true);
+      // Should start in semi-join state
+      expect(join.type).toBe('semi');
+      // Should be able to flip without error
+      expect(() => join.flip()).not.toThrow();
+      expect(join.type).toBe('flipped');
+    });
+
+    test('flip: true forces join to be flipped and not flippable', () => {
+      const ast = {
+        table: 'users',
+        where: {
+          type: 'correlatedSubquery' as const,
+          op: 'EXISTS' as const,
+          flip: true,
+          related: {
+            correlation: {
+              parentField: ['id'],
+              childField: ['userId'],
+            },
+            subquery: {
+              table: 'posts',
+            },
+          },
+        },
+      } as const;
+      const plans = buildPlanGraph(ast, simpleCostModel);
+
+      expect(plans.plan.joins).toHaveLength(1);
+      const join = plans.plan.joins[0];
+
+      // Join should NOT be flippable (user specified flip: true)
+      expect(join.isFlippable()).toBe(false);
+      // Should start in flipped state
+      expect(join.type).toBe('flipped');
+    });
+
+    test('flip: false forces join to stay semi and not be flippable', () => {
+      const ast = {
+        table: 'users',
+        where: {
+          type: 'correlatedSubquery' as const,
+          op: 'EXISTS' as const,
+          flip: false,
+          related: {
+            correlation: {
+              parentField: ['id'],
+              childField: ['userId'],
+            },
+            subquery: {
+              table: 'posts',
+            },
+          },
+        },
+      } as const;
+      const plans = buildPlanGraph(ast, simpleCostModel);
+
+      expect(plans.plan.joins).toHaveLength(1);
+      const join = plans.plan.joins[0];
+
+      // Join should NOT be flippable (user specified flip: false)
+      expect(join.isFlippable()).toBe(false);
+      // Should start in semi-join state
+      expect(join.type).toBe('semi');
+      // Should not be able to flip
+      expect(() => join.flip()).toThrow('Cannot flip a non-flippable join');
+    });
+
+    test('NOT EXISTS is never flippable, regardless of flip flag', () => {
+      const ast = {
+        table: 'users',
+        where: {
+          type: 'correlatedSubquery' as const,
+          op: 'NOT EXISTS' as const,
+          flip: undefined,
+          related: {
+            correlation: {
+              parentField: ['id'],
+              childField: ['userId'],
+            },
+            subquery: {
+              table: 'posts',
+            },
+          },
+        },
+      } as const;
+      const plans = buildPlanGraph(ast, simpleCostModel);
+
+      expect(plans.plan.joins).toHaveLength(1);
+      const join = plans.plan.joins[0];
+
+      // NOT EXISTS should never be flippable
+      expect(join.isFlippable()).toBe(false);
+      expect(join.type).toBe('semi');
+      expect(() => join.flip()).toThrow('Cannot flip a non-flippable join');
+    });
+
+    test('multiple joins with mixed flip settings', () => {
+      const ast = {
+        table: 'users',
+        where: {
+          type: 'and' as const,
+          conditions: [
+            {
+              type: 'correlatedSubquery' as const,
+              op: 'EXISTS' as const,
+              flip: true, // Force flip
+              related: {
+                correlation: {
+                  parentField: ['id'],
+                  childField: ['userId'],
+                },
+                subquery: {
+                  table: 'posts',
+                },
+              },
+            },
+            {
+              type: 'correlatedSubquery' as const,
+              op: 'EXISTS' as const,
+              flip: false, // Force semi
+              related: {
+                correlation: {
+                  parentField: ['id'],
+                  childField: ['userId'],
+                },
+                subquery: {
+                  table: 'comments',
+                },
+              },
+            },
+            {
+              type: 'correlatedSubquery' as const,
+              op: 'EXISTS' as const,
+              flip: undefined, // Let planner decide
+              related: {
+                correlation: {
+                  parentField: ['id'],
+                  childField: ['userId'],
+                },
+                subquery: {
+                  table: 'likes',
+                },
+              },
+            },
+          ],
+        },
+      } as const;
+      const plans = buildPlanGraph(ast, simpleCostModel);
+
+      expect(plans.plan.joins).toHaveLength(3);
+
+      // First join (flip: true) should be flipped and not flippable
+      expect(plans.plan.joins[0].type).toBe('flipped');
+      expect(plans.plan.joins[0].isFlippable()).toBe(false);
+
+      // Second join (flip: false) should be semi and not flippable
+      expect(plans.plan.joins[1].type).toBe('semi');
+      expect(plans.plan.joins[1].isFlippable()).toBe(false);
+
+      // Third join (flip: undefined) should be semi and flippable
+      expect(plans.plan.joins[2].type).toBe('semi');
+      expect(plans.plan.joins[2].isFlippable()).toBe(true);
+    });
+
+    test('reset() restores join to initial type', () => {
+      const ast = {
+        table: 'users',
+        where: {
+          type: 'correlatedSubquery' as const,
+          op: 'EXISTS' as const,
+          flip: true,
+          related: {
+            correlation: {
+              parentField: ['id'],
+              childField: ['userId'],
+            },
+            subquery: {
+              table: 'posts',
+            },
+          },
+        },
+      } as const;
+      const plans = buildPlanGraph(ast, simpleCostModel);
+
+      const join = plans.plan.joins[0];
+      expect(join.type).toBe('flipped');
+
+      // Reset should restore to initial type (flipped)
+      join.reset();
+      expect(join.type).toBe('flipped');
+    });
+  });
 });
