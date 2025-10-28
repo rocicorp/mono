@@ -18,8 +18,6 @@ import {Database} from '../../zqlite/src/db.ts';
 import {newQueryDelegate} from '../../zqlite/src/test/source-factory.ts';
 import {schema, builder} from './schema.ts';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
-import {AccumulatorDebugger} from '../../zql/src/planner/planner-debug.ts';
-// import {AccumulatorDebugger} from '../../zql/src/planner/planner-debug.ts';
 
 // Open the zbugs SQLite database
 const db = new Database(
@@ -105,13 +103,13 @@ function benchmarkQuery<TTable extends keyof typeof schema.tables & string>(
   // Deep copy mappedAST and set flip to false for all correlated subqueries
   const mappedASTCopy = setFlipToFalseInAST(mappedAST);
 
-  const dbg = new AccumulatorDebugger();
+  // const dbg = new AccumulatorDebugger();
 
-  const plannedServerAST = planQuery(mappedASTCopy, costModel, dbg);
+  const plannedServerAST = planQuery(mappedASTCopy, costModel /*dbg*/);
   const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
 
   // console.log('Planned ast', JSON.stringify(plannedClientAST, null, 2));
-  console.log(dbg.format());
+  // console.log(dbg.format());
 
   const tableName = unplannedAST.table as TTable;
   const unplannedQuery = createQuery(tableName, unplannedAST);
