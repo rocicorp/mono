@@ -86,10 +86,6 @@ export class PlannerFanIn {
       limit: undefined,
     };
 
-    if (branchPattern === undefined) {
-      console.log('UNDEFINED BRANCH PATTERN', branchPattern);
-    }
-
     branchPattern = branchPattern ?? [];
 
     if (this.#type === 'FI') {
