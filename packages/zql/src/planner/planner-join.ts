@@ -192,29 +192,72 @@ export class PlannerJoin {
   estimateCost(branchPattern?: number[]): CostEstimate {
     const parentCost = this.#parent.estimateCost(branchPattern);
     const childCost = this.#child.estimateCost(branchPattern);
+    const closestJoinOrSource = this.#parent.closestJoinOrSource();
 
-    let scanEst = parentCost.baseCardinality;
-    if (this.#type === 'semi' && parentCost.limit !== undefined) {
-      if (childCost.selectivity !== 0) {
-        scanEst = Math.min(scanEst, parentCost.limit / childCost.selectivity);
+    if (this.#type === 'semi') {
+      let parentScanEst = parentCost.rows;
+      if (parentCost.limit !== undefined && childCost.selectivity !== 0) {
+        // How many parent rows must we scan before fulfilling the limit?
+        // If the child is very selective, we scan more parent rows to find matches.
+        // This does not yet take into account parent -> child fanout factor.
+        parentScanEst = Math.min(
+          parentScanEst,
+          parentCost.limit / childCost.selectivity,
+        );
       }
+
+      // Now how many child rows must be scanned per parent row?
+      // In a semi-join, we stop at the first matching child row.
+      let childRunningCost = childCost.runningCost;
+      if (childCost.limit !== undefined && childCost.selectivity !== 0) {
+        // Calculate cost per output row, then scale by actual rows needed
+        // In a semi-join, we only need to find one matching row per parent row.
+        // This does not yet take into account child -> parent fanout factor.
+        childRunningCost =
+          (1 - childCost.limit / childCost.selectivity) * childRunningCost;
+      }
+
+      if (closestJoinOrSource === 'join') {
+        // if the parent is a join, we're in a pipeline rather than nesting of joins.
+        return {
+          rows: parentCost.rows,
+          runningCost:
+            parentCost.runningCost +
+            SEMI_JOIN_OVERHEAD_MULTIPLIER *
+              parentScanEst *
+              (childCost.startupCost + childRunningCost),
+          startupCost: parentCost.startupCost,
+          selectivity: parentCost.selectivity,
+          limit: parentCost.limit,
+        };
+      }
+
+      // if the parent is a source, we're in a nested loop join
+      return {
+        // how many rows this loop will output to the next loop
+        rows: parentScanEst,
+        runningCost:
+          SEMI_JOIN_OVERHEAD_MULTIPLIER *
+          parentScanEst *
+          (childCost.startupCost + childRunningCost),
+        startupCost: parentCost.startupCost,
+        selectivity: parentCost.selectivity,
+        limit: parentCost.limit,
+      };
     }
 
-    if (this.#parent.closestJoinOrSource() === 'join') {
+    // Flipped join
+    // For a flipped join, we always scan all child rows
+    // The parent may have a limit, but we can't apply it until after the child
+    // has produced all its rows.
+    if (closestJoinOrSource === 'join') {
       // if the parent is a join, we're in a pipeline rather than nesting of joins.
-      const pipelineCost =
-        this.#type === 'flipped'
-          ? childCost.startupCost +
-            childCost.runningCost *
-              (parentCost.startupCost + parentCost.runningCost)
-          : parentCost.runningCost +
-            SEMI_JOIN_OVERHEAD_MULTIPLIER *
-              scanEst *
-              (childCost.startupCost + childCost.runningCost);
-
       return {
-        baseCardinality: parentCost.baseCardinality,
-        runningCost: pipelineCost,
+        rows: parentCost.rows,
+        runningCost:
+          childCost.startupCost +
+          childCost.runningCost *
+            (parentCost.startupCost + parentCost.runningCost),
         startupCost: parentCost.startupCost,
         selectivity: parentCost.selectivity,
         limit: parentCost.limit,
@@ -222,18 +265,12 @@ export class PlannerJoin {
     }
 
     // if the parent is a source, we're in a nested loop join
-    const nestedLoopCost =
-      this.#type === 'flipped'
-        ? childCost.runningCost *
-          (parentCost.startupCost + parentCost.runningCost)
-        : SEMI_JOIN_OVERHEAD_MULTIPLIER *
-          scanEst *
-          (childCost.startupCost + childCost.runningCost);
-
     return {
-      baseCardinality: parentCost.baseCardinality,
-      runningCost: nestedLoopCost,
-      startupCost: parentCost.startupCost,
+      // how many rows this loop will output to the next loop
+      rows: parentCost.rows,
+      runningCost:
+        childCost.runningCost + childCost.startupCost + parentCost.runningCost,
+      startupCost: childCost.startupCost,
       selectivity: parentCost.selectivity,
       limit: parentCost.limit,
     };
