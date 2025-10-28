@@ -39,15 +39,20 @@ export default defineConfig({
       return undefined;
     },
     include: ['src/**/*.{test,spec}{,.node}.?(c|m)[jt]s?(x)'],
-    onlyFailed: true,
+    silent: true,
     browser: {
       enabled: true,
       provider: playwright(),
       headless: true,
       screenshotFailures: false,
       instances: [
-        {browser: 'chromium'},
-        ...(CI ? [{browser: 'firefox'}, {browser: 'webkit'}] : []),
+        {browser: 'chromium' as const},
+        ...(CI
+          ? ([
+              {browser: 'firefox' as const},
+              {browser: 'webkit' as const},
+            ] as const)
+          : []),
       ],
     },
     coverage: {
