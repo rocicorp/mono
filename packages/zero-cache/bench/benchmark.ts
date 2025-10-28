@@ -13,7 +13,7 @@ import {
   preloadImpl,
   runImpl,
 } from '../../zql/src/query/query-impl.ts';
-import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
+import {queryWithContext} from '../../zql/src/query/query-internals.ts';
 import type {AnyQuery, MaterializeOptions} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
@@ -32,7 +32,7 @@ export function bench(opts: Options) {
   const db = new Database(lc, dbFile);
   const sources = new Map<string, Source>();
   const tableSpecs = computeZqlSpecs(lc, db);
-  const delegate: QueryDelegate<unknown> = {
+  const delegate: QueryDelegate<undefined> = {
     getSource: (name: string) => {
       let source = sources.get(name);
       if (source) {
@@ -101,7 +101,7 @@ export function bench(opts: Options) {
       return preloadImpl(query, this, options);
     },
     withContext(q) {
-      return asQueryInternals(q);
+      return queryWithContext(q, undefined);
     },
   };
 

@@ -25,7 +25,7 @@ import {
   preloadImpl,
   runImpl,
 } from '../../../zql/src/query/query-impl.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
 import type {MaterializeOptions, Query} from '../../../zql/src/query/query.ts';
 import {Database} from '../db.ts';
 import {compile, sql} from '../internal/sql.ts';
@@ -105,7 +105,7 @@ export function newQueryDelegate(
   logConfig: LogConfig,
   db: Database,
   schema: Schema,
-): QueryDelegate<unknown> {
+): QueryDelegate<undefined> {
   const sources = new Map<string, Source>();
   const clientToServerMapper = clientToServer(schema.tables);
   const serverToClientMapper = serverToClient(schema.tables);
@@ -213,7 +213,7 @@ export function newQueryDelegate(
       return preloadImpl(query, this, options);
     },
     withContext(q) {
-      return asQueryInternals(q);
+      return queryWithContext(q, undefined);
     },
   };
 }

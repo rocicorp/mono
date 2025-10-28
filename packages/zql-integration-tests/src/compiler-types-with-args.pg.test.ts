@@ -22,7 +22,6 @@ import {getServerSchema} from '../../zero-server/src/schema.ts';
 import {Transaction} from '../../zero-server/src/test/util.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
-import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import {type Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../zqlite/src/table-source.ts';
@@ -208,7 +207,7 @@ describe('compiling ZQL to SQL', () => {
       const c = compile(
         serverSchema,
         schema,
-        asQueryInternals(query).completedAST,
+        queryDelegate.withContext(query).completedAST,
       );
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
@@ -287,7 +286,7 @@ describe('compiling ZQL to SQL', () => {
       const c = compile(
         serverSchema,
         schema,
-        asQueryInternals(query).completedAST,
+        queryDelegate.withContext(query).completedAST,
       );
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
@@ -351,7 +350,7 @@ describe('compiling ZQL to SQL', () => {
       const c = compile(
         serverSchema,
         schema,
-        asQueryInternals(query).completedAST,
+        queryDelegate.withContext(query).completedAST,
       );
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
@@ -396,7 +395,7 @@ describe('compiling ZQL to SQL', () => {
       const c2 = compile(
         serverSchema,
         schema,
-        asQueryInternals(q2).completedAST,
+        queryDelegate.withContext(q2).completedAST,
       );
       const sqlQuery2 = formatPgInternalConvert(c2);
       const pgResult2 = extractZqlResult(
@@ -446,7 +445,7 @@ describe('compiling ZQL to SQL', () => {
       const c = compile(
         serverSchema,
         schema,
-        asQueryInternals(query).completedAST,
+        queryDelegate.withContext(query).completedAST,
       );
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
@@ -491,7 +490,7 @@ describe('compiling ZQL to SQL', () => {
       const c2 = compile(
         serverSchema,
         schema,
-        asQueryInternals(q2).completedAST,
+        queryDelegate.withContext(q2).completedAST,
       );
       const sqlQuery2 = formatPgInternalConvert(c2);
       const pgResult2 = extractZqlResult(

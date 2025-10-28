@@ -2,7 +2,6 @@ import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {AnyChainQuery} from './new/types.ts';
-import {withContextTag} from './query-internals.ts';
 import type {
   AnyQuery,
   AvailableRelationships,
@@ -29,8 +28,6 @@ export class ChainedQuery<
   TContext,
 > implements Query<TSchema, TTable, TReturn, TContext>
 {
-  readonly [withContextTag] = true;
-
   readonly #parent: {
     withContext(ctx: TContext): Query<TSchema, TTable, unknown>;
   };

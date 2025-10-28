@@ -9,7 +9,6 @@ import {number, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {createSource} from '../ivm/test/source-factory.ts';
 import type {QueryDelegate} from './query-delegate.ts';
 import {newQuery} from './query-impl.ts';
-import {asQueryInternals} from './query-internals.ts';
 import {QueryDelegateImpl} from './test/query-delegate.ts';
 import {schema} from './test/test-schemas.ts';
 import type {TypedView} from './typed-view.ts';
@@ -595,7 +594,7 @@ describe('joins and filters', () => {
     addData(queryDelegate);
 
     const q1 = newQuery(queryDelegate, schema, 'issue').one();
-    expect(asQueryInternals(q1).format).toEqual({
+    expect(queryDelegate.withContext(q1).format).toEqual({
       singular: true,
       relationships: {},
     });
@@ -603,7 +602,7 @@ describe('joins and filters', () => {
     const q2 = newQuery(queryDelegate, schema, 'issue')
       .one()
       .related('comments', q => q.one());
-    expect(asQueryInternals(q2).format).toEqual({
+    expect(queryDelegate.withContext(q2).format).toEqual({
       singular: true,
       relationships: {
         comments: {
@@ -616,7 +615,7 @@ describe('joins and filters', () => {
     const q3 = newQuery(queryDelegate, schema, 'issue').related('comments', q =>
       q.one(),
     );
-    expect(asQueryInternals(q3).format).toEqual({
+    expect(queryDelegate.withContext(q3).format).toEqual({
       singular: false,
       relationships: {
         comments: {
@@ -634,7 +633,7 @@ describe('joins and filters', () => {
       .where('closed', false)
       .limit(100)
       .orderBy('title', 'desc');
-    expect(asQueryInternals(q4).format).toEqual({
+    expect(queryDelegate.withContext(q4).format).toEqual({
       singular: true,
       relationships: {
         comments: {
@@ -2054,7 +2053,7 @@ describe('addCustom / addServer are called', () => {
     const queryDelegate = new QueryDelegateImpl();
     let query = newQuery(queryDelegate, schema, 'issue');
     if (type === 'addCustomQuery') {
-      query = asQueryInternals(query).nameAndArgs('issue', []);
+      query = queryDelegate.withContext(query).nameAndArgs('issue', []);
     }
     const spy = vi.spyOn(queryDelegate, type);
     switch (op) {

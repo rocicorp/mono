@@ -1,6 +1,6 @@
 import {expect, suite, test} from 'vitest';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
-import {asQueryInternals} from '../query/query-internals.ts';
+import {queryWithContext} from '../query/query-internals.ts';
 import type {AnyQuery} from '../query/query.ts';
 import {buildPlanGraph} from './planner-builder.ts';
 import {simpleCostModel} from './test/helpers.ts';
@@ -8,7 +8,7 @@ import {builder} from './test/test-schema.ts';
 
 suite('buildPlanGraph', () => {
   function completedAST(q: AnyQuery): AST {
-    return asQueryInternals(q).completedAST;
+    return queryWithContext(q, undefined).completedAST;
   }
 
   suite('basic structure', () => {

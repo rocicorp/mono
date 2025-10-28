@@ -1,7 +1,7 @@
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {ZPGQuery} from '../../../zero-server/src/zpg-query.ts';
 import {QueryImpl} from '../../../zql/src/query/query-impl.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery, Query} from '../../../zql/src/query/query.ts';
 import {type bootstrap} from './runner.ts';
 
@@ -21,7 +21,7 @@ export function staticToRunnable<TSchema extends Schema>({
   // oxlint-disable-next-line no-explicit-any
   sqlite: Query<TSchema, any, any, any>;
 } {
-  const qi = asQueryInternals(query);
+  const qi = queryWithContext(query, undefined);
   // reconstruct the generated query
   // for zql, zqlite and pg
   const zql = new QueryImpl(

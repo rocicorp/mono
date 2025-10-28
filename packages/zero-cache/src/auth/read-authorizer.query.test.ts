@@ -43,7 +43,7 @@ import {
   preloadImpl,
   runImpl,
 } from '../../../zql/src/query/query-impl.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
 import {
   type AnyQuery,
   type MaterializeOptions,
@@ -463,7 +463,7 @@ const permissions = must(
   }),
 );
 
-let queryDelegate: QueryDelegate<unknown>;
+let queryDelegate: QueryDelegate<undefined>;
 let replica: Database;
 function toDbType(type: ValueType) {
   switch (type) {
@@ -553,7 +553,7 @@ beforeEach(() => {
       return materializeImpl(query, this, factory, options);
     },
     withContext(q) {
-      return asQueryInternals(q);
+      return queryDelegate.withContext(q);
     },
     run(query, options) {
       return runImpl(query, this, options);
@@ -868,6 +868,7 @@ describe('issue permissions', () => {
       runReadQueryWithPermissions(
         {sub: '005', role: 'admin'},
         newQuery(queryDelegate, schema, 'issue'),
+        queryDelegate,
       ).map(r => r.row.id),
     ).toEqual(['001', '002', '003']);
   });
@@ -878,6 +879,7 @@ describe('issue permissions', () => {
       runReadQueryWithPermissions(
         {sub: '001', role: 'user'},
         newQuery(queryDelegate, schema, 'issue'),
+        queryDelegate,
       ).map(r => r.row.id),
     ).toEqual(['001', '002', '003']);
 
@@ -886,6 +888,7 @@ describe('issue permissions', () => {
       runReadQueryWithPermissions(
         {sub: '002', role: 'user'},
         newQuery(queryDelegate, schema, 'issue'),
+        queryDelegate,
       ).map(r => r.row.id),
     ).toEqual([]);
 
@@ -894,6 +897,7 @@ describe('issue permissions', () => {
       runReadQueryWithPermissions(
         {sub: '003', role: 'user'},
         newQuery(queryDelegate, schema, 'issue'),
+        queryDelegate,
       ).map(r => r.row.id),
     ).toEqual(['001', '002', '003']);
 
@@ -902,6 +906,7 @@ describe('issue permissions', () => {
       runReadQueryWithPermissions(
         {sub: '011', role: 'user'},
         newQuery(queryDelegate, schema, 'issue'),
+        queryDelegate,
       ).map(r => r.row.id),
     ).toEqual(['001']);
 
@@ -910,6 +915,7 @@ describe('issue permissions', () => {
       runReadQueryWithPermissions(
         {sub: '012', role: 'user'},
         newQuery(queryDelegate, schema, 'issue'),
+        queryDelegate,
       ).map(r => r.row.id),
     ).toEqual(['002', '003']);
   });
@@ -938,14 +944,15 @@ describe('issue permissions', () => {
   });
 });
 
-function runReadQueryWithPermissions(
+function runReadQueryWithPermissions<TContext>(
   authData: AuthData,
   query: Query<ZeroSchema, string>,
+  queryDelegate: QueryDelegate<TContext>,
 ) {
   const updatedAst = bindStaticParameters(
     transformQuery(
       new LogContext('debug'),
-      asQueryInternals(query).completedAST,
+      queryWithContext(query, undefined).completedAST,
       permissions,
       authData,
     ),
@@ -1154,6 +1161,7 @@ describe('comment & issueLabel permissions', () => {
         runReadQueryWithPermissions(
           {sub, role: sub === '005' ? 'admin' : 'user'},
           newQuery(queryDelegate, schema, 'comment'),
+          queryDelegate,
         ).map(r => r.row.id),
       ).toEqual(['001', '002']);
     }
@@ -1162,6 +1170,7 @@ describe('comment & issueLabel permissions', () => {
       runReadQueryWithPermissions(
         {sub: '004', role: 'user'},
         newQuery(queryDelegate, schema, 'comment'),
+        queryDelegate,
       ).map(r => r.row.id),
     ).toEqual([]);
   });
@@ -1520,6 +1529,7 @@ describe('read permissions against nested paths', () => {
         role: sub === 'admin' ? 'admin' : 'user',
       },
       query,
+      queryDelegate,
     );
     expect(toIdsOnly(actual)).toEqual(expected);
   });
@@ -1546,6 +1556,7 @@ describe('read permissions against nested paths', () => {
     let actual = runReadQueryWithPermissions(
       {sub: 'dne', role: '', properties: {role: 'admin'}},
       newQuery(queryDelegate, schema, 'issue'),
+      queryDelegate,
     );
     expect(toIdsOnly(actual)).toEqual([
       {
@@ -1556,6 +1567,7 @@ describe('read permissions against nested paths', () => {
     actual = runReadQueryWithPermissions(
       {sub: 'dne', role: ''},
       newQuery(queryDelegate, schema, 'issue'),
+      queryDelegate,
     );
     expect(toIdsOnly(actual)).toEqual([]);
   });

@@ -15,7 +15,7 @@ import {
   preloadImpl,
   runImpl,
 } from '../../../packages/zql/src/query/query-impl.ts';
-import {asQueryInternals} from '../../../packages/zql/src/query/query-internals.ts';
+import {queryWithContext} from '../../../packages/zql/src/query/query-internals.ts';
 import type {
   AnyQuery,
   HumanReadable,
@@ -26,7 +26,7 @@ import type {
 } from '../../../packages/zql/src/query/query.ts';
 import type {Edge, Graph} from './types.ts';
 
-export class VizDelegate implements QueryDelegate<unknown> {
+export class VizDelegate implements QueryDelegate<undefined> {
   readonly #sources: Map<string, MemorySource>;
   readonly #schema: Schema;
 
@@ -160,7 +160,7 @@ export class VizDelegate implements QueryDelegate<unknown> {
   }
 
   withContext(query: AnyQuery) {
-    return asQueryInternals(query);
+    return queryWithContext(query, undefined);
   }
 
   #getNode(input: InputBase, name?: string) {

@@ -20,7 +20,6 @@ import {
 import * as zero from '../../../packages/zero-client/src/mod.ts';
 import {mapAST} from '../../../packages/zero-protocol/src/ast.ts';
 import {clientToServer} from '../../../packages/zero-schema/src/name-mapper.ts';
-import {asQueryInternals} from '../../../packages/zql/src/query/query-internals.ts';
 import {VizDelegate} from './query-delegate.ts';
 
 type AnyQuery = zero.Query<any, any, any>;
@@ -224,7 +223,10 @@ function App() {
               'Authorization': `Basic ${credentials}`,
             },
             body: JSON.stringify({
-              ast: mapAST(asQueryInternals(capturedQuery).completedAST, mapper),
+              ast: mapAST(
+                vizDelegate.withContext(capturedQuery).completedAST,
+                mapper,
+              ),
             }),
           });
 
@@ -241,7 +243,7 @@ function App() {
 
       setResult({
         ast: capturedQuery
-          ? asQueryInternals(capturedQuery).completedAST
+          ? vizDelegate.withContext(capturedQuery).completedAST
           : undefined,
         graph,
         remoteRunResult,

@@ -17,7 +17,7 @@ import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
-import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
+import {queryWithContext} from '../../zql/src/query/query-internals.ts';
 import {type Query} from '../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../zql/src/query/test/query-delegate.ts';
 import {Database} from '../../zqlite/src/db.ts';
@@ -350,7 +350,11 @@ async function runAsSQL(
   q: Query<Schema, 'item'>,
   runPgQuery: (query: string, args: unknown[]) => Promise<unknown[]>,
 ) {
-  const c = compile(serverSchema, schema, asQueryInternals(q).completedAST);
+  const c = compile(
+    serverSchema,
+    schema,
+    queryWithContext(q, undefined).completedAST,
+  );
   const sqlQuery = formatPgInternalConvert(c);
   return extractZqlResult(
     await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),

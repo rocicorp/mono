@@ -16,7 +16,7 @@ import {
   runImpl,
 } from '../../zql/src/query/query-impl.ts';
 import {
-  asQueryInternals,
+  queryWithContext,
   type QueryInternals,
 } from '../../zql/src/query/query-internals.ts';
 import type {
@@ -37,16 +37,19 @@ export class QueryDelegateImpl<TContext> implements QueryDelegate<TContext> {
   readonly #logConfig: LogConfig;
   readonly defaultQueryComplete = true;
   readonly #commitObservers = new Set<() => void>();
+  readonly #context: TContext;
 
   constructor(
     lc: LogContext,
     db: Database,
     schema: Schema,
+    context: TContext,
     logConfig?: LogConfig,
   ) {
     this.#lc = lc.withContext('class', 'QueryDelegateImpl');
     this.#db = db;
     this.#schema = schema;
+    this.#context = context;
     this.#sources = new Map();
     this.#logConfig = logConfig ?? {
       format: 'text',
@@ -168,6 +171,6 @@ export class QueryDelegateImpl<TContext> implements QueryDelegate<TContext> {
   >(
     query: Query<TSchema, TTable, TReturn, TContext>,
   ): QueryInternals<TSchema, TTable, TReturn, TContext> {
-    return asQueryInternals(query);
+    return queryWithContext(query, this.#context);
   }
 }

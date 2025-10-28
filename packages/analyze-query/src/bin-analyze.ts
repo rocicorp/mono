@@ -42,7 +42,7 @@ import {
   preloadImpl,
   runImpl,
 } from '../../zql/src/query/query-impl.ts';
-import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
+import {queryWithContext} from '../../zql/src/query/query-internals.ts';
 import {
   type AnyQuery,
   type MaterializeOptions,
@@ -270,7 +270,7 @@ const host: QueryDelegate<unknown> = {
     return preloadImpl(query, this, options);
   },
   withContext(q) {
-    return asQueryInternals(q);
+    return queryWithContext(q, undefined);
   },
 };
 
@@ -310,7 +310,7 @@ function runQuery(queryString: string): Promise<AnalyzeQueryResult> {
   const f = new Function('z', `return z.query.${queryString};`);
   const q: Query<Schema, string, PullRow<string, Schema>, unknown> = f(z);
 
-  const ast = asQueryInternals(q).completedAST;
+  const ast = queryWithContext(q, undefined).completedAST;
   return runAst(lc, ast, false, {
     applyPermissions: config.applyPermissions,
     authData: config.authData,

@@ -49,8 +49,10 @@ import type {
   QueryDelegate,
 } from '../../../zql/src/query/query-delegate.ts';
 import {QueryImpl} from '../../../zql/src/query/query-impl.ts';
-import type {QueryInternals} from '../../../zql/src/query/query-internals.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import {
+  queryWithContext,
+  type QueryInternals,
+} from '../../../zql/src/query/query-internals.ts';
 import type {
   HumanReadable,
   MaterializeOptions,
@@ -1228,7 +1230,7 @@ class NoOpQueryDelegate<T> implements QueryDelegate<T> {
   }
 }
 
-class TestPGQueryDelegate extends NoOpQueryDelegate<unknown> {
+class TestPGQueryDelegate extends NoOpQueryDelegate<undefined> {
   readonly #pg: PostgresDB;
   readonly #schema: Schema;
   readonly serverSchema: ServerSchema;
@@ -1261,7 +1263,7 @@ class TestPGQueryDelegate extends NoOpQueryDelegate<unknown> {
     query: Query<TSchema, TTable, TReturn, unknown>,
     _options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
-    const queryInternals = asQueryInternals(query);
+    const queryInternals = queryWithContext(query, undefined);
     const sqlQuery = formatPgInternalConvert(
       compile(
         this.serverSchema,

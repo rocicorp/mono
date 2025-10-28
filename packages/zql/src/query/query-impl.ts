@@ -34,12 +34,7 @@ import {
 } from './expression.ts';
 import type {CustomQueryID} from './named.ts';
 import type {GotCallback, QueryDelegate} from './query-delegate.ts';
-import {
-  asQueryInternals,
-  queryInternalsTag,
-  withContextTag,
-  type QueryInternals,
-} from './query-internals.ts';
+import {queryInternalsTag, type QueryInternals} from './query-internals.ts';
 import {
   type AnyQuery,
   type ExistsOptions,
@@ -112,7 +107,6 @@ export abstract class AbstractQuery<
     QueryInternals<TSchema, TTable, TReturn, TContext>
 {
   readonly [queryInternalsTag] = true;
-  readonly [withContextTag] = true;
 
   readonly #schema: TSchema;
   readonly #tableName: TTable;
@@ -287,7 +281,7 @@ export abstract class AbstractQuery<
       const [firstRelation, secondRelation] = related;
       const {destSchema} = secondRelation;
       const junctionSchema = firstRelation.destSchema;
-      const sq = asQueryInternals(
+      const sq = asAbstractQuery(
         cb(
           this.#newQuery(
             destSchema,
@@ -301,7 +295,7 @@ export abstract class AbstractQuery<
             },
             this.customQueryID,
             relationship,
-          ) as AnyQuery,
+          ),
         ),
       );
 
@@ -619,6 +613,18 @@ export abstract class AbstractQuery<
     }
     return this.#completedAST;
   }
+}
+
+function asAbstractQuery<
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+  TContext,
+>(
+  q: Query<TSchema, TTable, TReturn, TContext>,
+): AbstractQuery<TSchema, TTable, TReturn, TContext> {
+  assert(q instanceof AbstractQuery);
+  return q;
 }
 
 export function materializeImpl<

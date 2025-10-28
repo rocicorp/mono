@@ -7,7 +7,6 @@ import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import type {MetricMap} from '../../../zql/src/query/metrics-delegate.ts';
 import type {CustomQueryID} from '../../../zql/src/query/named.ts';
 import {QueryImpl} from '../../../zql/src/query/query-impl.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {
   ZeroContext,
@@ -156,7 +155,7 @@ describe('query materialization metrics', () => {
         expectedDelta: 35,
         setup: () => {
           const query = createTestQuery(context);
-          return asQueryInternals(query).nameAndArgs('getUsers', []);
+          return context.withContext(query).nameAndArgs('getUsers', []);
         },
         additionalChecks: () => {
           expect(addCustomQuerySpy).toHaveBeenCalledOnce();
@@ -296,7 +295,7 @@ describe('query materialization metrics', () => {
         expectedDelta: 150,
         setup: () => {
           const query = createTestQuery(context);
-          return asQueryInternals(query).nameAndArgs('getUsers', []);
+          return context.withContext(query).nameAndArgs('getUsers', []);
         },
         additionalChecks: () => {
           expect(addCustomQuerySpy).toHaveBeenCalledOnce();

@@ -3,7 +3,7 @@ import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {SchemaQuery} from '../mutate/custom.ts';
 import type {NamedQueryFunction} from './define-query.ts';
 import {newQuery} from './query-impl.ts';
-import {asQueryInternals} from './query-internals.ts';
+import {queryWithContext} from './query-internals.ts';
 import {type AnyQuery, type Query} from './query.ts';
 
 export type QueryFn<
@@ -91,28 +91,40 @@ function syncedQueryImpl<
 >(name: TName, fn: any, takesContext: boolean) {
   return (context: TContext, args: TArg) => {
     const q = takesContext ? fn(context, ...args) : fn(...args);
-    return asQueryInternals(q).nameAndArgs(name, args) as TReturnQuery;
+    return queryWithContext(q, context).nameAndArgs(name, args) as TReturnQuery;
   };
 }
 
 // oxlint-disable-next-line no-explicit-any
-export function withValidation<F extends SyncedQuery<any, any, any, any, any>>(
+type AnySyncedQuery = SyncedQuery<any, any, any, any, any>;
+type AnyNamedQueryFunction = NamedQueryFunction<
+  // oxlint-disable-next-line no-explicit-any
+  any,
+  // oxlint-disable-next-line no-explicit-any
+  any,
+  // oxlint-disable-next-line no-explicit-any
+  any,
+  // oxlint-disable-next-line no-explicit-any
+  any,
+  // oxlint-disable-next-line no-explicit-any
+  any,
+  // oxlint-disable-next-line no-explicit-any
+  any,
+  // oxlint-disable-next-line no-explicit-any
+  any
+>;
+
+export function withValidation<F extends AnySyncedQuery>(
   fn: F,
   // oxlint-disable-next-line no-explicit-any
 ): F extends SyncedQuery<infer N, infer C, any, infer A, infer R>
   ? SyncedQuery<N, C, true, A, R>
   : never;
 
-export function withValidation<
-  // oxlint-disable-next-line no-explicit-any
-  F extends NamedQueryFunction<any, any, any, any, any, any, any>,
->(fn: F): F;
+export function withValidation<F extends AnyNamedQueryFunction>(fn: F): F;
 
 export function withValidation<
-  F extends // oxlint-disable-next-line no-explicit-any
-  | SyncedQuery<any, any, any, any, any>
-    // oxlint-disable-next-line no-explicit-any
-    | NamedQueryFunction<any, any, any, any, any, any, any>,
+  F extends AnySyncedQuery | AnyNamedQueryFunction,
 >(
   fn: F,
   // oxlint-disable-next-line no-explicit-any
