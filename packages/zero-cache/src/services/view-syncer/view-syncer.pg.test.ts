@@ -1152,20 +1152,21 @@ describe('view-syncer/service', () => {
           error: 'app',
           id: 'custom-1',
           name: 'named-query-1',
-          details: 'errrrrr',
+          message: 'errrrrr',
         },
         {
           error: 'app',
           id: 'custom-2',
           name: 'named-query-2',
-          details: 'brrrr',
+          message: 'brrrr',
+          details: {reason: 'somereason'},
         },
         {
-          error: 'http',
+          error: 'parse',
           id: 'custom-3',
           name: 'named-query-3',
-          status: 500,
-          details: '{ "error": "Internal Server Error" }',
+          message: 'Could not parse parameters',
+          details: {reason: 'Invalid syntax'},
         },
       ] satisfies TransformResponseBody);
       const client = connect(SYNC_CONTEXT, [
@@ -1182,23 +1183,28 @@ describe('view-syncer/service', () => {
             "transformError",
             [
               {
-                "details": "errrrrr",
                 "error": "app",
                 "id": "custom-1",
+                "message": "errrrrr",
                 "name": "named-query-1",
               },
               {
-                "details": "brrrr",
+                "details": {
+                  "reason": "somereason",
+                },
                 "error": "app",
                 "id": "custom-2",
+                "message": "brrrr",
                 "name": "named-query-2",
               },
               {
-                "details": "{ "error": "Internal Server Error" }",
-                "error": "http",
+                "details": {
+                  "reason": "Invalid syntax",
+                },
+                "error": "parse",
                 "id": "custom-3",
+                "message": "Could not parse parameters",
                 "name": "named-query-3",
-                "status": 500,
               },
             ],
           ],
@@ -1244,7 +1250,7 @@ describe('view-syncer/service', () => {
             },
           ],
         ]
-                  `);
+      `);
     });
 
     test('some individual queries fail', async () => {
@@ -1253,7 +1259,7 @@ describe('view-syncer/service', () => {
           error: 'app',
           id: 'custom-1',
           name: 'named-query-1',
-          details: 'errrrrr',
+          message: 'errrrrr',
         },
         {
           id: 'custom-2',
@@ -1269,83 +1275,83 @@ describe('view-syncer/service', () => {
       await nextPoke(client);
       stateChanges.push({state: 'version-ready'});
       expect(await nextPoke(client)).toMatchInlineSnapshot(`
-        [
-          [
-            "transformError",
-            [
-              {
-                "details": "errrrrr",
-                "error": "app",
-                "id": "custom-1",
-                "name": "named-query-1",
-              },
-            ],
-          ],
-          [
-            "pokeStart",
-            {
-              "baseCookie": "00:01",
-              "pokeID": "01",
-              "schemaVersions": {
-                "maxSupportedVersion": 3,
-                "minSupportedVersion": 2,
-              },
-            },
-          ],
-          [
-            "pokePart",
-            {
-              "gotQueriesPatch": [
-                {
-                  "hash": "custom-2",
-                  "op": "put",
-                },
-                {
-                  "hash": "custom-1",
-                  "op": "del",
-                },
-              ],
-              "lastMutationIDChanges": {
-                "foo": 42,
-              },
-              "pokeID": "01",
-              "rowsPatch": [
-                {
-                  "op": "put",
-                  "tableName": "users",
-                  "value": {
-                    "id": "100",
-                    "name": "Alice",
-                  },
-                },
-                {
-                  "op": "put",
-                  "tableName": "users",
-                  "value": {
-                    "id": "101",
-                    "name": "Bob",
-                  },
-                },
-                {
-                  "op": "put",
-                  "tableName": "users",
-                  "value": {
-                    "id": "102",
-                    "name": "Candice",
-                  },
-                },
-              ],
-            },
-          ],
-          [
-            "pokeEnd",
-            {
-              "cookie": "01",
-              "pokeID": "01",
-            },
-          ],
-        ]
-      `);
+                  [
+                    [
+                      "transformError",
+                      [
+                        {
+                          "error": "app",
+                          "id": "custom-1",
+                          "message": "errrrrr",
+                          "name": "named-query-1",
+                        },
+                      ],
+                    ],
+                    [
+                      "pokeStart",
+                      {
+                        "baseCookie": "00:01",
+                        "pokeID": "01",
+                        "schemaVersions": {
+                          "maxSupportedVersion": 3,
+                          "minSupportedVersion": 2,
+                        },
+                      },
+                    ],
+                    [
+                      "pokePart",
+                      {
+                        "gotQueriesPatch": [
+                          {
+                            "hash": "custom-2",
+                            "op": "put",
+                          },
+                          {
+                            "hash": "custom-1",
+                            "op": "del",
+                          },
+                        ],
+                        "lastMutationIDChanges": {
+                          "foo": 42,
+                        },
+                        "pokeID": "01",
+                        "rowsPatch": [
+                          {
+                            "op": "put",
+                            "tableName": "users",
+                            "value": {
+                              "id": "100",
+                              "name": "Alice",
+                            },
+                          },
+                          {
+                            "op": "put",
+                            "tableName": "users",
+                            "value": {
+                              "id": "101",
+                              "name": "Bob",
+                            },
+                          },
+                          {
+                            "op": "put",
+                            "tableName": "users",
+                            "value": {
+                              "id": "102",
+                              "name": "Candice",
+                            },
+                          },
+                        ],
+                      },
+                    ],
+                    [
+                      "pokeEnd",
+                      {
+                        "cookie": "01",
+                        "pokeID": "01",
+                      },
+                    ],
+                  ]
+                `);
     });
 
     // not yet supported: test('a single custom query that returns many queries' () => {});

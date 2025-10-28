@@ -38,6 +38,7 @@ import {MAX_TTL_MS, type TTL} from '../../../zql/src/query/ttl.ts';
 import {toGotQueriesKey} from './keys.ts';
 import {MutationTracker} from './mutation-tracker.ts';
 import {QueryManager} from './query-manager.ts';
+import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 
 const slowMaterializeThreshold = Infinity; // Disable slow materialization logs for tests.
 
@@ -1679,6 +1680,7 @@ describe('query transform errors', () => {
       error: 'app',
       id: queryHash,
       name: 'custom1',
+      message: 'failed to transform query',
     } as const;
 
     // set an error
@@ -1696,7 +1698,57 @@ describe('query transform errors', () => {
     expect(onFatalErrorMock).not.toHaveBeenCalled();
   });
 
-  test('calls onFatalError for http errors', () => {
+  test('got is called with an error when a parse error occurs', () => {
+    const onFatalErrorMock = vi.fn();
+    const nameAndArgs = {name: 'custom1', args: []};
+    const nameAndArgs2 = {name: 'custom2', args: []};
+
+    const queryHash = hashOfNameAndArgs(nameAndArgs.name, nameAndArgs.args);
+    const experimentalWatch = createExperimentalWatchMock();
+    const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+    const maxRecentQueriesSize = 0;
+    const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const queryManager = new QueryManager(
+      lc,
+      mutationTracker,
+      'client1',
+      schema.tables,
+      send,
+      experimentalWatch,
+      maxRecentQueriesSize,
+      queryChangeThrottleMs,
+      slowMaterializeThreshold,
+      onFatalErrorMock,
+    );
+
+    const gotCallback1 = vi.fn<(got: boolean | Error) => void>();
+    const gotCallback2 = vi.fn<(got: boolean | Error) => void>();
+
+    queryManager.addCustom(stubAst, nameAndArgs, 0, gotCallback1);
+    queryManager.addCustom(stubAst, nameAndArgs2, 0, gotCallback2);
+    queryManager.flushBatch();
+
+    expect(gotCallback1).toHaveBeenCalledOnce();
+    expect(gotCallback1).toHaveBeenCalledWith(false);
+    expect(gotCallback2).toHaveBeenCalledOnce();
+    expect(gotCallback2).toHaveBeenCalledWith(false);
+
+    const parseError: ErroredQuery = {
+      error: 'parse',
+      id: queryHash,
+      name: 'custom1',
+      message: 'invalid args',
+    };
+
+    queryManager.handleTransformErrors([parseError]);
+
+    expect(gotCallback1).toHaveBeenCalledTimes(2);
+    expect(gotCallback1).nthCalledWith(2, false, parseError);
+    expect(gotCallback2).toHaveBeenCalledTimes(1);
+    expect(onFatalErrorMock).not.toHaveBeenCalled();
+  });
+
+  test('calls onFatalError for non-app errors', () => {
     const onFatalErrorMock = vi.fn();
     const experimentalWatch = createExperimentalWatchMock();
     const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
@@ -1725,7 +1777,7 @@ describe('query transform errors', () => {
       name: 'testQuery',
       status: 500,
       details: 'Transform failed',
-    };
+    } as unknown as ErroredQuery;
 
     queryManager.handleTransformErrors([error]);
 
@@ -1735,55 +1787,6 @@ describe('query transform errors', () => {
         name: 'ProtocolError',
         errorBody: expect.objectContaining({
           kind: ErrorKind.TransformFailed,
-          message: 'HTTP 500 transforming queries',
-        }),
-      }),
-    );
-  });
-
-  test('calls onFatalError for zero errors', () => {
-    const onFatalErrorMock = vi.fn();
-    const experimentalWatch = createExperimentalWatchMock();
-    const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
-    const maxRecentQueriesSize = 0;
-    const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
-    const queryManager = new QueryManager(
-      lc,
-      mutationTracker,
-      'client1',
-      schema.tables,
-      send,
-      experimentalWatch,
-      maxRecentQueriesSize,
-      queryChangeThrottleMs,
-      slowMaterializeThreshold,
-      onFatalErrorMock,
-    );
-
-    const ast: AST = {table: 'issue', orderBy: [['id', 'asc']]};
-    const queryHash = hashOfAST(ast);
-    const gotCallback = vi.fn();
-    queryManager.addLegacy(ast, 0, gotCallback);
-
-    const error = {
-      error: 'zero' as const,
-      id: queryHash,
-      name: 'testQuery',
-      details: 'Something went wrong',
-    };
-
-    queryManager.handleTransformErrors([error]);
-
-    expect(gotCallback).toHaveBeenCalledTimes(2);
-    expect(gotCallback).nthCalledWith(1, false);
-    expect(gotCallback).nthCalledWith(2, false, error);
-    expect(onFatalErrorMock).toHaveBeenCalledOnce();
-    expect(onFatalErrorMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'ProtocolError',
-        errorBody: expect.objectContaining({
-          kind: ErrorKind.TransformFailed,
-          message: 'Unknown error transforming queries',
         }),
       }),
     );
@@ -1830,7 +1833,7 @@ describe('query transform errors', () => {
         name: 'query2',
         details: 'App error',
       },
-    ];
+    ] as unknown as ErroredQuery[];
 
     queryManager.handleTransformErrors(errors);
 
@@ -1841,7 +1844,6 @@ describe('query transform errors', () => {
         name: 'ProtocolError',
         errorBody: expect.objectContaining({
           kind: ErrorKind.TransformFailed,
-          message: 'HTTP 500 transforming queries',
         }),
       }),
     );

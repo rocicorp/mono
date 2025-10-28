@@ -1802,7 +1802,8 @@ test('listeners receive error when queryComplete rejects - plural', async () => 
   const testError: ErroredQuery = {
     error: 'app',
     id: 'test-error-1',
-    name: 'Query execution failed',
+    name: 'error-query',
+    message: 'Query execution failed',
     details: {reason: 'Test rejection'},
   };
 
@@ -1856,10 +1857,10 @@ test('listeners receive error when queryComplete rejects - singular', async () =
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
 
   const testError: ErroredQuery = {
-    error: 'zero',
+    error: 'parse',
     id: 'singular-error',
-    name: 'Singular query failed',
-    details: {},
+    name: 'error-query-1',
+    message: 'Singular query failed',
   };
 
   const queryCompletePromise = Promise.reject(testError);
@@ -1906,11 +1907,11 @@ test('all listeners receive error when queryComplete rejects', async () => {
   ms.push({row: {a: 1, b: 'a'}, type: 'add'});
 
   const testError: ErroredQuery = {
-    error: 'http',
+    error: 'parse',
     id: 'query-1',
-    name: 'query-1',
-    status: 500,
-    details: 'Internal server error',
+    name: 'error-query-2',
+    message: 'Query execution failed',
+    details: {reason: 'Test rejection'},
   };
 
   const queryCompletePromise = Promise.reject(testError);
@@ -1963,8 +1964,8 @@ test('listeners added after error still receive error state', async () => {
   const testError: ErroredQuery = {
     error: 'app',
     id: 'late-listener-error',
-    name: 'Error before listener',
-    details: {},
+    name: 'error-query-3',
+    message: 'Error before listener',
   };
 
   const queryCompletePromise = Promise.reject(testError);
@@ -2006,8 +2007,8 @@ test('error state persists through flush operations', async () => {
   const testError: ErroredQuery = {
     error: 'app',
     id: 'persistent-error',
-    name: 'Persistent error',
-    details: {},
+    name: 'error-query',
+    message: 'Persistent error',
   };
 
   const queryCompletePromise = Promise.reject(testError);

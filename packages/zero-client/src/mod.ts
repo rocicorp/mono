@@ -22,6 +22,8 @@ export type {
   ReadonlyJSONValue,
 } from '../../shared/src/json.ts';
 export type {MaybePromise} from '../../shared/src/types.ts';
+export {ApplicationError} from '../../zero-protocol/src/application-error.ts';
+export type {ApplicationErrorOptions} from '../../zero-protocol/src/application-error.ts';
 export type {
   AST,
   Bound,
@@ -158,3 +160,7 @@ export type {OnError, OnErrorParameters} from './client/on-error.ts';
 export type {UpdateNeededReason, ZeroOptions} from './client/options.ts';
 export {UpdateNeededReasonType} from './client/update-needed-reason-type.ts';
 export {Zero, type MakeEntityQueriesFromSchema} from './client/zero.ts';
+export type {
+  QueryErrorDetails,
+  QueryResultDetails,
+} from './types/query-result.ts';
