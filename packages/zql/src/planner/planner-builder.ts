@@ -328,7 +328,7 @@ function applyToCondition(
 
     return {
       ...condition,
-      flip: shouldFlip ? true : condition.flip,
+      flip: shouldFlip,
       related: {
         ...condition.related,
         subquery: {
