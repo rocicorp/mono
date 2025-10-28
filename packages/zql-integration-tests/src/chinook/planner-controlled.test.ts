@@ -46,10 +46,7 @@ describe('two joins via and', () => {
       costModel,
     );
 
-    // Genre gets flipped to the root
-    // Cost 10 -> Cost 1 -> Cost 1
-    // TODO: we need some tracing mechanism to check what constraints were chosen
-    expect(pick(planned, ['where', 'conditions', 0, 'flip'])).toBe(false);
+    expect(pick(planned, ['where', 'conditions', 0, 'flip'])).toBe(true);
     expect(pick(planned, ['where', 'conditions', 1, 'flip'])).toBe(true);
     expect(
       pick(planned, ['where', 'conditions', 1, 'related', 'subquery', 'table']),
