@@ -7,8 +7,12 @@ import type {LiteAndZqlSpec} from '../../../zero-cache/src/db/specs.ts';
 import {Debug} from '../../../zql/src/builder/debug-delegate.ts';
 import {ast, QueryImpl} from '../../../zql/src/query/query-impl.ts';
 import {planQuery} from '../../../zql/src/planner/planner-builder.ts';
-import {AccumulatorDebugger} from '../../../zql/src/planner/planner-debug.ts';
 import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
+import {mapAST} from '../../../zero-protocol/src/ast.ts';
+import {
+  clientToServer,
+  serverToClient,
+} from '../../../zero-schema/src/name-mapper.ts';
 import type {
   AnyQuery,
   AnyStaticQuery,
@@ -39,8 +43,9 @@ computeZqlSpecs(createSilentLogContext(), harness.dbs.sqlite, tableSpecs);
 // Create SQLite cost model
 const costModel = createSQLiteCostModel(harness.dbs.sqlite, tableSpecs);
 
-// Simple cost model for testing (fallback if SQLite model has issues)
-const simpleCostModel = () => ({startupCost: 0, baseCardinality: 100});
+// Create name mappers for translating between client and server names
+const clientToServerMapper = clientToServer(schema.tables);
+const serverToClientMapper = serverToClient(schema.tables);
 
 // Manual test cases to verify the infrastructure works
 test('manual: track.whereExists(album)', async () => {
@@ -136,16 +141,20 @@ async function runCase({
 
   try {
     // Run with planning
+    // Map to server names, plan, then map back to client names
+    const mappedAST = mapAST(queryAst, clientToServerMapper);
+    const plannedServerAST = planQuery(mappedAST, costModel);
+    const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
+
     const debugPlanned = new Debug();
-    const plannedAst = planQuery(queryAst, costModel);
     const plannedQuery = new QueryImpl(
       {
         ...harness.delegates.sqlite,
         debug: debugPlanned,
       },
       schema,
-      plannedAst.table,
-      plannedAst,
+      plannedClientAST.table,
+      plannedClientAST,
       generatedQuery.format,
     );
     await plannedQuery.run();
@@ -194,22 +203,21 @@ async function runManualCase(query: AnyQuery) {
   await unplannedQuery.run();
   const unplannedRowCount = getTotalRowCount(debugUnplanned);
 
-  // Run with planning (use simpleCostModel for now to debug)
-  const planDebugger = new AccumulatorDebugger();
+  // Run with planning
+  // Map to server names, plan, then map back to client names
+  const mappedAST = mapAST(queryAst, clientToServerMapper);
+  const plannedServerAST = planQuery(mappedAST, costModel);
+  const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
+
   const debugPlanned = new Debug();
-  const plannedAst = planQuery(queryAst, simpleCostModel, planDebugger);
-
-  // Log planning debug info
-  console.log('Planning debug info:', JSON.stringify(planDebugger.getEvents(), null, 2));
-
   const plannedQuery = new QueryImpl(
     {
       ...harness.delegates.sqlite,
       debug: debugPlanned,
     },
     schema,
-    plannedAst.table,
-    plannedAst,
+    plannedClientAST.table,
+    plannedClientAST,
     query.format,
   );
   await plannedQuery.run();
