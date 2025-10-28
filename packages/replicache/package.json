@@ -42,7 +42,6 @@
     "@rocicorp/prettier-config": "^0.4.0",
     "@rocicorp/zero-sqlite3": "^1.0.11",
     "@types/command-line-usage": "^5.0.2",
-    "@vitest/runner": "4.0.4",
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
     "compare-utf8": "^0.1.1",
@@ -52,7 +51,7 @@
     "playwright": "^1.53.2",
     "shared": "0.0.0",
     "typescript": "~5.8.2",
-    "vitest": "4.0.4"
+    "vitest": "^4.0.4"
   },
   "peerDependencies": {
     "@op-engineering/op-sqlite": ">=15",

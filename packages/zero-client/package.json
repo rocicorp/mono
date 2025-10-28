@@ -22,7 +22,6 @@
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",
-    "@vitest/ui": "^4.0.4",
     "ast-to-zql": "0.0.0",
     "datadog": "0.0.0",
     "esbuild": "^0.25.10",
