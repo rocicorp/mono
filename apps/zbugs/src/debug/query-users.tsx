@@ -9,8 +9,8 @@ export function QueryUsers() {
   if (details.type === 'error') {
     return (
       <div>
-        <button onClick={details.refetch}>Retry</button>
-        Error: {JSON.stringify(details.error?.details ?? null)}
+        <button onClick={details.retry}>Retry</button>
+        Error: {JSON.stringify(details.error?.detail ?? null)}
       </div>
     );
   }

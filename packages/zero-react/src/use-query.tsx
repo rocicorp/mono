@@ -12,37 +12,14 @@ import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 import {useZero} from './zero-provider.tsx';
-import type {Expand} from '../../shared/src/expand.ts';
-
-export type QueryResultDetails = Expand<
-  | {
-      readonly type: 'complete';
-    }
-  | {
-      readonly type: 'unknown';
-    }
-  | QueryErrorDetails
->;
-
-type QueryErrorDetails = {
-  readonly type: 'error';
-  readonly retry: () => void;
-  readonly error:
-    | {
-        readonly type: 'app';
-        readonly message: string;
-        readonly detail?: ReadonlyJSONValue;
-      }
-    | {
-        readonly type: 'parse';
-        readonly message: string;
-        readonly detail?: ReadonlyJSONValue;
-      };
-};
+import type {
+  QueryErrorDetails,
+  QueryResultDetails,
+} from '../../zero-client/src/types/query-result.ts';
 
 export type QueryResult<TReturn> = readonly [
   HumanReadable<TReturn>,
-  QueryResultDetails & {},
+  QueryResultDetails,
 ];
 
 export type UseQueryOptions = {
@@ -245,6 +222,7 @@ function makeError(retry: () => void, error: ErroredQuery): QueryErrorDetails {
   return {
     type: 'error',
     retry,
+    refetch: retry,
     error: {
       type: error.error,
       message: error.message,

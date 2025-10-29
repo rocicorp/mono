@@ -18,9 +18,9 @@ import {
   getAllViewsSizeForTesting,
   useSuspenseQuery,
   ViewStore,
-  type QueryResultDetails,
 } from './use-query.tsx';
 import {ZeroProvider} from './zero-provider.tsx';
+import type {QueryResultDetails} from '../../zero-client/src/types/query-result.ts';
 
 function newMockQuery(
   query: string,
@@ -629,7 +629,7 @@ describe('useSuspenseQuery', () => {
         return (
           <div>
             {details.type === 'error'
-              ? `Error: ${details.error?.queryName || 'Unknown error'}`
+              ? `Error: ${details.error?.message || 'Unknown error'}`
               : JSON.stringify(data)}
           </div>
         );
@@ -654,8 +654,9 @@ describe('useSuspenseQuery', () => {
       const error: ErroredQuery = {
         error: 'app',
         id: 'test-error-1',
-        name: 'Query failed',
-        details: {reason: 'Invalid syntax'},
+        name: 'error-query-1',
+        message: 'Query failed',
+        detail: {reason: 'Invalid syntax'},
       };
       view.listeners.forEach(cb => cb([], 'error', error));
       await expect.poll(() => element.textContent).toBe('Error: Query failed');
@@ -671,7 +672,7 @@ describe('useSuspenseQuery', () => {
         return (
           <div>
             {details.type === 'error'
-              ? `Error: ${details.error?.queryName || 'Unknown error'}`
+              ? `Error: ${details.error?.message || 'Unknown error'}`
               : JSON.stringify(data)}
           </div>
         );
@@ -696,8 +697,9 @@ describe('useSuspenseQuery', () => {
       const error: ErroredQuery = {
         error: 'app',
         id: 'test-error-2',
-        name: 'Query failed',
-        details: {reason: 'Invalid syntax'},
+        name: 'error-query-2',
+        message: 'Query failed',
+        detail: {reason: 'Invalid syntax'},
       };
       view.listeners.forEach(cb => cb(undefined, 'error', error));
       await expect.poll(() => element.textContent).toBe('Error: Query failed');
@@ -713,7 +715,7 @@ describe('useSuspenseQuery', () => {
         return (
           <div>
             {details.type === 'error'
-              ? `Error: ${details.error?.queryName}`
+              ? `Error: ${details.error?.message}`
               : `Data: ${JSON.stringify(data)}, Type: ${details.type}`}
           </div>
         );
@@ -739,8 +741,8 @@ describe('useSuspenseQuery', () => {
       const error: ErroredQuery = {
         error: 'app',
         id: 'temp-failure',
-        name: 'Temporary failure',
-        details: {},
+        name: 'error-query-3',
+        message: 'Temporary failure',
       };
       view.listeners.forEach(cb => cb([], 'error', error));
       await expect
@@ -764,7 +766,7 @@ describe('useSuspenseQuery', () => {
         return (
           <div>
             Data: {JSON.stringify(data)}, Type: {details.type}, Error:{' '}
-            {details.type === 'error' ? details.error?.queryName : 'none'}
+            {details.type === 'error' ? details.error?.message : 'none'}
           </div>
         );
       }
@@ -789,12 +791,12 @@ describe('useSuspenseQuery', () => {
         error: 'app',
         id: 'partial-failure',
         name: 'Partial failure',
-        details: {message: 'Some items failed'},
+        message: 'Some items failed',
       };
       view.listeners.forEach(cb => cb([{a: 1}], 'error', error));
       await expect
         .poll(() => element.textContent)
-        .toBe('Data: [{"a":1}], Type: error, Error: Partial failure');
+        .toBe('Data: [{"a":1}], Type: error, Error: Some items failed');
     });
 
     test('error state without suspense returns immediately', async () => {
@@ -807,7 +809,7 @@ describe('useSuspenseQuery', () => {
         return (
           <div>
             {details.type === 'error'
-              ? `Error state: ${details.error?.queryName}`
+              ? `Error state: ${details.error?.message}`
               : `Data: ${JSON.stringify(data)}`}
           </div>
         );
@@ -831,10 +833,10 @@ describe('useSuspenseQuery', () => {
 
       // Emit error immediately
       const error: ErroredQuery = {
-        error: 'zero',
+        error: 'parse',
         id: 'immediate-error',
-        name: 'Immediate error',
-        details: {},
+        name: 'error-query-4',
+        message: 'Immediate error',
       };
       view.listeners.forEach(cb => cb([], 'error', error));
       await expect
@@ -842,7 +844,7 @@ describe('useSuspenseQuery', () => {
         .toBe('Error state: Immediate error');
     });
 
-    test('HTTP error type is handled correctly', async () => {
+    test('parse error type is handled correctly', async () => {
       const q = newMockQuery('query' + unique);
       const zero = newMockZero('client' + unique);
       const materializeSpy = vi.spyOn(zero, 'materialize');
@@ -851,8 +853,8 @@ describe('useSuspenseQuery', () => {
         const [data, details] = useSuspenseQuery(q, {suspendUntil: 'partial'});
         return (
           <div>
-            {details.type === 'error' && details.error?.type === 'http'
-              ? `HTTP Error: ${details.error.status}`
+            {details.type === 'error' && details.error?.type === 'parse'
+              ? `Parse Error: ${details.error.message} ${JSON.stringify(details.error.detail)}`
               : JSON.stringify(data)}
           </div>
         );
@@ -875,35 +877,39 @@ describe('useSuspenseQuery', () => {
       };
 
       const httpError: ErroredQuery = {
-        error: 'http',
-        status: 500,
+        error: 'parse',
         id: 'q1',
         name: 'q1',
-        details: 'Internal Server Error',
+        message: 'Could not parse parameters',
+        detail: {reason: 'Invalid syntax'},
       };
       view.listeners.forEach(cb => cb([], 'error', httpError));
-      await expect.poll(() => element.textContent).toBe('HTTP Error: 500');
+      await expect
+        .poll(() => element.textContent)
+        .toBe(
+          'Parse Error: Could not parse parameters {"reason":"Invalid syntax"}',
+        );
     });
 
-    test('refetch function retries the query after error', async () => {
+    test('retry function retries the query after error', async () => {
       const q = newMockQuery('query' + unique);
       const zero = newMockZero('client' + unique);
       const materializeSpy = vi.spyOn(zero, 'materialize');
 
-      let refetchFn: (() => void) | undefined;
+      let retryFn: (() => void) | undefined;
 
       function Comp() {
         const [data, details] = useSuspenseQuery(q, {suspendUntil: 'partial'});
 
-        // Store refetch function if available
-        if (details.type === 'error' && details.refetch) {
-          refetchFn = details.refetch;
+        // Store retry function if available
+        if (details.type === 'error' && details.retry) {
+          retryFn = details.retry;
         }
 
         return (
           <div>
             {details.type === 'error'
-              ? `Error: ${details.error?.queryName}`
+              ? `Error: ${details.error?.message}`
               : `Data: ${JSON.stringify(data)}, Type: ${details.type}`}
           </div>
         );
@@ -937,16 +943,16 @@ describe('useSuspenseQuery', () => {
         error: 'app',
         id: 'test-error',
         name: 'Query failed',
-        details: {message: 'Network error'},
+        message: 'Network error',
       };
       firstView.listeners.forEach(cb => cb([], 'error', error));
-      await expect.poll(() => element.textContent).toBe('Error: Query failed');
+      await expect.poll(() => element.textContent).toBe('Error: Network error');
 
-      // Verify refetch function is available
-      expect(refetchFn).toBeDefined();
+      // Verify retry function is available
+      expect(retryFn).toBeDefined();
 
-      // Call refetch
-      refetchFn!();
+      // Call retry
+      retryFn!();
 
       // Verify that the old view was destroyed
       expect(firstView.destroy).toHaveBeenCalledTimes(1);
@@ -968,25 +974,25 @@ describe('useSuspenseQuery', () => {
         .toBe('Data: [{"a":1,"b":2}], Type: complete');
     });
 
-    test('refetch function can be called multiple times', async () => {
+    test('retry function can be called multiple times', async () => {
       const q = newMockQuery('query' + unique, true);
       const zero = newMockZero('client' + unique);
       const materializeSpy = vi.spyOn(zero, 'materialize');
 
-      let refetchFn: (() => void) | undefined;
+      let retryFn: (() => void) | undefined;
 
       function Comp() {
         const [data, details] = useSuspenseQuery(q, {suspendUntil: 'partial'});
 
-        // Store refetch function if available
-        if (details.type === 'error' && details.refetch) {
-          refetchFn = details.refetch;
+        // Store retry function if available
+        if (details.type === 'error' && details.retry) {
+          retryFn = details.retry;
         }
 
         return (
           <div>
             {details.type === 'error'
-              ? `Error: ${details.error?.queryName}`
+              ? `Error: ${details.error?.message}${details.error.detail ? ` ${JSON.stringify(details.error.detail)}` : ''}`
               : data !== undefined
                 ? `Data: ${JSON.stringify(data)}`
                 : 'No data'}
@@ -1019,14 +1025,14 @@ describe('useSuspenseQuery', () => {
       const error1: ErroredQuery = {
         error: 'app',
         id: 'error-1',
-        name: 'First failure',
-        details: {},
+        name: 'error-query-1',
+        message: 'First failure',
       };
       firstView.listeners.forEach(cb => cb(undefined, 'error', error1));
       await expect.poll(() => element.textContent).toBe('Error: First failure');
 
-      // First refetch
-      refetchFn!();
+      // First retry
+      retryFn!();
       expect(firstView.destroy).toHaveBeenCalledTimes(1);
       expect(materializeSpy).toHaveBeenCalledTimes(2);
 
@@ -1042,19 +1048,19 @@ describe('useSuspenseQuery', () => {
       });
 
       const error2: ErroredQuery = {
-        error: 'http',
-        status: 503,
+        error: 'parse',
         id: 'error-2',
-        name: 'Second failure',
-        details: 'Service unavailable',
+        name: 'error-query-1',
+        message: 'Second failure',
+        detail: {reason: 'Service unavailable'},
       };
       secondView.listeners.forEach(cb => cb(undefined, 'error', error2));
       await expect
         .poll(() => element.textContent)
-        .toBe('Error: Second failure');
+        .toBe('Error: Second failure {"reason":"Service unavailable"}');
 
-      // Second refetch
-      refetchFn!();
+      // Second retry
+      retryFn!();
       expect(secondView.destroy).toHaveBeenCalledTimes(1);
       expect(materializeSpy).toHaveBeenCalledTimes(3);
 
@@ -1070,7 +1076,7 @@ describe('useSuspenseQuery', () => {
         .toBe('Data: {"success":true}');
     });
 
-    test('refetch function is undefined when query is not in error state', async () => {
+    test('retry function is undefined when query is not in error state', async () => {
       const q = newMockQuery('query' + unique);
       const zero = newMockZero('client' + unique);
       const materializeSpy = vi.spyOn(zero, 'materialize');
@@ -1110,10 +1116,67 @@ describe('useSuspenseQuery', () => {
         .poll(() => element.textContent)
         .toBe('Data: [{"a":1}], Type: complete');
 
-      // Verify that refetch is not available when not in error state
+      // Verify that retry is not available when not in error state
       expect(capturedDetails?.type).toBe('complete');
       // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-      expect((capturedDetails as any).refetch).toBeUndefined();
+      expect((capturedDetails as any).retry).toBeUndefined();
+    });
+
+    test('retry is the same as refetch', async () => {
+      const q = newMockQuery('query' + unique);
+      const zero = newMockZero('client' + unique);
+      const materializeSpy = vi.spyOn(zero, 'materialize');
+
+      let capturedRetry: (() => void) | undefined;
+      let capturedRefetch: (() => void) | undefined;
+
+      function Comp() {
+        const [, details] = useSuspenseQuery(q, {suspendUntil: 'partial'});
+
+        if (details.type === 'error') {
+          capturedRetry = details.retry;
+          capturedRefetch = details.refetch;
+        }
+
+        return (
+          <div>
+            {details.type === 'error'
+              ? `Error: ${details.error?.message}`
+              : `Type: ${details.type}`}
+          </div>
+        );
+      }
+
+      root.render(
+        <ZeroProvider zero={zero}>
+          <Suspense fallback={<>loading</>}>
+            <Comp />
+          </Suspense>
+        </ZeroProvider>,
+      );
+
+      await expect.poll(() => element.textContent).toBe('loading');
+
+      const view = materializeSpy.mock.results[0].value as {
+        listeners: Set<
+          (snap: unknown, resultType: ResultType, error?: ErroredQuery) => void
+        >;
+      };
+
+      const error: ErroredQuery = {
+        error: 'app',
+        id: 'retry-refetch',
+        name: 'Retry Refetch',
+        message: 'Retry vs Refetch',
+      };
+      view.listeners.forEach(cb => cb([], 'error', error));
+
+      await expect
+        .poll(() => element.textContent)
+        .toBe('Error: Retry vs Refetch');
+
+      expect(capturedRetry).toBeDefined();
+      expect(capturedRetry).toBe(capturedRefetch);
     });
   });
 

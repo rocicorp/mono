@@ -167,7 +167,7 @@ export class InspectorDelegate implements MetricsDelegate {
 
     if ('error' in result) {
       throw new Error(
-        `Application error transforming custom query ${name}: ${result.error} ${JSON.stringify(result.details)}`,
+        `Error transforming custom query ${name} (${result.error}): ${result.message} ${JSON.stringify(result.detail)}`,
       );
     }
 

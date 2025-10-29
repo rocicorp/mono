@@ -21,9 +21,7 @@ type Props = {
 export const Filter = memo(function Filter({projectName, onSelect}: Props) {
   const [isOpen, setIsOpen] = useState(false);
 
-  const [unsortedLabels, _status] = useQuery(
-    queries.labelsForProject({projectName}),
-  );
+  const [unsortedLabels] = useQuery(queries.labelsForProject({projectName}));
   // TODO: Support case-insensitive sorting in ZQL.
   const labels = useMemo(
     () => toSorted(unsortedLabels, (a, b) => a.name.localeCompare(b.name)),
