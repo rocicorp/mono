@@ -4,7 +4,7 @@ import type {PlannerFanOut} from './planner-fan-out.ts';
 import type {PlannerFanIn} from './planner-fan-in.ts';
 import type {PlannerConnection} from './planner-connection.ts';
 import type {PlannerTerminus} from './planner-terminus.ts';
-import type {CostEstimate, PlannerNode} from './planner-node.ts';
+import type {PlannerNode} from './planner-node.ts';
 import {PlannerSource, type ConnectionCostModel} from './planner-source.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -119,7 +119,7 @@ export class PlannerGraph {
    */
   getTotalCost(): number {
     const estimate = must(this.#terminus).estimateCost();
-    return estimate.startupCost + estimate.runningCost;
+    return estimate.runningCost;
   }
 
   /**
@@ -157,59 +157,6 @@ export class PlannerGraph {
     this.#restoreConnections(state);
     this.#restoreJoins(state);
     this.#restoreFanNodes(state);
-  }
-
-  /**
-   * Collect cost estimates from all nodes in the graph for debugging.
-   */
-  #collectNodeCosts(): Array<{
-    node: string;
-    nodeType: PlannerNode['kind'];
-    costEstimate: CostEstimate;
-  }> {
-    const costs: Array<{
-      node: string;
-      nodeType: PlannerNode['kind'];
-      costEstimate: CostEstimate;
-    }> = [];
-
-    // Collect connection costs
-    for (const c of this.connections) {
-      costs.push({
-        node: c.name,
-        nodeType: 'connection',
-        costEstimate: c.estimateCost(undefined),
-      });
-    }
-
-    // Collect join costs
-    for (const j of this.joins) {
-      costs.push({
-        node: j.getName(),
-        nodeType: 'join',
-        costEstimate: j.estimateCost(undefined),
-      });
-    }
-
-    // Collect fan-out costs
-    for (const fo of this.fanOuts) {
-      costs.push({
-        node: 'FO',
-        nodeType: 'fan-out',
-        costEstimate: fo.estimateCost(undefined),
-      });
-    }
-
-    // Collect fan-in costs
-    for (const fi of this.fanIns) {
-      costs.push({
-        node: 'FI',
-        nodeType: 'fan-in',
-        costEstimate: fi.estimateCost(undefined),
-      });
-    }
-
-    return costs;
   }
 
   /**
@@ -371,7 +318,8 @@ export class PlannerGraph {
             type: 'plan-complete',
             attemptNumber: pattern,
             totalCost,
-            nodeCosts: this.#collectNodeCosts(),
+            // TODO: we'll need a different way to collect these
+            // nodeCosts: this.#collectNodeCosts(),
             joinStates: this.joins.map(j => {
               const info = j.getDebugInfo();
               return {

@@ -90,19 +90,11 @@ export class PlannerConnection {
   readonly #constraints: Map<string, PlannerConstraint | undefined>;
 
   /**
-   * Cached total cost (sum of all branches) to avoid redundant calculations.
-   * Invalidated when constraints change.
-   */
-  #cachedTotalCost: CostEstimate | undefined = undefined;
-
-  /**
    * Cached per-constraint costs to avoid redundant cost model calls.
    * Maps constraint key (branch pattern string) to computed cost.
    * Invalidated when constraints change.
    */
   #cachedConstraintCosts: Map<string, CostEstimate> = new Map();
-
-  #costDirty = true;
 
   constructor(
     table: string,
@@ -169,92 +161,13 @@ export class PlannerConnection {
     const key = path.join(',');
     this.#constraints.set(key, c);
     // Constraints changed, invalidate cost caches
-    this.#cachedTotalCost = undefined;
     this.#cachedConstraintCosts.clear();
-    this.#costDirty = true;
   }
 
-  estimateCost(branchPattern?: number[]): CostEstimate {
-    // If no branch pattern specified, return sum of all branches
-    // This is used by getUnpinnedConnectionCosts to get total cost
-    if (branchPattern === undefined) {
-      // Return cached total cost if still valid
-      if (!this.#costDirty && this.#cachedTotalCost !== undefined) {
-        return this.#cachedTotalCost;
-      }
-
-      // Calculate fresh cost - sum of all branch costs
-      let totalRows = 0;
-      let maxStartupCost = 0;
-      if (this.#constraints.size === 0) {
-        // No constraints - compute unconstrained cost (but still merge base constraints)
-        const key = '';
-        let cost = this.#cachedConstraintCosts.get(key);
-        if (cost === undefined) {
-          // Merge base constraints even when no propagated constraints
-          const {startupCost, rows} = this.#model(
-            this.table,
-            this.#sort,
-            this.#filters,
-            this.#baseConstraints,
-          );
-          cost = {
-            rows,
-            runningCost: rows,
-            startupCost,
-            selectivity: this.selectivity,
-            limit: this.limit,
-          };
-          this.#cachedConstraintCosts.set(key, cost);
-        }
-        totalRows = cost.rows;
-        maxStartupCost = cost.startupCost;
-      } else {
-        // Sum costs for all constraint branches
-        for (const [key, constraint] of this.#constraints.entries()) {
-          let cost = this.#cachedConstraintCosts.get(key);
-          if (cost === undefined) {
-            // Merge base constraints with propagated constraints
-            const mergedConstraint = mergeConstraints(
-              this.#baseConstraints,
-              constraint,
-            );
-            const {startupCost, rows} = this.#model(
-              this.table,
-              this.#sort,
-              this.#filters,
-              mergedConstraint,
-            );
-            cost = {
-              rows,
-              runningCost: rows,
-              startupCost,
-              selectivity: this.selectivity,
-              limit: this.limit,
-            };
-            this.#cachedConstraintCosts.set(key, cost);
-          }
-          totalRows += cost.rows;
-          // TODO: if no branch pattern is specified, should we sum startup costs?
-          maxStartupCost = Math.max(maxStartupCost, cost.startupCost);
-        }
-      }
-
-      const ret = {
-        rows: totalRows,
-        runningCost: totalRows,
-        startupCost: maxStartupCost,
-        selectivity: this.selectivity,
-        limit: this.limit,
-      };
-
-      // Cache total and mark as clean
-      this.#cachedTotalCost = ret;
-      this.#costDirty = false;
-
-      return ret;
-    }
-
+  estimateCost(
+    _downstreamChildSelectivity: number,
+    branchPattern: number[],
+  ): CostEstimate {
     // Branch pattern specified - return cost for this specific branch
     const key = branchPattern.join(',');
 
@@ -279,8 +192,7 @@ export class PlannerConnection {
     );
     cost = {
       rows,
-      runningCost: rows,
-      startupCost,
+      runningCost: Math.max(startupCost, 1),
       selectivity: this.selectivity,
       limit: this.limit,
     };
@@ -315,9 +227,7 @@ export class PlannerConnection {
     this.#constraints.clear();
     this.limit = this.#baseLimit;
     // Clear all cost caches
-    this.#cachedTotalCost = undefined;
     this.#cachedConstraintCosts.clear();
-    this.#costDirty = true;
   }
 
   /**
@@ -340,9 +250,7 @@ export class PlannerConnection {
       this.#constraints.set(key, value);
     }
     // Constraints changed, invalidate cost caches
-    this.#cachedTotalCost = undefined;
     this.#cachedConstraintCosts.clear();
-    this.#costDirty = true;
   }
 
   /**
@@ -359,8 +267,6 @@ export class PlannerConnection {
    * Forces cost calculation if not already cached.
    */
   getConstraintCostsForDebug(): Map<string, CostEstimate> {
-    // Trigger cost calculation to populate cache
-    this.estimateCost(undefined);
     // Return copy of cached costs
     return new Map(this.#cachedConstraintCosts);
   }

@@ -25,7 +25,7 @@ import type {
  * Flipped joins have a different overhead in that they become unlimited. This
  * is accounted for when propagating unlimits rather than here.
  */
-const SEMI_JOIN_OVERHEAD_MULTIPLIER = 1.5;
+// const SEMI_JOIN_OVERHEAD_MULTIPLIER = 1.5;
 
 /**
  * Represents a join between two data streams (parent and child).
@@ -189,52 +189,83 @@ export class PlannerJoin {
     this.#type = 'semi';
   }
 
-  estimateCost(branchPattern?: number[]): CostEstimate {
-    const parentCost = this.#parent.estimateCost(branchPattern);
-    const childCost = this.#child.estimateCost(branchPattern);
+  estimateCost(
+    // This argument is to deal with consecutive `andExists` statements.
+    // Each one will constrain how often a parent row passes all constraints.
+    // This means that we have to scan more and more parent rows the more
+    // constraints we add.
+    downstreamChildSelectivity: number,
+    branchPattern: number[],
+  ): CostEstimate {
+    const childCost = this.#child.estimateCost(1, branchPattern);
+    const parentCost = this.#parent.estimateCost(
+      // Selectivity flows up the graph from child to parent
+      // so we can determine the total selectivity of all ANDed exists checks.
+      downstreamChildSelectivity * childCost.selectivity,
+      branchPattern,
+    );
 
-    let scanEst = parentCost.rows;
-    if (this.#type === 'semi' && parentCost.limit !== undefined) {
-      if (childCost.selectivity !== 0) {
-        scanEst = Math.min(scanEst, parentCost.limit / childCost.selectivity);
-      }
-    }
+    // Max number of rows we can expect to output from this join (ignores limit).
+    // Computed as the fraction of parent rows matching a child row.
+    // Note that this does not take into account a fanout factor.
+    // I.e., if multiple child rows match a parent row.
+    // High fanout lowers the selectivity of the join.
+    // A flipped join will also output more rows than a semi-join in that case.
+    const outputRows = parentCost.rows * childCost.selectivity;
 
-    if (this.#parent.closestJoinOrSource() === 'join') {
-      // if the parent is a join, we're in a pipeline rather than nesting of joins.
-      const pipelineCost =
-        this.#type === 'flipped'
-          ? childCost.startupCost +
-            childCost.runningCost *
-              (parentCost.startupCost + parentCost.runningCost)
-          : parentCost.runningCost +
-            SEMI_JOIN_OVERHEAD_MULTIPLIER *
-              scanEst *
-              (childCost.startupCost + childCost.runningCost);
+    // Joins get more selective as they're combined.
+    // Computed as the product of their individual selectivities.
+    // Think of this example:
+    // track.whereExists('album', q => q.whereName('Greatest Hits').whereExists('artist', q => q.whereName('Famous Band')))
+    // The selectivity of the inner exists is:
+    // P(artist.name = 'Famous Band') = 0.1 (10% of albums are by Famous Band)
+    // The selectivity of the outer exists is:
+    // P(album.name = 'Greatest Hits' AND artist.name = 'Famous Band') = 0.05 (5% of tracks are from Greatest Hits by Famous Band)
+    const outputSelectivity = childCost.selectivity * parentCost.selectivity;
 
+    const currentSelectivity =
+      childCost.selectivity * downstreamChildSelectivity;
+
+    // The number of rows we can expect to scan from the parent.
+    // Different than outputRows because we may scan more rows than we output
+    // due to failing to match child rows or due to downstream nodes continuing to pull on us.
+    const scanEst =
+      parentCost.limit !== undefined
+        ? Math.min(parentCost.rows, parentCost.limit / currentSelectivity)
+        : parentCost.rows;
+
+    if (this.#type === 'semi') {
       return {
-        rows: parentCost.rows,
-        runningCost: pipelineCost,
-        startupCost: parentCost.startupCost,
-        selectivity: parentCost.selectivity,
+        rows: outputRows,
+        runningCost:
+          // How much did it cost to activate the parent?
+          parentCost.runningCost +
+          // For each parent row we scan, pay the child cost
+          scanEst *
+            (childCost.runningCost +
+              // We have to find at least one matching child row per parent row
+              // If there are no filters against the child then we assume we find a match immediately:
+              // rows * (1-1) = 0
+              // Multiplying against `childCost.rows` directly is wrong since
+              // that would assume we scan all children for each parent row
+              // rather than stopping at the first match.
+              childCost.rows * (1 - childCost.selectivity)),
+        selectivity: outputSelectivity,
         limit: parentCost.limit,
       };
     }
 
-    // if the parent is a source, we're in a nested loop join
-    const nestedLoopCost =
-      this.#type === 'flipped'
-        ? childCost.runningCost *
-          (parentCost.startupCost + parentCost.runningCost)
-        : SEMI_JOIN_OVERHEAD_MULTIPLIER *
-          scanEst *
-          (childCost.startupCost + childCost.runningCost);
-
+    // flipped join
     return {
-      rows: parentCost.rows,
-      runningCost: nestedLoopCost,
-      startupCost: parentCost.startupCost,
-      selectivity: parentCost.selectivity,
+      rows: outputRows,
+      runningCost:
+        childCost.runningCost +
+        // For each child row, we must pay the parent cost.
+        // Flip join fetches all children then all parents that match that child.
+        // "all parents that match that child" has been factored in during constraint propagation
+        // and is represented by parentCost.rows.
+        childCost.rows * (parentCost.runningCost + parentCost.rows),
+      selectivity: outputSelectivity,
       limit: parentCost.limit,
     };
   }

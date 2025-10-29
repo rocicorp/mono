@@ -68,7 +68,6 @@ export function expectedCost(constraintCount: number): CostEstimate {
   return {
     rows: c,
     runningCost: c,
-    startupCost: 0,
     selectivity: 1.0,
     limit: undefined,
   };
@@ -78,7 +77,6 @@ export function multCost(base: CostEstimate, factor: number): CostEstimate {
   return {
     rows: base.rows * factor,
     runningCost: base.runningCost * factor,
-    startupCost: base.startupCost,
     selectivity: base.selectivity,
     limit: base.limit,
   };

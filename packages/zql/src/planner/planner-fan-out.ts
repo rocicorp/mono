@@ -40,8 +40,11 @@ export class PlannerFanOut {
     this.#input.propagateConstraints(branchPattern, constraint, this);
   }
 
-  estimateCost(branchPattern?: number[]): CostEstimate {
-    return this.#input.estimateCost(branchPattern);
+  estimateCost(
+    downstreamChildSelectivity: number,
+    branchPattern: number[],
+  ): CostEstimate {
+    return this.#input.estimateCost(downstreamChildSelectivity, branchPattern);
   }
 
   convertToUFO(): void {

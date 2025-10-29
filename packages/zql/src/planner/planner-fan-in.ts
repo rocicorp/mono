@@ -75,38 +75,36 @@ export class PlannerFanIn {
     }
   }
 
-  estimateCost(branchPattern?: number[]): CostEstimate {
+  estimateCost(
+    downstreamChildSelectivity: number,
+    branchPattern: number[],
+  ): CostEstimate {
     // FanIn always sums costs of its inputs
     // But it needs to pass the correct branch pattern to each input
     let totalCost: CostEstimate = {
       rows: 0,
       runningCost: 0,
-      startupCost: 0,
       selectivity: 0,
       limit: undefined,
     };
-
-    branchPattern = branchPattern ?? [];
 
     if (this.#type === 'FI') {
       // Normal FanIn: all inputs get the same branch pattern with 0 prepended
       const updatedPattern = [0, ...branchPattern];
       let maxrows = 0;
       let maxRunningCost = 0;
-      let maxStartupCost = 0;
-      // Track complement probability for OR selectivity: P(A OR B) = 1 - (1-A)(1-B)
+
       let noMatchProb = 1.0;
       for (const input of this.#inputs) {
-        const cost = input.estimateCost(updatedPattern);
+        const cost = input.estimateCost(
+          downstreamChildSelectivity,
+          updatedPattern,
+        );
         if (cost.rows > maxrows) {
           maxrows = cost.rows;
         }
         if (cost.runningCost > maxRunningCost) {
           maxRunningCost = cost.runningCost;
-        }
-        // FI fetches from the root only once, so take the max startup cost
-        if (cost.startupCost > maxStartupCost) {
-          maxStartupCost = cost.startupCost;
         }
 
         // OR branches: combine selectivities assuming independent events
@@ -124,20 +122,20 @@ export class PlannerFanIn {
 
       totalCost.rows = maxrows;
       totalCost.runningCost = maxRunningCost;
-      totalCost.startupCost = maxStartupCost;
       totalCost.selectivity = 1 - noMatchProb;
     } else {
       // Union FanIn (UFI): each input gets unique branch pattern
       let i = 0;
-      // Track complement probability for OR selectivity: P(A OR B) = 1 - (1-A)(1-B)
+
       let noMatchProb = 1.0;
       for (const input of this.#inputs) {
         const updatedPattern = [i, ...branchPattern];
-        const cost = input.estimateCost(updatedPattern);
+        const cost = input.estimateCost(
+          downstreamChildSelectivity,
+          updatedPattern,
+        );
         totalCost.rows += cost.rows;
         totalCost.runningCost += cost.runningCost;
-        // UFI runs all branches, so startup costs add up
-        totalCost.startupCost += cost.startupCost;
 
         // OR branches: combine selectivities assuming independent events
         // P(A OR B) = 1 - (1-A)(1-B)

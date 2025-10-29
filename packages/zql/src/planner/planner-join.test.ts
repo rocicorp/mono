@@ -60,7 +60,7 @@ suite('PlannerJoin', () => {
 
     join.propagateConstraints([0], undefined);
 
-    expect(child.estimateCost()).toStrictEqual(expectedCost(1));
+    expect(child.estimateCost(1, [])).toStrictEqual(expectedCost(1));
   });
 
   test('propagateConstraints() on flipped join sends undefined to child', () => {
@@ -69,7 +69,7 @@ suite('PlannerJoin', () => {
     join.flip();
     join.propagateConstraints([0], undefined);
 
-    expect(child.estimateCost()).toStrictEqual(expectedCost(0));
+    expect(child.estimateCost(1, [])).toStrictEqual(expectedCost(0));
   });
 
   test('propagateConstraints() on pinned flipped join merges constraints for parent', () => {
@@ -83,19 +83,19 @@ suite('PlannerJoin', () => {
     const outputConstraint: PlannerConstraint = {name: undefined};
     join.propagateConstraints([0], outputConstraint);
 
-    expect(parent.estimateCost()).toStrictEqual(expectedCost(2));
+    expect(parent.estimateCost(1, [])).toStrictEqual(expectedCost(2));
   });
 
   test('semi-join has overhead multiplier applied to cost', () => {
     const {join} = createJoin();
 
     // Estimate cost for semi-join (not flipped)
-    const semiCost = join.estimateCost();
+    const semiCost = join.estimateCost(1, []);
 
     // Flip and estimate cost
     join.reset();
     join.flip();
-    const flippedCost = join.estimateCost();
+    const flippedCost = join.estimateCost(1, []);
 
     // Semi-join should be more expensive than flipped join due to overhead multiplier
     // The multiplier inflates runningCost only (not rows, which represents logical row count)
@@ -107,11 +107,11 @@ suite('PlannerJoin', () => {
     const {join} = createJoin();
 
     // Get costs for both join types
-    const semiCost = join.estimateCost();
+    const semiCost = join.estimateCost(1, []);
 
     join.reset();
     join.flip();
-    const flippedCost = join.estimateCost();
+    const flippedCost = join.estimateCost(1, []);
 
     // The difference should be significant enough to affect plan selection
     // With a 1.5x multiplier, semi should be 50% more expensive

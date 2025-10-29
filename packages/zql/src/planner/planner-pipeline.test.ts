@@ -73,7 +73,7 @@ suite('Planner Pipeline Integration', () => {
     // FO/FI: All 3 joins get the same branch pattern [0]
     // Parent connection sees only 1 unique branch pattern
     // Cost should be: expectedCost(0) for base case
-    const parentCost = parentConnection.estimateCost();
+    const parentCost = parentConnection.estimateCost(1, []);
     expect(parentCost).toStrictEqual(expectedCost(0));
 
     // Verify fan-out and fan-in are still normal types
@@ -146,7 +146,7 @@ suite('Planner Pipeline Integration', () => {
     // UFO/UFI: Each join gets a unique branch pattern [0], [1], [2]
     // Parent connection sees 3 unique branch patterns
     // Cost should be: 3 * expectedCost(0)
-    const parentCost = parentConnection.estimateCost();
+    const parentCost = parentConnection.estimateCost(1, []);
     expect(parentCost).toStrictEqual(multCost(expectedCost(0), 3));
 
     // Verify fan-out and fan-in are union types
@@ -185,7 +185,7 @@ suite('Planner Pipeline Integration', () => {
     normalFanIn.setOutput(normalTerminus);
 
     normalTerminus.propagateConstraints();
-    const normalCost = normalConnection.estimateCost();
+    const normalCost = normalConnection.estimateCost(1, []);
 
     // Test 2: Union UFO/UFI
     const unionConnection = parentSource.connect([['id', 'asc']], undefined);
@@ -216,7 +216,7 @@ suite('Planner Pipeline Integration', () => {
     unionFanIn.setOutput(unionTerminus);
 
     unionTerminus.propagateConstraints();
-    const unionCost = unionConnection.estimateCost();
+    const unionCost = unionConnection.estimateCost(1, []);
 
     // Union cost should be 3x normal cost
     expect(unionCost).toStrictEqual(multCost(normalCost, 3));
@@ -306,7 +306,7 @@ suite('Planner Pipeline Integration', () => {
     normalFanIn2.setOutput(normalTerminus);
 
     normalTerminus.propagateConstraints();
-    const normalCost = normalConnection.estimateCost();
+    const normalCost = normalConnection.estimateCost(1, []);
 
     // === Test 2: Union UFO/UFI chaining ===
     const unionConnection = parentSource.connect([['id', 'asc']], undefined);
@@ -390,7 +390,7 @@ suite('Planner Pipeline Integration', () => {
     unionFanIn2.setOutput(unionTerminus);
 
     unionTerminus.propagateConstraints();
-    const unionCost = unionConnection.estimateCost();
+    const unionCost = unionConnection.estimateCost(1, []);
 
     // Normal FO/FI: All branches collapse to single pattern [0, 0]
     // Cost = expectedCost(0) = 100

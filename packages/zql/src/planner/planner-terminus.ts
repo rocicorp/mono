@@ -26,7 +26,7 @@ export class PlannerTerminus {
 
   estimateCost(): CostEstimate {
     // Terminus starts the cost estimation flow with empty branch pattern
-    return this.#input.estimateCost([]);
+    return this.#input.estimateCost(1, []);
   }
 
   /**
