@@ -74,7 +74,7 @@ export function createSQLiteCostModel(
       `Expected scanstatus to return at least one loop for query: ${sql}`,
     );
 
-    const {startupCost, runningCost} = estimateCost(loops);
+    const {startupCost, rows: runningCost} = estimateCost(loops);
 
     return {
       startupCost,
@@ -172,7 +172,7 @@ function getScanstatusLoops(stmt: Statement): ScanstatusLoop[] {
  */
 function estimateCost(scanstats: ScanstatusLoop[]): {
   startupCost: number;
-  runningCost: number;
+  rows: number;
 } {
   // Sort by selectId to process in execution order
   const sorted = [...scanstats].sort((a, b) => a.selectId - b.selectId);
@@ -182,7 +182,7 @@ function estimateCost(scanstats: ScanstatusLoop[]): {
   const outputRows = new Map<number, number>();
 
   let startupCost = 0;
-  let runningCost = 0;
+  let rows = 0;
 
   // Identify if there are multiple top-level (parentId=0) operations
   // If so, the first is typically the scan, and subsequent ones are sorts
@@ -212,15 +212,15 @@ function estimateCost(scanstats: ScanstatusLoop[]): {
       // Top-level operation with multiple siblings
       if (isFirstTopLevel) {
         // First top-level operation is the scan (running cost)
-        runningCost += cost;
+        rows += cost;
         isFirstTopLevel = false;
       } else {
         // Subsequent top-level operations are sorts (startup cost)
         startupCost += cost / 10; // temp b-tree creation is less costly then actually emitting the rows
       }
     } else {
-      // All other operations are running costs
-      runningCost += cost;
+      // All other operations are rows
+      rows += cost;
     }
 
     if (stat.parentId !== lastParentId) {
@@ -233,5 +233,5 @@ function estimateCost(scanstats: ScanstatusLoop[]): {
     outputRows.set(stat.selectId, cost);
   }
 
-  return {startupCost, runningCost};
+  return {startupCost, rows};
 }
