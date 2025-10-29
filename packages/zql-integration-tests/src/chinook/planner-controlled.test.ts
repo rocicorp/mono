@@ -348,10 +348,11 @@ test('ors anded one after the other', () => {
   ).toBe(false);
 
   // Check second OR: invoiceLines and mediaType
-  // flipping invoice lines is actually cheaper due to the FK from invoiceLine -> track
+  // With limit=1 optimization, semi-join is now equally cheap as flipped join
+  // So planner keeps original order (no flip)
   expect(
     pick(planned, ['where', 'conditions', 1, 'conditions', 0, 'flip']),
-  ).toBe(true);
+  ).toBe(false);
   expect(
     pick(planned, ['where', 'conditions', 1, 'conditions', 1, 'flip']),
   ).toBe(false);

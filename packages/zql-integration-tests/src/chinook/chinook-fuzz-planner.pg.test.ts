@@ -14,10 +14,7 @@ import {
   clientToServer,
   serverToClient,
 } from '../../../zero-schema/src/name-mapper.ts';
-import type {
-  AnyQuery,
-  AnyStaticQuery,
-} from '../../../zql/src/query/test/util.ts';
+import type {AnyQuery} from '../../../zql/src/query/test/util.ts';
 import {createSQLiteCostModel} from '../../../zqlite/src/sqlite-cost-model.ts';
 import {bootstrap} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';
@@ -76,7 +73,7 @@ test('debug: album.whereExists(tracks)', async () => {
       debug: debugUnplanned,
     },
     schema,
-    queryAst.table,
+    queryAst.table as keyof typeof schema.tables,
     queryAst,
     query.format,
   );
@@ -100,7 +97,7 @@ test('debug: album.whereExists(tracks)', async () => {
       debug: debugPlanned,
     },
     schema,
-    plannedClientAST.table,
+    plannedClientAST.table as keyof typeof schema.tables,
     plannedClientAST,
     query.format,
   );
@@ -173,7 +170,7 @@ async function runCase({
         debug: debugUnplanned,
       },
       schema,
-      queryAst.table,
+      queryAst.table as keyof typeof schema.tables,
       queryAst,
       generatedQuery.format,
     );
@@ -203,7 +200,7 @@ async function runCase({
         debug: debugPlanned,
       },
       schema,
-      plannedClientAST.table,
+      plannedClientAST.table as keyof typeof schema.tables,
       plannedClientAST,
       generatedQuery.format,
     );
@@ -216,7 +213,7 @@ async function runCase({
       throw e;
     }
     throw new Error(
-      `Planner broke valid query! Seed ${seed}: ${e}`,
+      `Planner broke valid query! Seed ${seed}: ${e instanceof Error ? e.message : String(e)}`,
     );
   }
 
@@ -246,7 +243,7 @@ async function runManualCase(query: AnyQuery) {
       debug: debugUnplanned,
     },
     schema,
-    queryAst.table,
+    queryAst.table as keyof typeof schema.tables,
     queryAst,
     query.format,
   );
@@ -266,7 +263,7 @@ async function runManualCase(query: AnyQuery) {
       debug: debugPlanned,
     },
     schema,
-    plannedClientAST.table,
+    plannedClientAST.table as keyof typeof schema.tables,
     plannedClientAST,
     query.format,
   );
