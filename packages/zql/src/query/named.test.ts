@@ -366,7 +366,7 @@ test('makeSchemaQuery', () => {
     ),
     undefined,
   );
-  expect(q1.ast).toMatchInlineSnapshot(`
+  expect(q1.rawAST).toMatchInlineSnapshot(`
     {
       "table": "issue",
       "where": {

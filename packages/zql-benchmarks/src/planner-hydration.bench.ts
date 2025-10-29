@@ -60,7 +60,7 @@ function benchmarkQuery<TTable extends keyof typeof schema.tables>(
   name: string,
   query: Query<typeof schema, TTable>,
 ) {
-  const unplannedAST = queryWithContext(query, undefined).ast;
+  const unplannedAST = queryWithContext(query, undefined).completedAST;
 
   // Map to server names, plan, then map back to client names
   const mappedAST = mapAST(unplannedAST, clientToServerMapper);

@@ -680,5 +680,5 @@ test('round trip', () => {
 });
 
 function ast(q: AnyQuery): AST {
-  return queryWithContext(q, undefined).ast;
+  return queryWithContext(q, undefined).rawAST;
 }

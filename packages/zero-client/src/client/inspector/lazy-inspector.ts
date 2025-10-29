@@ -339,7 +339,7 @@ export async function analyzeQuery(
   const {customQueryID} = qi;
   const queryParameters = customQueryID
     ? {name: customQueryID.name, args: customQueryID.args}
-    : {ast: qi.ast};
+    : {ast: qi.rawAST};
 
   return rpc(
     await delegate.getSocket(),

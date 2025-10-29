@@ -50,7 +50,7 @@ export interface QueryInternals<
    */
   hash(): string;
 
-  readonly ast: AST;
+  readonly rawAST: AST;
   readonly completedAST: AST;
 
   readonly customQueryID: CustomQueryID | undefined;

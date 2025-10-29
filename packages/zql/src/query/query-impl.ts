@@ -99,7 +99,7 @@ export abstract class AbstractQuery<
 
   readonly #schema: TSchema;
   readonly #tableName: TTable;
-  readonly #ast: AST;
+  readonly rawAST: AST;
   readonly format: Format;
   #hash: string = '';
   readonly #system: System;
@@ -119,7 +119,7 @@ export abstract class AbstractQuery<
   ) {
     this.#schema = schema;
     this.#tableName = tableName;
-    this.#ast = ast;
+    this.rawAST = ast;
     this.format = format;
     this.#system = system;
     this.#currentJunction = currentJunction;
@@ -139,7 +139,7 @@ export abstract class AbstractQuery<
   ): Query<TSchema, TTable, TReturn, TContext> {
     return this.#newQuery(
       this.#tableName,
-      this.#ast,
+      this.rawAST,
       this.format,
       {
         name,
@@ -149,13 +149,9 @@ export abstract class AbstractQuery<
     );
   }
 
-  get ast() {
-    return this.#ast;
-  }
-
   hash(): string {
     if (!this.#hash) {
-      this.#hash = hashOfAST(this.#completeAst());
+      this.#hash = hashOfAST(this._completeAst());
     }
     return this.#hash;
   }
@@ -164,7 +160,7 @@ export abstract class AbstractQuery<
     this.#newQuery(
       this.#tableName,
       {
-        ...this.#ast,
+        ...this.rawAST,
         limit: 1,
       },
       {
@@ -238,9 +234,9 @@ export abstract class AbstractQuery<
       return this.#newQuery(
         this.#tableName,
         {
-          ...this.#ast,
+          ...this.rawAST,
           related: [
-            ...(this.#ast.related ?? []),
+            ...(this.rawAST.related ?? []),
             {
               system: this.#system,
               correlation: {
@@ -249,7 +245,7 @@ export abstract class AbstractQuery<
               },
               subquery: addPrimaryKeysToAst(
                 this.#schema.tables[destSchema],
-                subQuery.#ast,
+                subQuery.rawAST,
               ),
             },
           ],
@@ -296,9 +292,9 @@ export abstract class AbstractQuery<
       return this.#newQuery(
         this.#tableName,
         {
-          ...this.#ast,
+          ...this.rawAST,
           related: [
-            ...(this.#ast.related ?? []),
+            ...(this.rawAST.related ?? []),
             {
               system: this.#system,
               correlation: {
@@ -322,7 +318,7 @@ export abstract class AbstractQuery<
                     },
                     subquery: addPrimaryKeysToAst(
                       this.#schema.tables[destSchema],
-                      sq.ast,
+                      sq.rawAST,
                     ),
                   },
                 ],
@@ -364,7 +360,7 @@ export abstract class AbstractQuery<
       cond = cmp(fieldOrExpressionFactory, opOrValue, value);
     }
 
-    const existingWhere = this.#ast.where;
+    const existingWhere = this.rawAST.where;
     if (existingWhere) {
       cond = and(existingWhere, cond);
     }
@@ -374,7 +370,7 @@ export abstract class AbstractQuery<
     return this.#newQuery(
       this.#tableName,
       {
-        ...this.#ast,
+        ...this.rawAST,
         where,
       },
       this.format,
@@ -390,7 +386,7 @@ export abstract class AbstractQuery<
     this.#newQuery(
       this.#tableName,
       {
-        ...this.#ast,
+        ...this.rawAST,
         start: {
           row,
           exclusive: !opts?.inclusive,
@@ -418,7 +414,7 @@ export abstract class AbstractQuery<
     return this.#newQuery(
       this.#tableName,
       {
-        ...this.#ast,
+        ...this.rawAST,
         limit,
       },
       this.format,
@@ -440,8 +436,8 @@ export abstract class AbstractQuery<
     return this.#newQuery(
       this.#tableName,
       {
-        ...this.#ast,
-        orderBy: [...(this.#ast.orderBy ?? []), [field as string, direction]],
+        ...this.rawAST,
+        orderBy: [...(this.rawAST.orderBy ?? []), [field as string, direction]],
       },
       this.format,
       this.customQueryID,
@@ -488,7 +484,7 @@ export abstract class AbstractQuery<
           },
           subquery: addPrimaryKeysToAst(
             this.#schema.tables[destTableName],
-            subQuery.#ast,
+            subQuery.rawAST,
           ),
         },
         op: 'EXISTS',
@@ -544,7 +540,7 @@ export abstract class AbstractQuery<
                 subquery: addPrimaryKeysToAst(
                   this.#schema.tables[destSchema],
                   (queryToDest as QueryImpl<Schema, string, unknown, unknown>)
-                    .#ast,
+                    .rawAST,
                 ),
               },
               op: 'EXISTS',
@@ -563,35 +559,35 @@ export abstract class AbstractQuery<
   #completedAST: AST | undefined;
 
   get completedAST(): AST {
-    return this.#completeAst();
+    return this._completeAst();
   }
 
-  #completeAst(): AST {
+  _completeAst(): AST {
     if (!this.#completedAST) {
       const finalOrderBy = addPrimaryKeys(
         this.#schema.tables[this.#tableName],
-        this.#ast.orderBy,
+        this.rawAST.orderBy,
       );
-      if (this.#ast.start) {
-        const {row} = this.#ast.start;
+      if (this.rawAST.start) {
+        const {row} = this.rawAST.start;
         const narrowedRow: Writable<IVMRow> = {};
         for (const [field] of finalOrderBy) {
           narrowedRow[field] = row[field];
         }
         this.#completedAST = {
-          ...this.#ast,
+          ...this.rawAST,
           start: {
-            ...this.#ast.start,
+            ...this.rawAST.start,
             row: narrowedRow,
           },
           orderBy: finalOrderBy,
         };
       } else {
         this.#completedAST = {
-          ...this.#ast,
+          ...this.rawAST,
           orderBy: addPrimaryKeys(
             this.#schema.tables[this.#tableName],
-            this.#ast.orderBy,
+            this.rawAST.orderBy,
           ),
         };
       }

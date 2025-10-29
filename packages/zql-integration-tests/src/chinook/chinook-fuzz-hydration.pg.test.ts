@@ -41,8 +41,8 @@ if (REPRO_SEED) {
     console.log(
       'ZQL',
       await formatOutput(
-        queryWithContext(query[0], undefined).ast.table +
-          astToZQL(queryWithContext(query[0], undefined).ast),
+        queryWithContext(query[0], undefined).rawAST.table +
+          astToZQL(queryWithContext(query[0], undefined).rawAST),
       ),
     );
     await runCase(tc);

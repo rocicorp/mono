@@ -24,14 +24,14 @@ export function staticToRunnable<TSchema extends Schema>({
   const qi = queryWithContext(query, undefined);
   // reconstruct the generated query
   // for zql, zqlite and pg
-  const zql = new QueryImpl(schema, qi.ast.table, qi.ast, qi.format);
-  const zqlite = new QueryImpl(schema, qi.ast.table, qi.ast, qi.format);
+  const zql = new QueryImpl(schema, qi.rawAST.table, qi.rawAST, qi.format);
+  const zqlite = new QueryImpl(schema, qi.rawAST.table, qi.rawAST, qi.format);
   const pg = new ZPGQuery(
     schema,
     harness.delegates.pg.serverSchema,
-    qi.ast.table,
+    qi.rawAST.table,
     harness.delegates.pg.transaction,
-    qi.ast,
+    qi.rawAST,
     qi.format,
   );
 

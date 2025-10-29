@@ -648,7 +648,7 @@ export async function runAndCompare(
   const sqliteResult = mapResultToClientNames(
     await delegates.sqlite.run(queries.sqlite),
     zqlSchema,
-    delegates.sqlite.withContext(queries.sqlite).ast.table,
+    delegates.sqlite.withContext(queries.sqlite).rawAST.table,
   );
   const memoryResult = await delegates.memory.run(queries.memory);
 

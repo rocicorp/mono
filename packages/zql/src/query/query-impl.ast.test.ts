@@ -7,7 +7,7 @@ import {staticQuery} from './static-query.ts';
 import {schema} from './test/test-schemas.ts';
 
 function ast(q: AnyQuery) {
-  return queryWithContext(q, undefined).ast;
+  return queryWithContext(q, undefined).rawAST;
 }
 
 describe('building the AST', () => {

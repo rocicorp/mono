@@ -1833,5 +1833,5 @@ describe('admin readable', () => {
 });
 
 function ast(query: AnyQuery): AST {
-  return queryWithContext(query, undefined).ast;
+  return queryWithContext(query, undefined).rawAST;
 }
