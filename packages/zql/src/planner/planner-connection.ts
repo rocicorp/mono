@@ -129,8 +129,8 @@ export class PlannerConnection {
       const costWithFilters = model(table, sort, filters, undefined);
       const costWithoutFilters = model(table, sort, undefined, undefined);
       this.selectivity =
-        costWithoutFilters.baseCardinality > 0
-          ? costWithFilters.baseCardinality / costWithoutFilters.baseCardinality
+        costWithoutFilters.rows > 0
+          ? costWithFilters.rows / costWithoutFilters.rows
           : 1.0;
     } else {
       // Root connections or connections without filters
@@ -184,7 +184,7 @@ export class PlannerConnection {
       }
 
       // Calculate fresh cost - sum of all branch costs
-      let totalCardinality = 0;
+      let totalRows = 0;
       let maxStartupCost = 0;
       if (this.#constraints.size === 0) {
         // No constraints - compute unconstrained cost (but still merge base constraints)
@@ -192,22 +192,22 @@ export class PlannerConnection {
         let cost = this.#cachedConstraintCosts.get(key);
         if (cost === undefined) {
           // Merge base constraints even when no propagated constraints
-          const {startupCost, baseCardinality} = this.#model(
+          const {startupCost, rows} = this.#model(
             this.table,
             this.#sort,
             this.#filters,
             this.#baseConstraints,
           );
           cost = {
-            baseCardinality,
-            runningCost: baseCardinality,
+            rows,
+            runningCost: rows,
             startupCost,
             selectivity: this.selectivity,
             limit: this.limit,
           };
           this.#cachedConstraintCosts.set(key, cost);
         }
-        totalCardinality = cost.baseCardinality;
+        totalRows = cost.rows;
         maxStartupCost = cost.startupCost;
       } else {
         // Sum costs for all constraint branches
@@ -219,30 +219,30 @@ export class PlannerConnection {
               this.#baseConstraints,
               constraint,
             );
-            const {startupCost, baseCardinality} = this.#model(
+            const {startupCost, rows} = this.#model(
               this.table,
               this.#sort,
               this.#filters,
               mergedConstraint,
             );
             cost = {
-              baseCardinality,
-              runningCost: baseCardinality,
+              rows,
+              runningCost: rows,
               startupCost,
               selectivity: this.selectivity,
               limit: this.limit,
             };
             this.#cachedConstraintCosts.set(key, cost);
           }
-          totalCardinality += cost.baseCardinality;
+          totalRows += cost.rows;
           // TODO: if no branch pattern is specified, should we sum startup costs?
           maxStartupCost = Math.max(maxStartupCost, cost.startupCost);
         }
       }
 
       const ret = {
-        baseCardinality: totalCardinality,
-        runningCost: totalCardinality,
+        rows: totalRows,
+        runningCost: totalRows,
         startupCost: maxStartupCost,
         selectivity: this.selectivity,
         limit: this.limit,
@@ -271,15 +271,15 @@ export class PlannerConnection {
       this.#baseConstraints,
       constraint,
     );
-    const {startupCost, baseCardinality} = this.#model(
+    const {startupCost, rows} = this.#model(
       this.table,
       this.#sort,
       this.#filters,
       mergedConstraint,
     );
     cost = {
-      baseCardinality,
-      runningCost: baseCardinality,
+      rows,
+      runningCost: rows,
       startupCost,
       selectivity: this.selectivity,
       limit: this.limit,
@@ -366,7 +366,7 @@ export class PlannerConnection {
   }
 }
 
-export type CostModelCost = {startupCost: number; baseCardinality: number};
+export type CostModelCost = {startupCost: number; rows: number};
 export type ConnectionCostModel = (
   table: string,
   sort: Ordering,

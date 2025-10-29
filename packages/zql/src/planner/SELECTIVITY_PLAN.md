@@ -238,7 +238,7 @@ Current code has a bug where `semiJoinSelectivity = 0` (EXISTS can never succeed
 if (childCost.semiJoinSelectivity === 0) {
   // EXISTS can never succeed - result set is empty
   return {
-    baseCardinality: 0,
+    rows: 0,
     runningCost: parentCost.runningCost, // Cost to discover emptiness
     filterSelectivity: 0,
     semiJoinSelectivity: 0,

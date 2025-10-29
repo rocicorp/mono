@@ -11,7 +11,7 @@ suite('PlannerConnection', () => {
     const connection = createConnection();
 
     expect(connection.estimateCost()).toStrictEqual({
-      baseCardinality: BASE_COST,
+      rows: BASE_COST,
       runningCost: BASE_COST,
       startupCost: 0,
       selectivity: 1.0,
@@ -46,7 +46,7 @@ suite('PlannerConnection', () => {
 
     const ec = expectedCost(1);
     expect(connection.estimateCost()).toStrictEqual({
-      baseCardinality: ec.baseCardinality * 2,
+      rows: ec.rows * 2,
       runningCost: ec.runningCost * 2,
       startupCost: 0,
       selectivity: 1.0,
@@ -63,7 +63,7 @@ suite('PlannerConnection', () => {
     connection.reset();
 
     expect(connection.estimateCost()).toStrictEqual({
-      baseCardinality: BASE_COST,
+      rows: BASE_COST,
       runningCost: BASE_COST,
       startupCost: 0,
       selectivity: 1.0,
