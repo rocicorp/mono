@@ -28,13 +28,17 @@ import {type ZeroConfig} from '../../config/zero-config.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {recordMutation} from '../../server/anonymous-otel-start.ts';
-import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
-import {throwErrorForClientIfSchemaVersionNotSupported} from '../../types/schema-versions.ts';
+import {throwProtocolErrorIfSchemaVersionNotSupported} from '../../types/schema-versions.ts';
 import {appSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {SlidingWindowLimiter} from '../limiter/sliding-window-limiter.ts';
 import type {RefCountedService, Service} from '../service.ts';
 import {MutationAlreadyProcessedError} from './error.ts';
+import {
+  isProtocolError,
+  ProtocolError,
+} from '../../../../zero-protocol/src/error.ts';
+import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 
 // An error encountered processing a mutation.
 // Returned back to application for display to user.
@@ -261,9 +265,9 @@ export async function processMutation(
           return undefined;
         }
         if (
-          e instanceof ErrorForClient &&
+          isProtocolError(e) &&
           !errorMode &&
-          e.errorBody.kind === ErrorKind.InvalidPush &&
+          e.kind === ErrorKind.InvalidPush &&
           customMutatorsEnabled &&
           i < 2
         ) {
@@ -280,7 +284,7 @@ export async function processMutation(
           await new Promise(resolve => setTimeout(resolve, 100));
           continue;
         }
-        if (e instanceof ErrorForClient || errorMode) {
+        if (isProtocolError(e) || errorMode) {
           lc.error?.('Process mutation error', e);
           throw e;
         }
@@ -465,15 +469,16 @@ async function checkSchemaVersionAndIncrementLastMutationID(
       lastMutationID,
     );
   } else if (receivedMutationID > lastMutationID) {
-    throw new ErrorForClient({
+    throw new ProtocolError({
       kind: ErrorKind.InvalidPush,
       message: `Push contains unexpected mutation id ${receivedMutationID} for client ${clientID}. Expected mutation id ${lastMutationID.toString()}.`,
+      origin: ErrorOrigin.ZeroCache,
     });
   }
 
   if (schemaVersion !== undefined && supportedVersionRange !== undefined) {
     assert(supportedVersionRange.length === 1);
-    throwErrorForClientIfSchemaVersionNotSupported(
+    throwProtocolErrorIfSchemaVersionNotSupported(
       schemaVersion,
       supportedVersionRange[0],
     );

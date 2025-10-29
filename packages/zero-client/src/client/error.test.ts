@@ -174,7 +174,7 @@ describe('isAuthError', () => {
       reason: ErrorReason.HTTP,
       status: 401,
       message: 'Unauthorized',
-      queries: [],
+      queryIDs: [],
     });
 
     expect(isAuthError(error)).toBe(true);
@@ -187,7 +187,7 @@ describe('isAuthError', () => {
       reason: ErrorReason.HTTP,
       status: 403,
       message: 'Forbidden',
-      queries: [],
+      queryIDs: [],
     });
 
     expect(isAuthError(error)).toBe(true);
@@ -335,7 +335,7 @@ describe('getErrorConnectionTransition', () => {
       kind,
       message: 'non-fatal',
       origin: ErrorOrigin.Server,
-    });
+    } as ErrorBody);
 
     expect(getErrorConnectionTransition(error)).toEqual({
       status: NO_STATUS_TRANSITION,

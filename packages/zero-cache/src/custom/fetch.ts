@@ -3,8 +3,14 @@ import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {upstreamSchema, type ShardID} from '../types/shards.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {ErrorForClient} from '../types/error-for-client.ts';
+import type {Type} from '../../../shared/src/valita.ts';
+import {
+  isProtocolError,
+  ProtocolError,
+} from '../../../zero-protocol/src/error.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 
 const reservedParams = ['schema', 'appID'];
 
@@ -33,7 +39,29 @@ export type HeaderOptions = {
   cookie?: string | undefined;
 };
 
-export async function fetchFromAPIServer(
+export const getBodyPreview = async (
+  res: Response,
+  lc: LogContext,
+): Promise<string | undefined> => {
+  try {
+    const body = await res.clone().text();
+    if (body.length > 512) {
+      return body.slice(0, 512) + '...';
+    }
+    return body;
+  } catch (e) {
+    lc.error?.('failed to get body preview', {
+      url: res.url,
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+
+  return undefined;
+};
+
+export async function fetchFromAPIServer<TValidator extends Type>(
+  validator: TValidator,
+  source: 'push' | 'transform',
   lc: LogContext,
   url: string,
   allowedUrlPatterns: URLPattern[],
@@ -41,7 +69,7 @@ export async function fetchFromAPIServer(
   headerOptions: HeaderOptions,
   body: ReadonlyJSONValue,
 ) {
-  lc.info?.('fetchFromAPIServer called', {
+  lc.debug?.('fetchFromAPIServer called', {
     url,
   });
 
@@ -80,32 +108,104 @@ export async function fetchFromAPIServer(
   urlObj.search = params.toString();
 
   const finalUrl = urlObj.toString();
-  const response = await fetch(finalUrl, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
 
-  if (!response.ok) {
-    // Zero currently handles all auth errors this way (throws ErrorForClient).
-    // Continue doing that until we have an `onError` callback exposed on the top level Zero instance.
-    // This:
-    // 1. Keeps the API the same for those migrating to custom mutators from CRUD
-    // 2. Ensures we only churn the API once, when we have `onError` available.
-    //
-    // When switching to `onError`, we should stop disconnecting the websocket
-    // on auth errors and instead let the token be updated
-    // on the existing WS connection. This will give us the chance to skip
-    // re-hydrating queries that do not use the modified fields of the token.
-    if (response.status === 401) {
-      throw new ErrorForClient({
-        kind: ErrorKind.AuthInvalidated,
-        message: await response.text(),
+  try {
+    const response = await fetch(finalUrl, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const bodyPreview = await getBodyPreview(response, lc);
+
+      lc.info?.('fetch from API server returned non-OK status', {
+        url: finalUrl,
+        status: response.status,
+        bodyPreview,
       });
-    }
-  }
 
-  return response;
+      throw new ProtocolError(
+        source === 'push'
+          ? {
+              kind: ErrorKind.PushFailed,
+              origin: ErrorOrigin.ZeroCache,
+              reason: ErrorReason.HTTP,
+              status: response.status,
+              bodyPreview,
+              message: `Fetch from API server returned non-OK status ${response.status}`,
+              mutationIDs: [],
+            }
+          : {
+              kind: ErrorKind.TransformFailed,
+              origin: ErrorOrigin.ZeroCache,
+              reason: ErrorReason.HTTP,
+              status: response.status,
+              bodyPreview,
+              message: `Fetch from API server returned non-OK status ${response.status}`,
+              queryIDs: [],
+            },
+      );
+    }
+
+    try {
+      const json = await response.json();
+
+      return validator.parse(json);
+    } catch (error) {
+      lc.error?.('failed to parse response', {
+        url: finalUrl,
+        error,
+      });
+
+      throw new ProtocolError(
+        source === 'push'
+          ? {
+              kind: ErrorKind.PushFailed,
+              origin: ErrorOrigin.ZeroCache,
+              reason: ErrorReason.Parse,
+              message: `Failed to parse response from API server: ${error instanceof Error ? error.message : String(error)}`,
+              mutationIDs: [],
+            }
+          : {
+              kind: ErrorKind.TransformFailed,
+              origin: ErrorOrigin.ZeroCache,
+              reason: ErrorReason.Parse,
+              message: `Failed to parse response from API server: ${error instanceof Error ? error.message : String(error)}`,
+              queryIDs: [],
+            },
+        {cause: error},
+      );
+    }
+  } catch (error) {
+    if (isProtocolError(error)) {
+      throw error;
+    }
+
+    lc.error?.('failed to fetch from API server with unknown error', {
+      url: finalUrl,
+      error,
+    });
+
+    throw new ProtocolError(
+      source === 'push'
+        ? {
+            kind: ErrorKind.PushFailed,
+            origin: ErrorOrigin.ZeroCache,
+            reason: ErrorReason.Internal,
+            message: `Fetch from API server failed with unknown error: ${error instanceof Error ? error.message : String(error)}`,
+            mutationIDs: [],
+          }
+        : {
+            kind: ErrorKind.TransformFailed,
+            origin: ErrorOrigin.ZeroCache,
+            reason: ErrorReason.Internal,
+            message: `Fetch from API server failed with unknown error: ${error instanceof Error ? error.message : String(error)}`,
+            queryIDs: [],
+          },
+      {cause: error},
+    );
+  }
 }
 
 /**
