@@ -6,30 +6,12 @@ import {
 } from '../../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
-import type {Schema} from '../../../../zero-types/src/schema.ts';
-import type {FilterInput} from '../../ivm/filter-operators.ts';
-import {MemoryStorage} from '../../ivm/memory-storage.ts';
-import type {Input} from '../../ivm/operator.ts';
-import type {Source, SourceInput} from '../../ivm/source.ts';
+import type {Source} from '../../ivm/source.ts';
 import {createSource} from '../../ivm/test/source-factory.ts';
-import type {ViewFactory} from '../../ivm/view.ts';
 import type {CustomQueryID} from '../named.ts';
-import type {
-  CommitListener,
-  GotCallback,
-  QueryDelegate,
-} from '../query-delegate.ts';
-import {materializeImpl, preloadImpl, runImpl} from '../query-impl.ts';
-import {queryWithContext, type QueryInternals} from '../query-internals.ts';
-import type {
-  HumanReadable,
-  MaterializeOptions,
-  PreloadOptions,
-  Query,
-  RunOptions,
-} from '../query.ts';
+import {QueryDelegateBase} from '../query-delegate-base.ts';
+import type {CommitListener, GotCallback} from '../query-delegate.ts';
 import type {TTL} from '../ttl.ts';
-import type {TypedView} from '../typed-view.ts';
 import {
   commentSchema,
   issueLabelSchema,
@@ -47,9 +29,9 @@ type Entry = {
   args: readonly ReadonlyJSONValue[] | undefined;
   ttl: TTL;
 };
-export class QueryDelegateImpl<TContext = undefined>
-  implements QueryDelegate<TContext>
-{
+export class QueryDelegateImpl<
+  TContext = undefined,
+> extends QueryDelegateBase<TContext> {
   readonly #sources: Record<string, Source> = makeSources();
   readonly #commitListeners: Set<CommitListener> = new Set();
 
@@ -58,7 +40,6 @@ export class QueryDelegateImpl<TContext = undefined>
   synchronouslyCallNextGotCallback = false;
   callGot = false;
   readonly defaultQueryComplete = false;
-  readonly #context: TContext | undefined;
   readonly enableNotExists = true; // Allow NOT EXISTS in tests
 
   constructor({
@@ -70,24 +51,10 @@ export class QueryDelegateImpl<TContext = undefined>
     callGot?: boolean | undefined;
     context?: TContext | undefined;
   } = {}) {
+    super(context as TContext);
     this.#sources = sources;
     this.callGot = callGot;
-    this.#context = context;
   }
-
-  withContext<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-  >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-  ): QueryInternals<TSchema, TTable, TReturn, TContext> {
-    return queryWithContext(query, this.#context as TContext);
-  }
-
-  flushQueryChanges() {}
-
-  assertValidRunOptions(): void {}
 
   batchViewUpdates<T>(applyViewUpdates: () => T): T {
     return applyViewUpdates();
@@ -164,92 +131,11 @@ export class QueryDelegateImpl<TContext = undefined>
     return this.#sources[name];
   }
 
-  createStorage() {
-    return new MemoryStorage();
-  }
-
-  decorateSourceInput(input: SourceInput): Input {
-    return input;
-  }
-
-  decorateInput(input: Input, _description: string): Input {
-    return input;
-  }
-
-  decorateFilterInput(input: FilterInput, _description: string): FilterInput {
-    return input;
-  }
-
-  addEdge() {}
-
   callAllGotCallbacks() {
     for (const gotCallback of this.gotCallbacks) {
       gotCallback?.(true);
     }
     this.gotCallbacks.length = 0;
-  }
-
-  addMetric() {}
-
-  materialize<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-    TContext,
-  >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-    factory?: undefined,
-    options?: MaterializeOptions,
-  ): TypedView<HumanReadable<TReturn>>;
-
-  materialize<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-    TContext,
-    T,
-  >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-    factory: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
-    options?: MaterializeOptions,
-  ): T;
-
-  materialize<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-    T,
-  >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
-    options?: MaterializeOptions,
-  ): T {
-    return materializeImpl(query, this, factory, options);
-  }
-
-  run<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-  >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-    options?: RunOptions,
-  ): Promise<HumanReadable<TReturn>> {
-    return runImpl(query, this, options);
-  }
-
-  preload<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-  >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-    options?: PreloadOptions,
-  ): {
-    cleanup: () => void;
-    complete: Promise<void>;
-  } {
-    return preloadImpl(query, this, options);
   }
 }
 

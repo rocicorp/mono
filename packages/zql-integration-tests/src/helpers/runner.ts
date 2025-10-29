@@ -15,7 +15,6 @@ import {formatPgInternalConvert} from '../../../z2s/src/sql.ts';
 import {initialSync} from '../../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {
   clientToServer,
@@ -31,38 +30,22 @@ import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Change} from '../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../zql/src/ivm/data.ts';
 import {defaultFormat} from '../../../zql/src/ivm/default-format.ts';
-import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
-import type {Input, InputBase, Storage} from '../../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
-import type {
-  Source,
-  SourceChange,
-  SourceInput,
-} from '../../../zql/src/ivm/source.ts';
-import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
-import type {MetricMap} from '../../../zql/src/query/metrics-delegate.ts';
-import type {CustomQueryID} from '../../../zql/src/query/named.ts';
+import type {Source, SourceChange} from '../../../zql/src/ivm/source.ts';
+import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
 import type {
   CommitListener,
-  GotCallback,
   QueryDelegate,
 } from '../../../zql/src/query/query-delegate.ts';
 import {QueryImpl} from '../../../zql/src/query/query-impl.ts';
-import {
-  queryWithContext,
-  type QueryInternals,
-} from '../../../zql/src/query/query-internals.ts';
+import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
 import type {
   HumanReadable,
-  MaterializeOptions,
-  PreloadOptions,
   Query,
   RunOptions,
 } from '../../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../zql/src/query/test/query-delegate.ts';
-import type {TTL} from '../../../zql/src/query/ttl.ts';
-import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {
   mapResultToClientNames,
@@ -1101,136 +1084,7 @@ async function checkEditToMatch(
   zqlMaterialized.destroy();
 }
 
-class NoOpQueryDelegate<T> implements QueryDelegate<T> {
-  withContext<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-  >(
-    _query: Query<TSchema, TTable, TReturn, T>,
-  ): QueryInternals<TSchema, TTable, TReturn, T> {
-    return {} as QueryInternals<TSchema, TTable, TReturn, T>;
-  }
-
-  addServerQuery(_ast: AST, _ttl: TTL, _gotCallback?: GotCallback): () => void {
-    return () => {};
-  }
-
-  addCustomQuery(
-    _ast: AST,
-    _customQueryID: CustomQueryID,
-    _ttl: TTL,
-    _gotCallback?: GotCallback,
-  ): () => void {
-    return () => {};
-  }
-
-  updateServerQuery(_ast: AST, _ttl: TTL): void {
-    // No-op
-  }
-
-  updateCustomQuery(_customQueryID: CustomQueryID, _ttl: TTL): void {
-    // No-op
-  }
-
-  flushQueryChanges(): void {
-    // No-op
-  }
-
-  onTransactionCommit(_cb: CommitListener): () => void {
-    return () => {};
-  }
-
-  batchViewUpdates<R>(applyViewUpdates: () => R): R {
-    return applyViewUpdates();
-  }
-
-  assertValidRunOptions(_options?: RunOptions): void {
-    // No-op
-  }
-
-  readonly defaultQueryComplete = false;
-
-  materialize<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-    TView,
-  >(
-    _query: Query<TSchema, TTable, TReturn, T>,
-    _factory?: ViewFactory<TSchema, TTable, TReturn, T, TView>,
-    _options?: MaterializeOptions,
-  ): TypedView<HumanReadable<TReturn>> | TView {
-    return {
-      data: {} as HumanReadable<TReturn>,
-      destroy: () => {},
-    } as TypedView<HumanReadable<TReturn>> | TView;
-  }
-
-  run<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-  >(
-    _query: Query<TSchema, TTable, TReturn, T>,
-    _options?: RunOptions,
-  ): Promise<HumanReadable<TReturn>> {
-    return Promise.resolve({} as HumanReadable<TReturn>);
-  }
-
-  preload<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-  >(
-    _query: Query<TSchema, TTable, TReturn, T>,
-    _options?: PreloadOptions,
-  ): {cleanup: () => void; complete: Promise<void>} {
-    return {
-      cleanup: () => {},
-      complete: Promise.resolve(),
-    };
-  }
-
-  readonly applyFiltersAnyway = undefined;
-  readonly debug = undefined;
-
-  getSource(_tableName: string): Source | undefined {
-    return undefined;
-  }
-
-  createStorage(_name: string): Storage {
-    return {} as Storage;
-  }
-
-  decorateInput(input: Input, _name: string): Input {
-    return input;
-  }
-
-  addEdge(_source: InputBase, _dest: InputBase): void {
-    // No-op
-  }
-
-  decorateFilterInput(input: FilterInput, _name: string): FilterInput {
-    return input;
-  }
-
-  decorateSourceInput(input: SourceInput, _queryID: string): Input {
-    return input;
-  }
-
-  readonly mapAst = undefined;
-
-  addMetric<K extends keyof MetricMap>(
-    _metric: K,
-    _value: number,
-    ..._args: MetricMap[K]
-  ): void {
-    // No-op
-  }
-}
-
-class TestPGQueryDelegate extends NoOpQueryDelegate<undefined> {
+class TestPGQueryDelegate extends QueryDelegateBase<undefined> {
   readonly #pg: PostgresDB;
   readonly #schema: Schema;
   readonly serverSchema: ServerSchema;
@@ -1240,7 +1094,7 @@ class TestPGQueryDelegate extends NoOpQueryDelegate<undefined> {
   };
 
   constructor(pg: PostgresDB, schema: Schema, serverSchema: ServerSchema) {
-    super();
+    super(undefined);
     this.#pg = pg;
     this.#schema = schema;
     this.serverSchema = serverSchema;
@@ -1249,6 +1103,16 @@ class TestPGQueryDelegate extends NoOpQueryDelegate<undefined> {
         pg.unsafe(query, args as JSONValue[]),
       wrappedTransaction: pg,
     };
+  }
+
+  readonly defaultQueryComplete = false;
+
+  onTransactionCommit(_cb: CommitListener): () => void {
+    return () => {};
+  }
+
+  getSource(_tableName: string): Source | undefined {
+    return undefined;
   }
 
   query(query: string, args: unknown[]) {

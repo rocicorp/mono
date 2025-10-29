@@ -131,6 +131,22 @@ const user = table('user')
   import {helper} from './mod.ts';
   ```
 
+- **DO NOT use `import()` in type expressions**: Always use `import type` at the top of the file
+
+  ```typescript
+  // Correct - import type at the top
+  import type {AST} from '../../../zero-protocol/src/ast.ts';
+  import type {TTL} from './ttl.ts';
+
+  abstract addServerQuery(ast: AST, ttl: TTL): void;
+
+  // Incorrect - don't use import() in type expressions
+  abstract addServerQuery(
+    ast: import('../../../zero-protocol/src/ast.ts').AST,
+    ttl: import('./ttl.ts').TTL,
+  ): void;
+  ```
+
 - **AVOID re-exports that create cycles**: Re-exports can introduce circular dependencies between packages
 
   ```typescript

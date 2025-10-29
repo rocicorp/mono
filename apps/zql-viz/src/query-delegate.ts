@@ -1,33 +1,13 @@
-import type {Schema} from '../../../packages/zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../packages/zero-types/src/schema.ts';
 import type {FilterInput} from '../../../packages/zql/src/ivm/filter-operators.ts';
 import {MemorySource} from '../../../packages/zql/src/ivm/memory-source.ts';
-import {MemoryStorage} from '../../../packages/zql/src/ivm/memory-storage.ts';
-import type {
-  Input,
-  InputBase,
-  Storage,
-} from '../../../packages/zql/src/ivm/operator.ts';
+import type {Input, InputBase} from '../../../packages/zql/src/ivm/operator.ts';
 import type {SourceInput} from '../../../packages/zql/src/ivm/source.ts';
-import type {ViewFactory} from '../../../packages/zql/src/ivm/view.ts';
-import type {QueryDelegate} from '../../../packages/zql/src/query/query-delegate.ts';
-import {
-  materializeImpl,
-  preloadImpl,
-  runImpl,
-} from '../../../packages/zql/src/query/query-impl.ts';
-import {queryWithContext} from '../../../packages/zql/src/query/query-internals.ts';
-import type {
-  AnyQuery,
-  HumanReadable,
-  MaterializeOptions,
-  PreloadOptions,
-  Query,
-  RunOptions,
-} from '../../../packages/zql/src/query/query.ts';
+import {QueryDelegateBase} from '../../../packages/zql/src/query/query-delegate-base.ts';
 import type {Edge, Graph} from './types.ts';
 
-export class VizDelegate implements QueryDelegate<undefined> {
-  readonly #sources: Map<string, MemorySource>;
+export class VizDelegate extends QueryDelegateBase<undefined> {
+  readonly #sources: Map<string, MemorySource> = new Map();
   readonly #schema: Schema;
 
   readonly #nodeIds: Map<
@@ -37,18 +17,16 @@ export class VizDelegate implements QueryDelegate<undefined> {
       type: string;
       name: string;
     }
-  >;
-  readonly #edges: Edge[];
+  > = new Map();
+  readonly #edges: Edge[] = [];
   #nodeIdCounter = 0;
   readonly defaultQueryComplete: boolean = true;
 
   readonly applyFiltersAnyway = true;
 
   constructor(schema: Schema) {
-    this.#sources = new Map();
+    super(undefined);
     this.#schema = schema;
-    this.#nodeIds = new Map();
-    this.#edges = [];
   }
 
   getGraph(): Graph {
@@ -74,10 +52,6 @@ export class VizDelegate implements QueryDelegate<undefined> {
     return newSource;
   }
 
-  createStorage(): Storage {
-    return new MemoryStorage();
-  }
-
   decorateInput(input: Input, name: string): Input {
     this.#getNode(input, name);
     return input;
@@ -100,67 +74,8 @@ export class VizDelegate implements QueryDelegate<undefined> {
     return input;
   }
 
-  addServerQuery() {
-    return () => {};
-  }
-  addCustomQuery() {
-    return () => {};
-  }
-  updateServerQuery() {}
-  updateCustomQuery() {}
   onTransactionCommit() {
     return () => {};
-  }
-  batchViewUpdates<T>(applyViewUpdates: () => T): T {
-    return applyViewUpdates();
-  }
-  assertValidRunOptions() {}
-  flushQueryChanges() {}
-  addMetric() {}
-
-  materialize<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-    TContext,
-    T,
-  >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
-    options?: MaterializeOptions,
-  ): T {
-    return materializeImpl(query, this, factory, options);
-  }
-
-  run<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-    TContext,
-  >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-    options?: RunOptions,
-  ): Promise<HumanReadable<TReturn>> {
-    return runImpl(query, this, options);
-  }
-
-  preload<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-    TContext,
-  >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-    options?: PreloadOptions,
-  ): {
-    cleanup: () => void;
-    complete: Promise<void>;
-  } {
-    return preloadImpl(query, this, options);
-  }
-
-  withContext(query: AnyQuery) {
-    return queryWithContext(query, undefined);
   }
 
   #getNode(input: InputBase, name?: string) {

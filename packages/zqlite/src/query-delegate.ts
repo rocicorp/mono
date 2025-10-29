@@ -1,43 +1,20 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {LogConfig} from '../../otel/src/log-options.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
-import type {FilterInput} from '../../zql/src/ivm/filter-operators.ts';
-import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
-import type {Input} from '../../zql/src/ivm/operator.ts';
-import type {Source, SourceInput} from '../../zql/src/ivm/source.ts';
-import type {ViewFactory} from '../../zql/src/ivm/view.ts';
-import type {
-  CommitListener,
-  QueryDelegate,
-} from '../../zql/src/query/query-delegate.ts';
-import {
-  materializeImpl,
-  preloadImpl,
-  runImpl,
-} from '../../zql/src/query/query-impl.ts';
-import {
-  queryWithContext,
-  type QueryInternals,
-} from '../../zql/src/query/query-internals.ts';
-import type {
-  HumanReadable,
-  MaterializeOptions,
-  PreloadOptions,
-  Query,
-  RunOptions,
-} from '../../zql/src/query/query.ts';
+import type {Source} from '../../zql/src/ivm/source.ts';
+import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
+import type {CommitListener} from '../../zql/src/query/query-delegate.ts';
 import type {Database} from './db.ts';
 import {TableSource} from './table-source.ts';
 
-export class QueryDelegateImpl<TContext> implements QueryDelegate<TContext> {
+export class QueryDelegateImpl<TContext> extends QueryDelegateBase<TContext> {
   readonly #lc: LogContext;
   readonly #db: Database;
   readonly #schema: Schema;
-  readonly #sources: Map<string, Source>;
+  readonly #sources: Map<string, Source> = new Map();
   readonly #logConfig: LogConfig;
   readonly defaultQueryComplete = true;
   readonly #commitObservers = new Set<() => void>();
-  readonly #context: TContext;
 
   constructor(
     lc: LogContext,
@@ -46,11 +23,10 @@ export class QueryDelegateImpl<TContext> implements QueryDelegate<TContext> {
     context: TContext,
     logConfig?: LogConfig,
   ) {
+    super(context);
     this.#lc = lc.withContext('class', 'QueryDelegateImpl');
     this.#db = db;
     this.#schema = schema;
-    this.#context = context;
-    this.#sources = new Map();
     this.#logConfig = logConfig ?? {
       format: 'text',
       ivmSampling: 0,
@@ -81,96 +57,17 @@ export class QueryDelegateImpl<TContext> implements QueryDelegate<TContext> {
     return source;
   }
 
-  createStorage() {
-    return new MemoryStorage();
-  }
-
-  decorateSourceInput(input: SourceInput): Input {
-    return input;
-  }
-
-  decorateInput(input: Input): Input {
-    return input;
-  }
-
-  decorateFilterInput(input: FilterInput): FilterInput {
-    return input;
-  }
-
-  addServerQuery() {
-    return () => {};
-  }
-
-  addEdge() {}
-
-  addCustomQuery() {
-    return () => {};
-  }
-
-  updateServerQuery() {}
-  updateCustomQuery() {}
-  flushQueryChanges() {}
   onTransactionCommit(cb: CommitListener) {
     this.#commitObservers.add(cb);
     return () => {
       this.#commitObservers.delete(cb);
     };
   }
-  batchViewUpdates<T>(applyViewUpdates: () => T): T {
+  override batchViewUpdates<T>(applyViewUpdates: () => T): T {
     const ret = applyViewUpdates();
     for (const observer of this.#commitObservers) {
       observer();
     }
     return ret;
-  }
-  assertValidRunOptions() {}
-  addMetric() {}
-
-  materialize<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-    T,
-  >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
-    options?: MaterializeOptions,
-  ): T {
-    return materializeImpl(query, this, factory, options);
-  }
-
-  run<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-  >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-    options?: RunOptions,
-  ): Promise<HumanReadable<TReturn>> {
-    return runImpl(query, this, options);
-  }
-
-  preload<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-  >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-    options?: PreloadOptions,
-  ): {
-    cleanup: () => void;
-    complete: Promise<void>;
-  } {
-    return preloadImpl(query, this, options);
-  }
-
-  withContext<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-  >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-  ): QueryInternals<TSchema, TTable, TReturn, TContext> {
-    return queryWithContext(query, this.#context);
   }
 }
