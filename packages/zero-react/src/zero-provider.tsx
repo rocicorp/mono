@@ -10,7 +10,7 @@ import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
 import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 
-const ZeroContext = createContext<unknown | undefined>(undefined);
+export const ZeroContext = createContext<unknown | undefined>(undefined);
 
 export function useZero<
   S extends Schema,
