@@ -61,55 +61,6 @@ test('manual: album.whereExists(tracks)', async () => {
   await runManualCase(query);
 });
 
-test.only('debug: album.whereExists(tracks)', async () => {
-  const query = builder.album.whereExists('tracks');
-  const queryAst = ast(query);
-
-  // Run without planning
-  const debugUnplanned = new Debug();
-  const unplannedQuery = new QueryImpl(
-    {
-      ...harness.delegates.sqlite,
-      debug: debugUnplanned,
-    },
-    schema,
-    queryAst.table as keyof typeof schema.tables,
-    queryAst,
-    query.format,
-  );
-  await unplannedQuery.run();
-  const unplannedRowCount = getTotalRowCount(debugUnplanned);
-
-  // Run with planning and debug tracing
-  const planDebugger = new AccumulatorDebugger();
-  const mappedAST = mapAST(queryAst, clientToServerMapper);
-  const plannedServerAST = planQuery(mappedAST, costModel, planDebugger);
-  const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
-
-  console.log('\n=== PLANNER DEBUG TRACE ===');
-  console.log(planDebugger.format());
-  console.log('===========================\n');
-
-  const debugPlanned = new Debug();
-  const plannedQuery = new QueryImpl(
-    {
-      ...harness.delegates.sqlite,
-      debug: debugPlanned,
-    },
-    schema,
-    plannedClientAST.table as keyof typeof schema.tables,
-    plannedClientAST,
-    query.format,
-  );
-  await plannedQuery.run();
-  const plannedRowCount = getTotalRowCount(debugPlanned);
-
-  console.log(`Unplanned rows: ${unplannedRowCount}`);
-  console.log(`Planned rows: ${plannedRowCount}`);
-  console.log(`Unplanned row counts:`, debugUnplanned.getVendedRowCounts());
-  console.log(`Planned row counts:`, debugPlanned.getVendedRowCounts());
-});
-
 // Fuzz tests (disabled for now - queries may be too complex)
 test.each(Array.from({length: 0}, () => createCase()))(
   'fuzz-planner $seed',
