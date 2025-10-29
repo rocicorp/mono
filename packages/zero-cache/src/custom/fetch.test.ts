@@ -35,6 +35,10 @@ const shard: ShardID = {appID: 'test_app', shardNum: 1};
 const baseUrl = 'https://api.example.com/endpoint';
 const allowedPatterns = [compileUrlPattern(baseUrl)];
 
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
+
 describe('fetchFromAPIServer', () => {
   const lc = createSilentLogContext();
   const body = {test: 'data'};
@@ -188,7 +192,7 @@ describe('fetchFromAPIServer', () => {
 
     expect(caught).toBeInstanceOf(ProtocolError);
     assert(isProtocolError(caught), 'Expected protocol error');
-    expect(caught.errorBody.kind).toBe(ErrorKind.PushFailed);
+    expect(caught.kind).toBe(ErrorKind.PushFailed);
     assert(
       caught.errorBody.kind === ErrorKind.PushFailed,
       'Expected zeroCache PushFailed error',
@@ -265,7 +269,7 @@ describe('fetchFromAPIServer', () => {
     expect(caught).toBeInstanceOf(ProtocolError);
 
     assert(isProtocolError(caught), 'Expected protocol error');
-    expect(caught.errorBody.kind).toBe(ErrorKind.TransformFailed);
+    expect(caught.kind).toBe(ErrorKind.TransformFailed);
     assert(
       caught.errorBody.kind === ErrorKind.TransformFailed,
       'Expected zeroCache TransformFailed error',
@@ -297,7 +301,7 @@ describe('fetchFromAPIServer', () => {
     expect(caught).toBeInstanceOf(ProtocolError);
 
     assert(isProtocolError(caught), 'Expected protocol error');
-    expect(caught.errorBody.kind).toBe(ErrorKind.TransformFailed);
+    expect(caught.kind).toBe(ErrorKind.TransformFailed);
     assert(
       caught.errorBody.kind === ErrorKind.TransformFailed,
       'Expected zeroCache TransformFailed error',
@@ -367,7 +371,7 @@ describe('fetchFromAPIServer', () => {
     expect(caught).toBeInstanceOf(ProtocolError);
     assert(isProtocolError(caught), 'Expected protocol error');
 
-    expect(caught.errorBody.kind).toBe(ErrorKind.TransformFailed);
+    expect(caught.kind).toBe(ErrorKind.TransformFailed);
     assert(
       caught.errorBody.kind === ErrorKind.TransformFailed,
       'Expected zeroCache TransformFailed error',
@@ -376,7 +380,7 @@ describe('fetchFromAPIServer', () => {
     expect(caught.errorBody.message).toMatch(/Failed to parse response/);
   });
 
-  test('wraps rejected fetch calls in ProtocolError with unknown type', async () => {
+  test('wraps rejected fetch calls for push in ProtocolError with internal type', async () => {
     mockFetch.mockRejectedValueOnce(new Error('boom'));
 
     let caught: unknown;
@@ -507,8 +511,4 @@ describe('urlMatch', () => {
       ),
     ).toBe(false);
   });
-});
-
-afterAll(() => {
-  vi.unstubAllGlobals();
 });

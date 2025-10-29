@@ -168,21 +168,3 @@ export class ProtocolError<
 export function isProtocolError(error: unknown): error is ProtocolError {
   return error instanceof ProtocolError;
 }
-
-export function toProtocolError(
-  error: unknown,
-  origin: ErrorOrigin.Server | ErrorOrigin.ZeroCache,
-): ProtocolError {
-  if (isProtocolError(error)) {
-    return error;
-  }
-
-  return new ProtocolError(
-    {
-      kind: ErrorKind.Internal,
-      message: error instanceof Error ? error.message : String(error),
-      origin,
-    },
-    {cause: error},
-  );
-}

@@ -1,31 +1,15 @@
 import {beforeEach, describe, expect, test, vi} from 'vitest';
-import WebSocket, {type RawData} from 'ws';
+import WebSocket from 'ws';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
-import {send} from './connection.ts';
+import {send, type WebSocketLike} from './connection.ts';
 
-class MockSocket implements Pick<WebSocket, 'readyState' | 'send'> {
+class MockSocket implements WebSocketLike {
   readyState: WebSocket['readyState'] = WebSocket.OPEN;
-
-  send(data: RawData, cb?: (err?: Error) => void): void;
-  send(
-    data: RawData,
-    options: {
-      mask?: boolean | undefined;
-      binary?: boolean | undefined;
-      compress?: boolean | undefined;
-      fin?: boolean | undefined;
-    },
-    cb?: (err?: Error) => void,
-  ): void;
-  send(
-    _data: RawData,
-    _optionsOrCb?: unknown,
-    _maybeCb?: (err?: Error) => void,
-  ) {}
+  send(_data: string, _cb?: (err?: Error) => void) {}
 }
 
 describe('send', () => {

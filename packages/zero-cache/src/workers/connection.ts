@@ -16,6 +16,7 @@ import {upstreamSchema, type Upstream} from '../../../zero-protocol/src/up.ts';
 import {
   ProtocolErrorWithLevel,
   getLogLevel,
+  wrapWithProtocolError,
 } from '../types/error-with-level.ts';
 import type {Source} from '../types/streams.ts';
 import type {ConnectParams} from './connect-params.ts';
@@ -293,11 +294,8 @@ export class Connection {
   }
 
   #closeWithThrown(e: unknown) {
-    const errorBody = findProtocolError(e)?.errorBody ?? {
-      kind: ErrorKind.Internal,
-      message: e instanceof Error ? e.message : String(e),
-      origin: ErrorOrigin.ZeroCache,
-    };
+    const errorBody =
+      findProtocolError(e)?.errorBody ?? wrapWithProtocolError(e).errorBody;
 
     this.#closeWithError(errorBody, e);
   }
@@ -332,10 +330,14 @@ export class Connection {
   }
 }
 
+export type WebSocketLike = Pick<WebSocket, 'readyState'> & {
+  send(data: string, cb?: (err?: Error) => void): void;
+};
+
 // Exported for testing purposes.
 export function send(
   lc: LogContext,
-  ws: Pick<WebSocket, 'readyState' | 'send'>,
+  ws: WebSocketLike,
   data: Downstream,
   callback: ((err?: Error | null) => void) | 'ignore-backpressure',
 ) {

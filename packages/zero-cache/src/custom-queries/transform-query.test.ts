@@ -147,7 +147,6 @@ describe('CustomQueryTransformer', () => {
   });
 
   test('should transform queries successfully and return TransformedAndHashed array', async () => {
-    // Mock now returns the parsed response directly, not a Response object
     mockFetchFromAPIServer.mockResolvedValue([
       'transformed',
       mockQueryResponses,
@@ -169,8 +168,8 @@ describe('CustomQueryTransformer', () => {
 
     // Verify the API was called correctly
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
-      expect.anything(), // validator (transformResponseMessageSchema)
-      'transform', // source
+      expect.anything(),
+      'transform',
       lc,
       pullUrl,
       [expectUrlPatternMatching(pullUrl)],
@@ -190,7 +189,6 @@ describe('CustomQueryTransformer', () => {
   });
 
   test('should handle errored queries in response', async () => {
-    // Mock now returns the parsed response directly
     mockFetchFromAPIServer.mockResolvedValue([
       'transformed',
       [
@@ -270,7 +268,6 @@ describe('CustomQueryTransformer', () => {
   });
 
   test('should handle empty queries array', async () => {
-    // Mock now returns the parsed response directly
     mockFetchFromAPIServer.mockResolvedValue(['transformed', []]);
 
     const transformer = new CustomQueryTransformer(
@@ -384,8 +381,8 @@ describe('CustomQueryTransformer', () => {
     await transformer.transform(headerOptions, [mockQueries[0]], undefined);
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
     expect(mockFetchFromAPIServer).toHaveBeenLastCalledWith(
-      expect.anything(), // validator
-      'transform', // source
+      expect.anything(),
+      'transform',
       lc,
       'https://api.example.com/pull',
       [expectUrlPatternMatching('https://api.example.com/pull')],
@@ -402,8 +399,8 @@ describe('CustomQueryTransformer', () => {
     );
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
     expect(mockFetchFromAPIServer).toHaveBeenLastCalledWith(
-      expect.anything(), // validator
-      'transform', // source
+      expect.anything(),
+      'transform',
       lc,
       pullUrl,
       [expectUrlPatternMatching(pullUrl)],
@@ -446,8 +443,8 @@ describe('CustomQueryTransformer', () => {
     );
 
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
-      expect.anything(), // validator
-      'transform', // source
+      expect.anything(),
+      'transform',
       lc,
       pullUrl,
       [expectUrlPatternMatching(pullUrl)],
@@ -485,8 +482,8 @@ describe('CustomQueryTransformer', () => {
     );
 
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
-      expect.anything(), // validator
-      'transform', // source
+      expect.anything(),
+      'transform',
       lc,
       pullUrl,
       [expectUrlPatternMatching(pullUrl)],
@@ -612,8 +609,8 @@ describe('CustomQueryTransformer', () => {
 
     // Verify custom URL was used instead of default
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
-      expect.anything(), // validator
-      'transform', // source
+      expect.anything(),
+      'transform',
       lc,
       customUrl,
       [expectUrlPatternMatching(pullUrl)], // Pattern still compiled from config
@@ -645,8 +642,8 @@ describe('CustomQueryTransformer', () => {
 
     // Verify default URL from config was used
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
-      expect.anything(), // validator
-      'transform', // source
+      expect.anything(),
+      'transform',
       lc,
       pullUrl,
       [expectUrlPatternMatching(pullUrl)],
@@ -694,8 +691,8 @@ describe('CustomQueryTransformer', () => {
 
     // Verify the disallowed URL was attempted to be used
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
-      expect.anything(), // validator
-      'transform', // source
+      expect.anything(),
+      'transform',
       lc,
       disallowedUrl,
       [expectUrlPatternMatching(pullUrl)], // Pattern still compiled from config
@@ -742,8 +739,8 @@ describe('CustomQueryTransformer', () => {
 
     // Verify the API was called
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
-      expect.anything(), // validator
-      'transform', // source
+      expect.anything(),
+      'transform',
       lc,
       pullUrl,
       [expectUrlPatternMatching(pullUrl)],
@@ -785,8 +782,8 @@ describe('CustomQueryTransformer', () => {
 
     // Verify the API was called
     expect(mockFetchFromAPIServer).toHaveBeenCalledWith(
-      expect.anything(), // validator
-      'transform', // source
+      expect.anything(),
+      'transform',
       lc,
       pullUrl,
       [expectUrlPatternMatching(pullUrl)],
@@ -828,8 +825,6 @@ describe('CustomQueryTransformer', () => {
   });
 
   test('should handle non-Error exceptions', async () => {
-    // Some libraries or code might throw non-Error objects
-    // e.g., throw "connection failed" or throw {code: 500}
     mockFetchFromAPIServer.mockRejectedValue('string error thrown');
 
     const transformer = new CustomQueryTransformer(
@@ -848,7 +843,8 @@ describe('CustomQueryTransformer', () => {
       kind: ErrorKind.TransformFailed,
       origin: ErrorOrigin.ZeroCache,
       reason: ErrorReason.Internal,
-      message: 'An unknown error occurred while transforming queries.',
+      message:
+        'An unknown error occurred while transforming queries: string error thrown',
       queryIDs: ['query1'],
     });
   });

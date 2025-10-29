@@ -160,7 +160,7 @@ export class CustomQueryTransformer {
         message:
           e instanceof Error
             ? e.message
-            : 'An unknown error occurred while transforming queries.',
+            : `An unknown error occurred while transforming queries: ${String(e)}`,
         queryIDs,
       } as const satisfies TransformFailedBody;
     }

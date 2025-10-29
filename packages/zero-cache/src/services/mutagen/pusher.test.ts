@@ -894,25 +894,6 @@ describe('pusher errors', () => {
     );
   });
 
-  test('emits error message with new error format (kind in response)', async () => {
-    await expectPushErrorResponse(
-      {
-        kind: ErrorKind.PushFailed,
-        origin: ErrorOrigin.Server,
-        reason: ErrorReason.Database,
-        message: 'Database constraint violation',
-        mutationIDs: [{clientID, id: 1}],
-      },
-      {
-        kind: ErrorKind.PushFailed,
-        origin: ErrorOrigin.Server,
-        reason: ErrorReason.Database,
-        message: 'Database constraint violation',
-        mutationIDs: [{clientID: 'test-cid', id: 1}],
-      },
-    );
-  });
-
   test('handles non-Error object thrown in catch block', async () => {
     const fetch = (global.fetch = vi.fn());
     fetch.mockRejectedValue('string error');

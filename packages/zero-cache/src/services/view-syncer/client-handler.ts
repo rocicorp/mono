@@ -23,7 +23,10 @@ import {
   getOrCreateCounter,
   getOrCreateHistogram,
 } from '../../observability/metrics.ts';
-import {getLogLevel} from '../../types/error-with-level.ts';
+import {
+  getLogLevel,
+  wrapWithProtocolError,
+} from '../../types/error-with-level.ts';
 import {
   getProtocolErrorIfSchemaVersionNotSupported,
   type SchemaVersions,
@@ -44,10 +47,8 @@ import {
 import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts';
 import {
   ProtocolError,
-  toProtocolError,
   type TransformFailedBody,
 } from '../../../../zero-protocol/src/error.ts';
-import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 
 export type PutRowPatch = {
   type: 'row';
@@ -182,7 +183,7 @@ export class ClientHandler {
       `view-syncer closing connection with error: ${String(e)}`,
       e,
     );
-    this.#downstream.fail(toProtocolError(e, ErrorOrigin.ZeroCache));
+    this.#downstream.fail(wrapWithProtocolError(e));
   }
 
   close(reason: string) {
@@ -324,7 +325,7 @@ export class ClientHandler {
             this.#pokedRows.add(1);
           }
         } catch (e) {
-          this.#downstream.fail(toProtocolError(e, ErrorOrigin.ZeroCache));
+          this.#downstream.fail(wrapWithProtocolError(e));
         }
       },
 
