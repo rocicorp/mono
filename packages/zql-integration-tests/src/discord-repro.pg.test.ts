@@ -51,7 +51,7 @@ beforeAll(async () => {
   );
 
   queryDelegate = newQueryDelegate(lc, testLogConfig, sqlite, schema);
-  issueQuery = newQuery(queryDelegate, schema, 'issue');
+  issueQuery = newQuery(schema, 'issue');
 });
 
 test('discord report https://discord.com/channels/830183651022471199/1347550174968287233/1347552521865920616', () => {

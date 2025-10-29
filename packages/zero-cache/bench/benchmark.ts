@@ -61,7 +61,7 @@ export function bench(opts: Options) {
 
   const delegate = new BenchmarkQueryDelegate();
 
-  const issueQuery = newQuery(delegate, schema, 'issue');
+  const issueQuery = newQuery(schema, 'issue');
   const q = issueQuery
     .related('labels')
     .orderBy('modified', 'desc')

@@ -263,9 +263,9 @@ function makeError(
 declare const TESTING: boolean;
 
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-type ViewWrapperAny = ViewWrapper<any, any, any, any, any>;
+type AnyViewWrapper = ViewWrapper<any, any, any, any, any>;
 
-const allViews = new WeakMap<ViewStore, Map<string, ViewWrapperAny>>();
+const allViews = new WeakMap<ViewStore, Map<string, AnyViewWrapper>>();
 
 export function getAllViewsSizeForTesting(store: ViewStore): number {
   if (TESTING) {
@@ -323,7 +323,7 @@ export function getAllViewsSizeForTesting(store: ViewStore): number {
  * Swapping `useState` to `useRef` has similar problems.
  */
 export class ViewStore {
-  #views = new Map<string, ViewWrapperAny>();
+  #views = new Map<string, AnyViewWrapper>();
 
   constructor() {
     if (TESTING) {

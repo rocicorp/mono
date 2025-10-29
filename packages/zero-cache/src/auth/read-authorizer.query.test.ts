@@ -865,7 +865,7 @@ describe('issue permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '005', role: 'admin'},
-        newQuery(queryDelegate, schema, 'issue'),
+        newQuery(schema, 'issue'),
         queryDelegate,
       ).map(r => r.row.id),
     ).toEqual(['001', '002', '003']);
@@ -876,7 +876,7 @@ describe('issue permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '001', role: 'user'},
-        newQuery(queryDelegate, schema, 'issue'),
+        newQuery(schema, 'issue'),
         queryDelegate,
       ).map(r => r.row.id),
     ).toEqual(['001', '002', '003']);
@@ -885,7 +885,7 @@ describe('issue permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '002', role: 'user'},
-        newQuery(queryDelegate, schema, 'issue'),
+        newQuery(schema, 'issue'),
         queryDelegate,
       ).map(r => r.row.id),
     ).toEqual([]);
@@ -894,7 +894,7 @@ describe('issue permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '003', role: 'user'},
-        newQuery(queryDelegate, schema, 'issue'),
+        newQuery(schema, 'issue'),
         queryDelegate,
       ).map(r => r.row.id),
     ).toEqual(['001', '002', '003']);
@@ -903,7 +903,7 @@ describe('issue permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '011', role: 'user'},
-        newQuery(queryDelegate, schema, 'issue'),
+        newQuery(schema, 'issue'),
         queryDelegate,
       ).map(r => r.row.id),
     ).toEqual(['001']);
@@ -912,7 +912,7 @@ describe('issue permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '012', role: 'user'},
-        newQuery(queryDelegate, schema, 'issue'),
+        newQuery(schema, 'issue'),
         queryDelegate,
       ).map(r => r.row.id),
     ).toEqual(['002', '003']);
@@ -1158,7 +1158,7 @@ describe('comment & issueLabel permissions', () => {
       expect(
         runReadQueryWithPermissions(
           {sub, role: sub === '005' ? 'admin' : 'user'},
-          newQuery(queryDelegate, schema, 'comment'),
+          newQuery(schema, 'comment'),
           queryDelegate,
         ).map(r => r.row.id),
       ).toEqual(['001', '002']);
@@ -1167,7 +1167,7 @@ describe('comment & issueLabel permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '004', role: 'user'},
-        newQuery(queryDelegate, schema, 'comment'),
+        newQuery(schema, 'comment'),
         queryDelegate,
       ).map(r => r.row.id),
     ).toEqual([]);
@@ -1351,7 +1351,7 @@ describe('read permissions against nested paths', () => {
     {
       name: 'User can view everything they are attached to through owner/creator relationships',
       sub: 'owner-creator',
-      query: newQuery(queryDelegate, schema, 'user')
+      query: newQuery(schema, 'user')
         .where('id', '=', 'owner-creator')
         .related('createdIssues', q => q.related('comments', q => q.limit(1)))
         .related('ownedIssues', q => q.related('comments', q => q.limit(1))),
@@ -1400,7 +1400,7 @@ describe('read permissions against nested paths', () => {
     {
       name: 'User cannot see previously viewed issues if they were moved out of the project and are not the owner/creator',
       sub: 'not-project-member',
-      query: newQuery(queryDelegate, schema, 'user')
+      query: newQuery(schema, 'user')
         .where('id', '=', 'not-project-member')
         .related('viewedIssues', q => q.related('comments')),
       expected: [
@@ -1420,7 +1420,7 @@ describe('read permissions against nested paths', () => {
     {
       name: 'User can see previously viewed issues (even if they are not in the project) if they are the owner/creator',
       sub: 'owner-creator',
-      query: newQuery(queryDelegate, schema, 'user')
+      query: newQuery(schema, 'user')
         .where('id', 'owner-creator')
         .related('viewedIssues', q => q.related('comments', q => q.limit(2))),
       expected: [
@@ -1464,7 +1464,7 @@ describe('read permissions against nested paths', () => {
     {
       name: 'User can see everything they are attached to through project membership',
       sub: 'project-member',
-      query: newQuery(queryDelegate, schema, 'user').related('projects', q =>
+      query: newQuery(schema, 'user').related('projects', q =>
         q.related('issues', q => q.related('comments')),
       ),
       expected: [
@@ -1553,7 +1553,7 @@ describe('read permissions against nested paths', () => {
   test('nested property access', () => {
     let actual = runReadQueryWithPermissions(
       {sub: 'dne', role: '', properties: {role: 'admin'}},
-      newQuery(queryDelegate, schema, 'issue'),
+      newQuery(schema, 'issue'),
       queryDelegate,
     );
     expect(toIdsOnly(actual)).toEqual([
@@ -1564,7 +1564,7 @@ describe('read permissions against nested paths', () => {
 
     actual = runReadQueryWithPermissions(
       {sub: 'dne', role: ''},
-      newQuery(queryDelegate, schema, 'issue'),
+      newQuery(schema, 'issue'),
       queryDelegate,
     );
     expect(toIdsOnly(actual)).toEqual([]);

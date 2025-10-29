@@ -48,14 +48,13 @@ function mockEndToEndTiming(
 }
 
 // Helper function to create a standard query
-function createTestQuery<C>(context: ZeroContext<C>) {
+function createTestQuery() {
   const ast = {
     table: 'users',
     orderBy: [['id', 'asc'] as [string, 'asc' | 'desc']],
   } as const;
 
   return new QueryImpl(
-    context,
     schema,
     ast.table,
     ast,
@@ -146,7 +145,7 @@ describe('query materialization metrics', () => {
         t0: 100,
         clientTime: 125,
         expectedDelta: 25,
-        setup: () => createTestQuery(context),
+        setup: () => createTestQuery(),
       },
       {
         name: 'records client metric for custom queries',
@@ -154,7 +153,7 @@ describe('query materialization metrics', () => {
         clientTime: 235,
         expectedDelta: 35,
         setup: () => {
-          const query = createTestQuery(context);
+          const query = createTestQuery();
           return context.withContext(query).nameAndArgs('getUsers', []);
         },
         additionalChecks: () => {
@@ -194,7 +193,7 @@ describe('query materialization metrics', () => {
 
       // Create multiple queries
       for (let i = 0; i < 3; i++) {
-        const query = createTestQuery(context);
+        const query = createTestQuery();
         queries.push(query);
         views.push(context.materialize(query) as unknown as MockView);
       }
@@ -218,7 +217,7 @@ describe('query materialization metrics', () => {
       // Mock performance.now() for view factory
       mockClientTiming(250, 275);
 
-      const query = createTestQuery(context);
+      const query = createTestQuery();
 
       // Use custom view factory
       const customViewFactory = () => ({
@@ -241,7 +240,7 @@ describe('query materialization metrics', () => {
       // Test precision with fractional milliseconds
       mockClientTiming(1000.123, 1025.789);
 
-      const query = createTestQuery(context);
+      const query = createTestQuery();
 
       const view = context.materialize(query) as unknown as MockView;
 
@@ -259,7 +258,7 @@ describe('query materialization metrics', () => {
       // Mock performance.now() for query
       mockClientTiming(500, 545);
 
-      const query = createTestQuery(context);
+      const query = createTestQuery();
 
       const view = context.materialize(query) as unknown as MockView;
 
@@ -282,7 +281,7 @@ describe('query materialization metrics', () => {
         clientTime: 200,
         serverTime: 300,
         expectedDelta: 150,
-        setup: () => createTestQuery(context),
+        setup: () => createTestQuery(),
         additionalChecks: () => {
           expect(addServerQuerySpy).toHaveBeenCalledOnce();
         },
@@ -294,7 +293,7 @@ describe('query materialization metrics', () => {
         serverTime: 400,
         expectedDelta: 150,
         setup: () => {
-          const query = createTestQuery(context);
+          const query = createTestQuery();
           return context.withContext(query).nameAndArgs('getUsers', []);
         },
         additionalChecks: () => {
@@ -340,7 +339,7 @@ describe('query materialization metrics', () => {
       // Mock performance.now() for basic timing - only 2 calls expected (t0 and client metric)
       mockClientTiming(150, 200);
 
-      const query = createTestQuery(context);
+      const query = createTestQuery();
 
       const view = context.materialize(query) as unknown as MockView;
 
@@ -359,7 +358,7 @@ describe('query materialization metrics', () => {
       // Mock performance.now() for basic timing
       mockClientTiming(100, 150);
 
-      const query = createTestQuery(context);
+      const query = createTestQuery();
 
       const view = context.materialize(query) as unknown as MockView;
 
@@ -387,13 +386,13 @@ describe('query materialization metrics', () => {
       ]);
 
       // First query
-      const query1 = createTestQuery(context);
+      const query1 = createTestQuery();
 
       const view1 = context.materialize(query1) as unknown as MockView;
       const firstGotCallback = gotCallback!;
 
       // Second query
-      const query2 = createTestQuery(context);
+      const query2 = createTestQuery();
 
       const view2 = context.materialize(query2) as unknown as MockView;
       const secondGotCallback = gotCallback!;
@@ -440,7 +439,7 @@ describe('query materialization metrics', () => {
       // Mock performance.now() for server failure scenario
       mockClientTiming(150, 200);
 
-      const query = createTestQuery(context);
+      const query = createTestQuery();
 
       const view = context.materialize(query) as unknown as MockView;
 
@@ -460,7 +459,7 @@ describe('query materialization metrics', () => {
       // Mock performance.now() for very fast response (same time for t0 and callback)
       mockEndToEndTiming(101, 102, 101);
 
-      const query = createTestQuery(context);
+      const query = createTestQuery();
 
       const view = context.materialize(query) as unknown as MockView;
 
@@ -485,7 +484,7 @@ describe('query materialization metrics', () => {
       // Mock performance.now() for view factory timing
       mockEndToEndTiming(150, 200, 300);
 
-      const query = createTestQuery(context);
+      const query = createTestQuery();
 
       // Use custom view factory
       const customViewFactory = vi.fn().mockReturnValue({
@@ -519,7 +518,7 @@ describe('query materialization metrics', () => {
       source.push({type: 'add', row: {id: 'user1', name: 'John'}});
       source.push({type: 'add', row: {id: 'user2', name: 'Jane'}});
 
-      const query = createTestQuery(context);
+      const query = createTestQuery();
 
       const view = context.materialize(query) as unknown as MockView & {
         data: unknown[];
@@ -599,7 +598,7 @@ describe('query materialization metrics', () => {
       ]);
 
       for (let i = 0; i < 5; i++) {
-        const query = createTestQuery(context);
+        const query = createTestQuery();
 
         const view = context.materialize(query) as unknown as MockView;
         view.destroy();
@@ -620,7 +619,7 @@ describe('query materialization metrics', () => {
         .spyOn(performance, 'now')
         .mockImplementation(() => mockTime);
 
-      const query = createTestQuery(context);
+      const query = createTestQuery();
 
       mockTime = 1050.456;
       const view = context.materialize(query) as unknown as MockView;

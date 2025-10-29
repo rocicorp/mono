@@ -946,11 +946,14 @@ export class Zero<
       | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
-    const [factory, options] =
-      typeof factoryOrOptions === 'function'
-        ? [factoryOrOptions, maybeOptions]
-        : [undefined, factoryOrOptions];
-
+    let factory;
+    let options;
+    if (typeof factoryOrOptions === 'function') {
+      factory = factoryOrOptions;
+      options = maybeOptions;
+    } else {
+      options = factoryOrOptions;
+    }
     return this.#zeroContext.materialize(query, factory, options);
   }
 
@@ -2217,10 +2220,9 @@ export class Zero<
 
   #registerQueries(schema: Schema): MakeEntityQueriesFromSchema<S> {
     const rv = {} as Record<string, Query<Schema, string>>;
-    const context = this.#zeroContext;
     // Not using parse yet
     for (const name of Object.keys(schema.tables)) {
-      rv[name] = newQuery(context, schema, name);
+      rv[name] = newQuery(schema, name);
     }
 
     return rv as MakeEntityQueriesFromSchema<S>;

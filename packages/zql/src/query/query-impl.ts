@@ -54,19 +54,8 @@ export function newQuery<
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
   TContext = unknown,
->(
-  delegate: QueryDelegate<TContext> | undefined,
-  schema: TSchema,
-  table: TTable,
-): Query<TSchema, TTable, TReturn, TContext> {
-  return new QueryImpl(
-    delegate,
-    schema,
-    table,
-    {table},
-    defaultFormat,
-    undefined,
-  );
+>(schema: TSchema, table: TTable): Query<TSchema, TTable, TReturn, TContext> {
+  return new QueryImpl(schema, table, {table}, defaultFormat, undefined);
 }
 
 export function staticParam(
@@ -813,7 +802,6 @@ export class QueryImpl<
   implements Query<TSchema, TTable, TReturn, TContext>
 {
   constructor(
-    delegate: QueryDelegate<TContext> | undefined,
     schema: TSchema,
     tableName: TTable,
     ast: AST = {table: tableName},
@@ -832,7 +820,6 @@ export class QueryImpl<
       currentJunction,
       (tableName, ast, format, customQueryID, currentJunction) =>
         new QueryImpl(
-          delegate,
           schema,
           tableName,
           ast,

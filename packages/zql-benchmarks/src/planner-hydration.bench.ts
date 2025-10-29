@@ -46,14 +46,7 @@ function createQuery<TTable extends keyof typeof schema.tables>(
   tableName: TTable,
   queryAST: AST,
 ) {
-  const q = new QueryImpl(
-    delegates.sqlite,
-    schema,
-    tableName,
-    queryAST,
-    defaultFormat,
-    'test',
-  );
+  const q = new QueryImpl(schema, tableName, queryAST, defaultFormat, 'test');
   return q as Query<
     typeof schema,
     TTable,

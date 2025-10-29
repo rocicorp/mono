@@ -52,7 +52,7 @@ function setupTestEnvironment() {
   ms.push({row: {a: 2, b: 'b'}, type: 'add'});
 
   const queryDelegate = new QueryDelegateImpl({sources: {table: ms}});
-  const tableQuery = newQuery(queryDelegate, schema, 'table');
+  const tableQuery = newQuery(schema, 'table');
 
   return {ms, tableQuery, queryDelegate, schema};
 }
@@ -399,7 +399,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   const queryDelegate = new QueryDelegateImpl({
     sources: {issue: issueSource, comment: commentSource},
   });
-  const issueQuery = newQuery(queryDelegate, schema, 'issue');
+  const issueQuery = newQuery(schema, 'issue');
 
   const [querySignal, setQuery] = createSignal(
     issueQuery.where('id', 'i1').related('comments'),

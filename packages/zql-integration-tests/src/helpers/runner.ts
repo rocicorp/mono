@@ -38,6 +38,7 @@ import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {QueryImpl} from '../../../zql/src/query/query-impl.ts';
 import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
 import type {
+  AnyQuery,
   HumanReadable,
   Query,
   RunOptions,
@@ -62,13 +63,9 @@ type DBs<TSchema extends Schema> = {
 };
 
 type Delegates = {
-  // pg: {
-  //   transaction: DBTransaction<unknown>;
-  //   serverSchema: ServerSchema;
-  // };
   pg: TestPGQueryDelegate;
-  sqlite: QueryDelegate<unknown>;
-  memory: QueryDelegate<unknown>;
+  sqlite: QueryDelegate<undefined>;
+  memory: QueryDelegate<undefined>;
   mapper: NameMapper;
 };
 
@@ -189,15 +186,6 @@ function makeDelegates<TSchema extends Schema>(
 ): Delegates {
   return {
     pg: new TestPGQueryDelegate(dbs.pg, schema, dbs.pgSchema),
-    // {
-    //   transaction: {
-    //     query(query: string, args: unknown[]) {
-    //       return dbs.pg.unsafe(query, args as JSONValue[]);
-    //     },
-    //     wrappedTransaction: dbs.pg,
-    //   },
-    //   serverSchema: dbs.pgSchema,
-    // },
     sqlite: newQueryDelegate(lc, testLogConfig, dbs.sqlite, schema),
     memory: new TestMemoryQueryDelegate({sources: dbs.memory}),
     mapper: clientToServer(schema.tables),
@@ -229,7 +217,6 @@ function makeQueries<TSchema extends Schema>(
       defaultFormat,
     );
     ret.memory[table] = new QueryImpl(
-      delegates.memory,
       schema,
       table,
       {table},
@@ -237,7 +224,6 @@ function makeQueries<TSchema extends Schema>(
       'test',
     );
     ret.sqlite[table] = new QueryImpl(
-      delegates.sqlite,
       schema,
       table,
       {table},
@@ -422,15 +408,6 @@ export async function bootstrap<TSchema extends Schema>({
       const scopedDelegates: Delegates = {
         ...delegates,
         pg: new TestPGQueryDelegate(tx, zqlSchema, dbs.pgSchema),
-        // (class extends NoOpQueryDelegate<unknown> {
-        //   query(query: string, args: unknown[]) {
-        //     return tx.unsafe(query, args as JSONValue[]);
-        //   }
-
-        //   // }(),{
-        //   // transaction:
-        //   serverSchema = dbs.pgSchema;
-        // })(),
         memory: new TestMemoryQueryDelegate({
           sources: Object.fromEntries(
             Object.entries(dbs.memory).map(([key, source]) => [
@@ -727,9 +704,6 @@ async function checkPush(
   );
   await checkEditToMatch(zqlSchema, delegates, editedRows, queries);
 }
-
-// oxlint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyQuery = Query<any, any, any, any>;
 
 function gatherRows(
   zqlSchema: Schema,

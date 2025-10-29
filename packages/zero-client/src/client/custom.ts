@@ -205,13 +205,11 @@ function assertValidRunOptions(options: RunOptions | undefined): void {
 }
 
 function makeSchemaQuery<TSchema extends Schema, TContext>(
-  lc: ZeroLogContext,
+  _lc: ZeroLogContext,
   schema: TSchema,
-  ivmBranch: IVMSourceBranch,
-  context: TContext,
+  _ivmBranch: IVMSourceBranch,
+  _context: TContext,
 ) {
-  const zeroContext = newZeroContext(lc, ivmBranch, context);
-
   return new Proxy(
     {},
     {
@@ -220,7 +218,7 @@ function makeSchemaQuery<TSchema extends Schema, TContext>(
           return target[prop];
         }
 
-        target[prop] = newQuery(zeroContext, schema, prop);
+        target[prop] = newQuery(schema, prop);
         return target[prop];
       },
     },

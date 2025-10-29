@@ -197,7 +197,7 @@ function makeQueryBuilders<S extends Schema, TContext>(
           throw new Error(`Table ${prop} does not exist in schema`);
         }
 
-        const q = newQuery(undefined, schema, prop);
+        const q = newQuery(schema, prop);
         target[prop] = q;
         return q;
       },
