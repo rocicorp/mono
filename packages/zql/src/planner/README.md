@@ -144,27 +144,51 @@ issue
 
 The above query would result in a single plan that is not composed of any other plans. This is also the case if more exists were present.
 
-## Degrees of Freedom
+## Planning Algorithm
 
-The planner can adjust two sets of knobs when creating a plan:
+The planner uses **exhaustive join flip enumeration** to find the optimal query execution plan.
 
-1. The flipping, or not, of joins
-2. The ordering of `AND` conditions
+### Approach
 
-The planner currently only leverages (1).
+Given a query with `n` flippable joins (EXISTS checks), the planner:
 
-## Join Flipping
+1. **Enumerates all flip patterns**: Tries all 2^n possible combinations of flipping/not-flipping each join
+2. **Evaluates each pattern**: For each combination, calculates the total query cost
+3. **Selects the best**: Chooses the plan with the lowest cost
 
-The planner creates a graph of the query as the query is written (i.e., ordering of logical terms is not changed). It then loops through these steps:
+### Algorithm Steps
 
-1. **Connection cost estimation** - Calculate costs for all unpinned connections
-2. **Connection selection** - Pick the lowest-cost connection
-3. **Join flipping & pinning** - Traverse downstream, flip joins if needed, pin all joins on the path
-4. **FO/FI type conversion** - Convert FO→UFO and FI→UFI if any join was flipped between them
-5. **Constraint propagation** - Send constraints up the graph from the terminus
-6. **Implicit connection pinning** - Connections receiving constraints from pinned joins become pinned
+For each flip pattern (0 to 2^n - 1):
 
-This repeats until all connections have been pinned (selected or forced by pinned joins).
+1. **Reset planning state** - Clear all mutable state from previous attempt
+2. **Apply flip pattern** - Treat pattern as bitmask; bit `i` = 1 means flip join `i`
+3. **Derive FO/FI states** - Convert FO→UFO and FI→UFI if any join between them is flipped
+4. **Propagate unlimiting** - Remove EXISTS limits from connections in flipped join child subgraphs
+5. **Propagate constraints** - Send constraints up the graph from the terminus
+6. **Evaluate cost** - Calculate total cost for this plan
+7. **Track best** - If this is the lowest cost so far, save the plan state
+
+Finally, restore the best plan found.
+
+### Safety Limits
+
+To prevent excessive planning time, the planner enforces `MAX_FLIPPABLE_JOINS = 13`:
+
+- 10 joins → 1,024 plans (~100-200ms)
+- 12 joins → 4,096 plans (~400ms-1s)
+- 13 joins → 8,192 plans (~1-2s)
+
+Queries exceeding this limit will throw an error suggesting simplification.
+
+### Why Exhaustive?
+
+Unlike greedy approaches that make local decisions, exhaustive enumeration:
+
+- **Guarantees optimal plan**: Explores the entire search space
+- **Handles complex interactions**: Correctly evaluates how join flips affect downstream costs
+- **Practical for most queries**: Most queries have ≤5 EXISTS checks, making 2^5 = 32 evaluations trivial
+
+The trade-off is exponential growth, hence the safety limit.
 
 ## Cost Estimation
 
@@ -194,6 +218,62 @@ The cost of the above would be the size of the issue table + the cost to create 
 
 Limits are never provided to the cost estimator as we can never know how many rows will be filtered out before fulfilling a limit.
 
+### Cost Components
+
+Each node in the planner graph returns a `CostEstimate` object with multiple components:
+
+```ts
+type CostEstimate = {
+  baseCardinality: number; // Estimated number of output rows
+  runningCost: number; // Cost that scales with outer loop iterations
+  startupCost: number; // One-time cost (e.g., sorting, building temp tables)
+  selectivity: number; // Fraction of rows that pass filters (0-1)
+  limit: number | undefined; // Result limit if present
+};
+```
+
+**Component Semantics:**
+
+- **`startupCost`**: One-time initialization costs that don't scale with the number of times a node is executed. Examples:
+  - Building a temporary B-tree for sorting by an unindexed column
+  - Creating hash tables for joins
+  - Reading table statistics
+
+- **`runningCost`**: Costs that scale with how many times the node executes in nested loops. For a connection scanning 100 rows:
+  - Executed once in outer loop: `runningCost = 100`
+  - Executed 1000 times in inner loop: total cost = `1000 × 100 = 100,000`
+
+- **`baseCardinality`**: The logical number of output rows. Used by parent joins to estimate their loop counts.
+
+- **`selectivity`**: The fraction of input rows that survive filters (0.0 to 1.0). Used to estimate how many rows will satisfy a limit clause.
+
+**Total Cost Calculation:**
+
+The total cost of a plan is: `startupCost + runningCost`
+
+Startup costs accumulate additively while running costs multiply through nested loops.
+
+### Semi-Join Overhead
+
+Semi-joins (representing `EXISTS` checks) have inherent execution overhead compared to flipped joins, even when they scan the same number of rows logically. This overhead comes from:
+
+1. **Correlated execution**: Each parent row requires a separate correlation check
+2. **Limited index utilization**: Cannot leverage combined constraint checking as effectively as regular joins
+3. **Query planner limitations**: Database engines may not optimize correlated subqueries as well as regular joins
+
+To account for this, the planner applies a **semi-join overhead multiplier** (currently 1.5×) to `scanEst` for semi-joins. This ensures that when two plans have the same logical row counts but differ in join strategy, the planner correctly prefers flipped joins.
+
+**Example Impact:**
+
+Consider a query where both approaches scan 1 row:
+
+- Semi-join: `{baseCardinality: 1.5, runningCost: 1.5}`
+- Flipped join: `{baseCardinality: 1.0, runningCost: 1.0}`
+
+The overhead propagates through nested joins, making the difference more significant in complex queries. In production workloads, this correctly models the 1.5-1.7× performance difference observed between semi-joins and flipped joins.
+
+See `planner-join.ts` for the implementation and `SEMI_JOIN_OVERHEAD_MULTIPLIER` constant.
+
 ### Cost Estimation with Branch Patterns
 
 The `estimateCost()` method accepts an optional branch pattern parameter:
@@ -216,37 +296,49 @@ To avoid redundant cost model invocations, connections cache costs at two levels
 
 Both caches are invalidated when constraints change during propagation.
 
-## Connection Selection
+## Join Flipping Mechanics
 
-The lowest cost N connections are chosen as starting points for the planning algorithm. Each one will generate a unique plan and the plan with the lowest total cost will be the one selected.
+Each join can be in one of two states:
 
-## Join flipping & pinning
+- **Semi-join**: Parent is outer loop, child is inner loop (original query order)
+- **Flipped join**: Child is outer loop, parent is inner loop (reversed)
 
-Once a connection is selected, we follow its outputs to the first join. That join, and all joins it outputs to, is the pinned.
+The exhaustive planner treats each flip pattern as a binary string where bit `i` determines whether join `i` is flipped.
 
-`source -> connection1 -> join1 -> join2 <- connection2`
+**Example with 3 flippable joins:**
 
-When "connection1" is chosen, both `join1` and `join2` will become pinned. This is because flipping any join on the path to the connection would cause that connection to no longer be run in the chosen position.
-In other words, if a later step flips `join2` then `connection2` would become the outer loop to `connection1`, invalidating our plan that put `connection` in the outer loop.
+- Pattern `000` (0): All semi-joins (original query order)
+- Pattern `001` (1): Only join 0 flipped
+- Pattern `101` (5): Joins 0 and 2 flipped
+- Pattern `111` (7): All joins flipped
 
-If `connection1` was the child input to `join1` then `join1` is flipped. We follow `join1`'s output and apply the same logic:
-
-- if `join1` is the child input of `join2`, flip and pin `join2` otherwise only pin `join2`.
+**NOT EXISTS joins** are marked as unflippable and never participate in enumeration.
 
 ## Constraint Propagation
 
-After flipping and pinning, constraints are propagated up the graph from the final / "view" node.
+After applying a flip pattern, constraints are propagated up the graph from the terminus node to update connection cost estimates.
 
-node -propagate_constraints-> node -propagate_constraints-> node ...
+**Constraint Flow:**
 
-- a pinned and not-flipped join will send constraints to its child
-- a pinned and not-flipped join will forward constraints it received to its parent
-- a pinned and flipped join will send undefined constraints to its child
-- a pinned and flipped join will send a merger of constraints to its parent
-- a non-pinned and non-flipped join will forward constraints to its parent
-- a not pinned and flipped join is an error
+`terminus -> ... -> join -> ... -> join -> connection`
 
-See `planner-join.ts` for more detail.
+**Join Constraint Rules:**
+
+- **Semi-join** (not flipped):
+  - Sends its `childConstraint` to the child connection
+  - Forwards received constraints to the parent connection
+- **Flipped join**:
+  - Sends `undefined` to the child connection (child is now outer loop, unconstrained)
+  - Merges its `parentConstraint` with received constraints and sends to parent
+
+**Why This Matters:**
+
+Constraints represent which columns are available for index lookups. When a join is flipped, the outer/inner loop relationship changes, altering what constraints are available:
+
+- **Semi-join**: Parent rows drive child lookups → child gets constraining columns
+- **Flipped join**: Child rows drive parent lookups → parent gets constraining columns
+
+See `planner-join.ts` for implementation details.
 
 ### Branch Patterns
 
@@ -282,36 +374,10 @@ If the FanIn is converted to UFI (because a join flipped), constraint propagatio
 
 This is why the planner tries to avoid flipping joins in OR regions when possible.
 
-## Connection Pinning
-
-If a pinned join feeds a constraint directly to an unpinned connection, that connection becomes pinned. This is because that connection's order in the plan has becomed fixed by the pinning of the join feeding it.
-
-```
-c1 --> join
-c2 --/
-```
-
-If `c1` is chosen, pinning join, then `c2` must go next.
-
-```
-c1  c2  c3
- |  |   |
- \  /   |
- join   |
-   |    |
-    \  /
-    join
-```
-
-If `c1` is chosen, both joins are pinned. Since both joins are pinned, no more choices are available to the planner. Both `c2` and `c3` become pinned.
-
-## Repeat: Cost Estimation
-
-Once constraints have been propagated to connections, they can update their costs. In simple terms: selecting a join to put in the outer loop reveals constraints that will be available to later joins.
-Costs are updated to reflect the new constraints.
-
 ---
 
 ## NOT EXISTS Handling
 
-`NOT EXISTS` cannot be flipped at the moment. This is handled by marking them as "unflippable" and throwing if we try to flip. The planner catches the throw and moves on to pick a different connection which may not incur a flip of the `NOT EXISTS` join.
+`NOT EXISTS` joins cannot be flipped. They are marked as `flippable: false` and are excluded from the enumeration process. Only flippable joins (standard EXISTS checks) participate in the flip pattern enumeration.
+
+If a flip pattern would require flipping an unflippable join (which shouldn't happen with proper `isFlippable()` checks), it would throw an `UnflippableJoinError` and that pattern would be skipped.

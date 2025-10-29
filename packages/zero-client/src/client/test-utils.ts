@@ -8,8 +8,10 @@ import type {JSONValue} from '../../../shared/src/json.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import type {ErrorMessage} from '../../../zero-protocol/src/error.ts';
+import type {
+  ErrorBody,
+  ErrorMessage,
+} from '../../../zero-protocol/src/error.ts';
 import type {
   PokeEndBody,
   PokeEndMessage,
@@ -24,7 +26,7 @@ import type {
   PullResponseMessage,
 } from '../../../zero-protocol/src/pull.ts';
 import type {
-  PushResponse,
+  PushResponseBody,
   PushResponseMessage,
 } from '../../../zero-protocol/src/push.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
@@ -232,13 +234,13 @@ export class TestZero<
     return this.triggerMessage(msg);
   }
 
-  triggerPushResponse(pushResponseBody: PushResponse): Promise<void> {
+  triggerPushResponse(pushResponseBody: PushResponseBody): Promise<void> {
     const msg: PushResponseMessage = ['pushResponse', pushResponseBody];
     return this.triggerMessage(msg);
   }
 
-  triggerError(kind: ErrorKind, message: string, body = {}): Promise<void> {
-    const msg: ErrorMessage = ['error', {kind, message, ...body}];
+  triggerError(errorBody: ErrorBody): Promise<void> {
+    const msg: ErrorMessage = ['error', errorBody];
     return this.triggerMessage(msg);
   }
 

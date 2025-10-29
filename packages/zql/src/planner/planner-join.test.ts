@@ -2,11 +2,6 @@ import {expect, suite, test} from 'vitest';
 import {UnflippableJoinError} from './planner-join.ts';
 import {CONSTRAINTS, createJoin, expectedCost} from './test/helpers.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
-import type {PlannerNode} from './planner-node.ts';
-
-const pinned = {
-  pinned: true,
-} as PlannerNode;
 
 suite('PlannerJoin', () => {
   test('initial state is semi-join, unpinned', () => {
@@ -14,14 +9,6 @@ suite('PlannerJoin', () => {
 
     expect(join.kind).toBe('join');
     expect(join.type).toBe('semi');
-    expect(join.pinned).toBe(false);
-  });
-
-  test('can be pinned', () => {
-    const {join} = createJoin();
-
-    join.pin();
-    expect(join.pinned).toBe(true);
   });
 
   test('can be flipped when flippable', () => {
@@ -35,13 +22,6 @@ suite('PlannerJoin', () => {
     const {join} = createJoin({flippable: false});
 
     expect(() => join.flip()).toThrow(UnflippableJoinError);
-  });
-
-  test('cannot flip when pinned', () => {
-    const {join} = createJoin();
-
-    join.pin();
-    expect(() => join.flip()).toThrow('Cannot flip a pinned join');
   });
 
   test('cannot flip when already flipped', () => {
@@ -69,30 +49,25 @@ suite('PlannerJoin', () => {
     const {join} = createJoin();
 
     join.flip();
-    join.pin();
     expect(join.type).toBe('flipped');
-    expect(join.pinned).toBe(true);
 
     join.reset();
     expect(join.type).toBe('semi');
-    expect(join.pinned).toBe(false);
   });
 
-  test('propagateConstraints() on pinned semi-join sends constraints to child', () => {
+  test('propagateConstraints() on semi-join sends constraints to child', () => {
     const {child, join} = createJoin();
 
-    join.pin();
-    join.propagateConstraints([0], undefined, pinned);
+    join.propagateConstraints([0], undefined);
 
     expect(child.estimateCost()).toStrictEqual(expectedCost(1));
   });
 
-  test('propagateConstraints() on pinned flipped join sends undefined to child', () => {
+  test('propagateConstraints() on flipped join sends undefined to child', () => {
     const {child, join} = createJoin();
 
     join.flip();
-    join.pin();
-    join.propagateConstraints([0], undefined, pinned);
+    join.propagateConstraints([0], undefined);
 
     expect(child.estimateCost()).toStrictEqual(expectedCost(0));
   });
@@ -104,11 +79,44 @@ suite('PlannerJoin', () => {
     });
 
     join.flip();
-    join.pin();
 
     const outputConstraint: PlannerConstraint = {name: undefined};
-    join.propagateConstraints([0], outputConstraint, pinned);
+    join.propagateConstraints([0], outputConstraint);
 
     expect(parent.estimateCost()).toStrictEqual(expectedCost(2));
+  });
+
+  test('semi-join has overhead multiplier applied to cost', () => {
+    const {join} = createJoin();
+
+    // Estimate cost for semi-join (not flipped)
+    const semiCost = join.estimateCost();
+
+    // Flip and estimate cost
+    join.reset();
+    join.flip();
+    const flippedCost = join.estimateCost();
+
+    // Semi-join should be more expensive than flipped join due to overhead multiplier
+    // The multiplier inflates runningCost only (not baseCardinality, which represents logical row count)
+    expect(semiCost.runningCost).toBeGreaterThan(flippedCost.runningCost);
+    expect(semiCost.baseCardinality).toBe(flippedCost.baseCardinality); // Same logical rows
+  });
+
+  test('semi-join overhead allows planner to prefer flipped joins when row counts are equal', () => {
+    const {join} = createJoin();
+
+    // Get costs for both join types
+    const semiCost = join.estimateCost();
+
+    join.reset();
+    join.flip();
+    const flippedCost = join.estimateCost();
+
+    // The difference should be significant enough to affect plan selection
+    // With a 1.5x multiplier, semi should be 50% more expensive
+    const ratio = semiCost.runningCost / flippedCost.runningCost;
+    expect(ratio).toBeGreaterThanOrEqual(1.4); // Allow some tolerance
+    expect(ratio).toBeLessThanOrEqual(1.6);
   });
 });

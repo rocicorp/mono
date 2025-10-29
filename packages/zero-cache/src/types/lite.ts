@@ -5,10 +5,8 @@ import type {
   ValueType,
 } from '../../../zero-schema/src/table-schema.ts';
 import type {ColumnSpec, LiteTableSpec} from '../db/specs.ts';
-import {
-  dataTypeToZqlValueType as upstreamDataTypeToZqlValueType,
-  type PostgresValueType,
-} from './pg.ts';
+import {dataTypeToZqlValueType as upstreamDataTypeToZqlValueType} from './pg-data-type.ts';
+import type {PostgresValueType} from './pg.ts';
 import type {RowValue} from './row-key.ts';
 
 /** Javascript value types supported by better-sqlite3. */

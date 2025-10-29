@@ -2,6 +2,8 @@ import {jsonSchema} from '../../shared/src/json-schema.ts';
 import * as v from '../../shared/src/valita.ts';
 import type {NameMapper} from '../../zero-types/src/name-mapper.ts';
 import {rowSchema} from './data.ts';
+import {pushFailedBodySchema} from './error.ts';
+import {mutationIDSchema} from './mutation-id.ts';
 import * as MutationType from './mutation-type-enum.ts';
 import {primaryKeySchema, primaryKeyValueRecordSchema} from './primary-key.ts';
 
@@ -99,10 +101,6 @@ export const pushBodySchema = v.object({
 });
 
 export const pushMessageSchema = v.tuple([v.literal('push'), pushBodySchema]);
-export const mutationIDSchema = v.object({
-  id: v.number(),
-  clientID: v.string(),
-});
 
 const appErrorSchema = v.object({
   error: v.literal('app'),
@@ -110,7 +108,11 @@ const appErrorSchema = v.object({
   details: jsonSchema.optional(),
 });
 const zeroErrorSchema = v.object({
-  error: v.literalUnion('oooMutation', 'alreadyProcessed'),
+  error: v.union(
+    /** @deprecated push oooMutation errors are now represented as ['error', { ... }] messages */
+    v.literal('oooMutation'),
+    v.literal('alreadyProcessed'),
+  ),
   details: jsonSchema.optional(),
 });
 
@@ -134,32 +136,51 @@ const pushOkSchema = v.object({
   mutations: v.array(mutationResponseSchema),
 });
 
+/**
+ * @deprecated push errors are now represented as ['error', { ... }] messages
+ */
 const unsupportedPushVersionSchema = v.object({
+  /** @deprecated */
   error: v.literal('unsupportedPushVersion'),
-  // optional for backwards compatibility
-  // This field is included so the client knows which mutations
-  // were not processed by the server.
+  /** @deprecated */
   mutationIDs: v.array(mutationIDSchema).optional(),
 });
+/**
+ * @deprecated push errors are now represented as ['error', { ... }] messages
+ */
 const unsupportedSchemaVersionSchema = v.object({
+  /** @deprecated */
   error: v.literal('unsupportedSchemaVersion'),
-  // optional for backwards compatibility
-  // This field is included so the client knows which mutations
-  // were not processed by the server.
+  /** @deprecated */
   mutationIDs: v.array(mutationIDSchema).optional(),
 });
+/**
+ * @deprecated push http errors are now represented as ['error', { ... }] messages
+ */
 const httpErrorSchema = v.object({
+  /** @deprecated */
   error: v.literal('http'),
+  /** @deprecated */
   status: v.number(),
+  /** @deprecated */
   details: v.string(),
+  /** @deprecated */
   mutationIDs: v.array(mutationIDSchema).optional(),
 });
+/**
+ * @deprecated push zero errors are now represented as ['error', { ... }] messages
+ */
 const zeroPusherErrorSchema = v.object({
+  /** @deprecated */
   error: v.literal('zeroPusher'),
+  /** @deprecated */
   details: v.string(),
+  /** @deprecated */
   mutationIDs: v.array(mutationIDSchema).optional(),
 });
-
+/**
+ * @deprecated push errors are now represented as ['error', { ... }] messages
+ */
 const pushErrorSchema = v.union(
   unsupportedPushVersionSchema,
   unsupportedSchemaVersionSchema,
@@ -167,10 +188,15 @@ const pushErrorSchema = v.union(
   zeroPusherErrorSchema,
 );
 
-export const pushResponseSchema = v.union(pushOkSchema, pushErrorSchema);
+export const pushResponseBodySchema = v.union(pushOkSchema, pushErrorSchema);
+
+export const pushResponseSchema = v.union(
+  pushResponseBodySchema,
+  pushFailedBodySchema,
+);
 export const pushResponseMessageSchema = v.tuple([
   v.literal('pushResponse'),
-  pushResponseSchema,
+  pushResponseBodySchema,
 ]);
 
 export const ackMutationResponsesMessageSchema = v.tuple([
@@ -198,18 +224,22 @@ export type CustomMutation = v.Infer<typeof customMutationSchema>;
 export type Mutation = v.Infer<typeof mutationSchema>;
 export type PushBody = v.Infer<typeof pushBodySchema>;
 export type PushMessage = v.Infer<typeof pushMessageSchema>;
+export type PushResponseBody = v.Infer<typeof pushResponseBodySchema>;
 export type PushResponse = v.Infer<typeof pushResponseSchema>;
 export type PushResponseMessage = v.Infer<typeof pushResponseMessageSchema>;
 export type MutationResponse = v.Infer<typeof mutationResponseSchema>;
 export type MutationOk = v.Infer<typeof mutationOkSchema>;
 export type MutationError = v.Infer<typeof mutationErrorSchema>;
+/**
+ * @deprecated push errors are now represented as ['error', { ... }] messages
+ */
 export type PushError = v.Infer<typeof pushErrorSchema>;
 export type PushOk = v.Infer<typeof pushOkSchema>;
-export type MutationID = v.Infer<typeof mutationIDSchema>;
 export type MutationResult = v.Infer<typeof mutationResultSchema>;
 export type AckMutationMessage = v.Infer<
   typeof ackMutationResponsesMessageSchema
 >;
+export type {MutationID} from './mutation-id.ts';
 
 export function mapCRUD(
   arg: CRUDMutationArg,

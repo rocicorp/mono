@@ -22,8 +22,9 @@ describe('one join', () => {
 
     const planned = planQuery(unplanned, costModel);
 
-    // All plans are same cost, use original order
-    expect(planned).toEqual(unplanned);
+    // With semi-join overhead, planner now prefers flipped joins even when base costs are equal
+    // This is expected: flipped joins are more efficient than semi-joins for equal row counts
+    expect(pick(planned, ['where', 'flip'])).toBe(true);
   });
 
   test('track.exists(album): track is more expensive', () => {
@@ -53,9 +54,6 @@ describe('two joins via and', () => {
       costModel,
     );
 
-    // Genre gets flipped to the root
-    // Cost 10 -> Cost 1 -> Cost 1
-    // TODO: we need some tracing mechanism to check what constraints were chosen
     expect(pick(planned, ['where', 'conditions', 0, 'flip'])).toBe(false);
     expect(pick(planned, ['where', 'conditions', 1, 'flip'])).toBe(true);
     expect(
@@ -210,11 +208,12 @@ describe('double nested exists', () => {
       costModel,
     );
 
-    // join order: album -> artist -> track
+    // join order: artist -> album -> track
+    // With semi-join overhead, planner now flips both joins to avoid overhead
     expect(pick(planned, ['where', 'flip'])).toBe(true);
     expect(
       pick(planned, ['where', 'related', 'subquery', 'where', 'flip']),
-    ).toBe(false);
+    ).toBe(true);
   });
 });
 
@@ -354,7 +353,6 @@ test('ors anded one after the other', () => {
       .where(({or, exists}) => or(exists('invoiceLines'), exists('mediaType'))),
   );
 
-  // All tables have similar cost, so no flips should occur
   const costModel = makeCostModel({
     track: 10000,
     album: 10000,
@@ -373,10 +371,12 @@ test('ors anded one after the other', () => {
   expect(
     pick(planned, ['where', 'conditions', 0, 'conditions', 1, 'flip']),
   ).toBe(false);
+
   // Check second OR: invoiceLines and mediaType
+  // flipping invoice lines is actually cheaper due to the FK from invoiceLine -> track
   expect(
     pick(planned, ['where', 'conditions', 1, 'conditions', 0, 'flip']),
-  ).toBe(false);
+  ).toBe(true);
   expect(
     pick(planned, ['where', 'conditions', 1, 'conditions', 1, 'flip']),
   ).toBe(false);

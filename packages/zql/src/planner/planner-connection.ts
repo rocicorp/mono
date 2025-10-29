@@ -73,8 +73,6 @@ export class PlannerConnection {
   // ========================================================================
   // MUTABLE PLANNING STATE (changes during plan search)
   // ========================================================================
-  pinned: boolean;
-
   /**
    * Current limit during planning. Can be cleared (set to undefined) when a
    * parent join is flipped, indicating this connection is now in an outer loop
@@ -115,7 +113,6 @@ export class PlannerConnection {
     limit?: number,
     name?: string,
   ) {
-    this.pinned = false;
     this.table = table;
     this.name = name ?? table;
     this.#sort = sort;
@@ -168,27 +165,13 @@ export class PlannerConnection {
    * The max of the last element of the paths is the number of
    * root branches.
    */
-  propagateConstraints(
-    path: number[],
-    c: PlannerConstraint | undefined,
-    from: PlannerNode,
-  ): void {
+  propagateConstraints(path: number[], c: PlannerConstraint | undefined): void {
     const key = path.join(',');
     this.#constraints.set(key, c);
     // Constraints changed, invalidate cost caches
     this.#cachedTotalCost = undefined;
     this.#cachedConstraintCosts.clear();
     this.#costDirty = true;
-
-    if (this.pinned) {
-      assert(
-        from.pinned,
-        'It should be impossible for a pinned connection to receive constraints from a non-pinned node',
-      );
-    }
-    if (from.pinned) {
-      this.pinned = true;
-    }
   }
 
   estimateCost(branchPattern?: number[]): CostEstimate {
@@ -330,7 +313,6 @@ export class PlannerConnection {
 
   reset() {
     this.#constraints.clear();
-    this.pinned = false;
     this.limit = this.#baseLimit;
     // Clear all cost caches
     this.#cachedTotalCost = undefined;

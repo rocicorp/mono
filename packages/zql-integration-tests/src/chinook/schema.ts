@@ -235,6 +235,11 @@ const trackRelationships = relationships(track, ({one, many}) => ({
       destSchema: playlist,
     },
   ),
+  playlistTrackJunction: many({
+    sourceField: ['id'],
+    destField: ['trackId'],
+    destSchema: playlistTrack,
+  }),
   invoiceLines: many({
     sourceField: ['id'],
     destField: ['trackId'],
@@ -255,6 +260,22 @@ const playlistRelationships = relationships(playlist, ({many}) => ({
       destSchema: track,
     },
   ),
+}));
+
+const genreRelationships = relationships(genre, ({many}) => ({
+  tracks: many({
+    sourceField: ['id'],
+    destField: ['genreId'],
+    destSchema: track,
+  }),
+}));
+
+const mediaTypeRelationships = relationships(mediaType, ({many}) => ({
+  tracks: many({
+    sourceField: ['id'],
+    destField: ['mediaTypeId'],
+    destSchema: track,
+  }),
 }));
 
 export const schema = createSchema({
@@ -280,6 +301,8 @@ export const schema = createSchema({
     invoiceLineRelationships,
     trackRelationships,
     playlistRelationships,
+    genreRelationships,
+    mediaTypeRelationships,
   ],
 });
 
