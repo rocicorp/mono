@@ -17,7 +17,10 @@ import type {
 } from '../../../../zero-protocol/src/custom-queries.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';
 import type {ErrorBody} from '../../../../zero-protocol/src/error.ts';
+import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
 import type {
   PokeEndBody,
   PokePartBody,
@@ -31,7 +34,6 @@ import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
-import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {cvrSchema} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
@@ -68,8 +70,6 @@ import {
   USERS_QUERY,
 } from './view-syncer-test-util.ts';
 import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
-import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
-import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';
 
 describe('view-syncer/service', () => {
   let storageDB: Database;
@@ -3926,5 +3926,18 @@ describe('view-syncer/service', () => {
         ],
       ]
     `);
+  });
+
+  test('errors on new connection if already shut down', async () => {
+    // Simulates the view-syncer being stopped, e.g. due to an error,
+    // but a client connecting to it before it was removed from the
+    // service map.
+    await vs.stop();
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await expect(nextPoke(client)).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[ProtocolError: Reconnect required]`,
+    );
   });
 });
