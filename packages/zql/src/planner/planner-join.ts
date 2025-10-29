@@ -248,31 +248,12 @@ export class PlannerJoin {
       };
     }
 
-    // Flipped join
-    // For a flipped join, we always scan all child rows
-    // The parent may have a limit, but we can't apply it until after the child
-    // has produced all its rows.
-    if (closestJoinOrSource === 'join') {
-      // if the parent is a join, we're in a pipeline rather than nesting of joins.
-      return {
-        rows: parentCost.rows,
-        runningCost:
-          childCost.startupCost +
-          childCost.runningCost *
-            (parentCost.startupCost + parentCost.runningCost),
-        startupCost: parentCost.startupCost,
-        selectivity: parentCost.selectivity,
-        limit: parentCost.limit,
-      };
-    }
-
-    // if the parent is a source, we're in a nested loop join
+    // Hmm, why does flip not have asymmetric cost like semi-join?
     return {
       // how many rows this loop will output to the next loop
       rows: parentCost.rows,
       runningCost:
-        childCost.runningCost *
-        (parentCost.startupCost + parentCost.runningCost),
+        childCost.rows * (parentCost.startupCost + parentCost.runningCost),
       startupCost: childCost.startupCost,
       selectivity: parentCost.selectivity,
       limit: parentCost.limit,
