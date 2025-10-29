@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "verify": "node src/verify-package-deps.ts",
-    "verify:fix": "node src/verify-package-deps.ts --fix",
+    "verify": "tsx src/verify-package-deps.ts",
+    "verify:fix": "tsx src/verify-package-deps.ts --fix",
     "check-types": "tsc",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
