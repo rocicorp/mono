@@ -79,7 +79,7 @@ export class PlannerFanIn {
     // FanIn always sums costs of its inputs
     // But it needs to pass the correct branch pattern to each input
     let totalCost: CostEstimate = {
-      baseCardinality: 0,
+      rows: 0,
       runningCost: 0,
       startupCost: 0,
       selectivity: 0,
@@ -98,8 +98,8 @@ export class PlannerFanIn {
       let noMatchProb = 1.0;
       for (const input of this.#inputs) {
         const cost = input.estimateCost(updatedPattern);
-        if (cost.baseCardinality > maxBaseCardinality) {
-          maxBaseCardinality = cost.baseCardinality;
+        if (cost.rows > maxBaseCardinality) {
+          maxBaseCardinality = cost.rows;
         }
         if (cost.runningCost > maxRunningCost) {
           maxRunningCost = cost.runningCost;
@@ -122,7 +122,7 @@ export class PlannerFanIn {
         totalCost.limit = cost.limit;
       }
 
-      totalCost.baseCardinality = maxBaseCardinality;
+      totalCost.rows = maxBaseCardinality;
       totalCost.runningCost = maxRunningCost;
       totalCost.startupCost = maxStartupCost;
       totalCost.selectivity = 1 - noMatchProb;
@@ -134,7 +134,7 @@ export class PlannerFanIn {
       for (const input of this.#inputs) {
         const updatedPattern = [i, ...branchPattern];
         const cost = input.estimateCost(updatedPattern);
-        totalCost.baseCardinality += cost.baseCardinality;
+        totalCost.rows += cost.rows;
         totalCost.runningCost += cost.runningCost;
         // UFI runs all branches, so startup costs add up
         totalCost.startupCost += cost.startupCost;

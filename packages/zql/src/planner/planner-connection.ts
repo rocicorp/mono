@@ -199,7 +199,7 @@ export class PlannerConnection {
             this.#baseConstraints,
           );
           cost = {
-            baseCardinality,
+            rows: baseCardinality,
             runningCost: baseCardinality,
             startupCost,
             selectivity: this.selectivity,
@@ -207,7 +207,7 @@ export class PlannerConnection {
           };
           this.#cachedConstraintCosts.set(key, cost);
         }
-        totalCardinality = cost.baseCardinality;
+        totalCardinality = cost.rows;
         maxStartupCost = cost.startupCost;
       } else {
         // Sum costs for all constraint branches
@@ -226,7 +226,7 @@ export class PlannerConnection {
               mergedConstraint,
             );
             cost = {
-              baseCardinality,
+              rows: baseCardinality,
               runningCost: baseCardinality,
               startupCost,
               selectivity: this.selectivity,
@@ -234,7 +234,7 @@ export class PlannerConnection {
             };
             this.#cachedConstraintCosts.set(key, cost);
           }
-          totalCardinality += cost.baseCardinality;
+          totalCardinality += cost.rows;
           // TODO: if no branch pattern is specified, should we sum startup costs?
           maxStartupCost = Math.max(maxStartupCost, cost.startupCost);
         }
@@ -278,7 +278,7 @@ export class PlannerConnection {
       mergedConstraint,
     );
     cost = {
-      baseCardinality,
+      rows: baseCardinality,
       runningCost: baseCardinality,
       startupCost,
       selectivity: this.selectivity,

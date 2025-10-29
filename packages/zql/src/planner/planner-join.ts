@@ -213,8 +213,10 @@ export class PlannerJoin {
         // Calculate cost per output row, then scale by actual rows needed
         // In a semi-join, we only need to find one matching row per parent row.
         // This does not yet take into account child -> parent fanout factor.
-        childRunningCost =
-          (1 - childCost.limit / childCost.selectivity) * childRunningCost;
+        childRunningCost = Math.max(
+          1,
+          (1 - childCost.limit / childCost.selectivity) * childRunningCost,
+        );
       }
 
       if (closestJoinOrSource === 'join') {
@@ -269,7 +271,8 @@ export class PlannerJoin {
       // how many rows this loop will output to the next loop
       rows: parentCost.rows,
       runningCost:
-        childCost.runningCost + childCost.startupCost + parentCost.runningCost,
+        childCost.runningCost *
+        (parentCost.startupCost + parentCost.runningCost),
       startupCost: childCost.startupCost,
       selectivity: parentCost.selectivity,
       limit: parentCost.limit,

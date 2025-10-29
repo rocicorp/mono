@@ -46,7 +46,7 @@ suite('PlannerConnection', () => {
 
     const ec = expectedCost(1);
     expect(connection.estimateCost()).toStrictEqual({
-      baseCardinality: ec.baseCardinality * 2,
+      baseCardinality: ec.rows * 2,
       runningCost: ec.runningCost * 2,
       startupCost: 0,
       selectivity: 1.0,

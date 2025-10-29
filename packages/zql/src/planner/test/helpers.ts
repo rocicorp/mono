@@ -63,7 +63,7 @@ export const simpleCostModel: ConnectionCostModel = (
 export function expectedCost(constraintCount: number): CostEstimate {
   const c = Math.max(1, BASE_COST - constraintCount * CONSTRAINT_REDUCTION);
   return {
-    baseCardinality: c,
+    rows: c,
     runningCost: c,
     startupCost: 0,
     selectivity: 1.0,
@@ -73,7 +73,7 @@ export function expectedCost(constraintCount: number): CostEstimate {
 
 export function multCost(base: CostEstimate, factor: number): CostEstimate {
   return {
-    baseCardinality: base.baseCardinality * factor,
+    rows: base.rows * factor,
     runningCost: base.runningCost * factor,
     startupCost: base.startupCost,
     selectivity: base.selectivity,
