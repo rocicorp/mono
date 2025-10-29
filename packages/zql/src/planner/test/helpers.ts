@@ -1,5 +1,8 @@
 import type {Condition, Ordering} from '../../../../zero-protocol/src/ast.ts';
-import type {ConnectionCostModel} from '../planner-connection.ts';
+import type {
+  ConnectionCostModel,
+  CostModelCost,
+} from '../planner-connection.ts';
 import type {PlannerConstraint} from '../planner-constraint.ts';
 import {PlannerSource} from '../planner-source.ts';
 import type {PlannerConnection} from '../planner-connection.ts';
@@ -48,12 +51,12 @@ export const simpleCostModel: ConnectionCostModel = (
   _sort: Ordering,
   _filters: Condition | undefined,
   constraint: PlannerConstraint | undefined,
-): {startupCost: number; baseCardinality: number} => {
+): CostModelCost => {
   const constraintCount = constraint ? Object.keys(constraint).length : 0;
-  const baseCardinality = Math.max(1, 100 - constraintCount * 10);
+  const rows = Math.max(1, 100 - constraintCount * 10);
   return {
     startupCost: 0,
-    baseCardinality,
+    rows: rows,
   };
 };
 
@@ -63,7 +66,7 @@ export const simpleCostModel: ConnectionCostModel = (
 export function expectedCost(constraintCount: number): CostEstimate {
   const c = Math.max(1, BASE_COST - constraintCount * CONSTRAINT_REDUCTION);
   return {
-    baseCardinality: c,
+    rows: c,
     runningCost: c,
     startupCost: 0,
     selectivity: 1.0,
@@ -73,7 +76,7 @@ export function expectedCost(constraintCount: number): CostEstimate {
 
 export function multCost(base: CostEstimate, factor: number): CostEstimate {
   return {
-    baseCardinality: base.baseCardinality * factor,
+    rows: base.rows * factor,
     runningCost: base.runningCost * factor,
     startupCost: base.startupCost,
     selectivity: base.selectivity,

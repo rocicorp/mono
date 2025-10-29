@@ -224,7 +224,7 @@ Each node in the planner graph returns a `CostEstimate` object with multiple com
 
 ```ts
 type CostEstimate = {
-  baseCardinality: number; // Estimated number of output rows
+  rows: number; // Estimated number of output rows
   runningCost: number; // Cost that scales with outer loop iterations
   startupCost: number; // One-time cost (e.g., sorting, building temp tables)
   selectivity: number; // Fraction of rows that pass filters (0-1)
@@ -243,7 +243,7 @@ type CostEstimate = {
   - Executed once in outer loop: `runningCost = 100`
   - Executed 1000 times in inner loop: total cost = `1000 × 100 = 100,000`
 
-- **`baseCardinality`**: The logical number of output rows. Used by parent joins to estimate their loop counts.
+- **`rows`**: The logical number of output rows. Used by parent joins to estimate their loop counts.
 
 - **`selectivity`**: The fraction of input rows that survive filters (0.0 to 1.0). Used to estimate how many rows will satisfy a limit clause.
 
@@ -267,8 +267,8 @@ To account for this, the planner applies a **semi-join overhead multiplier** (cu
 
 Consider a query where both approaches scan 1 row:
 
-- Semi-join: `{baseCardinality: 1.5, runningCost: 1.5}`
-- Flipped join: `{baseCardinality: 1.0, runningCost: 1.0}`
+- Semi-join: `{rows: 1.5, runningCost: 1.5}`
+- Flipped join: `{rows: 1.0, runningCost: 1.0}`
 
 The overhead propagates through nested joins, making the difference more significant in complex queries. In production workloads, this correctly models the 1.5-1.7× performance difference observed between semi-joins and flipped joins.
 

@@ -17,9 +17,8 @@ function ast(q: AnyQuery) {
 
 describe('one join', () => {
   test('no changes in cost', () => {
-    const costModel = () => ({startupCost: 0, baseCardinality: 10});
+    const costModel = () => ({startupCost: 0, rows: 10});
     const unplanned = ast(builder.track.whereExists('album'));
-
     const planned = planQuery(unplanned, costModel);
 
     // With semi-join overhead, planner now prefers flipped joins even when base costs are equal
@@ -106,9 +105,9 @@ describe('two joins via or', () => {
             constraint.hasOwnProperty('id'),
             'Expected constraint to have id',
           );
-          return {startupCost: 0, baseCardinality: 1};
+          return {startupCost: 0, rows: 1};
         }
-        return {startupCost: 0, baseCardinality: 2}; // only 2 albums with the name 'Outlaw Blues'
+        return {startupCost: 0, rows: 2}; // only 2 albums with the name 'Outlaw Blues'
       }
 
       if (table === 'invoiceLine') {
@@ -121,23 +120,23 @@ describe('two joins via or', () => {
           // TODO: We cannot get this to flip one and not the other without incorporating
           // limits and selectivity into the cost model. For now, just return a low cost to
           // simulate the track quickly matching invoices and returning early.
-          return {startupCost: 0, baseCardinality: 0.1};
+          return {startupCost: 0, rows: 0.1};
         }
 
-        return {startupCost: 0, baseCardinality: 10_000};
+        return {startupCost: 0, rows: 10_000};
       }
 
       if (table === 'track') {
         if (constraint !== undefined) {
           if (constraint.hasOwnProperty('id')) {
-            return {startupCost: 0, baseCardinality: 1};
+            return {startupCost: 0, rows: 1};
           }
           if (constraint.hasOwnProperty('albumId')) {
-            return {startupCost: 0, baseCardinality: 10};
+            return {startupCost: 0, rows: 10};
           }
           throw new Error('Unexpected constraint on track');
         }
-        return {startupCost: 0, baseCardinality: 1_000};
+        return {startupCost: 0, rows: 1_000};
       }
 
       throw new Error(`Unexpected table: ${table}`);
@@ -289,17 +288,17 @@ describe('related calls get plans', () => {
         // if we flip to do genre, we can reduce the cost.
         if (constraint?.hasOwnProperty('genreId')) {
           return {
-            baseCardinality: 1,
+            rows: 1,
             startupCost: 0,
           };
         }
         return {
-          baseCardinality: 10_000,
+          rows: 10_000,
           startupCost: 0,
         };
       }
       return {
-        baseCardinality: 10,
+        rows: 10,
         startupCost: 0,
       };
     };
@@ -394,7 +393,7 @@ function makeCostModel(costs: Record<string, number>) {
       // Primary key constraint, very fast
       return {
         startupCost: 0,
-        baseCardinality: 1,
+        rows: 1,
       };
     }
 
@@ -402,7 +401,7 @@ function makeCostModel(costs: Record<string, number>) {
       // not many invoices lines per track
       return {
         startupCost: 0,
-        baseCardinality: 100,
+        rows: 100,
       };
     }
 
@@ -410,7 +409,7 @@ function makeCostModel(costs: Record<string, number>) {
       // not many tracks per album
       return {
         startupCost: 0,
-        baseCardinality: 10,
+        rows: 10,
       };
     }
 
@@ -418,7 +417,7 @@ function makeCostModel(costs: Record<string, number>) {
       must(costs[table]) / (Object.keys(constraint).length * 100 || 1);
     return {
       startupCost: 0,
-      baseCardinality: ret,
+      rows: ret,
     };
   };
 }
