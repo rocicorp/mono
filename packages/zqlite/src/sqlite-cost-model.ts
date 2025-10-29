@@ -185,15 +185,17 @@ function estimateCost(scanstats: ScanstatusLoop[]): {
       firstLoop = false;
     } else {
       if (op.explain.includes('ORDER BY')) {
-        // If a temp b-tree must be constructed then we end up processing all
-        // rows that match the constraint to create this b-tree.
-        // B-Tree construction is ~O(n log n) so we add that to the cost.
-        // We divide the cost by 10 because sorting in SQLite is ~10x faster
-        // than bringing the data into JS and sorting there.
-        totalCost += (totalRows * Math.log2(totalRows)) / 10;
+        totalCost += btreeCost(totalRows);
       }
     }
   }
 
   return {rows: totalRows, startupCost: totalCost};
+}
+
+export function btreeCost(rows: number): number {
+  // B-Tree construction is ~O(n log n) so we estimate the cost as such.
+  // We divide the cost by 10 because sorting in SQLite is ~10x faster
+  // than bringing the data into JS and sorting there.
+  return (rows * Math.log2(rows)) / 10;
 }
