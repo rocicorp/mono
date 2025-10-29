@@ -121,6 +121,7 @@ export {
 } from '../../zql/src/query/define-query.ts';
 export type {
   AnyNamedQueryFunction,
+  DefineQueryFunc,
   DefineQueryOptions,
   NamedQueryFunction,
 } from '../../zql/src/query/define-query.ts';

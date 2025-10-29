@@ -1,7 +1,6 @@
 import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
-import type {AnyChainQuery} from './new/types.ts';
 import type {
   AnyQuery,
   AvailableRelationships,
@@ -13,6 +12,27 @@ import type {
   PullTableSchema,
   Query,
 } from './query.ts';
+
+/**
+ * Function type for chaining one query to another.
+ */
+type ChainQuery<
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn1,
+  TReturn2,
+  TContext,
+> = (
+  q: Query<TSchema, TTable, TReturn1, TContext>,
+) => Query<TSchema, TTable, TReturn2, TContext>;
+
+export type AnyChainQuery = ChainQuery<
+  Schema,
+  string,
+  PullRow<string, Schema>,
+  PullRow<string, Schema>,
+  unknown
+>;
 
 /**
  * Chained query that applies a transformation function to a parent query.

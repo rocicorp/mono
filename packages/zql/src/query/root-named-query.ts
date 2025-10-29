@@ -2,10 +2,10 @@ import type {StandardSchemaV1} from '@standard-schema/spec';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import {ChainedQuery} from './chained-query.ts';
+import {ChainedQuery, type AnyChainQuery} from './chained-query.ts';
+import type {DefineQueryFunc} from './define-query.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {CustomQueryID} from './named.ts';
-import type {AnyChainQuery, Func} from './new/types.ts';
 import {queryWithContext} from './query-internals.ts';
 import type {AnyQuery} from './query.ts';
 import {
@@ -38,13 +38,13 @@ export class RootNamedQuery<
 {
   readonly #name: TName;
   readonly #input: TInput;
-  readonly #func: Func<TSchema, TTable, TReturn, TContext, TOutput>;
+  readonly #func: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>;
   readonly #validator: StandardSchemaV1<TInput, TOutput> | undefined;
   #cachedQuery: Query<TSchema, TTable, TReturn, TContext> | undefined;
 
   constructor(
     name: TName,
-    func: Func<TSchema, TTable, TReturn, TContext, TOutput>,
+    func: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
     input: TInput,
     validator: StandardSchemaV1<TInput, TOutput> | undefined,
   ) {

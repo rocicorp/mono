@@ -1,13 +1,26 @@
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {Func} from './new/types.ts';
 import type {Query} from './query.ts';
 import {RootNamedQuery} from './root-named-query.ts';
 
 export type DefineQueryOptions<Input, Output> = {
   validator?: StandardSchemaV1<Input, Output> | undefined;
 };
+
+/**
+ * Function type for root query functions that take context and args.
+ */
+export type DefineQueryFunc<
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+  TContext,
+  TArgs,
+> = (options: {
+  ctx: TContext;
+  args: TArgs;
+}) => Query<TSchema, TTable, TReturn, TContext>;
 
 export type NamedQueryFunction<
   TName extends string,
@@ -47,8 +60,8 @@ export function defineQuery<
   TContext,
   TArgs extends ReadonlyJSONValue | undefined,
 >(
-  name1: TName,
-  queryFn: Func<TSchema, TTable, TReturn, TContext, TArgs>,
+  name: TName,
+  queryFn: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TArgs>,
 ): NamedQueryFunction<TName, TSchema, TTable, TReturn, TContext, TArgs, TArgs>;
 
 // Overload for options parameter with validator - Input and Output can be different
@@ -61,9 +74,9 @@ export function defineQuery<
   TOutput extends ReadonlyJSONValue | undefined,
   TInput extends ReadonlyJSONValue | undefined = TOutput,
 >(
-  name2: TName,
+  name: TName,
   options: DefineQueryOptions<TInput, TOutput>,
-  queryFn: Func<TSchema, TTable, TReturn, TContext, TOutput>,
+  queryFn: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
 ): NamedQueryFunction<
   TName,
   TSchema,
@@ -83,9 +96,9 @@ export function defineQuery<
   TContext,
   TArgs extends ReadonlyJSONValue | undefined,
 >(
-  name3: TName,
+  name: TName,
   options: {},
-  queryFn: Func<TSchema, TTable, TReturn, TContext, TArgs>,
+  queryFn: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TArgs>,
 ): NamedQueryFunction<TName, TSchema, TTable, TReturn, TContext, TArgs, TArgs>;
 
 // Implementation
@@ -101,8 +114,8 @@ export function defineQuery<
   name: TName,
   optionsOrQueryFn:
     | DefineQueryOptions<TInput, TOutput>
-    | Func<TSchema, TTable, TReturn, TContext, TOutput>,
-  queryFn?: Func<TSchema, TTable, TReturn, TContext, TOutput>,
+    | DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
+  queryFn?: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
 ): NamedQueryFunction<
   TName,
   TSchema,
@@ -114,7 +127,13 @@ export function defineQuery<
 > {
   // Handle different parameter patterns
   let defineOptions: DefineQueryOptions<TInput, TOutput> | undefined;
-  let actualQueryFn: Func<TSchema, TTable, TReturn, TContext, TOutput>;
+  let actualQueryFn: DefineQueryFunc<
+    TSchema,
+    TTable,
+    TReturn,
+    TContext,
+    TOutput
+  >;
 
   if (typeof optionsOrQueryFn === 'function') {
     // defineQuery(name, queryFn) - no options
@@ -185,8 +204,8 @@ export function defineQueryWithContextType<TContext>(): <
   name: TName,
   optionsOrQueryFn:
     | DefineQueryOptions<TInput, TOutput>
-    | Func<TSchema, TTable, TReturn, TContext, TOutput>,
-  queryFn?: Func<TSchema, TTable, TReturn, TContext, TOutput>,
+    | DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
+  queryFn?: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
 ) => NamedQueryFunction<
   TName,
   TSchema,
@@ -207,8 +226,8 @@ export function defineQueryWithContextType<TContext>(): <
     name: TName,
     optionsOrQueryFn:
       | DefineQueryOptions<TInput, TOutput>
-      | Func<TSchema, TTable, TReturn, TContext, TOutput>,
-    queryFn?: Func<TSchema, TTable, TReturn, TContext, TOutput>,
+      | DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
+    queryFn?: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
   ) => NamedQueryFunction<
     TName,
     TSchema,
