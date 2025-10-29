@@ -1,6 +1,6 @@
-import type {DBTransaction, Row} from '../../../zql/src/mutate/custom.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import type {PostgresTransaction} from '../../../zero-cache/src/types/pg.ts';
+import type {DBTransaction, Row} from '../../../zql/src/mutate/custom.ts';
 
 export class Transaction implements DBTransaction<PostgresTransaction> {
   readonly wrappedTransaction: PostgresTransaction;

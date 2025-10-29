@@ -1,9 +1,10 @@
 import type {Zero} from '@rocicorp/zero';
-import type {IssueRow, Schema} from '../shared/schema.ts';
+import type {AuthData} from '../shared/auth.ts';
 import type {Mutators} from '../shared/mutators.ts';
+import type {IssueRow, Schema} from '../shared/schema.ts';
 
 export function commentQuery(
-  z: Zero<Schema, Mutators>,
+  z: Zero<Schema, Mutators, AuthData | undefined>,
   displayed: IssueRow | undefined,
 ) {
   return z.query.comment

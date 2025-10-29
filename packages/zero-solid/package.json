@@ -26,7 +26,7 @@
     "vite-plugin-solid": "^2.11.7",
     "zero-client": "0.0.0",
     "zero-protocol": "0.0.0",
-    "zero-schema": "0.0.0",
+    "zero-types": "0.0.0",
     "zql": "0.0.0"
   },
   "prettier": "@rocicorp/prettier-config"

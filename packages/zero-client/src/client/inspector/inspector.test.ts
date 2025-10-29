@@ -6,9 +6,10 @@ import {
   type InspectMetricsDown,
   type InspectQueriesDown,
 } from '../../../../zero-protocol/src/inspect-down.ts';
-import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../../zero-types/src/schema.ts';
 import {schema} from '../../../../zql/src/query/test/test-schemas.ts';
 import {nanoid} from '../../util/nanoid.ts';
+import {bindingsForZero} from '../bindings.ts';
 import type {CustomMutatorDefs} from '../custom.ts';
 import {MockSocket, TestZero, zeroForTest} from '../test-utils.ts';
 import type {Inspector} from './inspector.ts';
@@ -320,7 +321,7 @@ describe('query metrics', () => {
     await z.triggerConnected();
 
     const issueQuery = z.query.issue;
-    await issueQuery.run();
+    await z.run(issueQuery);
 
     const metrics = await getMetrics(z.inspector, z);
     expect(metrics['query-materialization-client'].count()).toBe(1);
@@ -335,7 +336,7 @@ describe('query metrics', () => {
     await z.triggerConnected();
 
     const issueQuery = z.query.issue.orderBy('id', 'desc');
-    const view = issueQuery.materialize();
+    const view = z.materialize(issueQuery);
 
     await z.triggerGotQueriesPatch(issueQuery);
 
@@ -352,7 +353,7 @@ describe('query metrics', () => {
         value: [
           {
             clientID: z.clientID,
-            queryID: issueQuery.hash(),
+            queryID: bindingsForZero(z).hash(issueQuery),
             ast: {
               table: 'issue',
               orderBy: [['id', 'desc']],
@@ -372,7 +373,7 @@ describe('query metrics', () => {
 
     const queries = await queriesP;
     expect(queries).toHaveLength(1);
-    expect(issueQuery.hash()).toBe(queries[0].id);
+    expect(bindingsForZero(z).hash(issueQuery)).toBe(queries[0].id);
 
     // We should have metrics for all.. even if empty
     expect(queries[0].metrics).toMatchInlineSnapshot(`
@@ -409,8 +410,8 @@ describe('query metrics', () => {
     const query1 = z.query.issue;
     const query2 = z.query.issue.where('id', '1');
 
-    await query1.run();
-    await query2.run();
+    await z.run(query1);
+    await z.run(query2);
 
     // Check that metrics were actually collected
 
@@ -430,9 +431,9 @@ describe('query metrics', () => {
     await z.triggerConnected();
 
     // Execute queries with different characteristics to test metrics collection
-    await z.query.issue.run(); // Simple table query
-    await z.query.issue.where('id', '1').run(); // Filtered query
-    await z.query.issue.where('id', '2').run(); // Another filtered query
+    await z.run(z.query.issue); // Simple table query
+    await z.run(z.query.issue.where('id', '1')); // Filtered query
+    await z.run(z.query.issue.where('id', '2')); // Another filtered query
 
     // Test that the inspector can access the real metrics
 
@@ -462,7 +463,7 @@ describe('query metrics', () => {
     ensureRealData(globalMetricsQueryMaterializationClient);
 
     const q = z.query.issue;
-    const view = q.materialize();
+    const view = z.materialize(q);
     await z.triggerGotQueriesPatch(q);
 
     {
@@ -487,7 +488,7 @@ describe('query metrics', () => {
 
     // Create a query and materialize a view to set up the query pipeline
     const issueQuery = z.query.issue;
-    const view = issueQuery.materialize();
+    const view = z.materialize(issueQuery);
     await z.triggerGotQueriesPatch(issueQuery);
 
     // Get initial inspector to verify no query-update metrics initially
@@ -546,7 +547,7 @@ describe('query metrics', () => {
     await z.triggerConnected();
 
     const issueQuery = z.query.issue.orderBy('id', 'desc');
-    const view = issueQuery.materialize();
+    const view = z.materialize(issueQuery);
     await z.triggerGotQueriesPatch(issueQuery);
 
     // Trigger row updates to generate query-update metrics for this specific query
@@ -588,7 +589,7 @@ describe('query metrics', () => {
         value: [
           {
             clientID: z.clientID,
-            queryID: issueQuery.hash(),
+            queryID: bindingsForZero(z).hash(issueQuery),
             ast: {
               table: 'issue',
               orderBy: [['id', 'desc']],
@@ -611,7 +612,7 @@ describe('query metrics', () => {
 
     const queries = await queriesP;
     expect(queries).toHaveLength(1);
-    expect(issueQuery.hash()).toBe(queries[0].id);
+    expect(bindingsForZero(z).hash(issueQuery)).toBe(queries[0].id);
 
     const {metrics} = queries[0];
     expect(metrics).toMatchInlineSnapshot(`
@@ -686,7 +687,7 @@ test('clientZQL', async () => {
 
   // Trigger QueryManager.#add by materializing a query and marking it as got
   const issueQuery = z.query.issue.where('ownerId', 'arv');
-  const view = issueQuery.materialize();
+  const view = z.materialize(issueQuery);
   await z.triggerGotQueriesPatch(issueQuery);
 
   // Send fake inspect/queries response for this query
@@ -698,7 +699,7 @@ test('clientZQL', async () => {
       value: [
         {
           clientID: z.clientID,
-          queryID: issueQuery.hash(),
+          queryID: bindingsForZero(z).hash(issueQuery),
           ast: {
             table: 'issues',
             where: {
@@ -724,7 +725,7 @@ test('clientZQL', async () => {
 
   const queries = await queriesP;
   expect(queries).toHaveLength(1);
-  expect(queries[0].id).toBe(issueQuery.hash());
+  expect(queries[0].id).toBe(bindingsForZero(z).hash(issueQuery));
   expect(queries[0].clientZQL).toBe(
     "issue.where('ownerId', 'arv').orderBy('id', 'asc')",
   );

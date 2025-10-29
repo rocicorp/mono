@@ -61,7 +61,7 @@ describe('basics', () => {
     `All ${N} rows x 10 columns (numbers)`,
     async () => {
       const {promise, resolve} = resolver<readonly UserRow[]>();
-      const m = z.query.user.materialize();
+      const m = z.materialize(z.query.user);
       m.addListener(data => {
         if (data.length === N) {
           resolve(data as readonly UserRow[]);
@@ -83,7 +83,7 @@ describe('pk compare', () => {
     async () => {
       const {promise, resolve} = resolver<readonly UserRow[]>();
       const value = N - 1;
-      const m = z.query.user.where('a', value).materialize();
+      const m = z.materialize(z.query.user.where('a', value));
       m.addListener(data => {
         if (data.length === 1) {
           resolve(data as readonly UserRow[]);
@@ -104,7 +104,7 @@ describe('with filter', () => {
     `Lower rows ${N / 2} x 10 columns (numbers)`,
     async () => {
       const {promise, resolve} = resolver<readonly UserRow[]>();
-      const m = z.query.user.where('a', '<', N / 2).materialize();
+      const m = z.materialize(z.query.user.where('a', '<', N / 2));
       m.addListener(data => {
         if (data.length === N / 2) {
           resolve(data as readonly UserRow[]);

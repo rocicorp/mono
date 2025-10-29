@@ -20,7 +20,6 @@ import type {
   SimpleCondition,
   ValuePosition,
 } from '../../zero-protocol/src/ast.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   clientToServer,
   type NameMapper,
@@ -29,6 +28,7 @@ import type {
   ServerColumnSchema,
   ServerSchema,
 } from '../../zero-schema/src/server-schema.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {
   sql,

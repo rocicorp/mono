@@ -8,11 +8,15 @@ import {
   type AddEmojiArgs,
   type CreateIssueArgs,
 } from '../shared/mutators.ts';
-import {schema, type Schema} from '../shared/schema.ts';
+import {builder, schema, type Schema} from '../shared/schema.ts';
 import {notify} from './notify.ts';
 
 export type PostCommitTask = () => Promise<void>;
-type MutatorTx = ServerTransaction<Schema, PostgresJsTransaction>;
+type MutatorTx = ServerTransaction<
+  Schema,
+  PostgresJsTransaction,
+  AuthData | undefined
+>;
 
 export function createServerMutators(
   authData: AuthData | undefined,
@@ -137,10 +141,9 @@ export function createServerMutators(
           created: Date.now(),
         });
 
-        const comment = await tx.query.comment
-          .where('id', args.subjectID)
-          .one()
-          .run();
+        const comment = await tx.run(
+          builder.comment.where('id', args.subjectID).one(),
+        );
         assert(comment);
         assert(tx.location === 'server');
         await notify(
@@ -184,7 +187,7 @@ export function createServerMutators(
       async edit(tx: MutatorTx, {id, body}: {id: string; body: string}) {
         await mutators.comment.edit(tx, {id, body});
 
-        const comment = await tx.query.comment.where('id', id).one().run();
+        const comment = await tx.run(builder.comment.where('id', id).one());
         assert(comment);
 
         assert(tx.location === 'server');

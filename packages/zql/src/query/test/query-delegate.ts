@@ -6,17 +6,11 @@ import {
 } from '../../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
-import type {FilterInput} from '../../ivm/filter-operators.ts';
-import {MemoryStorage} from '../../ivm/memory-storage.ts';
-import type {Input} from '../../ivm/operator.ts';
-import type {Source, SourceInput} from '../../ivm/source.ts';
+import type {Source} from '../../ivm/source.ts';
 import {createSource} from '../../ivm/test/source-factory.ts';
 import type {CustomQueryID} from '../named.ts';
-import type {
-  CommitListener,
-  GotCallback,
-  QueryDelegate,
-} from '../query-delegate.ts';
+import {QueryDelegateBase} from '../query-delegate-base.ts';
+import type {CommitListener, GotCallback} from '../query-delegate.ts';
 import type {TTL} from '../ttl.ts';
 import {
   commentSchema,
@@ -35,7 +29,9 @@ type Entry = {
   args: readonly ReadonlyJSONValue[] | undefined;
   ttl: TTL;
 };
-export class QueryDelegateImpl implements QueryDelegate {
+export class QueryDelegateImpl<
+  TContext = undefined,
+> extends QueryDelegateBase<TContext> {
   readonly #sources: Record<string, Source> = makeSources();
   readonly #commitListeners: Set<CommitListener> = new Set();
 
@@ -49,17 +45,16 @@ export class QueryDelegateImpl implements QueryDelegate {
   constructor({
     sources = makeSources(),
     callGot = false,
+    context,
   }: {
     sources?: Record<string, Source> | undefined;
     callGot?: boolean | undefined;
+    context?: TContext | undefined;
   } = {}) {
+    super(context as TContext);
     this.#sources = sources;
     this.callGot = callGot;
   }
-
-  flushQueryChanges() {}
-
-  assertValidRunOptions(): void {}
 
   batchViewUpdates<T>(applyViewUpdates: () => T): T {
     return applyViewUpdates();
@@ -136,32 +131,12 @@ export class QueryDelegateImpl implements QueryDelegate {
     return this.#sources[name];
   }
 
-  createStorage() {
-    return new MemoryStorage();
-  }
-
-  decorateSourceInput(input: SourceInput): Input {
-    return input;
-  }
-
-  decorateInput(input: Input, _description: string): Input {
-    return input;
-  }
-
-  decorateFilterInput(input: FilterInput, _description: string): FilterInput {
-    return input;
-  }
-
-  addEdge() {}
-
   callAllGotCallbacks() {
     for (const gotCallback of this.gotCallbacks) {
       gotCallback?.(true);
     }
     this.gotCallbacks.length = 0;
   }
-
-  addMetric() {}
 }
 
 function makeSources() {

@@ -2,30 +2,31 @@ import type {
   InternalDiff,
   InternalDiffOperation,
 } from '../../../replicache/src/btree/node.ts';
-import {readFromHash} from '../../../replicache/src/db/read.ts';
-import type {Hash} from '../../../replicache/src/hash.ts';
-import {withRead} from '../../../replicache/src/with-transactions.ts';
-import type {ZeroContext} from './context.ts';
-import * as FormatVersion from '../../../replicache/src/format-version-enum.ts';
-import type {IVMSourceBranch} from './ivm-branch.ts';
-import {ENTITIES_KEY_PREFIX} from './keys.ts';
-import {must} from '../../../shared/src/must.ts';
 import type {LazyStore} from '../../../replicache/src/dag/lazy-store.ts';
+import {readFromHash} from '../../../replicache/src/db/read.ts';
+import * as FormatVersion from '../../../replicache/src/format-version-enum.ts';
+import type {Hash} from '../../../replicache/src/hash.ts';
 import type {
   EphemeralID,
   MutationTrackingData,
   ZeroOption,
   ZeroReadOptions,
 } from '../../../replicache/src/replicache-options.ts';
+import {withRead} from '../../../replicache/src/with-transactions.ts';
+import {must} from '../../../shared/src/must.ts';
+import type {ZeroContext} from './context.ts';
+import type {IVMSourceBranch} from './ivm-branch.ts';
+import {ENTITIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 
 type TxData = {
   ivmSources: IVMSourceBranch;
   token: string | undefined;
+  context: unknown;
 };
 
-export class ZeroRep implements ZeroOption {
-  readonly #context: ZeroContext;
+export class ZeroRep<TContext> implements ZeroOption {
+  readonly #context: ZeroContext<TContext>;
   readonly #ivmMain: IVMSourceBranch;
   readonly #customMutatorsEnabled: boolean;
   readonly #mutationTracker: MutationTracker;
@@ -33,7 +34,7 @@ export class ZeroRep implements ZeroOption {
   #auth: string | undefined;
 
   constructor(
-    context: ZeroContext,
+    context: ZeroContext<TContext>,
     ivmMain: IVMSourceBranch,
     customMutatorsEnabled: boolean,
     mutationTracker: MutationTracker,
@@ -88,6 +89,7 @@ export class ZeroRep implements ZeroOption {
       .then(branch => ({
         ivmSources: branch,
         token: this.#auth,
+        context: this.#context,
       }));
   };
 

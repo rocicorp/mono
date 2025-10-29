@@ -12,8 +12,8 @@ import {
   type UpdateOp,
   type UpsertOp,
 } from '../../../zero-protocol/src/push.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {
   DeleteID,
   InsertValue,
