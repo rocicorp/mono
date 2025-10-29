@@ -1,6 +1,6 @@
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Func} from './new/types.ts';
 import type {Query} from './query.ts';
 import {RootNamedQuery} from './root-named-query.ts';

@@ -1,6 +1,6 @@
 import type {Faker} from '@faker-js/faker';
-import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
-import type {ValueType} from '../../../../zero-schema/src/table-schema.ts';
+import type {ValueType} from '../../../../zero-types/src/schema-value.ts';
+import type {Schema} from '../../../../zero-types/src/schema.ts';
 import type {StaticQuery} from '../static-query.ts';
 
 export type Rng = () => number;

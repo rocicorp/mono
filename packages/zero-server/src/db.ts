@@ -1,4 +1,4 @@
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
 import type {TransactionBase} from '../../zql/src/mutate/custom.ts';
 
 export interface ZeroTransaction<

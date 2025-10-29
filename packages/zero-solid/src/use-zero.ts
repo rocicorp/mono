@@ -11,7 +11,7 @@ import {
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
 
 // oxlint-disable-next-line no-explicit-any
 const ZeroContext = createContext<Accessor<Zero<any, any, any>> | undefined>(

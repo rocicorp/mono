@@ -42,16 +42,14 @@ import {
   type Mutation,
 } from '../../../zero-protocol/src/push.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
-import {
-  createSchema,
-  type Schema,
-} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
   number,
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {nanoid} from '../util/nanoid.ts';

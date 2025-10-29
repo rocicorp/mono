@@ -12,10 +12,8 @@ import {
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {staticParam} from '../../../zero-schema/src/permissions.ts';
-import {
-  type Opaque,
-  type TableSchema,
-} from '../../../zero-schema/src/table-schema.ts';
+import {type Opaque} from '../../../zero-schema/src/table-schema.ts';
+import type {TableSchema} from '../../../zero-types/src/schema.ts';
 import type {ExpressionFactory} from './expression.ts';
 import {
   type Query,

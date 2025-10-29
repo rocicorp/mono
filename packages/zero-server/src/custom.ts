@@ -4,13 +4,13 @@ import {
   sql,
   sqlConvertColumnArg,
 } from '../../z2s/src/sql.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {
   ServerColumnSchema,
   ServerSchema,
   ServerTableSchema,
 } from '../../zero-schema/src/server-schema.ts';
 import type {TableSchema} from '../../zero-schema/src/table-schema.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
 import type {
   DBTransaction,
   SchemaCRUD,

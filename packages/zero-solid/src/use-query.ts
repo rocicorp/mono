@@ -2,7 +2,7 @@ import {createComputed, createSignal, onCleanup, type Accessor} from 'solid-js';
 import {createStore} from 'solid-js/store';
 import type {ClientID} from '../../replicache/src/sync/ids.ts';
 import {bindingsForZero} from '../../zero-client/src/client/bindings.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
 import type {HumanReadable, Query} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import {

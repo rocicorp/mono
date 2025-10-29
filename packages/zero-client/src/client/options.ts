@@ -2,7 +2,7 @@ import type {LogLevel} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import * as v from '../../../shared/src/valita.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {OnError} from './on-error.ts';
 import {UpdateNeededReasonType} from './update-needed-reason-type.ts';

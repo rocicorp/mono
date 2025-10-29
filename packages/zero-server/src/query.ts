@@ -1,6 +1,6 @@
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import {defaultFormat} from '../../zero-types/src/format.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
 import type {DBTransaction, SchemaQuery} from '../../zql/src/mutate/custom.ts';
 import type {Query} from '../../zql/src/query/query.ts';
 import {ZPGQuery} from './zpg-query.ts';

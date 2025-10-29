@@ -6,8 +6,8 @@ import {
   transformRequestMessageSchema,
   type TransformResponseMessage,
 } from '../../../zero-protocol/src/custom-queries.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 

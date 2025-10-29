@@ -1,6 +1,6 @@
 import {expect, test} from 'vitest';
+import type {Schema as ZeroSchema} from '../../zero-types/src/schema.ts';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
-import type {Schema as ZeroSchema} from './builder/schema-builder.ts';
 import {createSchema} from './builder/schema-builder.ts';
 import {column, table} from './builder/table-builder.ts';
 import {definePermissions} from './permissions.ts';

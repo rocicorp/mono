@@ -1,5 +1,5 @@
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {ZPGQuery} from '../../../zero-server/src/zpg-query.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import {QueryImpl} from '../../../zql/src/query/query-impl.ts';
 import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery, Query} from '../../../zql/src/query/query.ts';

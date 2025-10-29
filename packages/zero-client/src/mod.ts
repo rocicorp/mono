@@ -56,10 +56,7 @@ export {
 } from '../../zero-protocol/src/custom-queries.ts';
 export {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 export {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
-export {
-  createSchema,
-  type Schema,
-} from '../../zero-schema/src/builder/schema-builder.ts';
+export {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 export {
   boolean,
   enumeration,
@@ -93,6 +90,7 @@ export type {
   SchemaValueWithCustomType,
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
+export type {Schema} from '../../zero-types/src/schema.ts';
 export type {Change} from '../../zql/src/ivm/change.ts';
 export type {Node} from '../../zql/src/ivm/data.ts';
 export type {Input, Output} from '../../zql/src/ivm/operator.ts';

@@ -1,4 +1,5 @@
 import {expect, expectTypeOf, test} from 'vitest';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {
   AnyQuery,
   HumanReadable,
@@ -6,7 +7,7 @@ import type {
   QueryReturn,
 } from '../../../zql/src/query/query.ts';
 import {relationships} from './relationship-builder.ts';
-import {clientSchemaFrom, createSchema, type Schema} from './schema-builder.ts';
+import {clientSchemaFrom, createSchema} from './schema-builder.ts';
 import {boolean, json, number, string, table} from './table-builder.ts';
 
 const mockQueryInst = {

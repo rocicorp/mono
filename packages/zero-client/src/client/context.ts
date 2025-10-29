@@ -3,7 +3,7 @@ import type {Hash} from '../../../replicache/src/hash.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {DebugDelegate} from '../../../zql/src/builder/debug-delegate.ts';
 import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';

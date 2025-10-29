@@ -7,8 +7,8 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
 import type {MutationOk} from '../../../zero-protocol/src/push.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {
   ClientTransaction,
   DeleteID,

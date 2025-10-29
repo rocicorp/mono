@@ -28,7 +28,7 @@ import type {
   PushResponseMessage,
 } from '../../../zero-protocol/src/push.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {PullRow, Query} from '../../../zql/src/query/query.ts';
 import {bindingsForZero} from './bindings.ts';
 import type {ConnectionState} from './connection-manager.ts';

@@ -69,14 +69,12 @@ import type {UpQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts
 import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
 import {nullableVersionSchema} from '../../../zero-protocol/src/version.ts';
-import {
-  type Schema,
-  clientSchemaFrom,
-} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {clientSchemaFrom} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   type NameMapper,
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
 import {

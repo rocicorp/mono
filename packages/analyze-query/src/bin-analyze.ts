@@ -28,8 +28,8 @@ import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
 import type {AnalyzeQueryResult} from '../../zero-protocol/src/analyze-query-result.ts';
 import {type AST} from '../../zero-protocol/src/ast.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
 import {
   Debug,
   runtimeDebugFlags,

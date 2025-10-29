@@ -1,6 +1,6 @@
 import postgres from 'postgres';
 import type {JSONValue} from '../../../shared/src/json.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {
   DBConnection,
   DBTransaction,

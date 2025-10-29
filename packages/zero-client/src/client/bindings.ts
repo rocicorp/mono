@@ -1,5 +1,5 @@
 import type {CustomMutatorDefs} from '../../../zero-client/src/client/custom.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Format, ViewFactory} from '../../../zql/src/ivm/view.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import type {

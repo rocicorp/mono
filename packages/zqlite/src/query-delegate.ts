@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {LogConfig} from '../../otel/src/log-options.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
 import type {FilterInput} from '../../zql/src/ivm/filter-operators.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {Input} from '../../zql/src/ivm/operator.ts';

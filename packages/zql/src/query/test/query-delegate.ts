@@ -6,7 +6,7 @@ import {
 } from '../../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
-import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../../zero-types/src/schema.ts';
 import type {FilterInput} from '../../ivm/filter-operators.ts';
 import {MemoryStorage} from '../../ivm/memory-storage.ts';
 import type {Input} from '../../ivm/operator.ts';

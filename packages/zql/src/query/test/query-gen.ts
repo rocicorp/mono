@@ -1,7 +1,7 @@
 import {type Faker} from '@faker-js/faker';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
-import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import type {ServerSchema} from '../../../../zero-schema/src/server-schema.ts';
+import type {Schema} from '../../../../zero-types/src/schema.ts';
 import {getDataForType} from '../../../../zql-integration-tests/src/helpers/data-gen.ts';
 import {NotImplementedError} from '../../error.ts';
 import {queryWithContext} from '../query-internals.ts';

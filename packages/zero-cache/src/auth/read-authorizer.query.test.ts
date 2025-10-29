@@ -11,10 +11,7 @@ import type {
   UpdateOp,
 } from '../../../zero-protocol/src/push.ts';
 import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
-import {
-  createSchema,
-  type Schema as ZeroSchema,
-} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
   number,
@@ -27,6 +24,7 @@ import {
   definePermissions,
 } from '../../../zero-schema/src/permissions.ts';
 import type {ValueType} from '../../../zero-schema/src/table-schema.ts';
+import type {Schema as ZeroSchema} from '../../../zero-types/src/schema.ts';
 import {
   bindStaticParameters,
   buildPipeline,

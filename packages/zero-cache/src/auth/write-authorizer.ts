@@ -22,8 +22,8 @@ import type {
   UpdateOp,
   UpsertOp,
 } from '../../../zero-protocol/src/push.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {Policy} from '../../../zero-schema/src/compiled-permissions.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {BuilderDelegate} from '../../../zql/src/builder/builder.ts';
 import {
   bindStaticParameters,

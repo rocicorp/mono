@@ -17,7 +17,6 @@ import {getConnectionURI, testDBs} from '../../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   clientToServer,
   type NameMapper,
@@ -28,6 +27,7 @@ import {makeSchemaCRUD} from '../../../zero-server/src/custom.ts';
 import {getServerSchema} from '../../../zero-server/src/schema.ts';
 import {Transaction} from '../../../zero-server/src/test/util.ts';
 import {ZPGQuery} from '../../../zero-server/src/zpg-query.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Change} from '../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../zql/src/ivm/data.ts';
 import {defaultFormat} from '../../../zql/src/ivm/default-format.ts';

@@ -1,5 +1,5 @@
 import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {AnyChainQuery} from './new/types.ts';
 import type {

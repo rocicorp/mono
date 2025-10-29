@@ -1,7 +1,7 @@
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import {ChainedQuery} from './chained-query.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {CustomQueryID} from './named.ts';

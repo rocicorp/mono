@@ -6,7 +6,7 @@ import {
   type InspectMetricsDown,
   type InspectQueriesDown,
 } from '../../../../zero-protocol/src/inspect-down.ts';
-import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../../../zero-types/src/schema.ts';
 import {schema} from '../../../../zql/src/query/test/test-schemas.ts';
 import {nanoid} from '../../util/nanoid.ts';
 import {bindingsForZero} from '../bindings.ts';

@@ -1,7 +1,7 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
-import type {Schema as ZeroSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema as ZeroSchema} from '../../../zero-types/src/schema.ts';
 import type {Format} from '../ivm/view.ts';
 import type {CustomQueryID} from './named.ts';
 import type {Query} from './query.ts';

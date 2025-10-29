@@ -2,7 +2,7 @@ import {renderHook} from '@solidjs/testing-library';
 import {createSignal, type JSX} from 'solid-js';
 import {expect, test, vi} from 'vitest';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
 import {useZero, ZeroProvider} from './use-zero.ts';
 
 vi.mock('../../zero-client/src/client/zero.ts', async importOriginal => ({

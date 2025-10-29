@@ -4,11 +4,9 @@ import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {
   Schema,
   Schema as ZeroSchema,
-} from '../../../zero-schema/src/builder/schema-builder.ts';
-import type {
   LastInTuple,
   TableSchema,
-} from '../../../zero-schema/src/table-schema.ts';
+} from '../../../zero-types/src/schema.ts';
 import type {
   SchemaValueToTSType,
   SchemaValueWithCustomType,

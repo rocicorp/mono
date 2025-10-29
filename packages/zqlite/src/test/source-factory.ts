@@ -7,12 +7,12 @@ import {
   type CompoundKey,
 } from '../../../zero-protocol/src/ast.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   clientToServer,
   serverToClient,
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Input} from '../../../zql/src/ivm/operator.ts';
