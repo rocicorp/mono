@@ -198,7 +198,7 @@ describe('CustomQueryTransformer', () => {
           id: 'query2',
           name: 'getPostsByUser',
           message: 'Query syntax error',
-          detail: {reason: 'syntax error'},
+          details: {reason: 'syntax error'},
         },
       ],
     ] satisfies TransformResponseMessage);
@@ -224,7 +224,7 @@ describe('CustomQueryTransformer', () => {
         id: 'query2',
         name: 'getPostsByUser',
         message: 'Query syntax error',
-        detail: {reason: 'syntax error'},
+        details: {reason: 'syntax error'},
       },
     ]);
   });
@@ -507,7 +507,7 @@ describe('CustomQueryTransformer', () => {
             id: 'query1',
             name: 'getUserById',
             message: 'Query syntax error',
-            detail: {reason: 'Query syntax error'},
+            details: {reason: 'Query syntax error'},
           },
         ],
       ] satisfies TransformResponseMessage;
@@ -536,7 +536,7 @@ describe('CustomQueryTransformer', () => {
         id: 'query1',
         name: 'getUserById',
         message: 'Query syntax error',
-        detail: {reason: 'Query syntax error'},
+        details: {reason: 'Query syntax error'},
       },
     ]);
 

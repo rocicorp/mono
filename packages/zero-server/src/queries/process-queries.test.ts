@@ -232,10 +232,9 @@ describe('handleGetQueriesRequest', () => {
   });
 
   test('marks QueryParseError as parse error instead of app error', async () => {
-    const parseError = new QueryParseError(
-      'testQuery',
-      new TypeError('Invalid argument type'),
-    );
+    const parseError = new QueryParseError('testQuery', {
+      cause: new TypeError('Invalid argument type'),
+    });
 
     const cb = vi.fn(() => {
       throw parseError;
@@ -267,7 +266,9 @@ describe('handleGetQueriesRequest', () => {
     // oxlint-disable-next-line require-await
     const cb = vi.fn(async name => {
       if (name === 'parseErrorQuery') {
-        throw new QueryParseError('parseErrorQuery', new Error('Invalid args'));
+        throw new QueryParseError('parseErrorQuery', {
+          cause: new Error('Invalid args'),
+        });
       }
       return {query: makeQuery(ast)};
     });

@@ -656,7 +656,7 @@ describe('useSuspenseQuery', () => {
         id: 'test-error-1',
         name: 'error-query-1',
         message: 'Query failed',
-        detail: {reason: 'Invalid syntax'},
+        details: {reason: 'Invalid syntax'},
       };
       view.listeners.forEach(cb => cb([], 'error', error));
       await expect.poll(() => element.textContent).toBe('Error: Query failed');
@@ -699,7 +699,7 @@ describe('useSuspenseQuery', () => {
         id: 'test-error-2',
         name: 'error-query-2',
         message: 'Query failed',
-        detail: {reason: 'Invalid syntax'},
+        details: {reason: 'Invalid syntax'},
       };
       view.listeners.forEach(cb => cb(undefined, 'error', error));
       await expect.poll(() => element.textContent).toBe('Error: Query failed');
@@ -854,7 +854,7 @@ describe('useSuspenseQuery', () => {
         return (
           <div>
             {details.type === 'error' && details.error?.type === 'parse'
-              ? `Parse Error: ${details.error.message} ${JSON.stringify(details.error.detail)}`
+              ? `Parse Error: ${details.error.message} ${JSON.stringify(details.error.details)}`
               : JSON.stringify(data)}
           </div>
         );
@@ -881,7 +881,7 @@ describe('useSuspenseQuery', () => {
         id: 'q1',
         name: 'q1',
         message: 'Could not parse parameters',
-        detail: {reason: 'Invalid syntax'},
+        details: {reason: 'Invalid syntax'},
       };
       view.listeners.forEach(cb => cb([], 'error', httpError));
       await expect
@@ -992,7 +992,7 @@ describe('useSuspenseQuery', () => {
         return (
           <div>
             {details.type === 'error'
-              ? `Error: ${details.error?.message}${details.error.detail ? ` ${JSON.stringify(details.error.detail)}` : ''}`
+              ? `Error: ${details.error?.message}${details.error.details ? ` ${JSON.stringify(details.error.details)}` : ''}`
               : data !== undefined
                 ? `Data: ${JSON.stringify(data)}`
                 : 'No data'}
@@ -1052,7 +1052,7 @@ describe('useSuspenseQuery', () => {
         id: 'error-2',
         name: 'error-query-1',
         message: 'Second failure',
-        detail: {reason: 'Service unavailable'},
+        details: {reason: 'Service unavailable'},
       };
       secondView.listeners.forEach(cb => cb(undefined, 'error', error2));
       await expect

@@ -189,7 +189,7 @@ test('useQuery gets an error', async () => {
   must(queryDelegate.gotCallbacks[0])(true, {
     id: 'q1',
     message: 'Something went wrong',
-    detail: {something: 'went wrong'},
+    details: {something: 'went wrong'},
     error: 'app',
     name: 'TestQuery',
   });
@@ -202,7 +202,7 @@ test('useQuery gets an error', async () => {
   assert(r.type === 'error');
   expect(r.error).toEqual({
     message: 'Something went wrong',
-    detail: {something: 'went wrong'},
+    details: {something: 'went wrong'},
     type: 'app',
   });
   // same rows, no recomputation of the view

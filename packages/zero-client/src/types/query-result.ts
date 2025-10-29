@@ -20,11 +20,11 @@ export type QueryErrorDetails = {
     | {
         readonly type: 'app';
         readonly message: string;
-        readonly detail?: ReadonlyJSONValue;
+        readonly details?: ReadonlyJSONValue;
       }
     | {
         readonly type: 'parse';
         readonly message: string;
-        readonly detail?: ReadonlyJSONValue;
+        readonly details?: ReadonlyJSONValue;
       };
 };

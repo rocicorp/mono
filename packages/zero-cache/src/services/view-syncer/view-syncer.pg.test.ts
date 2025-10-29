@@ -1159,14 +1159,14 @@ describe('view-syncer/service', () => {
           id: 'custom-2',
           name: 'named-query-2',
           message: 'brrrr',
-          detail: {reason: 'somereason'},
+          details: {reason: 'somereason'},
         },
         {
           error: 'parse',
           id: 'custom-3',
           name: 'named-query-3',
           message: 'Could not parse parameters',
-          detail: {reason: 'Invalid syntax'},
+          details: {reason: 'Invalid syntax'},
         },
       ] satisfies TransformResponseBody);
       const client = connect(SYNC_CONTEXT, [
@@ -1189,7 +1189,7 @@ describe('view-syncer/service', () => {
                 "name": "named-query-1",
               },
               {
-                "detail": {
+                "details": {
                   "reason": "somereason",
                 },
                 "error": "app",
@@ -1198,7 +1198,7 @@ describe('view-syncer/service', () => {
                 "name": "named-query-2",
               },
               {
-                "detail": {
+                "details": {
                   "reason": "Invalid syntax",
                 },
                 "error": "parse",

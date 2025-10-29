@@ -113,7 +113,7 @@ export class SolidView implements Output {
       error: {
         type: error.error,
         message: error.message,
-        ...(error.detail ? {detail: error.detail} : {}),
+        ...(error.details ? {details: error.details} : {}),
       },
     };
   }

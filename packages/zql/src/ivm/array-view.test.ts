@@ -1804,7 +1804,7 @@ test('listeners receive error when queryComplete rejects - plural', async () => 
     id: 'test-error-1',
     name: 'error-query',
     message: 'Query execution failed',
-    detail: {reason: 'Test rejection'},
+    details: {reason: 'Test rejection'},
   };
 
   const queryCompletePromise = Promise.reject(testError);
@@ -1861,7 +1861,6 @@ test('listeners receive error when queryComplete rejects - singular', async () =
     id: 'singular-error',
     name: 'error-query-1',
     message: 'Singular query failed',
-    detail: {},
   };
 
   const queryCompletePromise = Promise.reject(testError);
@@ -1912,7 +1911,7 @@ test('all listeners receive error when queryComplete rejects', async () => {
     id: 'query-1',
     name: 'error-query-2',
     message: 'Query execution failed',
-    detail: {reason: 'Test rejection'},
+    details: {reason: 'Test rejection'},
   };
 
   const queryCompletePromise = Promise.reject(testError);
@@ -1967,7 +1966,6 @@ test('listeners added after error still receive error state', async () => {
     id: 'late-listener-error',
     name: 'error-query-3',
     message: 'Error before listener',
-    detail: {},
   };
 
   const queryCompletePromise = Promise.reject(testError);
@@ -2011,7 +2009,6 @@ test('error state persists through flush operations', async () => {
     id: 'persistent-error',
     name: 'error-query',
     message: 'Persistent error',
-    detail: {},
   };
 
   const queryCompletePromise = Promise.reject(testError);

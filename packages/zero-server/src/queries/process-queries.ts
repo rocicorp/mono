@@ -81,14 +81,14 @@ export async function handleGetQueriesRequest<S extends Schema>(
           query = result.query;
         } catch (error) {
           const message = getErrorMessage(error);
-          const detail = getErrorDetails(error);
+          const details = getErrorDetails(error);
 
           return {
             error: error instanceof QueryParseError ? 'parse' : 'app',
             id: req.id,
             name: req.name,
             message,
-            ...(detail ? {detail} : {}),
+            ...(details ? {details} : {}),
           };
         }
 

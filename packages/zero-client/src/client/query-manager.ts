@@ -1,6 +1,6 @@
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
-import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {TDigest} from '../../../shared/src/tdigest.ts';
@@ -226,7 +226,7 @@ export class QueryManager implements InspectorDelegate {
         entry.gotCallbacks.forEach(callback => callback(false, error));
       }
       // this code path is not possible technically since errors were never implemented in the legacy query transform error
-      // but is included for backwards compatibility
+      // but is included for backwards compatibility and we have a test case for it
       else {
         this.#onFatalError(
           new ProtocolError({
@@ -237,7 +237,7 @@ export class QueryManager implements InspectorDelegate {
             queryIDs: [],
           }),
         );
-        unreachable(error);
+        // unreachable(error); TODO(0xcadams): this should eventually be unreachable
       }
     }
   }

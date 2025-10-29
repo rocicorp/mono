@@ -23,14 +23,14 @@ export const appErroredQuerySchema = v.object({
   id: v.string(),
   name: v.string(),
   message: v.string(),
-  detail: jsonSchema.optional(),
+  details: jsonSchema.optional(),
 });
 export const parseErroredQuerySchema = v.object({
   error: v.literal('parse'),
   id: v.string(),
   name: v.string(),
   message: v.string(),
-  detail: jsonSchema.optional(),
+  details: jsonSchema.optional(),
 });
 export const erroredQuerySchema = v.union(
   appErroredQuerySchema,

@@ -10,7 +10,7 @@ export function QueryUsers() {
     return (
       <div>
         <button onClick={details.retry}>Retry</button>
-        Error: {JSON.stringify(details.error?.detail ?? null)}
+        Error: {JSON.stringify(details.error?.details ?? null)}
       </div>
     );
   }
