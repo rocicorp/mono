@@ -206,7 +206,7 @@ export class PlannerJoin {
         );
       }
 
-      // Now how many child rows must be scanned per parent row?
+      // Now how much child work per parent row?
       // In a semi-join, we stop at the first matching child row.
       let childRunningCost = childCost.runningCost;
       if (childCost.limit !== undefined && childCost.selectivity !== 0) {
@@ -218,6 +218,8 @@ export class PlannerJoin {
           (1 - childCost.limit / childCost.selectivity) * childRunningCost,
         );
       }
+
+      console.log('child running cost per parent row:', childRunningCost);
 
       if (closestJoinOrSource === 'join') {
         // if the parent is a join, we're in a pipeline rather than nesting of joins.

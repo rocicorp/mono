@@ -61,7 +61,7 @@ test('manual: album.whereExists(tracks)', async () => {
   await runManualCase(query);
 });
 
-test('debug: album.whereExists(tracks)', async () => {
+test.only('debug: album.whereExists(tracks)', async () => {
   const query = builder.album.whereExists('tracks');
   const queryAst = ast(query);
 

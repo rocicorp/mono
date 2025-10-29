@@ -39,7 +39,7 @@ export function createSQLiteCostModel(
     sort: Ordering,
     filters: Condition | undefined,
     constraint: PlannerConstraint | undefined,
-  ): {startupCost: number; baseCardinality: number} => {
+  ): {startupCost: number; rows: number} => {
     // Transform filters to remove correlated subqueries
     // The cost model can't handle correlated subqueries, so we estimate cost
     // without them. This is conservative - actual cost may be higher.
@@ -78,7 +78,7 @@ export function createSQLiteCostModel(
 
     return {
       startupCost,
-      baseCardinality: Math.max(1, runningCost),
+      rows: Math.max(1, runningCost),
     };
   };
 }
@@ -216,7 +216,7 @@ function estimateCost(scanstats: ScanstatusLoop[]): {
         isFirstTopLevel = false;
       } else {
         // Subsequent top-level operations are sorts (startup cost)
-        startupCost += cost;
+        startupCost += cost / 10; // temp b-tree creation is less costly then actually emitting the rows
       }
     } else {
       // All other operations are running costs

@@ -48,12 +48,12 @@ export const simpleCostModel: ConnectionCostModel = (
   _sort: Ordering,
   _filters: Condition | undefined,
   constraint: PlannerConstraint | undefined,
-): {startupCost: number; baseCardinality: number} => {
+): {startupCost: number; rows: number} => {
   const constraintCount = constraint ? Object.keys(constraint).length : 0;
-  const baseCardinality = Math.max(1, 100 - constraintCount * 10);
+  const rows = Math.max(1, 100 - constraintCount * 10);
   return {
     startupCost: 0,
-    baseCardinality,
+    rows,
   };
 };
 
