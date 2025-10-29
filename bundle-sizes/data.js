@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1761293819053,
+  "lastUpdate": 1761777631085,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54377,6 +54377,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/789ce3e3da33d4495e3dcde1262cd3b8c37d8a37"
         },
         "date": 1761293807124,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302365,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54477,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111453,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31872,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "497fd3ed5c0b58e06895aeb8ab6d07b20a1362c2",
+          "message": "feat(zero): defineQuery (#4958)\n\n# Introduce defineQuery as the unified replacement for syncedQuery and\nsyncedQueryWithArgs.\n\nBREAKING CHANGE!\n\napps/zbugs updated as an example; internals related to query\nidentification and materialization were refactored.\n\n## Conceptual Changes\n\nThere are more kinds of `Queries` now.\n\n## Query\n\nThe main interface. It has builder methods like where, limit, and\nrelated. This is the only one we expect people to interact with.\n\nBREAKING CHANGE! Query no longer has `run`, `preload`, or `materialize`.\nYou need to call these methods on the zero instance or the transaction\nobject.\n\n### RootNamedQuery\n\nThis is the concrete class you get when the result of `defineQuery` is\ncalled.\n\n```ts\nconst issues = defineQuery('issue', {validator: ...}, ({ctx, args}) => ...);\nissues({id: 42}); // Returns a Query backed by a RootNamedQuery\n```\n\nRootNamedQuery does not have an AST. The AST is only available after the\ncontext has been passed in. The function body passed into defineQuery is\nnot called until the context is passed in. The args, on the other hand,\nare validated right away.\n\n### ChainedQuery\n\nCalling the chaining methods on the `RootNamedQuery` instance creates\nchained queries. They are called “chained” because they keep a reference\nto the parent query.\n\nChained queries do not have an AST either. Once you pass the context in,\nwe call the parent query and obtain the AST.",
+          "timestamp": "2025-10-29T22:32:59Z",
+          "tree_id": "64c7bce738b591bff844b62d31bcc70db40c4b30",
+          "url": "https://github.com/rocicorp/mono/commit/497fd3ed5c0b58e06895aeb8ab6d07b20a1362c2"
+        },
+        "date": 1761777618602,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
