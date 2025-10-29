@@ -1,3 +1,4 @@
+// oxlint-disable expect-expect
 /* oxlint-disable no-console */
 import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {expect, test} from 'vitest';
@@ -7,7 +8,6 @@ import type {LiteAndZqlSpec} from '../../../zero-cache/src/db/specs.ts';
 import {Debug} from '../../../zql/src/builder/debug-delegate.ts';
 import {ast, QueryImpl} from '../../../zql/src/query/query-impl.ts';
 import {planQuery} from '../../../zql/src/planner/planner-builder.ts';
-import {AccumulatorDebugger} from '../../../zql/src/planner/planner-debug.ts';
 import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
 import {mapAST} from '../../../zero-protocol/src/ast.ts';
 import {
@@ -99,6 +99,31 @@ function createCase(seed?: number) {
   };
 }
 
+async function executeQuery(
+  queryAst: ReturnType<typeof ast>,
+  format: AnyQuery['format'],
+  debug = new Debug(),
+): Promise<number> {
+  const query = new QueryImpl(
+    {
+      ...harness.delegates.sqlite,
+      debug,
+    },
+    schema,
+    queryAst.table as keyof typeof schema.tables,
+    queryAst,
+    format,
+  );
+  await query.run();
+  return getTotalRowCount(debug);
+}
+
+function planAST(queryAst: ReturnType<typeof ast>): ReturnType<typeof ast> {
+  const mappedAST = mapAST(queryAst, clientToServerMapper);
+  const plannedServerAST = planQuery(mappedAST, costModel);
+  return mapAST(plannedServerAST, serverToClientMapper);
+}
+
 async function runCase({
   query,
   seed,
@@ -113,20 +138,7 @@ async function runCase({
   let plannedRowCount: number;
 
   try {
-    // Run without planning
-    const debugUnplanned = new Debug();
-    const unplannedQuery = new QueryImpl(
-      {
-        ...harness.delegates.sqlite,
-        debug: debugUnplanned,
-      },
-      schema,
-      queryAst.table as keyof typeof schema.tables,
-      queryAst,
-      generatedQuery.format,
-    );
-    await unplannedQuery.run();
-    unplannedRowCount = getTotalRowCount(debugUnplanned);
+    unplannedRowCount = await executeQuery(queryAst, generatedQuery.format);
   } catch (e) {
     // Skip queries that fail during unplanned execution (query generator issues)
     if (seed === REPRO_SEED) {
@@ -138,25 +150,8 @@ async function runCase({
   }
 
   try {
-    // Run with planning
-    // Map to server names, plan, then map back to client names
-    const mappedAST = mapAST(queryAst, clientToServerMapper);
-    const plannedServerAST = planQuery(mappedAST, costModel);
-    const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
-
-    const debugPlanned = new Debug();
-    const plannedQuery = new QueryImpl(
-      {
-        ...harness.delegates.sqlite,
-        debug: debugPlanned,
-      },
-      schema,
-      plannedClientAST.table as keyof typeof schema.tables,
-      plannedClientAST,
-      generatedQuery.format,
-    );
-    await plannedQuery.run();
-    plannedRowCount = getTotalRowCount(debugPlanned);
+    const plannedAST = planAST(queryAst);
+    plannedRowCount = await executeQuery(plannedAST, generatedQuery.format);
   } catch (e) {
     // If planned fails but unplanned succeeded, that's a planner bug
     if (seed === REPRO_SEED) {
@@ -186,40 +181,9 @@ async function runCase({
 async function runManualCase(query: AnyQuery) {
   const queryAst = ast(query);
 
-  // Run without planning
-  const debugUnplanned = new Debug();
-  const unplannedQuery = new QueryImpl(
-    {
-      ...harness.delegates.sqlite,
-      debug: debugUnplanned,
-    },
-    schema,
-    queryAst.table as keyof typeof schema.tables,
-    queryAst,
-    query.format,
-  );
-  await unplannedQuery.run();
-  const unplannedRowCount = getTotalRowCount(debugUnplanned);
-
-  // Run with planning
-  // Map to server names, plan, then map back to client names
-  const mappedAST = mapAST(queryAst, clientToServerMapper);
-  const plannedServerAST = planQuery(mappedAST, costModel);
-  const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
-
-  const debugPlanned = new Debug();
-  const plannedQuery = new QueryImpl(
-    {
-      ...harness.delegates.sqlite,
-      debug: debugPlanned,
-    },
-    schema,
-    plannedClientAST.table as keyof typeof schema.tables,
-    plannedClientAST,
-    query.format,
-  );
-  await plannedQuery.run();
-  const plannedRowCount = getTotalRowCount(debugPlanned);
+  const unplannedRowCount = await executeQuery(queryAst, query.format);
+  const plannedAST = planAST(queryAst);
+  const plannedRowCount = await executeQuery(plannedAST, query.format);
 
   console.log(`unplanned=${unplannedRowCount}, planned=${plannedRowCount}`);
 

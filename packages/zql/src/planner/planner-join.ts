@@ -219,8 +219,6 @@ export class PlannerJoin {
         );
       }
 
-      console.log('child running cost per parent row:', childRunningCost);
-
       if (closestJoinOrSource === 'join') {
         // if the parent is a join, we're in a pipeline rather than nesting of joins.
         return {
