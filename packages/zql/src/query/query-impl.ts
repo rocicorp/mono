@@ -465,15 +465,17 @@ export abstract class AbstractQuery<
       assert(isCompoundKey(destField), 'Invalid relationship');
 
       const subQuery = asAbstractQuery(
-        this.#newQuery(
-          destTableName,
-          {
-            table: destTableName,
-            alias: `${SUBQ_PREFIX}${relationship}`,
-          },
-          defaultFormat,
-          this.customQueryID,
-          undefined,
+        cb(
+          this.#newQuery(
+            destTableName,
+            {
+              table: destTableName,
+              alias: `${SUBQ_PREFIX}${relationship}`,
+            },
+            defaultFormat,
+            this.customQueryID,
+            undefined,
+          ),
         ),
       );
       return {

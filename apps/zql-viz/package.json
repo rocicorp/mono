@@ -23,7 +23,7 @@
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "~5.8.2",
     "vite": "6.2.1",
-    "zero-schema": "0.0.0",
+    "zero-types": "0.0.0",
     "zql": "0.0.0"
   }
 }
