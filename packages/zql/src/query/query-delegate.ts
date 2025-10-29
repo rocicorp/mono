@@ -150,14 +150,3 @@ export interface QueryDelegate<TContext>
     complete: Promise<void>;
   };
 }
-
-export interface WithContext<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
-  TContext,
-> {
-  withContext(
-    ctx: TContext,
-  ): QueryInternals<TSchema, TTable, TReturn, TContext>;
-}

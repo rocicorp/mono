@@ -18,10 +18,9 @@ import type {
   CommitListener,
   GotCallback,
   QueryDelegate,
-  WithContext,
 } from '../query-delegate.ts';
 import {materializeImpl, preloadImpl, runImpl} from '../query-impl.ts';
-import {type QueryInternals} from '../query-internals.ts';
+import {queryWithContext, type QueryInternals} from '../query-internals.ts';
 import type {
   HumanReadable,
   MaterializeOptions,
@@ -83,10 +82,7 @@ export class QueryDelegateImpl<TContext = undefined>
   >(
     query: Query<TSchema, TTable, TReturn, TContext>,
   ): QueryInternals<TSchema, TTable, TReturn, TContext> {
-    assert('withContext' in query);
-    return (
-      query as WithContext<TSchema, TTable, TReturn, TContext>
-    ).withContext(this.#context as TContext);
+    return queryWithContext(query, this.#context as TContext);
   }
 
   flushQueryChanges() {}

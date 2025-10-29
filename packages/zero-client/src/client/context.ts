@@ -12,10 +12,9 @@ import type {Source, SourceInput} from '../../../zql/src/ivm/source.ts';
 import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import {MeasurePushOperator} from '../../../zql/src/query/measure-push-operator.ts';
 import type {MetricsDelegate} from '../../../zql/src/query/metrics-delegate.ts';
-import type {
-  CommitListener,
-  QueryDelegate,
-  WithContext,
+import {
+  type CommitListener,
+  type QueryDelegate,
 } from '../../../zql/src/query/query-delegate.ts';
 import {
   materializeImpl,
@@ -23,6 +22,7 @@ import {
   runImpl,
 } from '../../../zql/src/query/query-impl.ts';
 import {
+  queryWithContext,
   type AnyQueryInternals,
   type QueryInternals,
 } from '../../../zql/src/query/query-internals.ts';
@@ -118,9 +118,7 @@ export class ZeroContext<TContext> implements QueryDelegate<TContext> {
       return existing;
     }
 
-    const qi = (
-      query as unknown as WithContext<TSchema, TTable, TReturn, TContext>
-    ).withContext(this.#context);
+    const qi = queryWithContext(query, this.#context);
     this.#queryInternals.set(query, qi);
     return qi;
   }

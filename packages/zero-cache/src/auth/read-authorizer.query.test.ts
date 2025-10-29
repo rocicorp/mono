@@ -942,10 +942,10 @@ describe('issue permissions', () => {
   });
 });
 
-function runReadQueryWithPermissions<TContext>(
+function runReadQueryWithPermissions(
   authData: AuthData,
   query: Query<ZeroSchema, string>,
-  queryDelegate: QueryDelegate<TContext>,
+  queryDelegate: QueryDelegate<undefined>,
 ) {
   const updatedAst = bindStaticParameters(
     transformQuery(

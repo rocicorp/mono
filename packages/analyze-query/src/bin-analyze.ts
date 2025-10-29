@@ -209,7 +209,7 @@ const sources = new Map<string, TableSource>();
 const clientToServerMapper = clientToServer(schema.tables);
 const debug = new Debug();
 const tableSpecs = computeZqlSpecs(lc, db);
-const host: QueryDelegate<unknown> = {
+const host: QueryDelegate<undefined> = {
   debug,
   getSource: (serverTableName: string) => {
     let source = sources.get(serverTableName);
@@ -308,7 +308,7 @@ function runQuery(queryString: string): Promise<AnalyzeQueryResult> {
   };
 
   const f = new Function('z', `return z.query.${queryString};`);
-  const q: Query<Schema, string, PullRow<string, Schema>, unknown> = f(z);
+  const q: Query<Schema, string, PullRow<string, Schema>, undefined> = f(z);
 
   const ast = queryWithContext(q, undefined).completedAST;
   return runAst(lc, ast, false, {
