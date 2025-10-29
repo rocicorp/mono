@@ -193,7 +193,7 @@ export class PlannerJoin {
     const parentCost = this.#parent.estimateCost(branchPattern);
     const childCost = this.#child.estimateCost(branchPattern);
 
-    let scanEst = parentCost.baseCardinality;
+    let scanEst = parentCost.rows;
     if (this.#type === 'semi' && parentCost.limit !== undefined) {
       if (childCost.selectivity !== 0) {
         scanEst = Math.min(scanEst, parentCost.limit / childCost.selectivity);
@@ -213,7 +213,7 @@ export class PlannerJoin {
               (childCost.startupCost + childCost.runningCost);
 
       return {
-        baseCardinality: parentCost.baseCardinality,
+        rows: parentCost.rows,
         runningCost: pipelineCost,
         startupCost: parentCost.startupCost,
         selectivity: parentCost.selectivity,
@@ -231,7 +231,7 @@ export class PlannerJoin {
           (childCost.startupCost + childCost.runningCost);
 
     return {
-      baseCardinality: parentCost.baseCardinality,
+      rows: parentCost.rows,
       runningCost: nestedLoopCost,
       startupCost: parentCost.startupCost,
       selectivity: parentCost.selectivity,

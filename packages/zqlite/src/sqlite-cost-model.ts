@@ -1,5 +1,8 @@
 import type {Condition, Ordering} from '../../zero-protocol/src/ast.ts';
-import type {ConnectionCostModel} from '../../zql/src/planner/planner-connection.ts';
+import type {
+  ConnectionCostModel,
+  CostModelCost,
+} from '../../zql/src/planner/planner-connection.ts';
 import type {PlannerConstraint} from '../../zql/src/planner/planner-constraint.ts';
 import SQLite3Database from '@rocicorp/zero-sqlite3';
 import {buildSelectQuery, type NoSubqueryCondition} from './query-builder.ts';
@@ -19,6 +22,8 @@ interface ScanstatusLoop {
   parentId: number;
   /** Estimated rows emitted per turn of parent loop */
   est: number;
+  /** EXPLAIN text for this loop to determine: b-tree vs list subquery */
+  explain: string;
 }
 
 /**
@@ -39,7 +44,7 @@ export function createSQLiteCostModel(
     sort: Ordering,
     filters: Condition | undefined,
     constraint: PlannerConstraint | undefined,
-  ): {startupCost: number; baseCardinality: number} => {
+  ): CostModelCost => {
     // Transform filters to remove correlated subqueries
     // The cost model can't handle correlated subqueries, so we estimate cost
     // without them. This is conservative - actual cost may be higher.
@@ -74,12 +79,7 @@ export function createSQLiteCostModel(
       `Expected scanstatus to return at least one loop for query: ${sql}`,
     );
 
-    const {startupCost, runningCost} = estimateCost(loops);
-
-    return {
-      startupCost,
-      baseCardinality: Math.max(1, runningCost),
-    };
+    return estimateCost(loops);
   };
 }
 
@@ -146,6 +146,9 @@ function getScanstatusLoops(stmt: Statement): ScanstatusLoop[] {
       parentId: must(
         stmt.scanStatus(idx, SQLite3Database.SQLITE_SCANSTAT_PARENTID, 1),
       ),
+      explain: must(
+        stmt.scanStatus(idx, SQLite3Database.SQLITE_SCANSTAT_EXPLAIN, 1),
+      ),
       est: must(stmt.scanStatus(idx, SQLite3Database.SQLITE_SCANSTAT_EST, 1)),
     });
   }
@@ -155,83 +158,44 @@ function getScanstatusLoops(stmt: Statement): ScanstatusLoop[] {
 
 /**
  * Estimates the cost of a query based on scanstats from sqlite3_stmt_scanstatus_v2
- *
- * Algorithm:
- * - Siblings (same parentId) are pipeline operations that run once
- * - Children (parentId != 0) are nested loops that run once per parent output row
- * - Cost = estimated rows × loops
- * - Startup cost = one-time costs (e.g., sorting) that don't scale with outer loops
- * - Running cost = costs that scale with the number of iterations
- *
- * SQLite reports sorting operations as separate scan loops. When a query requires
- * sorting (ORDER BY on non-indexed column), there will be multiple loops with the
- * same parentId=0, where the later loop is the sort operation.
- *
- * @param scanstats Array of scan statistics with parentId, selectId, and est (estimated rows)
- * @returns Object with startup cost and running cost
  */
 function estimateCost(scanstats: ScanstatusLoop[]): {
+  rows: number;
   startupCost: number;
-  runningCost: number;
 } {
   // Sort by selectId to process in execution order
   const sorted = [...scanstats].sort((a, b) => a.selectId - b.selectId);
 
-  // Track the total output rows for each selectId
-  // This is used to determine loop counts for child operations
-  const outputRows = new Map<number, number>();
-
-  let startupCost = 0;
-  let runningCost = 0;
+  let totalRows = 0;
+  let totalCost = 0;
 
   // Identify if there are multiple top-level (parentId=0) operations
   // If so, the first is typically the scan, and subsequent ones are sorts
   const topLevelOps = sorted.filter(s => s.parentId === 0);
-  const hasSortOperation = topLevelOps.length > 1;
 
-  let pipelineRows = 1;
-  let lastParentId = -1;
-  let isFirstTopLevel = true;
-
-  for (const stat of sorted) {
-    let loops: number;
-
-    if (stat.parentId === 0) {
-      // Top-level operation (sibling): runs once as part of pipeline
-      loops = 1;
+  // We only consider top level ops since ZQL queries are single-table when hitting SQLite.
+  // We do have a nested op in the case of `WHERE x IN (:arg)` but it is negligible
+  // assuming :arg is small.
+  let firstLoop = true;
+  for (const op of topLevelOps) {
+    if (firstLoop) {
+      // First top-level op is the main scan
+      // and determines the total number of rows output.
+      totalRows = op.est;
+      firstLoop = false;
     } else {
-      // Child operation (nested loop): runs once per parent's output row
-      loops = outputRows.get(stat.parentId) || 1;
-    }
-
-    // Cost is the number of rows processed/examined
-    const cost = stat.est * loops * pipelineRows;
-
-    // Classify cost as startup or running
-    if (stat.parentId === 0 && hasSortOperation) {
-      // Top-level operation with multiple siblings
-      if (isFirstTopLevel) {
-        // First top-level operation is the scan (running cost)
-        runningCost += cost;
-        isFirstTopLevel = false;
-      } else {
-        // Subsequent top-level operations are sorts (startup cost)
-        startupCost += cost;
+      if (op.explain.includes('ORDER BY')) {
+        totalCost += btreeCost(totalRows);
       }
-    } else {
-      // All other operations are running costs
-      runningCost += cost;
     }
-
-    if (stat.parentId !== lastParentId) {
-      // New pipeline operation - reset pipeline row count
-      pipelineRows = stat.est;
-      lastParentId = stat.parentId;
-    }
-
-    // Track this operation's total output (for any children)
-    outputRows.set(stat.selectId, cost);
   }
 
-  return {startupCost, runningCost};
+  return {rows: totalRows, startupCost: totalCost};
+}
+
+export function btreeCost(rows: number): number {
+  // B-Tree construction is ~O(n log n) so we estimate the cost as such.
+  // We divide the cost by 10 because sorting in SQLite is ~10x faster
+  // than bringing the data into JS and sorting there.
+  return (rows * Math.log2(rows)) / 10;
 }

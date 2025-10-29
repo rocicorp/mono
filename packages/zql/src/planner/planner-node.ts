@@ -16,7 +16,7 @@ export type PlannerNode =
   | PlannerTerminus;
 
 export type CostEstimate = {
-  baseCardinality: number;
+  rows: number;
   runningCost: number;
   startupCost: number;
   selectivity: number;
