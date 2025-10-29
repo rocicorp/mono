@@ -482,7 +482,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     if (policy.length === 0) {
       return false;
     }
-    let rowQueryAst = asStaticQuery(rowQuery).completedAST;
+    let rowQueryAst = asStaticQuery(rowQuery).ast;
     rowQueryAst = bindStaticParameters(
       {
         ...rowQueryAst,

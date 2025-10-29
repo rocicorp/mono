@@ -268,7 +268,7 @@ function runQuery(queryString: string): Promise<AnalyzeQueryResult> {
   const f = new Function('z', `return z.query.${queryString};`);
   const q: Query<Schema, string, PullRow<string, Schema>, undefined> = f(z);
 
-  const ast = queryWithContext(q, undefined).completedAST;
+  const ast = queryWithContext(q, undefined).ast;
   return runAst(lc, ast, false, {
     applyPermissions: config.applyPermissions,
     authData: config.authData,

@@ -41,8 +41,8 @@ if (REPRO_SEED) {
     console.log(
       'ZQL',
       await formatOutput(
-        queryWithContext(query[0], undefined).rawAST.table +
-          astToZQL(queryWithContext(query[0], undefined).rawAST),
+        queryWithContext(query[0], undefined).ast.table +
+          astToZQL(queryWithContext(query[0], undefined).ast),
       ),
     );
     await runCase(tc);
@@ -127,7 +127,5 @@ async function shrink(generations: AnyQuery[], seed: number) {
   }
   const query = generations[lastFailure];
   const queryInternals = queryWithContext(query, undefined);
-  return formatOutput(
-    queryInternals.completedAST.table + astToZQL(queryInternals.completedAST),
-  );
+  return formatOutput(queryInternals.ast.table + astToZQL(queryInternals.ast));
 }

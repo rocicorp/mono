@@ -223,10 +223,7 @@ function App() {
               'Authorization': `Basic ${credentials}`,
             },
             body: JSON.stringify({
-              ast: mapAST(
-                vizDelegate.withContext(capturedQuery).completedAST,
-                mapper,
-              ),
+              ast: mapAST(vizDelegate.withContext(capturedQuery).ast, mapper),
             }),
           });
 
@@ -243,7 +240,7 @@ function App() {
 
       setResult({
         ast: capturedQuery
-          ? vizDelegate.withContext(capturedQuery).completedAST
+          ? vizDelegate.withContext(capturedQuery).ast
           : undefined,
         graph,
         remoteRunResult,

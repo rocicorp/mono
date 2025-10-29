@@ -184,6 +184,7 @@ describe('unreadable tables', () => {
       expect(
         transformQuery(lc, ast(query), permissionRules, authData),
       ).toStrictEqual({
+        orderBy: [['id', 'asc']],
         related: undefined,
         table: tableName,
         where: {
@@ -202,6 +203,12 @@ describe('unreadable tables', () => {
     expect(transformQuery(lc, ast(query), permissionRules, authData))
       .toMatchInlineSnapshot(`
         {
+          "orderBy": [
+            [
+              "id",
+              "asc",
+            ],
+          ],
           "related": [
             {
               "correlation": {
@@ -266,6 +273,12 @@ describe('unreadable tables', () => {
     expect(transformQuery(lc, ast(query), permissionRules, undefined))
       .toMatchInlineSnapshot(`
         {
+          "orderBy": [
+            [
+              "id",
+              "asc",
+            ],
+          ],
           "related": [
             {
               "correlation": {
@@ -342,6 +355,12 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": [
           {
             "correlation": {
@@ -445,6 +464,12 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": [
           {
             "correlation": {
@@ -544,6 +569,12 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": [
           {
             "correlation": {
@@ -588,6 +619,12 @@ describe('unreadable tables', () => {
     expect(transformQuery(lc, ast(query), permissionRules, undefined))
       .toMatchInlineSnapshot(`
         {
+          "orderBy": [
+            [
+              "id",
+              "asc",
+            ],
+          ],
           "related": undefined,
           "table": "readable",
           "where": {
@@ -631,6 +668,12 @@ describe('unreadable tables', () => {
     expect(transformQuery(lc, ast(query), permissionRules, authData))
       .toMatchInlineSnapshot(`
         {
+          "orderBy": [
+            [
+              "id",
+              "asc",
+            ],
+          ],
           "related": undefined,
           "table": "readable",
           "where": {
@@ -686,6 +729,12 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": undefined,
         "table": "readable",
         "where": {
@@ -738,6 +787,12 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": undefined,
         "table": "readable",
         "where": {
@@ -792,6 +847,12 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": undefined,
         "table": "readable",
         "where": {
@@ -878,6 +939,12 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": undefined,
         "table": "readable",
         "where": {
@@ -965,6 +1032,12 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": undefined,
         "table": "readable",
         "where": {
@@ -1049,6 +1122,12 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": undefined,
         "table": "readable",
         "where": {
@@ -1132,6 +1211,12 @@ test('exists rules in permissions are tagged as the permissions system', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
+      "orderBy": [
+        [
+          "id",
+          "asc",
+        ],
+      ],
       "related": undefined,
       "table": "readableThruUnreadable",
       "where": {
@@ -1177,6 +1262,12 @@ test('exists rules in permissions are tagged as the permissions system', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
+      "orderBy": [
+        [
+          "id",
+          "asc",
+        ],
+      ],
       "related": [
         {
           "correlation": {
@@ -1257,6 +1348,12 @@ describe('admin readable', () => {
       // all levels of the query (root, self1, self2) should have the admin policy applied.
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": [
           {
             "correlation": {
@@ -1360,6 +1457,12 @@ describe('admin readable', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": [
           {
             "correlation": {
@@ -1560,6 +1663,12 @@ describe('admin readable', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": undefined,
         "table": "adminReadable",
         "where": {
@@ -1634,6 +1743,12 @@ describe('admin readable', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": undefined,
         "table": "adminReadable",
         "where": {
@@ -1725,6 +1840,12 @@ describe('admin readable', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": undefined,
         "table": "adminReadable",
         "where": {
@@ -1833,5 +1954,5 @@ describe('admin readable', () => {
 });
 
 function ast(query: AnyQuery): AST {
-  return queryWithContext(query, undefined).rawAST;
+  return queryWithContext(query, undefined).ast;
 }

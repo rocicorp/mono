@@ -648,7 +648,7 @@ export async function runAndCompare(
   const sqliteResult = mapResultToClientNames(
     await delegates.sqlite.run(queries.sqlite),
     zqlSchema,
-    delegates.sqlite.withContext(queries.sqlite).rawAST.table,
+    delegates.sqlite.withContext(queries.sqlite).ast.table,
   );
   const memoryResult = await delegates.memory.run(queries.memory);
 
@@ -838,7 +838,7 @@ async function checkRemove(
       mapResultToClientNames(
         zqliteMaterialized.data,
         zqlSchema,
-        delegates.sqlite.withContext(queries.sqlite).completedAST.table,
+        delegates.sqlite.withContext(queries.sqlite).ast.table,
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -889,7 +889,7 @@ async function checkAddBack(
       mapResultToClientNames(
         zqliteMaterialized.data,
         zqlSchema,
-        delegates.sqlite.withContext(queries.sqlite).completedAST.table,
+        delegates.sqlite.withContext(queries.sqlite).ast.table,
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -970,7 +970,7 @@ async function checkEditToRandom(
       mapResultToClientNames(
         zqliteMaterialized.data,
         zqlSchema,
-        delegates.sqlite.withContext(queries.sqlite).completedAST.table,
+        delegates.sqlite.withContext(queries.sqlite).ast.table,
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -1045,7 +1045,7 @@ async function checkEditToMatch(
       mapResultToClientNames(
         zqliteMaterialized.data,
         zqlSchema,
-        delegates.sqlite.withContext(queries.sqlite).completedAST.table,
+        delegates.sqlite.withContext(queries.sqlite).ast.table,
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -1099,7 +1099,7 @@ class TestPGQueryDelegate extends QueryDelegateBase<undefined> {
       compile(
         this.serverSchema,
         this.#schema,
-        queryInternals.completedAST,
+        queryInternals.ast,
         queryInternals.format,
       ),
     );

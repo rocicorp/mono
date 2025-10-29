@@ -11,8 +11,8 @@ export function makeGetPlanAST(
   costModel: ConnectionCostModel,
 ) {
   return (q: AnyQuery, planDebugger?: PlanDebugger) => {
-    const completedAST = queryWithContext(q, undefined).completedAST;
-    return planQuery(mapAST(completedAST, mapper), costModel, planDebugger);
+    const ast = queryWithContext(q, undefined).ast;
+    return planQuery(mapAST(ast, mapper), costModel, planDebugger);
   };
 }
 

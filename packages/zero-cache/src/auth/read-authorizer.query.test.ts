@@ -911,7 +911,7 @@ function runReadQueryWithPermissions(
   const updatedAst = bindStaticParameters(
     transformQuery(
       new LogContext('debug'),
-      queryWithContext(query, undefined).completedAST,
+      queryWithContext(query, undefined).ast,
       permissions,
       authData,
     ),

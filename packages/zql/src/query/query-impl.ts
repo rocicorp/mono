@@ -99,7 +99,7 @@ export abstract class AbstractQuery<
 
   readonly #schema: TSchema;
   readonly #tableName: TTable;
-  readonly rawAST: AST;
+  readonly #ast: AST;
   readonly format: Format;
   #hash: string = '';
   readonly #system: System;
@@ -119,7 +119,7 @@ export abstract class AbstractQuery<
   ) {
     this.#schema = schema;
     this.#tableName = tableName;
-    this.rawAST = ast;
+    this.#ast = ast;
     this.format = format;
     this.#system = system;
     this.#currentJunction = currentJunction;
@@ -139,7 +139,7 @@ export abstract class AbstractQuery<
   ): Query<TSchema, TTable, TReturn, TContext> {
     return this.#newQuery(
       this.#tableName,
-      this.rawAST,
+      this.#ast,
       this.format,
       {
         name,
@@ -151,7 +151,7 @@ export abstract class AbstractQuery<
 
   hash(): string {
     if (!this.#hash) {
-      this.#hash = hashOfAST(this._completeAst());
+      this.#hash = hashOfAST(this.#completeAst());
     }
     return this.#hash;
   }
@@ -160,7 +160,7 @@ export abstract class AbstractQuery<
     this.#newQuery(
       this.#tableName,
       {
-        ...this.rawAST,
+        ...this.#ast,
         limit: 1,
       },
       {
@@ -234,9 +234,9 @@ export abstract class AbstractQuery<
       return this.#newQuery(
         this.#tableName,
         {
-          ...this.rawAST,
+          ...this.#ast,
           related: [
-            ...(this.rawAST.related ?? []),
+            ...(this.#ast.related ?? []),
             {
               system: this.#system,
               correlation: {
@@ -245,7 +245,7 @@ export abstract class AbstractQuery<
               },
               subquery: addPrimaryKeysToAst(
                 this.#schema.tables[destSchema],
-                subQuery.rawAST,
+                subQuery.#ast,
               ),
             },
           ],
@@ -292,9 +292,9 @@ export abstract class AbstractQuery<
       return this.#newQuery(
         this.#tableName,
         {
-          ...this.rawAST,
+          ...this.#ast,
           related: [
-            ...(this.rawAST.related ?? []),
+            ...(this.#ast.related ?? []),
             {
               system: this.#system,
               correlation: {
@@ -318,7 +318,7 @@ export abstract class AbstractQuery<
                     },
                     subquery: addPrimaryKeysToAst(
                       this.#schema.tables[destSchema],
-                      sq.rawAST,
+                      sq.#ast,
                     ),
                   },
                 ],
@@ -360,7 +360,7 @@ export abstract class AbstractQuery<
       cond = cmp(fieldOrExpressionFactory, opOrValue, value);
     }
 
-    const existingWhere = this.rawAST.where;
+    const existingWhere = this.#ast.where;
     if (existingWhere) {
       cond = and(existingWhere, cond);
     }
@@ -370,7 +370,7 @@ export abstract class AbstractQuery<
     return this.#newQuery(
       this.#tableName,
       {
-        ...this.rawAST,
+        ...this.#ast,
         where,
       },
       this.format,
@@ -386,7 +386,7 @@ export abstract class AbstractQuery<
     this.#newQuery(
       this.#tableName,
       {
-        ...this.rawAST,
+        ...this.#ast,
         start: {
           row,
           exclusive: !opts?.inclusive,
@@ -414,7 +414,7 @@ export abstract class AbstractQuery<
     return this.#newQuery(
       this.#tableName,
       {
-        ...this.rawAST,
+        ...this.#ast,
         limit,
       },
       this.format,
@@ -436,8 +436,8 @@ export abstract class AbstractQuery<
     return this.#newQuery(
       this.#tableName,
       {
-        ...this.rawAST,
-        orderBy: [...(this.rawAST.orderBy ?? []), [field as string, direction]],
+        ...this.#ast,
+        orderBy: [...(this.#ast.orderBy ?? []), [field as string, direction]],
       },
       this.format,
       this.customQueryID,
@@ -484,7 +484,7 @@ export abstract class AbstractQuery<
           },
           subquery: addPrimaryKeysToAst(
             this.#schema.tables[destTableName],
-            subQuery.rawAST,
+            subQuery.#ast,
           ),
         },
         op: 'EXISTS',
@@ -540,7 +540,7 @@ export abstract class AbstractQuery<
                 subquery: addPrimaryKeysToAst(
                   this.#schema.tables[destSchema],
                   (queryToDest as QueryImpl<Schema, string, unknown, unknown>)
-                    .rawAST,
+                    .#ast,
                 ),
               },
               op: 'EXISTS',
@@ -558,36 +558,36 @@ export abstract class AbstractQuery<
 
   #completedAST: AST | undefined;
 
-  get completedAST(): AST {
-    return this._completeAst();
+  get ast(): AST {
+    return this.#completeAst();
   }
 
-  _completeAst(): AST {
+  #completeAst(): AST {
     if (!this.#completedAST) {
       const finalOrderBy = addPrimaryKeys(
         this.#schema.tables[this.#tableName],
-        this.rawAST.orderBy,
+        this.#ast.orderBy,
       );
-      if (this.rawAST.start) {
-        const {row} = this.rawAST.start;
+      if (this.#ast.start) {
+        const {row} = this.#ast.start;
         const narrowedRow: Writable<IVMRow> = {};
         for (const [field] of finalOrderBy) {
           narrowedRow[field] = row[field];
         }
         this.#completedAST = {
-          ...this.rawAST,
+          ...this.#ast,
           start: {
-            ...this.rawAST.start,
+            ...this.#ast.start,
             row: narrowedRow,
           },
           orderBy: finalOrderBy,
         };
       } else {
         this.#completedAST = {
-          ...this.rawAST,
+          ...this.#ast,
           orderBy: addPrimaryKeys(
             this.#schema.tables[this.#tableName],
-            this.rawAST.orderBy,
+            this.#ast.orderBy,
           ),
         };
       }
@@ -630,7 +630,7 @@ export function materializeImpl<
   let ttl: TTL = options?.ttl ?? DEFAULT_TTL_MS;
 
   const qi = delegate.withContext(query);
-  const {completedAST, format, customQueryID} = qi;
+  const {ast: ast, format, customQueryID} = qi;
   const queryHash = qi.hash();
 
   const queryID = customQueryID
@@ -640,7 +640,7 @@ export function materializeImpl<
   let queryComplete: boolean | ErroredQuery = delegate.defaultQueryComplete;
   const updateTTL = customQueryID
     ? (newTTL: TTL) => delegate.updateCustomQuery(customQueryID, newTTL)
-    : (newTTL: TTL) => delegate.updateServerQuery(completedAST, newTTL);
+    : (newTTL: TTL) => delegate.updateServerQuery(ast, newTTL);
 
   const gotCallback: GotCallback = (got, error) => {
     if (error) {
@@ -654,7 +654,7 @@ export function materializeImpl<
         'query-materialization-end-to-end',
         performance.now() - t0,
         queryID,
-        completedAST,
+        ast,
       );
       queryComplete = true;
       queryCompleteResolver.resolve(true);
@@ -671,10 +671,10 @@ export function materializeImpl<
   const t0 = performance.now();
 
   const removeAddedQuery = customQueryID
-    ? delegate.addCustomQuery(completedAST, customQueryID, ttl, gotCallback)
-    : delegate.addServerQuery(completedAST, ttl, gotCallback);
+    ? delegate.addCustomQuery(ast, customQueryID, ttl, gotCallback)
+    : delegate.addServerQuery(ast, ttl, gotCallback);
 
-  const input = buildPipeline(completedAST, delegate, queryID);
+  const input = buildPipeline(ast, delegate, queryID);
 
   const view = delegate.batchViewUpdates(() =>
     (factory ?? arrayViewFactory)(
@@ -756,25 +756,20 @@ export function preloadImpl<
   const qi = delegate.withContext(query);
   const ttl = options?.ttl ?? DEFAULT_PRELOAD_TTL_MS;
   const {resolve, promise: complete} = resolver<void>();
-  const {customQueryID, completedAST} = qi;
+  const {customQueryID, ast: ast} = qi;
   if (customQueryID) {
-    const cleanup = delegate.addCustomQuery(
-      completedAST,
-      customQueryID,
-      ttl,
-      got => {
-        if (got) {
-          resolve();
-        }
-      },
-    );
+    const cleanup = delegate.addCustomQuery(ast, customQueryID, ttl, got => {
+      if (got) {
+        resolve();
+      }
+    });
     return {
       cleanup,
       complete,
     };
   }
 
-  const cleanup = delegate.addServerQuery(completedAST, ttl, got => {
+  const cleanup = delegate.addServerQuery(ast, ttl, got => {
     if (got) {
       resolve();
     }

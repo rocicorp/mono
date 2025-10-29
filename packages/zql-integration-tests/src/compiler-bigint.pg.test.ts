@@ -215,7 +215,7 @@ describe('compiling ZQL to SQL', () => {
       const c = compile(
         serverSchema,
         schema,
-        queryDelegate.withContext(query).completedAST,
+        queryDelegate.withContext(query).ast,
       );
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
@@ -270,7 +270,7 @@ describe('compiling ZQL to SQL', () => {
       const c = compile(
         serverSchema,
         schema,
-        queryDelegate.withContext(query).completedAST,
+        queryDelegate.withContext(query).ast,
       );
       const sqlQuery = formatPgInternalConvert(c);
       const result = await runPgQuery(
@@ -292,7 +292,7 @@ describe('compiling ZQL to SQL', () => {
       const c = compile(
         serverSchema,
         schema,
-        queryDelegate.withContext(query).completedAST,
+        queryDelegate.withContext(query).ast,
       );
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
@@ -347,7 +347,7 @@ describe('compiling ZQL to SQL', () => {
       const c2 = compile(
         serverSchema,
         schema,
-        queryDelegate.withContext(q2).completedAST,
+        queryDelegate.withContext(q2).ast,
       );
       const sqlQuery2 = formatPgInternalConvert(c2);
       const pgResult2 = extractZqlResult(

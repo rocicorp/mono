@@ -50,8 +50,11 @@ export interface QueryInternals<
    */
   hash(): string;
 
-  readonly rawAST: AST;
-  readonly completedAST: AST;
+  /**
+   * The completed AST for this query, with any missing primary keys added to
+   * orderBy and start.
+   */
+  readonly ast: AST;
 
   readonly customQueryID: CustomQueryID | undefined;
 

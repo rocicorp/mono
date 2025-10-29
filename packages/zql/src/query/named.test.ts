@@ -113,7 +113,7 @@ test('syncedQuery', () => {
     args: ['123'],
   });
 
-  expect(q.completedAST).toEqual({
+  expect(q.ast).toEqual({
     table: 'issue',
     where: {
       left: {
@@ -175,7 +175,7 @@ test('syncedQuery', () => {
     args: ['123'],
   });
 
-  expect(vq.completedAST).toEqual({
+  expect(vq.ast).toEqual({
     table: 'issue',
     where: {
       left: {
@@ -241,7 +241,7 @@ test('syncedQueryWithContext', () => {
     args: ['123'],
   });
 
-  expect(q.completedAST).toEqual({
+  expect(q.ast).toEqual({
     table: 'issue',
     where: {
       conditions: [
@@ -320,7 +320,7 @@ test('syncedQueryWithContext', () => {
     args: ['123'],
   });
 
-  expect(vq.completedAST).toEqual({
+  expect(vq.ast).toEqual({
     table: 'issue',
     where: {
       conditions: [
@@ -366,8 +366,14 @@ test('makeSchemaQuery', () => {
     ),
     undefined,
   );
-  expect(q1.rawAST).toMatchInlineSnapshot(`
+  expect(q1.ast).toMatchInlineSnapshot(`
     {
+      "orderBy": [
+        [
+          "id",
+          "asc",
+        ],
+      ],
       "table": "issue",
       "where": {
         "left": {

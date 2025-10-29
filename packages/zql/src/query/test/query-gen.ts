@@ -100,7 +100,7 @@ function augmentQuery(
   }
 
   function addOrderBy(query: AnyQuery) {
-    const tableName = queryWithContext(query, undefined).rawAST.table;
+    const tableName = queryWithContext(query, undefined).ast.table;
     const table = schema.tables[tableName];
     const columnNames = Object.keys(table.columns);
     // we wouldn't really order by _every_ column, right?
@@ -139,7 +139,7 @@ function augmentQuery(
       return query;
     }
 
-    const tableName = queryWithContext(query, undefined).rawAST.table;
+    const tableName = queryWithContext(query, undefined).ast.table;
     const table = schema.tables[tableName];
     const columnNames = Object.keys(table.columns);
     for (let i = 0; i < numConditions; i++) {
@@ -187,7 +187,7 @@ function augmentQuery(
       return query;
     }
 
-    const tableName = queryWithContext(query, undefined).rawAST.table;
+    const tableName = queryWithContext(query, undefined).ast.table;
     const relationships = Object.keys(schema.relationships[tableName] ?? {});
     const relationshipsToAdd = Math.floor(rng() * 4);
     if (relationshipsToAdd === 0) {
@@ -228,7 +228,7 @@ function augmentQuery(
       return query;
     }
 
-    const tableName = queryWithContext(query, undefined).rawAST.table;
+    const tableName = queryWithContext(query, undefined).ast.table;
     const relationships = Object.keys(schema.relationships[tableName] ?? {});
     const existsToAdd = Math.floor(rng() * 4);
     if (existsToAdd === 0) {

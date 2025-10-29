@@ -12,7 +12,7 @@ import {pick} from '../helpers/planner.ts';
 import {builder} from './schema.ts';
 
 function ast(q: AnyQuery) {
-  return queryWithContext(q, undefined).completedAST;
+  return queryWithContext(q, undefined).ast;
 }
 
 describe('one join', () => {

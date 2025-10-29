@@ -57,12 +57,7 @@ export class ZPGQuery<
     const sqlQuery =
       this.#query ??
       formatPgInternalConvert(
-        compile(
-          this.#serverSchema,
-          this.#schema,
-          this.completedAST,
-          this.format,
-        ),
+        compile(this.#serverSchema, this.#schema, this.ast, this.format),
       );
     this.#query = sqlQuery;
     const pgIterableResult = await this.#dbTransaction.query(

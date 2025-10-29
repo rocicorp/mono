@@ -28,7 +28,7 @@ test('stable generation', () => {
   const schema = generateSchema(rng, faker);
   const q = generateQuery(schema, {}, rng, faker);
 
-  expect(queryWithContext(q, undefined).completedAST).toMatchInlineSnapshot(`
+  expect(queryWithContext(q, undefined).ast).toMatchInlineSnapshot(`
     {
       "limit": 126,
       "orderBy": [

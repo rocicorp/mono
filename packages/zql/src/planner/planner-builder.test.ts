@@ -7,13 +7,13 @@ import {simpleCostModel} from './test/helpers.ts';
 import {builder} from './test/test-schema.ts';
 
 suite('buildPlanGraph', () => {
-  function completedAST(q: AnyQuery): AST {
-    return queryWithContext(q, undefined).completedAST;
+  function getAST(q: AnyQuery): AST {
+    return queryWithContext(q, undefined).ast;
   }
 
   suite('basic structure', () => {
     test('creates plan graph for simple table query', () => {
-      const ast = completedAST(builder.users);
+      const ast = getAST(builder.users);
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       expect(plans.plan).toBeDefined();
@@ -23,7 +23,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('creates connection with filters', () => {
-      const ast = completedAST(builder.users.where('id', 1));
+      const ast = getAST(builder.users.where('id', 1));
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       expect(plans.plan.connections).toHaveLength(1);
@@ -31,7 +31,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('creates sources for tables', () => {
-      const ast = completedAST(builder.users);
+      const ast = getAST(builder.users);
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       // Source should be accessible
@@ -41,7 +41,7 @@ suite('buildPlanGraph', () => {
 
   suite('correlatedSubquery creates joins', () => {
     test('EXISTS creates a join that can be flipped', () => {
-      const ast = completedAST(builder.users.whereExists('posts'));
+      const ast = getAST(builder.users.whereExists('posts'));
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       // Should have 2 connections: one for users, one for posts
@@ -88,7 +88,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('assigns unique plan IDs to joins', () => {
-      const ast = completedAST(
+      const ast = getAST(
         builder.users.whereExists('posts').whereExists('comments'),
       );
       const plans = buildPlanGraph(ast, simpleCostModel);
@@ -101,7 +101,7 @@ suite('buildPlanGraph', () => {
 
   suite('AND creates sequential joins', () => {
     test('AND with multiple correlatedSubqueries creates multiple joins', () => {
-      const ast = completedAST(
+      const ast = getAST(
         builder.users.whereExists('posts').whereExists('comments'),
       );
       const plans = buildPlanGraph(ast, simpleCostModel);
@@ -113,7 +113,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('AND with simple and correlatedSubquery conditions', () => {
-      const ast = completedAST(
+      const ast = getAST(
         builder.users.where('active', true).whereExists('posts'),
       );
       const plans = buildPlanGraph(ast, simpleCostModel);
@@ -127,7 +127,7 @@ suite('buildPlanGraph', () => {
 
   suite('OR creates fan-out/fan-in pairs', () => {
     test('OR with correlatedSubqueries creates fan-out and fan-in', () => {
-      const ast = completedAST(
+      const ast = getAST(
         builder.users.where(({or, exists}) =>
           or(exists('posts'), exists('comments')),
         ),
@@ -149,7 +149,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('OR with only simple conditions does not create fan structure', () => {
-      const ast = completedAST(
+      const ast = getAST(
         builder.users.where(({or, cmp}) =>
           or(cmp('status', 'active'), cmp('status', 'pending')),
         ),
@@ -163,7 +163,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('OR with mixed simple and correlatedSubquery creates fan structure', () => {
-      const ast = completedAST(
+      const ast = getAST(
         builder.users.where(({or, cmp, exists}) =>
           or(cmp('admin', true), exists('posts')),
         ),
@@ -177,7 +177,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('nested OR creates nested fan structures', () => {
-      const ast = completedAST(
+      const ast = getAST(
         builder.users.where(({or, exists}) =>
           or(exists('posts'), or(exists('comments'), exists('likes'))),
         ),
@@ -197,7 +197,7 @@ suite('buildPlanGraph', () => {
 
   suite('related creates subPlans', () => {
     test('single related query creates subPlan', () => {
-      const ast = completedAST(builder.users.related('posts'));
+      const ast = getAST(builder.users.related('posts'));
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       // Main plan should have only 1 connection (users)
@@ -211,9 +211,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('multiple related queries create multiple subPlans', () => {
-      const ast = completedAST(
-        builder.users.related('posts').related('comments'),
-      );
+      const ast = getAST(builder.users.related('posts').related('comments'));
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       // Main plan should have only 1 connection
@@ -226,7 +224,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('nested related queries create nested subPlans', () => {
-      const ast = completedAST(
+      const ast = getAST(
         builder.users.related('posts', q => q.related('comments')),
       );
       const plans = buildPlanGraph(ast, simpleCostModel);
@@ -250,7 +248,7 @@ suite('buildPlanGraph', () => {
 
   suite('complex queries', () => {
     test('combination of AND, OR, and related', () => {
-      const ast = completedAST(
+      const ast = getAST(
         builder.users
           .where('active', true)
           .where(({or, exists}) => or(exists('posts'), exists('comments')))
@@ -275,7 +273,7 @@ suite('buildPlanGraph', () => {
 
   suite('graph structure and wiring', () => {
     test('creates terminus node', () => {
-      const ast = completedAST(builder.users);
+      const ast = getAST(builder.users);
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       // Terminus should be set (can verify by checking propagateConstraints works)
@@ -283,7 +281,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('connections are wired to outputs', () => {
-      const ast = completedAST(builder.users.whereExists('posts'));
+      const ast = getAST(builder.users.whereExists('posts'));
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       // All connections should have outputs set
@@ -295,7 +293,7 @@ suite('buildPlanGraph', () => {
 
   suite('limit assignment', () => {
     test('simple EXISTS child connection has limit=1', () => {
-      const ast = completedAST(builder.users.whereExists('posts'));
+      const ast = getAST(builder.users.whereExists('posts'));
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       expect(plans.plan.connections).toHaveLength(2);
@@ -347,7 +345,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('AND with multiple EXISTS - each child has limit=1', () => {
-      const ast = completedAST(
+      const ast = getAST(
         builder.users.whereExists('posts').whereExists('comments'),
       );
       const plans = buildPlanGraph(ast, simpleCostModel);
@@ -376,7 +374,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('OR with EXISTS branches - each child has limit=1', () => {
-      const ast = completedAST(
+      const ast = getAST(
         builder.users.where(({or, exists}) =>
           or(exists('posts'), exists('comments')),
         ),
@@ -407,7 +405,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('nested EXISTS - both levels have limit=1', () => {
-      const ast = completedAST(
+      const ast = getAST(
         builder.users.whereExists('posts', q => q.whereExists('comments')),
       );
       const plans = buildPlanGraph(ast, simpleCostModel);
@@ -441,7 +439,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('root connection gets ast.limit', () => {
-      const ast = completedAST(builder.users.limit(10));
+      const ast = getAST(builder.users.limit(10));
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       expect(plans.plan.connections).toHaveLength(1);
@@ -453,7 +451,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('root with limit and EXISTS - separate limits', () => {
-      const ast = completedAST(builder.users.limit(10).whereExists('posts'));
+      const ast = getAST(builder.users.limit(10).whereExists('posts'));
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       expect(plans.plan.connections).toHaveLength(2);
@@ -475,9 +473,7 @@ suite('buildPlanGraph', () => {
     });
 
     test('related subPlan root gets its own limit', () => {
-      const ast = completedAST(
-        builder.users.related('posts', q => q.limit(10)),
-      );
+      const ast = getAST(builder.users.related('posts', q => q.limit(10)));
       const plans = buildPlanGraph(ast, simpleCostModel);
 
       // Main plan should have only users connection

@@ -350,11 +350,7 @@ async function runAsSQL(
   q: Query<Schema, 'item'>,
   runPgQuery: (query: string, args: unknown[]) => Promise<unknown[]>,
 ) {
-  const c = compile(
-    serverSchema,
-    schema,
-    queryWithContext(q, undefined).completedAST,
-  );
+  const c = compile(serverSchema, schema, queryWithContext(q, undefined).ast);
   const sqlQuery = formatPgInternalConvert(c);
   return extractZqlResult(
     await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),

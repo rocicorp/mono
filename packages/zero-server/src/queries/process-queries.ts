@@ -49,7 +49,7 @@ export async function handleGetQueriesRequest<S extends Schema, Context>(
       return {
         id: req.id,
         name: req.name,
-        ast: mapAST(q.completedAST, nameMapper),
+        ast: mapAST(q.ast, nameMapper),
       };
     }),
   );

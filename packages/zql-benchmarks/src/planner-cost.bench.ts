@@ -40,7 +40,7 @@ function benchmarkPlanning<TTable extends keyof typeof schema.tables>(
   query: Query<typeof schema, TTable>,
   delegate: QueryDelegate<unknown>,
 ) {
-  const unplannedAST = delegate.withContext(query).completedAST;
+  const unplannedAST = delegate.withContext(query).ast;
   const mappedAST = mapAST(unplannedAST, clientToServerMapper);
 
   bench(name, () => {
