@@ -30,24 +30,13 @@ import {
   buildPipeline,
 } from '../../../zql/src/builder/builder.ts';
 import {Catch, type CaughtNode} from '../../../zql/src/ivm/catch.ts';
-import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
-import type {AnyViewFactory} from '../../../zql/src/ivm/view.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
+import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {
-  materializeImpl,
-  newQuery,
-  preloadImpl,
-  runImpl,
-} from '../../../zql/src/query/query-impl.ts';
+import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
-import {
-  type AnyQuery,
-  type MaterializeOptions,
-  type Query,
-  type Row,
-} from '../../../zql/src/query/query.ts';
+import type {Query, Row} from '../../../zql/src/query/query.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
@@ -476,6 +465,51 @@ function toDbType(type: ValueType) {
   }
 }
 let writeAuthorizer: WriteAuthorizerImpl;
+
+class ReadAuthorizerTestQueryDelegate extends QueryDelegateBase<undefined> {
+  readonly defaultQueryComplete = true;
+
+  readonly #sources = new Map<string, Source>();
+  readonly #replica: Database;
+  readonly #lc: LogContext;
+
+  constructor(replica: Database, lc: LogContext) {
+    super(undefined);
+    this.#replica = replica;
+    this.#lc = lc;
+  }
+
+  override getSource(name: string): Source {
+    let source = this.#sources.get(name);
+    if (source) {
+      return source;
+    }
+    const tableSchema = schema.tables[name as keyof Schema['tables']];
+    assert(tableSchema, `Table schema not found for ${name}`);
+
+    // create the SQLite table
+    this.#replica.exec(`
+      CREATE TABLE "${name}" (
+        ${Object.entries(tableSchema.columns)
+          .map(([name, c]) => `"${name}" ${toDbType(c.type)}`)
+          .join(', ')},
+        PRIMARY KEY (${tableSchema.primaryKey.map(k => `"${k}"`).join(', ')})
+      )`);
+
+    source = new TableSource(
+      this.#lc,
+      testLogConfig,
+      this.#replica,
+      name,
+      tableSchema.columns,
+      tableSchema.primaryKey,
+    );
+
+    this.#sources.set(name, source);
+    return source;
+  }
+}
+
 beforeEach(() => {
   replica = new Database(lc, ':memory:');
   replica.exec(`
@@ -486,80 +520,7 @@ beforeEach(() => {
     .prepare(`INSERT INTO "app.permissions" (permissions, hash) VALUES (?, ?)`)
     .run(permsJSON, h128(permsJSON).toString(16));
 
-  const sources = new Map<string, Source>();
-  queryDelegate = {
-    getSource: (name: string) => {
-      let source = sources.get(name);
-      if (source) {
-        return source;
-      }
-      const tableSchema = schema.tables[name as keyof Schema['tables']];
-      assert(tableSchema, `Table schema not found for ${name}`);
-
-      // create the SQLite table
-      replica.exec(`
-      CREATE TABLE "${name}" (
-        ${Object.entries(tableSchema.columns)
-          .map(([name, c]) => `"${name}" ${toDbType(c.type)}`)
-          .join(', ')},
-        PRIMARY KEY (${tableSchema.primaryKey.map(k => `"${k}"`).join(', ')})
-      )`);
-
-      source = new TableSource(
-        lc,
-        testLogConfig,
-        replica,
-        name,
-        tableSchema.columns,
-        tableSchema.primaryKey,
-      );
-
-      sources.set(name, source);
-      return source;
-    },
-
-    createStorage() {
-      return new MemoryStorage();
-    },
-    decorateInput: input => input,
-    addEdge() {},
-    decorateFilterInput: input => input,
-    decorateSourceInput: input => input,
-    addServerQuery() {
-      return () => {};
-    },
-    addCustomQuery() {
-      return () => {};
-    },
-    updateServerQuery() {},
-    updateCustomQuery() {},
-    onTransactionCommit() {
-      return () => {};
-    },
-    batchViewUpdates<T>(applyViewUpdates: () => T): T {
-      return applyViewUpdates();
-    },
-    assertValidRunOptions() {},
-    flushQueryChanges() {},
-    defaultQueryComplete: true,
-    addMetric() {},
-    materialize(
-      query: AnyQuery,
-      factory?: AnyViewFactory,
-      options?: MaterializeOptions,
-    ) {
-      return materializeImpl(query, this, factory, options);
-    },
-    withContext(q) {
-      return queryDelegate.withContext(q);
-    },
-    run(query, options) {
-      return runImpl(query, this, options);
-    },
-    preload(query, options) {
-      return preloadImpl(query, this, options);
-    },
-  };
+  queryDelegate = new ReadAuthorizerTestQueryDelegate(replica, lc);
 
   for (const table of Object.values(schema.tables)) {
     // force the sqlite tables to be created by getting all the sources
