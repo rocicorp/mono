@@ -26,6 +26,11 @@ import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts
 import type {DeleteClientsMessage} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
+import {
+  ProtocolError,
+  type TransformFailedBody,
+} from '../../../../zero-protocol/src/error.ts';
 import type {
   InspectUpBody,
   InspectUpMessage,
@@ -45,7 +50,10 @@ import {
   getOrCreateUpDownCounter,
 } from '../../observability/metrics.ts';
 import {InspectorDelegate} from '../../server/inspector-delegate.ts';
-import {getLogLevel} from '../../types/error-with-level.ts';
+import {
+  getLogLevel,
+  ProtocolErrorWithLevel,
+} from '../../types/error-with-level.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowKey} from '../../types/row-key.ts';
 import type {ShardID} from '../../types/shards.ts';
@@ -93,11 +101,6 @@ import {
   ttlClockFromNumber,
   type TTLClock,
 } from './ttl-clock.ts';
-import {
-  ProtocolError,
-  type TransformFailedBody,
-} from '../../../../zero-protocol/src/error.ts';
-import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 
 export type TokenData = {
   readonly raw: string;
@@ -321,9 +324,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#lc.debug?.('acquired lock in #runInLockWithCVR ', rid);
       const lc = this.#lc.withContext('lock', rid);
       if (!this.#stateChanges.active) {
+        // view-syncer has been shutdown. this can be a backlog of tasks
+        // queued on the lock, or it can be a race condition in which a
+        // client connects before the ViewSyncer has been deleted from the
+        // ServiceRunner.
         this.#lc.debug?.('state changes are inactive');
         clearTimeout(this.#expiredQueriesTimer);
-        return; // view-syncer has been shutdown
+        throw new ProtocolErrorWithLevel(
+          {
+            kind: ErrorKind.Rehome,
+            message: 'Reconnect required',
+          },
+          'warn',
+        );
       }
       // If all clients have disconnected, cancel all pending work.
       if (await this.#checkForShutdownConditionsInLock()) {
