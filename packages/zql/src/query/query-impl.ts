@@ -19,7 +19,7 @@ import {
   hashOfNameAndArgs,
 } from '../../../zero-protocol/src/query-hash.ts';
 import type {Schema, TableSchema} from '../../../zero-types/src/schema.ts';
-import {assertNoNotExists, buildPipeline} from '../builder/builder.ts';
+import {buildPipeline} from '../builder/builder.ts';
 import {NotImplementedError} from '../error.ts';
 import {ArrayView} from '../ivm/array-view.ts';
 import {defaultFormat} from '../ivm/default-format.ts';
@@ -221,7 +221,7 @@ export abstract class AbstractQuery<
       // if (cardinality === 'one') {
       //   q = q.one();
       // }
-      const sq = cb(q) as AbstractQuery<Schema, string, unknown, unknown>;
+      const subQuery = asAbstractQuery(cb(q));
       assert(
         isCompoundKey(sourceField),
         'The source of a relationship must specify at last 1 field',
@@ -249,7 +249,7 @@ export abstract class AbstractQuery<
               },
               subquery: addPrimaryKeysToAst(
                 this.#schema.tables[destSchema],
-                sq.#ast,
+                subQuery.#ast,
               ),
             },
           ],
@@ -258,7 +258,7 @@ export abstract class AbstractQuery<
           ...this.format,
           relationships: {
             ...this.format.relationships,
-            [relationship]: sq.format,
+            [relationship]: subQuery.format,
           },
         },
         this.customQueryID,
@@ -371,12 +371,6 @@ export abstract class AbstractQuery<
 
     const where = simplifyCondition(cond);
 
-    if (this.#system === 'client') {
-      // We need to do this after the DNF since the DNF conversion might change
-      // an EXISTS to a NOT EXISTS condition (and vice versa).
-      assertNoNotExists(where);
-    }
-
     return this.#newQuery(
       this.#tableName,
       {
@@ -470,7 +464,7 @@ export abstract class AbstractQuery<
       assert(isCompoundKey(sourceField), 'Invalid relationship');
       assert(isCompoundKey(destField), 'Invalid relationship');
 
-      const sq = cb(
+      const subQuery = asAbstractQuery(
         this.#newQuery(
           destTableName,
           {
@@ -480,8 +474,8 @@ export abstract class AbstractQuery<
           defaultFormat,
           this.customQueryID,
           undefined,
-        ) as AnyQuery,
-      ) as QueryImpl<Schema, string, unknown, unknown>;
+        ),
+      );
       return {
         type: 'correlatedSubquery',
         related: {
@@ -492,7 +486,7 @@ export abstract class AbstractQuery<
           },
           subquery: addPrimaryKeysToAst(
             this.#schema.tables[destTableName],
-            sq.#ast,
+            subQuery.#ast,
           ),
         },
         op: 'EXISTS',
@@ -707,7 +701,8 @@ export function materializeImpl<
   return view as T;
 }
 
-export function runImpl<
+// oxlint-disable-next-line require-await
+export async function runImpl<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
@@ -744,7 +739,7 @@ export function runImpl<
 
   const ret = v.data;
   v.destroy();
-  return Promise.resolve(ret);
+  return ret;
 }
 
 export function preloadImpl<

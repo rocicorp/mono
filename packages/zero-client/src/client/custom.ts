@@ -122,12 +122,7 @@ export class TransactionImpl<TSchema extends Schema, TContext>
       repTx,
       txData.ivmSources as IVMSourceBranch,
     );
-    this.query = makeSchemaQuery(
-      lc,
-      schema,
-      txData.ivmSources as IVMSourceBranch,
-      txData.context,
-    );
+    this.query = makeSchemaQuery(schema);
 
     this.#zeroContext = newZeroContext(
       lc,
@@ -204,12 +199,7 @@ function assertValidRunOptions(options: RunOptions | undefined): void {
   );
 }
 
-function makeSchemaQuery<TSchema extends Schema, TContext>(
-  _lc: ZeroLogContext,
-  schema: TSchema,
-  _ivmBranch: IVMSourceBranch,
-  _context: TContext,
-) {
+function makeSchemaQuery<TSchema extends Schema, TContext>(schema: TSchema) {
   return new Proxy(
     {},
     {

@@ -161,7 +161,11 @@ export type {
 export {RootNamedQuery} from '../../zql/src/query/root-named-query.ts';
 export {type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
-export {bindingsForZero, type BindingsForZero} from './client/bindings.ts';
+export {
+  bindingsForZero,
+  registerZeroDelegate,
+  type BindingsForZero,
+} from './client/bindings.ts';
 export {ClientErrorKind} from './client/client-error-kind.ts';
 export type {ConnectionState} from './client/connection-manager.ts';
 export {ConnectionStatus} from './client/connection-status.ts';

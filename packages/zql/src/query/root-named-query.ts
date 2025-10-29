@@ -22,9 +22,6 @@ import {
 /**
  * Root named query that has a name, input validation, and a function to execute.
  * This is the base query that doesn't chain from another query.
- *
- * This class provides chain methods and withContext() but doesn't implement
- * the Query interface. It's an internal implementation detail.
  */
 export class RootNamedQuery<
   TName extends string,

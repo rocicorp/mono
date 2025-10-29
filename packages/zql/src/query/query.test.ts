@@ -872,35 +872,6 @@ function takeSchema(x: TableSchema) {
   return x;
 }
 
-// This test is no longer applicable since materialize() has moved to QueryDelegate
-// test('custom materialize factory', () => {
-//   const query = mockQuery as unknown as Query<Schema, 'test'>;
-//   const x = query.materialize();
-//   expectTypeOf(x.data).toExtend<
-//     ReadonlyArray<{s: string; b: boolean; n: number}>
-//   >();
-
-//   // This is a pretend factory that unlike ArrayView, which has a `data` property that is an array,
-//   // has a `dataAsSet` property that is a Set.
-//   function factory<
-//     TSchema extends ZeroSchema,
-//     TTable extends string,
-//     TReturn,
-//     TContext,
-//   >(
-//     _query: QueryInternals<TSchema, TTable, TReturn, TContext>,
-//   ): {
-//     dataAsSet: Set<TReturn>;
-//   } {
-//     return {dataAsSet: new Set()};
-//   }
-
-//   const y = query.materialize(factory);
-//   expectTypeOf(y.dataAsSet).toExtend<
-//     Set<{s: string; b: boolean; n: number}>
-//   >();
-// });
-
 describe('Where expression factory and builder', () => {
   test('does not change the type', () => {
     const query = mockQuery as unknown as Query<Schema, 'test'>;

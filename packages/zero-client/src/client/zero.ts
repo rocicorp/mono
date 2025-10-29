@@ -622,7 +622,6 @@ export class Zero<
 
     // Register the delegate for bindings to access via WeakMap.
     // This avoids exposing the delegate as a public API on Zero.
-    // zeroDelegates.set(this, this.#zeroContext);
     registerZeroDelegate(this, this.#zeroContext);
 
     const replicacheImplOptions: ReplicacheImplOptions = {
@@ -782,8 +781,8 @@ export class Zero<
 
     if (TESTING) {
       asTestZero(this)[exposedToTestingSymbol] = {
-        puller: (req, rid) => this.#puller(req, rid),
-        pusher: (req, rid) => this.#pusher(req, rid),
+        puller: this.#puller,
+        pusher: this.#pusher,
         setReload: (r: () => void) => {
           this.#reload = r;
         },

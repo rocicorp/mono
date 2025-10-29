@@ -13,7 +13,7 @@ import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 export interface ZeroOptions<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
-  Context = undefined,
+  Context = unknown,
 > {
   /**
    * URL to the zero-cache. This can be a simple hostname, e.g.

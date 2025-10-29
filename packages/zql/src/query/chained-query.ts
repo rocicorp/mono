@@ -37,9 +37,6 @@ export type AnyChainQuery = ChainQuery<
 /**
  * Chained query that applies a transformation function to a parent query.
  * This represents a query operation that builds on top of another query.
- *
- * This class provides chain methods and withContext() but doesn't implement
- * the Query interface. It's an internal implementation detail.
  */
 export class ChainedQuery<
   TSchema extends Schema,
