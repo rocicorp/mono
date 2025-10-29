@@ -241,7 +241,7 @@ describe('client schemas', () => {
         fullTables,
       ),
     ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: {"kind":"SchemaVersionNotSupported","message":"The \\"yyy.zzz\\" table does not exist or is not one of the replicated tables: \\"bar\\",\\"foo\\". Note that zero does not sync tables from non-public schemas by default. Make sure you have defined a custom ZERO_APP_PUBLICATION to sync tables from non-public schemas."}]`,
+      `[ProtocolError: The "yyy.zzz" table does not exist or is not one of the replicated tables: "bar","foo". Note that zero does not sync tables from non-public schemas by default. Make sure you have defined a custom ZERO_APP_PUBLICATION to sync tables from non-public schemas.]`,
     );
   });
 
@@ -279,7 +279,10 @@ describe('client schemas', () => {
         fullTables,
       ),
     ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: {"kind":"SchemaVersionNotSupported","message":"The \\"yyy\\" table does not exist or is not one of the replicated tables: \\"bar\\",\\"foo\\".\\nThe \\"bar\\".\\"zzz\\" column does not exist or is not one of the replicated columns: \\"d\\",\\"e\\",\\"f\\",\\"id\\"."}]`,
+      `
+      [ProtocolError: The "yyy" table does not exist or is not one of the replicated tables: "bar","foo".
+      The "bar"."zzz" column does not exist or is not one of the replicated columns: "d","e","f","id".]
+    `,
     );
   });
 
@@ -304,7 +307,7 @@ describe('client schemas', () => {
         fullTables,
       ),
     ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: {"kind":"SchemaVersionNotSupported","message":"The \\"foo\\".\\"notSyncedToClient\\" column cannot be synced because it is of an unsupported data type \\"custom_pg_type\\""}]`,
+      `[ProtocolError: The "foo"."notSyncedToClient" column cannot be synced because it is of an unsupported data type "custom_pg_type"]`,
     );
   });
 
@@ -331,7 +334,10 @@ describe('client schemas', () => {
         fullTables,
       ),
     ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: {"kind":"SchemaVersionNotSupported","message":"The \\"foo\\".\\"a\\" column's upstream type \\"number\\" does not match the client type \\"string\\"\\nThe \\"foo\\".\\"b\\" column's upstream type \\"boolean\\" does not match the client type \\"number\\""}]`,
+      `
+          [ProtocolError: The "foo"."a" column's upstream type "number" does not match the client type "string"
+          The "foo"."b" column's upstream type "boolean" does not match the client type "number"]
+        `,
     );
   });
 
@@ -360,7 +366,7 @@ describe('client schemas', () => {
         fullTables,
       ),
     ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: {"kind":"SchemaVersionNotSupported","message":"The \\"nopk\\" table is missing a primary key or non-null unique index and thus cannot be synced to the client"}]`,
+      `[ProtocolError: The "nopk" table is missing a primary key or non-null unique index and thus cannot be synced to the client]`,
     );
   });
 
@@ -447,7 +453,7 @@ describe('client schemas', () => {
         fullTables,
       ),
     ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: {"kind":"SchemaVersionNotSupported","message":"The \\"foo\\" table's primaryKey <a> is not associated with a non-null unique index."}]`,
+      `[ProtocolError: The "foo" table's primaryKey <a> is not associated with a non-null unique index.]`,
     );
 
     expect(() =>
@@ -470,7 +476,7 @@ describe('client schemas', () => {
         fullTables,
       ),
     ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: {"kind":"SchemaVersionNotSupported","message":"The \\"foo\\" table's primaryKey <id,a,b> is not associated with a non-null unique index."}]`,
+      `[ProtocolError: The "foo" table's primaryKey <id,a,b> is not associated with a non-null unique index.]`,
     );
   });
 
@@ -494,7 +500,7 @@ describe('client schemas', () => {
         new Map(),
       ),
     ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: {"kind":"Internal","message":"No tables have been synced from upstream. Please check that the ZERO_UPSTREAM_DB has been properly set."}]`,
+      `[ProtocolError: No tables have been synced from upstream. Please check that the ZERO_UPSTREAM_DB has been properly set.]`,
     );
   });
 });

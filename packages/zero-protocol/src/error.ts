@@ -150,11 +150,7 @@ export type ErrorMessage = ['error', ErrorBody];
  * Represents an error used across zero-client, zero-cache, and zero-server.
  */
 export class ProtocolError<
-  const T extends {
-    kind: string;
-    message: string;
-    origin?: ErrorOrigin | undefined;
-  } = ErrorBody,
+  const T extends ErrorBody = ErrorBody,
 > extends Error {
   readonly errorBody: T;
 

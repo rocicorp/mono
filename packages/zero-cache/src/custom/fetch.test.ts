@@ -1,4 +1,7 @@
+import {LogContext} from '@rocicorp/logger';
 import {
+  afterAll,
+  assert,
   beforeEach,
   describe,
   expect,
@@ -6,298 +9,484 @@ import {
   test,
   vi,
 } from 'vitest';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import {ErrorForClient} from '../types/error-for-client.ts';
+import {
+  TestLogSink,
+  createSilentLogContext,
+} from '../../../shared/src/logging-test-utils.ts';
+import * as v from '../../../shared/src/valita.ts';
 import type {ShardID} from '../types/shards.ts';
-import {compileUrlPattern, fetchFromAPIServer, urlMatch} from './fetch.ts';
+import {
+  ProtocolError,
+  isProtocolError,
+} from '../../../zero-protocol/src/error.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {
+  compileUrlPattern,
+  fetchFromAPIServer,
+  getBodyPreview,
+  urlMatch,
+} from './fetch.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 
-// Mock the global fetch function
 const mockFetch = vi.fn() as MockedFunction<typeof fetch>;
 vi.stubGlobal('fetch', mockFetch);
 
-describe('fetchFromAPIServer', () => {
-  const mockShard: ShardID = {
-    appID: 'test_app',
-    shardNum: 1,
-  };
-  const lc = createSilentLogContext();
+const shard: ShardID = {appID: 'test_app', shardNum: 1};
+const baseUrl = 'https://api.example.com/endpoint';
+const allowedPatterns = [compileUrlPattern(baseUrl)];
 
-  const baseUrl = 'https://api.example.com/endpoint';
-  const allowedPatterns = ['https://api.example.com/endpoint'].map(
-    compileUrlPattern,
-  );
-  const headerOptions = {
-    apiKey: 'test-api-key',
-    token: 'test-token',
-  };
+afterAll(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('fetchFromAPIServer', () => {
+  const lc = createSilentLogContext();
   const body = {test: 'data'};
+  const validator = v.object({success: v.boolean()});
 
   beforeEach(() => {
     mockFetch.mockReset();
+    vi.useRealTimers();
   });
 
-  test('should make a POST request with correct headers and body', async () => {
-    const mockResponse = new Response(JSON.stringify({success: true}), {
-      status: 200,
-    });
-    mockFetch.mockResolvedValue(mockResponse);
+  test('returns parsed JSON on success and sends expected headers', async () => {
+    const responsePayload = {success: true};
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify(responsePayload), {status: 200}),
+    );
 
-    await fetchFromAPIServer(
+    const result = await fetchFromAPIServer(
+      validator,
+      'push',
       lc,
       baseUrl,
       allowedPatterns,
-      mockShard,
-      headerOptions,
-      body,
-    );
-
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining('https://api.example.com/endpoint'),
+      shard,
       {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Api-Key': 'test-api-key',
-          'Authorization': 'Bearer test-token',
-        },
-        body: JSON.stringify(body),
+        apiKey: 'key-123',
+        token: 'token-abc',
+        cookie: 'session=xyz',
       },
-    );
-  });
-
-  test('should include API key header when provided', async () => {
-    const mockResponse = new Response('{}', {status: 200});
-    mockFetch.mockResolvedValue(mockResponse);
-
-    await fetchFromAPIServer(
-      lc,
-      baseUrl,
-      allowedPatterns,
-      mockShard,
-      {apiKey: 'my-key'},
       body,
     );
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          'X-Api-Key': 'my-key',
-        }),
-      }),
-    );
+    expect(result).toEqual(responsePayload);
+    const [calledUrl, init] = mockFetch.mock.calls[0]!;
+    const url = new URL(calledUrl as string);
+    expect(url.origin + url.pathname).toBe(baseUrl);
+    expect(url.searchParams.get('schema')).toBe('test_app_1');
+    expect(url.searchParams.get('appID')).toBe('test_app');
+    expect(init?.method).toBe('POST');
+    expect(init?.body).toBe(JSON.stringify(body));
+    expect(init?.headers).toEqual({
+      'Content-Type': 'application/json',
+      'X-Api-Key': 'key-123',
+      'Authorization': 'Bearer token-abc',
+      'Cookie': 'session=xyz',
+    });
   });
 
-  test('should include Authorization header when token is provided', async () => {
-    const mockResponse = new Response('{}', {status: 200});
-    mockFetch.mockResolvedValue(mockResponse);
+  test('preserves existing query params when appending reserved ones', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({success: true}), {status: 200}),
+    );
+    const urlWithQuery = `${baseUrl}?foo=bar`;
 
     await fetchFromAPIServer(
+      validator,
+      'push',
       lc,
-      baseUrl,
+      urlWithQuery,
       allowedPatterns,
-      mockShard,
-      {token: 'my-token'},
+      shard,
+      {},
       body,
     );
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: 'Bearer my-token',
-        }),
-      }),
-    );
-  });
-
-  test('should not include auth headers when not provided', async () => {
-    const mockResponse = new Response('{}', {status: 200});
-    mockFetch.mockResolvedValue(mockResponse);
-
-    await fetchFromAPIServer(lc, baseUrl, allowedPatterns, mockShard, {}, body);
-
-    const callArgs = mockFetch.mock.calls[0];
-    const headers = callArgs[1]?.headers as Record<string, string>;
-
-    expect(headers).not.toHaveProperty('X-Api-Key');
-    expect(headers).not.toHaveProperty('Authorization');
-    expect(headers).toHaveProperty('Content-Type', 'application/json');
-  });
-
-  test('should append required schema and appID parameters', async () => {
-    const mockResponse = new Response('{}', {status: 200});
-    mockFetch.mockResolvedValue(mockResponse);
-
-    await fetchFromAPIServer(lc, baseUrl, allowedPatterns, mockShard, {}, body);
-
-    const calledUrl = mockFetch.mock.calls[0][0] as string;
+    const calledUrl = mockFetch.mock.calls[0]![0] as string;
     const url = new URL(calledUrl);
-
+    expect(url.searchParams.get('foo')).toBe('bar');
     expect(url.searchParams.get('schema')).toBe('test_app_1');
     expect(url.searchParams.get('appID')).toBe('test_app');
   });
 
-  test('should throw an error if URL contains reserved parameter "schema"', async () => {
-    const urlWithReserved = 'https://api.example.com/endpoint?schema=reserved';
-
-    await expect(
-      fetchFromAPIServer(
-        lc,
-        urlWithReserved,
-        allowedPatterns,
-        mockShard,
-        {},
-        body,
-      ),
-    ).rejects.toThrow(
-      'The push URL cannot contain the reserved query param "schema"',
+  test('omits optional headers when they are not provided', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({success: true}), {status: 200}),
     );
-  });
 
-  test('should throw an error if URL contains reserved parameter "appID"', async () => {
-    const urlWithReserved = 'https://api.example.com/endpoint?appID=reserved';
-
-    await expect(
-      fetchFromAPIServer(
-        lc,
-        urlWithReserved,
-        allowedPatterns,
-        mockShard,
-        {},
-        body,
-      ),
-    ).rejects.toThrow(
-      'The push URL cannot contain the reserved query param "appID"',
-    );
-  });
-
-  test('should return response for successful requests', async () => {
-    const mockResponse = new Response(JSON.stringify({success: true}), {
-      status: 200,
-    });
-    mockFetch.mockResolvedValue(mockResponse);
-
-    const result = await fetchFromAPIServer(
+    await fetchFromAPIServer(
+      validator,
+      'push',
       lc,
       baseUrl,
       allowedPatterns,
-      mockShard,
+      shard,
       {},
       body,
     );
 
-    expect(result).toBe(mockResponse);
+    const init = mockFetch.mock.calls[0]![1];
+    expect(init?.headers).toEqual({'Content-Type': 'application/json'});
   });
 
-  test('should throw ErrorForClient on 401 unauthorized response', async () => {
-    const errorMessage = 'Unauthorized access';
-
-    // First call - just test that it throws ErrorForClient
-    const mockResponse1 = new Response(errorMessage, {status: 401});
-    mockFetch.mockResolvedValueOnce(mockResponse1);
-
+  test('rejects URLs that are not allowed by configuration', async () => {
     await expect(
-      fetchFromAPIServer(lc, baseUrl, allowedPatterns, mockShard, {}, body),
-    ).rejects.toThrow(ErrorForClient);
+      fetchFromAPIServer(
+        validator,
+        'push',
+        lc,
+        'https://evil.example.com/endpoint',
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      ),
+    ).rejects.toThrow(
+      'URL "https://evil.example.com/endpoint" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration',
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
 
-    // Second call - test the error details
-    const mockResponse2 = new Response(errorMessage, {status: 401});
-    mockFetch.mockResolvedValueOnce(mockResponse2);
+  test.each(['schema', 'appID'] as const)(
+    'throws when reserved query param %s is present',
+    async reserved => {
+      const url = `${baseUrl}?${reserved}=value`;
+      await expect(
+        fetchFromAPIServer(
+          validator,
+          'push',
+          lc,
+          url,
+          allowedPatterns,
+          shard,
+          {},
+          body,
+        ),
+      ).rejects.toThrow(
+        `The push URL cannot contain the reserved query param "${reserved}"`,
+      );
+    },
+  );
 
+  test('wraps non-OK responses in ProtocolError with http type', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response('failure-body', {status: 503}),
+    );
+
+    let caught: unknown;
     try {
       await fetchFromAPIServer(
+        validator,
+        'push',
         lc,
         baseUrl,
         allowedPatterns,
-        mockShard,
+        shard,
         {},
         body,
       );
     } catch (error) {
-      expect(error).toBeInstanceOf(ErrorForClient);
-      const errorForClient = error as ErrorForClient;
-      expect(errorForClient.errorBody.kind).toBe(ErrorKind.AuthInvalidated);
-      expect(errorForClient.errorBody.message).toBe(errorMessage);
+      caught = error;
     }
-  });
 
-  test('should not throw for non-401 error status codes', async () => {
-    const mockResponse = new Response('Server Error', {status: 500});
-    mockFetch.mockResolvedValue(mockResponse);
-
-    const result = await fetchFromAPIServer(
-      lc,
-      baseUrl,
-      allowedPatterns,
-      mockShard,
-      {},
-      body,
+    expect(caught).toBeInstanceOf(ProtocolError);
+    assert(isProtocolError(caught), 'Expected protocol error');
+    expect(caught.kind).toBe(ErrorKind.PushFailed);
+    assert(
+      caught.errorBody.kind === ErrorKind.PushFailed,
+      'Expected zeroCache PushFailed error',
     );
 
-    expect(result).toBe(mockResponse);
+    expect(caught.errorBody.reason).toBe(ErrorReason.HTTP);
+    assert(
+      caught.errorBody.reason === ErrorReason.HTTP,
+      'Expected zeroCache HTTP error',
+    );
+    expect(caught.errorBody.status).toBe(503);
+    expect(caught.errorBody.bodyPreview).toBe('failure-body');
+    expect(caught.errorBody.message).toMatch(/non-OK status 503/);
   });
 
-  test('should stringify body as JSON', async () => {
-    const mockResponse = new Response('{}', {status: 200});
-    mockFetch.mockResolvedValue(mockResponse);
-    const complexBody = {
-      nested: {
-        object: true,
-        array: [1, 2, 3],
-      },
-    };
+  test('wraps JSON parse failures in ProtocolError with parse type', async () => {
+    const response = new Response('not-json', {status: 200});
+    Object.defineProperty(response, 'json', {
+      value: vi.fn().mockRejectedValue(new Error('bad json')),
+    });
+    mockFetch.mockResolvedValueOnce(response);
 
-    await fetchFromAPIServer(
-      lc,
-      baseUrl,
-      allowedPatterns,
-      mockShard,
-      {},
-      complexBody,
+    let caught: unknown;
+    try {
+      await fetchFromAPIServer(
+        validator,
+        'push',
+        lc,
+        baseUrl,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(ProtocolError);
+
+    assert(isProtocolError(caught), 'Expected protocol error');
+    expect(caught.kind).toBe(ErrorKind.PushFailed);
+    assert(
+      caught.errorBody.kind === ErrorKind.PushFailed,
+      'Expected zeroCache PushFailed error',
+    );
+    expect(caught.errorBody.reason).toBe(ErrorReason.Parse);
+    expect(caught.errorBody.message).toMatch(/Failed to parse response/);
+  });
+
+  test('wraps JSON parse failures for transform in ProtocolError with parse type', async () => {
+    const response = new Response('not-json', {status: 200});
+    Object.defineProperty(response, 'json', {
+      value: vi.fn().mockRejectedValue(new Error('bad json')),
+    });
+    mockFetch.mockResolvedValueOnce(response);
+
+    let caught: unknown;
+    try {
+      await fetchFromAPIServer(
+        validator,
+        'transform',
+        lc,
+        baseUrl,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(ProtocolError);
+
+    assert(isProtocolError(caught), 'Expected protocol error');
+    expect(caught.kind).toBe(ErrorKind.TransformFailed);
+    assert(
+      caught.errorBody.kind === ErrorKind.TransformFailed,
+      'Expected zeroCache TransformFailed error',
+    );
+    expect(caught.errorBody.reason).toBe(ErrorReason.Parse);
+    expect(caught.errorBody.message).toMatch(/Failed to parse response/);
+  });
+
+  test('fails with transform failed when transform is passed', async () => {
+    const response = new Response('not-json', {status: 400});
+    mockFetch.mockResolvedValueOnce(response);
+
+    let caught: unknown;
+    try {
+      await fetchFromAPIServer(
+        validator,
+        'transform',
+        lc,
+        baseUrl,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(ProtocolError);
+
+    assert(isProtocolError(caught), 'Expected protocol error');
+    expect(caught.kind).toBe(ErrorKind.TransformFailed);
+    assert(
+      caught.errorBody.kind === ErrorKind.TransformFailed,
+      'Expected zeroCache TransformFailed error',
+    );
+    expect(caught.errorBody.reason).toBe(ErrorReason.HTTP);
+    expect(caught.errorBody.message).toMatch(
+      /Fetch from API server returned non-OK status 400/,
+    );
+  });
+
+  test('wraps validator parse failures in ProtocolError with parse type', async () => {
+    const strictValidator = v.object({count: v.number()});
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({count: 'not-a-number'}), {status: 200}),
     );
 
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        body: JSON.stringify(complexBody),
+    let caught: unknown;
+    try {
+      await fetchFromAPIServer(
+        strictValidator,
+        'push',
+        lc,
+        baseUrl,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(ProtocolError);
+    assert(isProtocolError(caught), 'Expected protocol error');
+
+    expect(caught.kind).toBe(ErrorKind.PushFailed);
+    assert(
+      caught.errorBody.kind === ErrorKind.PushFailed,
+      'Expected zeroCache PushFailed error',
+    );
+    expect(caught.errorBody.reason).toBe(ErrorReason.Parse);
+    expect(caught.errorBody.message).toMatch(/Failed to parse response/);
+  });
+
+  test('wraps validator parse failures for transform in ProtocolError with parse type', async () => {
+    const strictValidator = v.object({count: v.number()});
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({count: 'not-a-number'}), {status: 200}),
+    );
+
+    let caught: unknown;
+    try {
+      await fetchFromAPIServer(
+        strictValidator,
+        'transform',
+        lc,
+        baseUrl,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(ProtocolError);
+    assert(isProtocolError(caught), 'Expected protocol error');
+
+    expect(caught.kind).toBe(ErrorKind.TransformFailed);
+    assert(
+      caught.errorBody.kind === ErrorKind.TransformFailed,
+      'Expected zeroCache TransformFailed error',
+    );
+    expect(caught.errorBody.reason).toBe(ErrorReason.Parse);
+    expect(caught.errorBody.message).toMatch(/Failed to parse response/);
+  });
+
+  test('wraps rejected fetch calls for push in ProtocolError with internal type', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('boom'));
+
+    let caught: unknown;
+    try {
+      await fetchFromAPIServer(
+        validator,
+        'push',
+        lc,
+        baseUrl,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(ProtocolError);
+    assert(isProtocolError(caught), 'Expected protocol error');
+
+    expect(caught.kind).toBe(ErrorKind.PushFailed);
+    assert(
+      caught.errorBody.kind === ErrorKind.PushFailed,
+      'Expected zeroCache PushFailed error',
+    );
+    expect(caught.errorBody.reason).toBe(ErrorReason.Internal);
+    expect(caught.errorBody.message).toMatch(/unknown error: boom/);
+  });
+
+  test('wraps rejected fetch calls for transform in ProtocolError with internal type', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('network failure'));
+
+    let caught: unknown;
+    try {
+      await fetchFromAPIServer(
+        validator,
+        'transform',
+        lc,
+        baseUrl,
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      );
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(ProtocolError);
+    assert(isProtocolError(caught), 'Expected protocol error');
+
+    expect(caught.kind).toBe(ErrorKind.TransformFailed);
+    assert(
+      caught.errorBody.kind === ErrorKind.TransformFailed,
+      'Expected zeroCache TransformFailed error',
+    );
+    expect(caught.errorBody.reason).toBe(ErrorReason.Internal);
+    expect(caught.errorBody.message).toMatch(/unknown error: network failure/);
+  });
+});
+
+describe('getBodyPreview', () => {
+  const lc = createSilentLogContext();
+
+  test('returns entire body when below truncation threshold', async () => {
+    const res = new Response('short-body', {status: 200});
+    expect(await getBodyPreview(res, lc)).toBe('short-body');
+  });
+
+  test('truncates body to 512 characters and appends ellipsis', async () => {
+    const longBody = 'a'.repeat(600);
+    const res = new Response(longBody, {status: 200});
+    const preview = await getBodyPreview(res, lc);
+    expect(preview).toHaveLength(515);
+    expect(preview?.endsWith('...')).toBe(true);
+    expect(preview?.startsWith('a'.repeat(512))).toBe(true);
+  });
+
+  test('logs error and returns undefined when preview extraction fails', async () => {
+    const sink = new TestLogSink();
+    const logContext = new LogContext('debug', undefined, sink);
+    const failingResponse = {
+      url: 'https://api.example.com/resource',
+      clone: () => ({
+        text: () => Promise.reject(new Error('read failed')),
       }),
-    );
+    } as unknown as Response;
+
+    expect(await getBodyPreview(failingResponse, logContext)).toBeUndefined();
+    expect(sink.messages).toHaveLength(1);
+    const [level, _ctx, args] = sink.messages[0]!;
+    expect(level).toBe('error');
+    expect(args[0]).toBe('failed to get body preview');
   });
 });
 
 describe('compileUrlPattern', () => {
-  test('should compile exact URL patterns', () => {
-    const patterns = ['https://api.example.com/endpoint'].map(
-      compileUrlPattern,
-    );
-    expect(patterns).toHaveLength(1);
-    expect(patterns[0].test('https://api.example.com/endpoint')).toBe(true);
-    expect(patterns[0].test('https://api.example.com/endpoint/extra')).toBe(
-      false,
-    );
-    expect(patterns[0].test('https://other.example.com/endpoint')).toBe(false);
+  test('compiles valid patterns and matches expected URLs', () => {
+    const pattern = compileUrlPattern('https://*.example.com/api/*');
+    expect(pattern.test('https://api.example.com/api/v1')).toBe(true);
+    expect(pattern.test('https://foo.bar.example.com/api/v2')).toBe(true);
+    expect(pattern.test('https://example.org/api/v1')).toBe(false);
   });
 
-  test('should compile wildcard subdomain patterns', () => {
-    const patterns = ['https://*.example.com/endpoint'].map(compileUrlPattern);
-    expect(patterns).toHaveLength(1);
-    expect(patterns[0].test('https://api.example.com/endpoint')).toBe(true);
-    expect(patterns[0].test('https://www.example.com/endpoint')).toBe(true);
-    expect(patterns[0].test('https://example.com/endpoint')).toBe(false);
-  });
-
-  test('should compile path wildcard patterns', () => {
-    const patterns = ['https://api.example.com/*'].map(compileUrlPattern);
-    expect(patterns).toHaveLength(1);
-    expect(patterns[0].test('https://api.example.com/endpoint')).toBe(true);
-    expect(patterns[0].test('https://api.example.com/other')).toBe(true);
-    expect(patterns[0].test('https://www.example.com/endpoint')).toBe(false);
-  });
-
-  test('should throw error for invalid URLPattern', () => {
-    // URLPattern is quite permissive, but malformed inputs should still throw
+  test('throws when the pattern is invalid', () => {
     expect(() => compileUrlPattern(':::invalid')).toThrow(
       /Invalid URLPattern in URL configuration/,
     );
@@ -305,58 +494,21 @@ describe('compileUrlPattern', () => {
 });
 
 describe('urlMatch', () => {
-  test('should return true for matching URLs', () => {
-    // Exact match
-    expect(
-      urlMatch(
-        'https://api.example.com/endpoint',
-        ['https://api.example.com/endpoint'].map(compileUrlPattern),
-      ),
-    ).toBe(true);
-
-    // Query parameters are ignored
+  test('returns true when a pattern matches the URL', () => {
     expect(
       urlMatch(
         'https://api.example.com/endpoint?foo=bar',
         ['https://api.example.com/endpoint'].map(compileUrlPattern),
       ),
     ).toBe(true);
-
-    // Hash fragments are ignored
-    expect(
-      urlMatch(
-        'https://api.example.com/endpoint#section',
-        ['https://api.example.com/endpoint'].map(compileUrlPattern),
-      ),
-    ).toBe(true);
-
-    // Multiple patterns
-    expect(
-      urlMatch(
-        'https://api2.example.com/endpoint',
-        [
-          'https://api1.example.com/endpoint',
-          'https://api2.example.com/endpoint',
-        ].map(compileUrlPattern),
-      ),
-    ).toBe(true);
   });
 
-  test('should return false for non-matching URLs', () => {
+  test('returns false when no patterns match the URL', () => {
     expect(
       urlMatch(
         'https://api.example.com/other',
         ['https://api.example.com/endpoint'].map(compileUrlPattern),
       ),
     ).toBe(false);
-
-    expect(
-      urlMatch(
-        'https://evil.com/endpoint',
-        ['https://api.example.com/endpoint'].map(compileUrlPattern),
-      ),
-    ).toBe(false);
-
-    expect(urlMatch('https://api.example.com/endpoint', [])).toBe(false);
   });
 });

@@ -3,6 +3,7 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {mapValues} from '../../../shared/src/objects.ts';
 import {TDigest} from '../../../shared/src/tdigest.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import type {ServerMetrics as ServerMetricsJSON} from '../../../zero-protocol/src/inspect-down.ts';
 import {hashOfNameAndArgs} from '../../../zero-protocol/src/query-hash.ts';
 import {
@@ -155,6 +156,10 @@ export class InspectorDelegate implements MetricsDelegate {
       userQueryURL,
     );
 
+    if ('kind' in results) {
+      throw new ProtocolError(results);
+    }
+
     const result = results[0];
     if (!result) {
       throw new Error('No transformation result returned');
@@ -162,7 +167,7 @@ export class InspectorDelegate implements MetricsDelegate {
 
     if ('error' in result) {
       throw new Error(
-        `Error transforming custom query ${name}: ${result.error} ${JSON.stringify(result.details)}`,
+        `Application error transforming custom query ${name}: ${result.error} ${JSON.stringify(result.details)}`,
       );
     }
 

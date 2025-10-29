@@ -26,6 +26,11 @@ import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts
 import type {DeleteClientsMessage} from '../../../../zero-protocol/src/delete-clients.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
+import {
+  ProtocolError,
+  type TransformFailedBody,
+} from '../../../../zero-protocol/src/error.ts';
 import type {
   InspectUpBody,
   InspectUpMessage,
@@ -45,7 +50,10 @@ import {
   getOrCreateUpDownCounter,
 } from '../../observability/metrics.ts';
 import {InspectorDelegate} from '../../server/inspector-delegate.ts';
-import {ErrorForClient, getLogLevel} from '../../types/error-for-client.ts';
+import {
+  getLogLevel,
+  ProtocolErrorWithLevel,
+} from '../../types/error-with-level.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowKey} from '../../types/row-key.ts';
 import type {ShardID} from '../../types/shards.ts';
@@ -316,9 +324,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#lc.debug?.('acquired lock in #runInLockWithCVR ', rid);
       const lc = this.#lc.withContext('lock', rid);
       if (!this.#stateChanges.active) {
+        // view-syncer has been shutdown. this can be a backlog of tasks
+        // queued on the lock, or it can be a race condition in which a
+        // client connects before the ViewSyncer has been deleted from the
+        // ServiceRunner.
         this.#lc.debug?.('state changes are inactive');
         clearTimeout(this.#expiredQueriesTimer);
-        return; // view-syncer has been shutdown
+        throw new ProtocolErrorWithLevel(
+          {
+            kind: ErrorKind.Rehome,
+            message: 'Reconnect required',
+          },
+          'warn',
+        );
       }
       // If all clients have disconnected, cancel all pending work.
       if (await this.#checkForShutdownConditionsInLock()) {
@@ -373,7 +391,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               cvr.replicaVersion
             }, DB=${this.#pipelines.replicaVersion}`;
             lc.info?.(`resetting CVR: ${message}`);
-            throw new ErrorForClient({kind: ErrorKind.ClientNotFound, message});
+            throw new ProtocolError({
+              kind: ErrorKind.ClientNotFound,
+              message,
+              origin: ErrorOrigin.ZeroCache,
+            });
           }
 
           if (this.#pipelinesSynced) {
@@ -1107,48 +1129,79 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #processTransformedCustomQueries(
     lc: LogContext,
-    transformedCustomQueries: (TransformedAndHashed | ErroredQuery)[],
+    transformedCustomQueries:
+      | (TransformedAndHashed | ErroredQuery)[]
+      | TransformFailedBody,
     cb: (q: TransformedAndHashed) => void,
     customQueryMap: Map<string, CustomQueryRecord>,
-  ) {
-    const errors: ErroredQuery[] = [];
+  ): string[] {
+    if ('kind' in transformedCustomQueries) {
+      this.#sendQueryTransformErrorToClients(
+        customQueryMap,
+        transformedCustomQueries,
+      );
+      return transformedCustomQueries.queryIDs;
+    }
+
+    const appQueryErrors: ErroredQuery[] = [];
 
     for (const q of transformedCustomQueries) {
       if ('error' in q) {
         lc.error?.(
           `Error transforming custom query ${q.name}: ${q.error} ${q.details}`,
         );
-        errors.push(q);
+        appQueryErrors.push(q);
         continue;
       }
       cb(q);
     }
 
-    this.#sendQueryTransformErrorToClients(customQueryMap, errors);
-    return errors;
+    this.#sendQueryTransformErrorToClients(customQueryMap, appQueryErrors);
+    return appQueryErrors.map(q => q.id);
   }
 
   #sendQueryTransformErrorToClients(
     customQueryMap: Map<string, CustomQueryRecord>,
-    errors: ErroredQuery[],
+    errorOrErrors: ErroredQuery[] | TransformFailedBody,
   ) {
-    const errorGroups = new Map<string, ErroredQuery[]>();
-    for (const err of errors) {
-      const q = customQueryMap.get(err.id);
-      assert(q, 'got an error that does not map back to a custom query');
-      const clientIds = Object.keys(q.clientState);
-      for (const clientId of clientIds) {
-        const group = errorGroups.get(clientId) ?? [];
+    const getAffectedClientIDs = (queryIDs: string[]): Set<string> => {
+      const clientIds = new Set<string>();
+      for (const queryID of queryIDs) {
+        const q = customQueryMap.get(queryID);
+        assert(
+          q,
+          `got an error for query ${queryID} that does not map back to a custom query`,
+        );
+        Object.keys(q.clientState).forEach(id => clientIds.add(id));
+      }
+      return clientIds;
+    };
+
+    // send the transform failed error to each affected client
+    if ('queryIDs' in errorOrErrors) {
+      for (const clientId of getAffectedClientIDs(errorOrErrors.queryIDs)) {
+        this.#clients
+          .get(clientId)
+          ?.sendQueryTransformFailedError(errorOrErrors);
+      }
+
+      return;
+    }
+
+    // Group and send application errors to each affected client
+    const appErrorGroups = new Map<string, ErroredQuery[]>();
+
+    for (const err of errorOrErrors) {
+      // Application errors need to be grouped by client
+      for (const clientId of getAffectedClientIDs([err.id])) {
+        const group = appErrorGroups.get(clientId) ?? [];
         group.push(err);
-        errorGroups.set(clientId, group);
+        appErrorGroups.set(clientId, group);
       }
     }
 
-    for (const [clientId, errors] of errorGroups) {
-      const client = this.#clients.get(clientId);
-      if (client) {
-        client.sendQueryTransformErrors(errors);
-      }
+    for (const [clientId, errors] of appErrorGroups) {
+      this.#clients.get(clientId)?.sendQueryTransformApplicationErrors(errors);
     }
   }
 
@@ -1242,7 +1295,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         );
       }
 
-      let erroredQueries: ErroredQuery[] | undefined;
+      let erroredQueryIDs: string[] | undefined;
       if (this.#customQueryTransformer && customQueries.size > 0) {
         const filteredCustomQueries = this.#filterCustomQueries(
           customQueries.values(),
@@ -1269,7 +1322,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             this.userQueryURL,
           );
 
-        erroredQueries = this.#processTransformedCustomQueries(
+        erroredQueryIDs = this.#processTransformedCustomQueries(
           lc,
           transformedCustomQueries,
           (q: TransformedAndHashed) =>
@@ -1324,10 +1377,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       // These are queries we need to remove from `desired`, not `got`, because they never transformed.
-      if (erroredQueries) {
-        for (const q of erroredQueries) {
+      if (erroredQueryIDs) {
+        for (const queryID of erroredQueryIDs) {
           removeQueries.push({
-            id: q.id,
+            id: queryID,
             transformationHash: undefined,
           });
         }
@@ -1911,17 +1964,19 @@ function checkClientAndCVRVersions(
     cmpVersions(client, NEW_CVR_VERSION) > 0
   ) {
     // CVR is empty but client is not.
-    throw new ErrorForClient({
+    throw new ProtocolError({
       kind: ErrorKind.ClientNotFound,
       message: 'Client not found',
+      origin: ErrorOrigin.ZeroCache,
     });
   }
 
   if (cmpVersions(client, cvr) > 0) {
     // Client is ahead of a non-empty CVR.
-    throw new ErrorForClient({
+    throw new ProtocolError({
       kind: ErrorKind.InvalidConnectionRequestBaseCookie,
       message: `CVR is at version ${versionString(cvr)}`,
+      origin: ErrorOrigin.ZeroCache,
     });
   }
 }
@@ -1938,10 +1993,11 @@ export function pickToken(
 
   if (newToken) {
     if (previousToken.decoded.sub !== newToken.decoded.sub) {
-      throw new ErrorForClient({
+      throw new ProtocolError({
         kind: ErrorKind.Unauthorized,
         message:
           'The user id in the new token does not match the previous token. Client groups are pinned to a single user.',
+        origin: ErrorOrigin.ZeroCache,
       });
     }
 
@@ -1952,10 +2008,11 @@ export function pickToken(
     }
 
     if (newToken.decoded.iat === undefined) {
-      throw new ErrorForClient({
+      throw new ProtocolError({
         kind: ErrorKind.Unauthorized,
         message:
           'The new token does not have an issued at time but the prior token does. Tokens for a client group must either all have issued at times or all not have issued at times',
+        origin: ErrorOrigin.ZeroCache,
       });
     }
 
@@ -1971,10 +2028,11 @@ export function pickToken(
   }
 
   // previousToken !== undefined but newToken is undefined
-  throw new ErrorForClient({
+  throw new ProtocolError({
     kind: ErrorKind.Unauthorized,
     message:
       'No token provided. An unauthenticated client cannot connect to an authenticated client group.',
+    origin: ErrorOrigin.ZeroCache,
   });
 }
 

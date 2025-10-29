@@ -944,6 +944,7 @@ class MissingEventTriggerSupport extends UnsupportedSchemaChangeError {
   }
 }
 
+// TODO(0xcadams): should this be a ProtocolError?
 class ShutdownSignal extends AbortError {
   readonly name = 'ShutdownSignal';
 

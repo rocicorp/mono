@@ -190,7 +190,9 @@ async function mutateHandler(
     'info',
   );
 
-  await Promise.all(postCommitTasks.map(task => task()));
+  // we don't yet handle errors here, since Loops emails return 429 very often
+  // and we don't want to block the mutation
+  await Promise.allSettled(postCommitTasks.map(task => task()));
 
   reply.send(response);
 }

@@ -20,7 +20,7 @@ import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
 import {recordRowsSynced} from '../../server/anonymous-otel-start.ts';
-import {ErrorForClient, ErrorWithLevel} from '../../types/error-for-client.ts';
+import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
 import {rowIDString} from '../../types/row-key.ts';
 import {cvrSchema, type ShardID, upstreamSchema} from '../../types/shards.ts';
@@ -56,6 +56,8 @@ import {
   ttlClockAsNumber,
   ttlClockFromNumber,
 } from './ttl-clock.ts';
+import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
+import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 
 export type CVRFlushStats = {
   instances: number;
@@ -203,9 +205,10 @@ export class CVRStore {
         return result;
       }
       assert(err);
-      throw new ErrorForClient({
+      throw new ProtocolError({
         kind: ErrorKind.ClientNotFound,
         message: `max attempts exceeded waiting for CVR@${err.cvrVersion} to catch up from ${err.rowsVersion}`,
+        origin: ErrorOrigin.ZeroCache,
       });
     });
   }
@@ -925,18 +928,22 @@ export async function checkVersion(
   }
 }
 
-export class ConcurrentModificationException extends ErrorWithLevel {
+export class ConcurrentModificationException extends ProtocolErrorWithLevel {
   readonly name = 'ConcurrentModificationException';
 
   constructor(expectedVersion: string, actualVersion: string) {
     super(
-      `CVR has been concurrently modified. Expected ${expectedVersion}, got ${actualVersion}`,
+      {
+        kind: ErrorKind.Internal,
+        message: `CVR has been concurrently modified. Expected ${expectedVersion}, got ${actualVersion}`,
+        origin: ErrorOrigin.ZeroCache,
+      },
       'warn',
     );
   }
 }
 
-export class OwnershipError extends ErrorForClient {
+export class OwnershipError extends ProtocolErrorWithLevel {
   readonly name = 'OwnershipError';
 
   constructor(
@@ -952,13 +959,14 @@ export class OwnershipError extends ErrorForClient {
           `${new Date(grantedAt ?? 0).toISOString()} ` +
           `(last connect time: ${new Date(lastConnectTime).toISOString()})`,
         maxBackoffMs: 0,
+        origin: ErrorOrigin.ZeroCache,
       },
       'info',
     );
   }
 }
 
-export class InvalidClientSchemaError extends ErrorForClient {
+export class InvalidClientSchemaError extends ProtocolErrorWithLevel {
   readonly name = 'InvalidClientSchemaError';
 
   constructor(cause: unknown) {
@@ -966,6 +974,7 @@ export class InvalidClientSchemaError extends ErrorForClient {
       {
         kind: ErrorKind.SchemaVersionNotSupported,
         message: `Could not parse clientSchema stored in CVR: ${String(cause)}`,
+        origin: ErrorOrigin.ZeroCache,
       },
       'warn',
       {cause},

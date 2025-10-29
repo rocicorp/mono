@@ -13,17 +13,16 @@ import {
   type HeaderOptions,
 } from '../custom/fetch.ts';
 import type {ShardID} from '../types/shards.ts';
-import * as v from '../../../shared/src/valita.ts';
 import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import {TimedCache} from '../../../shared/src/cache.ts';
 import {must} from '../../../shared/src/must.ts';
-import {ErrorForClient} from '../types/error-for-client.ts';
-
-export type HttpError = {
-  error: 'http';
-  status: number;
-  details: string;
-};
+import {
+  isProtocolError,
+  type TransformFailedBody,
+} from '../../../zero-protocol/src/error.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 
 /**
  * Transforms a custom query by calling the user's API server.
@@ -68,7 +67,7 @@ export class CustomQueryTransformer {
     headerOptions: HeaderOptions,
     queries: Iterable<CustomQueryRecord>,
     userQueryURL: string | undefined,
-  ): Promise<(TransformedAndHashed | ErroredQuery)[]> {
+  ): Promise<(TransformedAndHashed | ErroredQuery)[] | TransformFailedBody> {
     const request: TransformRequestBody = [];
     const cachedResponses: TransformedAndHashed[] = [];
 
@@ -98,9 +97,12 @@ export class CustomQueryTransformer {
       return cachedResponses;
     }
 
-    let response: Response | undefined;
+    const queryIDs = request.map(r => r.id);
+
     try {
-      response = await fetchFromAPIServer(
+      const transformResponse = await fetchFromAPIServer(
+        transformResponseMessageSchema,
+        'transform',
         this.#lc,
         userQueryURL ??
           must(
@@ -112,57 +114,56 @@ export class CustomQueryTransformer {
         headerOptions,
         ['transform', request] satisfies TransformRequestMessage,
       );
+
+      if (transformResponse[0] === 'transformFailed') {
+        return transformResponse[1];
+      }
+
+      const newResponses = transformResponse[1].map(transformed => {
+        if ('error' in transformed) {
+          return transformed;
+        }
+        return {
+          id: transformed.id,
+          transformedAst: transformed.ast,
+          transformationHash: hashOfAST(transformed.ast),
+        } satisfies TransformedAndHashed;
+      });
+
+      for (const transformed of newResponses) {
+        if ('error' in transformed) {
+          // do not cache error responses
+          continue;
+        }
+        const cacheKey = getCacheKey(headerOptions, transformed.id);
+        this.#cache.set(cacheKey, transformed);
+      }
+
+      return newResponses.concat(cachedResponses);
     } catch (e) {
-      if (e instanceof ErrorForClient) {
-        throw e;
+      this.#lc.error?.('failed to transform queries', e);
+
+      if (
+        isProtocolError(e) &&
+        e.errorBody.kind === ErrorKind.TransformFailed
+      ) {
+        return {
+          ...e.errorBody,
+          queryIDs,
+        } as const satisfies TransformFailedBody;
       }
-      return request.map(r => ({
-        error: 'zero',
-        details: e instanceof Error ? e.message : String(e),
-        id: r.id,
-        name: r.name,
-      }));
-    }
 
-    if (!response.ok) {
-      const details = await response.text();
-      return request.map(r => ({
-        error: 'http',
-        status: response.status,
-        details,
-        id: r.id,
-        name: r.name,
-      }));
-    }
-
-    const body = await response.json();
-    const msg = v.parse(body, transformResponseMessageSchema);
-
-    if (msg[0] === 'transformFailed') {
-      throw new Error('Transform failed - stub not implemented yet');
-    }
-
-    const newResponses = msg[1].map(transformed => {
-      if ('error' in transformed) {
-        return transformed;
-      }
       return {
-        id: transformed.id,
-        transformedAst: transformed.ast,
-        transformationHash: hashOfAST(transformed.ast),
-      } satisfies TransformedAndHashed;
-    });
-
-    for (const transformed of newResponses) {
-      if ('error' in transformed) {
-        // do not cache error responses
-        continue;
-      }
-      const cacheKey = getCacheKey(headerOptions, transformed.id);
-      this.#cache.set(cacheKey, transformed);
+        kind: ErrorKind.TransformFailed,
+        origin: ErrorOrigin.ZeroCache,
+        reason: ErrorReason.Internal,
+        message:
+          e instanceof Error
+            ? e.message
+            : `An unknown error occurred while transforming queries: ${String(e)}`,
+        queryIDs,
+      } as const satisfies TransformFailedBody;
     }
-
-    return newResponses.concat(cachedResponses);
   }
 }
 

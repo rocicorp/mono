@@ -1,15 +1,18 @@
 import {resolver} from '@rocicorp/resolver';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import * as ErrorKind from '../../../../zero-protocol/src/error-kind-enum.ts';
 import type {
   Mutation,
   PushBody,
   PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
-import {ErrorForClient} from '../../types/error-for-client.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {combinePushes, PusherService} from './pusher.ts';
+import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
+import type {PushFailedBody} from '../../../../zero-protocol/src/error.ts';
+import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
+import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';
+import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
 
 const config = {
   app: {
@@ -660,57 +663,12 @@ describe('initConnection', () => {
 
     await pusher.stop();
   });
-
-  test('rejects disallowed custom URL', async () => {
-    const pusher = new PusherService(
-      mockDB,
-      config,
-      {
-        url: ['http://allowed.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
-    void pusher.run();
-    const stream = pusher.initConnection(
-      clientID,
-      wsID,
-      'http://malicious.com/endpoint',
-    );
-
-    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
-
-    const messages: unknown[] = [];
-    for await (const msg of stream) {
-      messages.push(msg);
-      break;
-    }
-
-    expect(messages).toEqual([
-      [
-        'pushResponse',
-        {
-          error: 'zeroPusher',
-          details: expect.stringContaining(
-            'URL "http://malicious.com/endpoint" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration',
-          ),
-          mutationIDs: [{clientID, id: 1}],
-        },
-      ],
-    ]);
-
-    await pusher.stop();
-  });
 });
 
 describe('pusher streaming', () => {
   beforeEach(() => {
     vi.resetAllMocks();
   });
-
-  test('fails if we receive a push before initializing the connection', () => {});
 
   test('returns ok for subsequent pushes from same client', () => {
     const pusher = new PusherService(
@@ -730,109 +688,6 @@ describe('pusher streaming', () => {
     pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
     const result = pusher.enqueuePush(clientID, makePush(1), 'jwt', undefined);
     expect(result.type).toBe('ok');
-  });
-
-  test('streams error response to affected clients', async () => {
-    const fetch = (global.fetch = vi.fn());
-    fetch.mockResolvedValue({
-      ok: false,
-      status: 500,
-      text: () => Promise.resolve('Internal Server Error'),
-    });
-
-    const pusher = new PusherService(
-      mockDB,
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
-    void pusher.run();
-    const stream1 = pusher.initConnection('client1', 'ws1', undefined);
-    const stream2 = pusher.initConnection('client2', 'ws2', undefined);
-
-    pusher.enqueuePush('client1', makePush(1, 'client1'), 'jwt', undefined);
-    pusher.enqueuePush('client2', makePush(1, 'client2'), 'jwt', undefined);
-
-    const messages1: unknown[] = [];
-    const messages2: unknown[] = [];
-    // Wait for push to be processed
-    await new Promise(resolve => setTimeout(resolve, 0));
-
-    for await (const msg of stream1) {
-      messages1.push(msg);
-      break;
-    }
-    for await (const msg of stream2) {
-      messages2.push(msg);
-      break;
-    }
-
-    expect(messages1).toEqual([
-      [
-        'pushResponse',
-        {
-          error: 'http',
-          status: 500,
-          details: 'Internal Server Error',
-          mutationIDs: [{clientID: 'client1', id: 1}],
-        },
-      ],
-    ]);
-
-    expect(messages2).toEqual([
-      [
-        'pushResponse',
-        {
-          error: 'http',
-          status: 500,
-          details: 'Internal Server Error',
-          mutationIDs: [{clientID: 'client2', id: 2}],
-        },
-      ],
-    ]);
-  });
-
-  test('handles network errors', async () => {
-    const fetch = (global.fetch = vi.fn());
-    fetch.mockRejectedValue(new Error('Network error'));
-
-    const pusher = new PusherService(
-      mockDB,
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
-      },
-      lc,
-      'cgid',
-    );
-    void pusher.run();
-    const stream = pusher.initConnection(clientID, wsID, undefined);
-
-    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
-
-    const messages: unknown[] = [];
-    for await (const msg of stream) {
-      messages.push(msg);
-      break;
-    }
-
-    expect(messages).toEqual([
-      [
-        'pushResponse',
-        {
-          error: 'zeroPusher',
-          details: 'Error: Network error',
-          mutationIDs: [{clientID, id: 1}],
-        },
-      ],
-    ]);
   });
 
   test('cleanup removes client subscription', () => {
@@ -885,18 +740,216 @@ describe('pusher streaming', () => {
       value: undefined,
     });
   });
+});
 
-  test('fails the stream on ooo mutations', async () => {
+describe('pusher errors', () => {
+  async function expectPushErrorResponse(
+    errorResponse: PushResponse,
+    expectedError: PushFailedBody,
+  ) {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(errorResponse),
+    });
+
+    const pusher = new PusherService(
+      mockDB,
+      config,
+      {
+        url: ['http://example.com'],
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
+      lc,
+      'cgid',
+    );
+    void pusher.run();
+
+    const stream = pusher.initConnection(clientID, 'ws1', undefined);
+    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
+
+    const iterator = stream[Symbol.asyncIterator]();
+    const failure = iterator.next();
+    const expectedLogLevel =
+      expectedError.origin === ErrorOrigin.Server ? 'warn' : 'error';
+    await expect(failure).rejects.toBeInstanceOf(ProtocolErrorWithLevel);
+    await expect(failure).rejects.toMatchObject({
+      errorBody: expectedError,
+      logLevel: expectedLogLevel,
+    });
+  }
+
+  test('emits error message on ooo mutations', async () => {
+    await expectPushErrorResponse(
+      {
+        mutations: [
+          {id: {clientID, id: 3}, result: {}},
+          {id: {clientID, id: 1}, result: {error: 'oooMutation'}},
+        ],
+      },
+      {
+        kind: ErrorKind.PushFailed,
+        origin: ErrorOrigin.Server,
+        reason: ErrorReason.OutOfOrderMutation,
+        message: 'mutation was out of order',
+        details: undefined,
+        mutationIDs: [
+          {clientID: 'test-cid', id: 3},
+          {clientID: 'test-cid', id: 1},
+        ],
+      },
+    );
+  });
+
+  test('emits error message on unsupported schema version or push version', async () => {
+    await expectPushErrorResponse(
+      {
+        error: 'unsupportedSchemaVersion',
+        mutationIDs: [{clientID, id: 1}],
+      },
+      {
+        kind: ErrorKind.PushFailed,
+        origin: ErrorOrigin.Server,
+        reason: ErrorReason.Internal,
+        message: 'Unsupported schema version',
+        mutationIDs: [{clientID: 'test-cid', id: 1}],
+      },
+    );
+  });
+
+  test('emits error message with PushFailed error on 401 response', async () => {
+    await expectPushErrorResponse(
+      {
+        kind: ErrorKind.PushFailed,
+        origin: ErrorOrigin.ZeroCache,
+        reason: ErrorReason.HTTP,
+        status: 401,
+        bodyPreview: 'Unauthorized access',
+        message: 'Fetch from API server returned non-OK status 401',
+        mutationIDs: [{clientID: 'test-cid', id: 1}],
+      },
+      {
+        kind: ErrorKind.PushFailed,
+        origin: ErrorOrigin.ZeroCache,
+        reason: ErrorReason.HTTP,
+        status: 401,
+        bodyPreview: 'Unauthorized access',
+        message: 'Fetch from API server returned non-OK status 401',
+        mutationIDs: [{clientID: 'test-cid', id: 1}],
+      },
+    );
+  });
+
+  test('emits error message with legacy http error format', async () => {
+    await expectPushErrorResponse(
+      {
+        error: 'http',
+        status: 503,
+        details: 'Service Unavailable',
+        mutationIDs: [{clientID, id: 1}],
+      },
+      {
+        kind: ErrorKind.PushFailed,
+        origin: ErrorOrigin.ZeroCache,
+        reason: ErrorReason.HTTP,
+        status: 503,
+        bodyPreview: 'Service Unavailable',
+        message: 'Fetch from API server returned non-OK status 503',
+        mutationIDs: [{clientID: 'test-cid', id: 1}],
+      },
+    );
+  });
+
+  test('emits error message with legacy unsupportedPushVersion format', async () => {
+    await expectPushErrorResponse(
+      {
+        error: 'unsupportedPushVersion',
+        mutationIDs: [{clientID, id: 1}],
+      },
+      {
+        kind: ErrorKind.PushFailed,
+        origin: ErrorOrigin.Server,
+        reason: ErrorReason.UnsupportedPushVersion,
+        message: 'Unsupported push version',
+        mutationIDs: [{clientID: 'test-cid', id: 1}],
+      },
+    );
+  });
+
+  test('emits error message with legacy zeroPusher error format', async () => {
+    await expectPushErrorResponse(
+      {
+        error: 'zeroPusher',
+        details: 'Zero pusher internal error',
+        mutationIDs: [{clientID, id: 1}],
+      },
+      {
+        kind: ErrorKind.PushFailed,
+        origin: ErrorOrigin.Server,
+        reason: ErrorReason.Internal,
+        message: 'Zero pusher internal error',
+        mutationIDs: [{clientID: 'test-cid', id: 1}],
+      },
+    );
+  });
+
+  test('handles non-Error object thrown in catch block', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockRejectedValue('string error');
+
+    const pusher = new PusherService(
+      mockDB,
+      config,
+      {
+        url: ['http://example.com'],
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
+      lc,
+      'cgid',
+    );
+    void pusher.run();
+    const stream = pusher.initConnection(clientID, wsID, undefined);
+
+    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
+
+    const iterator = stream[Symbol.asyncIterator]();
+    const failure = iterator.next();
+    await expect(failure).rejects.toBeInstanceOf(ProtocolErrorWithLevel);
+    await expect(failure).rejects.toMatchObject({
+      errorBody: {
+        kind: ErrorKind.PushFailed,
+        origin: ErrorOrigin.ZeroCache,
+        reason: ErrorReason.Internal,
+        message:
+          'Fetch from API server failed with unknown error: string error',
+        mutationIDs: [
+          {
+            clientID: 'test-cid',
+            id: 1,
+          },
+        ],
+      },
+      logLevel: 'error',
+    });
+  });
+
+  test('handles ooo mutation with subsequent mutations', async () => {
     const fetch = (global.fetch = vi.fn());
     const oooResponse: PushResponse = {
       mutations: [
         {
-          id: {clientID, id: 3},
+          id: {clientID, id: 1},
+          result: {error: 'oooMutation', details: 'out of order'},
+        },
+        {
+          id: {clientID, id: 2},
           result: {},
         },
         {
-          id: {clientID, id: 1},
-          result: {error: 'oooMutation'},
+          id: {clientID, id: 3},
+          result: {},
         },
       ],
     };
@@ -920,54 +973,48 @@ describe('pusher streaming', () => {
     void pusher.run();
 
     const stream = pusher.initConnection(clientID, 'ws1', undefined);
-    pusher.enqueuePush(clientID, makePush(2, clientID), 'jwt', undefined);
+    pusher.enqueuePush(clientID, makePush(3, clientID), 'jwt', undefined);
 
-    await expect(stream[Symbol.asyncIterator]().next()).rejects.toThrow(
-      '{"kind":"InvalidPush","message":"mutation was out of order"}',
-    );
-  });
-
-  test('fails the stream on unsupported schema version or push version', async () => {
-    const fetch = (global.fetch = vi.fn());
-    const errorResponse: PushResponse = {
-      error: 'unsupportedSchemaVersion',
-      mutationIDs: [{clientID, id: 1}],
-    };
-
-    fetch.mockResolvedValue({
-      ok: true,
-      json: () => Promise.resolve(errorResponse),
-    });
-
-    const pusher = new PusherService(
-      mockDB,
-      config,
-      {
-        url: ['http://example.com'],
-        apiKey: 'api-key',
-        forwardCookies: false,
+    const iterator = stream[Symbol.asyncIterator]();
+    const failure = iterator.next();
+    await expect(failure).rejects.toBeInstanceOf(ProtocolErrorWithLevel);
+    await expect(failure).rejects.toMatchObject({
+      errorBody: {
+        kind: ErrorKind.PushFailed,
+        origin: ErrorOrigin.Server,
+        reason: ErrorReason.OutOfOrderMutation,
+        message: 'mutation was out of order',
+        details: 'out of order',
+        mutationIDs: [
+          {
+            clientID: 'test-cid',
+            id: 1,
+          },
+          {
+            clientID: 'test-cid',
+            id: 2,
+          },
+          {
+            clientID: 'test-cid',
+            id: 3,
+          },
+        ],
       },
-      lc,
-      'cgid',
-    );
-    void pusher.run();
-
-    const stream = pusher.initConnection(clientID, 'ws1', undefined);
-    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
-
-    await expect(stream[Symbol.asyncIterator]().next()).rejects.toThrow(
-      'unsupportedSchemaVersion',
-    );
+      logLevel: 'warn',
+    });
   });
 
-  test('fails the stream with AuthInvalidated error on 401 response', async () => {
+  test('streams error response to affected clients', async () => {
     const fetch = (global.fetch = vi.fn());
-
-    fetch.mockResolvedValue({
+    const mockResponse = {
       ok: false,
-      status: 401,
-      text: () => Promise.resolve('Unauthorized access'),
-    });
+      status: 500,
+      text: () => Promise.resolve('Internal Server Error'),
+      clone() {
+        return mockResponse;
+      },
+    };
+    fetch.mockResolvedValue(mockResponse);
 
     const pusher = new PusherService(
       mockDB,
@@ -981,16 +1028,140 @@ describe('pusher streaming', () => {
       'cgid',
     );
     void pusher.run();
+    const stream1 = pusher.initConnection('client1', 'ws1', undefined);
+    const stream2 = pusher.initConnection('client2', 'ws2', undefined);
 
-    const stream = pusher.initConnection(clientID, 'ws1', undefined);
+    pusher.enqueuePush('client1', makePush(1, 'client1'), 'jwt', undefined);
+    pusher.enqueuePush('client2', makePush(1, 'client2'), 'jwt', undefined);
+
+    const iterator1 = stream1[Symbol.asyncIterator]();
+    const iterator2 = stream2[Symbol.asyncIterator]();
+    const failure1 = iterator1.next();
+    const failure2 = iterator2.next();
+
+    await expect(failure1).rejects.toBeInstanceOf(ProtocolErrorWithLevel);
+    await expect(failure1).rejects.toMatchObject({
+      errorBody: {
+        kind: ErrorKind.PushFailed,
+        origin: ErrorOrigin.ZeroCache,
+        reason: ErrorReason.HTTP,
+        status: 500,
+        bodyPreview: 'Internal Server Error',
+        message: 'Fetch from API server returned non-OK status 500',
+        mutationIDs: [
+          {
+            clientID: 'client1',
+            id: 1,
+          },
+        ],
+      },
+      logLevel: 'error',
+    });
+
+    await expect(failure2).rejects.toBeInstanceOf(ProtocolErrorWithLevel);
+    await expect(failure2).rejects.toMatchObject({
+      errorBody: {
+        kind: ErrorKind.PushFailed,
+        origin: ErrorOrigin.ZeroCache,
+        reason: ErrorReason.HTTP,
+        status: 500,
+        bodyPreview: 'Internal Server Error',
+        message: 'Fetch from API server returned non-OK status 500',
+        mutationIDs: [
+          {
+            clientID: 'client2',
+            id: 2,
+          },
+        ],
+      },
+      logLevel: 'error',
+    });
+  });
+
+  test('handles network errors', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockRejectedValue(new Error('Network error'));
+
+    const pusher = new PusherService(
+      mockDB,
+      config,
+      {
+        url: ['http://example.com'],
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
+      lc,
+      'cgid',
+    );
+    void pusher.run();
+    const stream = pusher.initConnection(clientID, wsID, undefined);
+
     pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
 
-    await expect(stream[Symbol.asyncIterator]().next()).rejects.toThrow(
-      new ErrorForClient({
-        kind: ErrorKind.AuthInvalidated,
-        message: 'Unauthorized access',
-      }),
+    const iterator = stream[Symbol.asyncIterator]();
+    const failure = iterator.next();
+    await expect(failure).rejects.toBeInstanceOf(ProtocolErrorWithLevel);
+    await expect(failure).rejects.toMatchObject({
+      errorBody: {
+        kind: ErrorKind.PushFailed,
+        origin: ErrorOrigin.ZeroCache,
+        reason: ErrorReason.Internal,
+        message:
+          'Fetch from API server failed with unknown error: Network error',
+        mutationIDs: [
+          {
+            clientID: 'test-cid',
+            id: 1,
+          },
+        ],
+      },
+      logLevel: 'error',
+    });
+  });
+
+  test('rejects disallowed custom URL', async () => {
+    const pusher = new PusherService(
+      mockDB,
+      config,
+      {
+        url: ['http://allowed.com'],
+        apiKey: 'api-key',
+        forwardCookies: false,
+      },
+      lc,
+      'cgid',
     );
+    void pusher.run();
+    const stream = pusher.initConnection(
+      clientID,
+      wsID,
+      'http://malicious.com/endpoint',
+    );
+
+    pusher.enqueuePush(clientID, makePush(1, clientID), 'jwt', undefined);
+
+    const iterator = stream[Symbol.asyncIterator]();
+    const failure = iterator.next();
+    await expect(failure).rejects.toBeInstanceOf(ProtocolErrorWithLevel);
+    await expect(failure).rejects.toMatchObject({
+      errorBody: {
+        kind: ErrorKind.PushFailed,
+        origin: ErrorOrigin.ZeroCache,
+        reason: ErrorReason.Internal,
+        message: expect.stringContaining(
+          'URL "http://malicious.com/endpoint" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration',
+        ),
+        mutationIDs: [
+          {
+            clientID: 'test-cid',
+            id: 1,
+          },
+        ],
+      },
+      logLevel: 'error',
+    });
+
+    await pusher.stop();
   });
 });
 
