@@ -27,6 +27,7 @@ export class Inspector {
     this.#delegate = {
       getQueryMetrics: delegate.getQueryMetrics.bind(delegate),
       getAST: delegate.getAST.bind(delegate),
+      mapClientASTToServer: delegate.mapClientASTToServer.bind(delegate),
       get metrics() {
         return delegate.metrics;
       },

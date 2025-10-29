@@ -337,7 +337,7 @@ export async function analyzeQuery(
   const {customQueryID} = query;
   const queryParameters = customQueryID
     ? {name: customQueryID.name, args: customQueryID.args}
-    : {ast: query.ast};
+    : {ast: delegate.mapClientASTToServer(query.ast)};
 
   return rpc(
     await delegate.getSocket(),
@@ -356,6 +356,7 @@ export interface InspectorDelegate {
   getQueryMetrics(hash: string): ClientMetrics | undefined;
   getAST(queryID: string): AST | undefined;
   readonly metrics: ClientMetrics;
+  mapClientASTToServer(ast: AST): AST;
 }
 
 export interface ExtendedInspectorDelegate extends InspectorDelegate {
