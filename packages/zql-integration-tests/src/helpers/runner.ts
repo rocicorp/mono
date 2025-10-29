@@ -34,10 +34,7 @@ import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
 import type {Source, SourceChange} from '../../../zql/src/ivm/source.ts';
 import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
-import type {
-  CommitListener,
-  QueryDelegate,
-} from '../../../zql/src/query/query-delegate.ts';
+import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {QueryImpl} from '../../../zql/src/query/query-impl.ts';
 import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
 import type {
@@ -1106,10 +1103,6 @@ class TestPGQueryDelegate extends QueryDelegateBase<undefined> {
   }
 
   readonly defaultQueryComplete = false;
-
-  onTransactionCommit(_cb: CommitListener): () => void {
-    return () => {};
-  }
 
   getSource(_tableName: string): Source | undefined {
     return undefined;

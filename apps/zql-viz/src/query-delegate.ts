@@ -74,10 +74,6 @@ export class VizDelegate extends QueryDelegateBase<undefined> {
     return input;
   }
 
-  onTransactionCommit() {
-    return () => {};
-  }
-
   #getNode(input: InputBase, name?: string) {
     const existing = this.#nodeIds.get(input);
     if (existing) {

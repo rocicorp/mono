@@ -241,7 +241,13 @@ export abstract class QueryDelegateBase<TContext>
     // No-op
   }
 
-  abstract onTransactionCommit(cb: CommitListener): () => void;
+  /**
+   * Called when a transaction commits. Override to add custom behavior.
+   * Default implementation returns a no-op cleanup function.
+   */
+  onTransactionCommit(_cb: CommitListener): () => void {
+    return () => {};
+  }
 
   /**
    * Validates run options. Override to add custom validation.

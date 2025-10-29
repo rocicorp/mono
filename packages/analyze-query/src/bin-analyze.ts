@@ -34,21 +34,11 @@ import {
   Debug,
   runtimeDebugFlags,
 } from '../../zql/src/builder/debug-delegate.ts';
-import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
-import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
-import {
-  materializeImpl,
-  newQuery,
-  preloadImpl,
-  runImpl,
-} from '../../zql/src/query/query-impl.ts';
+import type {Source} from '../../zql/src/ivm/source.ts';
+import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
+import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {queryWithContext} from '../../zql/src/query/query-internals.ts';
-import {
-  type AnyQuery,
-  type MaterializeOptions,
-  type PullRow,
-  type Query,
-} from '../../zql/src/query/query.ts';
+import type {PullRow, Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
 import {explainQueries} from './explain-queries.ts';
@@ -209,9 +199,16 @@ const sources = new Map<string, TableSource>();
 const clientToServerMapper = clientToServer(schema.tables);
 const debug = new Debug();
 const tableSpecs = computeZqlSpecs(lc, db);
-const host: QueryDelegate<undefined> = {
-  debug,
-  getSource: (serverTableName: string) => {
+
+class AnalyzeQueryDelegate extends QueryDelegateBase<undefined> {
+  readonly debug = debug;
+  readonly defaultQueryComplete = true;
+
+  constructor() {
+    super(undefined);
+  }
+
+  getSource(serverTableName: string): Source | undefined {
     let source = sources.get(serverTableName);
     if (source) {
       return source;
@@ -230,49 +227,10 @@ const host: QueryDelegate<undefined> = {
 
     sources.set(serverTableName, source);
     return source;
-  },
+  }
+}
 
-  createStorage() {
-    // TODO: table storage!!
-    return new MemoryStorage();
-  },
-  decorateInput: input => input,
-  decorateSourceInput: input => input,
-  decorateFilterInput: input => input,
-  addEdge() {},
-  addServerQuery() {
-    return () => {};
-  },
-  addCustomQuery() {
-    return () => {};
-  },
-  updateServerQuery() {},
-  updateCustomQuery() {},
-  onTransactionCommit() {
-    return () => {};
-  },
-  batchViewUpdates<T>(applyViewUpdates: () => T): T {
-    return applyViewUpdates();
-  },
-  flushQueryChanges() {},
-  assertValidRunOptions() {},
-  defaultQueryComplete: true,
-  addMetric() {},
-  // oxlint-disable-next-line no-explicit-any
-  materialize(query: AnyQuery, factory: any, options: MaterializeOptions) {
-    // oxlint-disable-next-line no-explicit-any
-    return materializeImpl(query, this, factory, options) as any;
-  },
-  run(query, options) {
-    return runImpl(query, this, options);
-  },
-  preload(query, options) {
-    return preloadImpl(query, this, options);
-  },
-  withContext(q) {
-    return queryWithContext(q, undefined);
-  },
-};
+const host = new AnalyzeQueryDelegate();
 
 let result: AnalyzeQueryResult;
 
