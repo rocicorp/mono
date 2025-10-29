@@ -3998,4 +3998,17 @@ describe('view-syncer/service', () => {
       ]
     `);
   });
+
+  test('errors on new connection if already shut down', async () => {
+    // Simulates the view-syncer being stopped, e.g. due to an error,
+    // but a client connecting to it before it was removed from the
+    // service map.
+    await vs.stop();
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await expect(nextPoke(client)).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[Error: {"kind":"Rehome","message":"Reconnect required"}]`,
+    );
+  });
 });
