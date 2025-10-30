@@ -2,6 +2,7 @@ import {makeDefine} from '../build.ts';
 import {defineConfig} from 'vitest/config';
 
 export const CI = process.env['CI'] === 'true' || process.env['CI'] === '1';
+const TEST_BROWSER = process.env['TEST_BROWSER'];
 
 const define = {
   ...makeDefine(),
@@ -44,10 +45,12 @@ export default defineConfig({
       provider: 'playwright',
       headless: true,
       screenshotFailures: false,
-      instances: [
-        {browser: 'chromium'},
-        ...(CI ? [{browser: 'firefox'}, {browser: 'webkit'}] : []),
-      ],
+      instances: TEST_BROWSER
+        ? [{browser: TEST_BROWSER as 'chromium' | 'firefox' | 'webkit'}]
+        : [
+            {browser: 'chromium'},
+            ...(CI ? [{browser: 'firefox'}, {browser: 'webkit'}] : []),
+          ],
     },
     coverage: {
       provider: 'v8',

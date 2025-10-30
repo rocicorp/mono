@@ -87,15 +87,25 @@ jobs:
       - run: npm run check-types
 
   test:
-    name: Test (Shard ${{ matrix.shard }}/3)
+    name: Test (${{ matrix.browser }})
     runs-on: ubuntu-latest
     needs: [format, lint, check-types]
     strategy:
       matrix:
-        shard: [1, 2, 3]
+        browser: [chromium, firefox, webkit, node]
+        include:
+          - browser: chromium
+            install-cmd: npx playwright install chromium --with-deps
+          - browser: firefox
+            install-cmd: npx playwright install firefox --with-deps
+          - browser: webkit
+            install-cmd: npx playwright install webkit --with-deps
+          - browser: node
+            install-cmd: echo "No browser installation needed for node-only tests"
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
+      TEST_BROWSER: ${{ matrix.browser != 'node' && matrix.browser || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -106,9 +116,9 @@ jobs:
           cache: 'npm'
       - run: npm ci
       - name: Install Playwright
-        run: npx playwright install chromium firefox webkit --with-deps
+        run: ${{ matrix.install-cmd }}
       - name: Run tests
-        run: TEST_PG_MODE=nopg npm run test -- --shard=${{ matrix.shard }}/3
+        run: TEST_PG_MODE=nopg npm run test -- ${{ matrix.browser == 'node' && '--project="**/node"' || '' }}
 
   test-pg:
     name: Test PG ${{ matrix.pg-version }}
