@@ -25,6 +25,10 @@ import type {ZeroLogContext} from './zero-log-context.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
+import {
+  ApplicationError,
+  wrapWithApplicationError,
+} from '../../../zero-protocol/src/application-error.ts';
 
 type ErrorType =
   | MutationError
@@ -119,7 +123,7 @@ export class MutationTracker {
   rejectMutation(id: EphemeralID, e: unknown): void {
     const entry = this.#outstandingMutations.get(id);
     if (entry) {
-      this.#settleMutation(id, entry, 'reject', e);
+      this.#settleMutation(id, entry, 'reject', wrapWithApplicationError(e));
     }
   }
 
@@ -334,7 +338,23 @@ export class MutationTracker {
 
     const entry = this.#outstandingMutations.get(ephemeralID);
     assert(entry && entry.mutationID === mid);
-    this.#settleMutation(ephemeralID, entry, 'reject', error);
+    this.#settleMutation(
+      ephemeralID,
+      entry,
+      'reject',
+      error.error === 'app'
+        ? new ApplicationError(
+            error.message ?? `Unknown application error: ${error.error}`,
+            error.details ? {details: error.details} : undefined,
+          )
+        : new Error(
+            error.error === 'alreadyProcessed'
+              ? 'Mutation already processed'
+              : error.error === 'oooMutation'
+                ? 'Server reported an out-of-order mutation'
+                : `Unknown fallback error with mutation ID ${mid}: ${error.error}`,
+          ),
+    );
 
     // this is included for backwards compatibility with the per-mutation fatal error responses
     if (error.error === 'oooMutation') {
@@ -374,7 +394,7 @@ export class MutationTracker {
       resolver: Resolver<MutationOk, ErrorType>;
     },
     type: Type,
-    result: 'resolve' extends Type ? MutationOk : unknown,
+    result: 'resolve' extends Type ? MutationOk : Error,
   ): void {
     switch (type) {
       case 'resolve':

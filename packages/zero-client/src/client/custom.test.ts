@@ -10,6 +10,7 @@ import {
 import {zeroData} from '../../../replicache/src/transactions.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
+import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
 import type {Row} from '../../../zql/src/query/query.ts';
@@ -500,6 +501,11 @@ describe('server results and keeping read queries', () => {
           id: {clientID: z.clientID, id: 2},
           result: {
             error: 'app',
+            message: 'application error',
+            details: {
+              code: 'APP_ERROR',
+              other: 'some other detail',
+            },
           },
         },
       ],
@@ -507,7 +513,19 @@ describe('server results and keeping read queries', () => {
 
     await z.close();
 
-    await expect(close.server).rejects.toEqual({error: 'app'});
+    let caughtError: unknown;
+    try {
+      await close.server;
+    } catch (e) {
+      caughtError = e;
+    }
+
+    expect(caughtError).toBeInstanceOf(ApplicationError);
+    expect((caughtError as ApplicationError).message).toBe('application error');
+    expect((caughtError as ApplicationError).details).toEqual({
+      code: 'APP_ERROR',
+      other: 'some other detail',
+    });
   });
 
   test('changeDesiredQueries:remove is not sent while there are pending mutations', async () => {
@@ -621,7 +639,10 @@ describe('server results and keeping read queries', () => {
           id: {clientID: z.clientID, id: 2},
           result: {
             error: 'app',
-            details: 'womp womp',
+            message: 'womp womp',
+            details: {
+              issue: 'not found',
+            },
           },
         },
       ],
@@ -640,9 +661,17 @@ describe('server results and keeping read queries', () => {
 
     z.queryDelegate.flushQueryChanges();
 
-    await expect(close.server).rejects.toEqual({
-      error: 'app',
-      details: 'womp womp',
+    let caughtError: unknown;
+    try {
+      await close.server;
+    } catch (e) {
+      caughtError = e;
+    }
+
+    expect(caughtError).toBeInstanceOf(ApplicationError);
+    expect((caughtError as ApplicationError).message).toBe('womp womp');
+    expect((caughtError as ApplicationError).details).toEqual({
+      issue: 'not found',
     });
 
     await vi.waitFor(() => {

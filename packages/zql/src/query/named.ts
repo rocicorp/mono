@@ -2,6 +2,7 @@
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {SchemaQuery} from '../mutate/custom.ts';
+import {QueryParseError} from './error.ts';
 import {newQuery} from './query-impl.ts';
 import type {Query} from './query.ts';
 
@@ -95,7 +96,15 @@ export function withValidation<T extends SyncedQuery<any, any, any, any, any>>(
   }
   const ret: any = (context: unknown, ...args: unknown[]) => {
     const f = fn as any;
-    const parsed = f.parse(args);
+
+    // oxlint-disable-next-line no-explicit-any
+    let parsed: any;
+    try {
+      parsed = f.parse(args);
+    } catch (error) {
+      throw new QueryParseError({cause: error});
+    }
+
     return f.takesContext ? f(context, ...parsed) : f(...parsed);
   };
   ret.queryName = fn.queryName;

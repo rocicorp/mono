@@ -216,31 +216,28 @@ export class QueryManager implements InspectorDelegate {
     for (const error of errors) {
       const queryId = error.id;
       const entry = this.#queries.get(queryId);
-      if (entry) {
+
+      // if we don't have the query registered, continue
+      if (!entry) {
+        continue;
+      }
+
+      if (error.error === 'app' || error.error === 'parse') {
         entry.gotCallbacks.forEach(callback => callback(false, error));
       }
-      // this is included for backwards compatibility with the legacy query transform error
-      if (error.error !== 'app') {
+      // this code path is not possible technically since errors were never implemented in the legacy query transform error
+      // but is included for backwards compatibility and we have a test case for it
+      else {
         this.#onFatalError(
-          new ProtocolError(
-            error.error === 'http'
-              ? {
-                  kind: ErrorKind.TransformFailed,
-                  origin: ErrorOrigin.ZeroCache,
-                  reason: ErrorReason.HTTP,
-                  message: `HTTP ${error.status} transforming queries`,
-                  status: error.status,
-                  queryIDs: [],
-                }
-              : {
-                  kind: ErrorKind.TransformFailed,
-                  origin: ErrorOrigin.ZeroCache,
-                  reason: ErrorReason.Internal,
-                  message: `Unknown error transforming queries`,
-                  queryIDs: [],
-                },
-          ),
+          new ProtocolError({
+            kind: ErrorKind.TransformFailed,
+            origin: ErrorOrigin.ZeroCache,
+            reason: ErrorReason.Internal,
+            message: `Unknown error transforming queries: ${JSON.stringify(error)}`,
+            queryIDs: [],
+          }),
         );
+        // unreachable(error); TODO(0xcadams): this should eventually be unreachable
       }
     }
   }

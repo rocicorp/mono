@@ -1,5 +1,6 @@
 import {withValidation, type ReadonlyJSONValue} from '@rocicorp/zero';
 import {queries as sharedQueries} from '../shared/queries.ts';
+import {QueryError, QueryErrorCode} from '../shared/error.ts';
 import type {AuthData} from '../shared/auth.ts';
 
 // It's important to map incoming queries by queryName, not the
@@ -18,5 +19,5 @@ export function getQuery(
   if (name in validated) {
     return validated[name](context, ...args);
   }
-  throw new Error(`Unknown query: ${name}`);
+  throw new QueryError(`Unknown query: ${name}`, QueryErrorCode.UNKNOWN_QUERY);
 }

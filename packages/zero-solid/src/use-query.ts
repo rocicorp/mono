@@ -7,11 +7,11 @@ import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import {
   createSolidViewFactory,
   UNKNOWN,
-  type QueryResultDetails,
   type SolidView,
   type State,
 } from './solid-view.ts';
 import {useZero} from './use-zero.ts';
+import type {QueryResultDetails} from '../../zero-client/src/types/query-result.ts';
 
 export type QueryResult<TReturn> = readonly [
   Accessor<HumanReadable<TReturn>>,

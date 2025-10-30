@@ -12,33 +12,10 @@ import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 import {useZero} from './zero-provider.tsx';
-
-export type QueryResultDetails = Readonly<
-  | {
-      type: 'complete';
-    }
-  | {
-      type: 'unknown';
-    }
-  | QueryErrorDetails
->;
-
-type QueryErrorDetails = {
-  type: 'error';
-  refetch: () => void;
-  error:
-    | {
-        type: 'app';
-        queryName: string;
-        details: ReadonlyJSONValue;
-      }
-    | {
-        type: 'http';
-        queryName: string;
-        status: number;
-        details: ReadonlyJSONValue;
-      };
-};
+import type {
+  QueryErrorDetails,
+  QueryResultDetails,
+} from '../../zero-client/src/types/query-result.ts';
 
 export type QueryResult<TReturn> = readonly [
   HumanReadable<TReturn>,
@@ -183,7 +160,7 @@ function getSnapshot<TReturn>(
   singular: boolean,
   data: HumanReadable<TReturn>,
   resultType: ResultType,
-  refetchFn: () => void,
+  retryFn: () => void,
   error?: ErroredQuery,
 ): QueryResult<TReturn> {
   if (singular && data === undefined) {
@@ -192,7 +169,7 @@ function getSnapshot<TReturn>(
         if (error) {
           return [
             undefined,
-            makeError(refetchFn, error),
+            makeError(retryFn, error),
           ] as unknown as QueryResult<TReturn>;
         }
         return emptySnapshotSingularErrorUnknown as unknown as QueryResult<TReturn>;
@@ -209,7 +186,7 @@ function getSnapshot<TReturn>(
         if (error) {
           return [
             emptyArray,
-            makeError(refetchFn, error),
+            makeError(retryFn, error),
           ] as unknown as QueryResult<TReturn>;
         }
         return emptySnapshotErrorUnknown as unknown as QueryResult<TReturn>;
@@ -223,15 +200,15 @@ function getSnapshot<TReturn>(
   switch (resultType) {
     case 'error':
       if (error) {
-        return [data, makeError(refetchFn, error)];
+        return [data, makeError(retryFn, error)];
       }
       return [
         data,
-        makeError(refetchFn, {
+        makeError(retryFn, {
           error: 'app',
           id: 'unknown',
           name: 'unknown',
-          details: 'An unknown error occurred',
+          message: 'An unknown error occurred',
         }),
       ];
     case 'complete':
@@ -241,26 +218,17 @@ function getSnapshot<TReturn>(
   }
 }
 
-function makeError(
-  refetch: () => void,
-  error: ErroredQuery,
-): QueryErrorDetails {
+function makeError(retry: () => void, error: ErroredQuery): QueryErrorDetails {
+  const message = error.message ?? 'An unknown error occurred';
   return {
     type: 'error',
-    refetch,
-    error:
-      error.error === 'app' || error.error === 'zero'
-        ? {
-            type: 'app',
-            queryName: error.name,
-            details: error.details,
-          }
-        : {
-            type: 'http',
-            queryName: error.name,
-            status: error.status,
-            details: error.details,
-          },
+    retry,
+    refetch: retry,
+    error: {
+      type: error.error,
+      message,
+      ...(error.details ? {details: error.details} : {}),
+    },
   };
 }
 
@@ -460,7 +428,7 @@ class ViewWrapper<
       this.#format.singular,
       data,
       resultType,
-      this.#refetch,
+      this.#retry,
       error,
     );
     if (resultType === 'complete' || resultType === 'error') {
@@ -485,10 +453,10 @@ class ViewWrapper<
   };
 
   /**
-   * Called by the user to force a refetch of the query
+   * Called by the user to force a retry of the query
    * in the case the query errored.
    */
-  #refetch = () => {
+  #retry = () => {
     this.#view?.destroy();
     this.#view = undefined;
     this.#materializeIfNeeded();

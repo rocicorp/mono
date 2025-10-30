@@ -1,4 +1,11 @@
 export type {Expand} from '../../shared/src/expand.ts';
+export type {ConnectionState} from '../../zero-client/src/client/connection-manager.ts';
+export type {ConnectionStatus} from '../../zero-client/src/client/connection-status.ts';
+export type {
+  ZeroError,
+  ZeroErrorKind,
+} from '../../zero-client/src/client/error.ts';
+export type {QueryResultDetails} from '../../zero-client/src/types/query-result.ts';
 export type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
 export type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 export type {
@@ -13,7 +20,6 @@ export {
   useQuery,
   useSuspenseQuery,
   type QueryResult,
-  type QueryResultDetails,
   type UseQueryOptions,
 } from './use-query.tsx';
 export {useZeroConnectionState} from './use-zero-connection-state.tsx';

@@ -1149,7 +1149,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     for (const q of transformedCustomQueries) {
       if ('error' in q) {
         lc.error?.(
-          `Error transforming custom query ${q.name}: ${q.error} ${q.details}`,
+          `Error transforming custom query ${q.name}: ${q.error}${q.details ? ` ${JSON.stringify(q.details)}` : ''}`,
         );
         appQueryErrors.push(q);
         continue;

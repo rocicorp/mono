@@ -1,5 +1,4 @@
 import type {Transaction, UpdateValue} from '@rocicorp/zero';
-import {assert} from '../../../packages/shared/src/asserts.ts';
 import {
   assertIsCreatorOrAdmin,
   assertIsLoggedIn,
@@ -8,6 +7,7 @@ import {
   isAdmin,
   type AuthData,
 } from './auth.ts';
+import {MutationError, MutationErrorCode} from './error.ts';
 import {schema, ZERO_PROJECT_ID} from './schema.ts';
 
 function projectIDWithDefault(projectID: string | undefined): string {
@@ -79,7 +79,14 @@ export function createMutators(authData: AuthData | undefined) {
           .where('id', change.id)
           .one()
           .run();
-        assert(oldIssue);
+
+        if (!oldIssue) {
+          throw new MutationError(
+            `Issue not found`,
+            MutationErrorCode.ENTITY_NOT_FOUND,
+            change.id,
+          );
+        }
 
         await assertIsCreatorOrAdmin(authData, tx.query.issue, change.id);
         await tx.mutate.issue.update(change);
@@ -215,7 +222,14 @@ export function createMutators(authData: AuthData | undefined) {
           projectID,
         }: {id: string; name: string; projectID?: string | undefined},
       ) {
-        assert(isAdmin(authData), 'Only admins can create labels');
+        if (!isAdmin(authData)) {
+          throw new MutationError(
+            `Only admins can create labels`,
+            MutationErrorCode.NOT_AUTHORIZED,
+            id,
+          );
+        }
+
         await tx.mutate.label.insert({
           id,
           name,
@@ -237,7 +251,14 @@ export function createMutators(authData: AuthData | undefined) {
           projectID?: string | undefined;
         },
       ) {
-        assert(isAdmin(authData), 'Only admins can create labels');
+        if (!isAdmin(authData)) {
+          throw new MutationError(
+            `Only admins can create labels`,
+            MutationErrorCode.NOT_AUTHORIZED,
+            labelID,
+          );
+        }
+
         projectID = projectIDWithDefault(projectID);
         await tx.mutate.label.insert({
           id: labelID,

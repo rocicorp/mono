@@ -166,8 +166,10 @@ export class InspectorDelegate implements MetricsDelegate {
     }
 
     if ('error' in result) {
+      const message =
+        result.message ?? 'Unknown application error from custom query';
       throw new Error(
-        `Application error transforming custom query ${name}: ${result.error} ${JSON.stringify(result.details)}`,
+        `Error transforming custom query ${name} (${result.error}): ${message} ${JSON.stringify(result.details)}`,
       );
     }
 

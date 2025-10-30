@@ -64,6 +64,10 @@ export const errorKindSchema: v.Type<ErrorKind> = v.union(
 const pushFailedBaseSchema = v.object({
   kind: pushFailedErrorKindSchema,
   details: jsonSchema.optional(),
+  /**
+   * The mutationIDs of the mutations that failed to process.
+   * This can be a subset of the mutationIDs in the request.
+   */
   mutationIDs: v.array(mutationIDSchema),
   message: v.string(),
 });
@@ -98,6 +102,9 @@ export const pushFailedBodySchema = v.union(
 const transformFailedBaseSchema = v.object({
   kind: transformFailedErrorKindSchema,
   details: jsonSchema.optional(),
+  /**
+   * The queryIDs of the queries that failed to transform.
+   */
   queryIDs: v.array(v.string()),
   message: v.string(),
 });
