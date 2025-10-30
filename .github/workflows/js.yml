@@ -118,7 +118,7 @@ jobs:
       - name: Install Playwright
         run: ${{ matrix.install-cmd }}
       - name: Run tests
-        run: TEST_PG_MODE=nopg npm run test -- ${{ matrix.browser == 'node' && '--project="**/node"' || '' }}
+        run: TEST_PG_MODE=nopg npm run test -- ${{ matrix.browser == 'node' && '--project="**/node"' || '--project="!**/node"' }}
 
   test-pg:
     name: Test PG ${{ matrix.pg-version }}
