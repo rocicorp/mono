@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1761777631085,
+  "lastUpdate": 1761796114211,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54421,6 +54421,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/497fd3ed5c0b58e06895aeb8ab6d07b20a1362c2"
         },
         "date": 1761777618602,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302365,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54477,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111453,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31872,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "aaron@aaronboodman.com",
+            "name": "Aaron Boodman",
+            "username": "aboodman"
+          },
+          "committer": {
+            "email": "aaron@aaronboodman.com",
+            "name": "Aaron Boodman",
+            "username": "aboodman"
+          },
+          "distinct": true,
+          "id": "bcbdaeeedc0dc4a8362bd35ad2cd2e4bd1496091",
+          "message": "Revert \"feat(zero): defineQuery (#4958)\"\n\nThis broke mutations in zbugs. They fail with this error:\n\nPushProcessor Unexpected error processing mutation 1 for client p27m9atrdq25shlf4h {\"name\":\"Error\",\"message\":\"Not a RunnableQuery\",\"stack\":\"Error: Not a RunnableQuery\\n    at assert (file:///Users/aa/work/mono/packages/zero/out/shared/src/asserts.js:3:15)\\n    at asRunnableQuery (file:///Users/aa/work/mono/packages/zero/out/zql/src/query/runnable-query.js:3:5)\\n    at TransactionImpl.run (file:///Users/aa/work/mono/packages/zero/out/zero-server/src/custom.js:21:16)\\n    at assertUserCanSeeIssue (file:///Users/aa/work/mono/apps/zbugs/node_modules/.vite-temp/vite.config.ts.timestamp-1761794990335-e21c32482035d.mjs:896:32)\\n    at updateIssueNotification (file:///Users/aa/work/mono/apps/zbugs/node_modules/.vite-temp/vite.config.ts.timestamp-1761794990335-e21c32482035d.mjs:1129:11)\\n    at Object.create (file:///Users/aa/work/mono/apps/zbugs/node_modules/.vite-temp/vite.config.ts.timestamp-1761794990335-e21c32482035d.mjs:948:15)\\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\\n    at async create (file:///Users/aa/work/mono/apps/zbugs/node_modules/.vite-temp/vite.config.ts.timestamp-1761794990335-e21c32482035d.mjs:1446:9)\\n    at async dbProvider.transaction.upstreamSchema (file:///Users/aa/work/mono/packages/zero/out/zero-server/src/process-mutations.js:117:17)\\n    at async scope (file:///Users/aa/work/mono/node_modules/postgres/src/index.js:259:18)\\n    at async Function.begin (file:///Users/aa/work/mono/node_modules/postgres/src/index.js:242:14)\\n    at async Transactor.transact (file:///Users/aa/work/mono/packages/zero/out/zero-server/src/process-mutations.js:64:29)\\n    at async handleMutationRequest (file:///Users/aa/work/mono/packages/zero/out/zero-server/src/process-mutations.js:38:21)\\n    at async Object.mutateHandler (file:///Users/aa/work/mono/apps/zbugs/node_modules/.vite-temp/vite.config.ts.timestamp-1761794990335-e21c32482035d.mjs:1692:20)\"}\n\nThis reverts commit 497fd3ed5c0b58e06895aeb8ab6d07b20a1362c2.",
+          "timestamp": "2025-10-29T17:45:46-10:00",
+          "tree_id": "acf0c15db164db7c9a9d25e0edb5e990c8eff7b1",
+          "url": "https://github.com/rocicorp/mono/commit/bcbdaeeedc0dc4a8362bd35ad2cd2e4bd1496091"
+        },
+        "date": 1761796101864,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
