@@ -20,7 +20,8 @@ import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
 import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import {getServerSchema} from '../../zero-server/src/schema.ts';
 import {Transaction} from '../../zero-server/src/test/util.ts';
-import {completedAST, newQuery} from '../../zql/src/query/query-impl.ts';
+import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
+import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {type Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../zqlite/src/table-source.ts';
@@ -85,6 +86,7 @@ type Schema = typeof schema;
 let serverSchema: ServerSchema;
 
 let issueQuery: Query<Schema, 'issue'>;
+let queryDelegate: QueryDelegate<unknown>;
 
 beforeAll(async () => {
   pg = await testDBs.create(DB_NAME, undefined, false);
@@ -131,9 +133,9 @@ beforeAll(async () => {
     {tableCopyWorkers: 1},
   );
 
-  const queryDelegate = newQueryDelegate(lc, testLogConfig, sqlite, schema);
+  queryDelegate = newQueryDelegate(lc, testLogConfig, sqlite, schema);
 
-  issueQuery = newQuery(queryDelegate, schema, 'issue');
+  issueQuery = newQuery(schema, 'issue');
 
   // Check that PG, SQLite, and test data are in sync
   const [issuePgRows, commentPgRows] = await Promise.all([
@@ -202,13 +204,17 @@ describe('compiling ZQL to SQL', () => {
   ) {
     test('basic', async () => {
       const query = issueQuery.related('comments');
-      const c = compile(serverSchema, schema, completedAST(query));
+      const c = compile(
+        serverSchema,
+        schema,
+        queryDelegate.withContext(query).ast,
+      );
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
       );
       const zqlResult = mapResultToClientNames(
-        await query.run(),
+        await queryDelegate.run(query),
         schema,
         'issue',
       );
@@ -277,13 +283,17 @@ describe('compiling ZQL to SQL', () => {
       const query = issueQuery
         .related('comments', q => q.orderBy('hash', 'asc'))
         .limit(2);
-      const c = compile(serverSchema, schema, completedAST(query));
+      const c = compile(
+        serverSchema,
+        schema,
+        queryDelegate.withContext(query).ast,
+      );
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
       );
       const zqlResult = mapResultToClientNames(
-        await query.run(),
+        await queryDelegate.run(query),
         schema,
         'issue',
       );
@@ -337,13 +347,17 @@ describe('compiling ZQL to SQL', () => {
       const query = issueQuery.related('comments', q =>
         q.where('hash', '>=', 'hash-51'),
       );
-      const c = compile(serverSchema, schema, completedAST(query));
+      const c = compile(
+        serverSchema,
+        schema,
+        queryDelegate.withContext(query).ast,
+      );
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
       );
       const zqlResult = mapResultToClientNames(
-        await query.run(),
+        await queryDelegate.run(query),
         schema,
         'issue',
       );
@@ -378,13 +392,17 @@ describe('compiling ZQL to SQL', () => {
       const q2 = issueQuery.related('comments', q =>
         q.where('hash', '=', 'hash-1'),
       );
-      const c2 = compile(serverSchema, schema, completedAST(q2));
+      const c2 = compile(
+        serverSchema,
+        schema,
+        queryDelegate.withContext(q2).ast,
+      );
       const sqlQuery2 = formatPgInternalConvert(c2);
       const pgResult2 = extractZqlResult(
         await runPgQuery(sqlQuery2.text, sqlQuery2.values as JSONValue[]),
       );
       const zqlResult2 = mapResultToClientNames(
-        await q2.run(),
+        await queryDelegate.run(q2),
         schema,
         'issue',
       );
@@ -424,13 +442,17 @@ describe('compiling ZQL to SQL', () => {
       const query = issueQuery.related('comments', q =>
         q.where('weight', '>=', 5.551),
       );
-      const c = compile(serverSchema, schema, completedAST(query));
+      const c = compile(
+        serverSchema,
+        schema,
+        queryDelegate.withContext(query).ast,
+      );
       const sqlQuery = formatPgInternalConvert(c);
       const pgResult = extractZqlResult(
         await runPgQuery(sqlQuery.text, sqlQuery.values as JSONValue[]),
       );
       const zqlResult = mapResultToClientNames(
-        await query.run(),
+        await queryDelegate.run(query),
         schema,
         'issue',
       );
@@ -465,13 +487,17 @@ describe('compiling ZQL to SQL', () => {
       const q2 = issueQuery.related('comments', q =>
         q.where('weight', '=', 1.11),
       );
-      const c2 = compile(serverSchema, schema, completedAST(q2));
+      const c2 = compile(
+        serverSchema,
+        schema,
+        queryDelegate.withContext(q2).ast,
+      );
       const sqlQuery2 = formatPgInternalConvert(c2);
       const pgResult2 = extractZqlResult(
         await runPgQuery(sqlQuery2.text, sqlQuery2.values as JSONValue[]),
       );
       const zqlResult2 = mapResultToClientNames(
-        await q2.run(),
+        await queryDelegate.run(q2),
         schema,
         'issue',
       );

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "check-types": "tsc",
+    "check-types:watch": "tsc --watch",
     "format": "prettier --write .",
     "check-format": "prettier --check .",
     "lint": "oxlint --type-aware src/",
@@ -20,7 +21,8 @@
     "shared": "0.0.0",
     "zero-cache": "0.0.0",
     "zero-protocol": "0.0.0",
-    "zero-schema": "0.0.0"
+    "zero-schema": "0.0.0",
+    "zero-types": "0.0.0"
   },
   "prettier": "@rocicorp/prettier-config"
 }

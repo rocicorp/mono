@@ -1,14 +1,12 @@
 /* oxlint-disable no-console */
+
 import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {expect, test} from 'vitest';
 import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../../ast-to-zql/src/format.ts';
-import {ast} from '../../../zql/src/query/query-impl.ts';
+import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
+import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
-import type {
-  AnyQuery,
-  AnyStaticQuery,
-} from '../../../zql/src/query/test/util.ts';
 import '../helpers/comparePg.ts';
 import {bootstrap, runAndCompare} from '../helpers/runner.ts';
 import {staticToRunnable} from '../helpers/static.ts';
@@ -42,7 +40,10 @@ if (REPRO_SEED) {
     const {query} = tc;
     console.log(
       'ZQL',
-      await formatOutput(ast(query[0]).table + astToZQL(ast(query[0]))),
+      await formatOutput(
+        queryWithContext(query[0], undefined).ast.table +
+          astToZQL(queryWithContext(query[0], undefined).ast),
+      ),
     );
     await runCase(tc);
   });
@@ -78,8 +79,9 @@ async function runCase({
   try {
     await runAndCompare(
       schema,
+      harness.delegates,
       staticToRunnable({
-        query: query[0] as AnyStaticQuery,
+        query: query[0],
         schema,
         harness,
       }),
@@ -106,8 +108,9 @@ async function shrink(generations: AnyQuery[], seed: number) {
     try {
       await runAndCompare(
         schema,
+        harness.delegates,
         staticToRunnable({
-          query: generations[mid] as AnyStaticQuery,
+          query: generations[mid],
           schema,
           harness,
         }),
@@ -123,5 +126,6 @@ async function shrink(generations: AnyQuery[], seed: number) {
     throw new Error('no failure found');
   }
   const query = generations[lastFailure];
-  return formatOutput(ast(query).table + astToZQL(ast(query)));
+  const queryInternals = queryWithContext(query, undefined);
+  return formatOutput(queryInternals.ast.table + astToZQL(queryInternals.ast));
 }

@@ -12,7 +12,9 @@
     "build:bin": "tsc -p tsconfig.bin.json",
     "lint": "oxlint --type-aware src/",
     "test": "vitest run",
+    "test:pg17": "vitest run --project='*17*'",
     "test:watch": "vitest watch",
+    "test:pg17:watch": "vitest watch --project='*17*'",
     "bench": "vitest bench",
     "test-types": "vitest run --typecheck.only --no-browser.enabled",
     "test-types:watch": "vitest watch --typecheck.only --no-browser.enabled"

@@ -1,18 +1,24 @@
 // cases with a controlled cost model
 import {describe, expect, test} from 'vitest';
-import {planQuery} from '../../../zql/src/planner/planner-builder.ts';
-import {builder} from './schema.ts';
-import {pick} from '../helpers/planner.ts';
-import type {PlannerConstraint} from '../../../zql/src/planner/planner-constraint.ts';
-import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
-import {must} from '../../../shared/src/must.ts';
 import {assert} from '../../../shared/src/asserts.ts';
+import {must} from '../../../shared/src/must.ts';
+import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
+import {planQuery} from '../../../zql/src/planner/planner-builder.ts';
 import type {CostModelCost} from '../../../zql/src/planner/planner-connection.ts';
+import type {PlannerConstraint} from '../../../zql/src/planner/planner-constraint.ts';
+import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
+import type {AnyQuery} from '../../../zql/src/query/query.ts';
+import {pick} from '../helpers/planner.ts';
+import {builder} from './schema.ts';
+
+function ast(q: AnyQuery) {
+  return queryWithContext(q, undefined).ast;
+}
 
 describe('one join', () => {
   test('no changes in cost', () => {
     const costModel = () => ({startupCost: 0, rows: 10});
-    const unplanned = builder.track.whereExists('album').ast;
+    const unplanned = ast(builder.track.whereExists('album'));
     const planned = planQuery(unplanned, costModel);
 
     // With semi-join overhead, planner now prefers flipped joins even when base costs are equal
@@ -23,7 +29,7 @@ describe('one join', () => {
   test('track.exists(album): track is more expensive', () => {
     const costModel = makeCostModel({track: 5000, album: 100});
     const planned = planQuery(
-      builder.track.whereExists('album').ast,
+      ast(builder.track.whereExists('album')),
       costModel,
     );
     expect(pick(planned, ['where', 'flip'])).toBe(true);
@@ -32,7 +38,7 @@ describe('one join', () => {
   test('track.exists(album): album is more expensive', () => {
     const costModel = makeCostModel({track: 100, album: 5000});
     const planned = planQuery(
-      builder.track.whereExists('album').ast,
+      ast(builder.track.whereExists('album')),
       costModel,
     );
     expect(pick(planned, ['where', 'flip'])).toBe(false);
@@ -43,7 +49,7 @@ describe('two joins via and', () => {
   test('track.exists(album).exists(genre): track > album > genre', () => {
     const costModel = makeCostModel({track: 5000, album: 100, genre: 10});
     const planned = planQuery(
-      builder.track.whereExists('album').whereExists('genre').ast,
+      ast(builder.track.whereExists('album').whereExists('genre')),
       costModel,
     );
 
@@ -57,7 +63,7 @@ describe('two joins via and', () => {
   test('track.exists(album).exists(genre): track > genre > album', () => {
     const costModel = makeCostModel({track: 5000, album: 10, genre: 100});
     const planned = planQuery(
-      builder.track.whereExists('album').whereExists('genre').ast,
+      ast(builder.track.whereExists('album').whereExists('genre')),
       costModel,
     );
 
@@ -73,9 +79,11 @@ describe('two joins via or', () => {
   test('track.exists(album).or.exists(genre): track > album > genre', () => {
     const costModel = makeCostModel({track: 500000, album: 10, genre: 10});
     const planned = planQuery(
-      builder.track.where(({or, exists}) =>
-        or(exists('album'), exists('genre')),
-      ).ast,
+      ast(
+        builder.track.where(({or, exists}) =>
+          or(exists('album'), exists('genre')),
+        ),
+      ),
       costModel,
     );
 
@@ -135,12 +143,14 @@ describe('two joins via or', () => {
     };
 
     const planned = planQuery(
-      builder.track.where(({or, exists}) =>
-        or(
-          exists('album', q => q.where('title', 'Outlaw Blues')),
-          exists('invoiceLines'),
+      ast(
+        builder.track.where(({or, exists}) =>
+          or(
+            exists('album', q => q.where('title', 'Outlaw Blues')),
+            exists('invoiceLines'),
+          ),
         ),
-      ).ast,
+      ),
       costModel,
     );
 
@@ -153,9 +163,11 @@ describe('double nested exists', () => {
   test('track.exists(album.exists(artist)): track > album > artist', () => {
     const costModel = makeCostModel({track: 5000, album: 100, artist: 10});
     const planned = planQuery(
-      builder.track.where(({exists}) =>
-        exists('album', q => q.whereExists('artist')),
-      ).ast,
+      ast(
+        builder.track.where(({exists}) =>
+          exists('album', q => q.whereExists('artist')),
+        ),
+      ),
       costModel,
     );
 
@@ -169,9 +181,11 @@ describe('double nested exists', () => {
   test('track.exists(album.exists(artist)): artist > album > track', () => {
     const costModel = makeCostModel({track: 10, album: 100, artist: 5000});
     const planned = planQuery(
-      builder.track.where(({exists}) =>
-        exists('album', q => q.whereExists('artist')),
-      ).ast,
+      ast(
+        builder.track.where(({exists}) =>
+          exists('album', q => q.whereExists('artist')),
+        ),
+      ),
       costModel,
     );
 
@@ -185,9 +199,11 @@ describe('double nested exists', () => {
   test('track.exists(album.exists(artist)): track > artist > album', () => {
     const costModel = makeCostModel({track: 1000, album: 10, artist: 100});
     const planned = planQuery(
-      builder.track.where(({exists}) =>
-        exists('album', q => q.whereExists('artist')),
-      ).ast,
+      ast(
+        builder.track.where(({exists}) =>
+          exists('album', q => q.whereExists('artist')),
+        ),
+      ),
       costModel,
     );
 
@@ -203,7 +219,7 @@ describe('double nested exists', () => {
 describe('no exists', () => {
   test('simple', () => {
     const costModel = makeCostModel({track: 1000, album: 10, artist: 100});
-    const unplanned = builder.track.where('name', 'Outlaw Blues').ast;
+    const unplanned = ast(builder.track.where('name', 'Outlaw Blues'));
     const planned = planQuery(unplanned, costModel);
 
     // No joins to plan, should be unchanged
@@ -212,9 +228,11 @@ describe('no exists', () => {
 
   test('with related', () => {
     const costModel = makeCostModel({track: 1000, album: 10, artist: 100});
-    const unplanned = builder.track
-      .where('name', 'Outlaw Blues')
-      .related('album', q => q.where('title', 'Outlaw Blues')).ast;
+    const unplanned = ast(
+      builder.track
+        .where('name', 'Outlaw Blues')
+        .related('album', q => q.where('title', 'Outlaw Blues')),
+    );
     const planned = planQuery(unplanned, costModel);
     // No joins to plan, should be unchanged
     expect(planned).toEqual(unplanned);
@@ -222,9 +240,11 @@ describe('no exists', () => {
 
   test('with or', () => {
     const costModel = makeCostModel({track: 1000, album: 10, artist: 100});
-    const unplanned = builder.track.where(({or, cmp}) =>
-      or(cmp('name', 'Outlaw Blues'), cmp('composer', 'foo')),
-    ).ast;
+    const unplanned = ast(
+      builder.track.where(({or, cmp}) =>
+        or(cmp('name', 'Outlaw Blues'), cmp('composer', 'foo')),
+      ),
+    );
     const planned = planQuery(unplanned, costModel);
     // No joins to plan, should be unchanged
     expect(planned).toEqual(unplanned);
@@ -235,9 +255,11 @@ describe('related calls get plans', () => {
   test('1:1 will not flip since it is anchored by primary key', () => {
     // album cost is decimated to 1 during the `related` transition since we are related by `albumId -> id`
     const costModel = makeCostModel({track: 1000, album: 100000, artist: 2});
-    const unplanned = builder.track
-      .where('name', 'Outlaw Blues')
-      .related('album', q => q.whereExists('artist')).ast;
+    const unplanned = ast(
+      builder.track
+        .where('name', 'Outlaw Blues')
+        .related('album', q => q.whereExists('artist')),
+    );
     const planned = planQuery(unplanned, costModel);
 
     expect(pick(planned, ['related', 0, 'subquery', 'where', 'flip'])).toBe(
@@ -246,9 +268,11 @@ describe('related calls get plans', () => {
   });
 
   test('1:many may flip', () => {
-    const unplanned = builder.album.related('tracks', q =>
-      q.whereExists('genre', q => q.where('name', 'Foo')),
-    ).ast;
+    const unplanned = ast(
+      builder.album.related('tracks', q =>
+        q.whereExists('genre', q => q.where('name', 'Foo')),
+      ),
+    );
     const costModel = (
       table: string,
       _sort: Ordering,
@@ -295,7 +319,7 @@ describe('junction edge', () => {
       track: 10000,
     });
     const planned = planQuery(
-      builder.playlist.whereExists('tracks').ast,
+      ast(builder.playlist.whereExists('tracks')),
       costModel,
     );
 
@@ -311,7 +335,7 @@ describe('junction edge', () => {
       track: 10000,
     });
     const planned = planQuery(
-      builder.track.whereExists('playlists').ast,
+      ast(builder.track.whereExists('playlists')),
       costModel,
     );
 
@@ -322,11 +346,11 @@ describe('junction edge', () => {
 
 test('ors anded one after the other', () => {
   // (A or B) and (C or D)
-  const ast = builder.track
-    .where(({or, exists}) => or(exists('album'), exists('genre')))
-    .where(({or, exists}) =>
-      or(exists('invoiceLines'), exists('mediaType')),
-    ).ast;
+  const astResult = ast(
+    builder.track
+      .where(({or, exists}) => or(exists('album'), exists('genre')))
+      .where(({or, exists}) => or(exists('invoiceLines'), exists('mediaType'))),
+  );
 
   const costModel = makeCostModel({
     track: 10000,
@@ -336,7 +360,7 @@ test('ors anded one after the other', () => {
     mediaType: 10000,
   });
 
-  const planned = planQuery(ast, costModel);
+  const planned = planQuery(astResult, costModel);
 
   // With uniform costs, planner should keep original order (no flips)
   // Check first OR: album and genre

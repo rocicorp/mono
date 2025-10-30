@@ -1,20 +1,21 @@
 import {bench, run, summary} from 'mitata';
-import {bootstrap} from '../../zql-integration-tests/src/helpers/runner.ts';
+import {expect, test} from 'vitest';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
+import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
+import {mapAST} from '../../zero-protocol/src/ast.ts';
+import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
 import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
 import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
-import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
-import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
+import {bootstrap} from '../../zql-integration-tests/src/helpers/runner.ts';
 import {planQuery} from '../../zql/src/planner/planner-builder.ts';
-import {mapAST} from '../../zero-protocol/src/ast.ts';
+import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import type {Query} from '../../zql/src/query/query.ts';
-import {expect, test} from 'vitest';
-import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
+import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
 
 const pgContent = await getChinook();
 
-const {dbs, queries} = await bootstrap({
+const {dbs, queries, delegates} = await bootstrap({
   suiteName: 'planner_cost_bench',
   zqlSchema: schema,
   pgContent,
@@ -34,11 +35,12 @@ const costModel = createSQLiteCostModel(dbs.sqlite, tableSpecs);
 const clientToServerMapper = clientToServer(schema.tables);
 
 // Helper to benchmark planning time
-function benchmarkPlanning<TTable extends keyof typeof schema.tables & string>(
+function benchmarkPlanning<TTable extends keyof typeof schema.tables>(
   name: string,
   query: Query<typeof schema, TTable>,
+  delegate: QueryDelegate<unknown>,
 ) {
-  const unplannedAST = query.ast;
+  const unplannedAST = delegate.withContext(query).ast;
   const mappedAST = mapAST(unplannedAST, clientToServerMapper);
 
   bench(name, () => {
@@ -50,11 +52,13 @@ summary(() => {
   benchmarkPlanning(
     '1 exists: track.exists(album)',
     queries.sqlite.track.whereExists('album'),
+    delegates.sqlite,
   );
 
   benchmarkPlanning(
     '2 exists (AND): track.exists(album).exists(genre)',
     queries.sqlite.track.whereExists('album').whereExists('genre'),
+    delegates.sqlite,
   );
 
   benchmarkPlanning(
@@ -63,6 +67,7 @@ summary(() => {
       .whereExists('album')
       .whereExists('genre')
       .whereExists('mediaType'),
+    delegates.sqlite,
   );
 
   benchmarkPlanning(
@@ -74,6 +79,7 @@ summary(() => {
         exists('mediaType', q => q.where('name', 'MPEG audio file')),
       ),
     ),
+    delegates.sqlite,
   );
 
   benchmarkPlanning(
@@ -84,6 +90,7 @@ summary(() => {
       .whereExists('mediaType')
       .whereExists('invoiceLines')
       .whereExists('playlistTrackJunction'),
+    delegates.sqlite,
   );
 
   benchmarkPlanning(
@@ -97,11 +104,13 @@ summary(() => {
         exists('genre', q => q.where('name', 'Pop')),
       ),
     ),
+    delegates.sqlite,
   );
 
   benchmarkPlanning(
     'Nested 2 levels: track > album > artist',
     queries.sqlite.track.whereExists('album', q => q.whereExists('artist')),
+    delegates.sqlite,
   );
 
   benchmarkPlanning(
@@ -109,6 +118,7 @@ summary(() => {
     queries.sqlite.playlist.whereExists('tracks', q =>
       q.whereExists('album', q2 => q2.whereExists('artist')),
     ),
+    delegates.sqlite,
   );
 
   benchmarkPlanning(
@@ -118,6 +128,7 @@ summary(() => {
         .where('title', 'Big Ones')
         .whereExists('artist', q2 => q2.where('name', 'Aerosmith')),
     ),
+    delegates.sqlite,
   );
 
   benchmarkPlanning(
@@ -133,6 +144,7 @@ summary(() => {
       .whereExists('genre')
       .whereExists('playlistTrackJunction')
       .whereExists('invoiceLines'),
+    delegates.sqlite,
   );
 
   benchmarkPlanning(
@@ -151,6 +163,7 @@ summary(() => {
         exists('mediaType', q => q.where('id', 2)),
       ),
     ),
+    delegates.sqlite,
   );
 
   benchmarkPlanning(
@@ -168,6 +181,7 @@ summary(() => {
       .whereExists('album')
       .whereExists('genre')
       .whereExists('mediaType'),
+    delegates.sqlite,
   );
 
   benchmarkPlanning(
@@ -188,6 +202,7 @@ summary(() => {
         exists('mediaType', q => q.where('id', 2)),
       ),
     ),
+    delegates.sqlite,
   );
 
   benchmarkPlanning(
@@ -211,6 +226,7 @@ summary(() => {
         ),
       ),
     ),
+    delegates.sqlite,
   );
 });
 

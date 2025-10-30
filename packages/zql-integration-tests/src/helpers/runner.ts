@@ -15,9 +15,7 @@ import {formatPgInternalConvert} from '../../../z2s/src/sql.ts';
 import {initialSync} from '../../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
-import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   clientToServer,
   type NameMapper,
@@ -25,21 +23,26 @@ import {
 import type {ServerSchema} from '../../../zero-schema/src/server-schema.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import {makeSchemaCRUD} from '../../../zero-server/src/custom.ts';
-import {ZPGQuery} from '../../../zero-server/src/query.ts';
 import {getServerSchema} from '../../../zero-server/src/schema.ts';
 import {Transaction} from '../../../zero-server/src/test/util.ts';
+import {ZPGQuery} from '../../../zero-server/src/zpg-query.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Change} from '../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../zql/src/ivm/data.ts';
 import {defaultFormat} from '../../../zql/src/ivm/default-format.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
-import type {Input} from '../../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
-import type {SourceChange} from '../../../zql/src/ivm/source.ts';
-import type {Format} from '../../../zql/src/ivm/view.ts';
-import type {DBTransaction} from '../../../zql/src/mutate/custom.ts';
+import type {Source, SourceChange} from '../../../zql/src/ivm/source.ts';
+import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {ast, QueryImpl} from '../../../zql/src/query/query-impl.ts';
-import type {Query} from '../../../zql/src/query/query.ts';
+import {QueryImpl} from '../../../zql/src/query/query-impl.ts';
+import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
+import type {
+  AnyQuery,
+  HumanReadable,
+  Query,
+  RunOptions,
+} from '../../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../zql/src/query/test/query-delegate.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {
@@ -60,12 +63,9 @@ type DBs<TSchema extends Schema> = {
 };
 
 type Delegates = {
-  pg: {
-    transaction: DBTransaction<unknown>;
-    serverSchema: ServerSchema;
-  };
-  sqlite: QueryDelegate;
-  memory: QueryDelegate;
+  pg: TestPGQueryDelegate;
+  sqlite: QueryDelegate<undefined>;
+  memory: QueryDelegate<undefined>;
   mapper: NameMapper;
 };
 
@@ -185,15 +185,7 @@ function makeDelegates<TSchema extends Schema>(
   schema: TSchema,
 ): Delegates {
   return {
-    pg: {
-      transaction: {
-        query(query: string, args: unknown[]) {
-          return dbs.pg.unsafe(query, args as JSONValue[]);
-        },
-        wrappedTransaction: dbs.pg,
-      },
-      serverSchema: dbs.pgSchema,
-    },
+    pg: new TestPGQueryDelegate(dbs.pg, schema, dbs.pgSchema),
     sqlite: newQueryDelegate(lc, testLogConfig, dbs.sqlite, schema),
     memory: new TestMemoryQueryDelegate({sources: dbs.memory}),
     mapper: clientToServer(schema.tables),
@@ -225,7 +217,6 @@ function makeQueries<TSchema extends Schema>(
       defaultFormat,
     );
     ret.memory[table] = new QueryImpl(
-      delegates.memory,
       schema,
       table,
       {table},
@@ -233,7 +224,6 @@ function makeQueries<TSchema extends Schema>(
       'test',
     );
     ret.sqlite[table] = new QueryImpl(
-      delegates.sqlite,
       schema,
       table,
       {table},
@@ -417,15 +407,7 @@ export async function bootstrap<TSchema extends Schema>({
     await dbs.pg.begin(async tx => {
       const scopedDelegates: Delegates = {
         ...delegates,
-        pg: {
-          transaction: {
-            query(query: string, args: unknown[]) {
-              return tx.unsafe(query, args as JSONValue[]);
-            },
-            wrappedTransaction: tx,
-          },
-          serverSchema: dbs.pgSchema,
-        },
+        pg: new TestPGQueryDelegate(tx, zqlSchema, dbs.pgSchema),
         memory: new TestMemoryQueryDelegate({
           sources: Object.fromEntries(
             Object.entries(dbs.memory).map(([key, source]) => [
@@ -516,17 +498,21 @@ function makeBenchmark<TSchema extends Schema>({
       const pg = createQuery(queries.pg);
       const zql = createQuery(queries.memory);
       const zqlite = createQuery(queries.sqlite);
-      benchHydration(`zql: ${name}`, zql);
-      benchHydration(`zqlite: ${name}`, zqlite);
-      benchHydration(`zpg: ${name}`, pg);
+      benchHydration(`zql: ${name}`, delegates.memory, zql);
+      benchHydration(`zqlite: ${name}`, delegates.sqlite, zqlite);
+      benchHydration(`zpg: ${name}`, delegates.pg, pg);
       break;
     }
   }
 }
 
-function benchHydration(name: string, q: AnyQuery) {
+function benchHydration(
+  name: string,
+  delegate: QueryDelegate<unknown>,
+  q: AnyQuery,
+) {
   bench(name, async () => {
-    await q.run();
+    await delegate.run(q);
   });
 }
 
@@ -540,7 +526,8 @@ function benchPush(
   let iteration = 0;
   bench(`${type}: ${name}`, function* () {
     // setup
-    const view = query.materialize();
+    const delegate = type === 'zqlite' ? delegates.sqlite : delegates.memory;
+    const view = delegate.materialize(query);
 
     // benchmark
     yield () => {
@@ -613,15 +600,7 @@ function makeTest<TSchema extends Schema>(
       // Isolate the test from other tests by putting each test in its own transaction.
       delegates = {
         ...delegates,
-        pg: {
-          transaction: {
-            query(query: string, args: unknown[]) {
-              return tx.unsafe(query, args as JSONValue[]);
-            },
-            wrappedTransaction: tx,
-          },
-          serverSchema: dbs.pgSchema,
-        },
+        pg: new TestPGQueryDelegate(tx, zqlSchema, dbs.pgSchema),
         memory: new TestMemoryQueryDelegate({
           sources: Object.fromEntries(
             Object.entries(dbs.memory).map(([key, source]) => [
@@ -649,7 +628,7 @@ function makeTest<TSchema extends Schema>(
         memory: createQuery(queryBuilders.memory),
       };
 
-      await runAndCompare(zqlSchema, queries, manualVerification);
+      await runAndCompare(zqlSchema, delegates, queries, manualVerification);
 
       if (pushEvery > 0) {
         await checkPush(zqlSchema, delegates, queries, pushEvery);
@@ -660,17 +639,18 @@ function makeTest<TSchema extends Schema>(
 
 export async function runAndCompare(
   zqlSchema: Schema,
+  delegates: Delegates,
   queries: QueryInstances,
   manualVerification: unknown,
 ) {
-  const pgResult = await queries.pg.run();
+  const pgResult = await delegates.pg.run(queries.pg);
   // Might we worth being able to configure ZQLite to return client vs server names
   const sqliteResult = mapResultToClientNames(
-    await queries.sqlite.run(),
+    await delegates.sqlite.run(queries.sqlite),
     zqlSchema,
-    ast(queries.sqlite).table,
+    delegates.sqlite.withContext(queries.sqlite).ast.table,
   );
-  const memoryResult = await queries.memory.run();
+  const memoryResult = await delegates.memory.run(queries.memory);
 
   // - is PG
   // + is SQLite / Memory
@@ -688,7 +668,7 @@ async function checkPush(
   pushEvery: number,
   mustEditRows?: [table: string, row: Row][],
 ) {
-  const queryRows = gatherRows(zqlSchema, queries.memory);
+  const queryRows = gatherRows(zqlSchema, queries.memory, delegates.memory);
 
   function copyRows() {
     return new Map(
@@ -725,22 +705,22 @@ async function checkPush(
   await checkEditToMatch(zqlSchema, delegates, editedRows, queries);
 }
 
-// oxlint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyQuery = Query<any, any, any>;
 function gatherRows(
   zqlSchema: Schema,
   q: AnyQuery,
+  queryDelegate: QueryDelegate<unknown>,
 ): Map<string, Map<string, Row>> {
   const rows = new Map<string, Map<string, Row>>();
 
-  const view = q.materialize(
+  const view = queryDelegate.materialize(
+    q,
     (
-      _query: AnyQuery,
-      input: Input,
-      _format: Format,
-      onDestroy: () => void,
-      _onTransactionCommit: (cb: () => void) => void,
-      _queryComplete: true | ErroredQuery | Promise<true>,
+      _query,
+      input,
+      _format,
+      onDestroy,
+      _onTransactionCommit,
+      _queryComplete,
     ) => {
       const schema = input.getSchema();
       for (const node of input.fetch({})) {
@@ -798,8 +778,8 @@ async function checkRemove(
 ): Promise<[table: string, row: Row][]> {
   const tables = [...queryRows.keys()];
 
-  const zqliteMaterialized = queries.sqlite.materialize();
-  const zqlMaterialized = queries.memory.materialize();
+  const zqliteMaterialized = delegates.sqlite.materialize(queries.sqlite);
+  const zqlMaterialized = delegates.memory.materialize(queries.memory);
 
   let numOps = 0;
   const removedRows: [string, Row][] = [];
@@ -853,12 +833,12 @@ async function checkRemove(
     });
 
     // pg cannot be materialized.
-    const pgResult = await queries.pg.run();
+    const pgResult = await delegates.pg.run(queries.pg);
     expect(
       mapResultToClientNames(
         zqliteMaterialized.data,
         zqlSchema,
-        ast(queries.sqlite).table,
+        delegates.sqlite.withContext(queries.sqlite).ast.table,
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -884,8 +864,8 @@ async function checkAddBack(
   rowsToAdd: [string, Row][],
   queries: QueryInstances,
 ) {
-  const zqliteMaterialized = queries.sqlite.materialize();
-  const zqlMaterialized = queries.memory.materialize();
+  const zqliteMaterialized = delegates.sqlite.materialize(queries.sqlite);
+  const zqlMaterialized = delegates.memory.materialize(queries.memory);
 
   const crud = makeSchemaCRUD(zqlSchema)(
     delegates.pg.transaction,
@@ -904,12 +884,12 @@ async function checkAddBack(
       row,
     });
 
-    const pgResult = await queries.pg.run();
+    const pgResult = await delegates.pg.run(queries.pg);
     expect(
       mapResultToClientNames(
         zqliteMaterialized.data,
         zqlSchema,
-        ast(queries.sqlite).table,
+        delegates.sqlite.withContext(queries.sqlite).ast.table,
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -930,8 +910,8 @@ async function checkEditToRandom(
 ): Promise<[table: string, [original: Row, edited: Row]][]> {
   const tables = [...queryRows.keys()];
 
-  const zqliteMaterialized = queries.sqlite.materialize();
-  const zqlMaterialized = queries.memory.materialize();
+  const zqliteMaterialized = delegates.sqlite.materialize(queries.sqlite);
+  const zqlMaterialized = delegates.memory.materialize(queries.memory);
 
   let numOps = 0;
   const editedRows: [string, [original: Row, edited: Row]][] = [];
@@ -985,12 +965,12 @@ async function checkEditToRandom(
       row: editedRow,
     });
 
-    const pgResult = await queries.pg.run();
+    const pgResult = await delegates.pg.run(queries.pg);
     expect(
       mapResultToClientNames(
         zqliteMaterialized.data,
         zqlSchema,
-        ast(queries.sqlite).table,
+        delegates.sqlite.withContext(queries.sqlite).ast.table,
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -1037,8 +1017,8 @@ async function checkEditToMatch(
   rowsToEdit: [string, [original: Row, edited: Row]][],
   queries: QueryInstances,
 ) {
-  const zqliteMaterialized = queries.sqlite.materialize();
-  const zqlMaterialized = queries.memory.materialize();
+  const zqliteMaterialized = delegates.sqlite.materialize(queries.sqlite);
+  const zqlMaterialized = delegates.memory.materialize(queries.memory);
 
   const crud = makeSchemaCRUD(zqlSchema)(
     delegates.pg.transaction,
@@ -1060,12 +1040,12 @@ async function checkEditToMatch(
       row: original,
     });
 
-    const pgResult = await queries.pg.run();
+    const pgResult = await delegates.pg.run(queries.pg);
     expect(
       mapResultToClientNames(
         zqliteMaterialized.data,
         zqlSchema,
-        ast(queries.sqlite).table,
+        delegates.sqlite.withContext(queries.sqlite).ast.table,
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -1073,4 +1053,64 @@ async function checkEditToMatch(
 
   zqliteMaterialized.destroy();
   zqlMaterialized.destroy();
+}
+
+class TestPGQueryDelegate extends QueryDelegateBase<undefined> {
+  readonly #pg: PostgresDB;
+  readonly #schema: Schema;
+  readonly serverSchema: ServerSchema;
+  readonly transaction: {
+    query: (query: string, args: unknown[]) => Promise<Iterable<Row>>;
+    wrappedTransaction: PostgresDB;
+  };
+
+  constructor(pg: PostgresDB, schema: Schema, serverSchema: ServerSchema) {
+    super(undefined);
+    this.#pg = pg;
+    this.#schema = schema;
+    this.serverSchema = serverSchema;
+    this.transaction = {
+      query: (query: string, args: unknown[]) =>
+        pg.unsafe(query, args as JSONValue[]),
+      wrappedTransaction: pg,
+    };
+  }
+
+  readonly defaultQueryComplete = false;
+
+  getSource(_tableName: string): Source | undefined {
+    return undefined;
+  }
+
+  query(query: string, args: unknown[]) {
+    return this.#pg.unsafe(query, args as JSONValue[]);
+  }
+
+  override async run<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+  >(
+    query: Query<TSchema, TTable, TReturn, unknown>,
+    _options?: RunOptions,
+  ): Promise<HumanReadable<TReturn>> {
+    const queryInternals = queryWithContext(query, undefined);
+    const sqlQuery = formatPgInternalConvert(
+      compile(
+        this.serverSchema,
+        this.#schema,
+        queryInternals.ast,
+        queryInternals.format,
+      ),
+    );
+    const result = await this.query(
+      sqlQuery.text,
+      sqlQuery.values as JSONValue[],
+    );
+    // Handle empty results for .one() queries
+    if (result.length === 0 && queryInternals.format.singular) {
+      return undefined as unknown as HumanReadable<TReturn>;
+    }
+    return extractZqlResult(result) as HumanReadable<TReturn>;
+  }
 }

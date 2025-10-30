@@ -11,7 +11,9 @@
     "check-types:watch": "tsc --watch",
     "lint": "oxlint --type-aware src/",
     "test": "vitest run",
-    "test:watch": "vitest watch"
+    "test:watch": "vitest watch",
+    "test:pg17": "vitest run --project='*17*'",
+    "test:pg17:watch": "vitest watch --project='*17*'"
   },
   "prettier": "@rocicorp/prettier-config",
   "dependencies": {
@@ -29,6 +31,7 @@
     "zero-cache": "0.0.0",
     "zero-protocol": "0.0.0",
     "zero-schema": "0.0.0",
+    "zero-types": "0.0.0",
     "zql": "0.0.0"
   }
 }

@@ -131,7 +131,41 @@ const user = table('user')
   import {helper} from './mod.ts';
   ```
 
-- Re-exports are common: main packages re-export from sub-packages (e.g., `packages/zero/src/mod.ts` → exports from `zero-client`, `zero-server`)
+- **DO NOT use `import()` in type expressions**: Always use `import type` at the top of the file
+
+  ```typescript
+  // Correct - import type at the top
+  import type {AST} from '../../../zero-protocol/src/ast.ts';
+  import type {TTL} from './ttl.ts';
+
+  abstract addServerQuery(ast: AST, ttl: TTL): void;
+
+  // Incorrect - don't use import() in type expressions
+  abstract addServerQuery(
+    ast: import('../../../zero-protocol/src/ast.ts').AST,
+    ttl: import('./ttl.ts').TTL,
+  ): void;
+  ```
+
+- **AVOID re-exports that create cycles**: Re-exports can introduce circular dependencies between packages
+
+  ```typescript
+  // Incorrect - re-exporting from higher-level package
+  // In zero-types/src/schema.ts:
+  export type {Schema} from '../zero-schema/src/builder/schema-builder.ts';
+
+  // Correct - import directly from the source
+  // In your code:
+  import type {Schema} from '../zero-types/src/schema.ts';
+  ```
+
+  **Package dependency hierarchy** (lower packages should not depend on higher ones):
+  - `shared`, `zero-protocol`, `zero-types` (lowest level - pure types/utilities)
+  - `zql`, `zero-schema` (mid level - can use types packages)
+  - `zero-client`, `zero-server`, `zero-cache` (higher level - can use zql/schema)
+  - `zero` (highest - re-exports for convenience, user-facing only)
+
+- Re-exports are acceptable in **user-facing packages** for convenience (e.g., `packages/zero/src/mod.ts` → exports from `zero-client`, `zero-server`), but avoid re-exports between internal packages
 
 ## Database
 

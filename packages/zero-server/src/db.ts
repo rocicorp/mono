@@ -1,8 +1,11 @@
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
 import type {TransactionBase} from '../../zql/src/mutate/custom.ts';
 
-export interface ZeroTransaction<S extends Schema, TDBTransaction>
-  extends TransactionBase<S> {
+export interface ZeroTransaction<
+  TSchema extends Schema,
+  TDBTransaction,
+  TContext,
+> extends TransactionBase<TSchema, TContext> {
   readonly location: 'server';
   readonly reason: 'authoritative';
   readonly dbTransaction: TDBTransaction;

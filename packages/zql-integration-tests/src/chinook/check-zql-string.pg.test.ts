@@ -1,5 +1,5 @@
 import {test} from 'vitest';
-import {defaultFormat} from '../../../zql/src/ivm/default-format.ts';
+import {defaultFormat} from '../../../zero-types/src/format.ts';
 import {StaticQuery} from '../../../zql/src/query/static-query.ts';
 import type {AnyStaticQuery} from '../../../zql/src/query/test/util.ts';
 import '../helpers/comparePg.ts';
@@ -42,6 +42,7 @@ const query: AnyStaticQuery = f(z);
 test('manual zql string', async () => {
   await runAndCompare(
     schema,
+    harness.delegates,
     staticToRunnable({
       query,
       schema,

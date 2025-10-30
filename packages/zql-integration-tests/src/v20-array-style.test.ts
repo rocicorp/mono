@@ -1,8 +1,6 @@
 import {expect, test} from 'vitest';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import {Database} from '../../zqlite/src/db.ts';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
-import {newQueryDelegate} from '../../zqlite/src/test/source-factory.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   json,
@@ -10,7 +8,8 @@ import {
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import {createBuilder} from '../../zql/src/query/named.ts';
-import {delegateSymbol} from '../../zql/src/query/query.ts';
+import {Database} from '../../zqlite/src/db.ts';
+import {newQueryDelegate} from '../../zqlite/src/test/source-factory.ts';
 
 test('reading from old array style tables', async () => {
   const lc = createSilentLogContext();
@@ -46,7 +45,8 @@ test('reading from old array style tables', async () => {
   const d = newQueryDelegate(lc, testLogConfig, sqlite, schema);
   const queries = createBuilder(schema);
 
-  const rows = await queries.bar[delegateSymbol](d).run();
+  const rows = await d.run(queries.bar);
+
   expect(rows).toMatchInlineSnapshot(`
     [
       {

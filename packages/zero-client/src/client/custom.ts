@@ -7,8 +7,8 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
 import type {MutationOk} from '../../../zero-protocol/src/push.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {
   ClientTransaction,
   DeleteID,
@@ -21,7 +21,11 @@ import type {
   UpsertValue,
 } from '../../../zql/src/mutate/custom.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
-import {type Query, type RunOptions} from '../../../zql/src/query/query.ts';
+import {
+  type HumanReadable,
+  type Query,
+  type RunOptions,
+} from '../../../zql/src/query/query.ts';
 import type {ClientID} from '../types/client-state.ts';
 import {ZeroContext} from './context.ts';
 import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
@@ -69,6 +73,7 @@ export type CustomMutatorImpl<
 export type MakeCustomMutatorInterfaces<
   S extends Schema,
   MD extends CustomMutatorDefs,
+  TContext,
 > = {
   readonly [NamespaceOrName in keyof MD]: MD[NamespaceOrName] extends (
     tx: Transaction<S>,
@@ -78,49 +83,76 @@ export type MakeCustomMutatorInterfaces<
     : {
         readonly [P in keyof MD[NamespaceOrName]]: MakeCustomMutatorInterface<
           S,
-          MD[NamespaceOrName][P]
+          MD[NamespaceOrName][P],
+          TContext
         >;
       };
 };
 
-export type MakeCustomMutatorInterface<S extends Schema, F> = F extends (
-  tx: ClientTransaction<S>,
+export type MakeCustomMutatorInterface<
+  TSchema extends Schema,
+  F,
+  TContext,
+> = F extends (
+  tx: ClientTransaction<TSchema, TContext>,
   ...args: infer Args
 ) => Promise<void>
   ? (...args: Args) => MutatorResult
   : never;
 
-export class TransactionImpl<S extends Schema> implements ClientTransaction<S> {
-  constructor(lc: ZeroLogContext, repTx: WriteTransaction, schema: S) {
-    const castedRepTx = repTx as WriteTransactionImpl;
+export class TransactionImpl<TSchema extends Schema, TContext>
+  implements ClientTransaction<TSchema, TContext>
+{
+  readonly location = 'client';
+  readonly mutate: SchemaCRUD<TSchema>;
+  readonly query: SchemaQuery<TSchema, TContext>;
+  readonly #repTx: WriteTransaction;
+  readonly #zeroContext: ZeroContext<TContext>;
+
+  constructor(lc: ZeroLogContext, repTx: WriteTransaction, schema: TSchema) {
     must(repTx.reason === 'initial' || repTx.reason === 'rebase');
-    this.clientID = repTx.clientID;
-    this.mutationID = repTx.mutationID;
-    this.reason = repTx.reason === 'initial' ? 'optimistic' : 'rebase';
     const txData = must(
-      castedRepTx[zeroData],
+      (repTx as WriteTransactionImpl)[zeroData],
       'zero was not set on replicache internal options!',
     );
+
+    this.#repTx = repTx;
     this.mutate = makeSchemaCRUD(
       schema,
       repTx,
       txData.ivmSources as IVMSourceBranch,
     );
-    this.query = makeSchemaQuery(
+    this.query = makeSchemaQuery(schema);
+
+    this.#zeroContext = newZeroContext(
       lc,
-      schema,
       txData.ivmSources as IVMSourceBranch,
+      txData.context as TContext,
     );
-    this.token = txData.token;
   }
 
-  readonly clientID: ClientID;
-  readonly mutationID: number;
-  readonly reason: 'optimistic' | 'rebase';
-  readonly location = 'client';
-  readonly mutate: SchemaCRUD<S>;
-  readonly query: SchemaQuery<S>;
-  readonly token: string | undefined;
+  get clientID(): ClientID {
+    return this.#repTx.clientID;
+  }
+
+  get mutationID(): number {
+    return this.#repTx.mutationID;
+  }
+
+  get reason(): 'optimistic' | 'rebase' {
+    return this.#repTx.reason === 'initial' ? 'optimistic' : 'rebase';
+  }
+
+  get token(): string | undefined {
+    return (this.#repTx as WriteTransactionImpl)[zeroData]?.token;
+  }
+
+  run<TTable extends keyof TSchema['tables'] & string, TReturn, TContext>(
+    query: Query<TSchema, TTable, TReturn, TContext>,
+    options?: RunOptions,
+  ): Promise<HumanReadable<TReturn>> {
+    return this.#zeroContext.run(query, options);
+  }
 }
 
 export function makeReplicacheMutator<S extends Schema, TWrappedTransaction>(
@@ -167,14 +199,31 @@ function assertValidRunOptions(options: RunOptions | undefined): void {
   );
 }
 
-function makeSchemaQuery<S extends Schema>(
+function makeSchemaQuery<TSchema extends Schema, TContext>(schema: TSchema) {
+  return new Proxy(
+    {},
+    {
+      get(target: Record<string, Query<TSchema, string>>, prop: string) {
+        if (prop in target) {
+          return target[prop];
+        }
+
+        target[prop] = newQuery(schema, prop);
+        return target[prop];
+      },
+    },
+  ) as SchemaQuery<TSchema, TContext>;
+}
+
+function newZeroContext<TContext>(
   lc: ZeroLogContext,
-  schema: S,
   ivmBranch: IVMSourceBranch,
+  context: TContext,
 ) {
-  const context = new ZeroContext(
+  return new ZeroContext(
     lc,
     ivmBranch,
+    context,
     () => emptyFunction,
     () => emptyFunction,
     emptyFunction,
@@ -184,20 +233,6 @@ function makeSchemaQuery<S extends Schema>(
     emptyFunction,
     assertValidRunOptions,
   );
-
-  return new Proxy(
-    {},
-    {
-      get(target: Record<string, Query<S, string>>, prop: string) {
-        if (prop in target) {
-          return target[prop];
-        }
-
-        target[prop] = newQuery(context, schema, prop);
-        return target[prop];
-      },
-    },
-  ) as SchemaQuery<S>;
 }
 
 function makeTableCRUD(

@@ -4,15 +4,10 @@ import type {ServerSchema} from '../../../../zero-schema/src/server-schema.ts';
 import type {Schema} from '../../../../zero-types/src/schema.ts';
 import {getDataForType} from '../../../../zql-integration-tests/src/helpers/data-gen.ts';
 import {NotImplementedError} from '../../error.ts';
-import {ast} from '../query-impl.ts';
+import {queryWithContext} from '../query-internals.ts';
+import type {AnyQuery} from '../query.ts';
 import {staticQuery} from '../static-query.ts';
-import {
-  randomValueForType,
-  selectRandom,
-  shuffle,
-  type AnyQuery,
-  type Rng,
-} from './util.ts';
+import {randomValueForType, selectRandom, shuffle, type Rng} from './util.ts';
 export type Dataset = {
   [table: string]: Row[];
 };
@@ -68,7 +63,7 @@ function augmentQuery(
   generations: Generation[],
   depth = 0,
   inExists = false,
-) {
+): AnyQuery {
   if (depth > maxDepth) {
     return query;
   }
@@ -105,7 +100,8 @@ function augmentQuery(
   }
 
   function addOrderBy(query: AnyQuery) {
-    const table = schema.tables[ast(query).table];
+    const tableName = queryWithContext(query, undefined).ast.table;
+    const table = schema.tables[tableName];
     const columnNames = Object.keys(table.columns);
     // we wouldn't really order by _every_ column, right?
     const numCols = Math.floor((rng() * columnNames.length) / 2);
@@ -143,10 +139,11 @@ function augmentQuery(
       return query;
     }
 
-    const table = schema.tables[ast(query).table];
+    const tableName = queryWithContext(query, undefined).ast.table;
+    const table = schema.tables[tableName];
     const columnNames = Object.keys(table.columns);
     for (let i = 0; i < numConditions; i++) {
-      const tableData = data[ast(query).table];
+      const tableData = data[tableName];
       const columnName = selectRandom(rng, columnNames);
       const column = table.columns[columnName];
       const operator = selectRandom(rng, operatorsByType[column.type]);
@@ -156,7 +153,6 @@ function augmentQuery(
 
       let detailedType: string | undefined;
       if (serverSchema) {
-        const tableName = ast(query).table;
         const serverTable = schema.tables[tableName].serverName ?? tableName;
         const serverColumn =
           schema.tables[tableName].columns[columnName].serverName ?? columnName;
@@ -191,9 +187,8 @@ function augmentQuery(
       return query;
     }
 
-    const relationships = Object.keys(
-      schema.relationships[ast(query).table] ?? {},
-    );
+    const tableName = queryWithContext(query, undefined).ast.table;
+    const relationships = Object.keys(schema.relationships[tableName] ?? {});
     const relationshipsToAdd = Math.floor(rng() * 4);
     if (relationshipsToAdd === 0) {
       return query;
@@ -233,9 +228,8 @@ function augmentQuery(
       return query;
     }
 
-    const relationships = Object.keys(
-      schema.relationships[ast(query).table] ?? {},
-    );
+    const tableName = queryWithContext(query, undefined).ast.table;
+    const relationships = Object.keys(schema.relationships[tableName] ?? {});
     const existsToAdd = Math.floor(rng() * 4);
     if (existsToAdd === 0) {
       return query;

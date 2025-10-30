@@ -1,12 +1,12 @@
+import type postgres from 'postgres';
 import {describe, expect, test, vi} from 'vitest';
 import * as v from '../../shared/src/valita.ts';
 import {type PushBody} from '../../zero-protocol/src/push.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
+import {PostgresJSConnection} from './adapters/postgresjs.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {PushProcessor} from './push-processor.ts';
-import {PostgresJSConnection} from './adapters/postgresjs.ts';
 import {ZQLDatabase} from './zql-database.ts';
-import type postgres from 'postgres';
 describe('PushProcessor', () => {
   const body = {
     pushVersion: 1,

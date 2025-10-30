@@ -1,19 +1,20 @@
 import {beforeEach, describe, expect, test} from 'vitest';
-import type {SchemaQuery, DBTransaction} from '../../zql/src/mutate/custom.ts';
-import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
-import {schema, schemaSql, seedDataSql} from './test/schema.ts';
 import {testDBs} from '../../zero-cache/src/test/db.ts';
-import {makeSchemaQuery} from './query.ts';
-import {Transaction} from './test/util.ts';
+import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
+import type {DBTransaction, SchemaQuery} from '../../zql/src/mutate/custom.ts';
+import {asRunnableQuery} from '../../zql/src/query/runnable-query.ts';
+import {makeSchemaQuery} from './query.ts';
 import {getServerSchema} from './schema.ts';
+import {schema, schemaSql, seedDataSql} from './test/schema.ts';
+import {Transaction} from './test/util.ts';
 
 describe('makeSchemaQuery', () => {
   let pg: PostgresDB;
   let queryProvider: (
     tx: DBTransaction<unknown>,
     serverSchema: ServerSchema,
-  ) => SchemaQuery<typeof schema>;
+  ) => SchemaQuery<typeof schema, unknown>;
 
   beforeEach(async () => {
     pg = await testDBs.create('makeSchemaQuery-test');
@@ -25,42 +26,42 @@ describe('makeSchemaQuery', () => {
 
   test('select', async () => {
     await pg.begin(async tx => {
-      const transaciton = new Transaction(tx);
-      const query = queryProvider(
-        transaciton,
-        await getServerSchema(transaciton, schema),
-      );
-      const result = await query.basic.run();
+      const transaction = new Transaction(tx);
+      const serverSchema = await getServerSchema(transaction, schema);
+      const query = queryProvider(transaction, serverSchema);
+      const result = await asRunnableQuery(query.basic).run();
       expect(result).toEqual([{id: '1', a: 2, b: 'foo', c: true}]);
 
-      const result2 = await query.names.run();
+      const result2 = await asRunnableQuery(query.names).run();
       expect(result2).toEqual([{id: '2', a: 3, b: 'bar', c: false}]);
 
-      const result3 = await query.compoundPk.run();
+      const result3 = await asRunnableQuery(query.compoundPk).run();
       expect(result3).toEqual([{a: 'a', b: 1, c: 'c'}]);
     });
   });
 
   test('select singular', async () => {
     await pg.begin(async tx => {
-      const transaciton = new Transaction(tx);
+      const transaction = new Transaction(tx);
       const query = queryProvider(
-        transaciton,
-        await getServerSchema(transaciton, schema),
+        transaction,
+        await getServerSchema(transaction, schema),
       );
-      const result = await query.basic.one().run();
+      const result = await asRunnableQuery(query.basic.one()).run();
       expect(result).toEqual({id: '1', a: 2, b: 'foo', c: true});
     });
   });
 
   test('select singular with no results', async () => {
     await pg.begin(async tx => {
-      const transaciton = new Transaction(tx);
+      const transaction = new Transaction(tx);
       const query = queryProvider(
-        transaciton,
-        await getServerSchema(transaciton, schema),
+        transaction,
+        await getServerSchema(transaction, schema),
       );
-      const result = await query.basic.where('id', 'non-existent').one().run();
+      const result = await asRunnableQuery(
+        query.basic.where('id', 'non-existent').one(),
+      ).run();
       expect(result).toEqual(undefined);
     });
   });
