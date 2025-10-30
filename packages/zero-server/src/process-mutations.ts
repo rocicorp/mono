@@ -5,8 +5,6 @@ import * as v from '../../shared/src/valita.ts';
 import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
 import {
   ApplicationError,
-  getErrorDetails,
-  getErrorMessage,
   isApplicationError,
   wrapWithApplicationError,
 } from '../../zero-protocol/src/application-error.ts';
@@ -26,6 +24,7 @@ import {
 } from '../../zero-protocol/src/push.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
 import {createLogContext} from './logging.ts';
+import {getErrorDetails, getErrorMessage} from '../../shared/src/error.ts';
 
 export interface TransactionProviderHooks {
   updateClientMutationID: () => Promise<{lastMutationID: number | bigint}>;
@@ -150,7 +149,6 @@ export async function handleMutationRequest(
     lc.error?.('Failed to parse push body', error);
 
     const message = `Failed to parse push body: ${getErrorMessage(error)}`;
-
     const details = getErrorDetails(error);
 
     return {
@@ -442,10 +440,8 @@ export class OutOfOrderMutation extends Error {
 
 function makeAppErrorResponse(
   m: Mutation,
-  error: ApplicationError,
+  error: ApplicationError<ReadonlyJSONValue | undefined>,
 ): MutationResponse {
-  const message = getErrorMessage(error);
-  const details = getErrorDetails(error);
   return {
     id: {
       clientID: m.clientID,
@@ -453,8 +449,8 @@ function makeAppErrorResponse(
     },
     result: {
       error: 'app',
-      message,
-      ...(details ? {details} : {}),
+      message: error.message,
+      ...(error.details ? {details: error.details} : {}),
     },
   };
 }

@@ -22,7 +22,8 @@ export const appErroredQuerySchema = v.object({
   error: v.literal('app'),
   id: v.string(),
   name: v.string(),
-  message: v.string(),
+  // optional for backwards compatibility
+  message: v.string().optional(),
   details: jsonSchema.optional(),
 });
 export const parseErroredQuerySchema = v.object({

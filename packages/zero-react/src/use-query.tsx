@@ -219,13 +219,14 @@ function getSnapshot<TReturn>(
 }
 
 function makeError(retry: () => void, error: ErroredQuery): QueryErrorDetails {
+  const message = error.message ?? 'An unknown error occurred';
   return {
     type: 'error',
     retry,
     refetch: retry,
     error: {
       type: error.error,
-      message: error.message,
+      message,
       ...(error.details ? {details: error.details} : {}),
     },
   };

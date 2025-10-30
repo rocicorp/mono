@@ -2,8 +2,6 @@ import {describe, expect, expectTypeOf, test} from 'vitest';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {
   ApplicationError,
-  getErrorDetails,
-  getErrorMessage,
   isApplicationError,
   wrapWithApplicationError,
 } from './application-error.ts';
@@ -130,56 +128,5 @@ describe('wrapWithApplicationError', () => {
     const wrapped = wrapWithApplicationError(circular);
     expect(wrapped.details).toBeUndefined();
     expect(wrapped.cause).toBe(circular);
-  });
-});
-
-describe('getErrorMessage', () => {
-  test('extracts message from Error', () => {
-    expect(getErrorMessage(new Error('Test error'))).toBe('Test error');
-  });
-
-  test('returns string directly', () => {
-    expect(getErrorMessage('String error')).toBe('String error');
-  });
-
-  test('returns fallback for non-string/Error types', () => {
-    expect(getErrorMessage(42)).toContain('Type number was thrown');
-    expect(getErrorMessage({code: 'ERR'})).toContain('Type object was thrown');
-  });
-});
-
-describe('getErrorDetails', () => {
-  test('returns details from ApplicationError', () => {
-    const details = {code: 'ERR_006'};
-    const error = new ApplicationError('Test', {details});
-    expect(getErrorDetails(error)).toEqual(details);
-  });
-
-  test('returns undefined for ApplicationError without details', () => {
-    expect(getErrorDetails(new ApplicationError('Test'))).toBeUndefined();
-  });
-
-  test('returns name for Error with custom name', () => {
-    const error = new Error('Test error');
-    error.name = 'CustomError';
-    expect(getErrorDetails(error)).toEqual({name: 'CustomError'});
-  });
-
-  test('returns undefined for plain Error', () => {
-    const error = new Error('Test');
-    error.name = 'Error';
-    expect(getErrorDetails(error)).toBeUndefined();
-  });
-
-  test('parses JSON-serializable values', () => {
-    expect(getErrorDetails({code: 'ERR_007'})).toEqual({code: 'ERR_007'});
-    expect(getErrorDetails('string')).toBe('string');
-    expect(getErrorDetails(42)).toBe(42);
-  });
-
-  test('returns undefined for non-JSON-serializable values', () => {
-    const circular = {ref: null as unknown};
-    circular.ref = circular;
-    expect(getErrorDetails(circular)).toBeUndefined();
   });
 });

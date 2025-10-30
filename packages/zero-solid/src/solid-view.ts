@@ -106,13 +106,14 @@ export class SolidView implements Output {
   }
 
   #makeError(error: ErroredQuery): QueryErrorDetails {
+    const message = error.message ?? 'An unknown error occurred';
     return {
       type: 'error',
       retry: this.#retry,
       refetch: this.#retry,
       error: {
         type: error.error,
-        message: error.message,
+        message,
         ...(error.details ? {details: error.details} : {}),
       },
     };

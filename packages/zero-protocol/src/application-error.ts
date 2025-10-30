@@ -1,4 +1,4 @@
-import {jsonSchema} from '../../shared/src/json-schema.ts';
+import {getErrorDetails, getErrorMessage} from '../../shared/src/error.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 
 /**
@@ -31,6 +31,9 @@ export interface ApplicationErrorOptions<
 export class ApplicationError<
   const T extends ReadonlyJSONValue | undefined = undefined,
 > extends Error {
+  /**
+   * This maps onto errors for transform and push app-level failures.
+   */
   readonly #details: T;
 
   constructor(
@@ -65,32 +68,4 @@ export function wrapWithApplicationError<
     cause: error,
     details: details as T,
   });
-}
-
-export function getErrorMessage(error: unknown): string {
-  return error instanceof Error
-    ? error.message
-    : typeof error === 'string'
-      ? error
-      : `Type ${typeof error} was thrown and the message could not be determined. Please see the cause for more details.`;
-}
-
-export function getErrorDetails(error: unknown): ReadonlyJSONValue | undefined {
-  if (isApplicationError(error)) {
-    return error.details;
-  }
-
-  if (error instanceof Error) {
-    if (error.name && error.name !== 'Error') {
-      return {name: error.name};
-    }
-
-    return undefined;
-  }
-
-  try {
-    return jsonSchema.parse(error);
-  } catch (_e) {}
-
-  return undefined;
 }
