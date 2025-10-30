@@ -334,6 +334,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           {
             kind: ErrorKind.Rehome,
             message: 'Reconnect required',
+            origin: ErrorOrigin.ZeroCache,
           },
           'warn',
         );
