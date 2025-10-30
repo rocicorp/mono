@@ -4,8 +4,8 @@ import {must} from '../../shared/src/must.ts';
 import {formatPg, sql} from '../../z2s/src/sql.ts';
 import * as PostgresTypeClass from '../../zero-cache/src/db/postgres-type-class-enum.ts';
 import {dataTypeToZqlValueType} from '../../zero-cache/src/types/pg-data-type.ts';
-import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
+import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
 import type {DBTransaction} from '../../zql/src/mutate/custom.ts';
 
 type PostgresTypeClass = Enum<typeof PostgresTypeClass>;

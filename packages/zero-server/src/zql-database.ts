@@ -1,7 +1,7 @@
 import type {MaybePromise} from '../../shared/src/types.ts';
 import {formatPg, sql} from '../../z2s/src/sql.ts';
-import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
+import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
 import type {
   DBConnection,
   DBTransaction,

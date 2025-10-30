@@ -21,13 +21,13 @@ import {
   clientToServer,
   type NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
-import type {ServerSchema} from '../../../zero-schema/src/server-schema.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import {makeSchemaCRUD} from '../../../zero-server/src/custom.ts';
 import {executePostgresQuery} from '../../../zero-server/src/pg-query-executor.ts';
 import {getServerSchema} from '../../../zero-server/src/schema.ts';
 import {Transaction} from '../../../zero-server/src/test/util.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {ServerSchema} from '../../../zero-types/src/server-schema.ts';
 import type {Change} from '../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../zql/src/ivm/data.ts';
 import {

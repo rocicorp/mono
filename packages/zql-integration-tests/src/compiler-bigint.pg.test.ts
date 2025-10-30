@@ -17,9 +17,9 @@ import {
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
-import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
 import {getServerSchema} from '../../zero-server/src/schema.ts';
 import {Transaction} from '../../zero-server/src/test/util.ts';
+import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {type Query} from '../../zql/src/query/query.ts';

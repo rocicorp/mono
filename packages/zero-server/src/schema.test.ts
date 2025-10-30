@@ -11,13 +11,13 @@ import {
   type ColumnBuilder,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import type {
-  ServerColumnSchema,
-  ServerSchema,
-} from '../../zero-schema/src/server-schema.ts';
-import type {
   SchemaValue,
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
+import type {
+  ServerColumnSchema,
+  ServerSchema,
+} from '../../zero-types/src/server-schema.ts';
 import {
   checkSchemasAreCompatible,
   type SchemaIncompatibilityError,

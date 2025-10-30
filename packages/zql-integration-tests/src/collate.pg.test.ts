@@ -13,7 +13,7 @@ import {
   string,
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
-import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
+import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';

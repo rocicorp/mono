@@ -2,8 +2,8 @@ import type {Faker} from '@faker-js/faker';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
-import type {ServerSchema} from '../../../zero-schema/src/server-schema.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {ServerSchema} from '../../../zero-types/src/server-schema.ts';
 import type {Rng} from '../../../zql/src/query/test/util.ts';
 
 export type Dataset = {
