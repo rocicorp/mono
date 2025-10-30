@@ -13,8 +13,8 @@ import {
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
 import {QueryParseError} from '../../../zql/src/query/error.ts';
 import type {AnyQuery} from '../../../zql/src/query/query-impl.ts';
 import {createLogContext} from '../logging.ts';
