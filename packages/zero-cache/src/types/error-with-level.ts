@@ -12,7 +12,7 @@ export class ProtocolErrorWithLevel extends ProtocolError {
 
   constructor(
     errorBody: ErrorBody,
-    logLevel: LogLevel = 'error',
+    logLevel: LogLevel = 'warn', // 'warn' by default since these are generally not server issues
     options?: ErrorOptions,
   ) {
     super(errorBody, options);
