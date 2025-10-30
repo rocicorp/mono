@@ -63,17 +63,17 @@ export class NodePgTransactionInternal
   }
 
   executeQuery<TReturn>(
-    ast: unknown,
-    format: unknown,
-    schema: unknown,
-    serverSchema: unknown,
+    ast: AST,
+    format: Format,
+    schema: Schema,
+    serverSchema: ServerSchema,
   ): Promise<HumanReadable<TReturn>> {
     return executePostgresQuery<TReturn>(
       this,
-      ast as AST,
-      format as Format,
-      schema as Schema,
-      serverSchema as ServerSchema,
+      ast,
+      format,
+      schema,
+      serverSchema,
     );
   }
 
