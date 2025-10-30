@@ -87,34 +87,34 @@ function benchmarkQuery<TTable extends keyof typeof schema.tables>(
 // Benchmark queries
 benchmarkQuery(
   'track.exists(album) where title="Big Ones"',
-  queries.sqlite.track.whereExists('album', q => q.where('title', 'Big Ones')),
+  queries.track.whereExists('album', q => q.where('title', 'Big Ones')),
 );
 
 benchmarkQuery(
   'track.exists(album).exists(genre)',
-  queries.sqlite.track.whereExists('album').whereExists('genre'),
+  queries.track.whereExists('album').whereExists('genre'),
 );
 
 benchmarkQuery(
   'track.exists(album).exists(genre) with filters',
-  queries.sqlite.track
+  queries.track
     .whereExists('album', q => q.where('title', 'Big Ones'))
     .whereExists('genre', q => q.where('name', 'Rock')),
 );
 
 benchmarkQuery(
   'playlist.exists(tracks)',
-  queries.sqlite.playlist.whereExists('tracks'),
+  queries.playlist.whereExists('tracks'),
 );
 
 benchmarkQuery(
   'track.exists(playlists)',
-  queries.sqlite.track.whereExists('playlists'),
+  queries.track.whereExists('playlists'),
 );
 
 benchmarkQuery(
   'track.exists(album) OR exists(genre)',
-  queries.sqlite.track.where(({or, exists}) =>
+  queries.track.where(({or, exists}) =>
     or(
       exists('album', q => q.where('title', 'Big Ones')),
       exists('genre', q => q.where('name', 'Rock')),

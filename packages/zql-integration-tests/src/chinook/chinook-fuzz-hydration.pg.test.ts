@@ -9,7 +9,6 @@ import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
 import '../helpers/comparePg.ts';
 import {bootstrap, runAndCompare} from '../helpers/runner.ts';
-import {staticToRunnable} from '../helpers/static.ts';
 import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
 
@@ -77,16 +76,7 @@ async function runCase({
   seed: number;
 }) {
   try {
-    await runAndCompare(
-      schema,
-      harness.delegates,
-      staticToRunnable({
-        query: query[0],
-        schema,
-        harness,
-      }),
-      undefined,
-    );
+    await runAndCompare(schema, harness.delegates, query[0], undefined);
   } catch (e) {
     const zql = await shrink(query[1], seed);
     if (seed === REPRO_SEED) {
@@ -109,11 +99,7 @@ async function shrink(generations: AnyQuery[], seed: number) {
       await runAndCompare(
         schema,
         harness.delegates,
-        staticToRunnable({
-          query: generations[mid],
-          schema,
-          harness,
-        }),
+        generations[mid],
         undefined,
       );
       low = mid + 1;

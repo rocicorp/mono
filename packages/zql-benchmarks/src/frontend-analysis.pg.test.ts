@@ -40,7 +40,7 @@ const hydrate100PointQueries = new B('hydrate 100 point queries', function* () {
   yield async () => {
     await Promise.all(
       Array.from({length: 100}, (_, i) =>
-        harness.queries.memory.track.where('id', i + 1),
+        harness.queries.track.where('id', i + 1),
       ),
     );
   };
@@ -89,7 +89,7 @@ const maintain100PointQueries = new B(
   function* () {
     const views = Array.from({length: 100}, (_, i) =>
       harness.delegates.memory.materialize(
-        harness.queries.memory.track.where('id', i + 1),
+        harness.queries.track.where('id', i + 1),
       ),
     );
     let count = 0;
@@ -131,7 +131,7 @@ The limit on each range query would vary from 10 -> 100.
 `;
 
 const hydrate10RangeQueries = new B('hydrate 10 range queries', function* () {
-  const zql = harness.queries.memory;
+  const zql = harness.queries;
   yield async () => {
     await Promise.all([
       zql.track.limit(100),
@@ -164,7 +164,7 @@ Alternatives to test:
 const hydrate10RangeQueriesAltField = new B(
   'hydrate 10 range queries by alternate fields',
   function* () {
-    const zql = harness.queries.memory;
+    const zql = harness.queries;
     yield async () => {
       await Promise.all([
         zql.track.orderBy('name', 'asc').limit(100),
@@ -198,7 +198,7 @@ because point queries are so slow.
 const hydrate10RangeQueriesMiddle = new B(
   'hydrate 10 range queries, start in the middle of the table',
   function* () {
-    const zql = harness.queries.memory;
+    const zql = harness.queries;
     yield async () => {
       await Promise.all([
         zql.track.start(middle('track')).limit(100),
@@ -227,7 +227,7 @@ Something strange. This is still faster than point queries.
 const hydrate100RangeQueries = new B(
   'hydrate 100 range queries (limit 20 each)',
   function* () {
-    const zql = harness.queries.memory;
+    const zql = harness.queries;
     yield async () => {
       await Promise.all(Array.from({length: 100}, _ => zql.track.limit(20)));
     };
@@ -242,7 +242,7 @@ Now to check maintenance of range queries during writes.`;
 const maintain10RangeQueriesAltField = new B(
   'hydrate 10 range queries by alternate fields',
   function* () {
-    const zql = harness.queries.memory;
+    const zql = harness.queries;
     const tables = [
       'track',
       'album',

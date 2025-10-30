@@ -4,7 +4,6 @@ import {StaticQuery} from '../../../zql/src/query/static-query.ts';
 import type {AnyStaticQuery} from '../../../zql/src/query/test/util.ts';
 import '../helpers/comparePg.ts';
 import {bootstrap, runAndCompare} from '../helpers/runner.ts';
-import {staticToRunnable} from '../helpers/static.ts';
 import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
 
@@ -40,14 +39,5 @@ const f = new Function('z', `return z.query.${QUERY_STRING};`);
 const query: AnyStaticQuery = f(z);
 
 test('manual zql string', async () => {
-  await runAndCompare(
-    schema,
-    harness.delegates,
-    staticToRunnable({
-      query,
-      schema,
-      harness,
-    }),
-    undefined,
-  );
+  await runAndCompare(schema, harness.delegates, query, undefined);
 });

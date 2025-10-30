@@ -16,7 +16,7 @@ const {queries, delegates} = await bootstrap({
 summary(() => {
   bench('tracks with artist name : flipped', async () => {
     await delegates.sqlite.run(
-      queries.sqlite.artist
+      queries.artist
         .where('name', 'AC/DC')
         .related('albums', a => a.related('tracks')),
     );
@@ -24,7 +24,7 @@ summary(() => {
 
   bench('tracks with artist name : not flipped', async () => {
     await delegates.sqlite.run(
-      queries.sqlite.track.whereExists('album', a =>
+      queries.track.whereExists('album', a =>
         a.whereExists('artist', ar => ar.where('name', 'AC/DC')),
       ),
     );

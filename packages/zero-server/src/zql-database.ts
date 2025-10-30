@@ -8,6 +8,7 @@ import type {
   SchemaCRUD,
   SchemaQuery,
 } from '../../zql/src/mutate/custom.ts';
+import {createBuilder} from '../../zql/src/query/named.ts';
 import type {
   HumanReadable,
   Query,
@@ -23,7 +24,6 @@ import type {
   TransactionProviderHooks,
   TransactionProviderInput,
 } from './process-mutations.ts';
-import {makeSchemaQuery} from './query.ts';
 
 /**
  * Implements a Database for use with PushProcessor that is backed by Postgres.
@@ -40,16 +40,13 @@ export class ZQLDatabase<S extends Schema, WrappedTransaction, TContext>
     dbTransaction: DBTransaction<WrappedTransaction>,
     serverSchema: ServerSchema,
   ) => SchemaCRUD<S>;
-  readonly #query: (
-    dbTransaction: DBTransaction<WrappedTransaction>,
-    serverSchema: ServerSchema,
-  ) => SchemaQuery<S, TContext>;
+  readonly #query: SchemaQuery<S, TContext>;
   readonly #schema: S;
 
   constructor(connection: DBConnection<WrappedTransaction>, schema: S) {
     this.connection = connection;
     this.#mutate = makeSchemaCRUD(schema);
-    this.#query = makeSchemaQuery(schema);
+    this.#query = createBuilder(schema);
     this.#schema = schema;
   }
 
@@ -120,6 +117,7 @@ export class ZQLDatabase<S extends Schema, WrappedTransaction, TContext>
       this.#schema,
       this.#mutate,
       this.#query,
+      undefined as TContext,
     );
   }
 

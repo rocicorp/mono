@@ -1,7 +1,10 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Expand} from '../../../shared/src/expand.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {ServerSchema} from '../../../zero-schema/src/server-schema.ts';
 import type {SchemaValueToTSType} from '../../../zero-types/src/schema-value.ts';
 import type {Schema, TableSchema} from '../../../zero-types/src/schema.ts';
+import type {Format} from '../ivm/view.ts';
 import type {
   HumanReadable,
   PullRow,
@@ -77,6 +80,12 @@ export interface DBConnection<TWrappedTransaction> {
 
 export interface DBTransaction<T> extends Queryable {
   readonly wrappedTransaction: T;
+  executeQuery<TReturn>(
+    ast: AST,
+    format: Format,
+    schema: Schema,
+    serverSchema: ServerSchema,
+  ): Promise<HumanReadable<TReturn>>;
 }
 
 interface Queryable {

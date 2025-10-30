@@ -1,10 +1,15 @@
 import {Client, Pool, type PoolClient} from 'pg';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {ServerSchema} from '../../../zero-schema/src/server-schema.ts';
+import type {Format} from '../../../zero-types/src/format.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {
   DBConnection,
   DBTransaction,
   Row,
 } from '../../../zql/src/mutate/custom.ts';
+import type {HumanReadable} from '../../../zql/src/query/query.ts';
+import {executePostgresQuery} from '../pg-query-executor.ts';
 import {ZQLDatabase} from '../zql-database.ts';
 
 export type {ZQLDatabase};
@@ -55,6 +60,21 @@ export class NodePgTransactionInternal
 
   constructor(client: NodePgTransaction) {
     this.wrappedTransaction = client;
+  }
+
+  executeQuery<TReturn>(
+    ast: unknown,
+    format: unknown,
+    schema: unknown,
+    serverSchema: unknown,
+  ): Promise<HumanReadable<TReturn>> {
+    return executePostgresQuery<TReturn>(
+      this,
+      ast as AST,
+      format as Format,
+      schema as Schema,
+      serverSchema as ServerSchema,
+    );
   }
 
   async query(sql: string, params: unknown[]): Promise<Row[]> {

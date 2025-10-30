@@ -20,7 +20,7 @@ import type {
   UpdateValue,
   UpsertValue,
 } from '../../../zql/src/mutate/custom.ts';
-import {newQuery} from '../../../zql/src/query/query-impl.ts';
+import {createBuilder} from '../../../zql/src/query/named.ts';
 import {
   type HumanReadable,
   type Query,
@@ -122,7 +122,7 @@ export class TransactionImpl<TSchema extends Schema, TContext>
       repTx,
       txData.ivmSources as IVMSourceBranch,
     );
-    this.query = makeSchemaQuery(schema);
+    this.query = createBuilder(schema);
 
     this.#zeroContext = newZeroContext(
       lc,
@@ -197,22 +197,6 @@ function assertValidRunOptions(options: RunOptions | undefined): void {
     options?.type !== 'complete',
     'Cannot wait for complete results in custom mutations',
   );
-}
-
-function makeSchemaQuery<TSchema extends Schema, TContext>(schema: TSchema) {
-  return new Proxy(
-    {},
-    {
-      get(target: Record<string, Query<TSchema, string>>, prop: string) {
-        if (prop in target) {
-          return target[prop];
-        }
-
-        target[prop] = newQuery(schema, prop);
-        return target[prop];
-      },
-    },
-  ) as SchemaQuery<TSchema, TContext>;
 }
 
 function newZeroContext<TContext>(

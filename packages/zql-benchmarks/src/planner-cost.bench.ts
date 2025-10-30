@@ -51,19 +51,19 @@ function benchmarkPlanning<TTable extends keyof typeof schema.tables>(
 summary(() => {
   benchmarkPlanning(
     '1 exists: track.exists(album)',
-    queries.sqlite.track.whereExists('album'),
+    queries.track.whereExists('album'),
     delegates.sqlite,
   );
 
   benchmarkPlanning(
     '2 exists (AND): track.exists(album).exists(genre)',
-    queries.sqlite.track.whereExists('album').whereExists('genre'),
+    queries.track.whereExists('album').whereExists('genre'),
     delegates.sqlite,
   );
 
   benchmarkPlanning(
     '3 exists (AND)',
-    queries.sqlite.track
+    queries.track
       .whereExists('album')
       .whereExists('genre')
       .whereExists('mediaType'),
@@ -72,7 +72,7 @@ summary(() => {
 
   benchmarkPlanning(
     '3 exists (OR)',
-    queries.sqlite.track.where(({or, exists}) =>
+    queries.track.where(({or, exists}) =>
       or(
         exists('album', q => q.where('title', 'Big Ones')),
         exists('genre', q => q.where('name', 'Rock')),
@@ -84,7 +84,7 @@ summary(() => {
 
   benchmarkPlanning(
     '5 exists (AND)',
-    queries.sqlite.track
+    queries.track
       .whereExists('album')
       .whereExists('genre')
       .whereExists('mediaType')
@@ -95,7 +95,7 @@ summary(() => {
 
   benchmarkPlanning(
     '5 exists (OR)',
-    queries.sqlite.track.where(({or, exists}) =>
+    queries.track.where(({or, exists}) =>
       or(
         exists('album', q => q.where('title', 'Big Ones')),
         exists('genre', q => q.where('name', 'Rock')),
@@ -109,13 +109,13 @@ summary(() => {
 
   benchmarkPlanning(
     'Nested 2 levels: track > album > artist',
-    queries.sqlite.track.whereExists('album', q => q.whereExists('artist')),
+    queries.track.whereExists('album', q => q.whereExists('artist')),
     delegates.sqlite,
   );
 
   benchmarkPlanning(
     'Nested 4 levels: playlist > tracks > album > artist',
-    queries.sqlite.playlist.whereExists('tracks', q =>
+    queries.playlist.whereExists('tracks', q =>
       q.whereExists('album', q2 => q2.whereExists('artist')),
     ),
     delegates.sqlite,
@@ -123,7 +123,7 @@ summary(() => {
 
   benchmarkPlanning(
     'Nested with filters: track > album > artist (filtered)',
-    queries.sqlite.track.whereExists('album', q =>
+    queries.track.whereExists('album', q =>
       q
         .where('title', 'Big Ones')
         .whereExists('artist', q2 => q2.where('name', 'Aerosmith')),
@@ -133,7 +133,7 @@ summary(() => {
 
   benchmarkPlanning(
     '10 exists (AND)',
-    queries.sqlite.track
+    queries.track
       .whereExists('album')
       .whereExists('genre')
       .whereExists('mediaType')
@@ -149,7 +149,7 @@ summary(() => {
 
   benchmarkPlanning(
     '10 exists (OR)',
-    queries.sqlite.track.where(({or, exists}) =>
+    queries.track.where(({or, exists}) =>
       or(
         exists('album', q => q.where('id', 1)),
         exists('album', q => q.where('id', 2)),
@@ -168,7 +168,7 @@ summary(() => {
 
   benchmarkPlanning(
     '12 exists (AND)',
-    queries.sqlite.track
+    queries.track
       .whereExists('album')
       .whereExists('genre')
       .whereExists('mediaType')
@@ -186,7 +186,7 @@ summary(() => {
 
   benchmarkPlanning(
     '12 exists (OR)',
-    queries.sqlite.track.where(({or, exists}) =>
+    queries.track.where(({or, exists}) =>
       or(
         exists('album', q => q.where('id', 1)),
         exists('album', q => q.where('id', 2)),
@@ -207,7 +207,7 @@ summary(() => {
 
   benchmarkPlanning(
     '12 level nesting',
-    queries.sqlite.track.whereExists('playlists', q =>
+    queries.track.whereExists('playlists', q =>
       q.whereExists('tracks', q2 =>
         q2.whereExists('album', q3 =>
           q3.whereExists('artist', q4 =>
