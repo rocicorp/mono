@@ -32,15 +32,18 @@ export const decommissionOptions = {
   log: {level: logOptions.level, format: logOptions.format},
 };
 
-export type Options = Config<typeof decommissionOptions>;
+export type DecommissionConfig = Config<typeof decommissionOptions>;
 
-export async function decommissionZero(lc: LogContext, opts: Options) {
-  const {app, shard} = opts;
-  const shardID = getShardID(opts);
+export async function decommissionZero(
+  lc: LogContext,
+  cfg: DecommissionConfig,
+) {
+  const {app, shard} = cfg;
+  const shardID = getShardID(cfg);
   lc.info?.(`Decommissioning app "${app.id}"`);
 
-  if (opts.upstream.type === 'pg') {
-    const upstream = pgClient(lc, opts.upstream.db);
+  if (cfg.upstream.type === 'pg') {
+    const upstream = pgClient(lc, cfg.upstream.db);
     await decommissionShard(lc, upstream, app.id, shard.num);
 
     lc.debug?.(`Cleaning up upstream metadata from ${hostPort(upstream)}`);
@@ -48,12 +51,12 @@ export async function decommissionZero(lc: LogContext, opts: Options) {
     await upstream.end();
   }
 
-  const cvr = pgClient(lc, opts.cvr.db ?? opts.upstream.db);
+  const cvr = pgClient(lc, cfg.cvr.db ?? cfg.upstream.db);
   lc.debug?.(`Cleaning up cvc data from ${hostPort(cvr)}`);
   await cvr.unsafe(`DROP SCHEMA IF EXISTS ${id(cvrSchema(shardID))} CASCADE`);
   await cvr.end();
 
-  const cdc = pgClient(lc, opts.change.db ?? opts.upstream.db);
+  const cdc = pgClient(lc, cfg.change.db ?? cfg.upstream.db);
   lc.debug?.(`Cleaning up cdc data from ${hostPort(cdc)}`);
   await cdc.unsafe(`DROP SCHEMA IF EXISTS ${id(cdcSchema(shardID))} CASCADE`);
   await cdc.end();

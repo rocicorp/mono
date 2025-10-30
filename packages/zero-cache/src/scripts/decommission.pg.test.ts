@@ -1,14 +1,15 @@
 import {LogContext} from '@rocicorp/logger';
-import {beforeEach, describe, expect} from 'vitest';
+import {beforeEach, describe, expect, expectTypeOf} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../zqlite/src/db.ts';
+import type {ZeroConfig} from '../config/zero-config.ts';
 import {initialSync} from '../services/change-source/pg/initial-sync.ts';
 import {initChangeStreamerSchema} from '../services/change-streamer/schema/init.ts';
 import {initViewSyncerSchema} from '../services/view-syncer/schema/init.ts';
-import {getConnectionURI, initDB, type PgTest, test} from '../test/db.ts';
+import {getConnectionURI, initDB, test, type PgTest} from '../test/db.ts';
 import type {PostgresDB} from '../types/pg.ts';
 import type {ShardID} from '../types/shards.ts';
-import {decommissionZero, type Options} from './decommission.ts';
+import {decommissionZero, type DecommissionConfig} from './decommission.ts';
 
 const APP_ID = 'zeroout';
 const SHARD_NUM = 13;
@@ -31,11 +32,17 @@ describe('decommission', () => {
     return () => testDBs.drop(upstream, cvr, cdc);
   });
 
+  test('decommission config is a subset of zero config', () => {
+    // This ensures that the environment variables used for a zero-cache
+    // will apply to zero-out.
+    expectTypeOf<ZeroConfig>().toExtend<DecommissionConfig>();
+  });
+
   async function runTest(
     upstream: PostgresDB,
     cvr: PostgresDB,
     cdc: PostgresDB,
-    opts: Options,
+    config: DecommissionConfig,
   ) {
     await initDB(
       upstream,
@@ -91,7 +98,7 @@ describe('decommission', () => {
       ).flat(),
     ).toEqual(expect.arrayContaining(['zeroout_13/cdc']));
 
-    await decommissionZero(lc, opts);
+    await decommissionZero(lc, config);
 
     expect(await upstream`SELECT pubname FROM pg_publication`.values()).toEqual(
       [],
