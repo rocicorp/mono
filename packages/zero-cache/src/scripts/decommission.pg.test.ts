@@ -121,25 +121,23 @@ describe('decommission', () => {
     ).toEqual([]);
   }
 
-  test('decommission zero, everything in upstream', () => {
-    return runTest(upstream, upstream, upstream, {
+  test('decommission zero, everything in upstream', () =>
+    runTest(upstream, upstream, upstream, {
       app: {id: APP_ID},
       shard: {num: SHARD_NUM},
       upstream: {db: getConnectionURI(upstream), type: 'pg'},
       cvr: {},
       change: {},
       log: {level: 'debug', format: 'text'},
-    });
-  });
+    }));
 
-  test('decommission zero, all separate dbs', () => {
-    return runTest(upstream, cvr, cdc, {
+  test('decommission zero, all separate dbs', () =>
+    runTest(upstream, cvr, cdc, {
       app: {id: APP_ID},
       shard: {num: SHARD_NUM},
       upstream: {db: getConnectionURI(upstream), type: 'pg'},
       cvr: {db: getConnectionURI(cvr)},
       change: {db: getConnectionURI(cdc)},
       log: {level: 'debug', format: 'text'},
-    });
-  });
+    }));
 });
