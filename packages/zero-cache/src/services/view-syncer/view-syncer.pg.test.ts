@@ -3568,6 +3568,9 @@ describe('view-syncer/service', () => {
 
     expect(await getCVROwner()).toBe('some-other-task-id');
 
+    // Mark as initialized since this test doesn't call initConnection().
+    vs.markInitialized();
+
     // Signal that the replica is ready before any connection
     // message is received.
     stateChanges.push({state: 'version-ready'});
@@ -3600,6 +3603,9 @@ describe('view-syncer/service', () => {
     ).flush(lc, otherTaskOwnershipTime, now, ttlClock);
 
     expect(await getCVROwner()).toBe('some-other-task-id');
+
+    // Mark as initialized since this test doesn't call initConnection().
+    vs.markInitialized();
 
     // deleteClients should be considered a new connection and
     // take over the CVR.
@@ -3932,6 +3938,7 @@ describe('view-syncer/service', () => {
     // Simulates the view-syncer being stopped, e.g. due to an error,
     // but a client connecting to it before it was removed from the
     // service map.
+
     await vs.stop();
     const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
