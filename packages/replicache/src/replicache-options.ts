@@ -254,7 +254,6 @@ export interface ReplicacheOptions<MD extends MutatorDefs> {
 export interface ZeroTxData {
   ivmSources: unknown;
   token: string | undefined;
-  context: unknown;
 }
 
 export type ZeroReadOptions = {

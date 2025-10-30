@@ -11,18 +11,16 @@ import {
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
-import type {Schema} from '../../zero-types/src/schema.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 
 // oxlint-disable-next-line no-explicit-any
-const ZeroContext = createContext<Accessor<Zero<any, any, any>> | undefined>(
+const ZeroContext = createContext<Accessor<Zero<any, any>> | undefined>(
   undefined,
 );
 
-export function createZero<
-  S extends Schema,
-  MD extends CustomMutatorDefs,
-  TContext,
->(options: ZeroOptions<S, MD, TContext>): Zero<S, MD, TContext> {
+export function createZero<S extends Schema, MD extends CustomMutatorDefs>(
+  options: ZeroOptions<S, MD>,
+): Zero<S, MD> {
   const opts = {
     ...options,
     batchViewUpdates: batch,
@@ -33,8 +31,7 @@ export function createZero<
 export function useZero<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
->(): () => Zero<S, MD, Context> {
+>(): () => Zero<S, MD> {
   const zero = useContext(ZeroContext);
 
   if (zero === undefined) {
@@ -46,21 +43,19 @@ export function useZero<
 export function createUseZero<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
 >() {
-  return () => useZero<S, MD, Context>();
+  return () => useZero<S, MD>();
 }
 
 export function ZeroProvider<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined,
-  Context,
+  MD extends CustomMutatorDefs | undefined = undefined,
 >(
   props: {children: JSX.Element} & (
     | {
-        zero: Zero<S, MD, Context>;
+        zero: Zero<S, MD>;
       }
-    | ZeroOptions<S, MD, Context>
+    | ZeroOptions<S, MD>
   ),
 ) {
   const zero = createMemo(() => {

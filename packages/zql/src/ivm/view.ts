@@ -1,7 +1,7 @@
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {Value} from '../../../zero-protocol/src/data.ts';
-import type {Format} from '../../../zero-types/src/format.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {Format} from '../../../zero-types/src/format.ts';
 import type {Query} from '../query/query.ts';
 import type {TTL} from '../query/ttl.ts';
 import type {Input} from './operator.ts';
@@ -16,10 +16,9 @@ export type ViewFactory<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
-  TContext,
   T,
 > = (
-  query: Query<TSchema, TTable, TReturn, TContext>,
+  query: Query<TSchema, TTable, TReturn>,
   input: Input,
   format: Format,
   onDestroy: () => void,
@@ -27,6 +26,3 @@ export type ViewFactory<
   queryComplete: true | ErroredQuery | Promise<true>,
   updateTTL: (ttl: TTL) => void,
 ) => T;
-
-// oxlint-disable-next-line no-explicit-any
-export type AnyViewFactory = ViewFactory<Schema, any, any, any, any>;

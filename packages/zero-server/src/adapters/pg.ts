@@ -1,10 +1,10 @@
-import {Client, Pool, type PoolClient} from 'pg';
-import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   DBConnection,
   DBTransaction,
   Row,
 } from '../../../zql/src/mutate/custom.ts';
+import {Client, Pool, type PoolClient} from 'pg';
 import {ZQLDatabase} from '../zql-database.ts';
 
 export type {ZQLDatabase};
@@ -18,7 +18,6 @@ export type NodePgTransaction = Pool | PoolClient | Client;
 
 export class NodePgConnection implements DBConnection<NodePgTransaction> {
   readonly #pool: NodePgTransaction;
-
   constructor(pool: NodePgTransaction) {
     this.#pool = pool;
   }
@@ -52,7 +51,6 @@ export class NodePgTransactionInternal
   implements DBTransaction<NodePgTransaction>
 {
   readonly wrappedTransaction: NodePgTransaction;
-
   constructor(client: NodePgTransaction) {
     this.wrappedTransaction = client;
   }

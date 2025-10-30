@@ -6,10 +6,10 @@ import {
   type Parameter,
 } from '../../zero-protocol/src/ast.ts';
 import {defaultFormat} from '../../zero-types/src/format.ts';
-import type {Schema} from '../../zero-types/src/schema.ts';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
 import type {Query} from '../../zql/src/query/query.ts';
 import {StaticQuery} from '../../zql/src/query/static-query.ts';
+import type {Schema} from './builder/schema-builder.ts';
 import type {
   AssetPermissions as CompiledAssetPermissions,
   PermissionsConfig as CompiledPermissionsConfig,

@@ -35,7 +35,7 @@ async function testBasics(userID: string) {
     value: number;
   };
 
-  const z = zeroForTest({
+  const r = zeroForTest({
     userID,
     schema: createSchema({
       tables: [
@@ -49,8 +49,8 @@ async function testBasics(userID: string) {
     }),
   });
 
-  const q = z.query.e.limit(1);
-  const view = z.materialize(q);
+  const q = r.query.e.limit(1);
+  const view = q.materialize();
   const log: (readonly E[])[] = [];
   const removeListener = view.addListener(rows => {
     // the array view nodes are edited in place, so we need to clone them
@@ -58,27 +58,27 @@ async function testBasics(userID: string) {
     log.push(rows.map(row => ({...row})));
   });
 
-  await z.triggerConnected();
+  await r.triggerConnected();
 
   await sleep(1);
   assert(deepEqual(log, [[]]));
 
-  await z.mutate.e.upsert({id: 'foo', value: 1});
+  await r.mutate.e.upsert({id: 'foo', value: 1});
   assert(deepEqual(log, [[], [{id: 'foo', value: 1}]]));
 
-  await z.mutate.e.upsert({id: 'foo', value: 2});
+  await r.mutate.e.upsert({id: 'foo', value: 2});
   assert(
     deepEqual(log, [[], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
   );
 
   removeListener();
 
-  await z.mutate.e.upsert({id: 'foo', value: 3});
+  await r.mutate.e.upsert({id: 'foo', value: 3});
   assert(
     deepEqual(log, [[], [{id: 'foo', value: 1}], [{id: 'foo', value: 2}]]),
   );
 
-  const view2 = z.materialize(q);
+  const view2 = q.materialize();
   let data: E[] = [];
   view2.addListener(rows => {
     data = [...rows];

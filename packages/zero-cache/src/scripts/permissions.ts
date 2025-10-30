@@ -1,17 +1,17 @@
-import {existsSync} from 'node:fs';
 import {basename, dirname, join, relative, resolve, sep} from 'node:path';
+import {existsSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import {tsImport} from 'tsx/esm/api';
 import {logOptions} from '../../../otel/src/log-options.ts';
-import {colorConsole} from '../../../shared/src/logging.ts';
 import * as v from '../../../shared/src/valita.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   permissionsConfigSchema,
   type PermissionsConfig,
 } from '../../../zero-schema/src/compiled-permissions.ts';
 import {isSchemaConfig} from '../../../zero-schema/src/schema-config.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
 import {appOptions, shardOptions, zeroOptions} from '../config/zero-config.ts';
+import {colorConsole} from '../../../shared/src/logging.ts';
 
 export const deployPermissionsOptions = {
   schema: {

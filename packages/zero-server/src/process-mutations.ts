@@ -1,7 +1,6 @@
 import type {LogContext, LogLevel} from '@rocicorp/logger';
 import {assert} from '../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
-import type {MaybePromise} from '../../shared/src/types.ts';
 import * as v from '../../shared/src/valita.ts';
 import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
 import {
@@ -34,10 +33,7 @@ export interface TransactionProviderInput {
  */
 export interface Database<T> {
   transaction: <R>(
-    callback: (
-      tx: T,
-      transactionHooks: TransactionProviderHooks,
-    ) => MaybePromise<R>,
+    callback: (tx: T, transactionHooks: TransactionProviderHooks) => Promise<R>,
     transactionInput?: TransactionProviderInput,
   ) => Promise<R>;
 }
@@ -236,7 +232,7 @@ class Transactor {
     mutation: CustomMutation,
     cb: TransactFnCallback<D>,
     caughtError: unknown,
-  ): MaybePromise<MutationResponse> {
+  ): Promise<MutationResponse> {
     return dbProvider.transaction(
       async (dbTx, transactionHooks) => {
         await this.#checkAndIncrementLastMutationID(

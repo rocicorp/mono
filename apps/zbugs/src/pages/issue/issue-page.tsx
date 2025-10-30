@@ -63,8 +63,8 @@ import {
 import {LRUCache} from '../../lru-cache.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {CACHE_NAV} from '../../query-cache-policy.ts';
-import {links, useListContext, type ZbugsHistoryState} from '../../routes.tsx';
 import {preload} from '../../zero-preload.ts';
+import {links, useListContext, type ZbugsHistoryState} from '../../routes.tsx';
 import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
@@ -97,7 +97,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   }, [listContext]);
 
   const [issue, issueResult] = useQuery(
-    issueDetail({idField, id, userID: z.userID}),
+    issueDetail(login.loginState?.decoded, idField, id, z.userID),
     CACHE_NAV,
   );
   useEffect(() => {
@@ -117,7 +117,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   useEffect(() => {
     if (issueResult.type === 'complete') {
       recordPageLoad('issue-page');
-      preload(z, projectName);
+      preload(login.loginState?.decoded, projectName, z);
     }
   }, [issueResult.type, login.loginState?.decoded, z]);
 
@@ -214,13 +214,14 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   };
 
   const [[next]] = useQuery(
-    issueListV2({
-      listContext: listContextParams,
-      userID: z.userID,
-      limit: 1,
+    issueListV2(
+      login.loginState?.decoded,
+      listContextParams,
+      z.userID,
+      1,
       start,
-      dir: 'forward',
-    }),
+      'forward',
+    ),
     prevNextOptions,
   );
   useKeypress('j', () => {
@@ -233,13 +234,14 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   });
 
   const [[prev]] = useQuery(
-    issueListV2({
-      listContext: listContextParams,
-      userID: z.userID,
-      limit: 1,
+    issueListV2(
+      login.loginState?.decoded,
+      listContextParams,
+      z.userID,
+      1,
       start,
-      dir: 'backward',
-    }),
+      'backward',
+    ),
     prevNextOptions,
   );
   useKeypress('k', () => {
@@ -1116,11 +1118,12 @@ function useShowToastForNewComment(
 export function IssueRedirect() {
   const z = useZero();
   const params = useParams();
+  const login = useLogin();
 
   const {idField, id} = getId(params);
 
   const [issue, issueResult] = useQuery(
-    issueDetail({idField, id, userID: z.userID}),
+    issueDetail(login.loginState?.decoded, idField, id, z.userID),
     CACHE_NAV,
   );
 

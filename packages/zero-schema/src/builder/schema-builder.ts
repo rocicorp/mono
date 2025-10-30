@@ -5,13 +5,12 @@ import {
   normalizeClientSchema,
   type ClientSchema,
 } from '../../../zero-protocol/src/client-schema.ts';
-import type {
-  Relationship,
-  Schema,
-  TableSchema,
-} from '../../../zero-types/src/schema.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {Relationship, TableSchema} from '../table-schema.ts';
 import type {Relationships} from './relationship-builder.ts';
 import {type TableBuilderWithColumns} from './table-builder.ts';
+
+export type {Schema};
 
 /**
  * Note: the keys of the `tables` and `relationships` parameters do not matter.

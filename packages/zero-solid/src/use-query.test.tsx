@@ -9,7 +9,6 @@ import {
 import {afterEach, expect, test, vi} from 'vitest';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
-import {registerZeroDelegate} from '../../zero-client/src/client/bindings.ts';
 import {
   createSchema,
   number,
@@ -17,7 +16,6 @@ import {
   string,
   table,
   Zero,
-  type CustomMutatorDefs,
   type Query,
   type Schema,
   type TTL,
@@ -26,8 +24,12 @@ import {
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import {idSymbol, refCountSymbol} from '../../zql/src/ivm/view-apply-change.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
-import {newQuery} from '../../zql/src/query/query-impl.ts';
-import type {MaterializeOptions} from '../../zql/src/query/query.ts';
+import {materialize, newQuery} from '../../zql/src/query/query-impl.ts';
+import type {
+  MaterializeOptions,
+  QueryRowType,
+  QueryTable,
+} from '../../zql/src/query/query.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
 import {useQuery, type UseQueryOptions} from './use-query.ts';
 import {ZeroProvider} from './use-zero.ts';
@@ -52,50 +54,38 @@ function setupTestEnvironment() {
   ms.push({row: {a: 2, b: 'b'}, type: 'add'});
 
   const queryDelegate = new QueryDelegateImpl({sources: {table: ms}});
-  const tableQuery = newQuery(schema, 'table');
+  const tableQuery = newQuery(queryDelegate, schema, 'table');
 
   return {ms, tableQuery, queryDelegate, schema};
 }
 
 afterEach(() => vi.resetAllMocks());
 
-type Context = unknown;
-
-function newMockZero<MD extends CustomMutatorDefs>(
+function newMockZero(
   clientID: string,
-  queryDelegate: QueryDelegate<Context>,
-): Zero<Schema, MD, Context> {
-  function m<TTable extends keyof Schema['tables'] & string, TReturn, T>(
-    query: Query<Schema, TTable, TReturn, Context>,
+  queryDelegate: QueryDelegate,
+): Zero<Schema> {
+  function m<T, Q>(
+    query: Q,
     factoryOrOptions?:
-      | ViewFactory<Schema, TTable, TReturn, Context, T>
+      | ViewFactory<Schema, QueryTable<Q>, QueryRowType<Q>, T>
       | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
-    const factory =
-      typeof factoryOrOptions === 'function' ? factoryOrOptions : undefined;
-    const options =
-      typeof factoryOrOptions === 'function' ? maybeOptions : factoryOrOptions;
-    return queryDelegate.materialize(query, factory, options);
+    return materialize(query, queryDelegate, factoryOrOptions, maybeOptions);
   }
-  const zero = {
+  return {
     clientID,
     materialize: m,
-  } as unknown as Zero<Schema, MD, Context>;
-  registerZeroDelegate(zero, queryDelegate);
-  return zero;
+  } as unknown as Zero<Schema>;
 }
 
 function useQueryWithZeroProvider<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
-  MD extends CustomMutatorDefs,
-  TContext,
 >(
-  zeroOrZeroSignal:
-    | Zero<Schema, MD, TContext>
-    | Accessor<Zero<Schema, MD, TContext>>,
+  zeroOrZeroSignal: Zero<Schema> | Accessor<Zero<Schema>>,
   querySignal: () => Query<TSchema, TTable, TReturn>,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
 ) {
@@ -150,7 +140,7 @@ test('useQuery with ttl', () => {
   const querySignal = vi.fn(() => tableQuery);
 
   const zero = newMockZero('useQuery-with-ttl-id', queryDelegate);
-  const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+  const materializeSpy = vi.spyOn(zero, 'materialize');
 
   useQueryWithZeroProvider(zero, querySignal, () => ({
     ttl: ttl(),
@@ -399,7 +389,7 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   const queryDelegate = new QueryDelegateImpl({
     sources: {issue: issueSource, comment: commentSource},
   });
-  const issueQuery = newQuery(schema, 'issue');
+  const issueQuery = newQuery(queryDelegate, schema, 'issue');
 
   const [querySignal, setQuery] = createSignal(
     issueQuery.where('id', 'i1').related('comments'),
@@ -709,7 +699,7 @@ test('useQuery ttl dep changed', () => {
 
   const clientID = 'useQuery ttl dep changed';
   const zero = newMockZero(clientID, queryDelegate);
-  const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+  const materializeSpy = vi.spyOn(zero, 'materialize');
 
   const {
     result: [rows],
@@ -742,7 +732,7 @@ test('useQuery view disposed when owner cleaned up', () => {
 
   const clientID = 'useQuery-view-disposed-when-owner-cleaned-up';
   const zero = newMockZero(clientID, queryDelegate);
-  const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+  const materializeSpy = vi.spyOn(zero, 'materialize');
   const {
     result: [rows],
     cleanup,
@@ -773,7 +763,7 @@ test('useQuery view disposed when zero instance changes, new view created', () =
   const clientID =
     'useQuery view disposed when zero instance changes, new view created';
   const mockZero0 = newMockZero(clientID, queryDelegate);
-  const mockZero0MaterializeSpy = vi.spyOn(queryDelegate, 'materialize');
+  const mockZero0MaterializeSpy = vi.spyOn(mockZero0, 'materialize');
   const [zero, setZero] = createSignal(mockZero0);
   const {
     result: [rows],
@@ -796,7 +786,7 @@ test('useQuery view disposed when zero instance changes, new view created', () =
   expect(mockZero0MaterializeSpy).toHaveBeenCalledTimes(1);
 
   const mockZero1 = newMockZero(clientID + '1', queryDelegate);
-  const mockZero1MaterializeSpy = vi.spyOn(queryDelegate, 'materialize');
+  const mockZero1MaterializeSpy = vi.spyOn(mockZero1, 'materialize');
 
   setZero(mockZero1);
 
@@ -817,7 +807,7 @@ test('useQuery view disposed when query changes and new view is created', () => 
 
   const clientID = 'useQuery-view-disposed-when-owner-cleaned-up';
   const zero = newMockZero(clientID, queryDelegate);
-  const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+  const materializeSpy = vi.spyOn(zero, 'materialize');
   const {
     result: [rows],
     cleanup,
@@ -879,7 +869,7 @@ test('useQuery when ZeroProvider is used, view is reused if query instance chang
   const clientID =
     'useQuery when ZeroProvider is used, view is reused if query instance changes as long as hash does not change';
   const zero = newMockZero(clientID, queryDelegate);
-  const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+  const materializeSpy = vi.spyOn(zero, 'materialize');
   const {
     result: [rows],
     cleanup,

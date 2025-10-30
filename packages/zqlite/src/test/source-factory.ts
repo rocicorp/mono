@@ -7,15 +7,17 @@ import {
   type CompoundKey,
 } from '../../../zero-protocol/src/ast.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   clientToServer,
   serverToClient,
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {Source} from '../../../zql/src/ivm/source.ts';
+import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
+import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
+import type {Input} from '../../../zql/src/ivm/operator.ts';
+import type {Source, SourceInput} from '../../../zql/src/ivm/source.ts';
 import type {SourceFactory} from '../../../zql/src/ivm/test/source-factory.ts';
-import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {Database} from '../db.ts';
 import {compile, sql} from '../internal/sql.ts';
@@ -90,94 +92,98 @@ export function mapResultToClientNames<T, S extends Schema>(
   return mapResult(result, schema, rootTable) as T;
 }
 
-class SourceFactoryQueryDelegate extends QueryDelegateBase<undefined> {
-  readonly defaultQueryComplete = true;
-  readonly enableNotExists = true;
+export function newQueryDelegate(
+  lc: LogContext,
+  logConfig: LogConfig,
+  db: Database,
+  schema: Schema,
+): QueryDelegate {
+  const sources = new Map<string, Source>();
+  const clientToServerMapper = clientToServer(schema.tables);
+  const serverToClientMapper = serverToClient(schema.tables);
+  return {
+    getSource: (serverTableName: string) => {
+      const clientTableName = serverToClientMapper.tableName(serverTableName);
+      let source = sources.get(serverTableName);
+      if (source) {
+        return source;
+      }
 
-  readonly #sources = new Map<string, Source>();
-  readonly #clientToServerMapper: ReturnType<typeof clientToServer>;
-  readonly #serverToClientMapper: ReturnType<typeof serverToClient>;
-  readonly #lc: LogContext;
-  readonly #logConfig: LogConfig;
-  readonly #db: Database;
-  readonly #schema: Schema;
+      const tableSchema =
+        schema.tables[clientTableName as keyof typeof schema.tables];
 
-  constructor(
-    lc: LogContext,
-    logConfig: LogConfig,
-    db: Database,
-    schema: Schema,
-  ) {
-    super(undefined);
-    this.#lc = lc;
-    this.#logConfig = logConfig;
-    this.#db = db;
-    this.#schema = schema;
-    this.#clientToServerMapper = clientToServer(schema.tables);
-    this.#serverToClientMapper = serverToClient(schema.tables);
-  }
-
-  override getSource(serverTableName: string): Source {
-    const clientTableName =
-      this.#serverToClientMapper.tableName(serverTableName);
-    let source = this.#sources.get(serverTableName);
-    if (source) {
-      return source;
-    }
-
-    const tables = this.#schema.tables;
-    const tableSchema = tables[clientTableName as keyof typeof tables];
-
-    // create the SQLite table
-    this.#db.exec(`
+      // create the SQLite table
+      db.exec(`
       CREATE TABLE IF NOT EXISTS "${serverTableName}" (
         ${Object.entries(tableSchema.columns)
           .map(
             ([name, c]) =>
-              `"${this.#clientToServerMapper.columnName(
+              `"${clientToServerMapper.columnName(
                 clientTableName,
                 name,
               )}" ${toSQLiteTypeName(c.type)}`,
           )
           .join(', ')},
         PRIMARY KEY (${tableSchema.primaryKey
-          .map(
-            k =>
-              `"${this.#clientToServerMapper.columnName(clientTableName, k)}"`,
-          )
+          .map(k => `"${clientToServerMapper.columnName(clientTableName, k)}"`)
           .join(', ')})
       )`);
 
-    source = new TableSource(
-      this.#lc,
-      this.#logConfig,
-      this.#db,
-      serverTableName,
-      Object.fromEntries(
-        Object.entries(tableSchema.columns).map(([k, v]) => [
-          this.#clientToServerMapper.columnName(clientTableName, k),
-          v,
-        ]),
-      ),
-      tableSchema.primaryKey.map(k =>
-        this.#clientToServerMapper.columnName(clientTableName, k),
-      ) as unknown as CompoundKey,
-    );
+      source = new TableSource(
+        lc,
+        logConfig,
+        db,
+        serverTableName,
+        Object.fromEntries(
+          Object.entries(tableSchema.columns).map(([k, v]) => [
+            clientToServerMapper.columnName(clientTableName, k),
+            v,
+          ]),
+        ),
+        tableSchema.primaryKey.map(k =>
+          clientToServerMapper.columnName(clientTableName, k),
+        ) as unknown as CompoundKey,
+      );
 
-    this.#sources.set(serverTableName, source);
-    return source;
-  }
+      sources.set(serverTableName, source);
+      return source;
+    },
 
-  mapAst(ast: AST): AST {
-    return mapAST(ast, this.#clientToServerMapper);
-  }
-}
+    mapAst(ast: AST): AST {
+      return mapAST(ast, clientToServerMapper);
+    },
 
-export function newQueryDelegate(
-  lc: LogContext,
-  logConfig: LogConfig,
-  db: Database,
-  schema: Schema,
-): QueryDelegate<undefined> {
-  return new SourceFactoryQueryDelegate(lc, logConfig, db, schema);
+    createStorage() {
+      return new MemoryStorage();
+    },
+    decorateSourceInput(input: SourceInput): Input {
+      return input;
+    },
+    addEdge() {},
+    decorateInput(input: Input): Input {
+      return input;
+    },
+    decorateFilterInput(input: FilterInput): FilterInput {
+      return input;
+    },
+    addServerQuery() {
+      return () => {};
+    },
+    addCustomQuery() {
+      return () => {};
+    },
+    updateServerQuery() {},
+    updateCustomQuery() {},
+    onTransactionCommit() {
+      return () => {};
+    },
+    batchViewUpdates<T>(applyViewUpdates: () => T): T {
+      return applyViewUpdates();
+    },
+    assertValidRunOptions() {},
+    flushQueryChanges() {},
+    defaultQueryComplete: true,
+    enableNotExists: true, // Allow NOT EXISTS in tests
+    addMetric() {},
+  };
 }

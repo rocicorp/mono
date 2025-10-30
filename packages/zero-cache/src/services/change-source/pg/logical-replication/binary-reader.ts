@@ -5,46 +5,45 @@ const textDecoder = new TextDecoder();
 
 // https://www.postgresql.org/docs/14/protocol-message-types.html
 export class BinaryReader {
-  #p = 0;
-  readonly #b: Uint8Array;
-
-  constructor(b: Uint8Array) {
-    this.#b = b;
+  _p = 0;
+  private _b: Uint8Array;
+  constructor(_b: Uint8Array) {
+    this._b = _b;
   }
 
   readUint8() {
     this.checkSize(1);
 
-    return this.#b[this.#p++];
+    return this._b[this._p++];
   }
 
   readInt16() {
     this.checkSize(2);
 
-    return (this.#b[this.#p++] << 8) | this.#b[this.#p++];
+    return (this._b[this._p++] << 8) | this._b[this._p++];
   }
 
   readInt32() {
     this.checkSize(4);
 
     return (
-      (this.#b[this.#p++] << 24) |
-      (this.#b[this.#p++] << 16) |
-      (this.#b[this.#p++] << 8) |
-      this.#b[this.#p++]
+      (this._b[this._p++] << 24) |
+      (this._b[this._p++] << 16) |
+      (this._b[this._p++] << 8) |
+      this._b[this._p++]
     );
   }
 
   readString() {
-    const endIdx = this.#b.indexOf(0x00, this.#p);
+    const endIdx = this._b.indexOf(0x00, this._p);
 
     if (endIdx < 0) {
       // TODO PgError.protocol_violation
       throw Error('unexpected end of message');
     }
 
-    const strBuf = this.#b.subarray(this.#p, endIdx);
-    this.#p = endIdx + 1;
+    const strBuf = this._b.subarray(this._p, endIdx);
+    this._p = endIdx + 1;
 
     return this.decodeText(strBuf);
   }
@@ -56,11 +55,11 @@ export class BinaryReader {
   read(n: number) {
     this.checkSize(n);
 
-    return this.#b.subarray(this.#p, (this.#p += n));
+    return this._b.subarray(this._p, (this._p += n));
   }
 
   checkSize(n: number) {
-    if (this.#b.length < this.#p + n) {
+    if (this._b.length < this._p + n) {
       // TODO PgError.protocol_violation
       throw Error('unexpected end of message');
     }

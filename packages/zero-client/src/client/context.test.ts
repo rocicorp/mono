@@ -46,7 +46,6 @@ test('getSource', () => {
   const context = new ZeroContext(
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
-    'context',
     null as unknown as AddQuery,
     null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
@@ -124,7 +123,6 @@ test('processChanges', () => {
   const context = new ZeroContext(
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
-    'context',
     null as unknown as AddQuery,
     null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
@@ -196,7 +194,6 @@ test('processChanges wraps source updates with batchViewUpdates', () => {
   const context = new ZeroContext(
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
-    'context',
     null as unknown as AddQuery,
     null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
@@ -257,7 +254,6 @@ test('transactions', () => {
   const context = new ZeroContext(
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
-    'context',
     null as unknown as AddQuery,
     null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
@@ -342,7 +338,6 @@ test('batchViewUpdates errors if applyViewUpdates is not called', () => {
   const context = new ZeroContext(
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
-    'context',
     null as unknown as AddQuery,
     null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,
@@ -367,7 +362,6 @@ test('batchViewUpdates returns value', () => {
   const context = new ZeroContext(
     new LogContext('info'),
     new IVMSourceBranch(schema.tables),
-    'context',
     null as unknown as AddQuery,
     null as unknown as AddCustomQuery,
     null as unknown as UpdateQuery,

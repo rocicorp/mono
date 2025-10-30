@@ -217,7 +217,7 @@ const PERMISSIONS_EXISTS_LIMIT = 1;
  * Recursively checks AND/OR branches but does not recurse into nested subqueries
  * (those are checked when buildPipelineInternal processes them).
  */
-export function assertNoNotExists(condition: Condition): void {
+function assertNoNotExists(condition: Condition): void {
   switch (condition.type) {
     case 'simple':
       return;

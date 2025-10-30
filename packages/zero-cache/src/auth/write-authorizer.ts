@@ -22,8 +22,8 @@ import type {
   UpdateOp,
   UpsertOp,
 } from '../../../zero-protocol/src/push.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {Policy} from '../../../zero-schema/src/compiled-permissions.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {BuilderDelegate} from '../../../zql/src/builder/builder.ts';
 import {
   bindStaticParameters,
@@ -31,10 +31,7 @@ import {
 } from '../../../zql/src/builder/builder.ts';
 import {simplifyCondition} from '../../../zql/src/query/expression.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
-import {
-  asStaticQuery,
-  staticQuery,
-} from '../../../zql/src/query/static-query.ts';
+import {StaticQuery, staticQuery} from '../../../zql/src/query/static-query.ts';
 import {
   DatabaseStorage,
   type ClientGroupStorage,
@@ -482,7 +479,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     if (policy.length === 0) {
       return false;
     }
-    let rowQueryAst = asStaticQuery(rowQuery).ast;
+    let rowQueryAst = (rowQuery as StaticQuery<Schema, string>).ast;
     rowQueryAst = bindStaticParameters(
       {
         ...rowQueryAst,

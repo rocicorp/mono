@@ -28,17 +28,16 @@ import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
 import type {AnalyzeQueryResult} from '../../zero-protocol/src/analyze-query-result.ts';
 import {type AST} from '../../zero-protocol/src/ast.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
-import type {Schema} from '../../zero-types/src/schema.ts';
 import {
   Debug,
   runtimeDebugFlags,
 } from '../../zql/src/builder/debug-delegate.ts';
-import type {Source} from '../../zql/src/ivm/source.ts';
-import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
-import {newQuery} from '../../zql/src/query/query-impl.ts';
-import {queryWithContext} from '../../zql/src/query/query-internals.ts';
-import type {PullRow, Query} from '../../zql/src/query/query.ts';
+import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
+import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
+import {completedAST, newQuery} from '../../zql/src/query/query-impl.ts';
+import {type PullRow, type Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
 import {explainQueries} from './explain-queries.ts';
@@ -199,16 +198,9 @@ const sources = new Map<string, TableSource>();
 const clientToServerMapper = clientToServer(schema.tables);
 const debug = new Debug();
 const tableSpecs = computeZqlSpecs(lc, db);
-
-class AnalyzeQueryDelegate extends QueryDelegateBase<undefined> {
-  readonly debug = debug;
-  readonly defaultQueryComplete = true;
-
-  constructor() {
-    super(undefined);
-  }
-
-  getSource(serverTableName: string): Source | undefined {
+const host: QueryDelegate = {
+  debug,
+  getSource: (serverTableName: string) => {
     let source = sources.get(serverTableName);
     if (source) {
       return source;
@@ -227,10 +219,35 @@ class AnalyzeQueryDelegate extends QueryDelegateBase<undefined> {
 
     sources.set(serverTableName, source);
     return source;
-  }
-}
+  },
 
-const host = new AnalyzeQueryDelegate();
+  createStorage() {
+    // TODO: table storage!!
+    return new MemoryStorage();
+  },
+  decorateInput: input => input,
+  decorateSourceInput: input => input,
+  decorateFilterInput: input => input,
+  addEdge() {},
+  addServerQuery() {
+    return () => {};
+  },
+  addCustomQuery() {
+    return () => {};
+  },
+  updateServerQuery() {},
+  updateCustomQuery() {},
+  onTransactionCommit() {
+    return () => {};
+  },
+  batchViewUpdates<T>(applyViewUpdates: () => T): T {
+    return applyViewUpdates();
+  },
+  flushQueryChanges() {},
+  assertValidRunOptions() {},
+  defaultQueryComplete: true,
+  addMetric() {},
+};
 
 let result: AnalyzeQueryResult;
 
@@ -260,15 +277,15 @@ function runQuery(queryString: string): Promise<AnalyzeQueryResult> {
     query: Object.fromEntries(
       Object.entries(schema.tables).map(([name]) => [
         name,
-        newQuery(schema, name),
+        newQuery(host, schema, name),
       ]),
     ),
   };
 
   const f = new Function('z', `return z.query.${queryString};`);
-  const q: Query<Schema, string, PullRow<string, Schema>, undefined> = f(z);
+  const q: Query<Schema, string, PullRow<string, Schema>> = f(z);
 
-  const ast = queryWithContext(q, undefined).ast;
+  const ast = completedAST(q);
   return runAst(lc, ast, false, {
     applyPermissions: config.applyPermissions,
     authData: config.authData,

@@ -14,20 +14,19 @@ import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
 import type {Row} from '../../../zql/src/query/query.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
-import {bindingsForZero} from './bindings.ts';
-import {ConnectionStatus} from './connection-status.ts';
 import {
   TransactionImpl,
   type MakeCustomMutatorInterfaces,
   type MutatorResult,
 } from './custom.ts';
-import {ClientError} from './error.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
-import {QueryManager} from './query-manager.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 import {MockSocket, zeroForTest} from './test-utils.ts';
 import {createDb} from './test/create-db.ts';
 import {getInternalReplicacheImplForTesting} from './zero.ts';
+import {QueryManager} from './query-manager.ts';
+import {ConnectionStatus} from './connection-status.ts';
+import {ClientError} from './error.ts';
 
 type Schema = typeof schema;
 type MutatorTx = Transaction<Schema>;
@@ -67,11 +66,7 @@ test('argument types are preserved on the generated mutator interface', () => {
     },
   } as const;
 
-  type MutatorsInterface = MakeCustomMutatorInterfaces<
-    Schema,
-    typeof mutators,
-    unknown
-  >;
+  type MutatorsInterface = MakeCustomMutatorInterfaces<Schema, typeof mutators>;
 
   expectTypeOf<MutatorsInterface>().toEqualTypeOf<{
     readonly issue: {
@@ -112,7 +107,7 @@ test('supports mutators without a namespace', async () => {
     createdAt: 1743018138477,
   }).client;
 
-  const issues = await z.run(z.query.issue);
+  const issues = await z.query.issue.run();
   expect(issues[0].title).toEqual('no-namespace');
 });
 
@@ -189,15 +184,15 @@ test('custom mutators write to the local store', async () => {
   }).client;
 
   await z.markQueryAsGot(z.query.issue);
-  let issues = await z.run(z.query.issue);
+  let issues = await z.query.issue.run();
   expect(issues[0].title).toEqual('foo');
 
   await z.mutate.issue.setTitle({id: '1', title: 'bar'}).client;
-  issues = await z.run(z.query.issue);
+  issues = await z.query.issue.run();
   expect(issues[0].title).toEqual('bar');
 
   await z.mutate.customNamespace.clown('1').client;
-  issues = await z.run(z.query.issue);
+  issues = await z.query.issue.run();
   expect(issues[0].title).toEqual('🤡');
 
   await z.mutate.issue.create({
@@ -208,12 +203,12 @@ test('custom mutators write to the local store', async () => {
     description: '',
     createdAt: 1743018138477,
   }).client;
-  issues = await z.run(z.query.issue);
+  issues = await z.query.issue.run();
   expect(issues.length).toEqual(2);
 
   await z.mutate.issue.deleteTwoIssues({id1: issues[0].id, id2: issues[1].id})
     .client;
-  issues = await z.run(z.query.issue);
+  issues = await z.query.issue.run();
   expect(issues.length).toEqual(0);
 });
 
@@ -229,7 +224,7 @@ test('custom mutators can query the local store during an optimistic mutation', 
           await tx.mutate.issue.insert(args);
         },
         closeAll: async (tx: MutatorTx) => {
-          const issues = await tx.run(tx.query.issue);
+          const issues = await tx.query.issue.run();
           await Promise.all(
             issues.map(issue =>
               tx.mutate.issue.update({id: issue.id, closed: true}),
@@ -255,12 +250,12 @@ test('custom mutators can query the local store during an optimistic mutation', 
 
   const q = z.query.issue.where('closed', false);
   await z.markQueryAsGot(q);
-  let issues = await z.run(q);
+  let issues = await q.run();
   expect(issues.length).toEqual(10);
 
   await z.mutate.issue.closeAll().client;
 
-  issues = await z.run(q);
+  issues = await q.run();
   expect(issues.length).toEqual(0);
 });
 
@@ -327,7 +322,7 @@ describe('rebasing custom mutators', () => {
           ) => {
             await tx.mutate.issue.insert(args);
             const readIssue = must(
-              await tx.run(tx.query.issue.where('id', args.id).one()),
+              await tx.query.issue.where('id', args.id).one().run(),
             );
             await tx.mutate.issue.update({
               ...readIssue,
@@ -348,10 +343,10 @@ describe('rebasing custom mutators', () => {
     }).client;
 
     const q = z.query.issue.where('id', '1').one();
-    const issue = await z.run(q, {type: 'unknown'});
+    const issue = await q.run({type: 'unknown'});
     expect(issue?.title).toEqual('foo updated');
     expect(issue?.description).toEqual('updated');
-    const p = z.run(q, {type: 'complete'});
+    const p = q.run({type: 'complete'});
     let completed = false;
     p.then(
       () => (completed = true),
@@ -366,10 +361,7 @@ describe('rebasing custom mutators', () => {
     // Pokes are scheduled using raf... give it a macro task.
     await vi.waitFor(async () => {
       const rep = getInternalReplicacheImplForTesting(z);
-
-      expect(
-        await rep.query(tx => tx.has(`g/${bindingsForZero(z).hash(q)}`)),
-      ).toEqual(true);
+      expect(await rep.query(tx => tx.has(`g/${q.hash()}`))).toEqual(true);
     });
 
     expect(completed).toEqual(true);
@@ -405,7 +397,7 @@ describe('rebasing custom mutators', () => {
         createdAt: 1743018138477,
       }).client;
 
-      const result = await z.run(z.query.issue.where('id', String(i)).one());
+      const result = await z.query.issue.where('id', String(i)).one().run();
       expect(result?.title).toEqual('foo ' + i);
       expect(result?.id).toEqual(String(i));
     }
@@ -423,9 +415,9 @@ describe('rebasing custom mutators', () => {
           ) => {
             await tx.mutate.issue.insert(args);
             // query main. The issue should not be there yet.
-            expect(await z.run(z.query.issue)).toHaveLength(0);
+            expect(await z.query.issue.run()).length(0);
             // but it is in this tx
-            expect(await tx.run(tx.query.issue)).toHaveLength(1);
+            expect(await tx.query.issue.run()).length(1);
 
             mutationRun = true;
           },
@@ -550,7 +542,7 @@ describe('server results and keeping read queries', () => {
     await z.triggerConnected();
     await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-    const q = z.materialize(z.query.issue.limit(1));
+    const q = z.query.issue.limit(1).materialize();
     const create = z.mutate.issue.create({
       id: '1',
       title: 'foo',
@@ -609,7 +601,7 @@ describe('server results and keeping read queries', () => {
     messages.length = 0;
 
     // check the error case
-    const q2 = z.materialize(z.query.issue);
+    const q2 = z.query.issue.materialize();
     const close = z.mutate.issue.close({});
     await close;
     q2.destroy();
@@ -698,7 +690,7 @@ describe('server results and keeping read queries', () => {
 
     let foundIssue: Row<typeof schema.tables.issue> | undefined;
     void create.server.then(async () => {
-      foundIssue = await z.run(z.query.issue.where('id', '1').one());
+      foundIssue = await z.query.issue.where('id', '1').one().run();
     });
 
     // confirm the mutation
@@ -761,7 +753,7 @@ test('run waiting for complete results throws in custom mutations', async () => 
       issue: {
         create: async (tx: MutatorTx) => {
           try {
-            await tx.run(tx.query.issue, {type: 'complete'});
+            await tx.query.issue.run({type: 'complete'});
           } catch (e) {
             err = e;
           }
@@ -844,7 +836,7 @@ test('crud mutators work if `enableLegacyMutators` is set to true (or not set)',
     createdAt: 1743018138477,
   });
   // read a row
-  await expect(z.run(z.query.issue.where('id', '1').one())).resolves.toEqual({
+  await expect(z.query.issue.where('id', '1').one().run()).resolves.toEqual({
     id: '1',
     title: 'foo',
     closed: false,
@@ -872,7 +864,7 @@ test('unnamed queries do not get registered with the query manager if `enableLeg
   await z.triggerConnected();
   await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-  await z.run(z.query.issue.where('id', '1').one());
+  await z.query.issue.where('id', '1').one().run();
 
   expect(addLegacySpy).not.toHaveBeenCalled();
   await z.close();
@@ -888,7 +880,7 @@ test('unnamed queries do get registered with the query manager if `enableLegacyQ
   await z.triggerConnected();
   await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-  await z.run(z.query.issue.where('id', '1').one());
+  await z.query.issue.where('id', '1').one().run();
 
   expect(addLegacySpy).toHaveBeenCalled();
   await z.close();

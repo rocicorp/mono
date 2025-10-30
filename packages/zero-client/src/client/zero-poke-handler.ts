@@ -5,10 +5,8 @@ import type {
 } from '../../../replicache/src/impl.ts';
 import type {PatchOperation} from '../../../replicache/src/patch-operation.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
-import {unreachable} from '../../../shared/src/asserts.ts';
 import {getBrowserGlobalMethod} from '../../../shared/src/browser-env.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
-import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
 import type {
   PokeEndBody,
   PokePartBody,
@@ -16,19 +14,21 @@ import type {
 } from '../../../zero-protocol/src/poke.ts';
 import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import type {RowPatchOp} from '../../../zero-protocol/src/row-patch.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   serverToClient,
   type NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
 import {
   toDesiredQueriesKey,
   toGotQueriesKey,
   toMutationResponseKey,
   toPrimaryKeyString,
 } from './keys.ts';
-import type {MutationTracker} from './mutation-tracker.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
+import {unreachable} from '../../../shared/src/asserts.ts';
+import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
+import type {MutationTracker} from './mutation-tracker.ts';
 
 type PokeAccumulator = {
   readonly pokeStart: PokeStartBody;

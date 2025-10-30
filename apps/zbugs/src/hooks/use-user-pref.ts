@@ -1,22 +1,23 @@
 import type {Zero} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
-import type {AuthData} from '../../shared/auth.ts';
+import {type Schema} from '../../shared/schema.ts';
 import type {Mutators} from '../../shared/mutators.ts';
 import {queries} from '../../shared/queries.ts';
-import {type Schema} from '../../shared/schema.ts';
+import {useLogin} from './use-login.tsx';
 
 export function useUserPref(key: string): string | undefined {
-  const [pref] = useQuery(queries.userPref(key));
+  const login = useLogin();
+  const [pref] = useQuery(queries.userPref(login.loginState?.decoded, key));
   return pref?.value;
 }
 
 export async function setUserPref(
-  z: Zero<Schema, Mutators, AuthData | undefined>,
+  z: Zero<Schema, Mutators>,
   key: string,
   value: string,
   mutate = z.mutate,
 ): Promise<void> {
-  await mutate.userPref.set({key, value}).client;
+  await mutate.userPref.set({key, value});
 }
 
 export function useNumericPref(key: string, defaultValue: number): number {
@@ -25,7 +26,7 @@ export function useNumericPref(key: string, defaultValue: number): number {
 }
 
 export function setNumericPref(
-  z: Zero<Schema, Mutators, AuthData | undefined>,
+  z: Zero<Schema, Mutators>,
   key: string,
   value: number,
 ): Promise<void> {

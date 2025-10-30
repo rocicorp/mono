@@ -5,7 +5,7 @@ import type {
   PgTransaction,
 } from 'drizzle-orm/pg-core';
 import type {ExtractTablesWithRelations} from 'drizzle-orm/relations';
-import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {
   DBConnection,
   DBTransaction,
@@ -58,7 +58,7 @@ export class DrizzleConnection<
       fn(
         new DrizzleInternalTransaction(
           drizzleTx,
-        ) as DBTransaction<TTransaction>,
+        ) as unknown as DBTransaction<TTransaction>,
       ),
     );
   }
@@ -169,14 +169,10 @@ export function toIterableRows(result: unknown): Iterable<Row> {
  * }
  * ```
  */
-export function zeroDrizzle<
-  TSchema extends Schema,
-  TDrizzle extends DrizzleDatabase,
-  TContext,
->(
-  schema: TSchema,
+export function zeroDrizzle<S extends Schema, TDrizzle extends DrizzleDatabase>(
+  schema: S,
   client: TDrizzle,
-): ZQLDatabase<TSchema, DrizzleTransaction<TDrizzle>, TContext> {
+): ZQLDatabase<S, DrizzleTransaction<TDrizzle>> {
   return new ZQLDatabase(
     new DrizzleConnection<TDrizzle, DrizzleTransaction<TDrizzle>>(client),
     schema,

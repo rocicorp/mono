@@ -1,8 +1,7 @@
 import {createComputed, createSignal, onCleanup, type Accessor} from 'solid-js';
 import {createStore} from 'solid-js/store';
 import type {ClientID} from '../../replicache/src/sync/ids.ts';
-import {bindingsForZero} from '../../zero-client/src/client/bindings.ts';
-import type {Schema} from '../../zero-types/src/schema.ts';
+import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {HumanReadable, Query} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import {
@@ -50,9 +49,8 @@ export function useQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
-  TContext,
 >(
-  querySignal: Accessor<Query<TSchema, TTable, TReturn, TContext>>,
+  querySignal: Accessor<Query<TSchema, TTable, TReturn>>,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
 ): QueryResult<TReturn> {
   const [state, setState] = createStore<State>([
@@ -75,7 +73,7 @@ export function useQuery<
     [
       SolidView | undefined,
       ClientID | undefined,
-      Query<TSchema, TTable, TReturn, TContext> | undefined,
+      Query<TSchema, TTable, TReturn> | undefined,
       string | undefined,
       TTL | undefined,
       number,
@@ -93,20 +91,19 @@ export function useQuery<
       const currentRefetchKey = refetchKey(); // depend on refetchKey to force re-evaluation
       const {clientID} = zero;
       const query = querySignal();
-      const bindings = bindingsForZero(zero);
-      const queryHash = bindings.hash(query);
+      const queryHash = query.hash();
       const ttl = normalize(options)?.ttl ?? DEFAULT_TTL_MS;
       if (
         !prevView ||
         clientID !== prevClientID ||
         prevRefetchKey !== currentRefetchKey ||
         (query !== prevQuery &&
-          (clientID === undefined || queryHash !== prevQueryHash))
+          (clientID === undefined || query.hash() !== prevQueryHash))
       ) {
         if (prevView) {
           prevView.destroy();
         }
-        view = bindings.materialize(
+        view = zero.materialize(
           query,
           createSolidViewFactory(setState, refetch),
           {ttl},

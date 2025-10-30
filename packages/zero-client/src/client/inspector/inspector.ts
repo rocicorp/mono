@@ -1,7 +1,6 @@
 import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
 import type {AnalyzeQueryOptions} from '../../../../zero-protocol/src/inspect-up.ts';
-import type {QueryDelegate} from '../../../../zql/src/query/query-delegate.ts';
-import type {AnyQuery} from '../../../../zql/src/query/query.ts';
+import type {AnyQuery} from '../../../../zql/src/query/query-impl.ts';
 import type {ClientGroup} from './client-group.ts';
 import {Client} from './client.ts';
 import type {
@@ -22,18 +21,15 @@ export class Inspector {
 
   constructor(
     rep: Rep,
-    inspectorDelegate: InspectorDelegate,
-    queryDelegate: QueryDelegate<unknown>,
+    delegate: InspectorDelegate,
     getSocket: () => Promise<WebSocket>,
   ) {
     this.#delegate = {
-      getQueryMetrics:
-        inspectorDelegate.getQueryMetrics.bind(inspectorDelegate),
-      getAST: inspectorDelegate.getAST.bind(inspectorDelegate),
+      getQueryMetrics: delegate.getQueryMetrics.bind(delegate),
+      getAST: delegate.getAST.bind(delegate),
       get metrics() {
-        return inspectorDelegate.metrics;
+        return delegate.metrics;
       },
-      queryDelegate,
       rep,
       getSocket,
       lazy: import('./lazy-inspector.ts'),

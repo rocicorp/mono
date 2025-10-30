@@ -34,8 +34,6 @@ import {
   initConnectionMessageSchema,
 } from '../../../zero-protocol/src/connect.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
-import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import {
@@ -44,27 +42,26 @@ import {
   type Mutation,
 } from '../../../zero-protocol/src/push.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  createSchema,
+  type Schema,
+} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
   number,
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {nanoid} from '../util/nanoid.ts';
-import {ClientErrorKind} from './client-error-kind.ts';
-import type {ConnectionState} from './connection-manager.ts';
-import {ConnectionStatus} from './connection-status.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {DeleteClientsManager} from './delete-clients-manager.ts';
-import {ClientError, isServerError} from './error.ts';
 import type {WSString} from './http-string.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import type {QueryManager} from './query-manager.ts';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.ts';
+import {ClientError, isServerError} from './error.ts';
 import {
   MockSocket,
   storageMock,
@@ -84,6 +81,11 @@ import {
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
 } from './zero.ts';
+import {ConnectionStatus} from './connection-status.ts';
+import type {ConnectionState} from './connection-manager.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
+import {ProtocolError} from '../../../zero-protocol/src/error.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 
 const startTime = 1678829450000;
 
@@ -1030,7 +1032,7 @@ describe('initConnection', () => {
       }),
     });
 
-    const view = r.materialize(r.query.e);
+    const view = r.query.e.materialize();
     view.addListener(() => {});
 
     const mockSocket = await r.socket;
@@ -1155,7 +1157,7 @@ describe('initConnection', () => {
       deletedClients: [{clientID: 'a'}],
     });
 
-    const view = r.materialize(r.query.e);
+    const view = r.query.e.materialize();
     view.addListener(() => {});
 
     const mockSocket = await r.socket;
@@ -1270,7 +1272,7 @@ describe('initConnection', () => {
     });
 
     expect(mockSocket.messages.length).toEqual(0);
-    const view = r.materialize(r.query.e);
+    const view = r.query.e.materialize();
     view.addListener(() => {});
     await r.triggerConnected();
     expect(mockSocket.messages.length).toEqual(1);
@@ -1347,7 +1349,7 @@ describe('initConnection', () => {
     });
 
     expect(mockSocket.messages.length).toEqual(0);
-    const view = r.materialize(r.query.e);
+    const view = r.query.e.materialize();
     view.addListener(() => {});
     await r.triggerConnected();
     expect(mockSocket.messages.length).toEqual(1);
@@ -1416,7 +1418,7 @@ describe('initConnection', () => {
 
     expect(mockSocket.messages.length).toEqual(0);
 
-    const view = r.materialize(r.query.e);
+    const view = r.query.e.materialize();
     view.addListener(() => {});
 
     await r.triggerConnected();
@@ -1437,13 +1439,13 @@ describe('initConnection', () => {
       }),
     });
 
-    const view1 = r.materialize(r.query.e);
+    const view1 = r.query.e.materialize();
     view1.addListener(() => {});
 
     const mockSocket = await r.socket;
     expect(mockSocket.messages.length).toEqual(0);
 
-    const view2 = r.materialize(r.query.e);
+    const view2 = r.query.e.materialize();
     view2.addListener(() => {});
     await r.triggerConnected();
     // no `changeDesiredQueries` sent since the query was already included in `initConnection`
@@ -1464,7 +1466,7 @@ describe('initConnection', () => {
       }),
     });
 
-    const view1 = r.materialize(r.query.e);
+    const view1 = r.query.e.materialize();
     const removeListener = view1.addListener(() => {});
 
     const mockSocket = await r.socket;
@@ -2032,7 +2034,7 @@ test('smokeTest', async () => {
     });
 
     const calls: Array<Array<unknown>> = [];
-    const view = r.materialize(r.query.issues);
+    const view = r.query.issues.materialize();
     const unsubscribe = view.addListener(c => {
       calls.push([...c]);
     });
@@ -2098,7 +2100,7 @@ test('passing server null allows queries without WS connection', async () => {
   });
 
   // Queries should still work locally
-  const view = r.materialize(r.query.tasks);
+  const view = r.query.tasks.materialize();
   const calls: Array<Array<unknown>> = [];
   const unsubscribe = view.addListener(c => {
     calls.push([...c]);
@@ -3310,8 +3312,8 @@ test('kvStore option', async () => {
     // Use persist as a way to ensure we have read the data out of IDB.
     await r.persist();
 
-    const idIsAView = r.materialize(r.query.e.where('id', '=', 'a'));
-    const allDataView = r.materialize(r.query.e);
+    const idIsAView = r.query.e.where('id', '=', 'a').materialize();
+    const allDataView = r.query.e.materialize();
     expect(allDataView.data).toEqual(expectedValue);
 
     await r.mutate.e.insert({id: 'a', value: 1});
@@ -3495,7 +3497,7 @@ describe('CRUD', () => {
     const z = makeZero();
 
     const createIssue = z.mutate.issue.insert;
-    const view = z.materialize(z.query.issue);
+    const view = z.query.issue.materialize();
     await createIssue({id: 'a', title: 'A'});
     expect(view.data).toEqual([{id: 'a', title: 'A', [refCountSymbol]: 1}]);
 
@@ -3529,7 +3531,7 @@ describe('CRUD', () => {
   test('set', async () => {
     const z = makeZero();
 
-    const view = z.materialize(z.query.comment);
+    const view = z.query.comment.materialize();
     await z.mutate.comment.insert({id: 'a', issueID: '1', text: 'A text'});
     expect(view.data).toEqual([
       {
@@ -3635,7 +3637,7 @@ describe('CRUD', () => {
 
   test('update', async () => {
     const z = makeZero();
-    const view = z.materialize(z.query.comment);
+    const view = z.query.comment.materialize();
     await z.mutate.comment.insert({id: 'a', issueID: '1', text: 'A text'});
     expect(view.data).toEqual([
       {
@@ -3709,7 +3711,7 @@ describe('CRUD', () => {
 
   test('compoundPK', async () => {
     const z = makeZero();
-    const view = z.materialize(z.query.compoundPKTest);
+    const view = z.query.compoundPKTest.materialize();
     await z.mutate.compoundPKTest.insert({id1: 'a', id2: 'a', text: 'a'});
     expect(view.data).toEqual([
       {id1: 'a', id2: 'a', text: 'a', [refCountSymbol]: 1},
@@ -3790,7 +3792,7 @@ describe('CRUD with compound primary key', () => {
     const z = makeZero();
 
     const createIssue: (issue: Issue) => Promise<void> = z.mutate.issue.insert;
-    const view = z.materialize(z.query.issue);
+    const view = z.query.issue.materialize();
     await createIssue({ids: 'a', idn: 1, title: 'A'});
     expect(view.data).toEqual([
       {ids: 'a', idn: 1, title: 'A', [refCountSymbol]: 1},
@@ -3806,7 +3808,7 @@ describe('CRUD with compound primary key', () => {
   test('set', async () => {
     const z = makeZero();
 
-    const view = z.materialize(z.query.comment);
+    const view = z.query.comment.materialize();
     await z.mutate.comment.insert({
       ids: 'a',
       idn: 1,
@@ -3883,7 +3885,7 @@ describe('CRUD with compound primary key', () => {
 
   test('update', async () => {
     const z = makeZero();
-    const view = z.materialize(z.query.comment);
+    const view = z.query.comment.materialize();
     await z.mutate.comment.insert({
       ids: 'a',
       idn: 1,
@@ -3974,8 +3976,8 @@ test('mutate is a function for batching', async () => {
       ],
     }),
   });
-  const issueView = z.materialize(z.query.issue);
-  const commentView = z.materialize(z.query.comment);
+  const issueView = z.query.issue.materialize();
+  const commentView = z.query.comment.materialize();
 
   const x = await z.mutateBatch(async m => {
     expect(
@@ -4124,7 +4126,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
       ],
     }),
   });
-  const issueView = z.materialize(z.query.issue);
+  const issueView = z.query.issue.materialize();
 
   await z.mutateBatch(async m => {
     // This works even with the nested await because what batch is doing is
