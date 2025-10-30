@@ -1,6 +1,4 @@
 export class QueryParseError extends Error {
-  readonly cause: unknown;
-
   constructor(opts: ErrorOptions) {
     super(
       opts?.cause instanceof Error
