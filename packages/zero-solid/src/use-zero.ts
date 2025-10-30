@@ -1,9 +1,11 @@
 import {
   batch,
   createContext,
+  createEffect,
   createMemo,
   onCleanup,
   splitProps,
+  untrack,
   useContext,
   type Accessor,
   type JSX,
@@ -17,6 +19,8 @@ import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
 const ZeroContext = createContext<Accessor<Zero<any, any>> | undefined>(
   undefined,
 );
+
+const NO_AUTH_SET = Symbol('NO_AUTH_SET');
 
 export function createZero<S extends Schema, MD extends CustomMutatorDefs>(
   options: ZeroOptions<S, MD>,
@@ -51,7 +55,7 @@ export function ZeroProvider<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
 >(
-  props: {children: JSX.Element} & (
+  props: {children: JSX.Element; init?: (zero: Zero<S, MD>) => void} & (
     | {
         zero: Zero<S, MD>;
       }
@@ -62,13 +66,45 @@ export function ZeroProvider<
     if ('zero' in props) {
       return props.zero;
     }
-    const [, options] = splitProps(props, ['children']);
+
+    const [, options] = splitProps(props, ['children', 'auth']);
+
+    const authValue = untrack(() => props.auth);
     const createdZero = new Zero({
       ...options,
+      ...(authValue !== undefined ? {auth: authValue} : {}),
       batchViewUpdates: batch,
     });
+    options.init?.(createdZero);
     onCleanup(() => createdZero.close());
     return createdZero;
+  });
+
+  const auth = createMemo<typeof NO_AUTH_SET | ZeroOptions<S, MD>['auth']>(
+    () => ('auth' in props ? props.auth : NO_AUTH_SET),
+  );
+
+  let prevAuth: typeof NO_AUTH_SET | ZeroOptions<S, MD>['auth'] = NO_AUTH_SET;
+
+  createEffect(() => {
+    const currentZero = zero();
+    if (!currentZero) {
+      return;
+    }
+
+    const currentAuth = auth();
+
+    if (prevAuth === NO_AUTH_SET) {
+      prevAuth = currentAuth;
+      return;
+    }
+
+    if (currentAuth !== prevAuth) {
+      prevAuth = currentAuth;
+      void currentZero.connection.connect({
+        auth: currentAuth === NO_AUTH_SET ? undefined : currentAuth,
+      });
+    }
   });
 
   return ZeroContext.Provider({
