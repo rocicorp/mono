@@ -96,12 +96,16 @@ jobs:
         include:
           - browser: chromium
             install-cmd: npx playwright install chromium --with-deps
+            test-filter: --project="!**/node"
           - browser: firefox
             install-cmd: npx playwright install firefox --with-deps
+            test-filter: --project="!**/node"
           - browser: webkit
             install-cmd: npx playwright install webkit --with-deps
+            test-filter: --project="!**/node"
           - browser: node
             install-cmd: echo "No browser installation needed for node-only tests"
+            test-filter: --project="**/node"
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
@@ -118,7 +122,7 @@ jobs:
       - name: Install Playwright
         run: ${{ matrix.install-cmd }}
       - name: Run tests
-        run: TEST_PG_MODE=nopg npm run test -- ${{ matrix.browser == 'node' && '--project="**/node"' || '--project="!**/node"' }}
+        run: TEST_PG_MODE=nopg npm run test -- ${{ matrix.test-filter }}
 
   test-pg:
     name: Test PG ${{ matrix.pg-version }}
