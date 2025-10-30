@@ -28,7 +28,7 @@ export function configForVersion(version: number, url: string) {
     test: {
       name: `${name}/pg-${version}`,
       browser: {enabled: false},
-      silent: true,
+      silent: 'passed-only',
       include: [
         'src/**/*.pg.test.?(c|m)[jt]s?(x)',
         'server/**/*.pg.test.?(c|m)[jt]s?(x)',
@@ -50,7 +50,7 @@ export function configForNoPg(url: string) {
     test: {
       name: `${name}/no-pg`,
       browser: {enabled: false},
-      silent: true,
+      silent: 'passed-only',
       include: [
         'src/**/*.test.?(c|m)[jt]s?(x)',
         'server/**/*.test.?(c|m)[jt]s?(x)',
