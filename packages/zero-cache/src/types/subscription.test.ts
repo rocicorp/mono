@@ -337,7 +337,6 @@ describe('types/subscription', () => {
     const received: string[] = [];
     let i = 0;
     for await (const m of subscription) {
-      console.error('i', i);
       received.push(m);
 
       if (i++ === 0) {
