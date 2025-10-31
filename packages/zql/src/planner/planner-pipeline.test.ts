@@ -15,12 +15,12 @@ suite('Planner Pipeline Integration', () => {
   test('FO/FI pairing produces small cost (single fetch)', () => {
     // Create: source -> connection -> fan-out
     const parentSource = new PlannerSource('users', simpleCostModel);
-    const parentConnection = parentSource.connect([['id', 'asc']], undefined);
+    const parentConnection = parentSource.connect([['id', 'asc']], undefined, false);
     const fanOut = new PlannerFanOut(parentConnection);
 
     // Create 3 child sources and joins
     const childSource1 = new PlannerSource('posts', simpleCostModel);
-    const childConnection1 = childSource1.connect([['id', 'asc']], undefined);
+    const childConnection1 = childSource1.connect([['id', 'asc']], undefined, false);
     const join1 = new PlannerJoin(
       parentConnection,
       childConnection1,
@@ -31,7 +31,7 @@ suite('Planner Pipeline Integration', () => {
     );
 
     const childSource2 = new PlannerSource('comments', simpleCostModel);
-    const childConnection2 = childSource2.connect([['id', 'asc']], undefined);
+    const childConnection2 = childSource2.connect([['id', 'asc']], undefined, false);
     const join2 = new PlannerJoin(
       parentConnection,
       childConnection2,
@@ -42,7 +42,7 @@ suite('Planner Pipeline Integration', () => {
     );
 
     const childSource3 = new PlannerSource('likes', simpleCostModel);
-    const childConnection3 = childSource3.connect([['id', 'asc']], undefined);
+    const childConnection3 = childSource3.connect([['id', 'asc']], undefined, false);
     const join3 = new PlannerJoin(
       parentConnection,
       childConnection3,
@@ -84,12 +84,12 @@ suite('Planner Pipeline Integration', () => {
   test('UFO/UFI pairing produces 3x cost (multiple fetches)', () => {
     // Create: source -> connection -> fan-out
     const parentSource = new PlannerSource('users', simpleCostModel);
-    const parentConnection = parentSource.connect([['id', 'asc']], undefined);
+    const parentConnection = parentSource.connect([['id', 'asc']], undefined, false);
     const fanOut = new PlannerFanOut(parentConnection);
 
     // Create 3 child sources and joins
     const childSource1 = new PlannerSource('posts', simpleCostModel);
-    const childConnection1 = childSource1.connect([['id', 'asc']], undefined);
+    const childConnection1 = childSource1.connect([['id', 'asc']], undefined, false);
     const join1 = new PlannerJoin(
       parentConnection,
       childConnection1,
@@ -100,7 +100,7 @@ suite('Planner Pipeline Integration', () => {
     );
 
     const childSource2 = new PlannerSource('comments', simpleCostModel);
-    const childConnection2 = childSource2.connect([['id', 'asc']], undefined);
+    const childConnection2 = childSource2.connect([['id', 'asc']], undefined, false);
     const join2 = new PlannerJoin(
       parentConnection,
       childConnection2,
@@ -111,7 +111,7 @@ suite('Planner Pipeline Integration', () => {
     );
 
     const childSource3 = new PlannerSource('likes', simpleCostModel);
-    const childConnection3 = childSource3.connect([['id', 'asc']], undefined);
+    const childConnection3 = childSource3.connect([['id', 'asc']], undefined, false);
     const join3 = new PlannerJoin(
       parentConnection,
       childConnection3,
@@ -159,12 +159,12 @@ suite('Planner Pipeline Integration', () => {
     const parentSource = new PlannerSource('users', simpleCostModel);
 
     // Test 1: Normal FO/FI
-    const normalConnection = parentSource.connect([['id', 'asc']], undefined);
+    const normalConnection = parentSource.connect([['id', 'asc']], undefined, false);
     const normalFanOut = new PlannerFanOut(normalConnection);
 
     const joins1 = Array.from({length: 3}, (_, i) => {
       const childSource = new PlannerSource(`child${i}`, simpleCostModel);
-      const childConnection = childSource.connect([['id', 'asc']], undefined);
+      const childConnection = childSource.connect([['id', 'asc']], undefined, false);
       return new PlannerJoin(
         normalConnection,
         childConnection,
@@ -188,13 +188,13 @@ suite('Planner Pipeline Integration', () => {
     const normalCost = normalConnection.estimateCost(1, []);
 
     // Test 2: Union UFO/UFI
-    const unionConnection = parentSource.connect([['id', 'asc']], undefined);
+    const unionConnection = parentSource.connect([['id', 'asc']], undefined, false);
     const unionFanOut = new PlannerFanOut(unionConnection);
     unionFanOut.convertToUFO();
 
     const joins2 = Array.from({length: 3}, (_, i) => {
       const childSource = new PlannerSource(`child${i}`, simpleCostModel);
-      const childConnection = childSource.connect([['id', 'asc']], undefined);
+      const childConnection = childSource.connect([['id', 'asc']], undefined, false);
       return new PlannerJoin(
         unionConnection,
         childConnection,
@@ -229,7 +229,7 @@ suite('Planner Pipeline Integration', () => {
     const parentSource = new PlannerSource('users', simpleCostModel);
 
     // === Test 1: Normal FO/FI chaining ===
-    const normalConnection = parentSource.connect([['id', 'asc']], undefined);
+    const normalConnection = parentSource.connect([['id', 'asc']], undefined, false);
 
     // First FO layer
     const normalFanOut1 = new PlannerFanOut(normalConnection);
@@ -237,7 +237,7 @@ suite('Planner Pipeline Integration', () => {
 
     // First layer joins (2 branches)
     const normalChild1 = new PlannerSource('posts', simpleCostModel);
-    const normalChildConn1 = normalChild1.connect([['id', 'asc']], undefined);
+    const normalChildConn1 = normalChild1.connect([['id', 'asc']], undefined, false);
     const normalJoin1 = new PlannerJoin(
       normalConnection,
       normalChildConn1,
@@ -248,7 +248,7 @@ suite('Planner Pipeline Integration', () => {
     );
 
     const normalChild2 = new PlannerSource('comments', simpleCostModel);
-    const normalChildConn2 = normalChild2.connect([['id', 'asc']], undefined);
+    const normalChildConn2 = normalChild2.connect([['id', 'asc']], undefined, false);
     const normalJoin2 = new PlannerJoin(
       normalConnection,
       normalChildConn2,
@@ -272,7 +272,7 @@ suite('Planner Pipeline Integration', () => {
 
     // Second layer joins (2 more branches)
     const normalChild3 = new PlannerSource('likes', simpleCostModel);
-    const normalChildConn3 = normalChild3.connect([['id', 'asc']], undefined);
+    const normalChildConn3 = normalChild3.connect([['id', 'asc']], undefined, false);
     const normalJoin3 = new PlannerJoin(
       normalFanIn1,
       normalChildConn3,
@@ -283,7 +283,7 @@ suite('Planner Pipeline Integration', () => {
     );
 
     const normalChild4 = new PlannerSource('shares', simpleCostModel);
-    const normalChildConn4 = normalChild4.connect([['id', 'asc']], undefined);
+    const normalChildConn4 = normalChild4.connect([['id', 'asc']], undefined, false);
     const normalJoin4 = new PlannerJoin(
       normalFanIn1,
       normalChildConn4,
@@ -309,7 +309,7 @@ suite('Planner Pipeline Integration', () => {
     const normalCost = normalConnection.estimateCost(1, []);
 
     // === Test 2: Union UFO/UFI chaining ===
-    const unionConnection = parentSource.connect([['id', 'asc']], undefined);
+    const unionConnection = parentSource.connect([['id', 'asc']], undefined, false);
 
     // First UFO layer
     const unionFanOut1 = new PlannerFanOut(unionConnection);
@@ -318,7 +318,7 @@ suite('Planner Pipeline Integration', () => {
 
     // First layer joins (2 branches)
     const unionChild1 = new PlannerSource('posts', simpleCostModel);
-    const unionChildConn1 = unionChild1.connect([['id', 'asc']], undefined);
+    const unionChildConn1 = unionChild1.connect([['id', 'asc']], undefined, false);
     const unionJoin1 = new PlannerJoin(
       unionConnection,
       unionChildConn1,
@@ -329,7 +329,7 @@ suite('Planner Pipeline Integration', () => {
     );
 
     const unionChild2 = new PlannerSource('comments', simpleCostModel);
-    const unionChildConn2 = unionChild2.connect([['id', 'asc']], undefined);
+    const unionChildConn2 = unionChild2.connect([['id', 'asc']], undefined, false);
     const unionJoin2 = new PlannerJoin(
       unionConnection,
       unionChildConn2,
@@ -355,7 +355,7 @@ suite('Planner Pipeline Integration', () => {
 
     // Second layer joins (2 more branches)
     const unionChild3 = new PlannerSource('likes', simpleCostModel);
-    const unionChildConn3 = unionChild3.connect([['id', 'asc']], undefined);
+    const unionChildConn3 = unionChild3.connect([['id', 'asc']], undefined, false);
     const unionJoin3 = new PlannerJoin(
       unionFanIn1,
       unionChildConn3,
@@ -366,7 +366,7 @@ suite('Planner Pipeline Integration', () => {
     );
 
     const unionChild4 = new PlannerSource('shares', simpleCostModel);
-    const unionChildConn4 = unionChild4.connect([['id', 'asc']], undefined);
+    const unionChildConn4 = unionChild4.connect([['id', 'asc']], undefined, false);
     const unionJoin4 = new PlannerJoin(
       unionFanIn1,
       unionChildConn4,

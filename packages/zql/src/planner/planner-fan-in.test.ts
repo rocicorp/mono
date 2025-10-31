@@ -93,6 +93,7 @@ suite('PlannerFanIn', () => {
           op: '=',
           right: {type: 'literal', value: 1},
         },
+        false,
         undefined,
         1, // limit triggers selectivity calculation
       );

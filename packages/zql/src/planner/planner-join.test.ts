@@ -98,9 +98,9 @@ suite('PlannerJoin', () => {
     const flippedCost = join.estimateCost(1, []);
 
     // Semi-join should be more expensive than flipped join due to overhead multiplier
-    // The multiplier inflates runningCost only (not rows, which represents logical row count)
-    expect(semiCost.runningCost).toBeGreaterThan(flippedCost.runningCost);
-    expect(semiCost.rows).toBe(flippedCost.rows); // Same logical rows
+    // The multiplier inflates cost only (not returnedRows, which represents logical row count)
+    expect(semiCost.cost).toBeGreaterThan(flippedCost.cost);
+    expect(semiCost.returnedRows).toBe(flippedCost.returnedRows); // Same logical rows
   });
 
   test('semi-join overhead allows planner to prefer flipped joins when row counts are equal', () => {
@@ -115,7 +115,7 @@ suite('PlannerJoin', () => {
 
     // The difference should be significant enough to affect plan selection
     // With a 1.5x multiplier, semi should be 50% more expensive
-    const ratio = semiCost.runningCost / flippedCost.runningCost;
+    const ratio = semiCost.cost / flippedCost.cost;
     expect(ratio).toBeGreaterThanOrEqual(1.4); // Allow some tolerance
     expect(ratio).toBeLessThanOrEqual(1.6);
   });
