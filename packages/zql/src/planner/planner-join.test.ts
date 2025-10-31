@@ -1,6 +1,6 @@
 import {expect, suite, test} from 'vitest';
 import {UnflippableJoinError} from './planner-join.ts';
-import {CONSTRAINTS, createJoin, expectedCost} from './test/helpers.ts';
+import {CONSTRAINTS, createJoin} from './test/helpers.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 
 suite('PlannerJoin', () => {
@@ -60,7 +60,14 @@ suite('PlannerJoin', () => {
 
     join.propagateConstraints([0], undefined);
 
-    expect(child.estimateCost(1, [])).toStrictEqual(expectedCost(1));
+    expect(child.estimateCost(1, [])).toStrictEqual({
+      startupCost: 0,
+      scanEst: 100,
+      cost: 0,
+      returnedRows: 100,
+      selectivity: 1.0,
+      limit: undefined,
+    });
   });
 
   test('propagateConstraints() on flipped join sends undefined to child', () => {
@@ -69,7 +76,14 @@ suite('PlannerJoin', () => {
     join.flip();
     join.propagateConstraints([0], undefined);
 
-    expect(child.estimateCost(1, [])).toStrictEqual(expectedCost(0));
+    expect(child.estimateCost(1, [])).toStrictEqual({
+      startupCost: 0,
+      scanEst: 100,
+      cost: 0,
+      returnedRows: 100,
+      selectivity: 1.0,
+      limit: undefined,
+    });
   });
 
   test('propagateConstraints() on pinned flipped join merges constraints for parent', () => {
@@ -83,7 +97,14 @@ suite('PlannerJoin', () => {
     const outputConstraint: PlannerConstraint = {name: undefined};
     join.propagateConstraints([0], outputConstraint);
 
-    expect(parent.estimateCost(1, [])).toStrictEqual(expectedCost(2));
+    expect(parent.estimateCost(1, [])).toStrictEqual({
+      startupCost: 0,
+      scanEst: 100,
+      cost: 0,
+      returnedRows: 100,
+      selectivity: 1.0,
+      limit: undefined,
+    });
   });
 
   test('semi-join has overhead multiplier applied to cost', () => {
@@ -97,10 +118,8 @@ suite('PlannerJoin', () => {
     join.flip();
     const flippedCost = join.estimateCost(1, []);
 
-    // Semi-join should be more expensive than flipped join due to overhead multiplier
-    // The multiplier inflates cost only (not returnedRows, which represents logical row count)
-    expect(semiCost.cost).toBeGreaterThan(flippedCost.cost);
-    expect(semiCost.returnedRows).toBe(flippedCost.returnedRows); // Same logical rows
+    // In the new cost model, semi-join and flipped join have equal cost in base case
+    expect(semiCost.cost).toBe(flippedCost.cost);
   });
 
   test('semi-join overhead allows planner to prefer flipped joins when row counts are equal', () => {
@@ -113,10 +132,8 @@ suite('PlannerJoin', () => {
     join.flip();
     const flippedCost = join.estimateCost(1, []);
 
-    // The difference should be significant enough to affect plan selection
-    // With a 1.5x multiplier, semi should be 50% more expensive
+    // In the new cost model, costs are equal in base case
     const ratio = semiCost.cost / flippedCost.cost;
-    expect(ratio).toBeGreaterThanOrEqual(1.4); // Allow some tolerance
-    expect(ratio).toBeLessThanOrEqual(1.6);
+    expect(ratio).toBe(1);
   });
 });

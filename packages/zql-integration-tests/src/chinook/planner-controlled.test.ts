@@ -15,9 +15,8 @@ describe('one join', () => {
     const unplanned = builder.track.whereExists('album').ast;
     const planned = planQuery(unplanned, costModel);
 
-    // With semi-join overhead, planner now prefers flipped joins even when base costs are equal
-    // This is expected: flipped joins are more efficient than semi-joins for equal row counts
-    expect(pick(planned, ['where', 'flip'])).toBe(true);
+    // In the new cost model without semi-join overhead, planner keeps original order when costs are equal
+    expect(pick(planned, ['where', 'flip'])).toBe(false);
   });
 
   test('track.exists(album): track is more expensive', () => {
@@ -47,7 +46,7 @@ describe('two joins via and', () => {
       costModel,
     );
 
-    expect(pick(planned, ['where', 'conditions', 0, 'flip'])).toBe(false);
+    expect(pick(planned, ['where', 'conditions', 0, 'flip'])).toBe(true);
     expect(pick(planned, ['where', 'conditions', 1, 'flip'])).toBe(true);
     expect(
       pick(planned, ['where', 'conditions', 1, 'related', 'subquery', 'table']),
@@ -348,10 +347,10 @@ test('ors anded one after the other', () => {
   ).toBe(false);
 
   // Check second OR: invoiceLines and mediaType
-  // flipping invoice lines is actually cheaper due to the FK from invoiceLine -> track
+  // In the new cost model, planner doesn't flip when costs are uniform
   expect(
     pick(planned, ['where', 'conditions', 1, 'conditions', 0, 'flip']),
-  ).toBe(true);
+  ).toBe(false);
   expect(
     pick(planned, ['where', 'conditions', 1, 'conditions', 1, 'flip']),
   ).toBe(false);

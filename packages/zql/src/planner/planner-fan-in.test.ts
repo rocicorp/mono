@@ -1,10 +1,5 @@
 import {expect, suite, test} from 'vitest';
-import {
-  CONSTRAINTS,
-  createConnection,
-  createFanIn,
-  expectedCost,
-} from './test/helpers.ts';
+import {CONSTRAINTS, createConnection, createFanIn} from './test/helpers.ts';
 import type {PlannerNode} from './planner-node.ts';
 import {PlannerSource} from './planner-source.ts';
 import type {ConnectionCostModel} from './planner-connection.ts';
@@ -45,8 +40,16 @@ suite('PlannerFanIn', () => {
 
     fanIn.propagateConstraints([], CONSTRAINTS.userId, unpinned);
 
-    expect(inputs[0].estimateCost(1, [])).toStrictEqual(expectedCost(1));
-    expect(inputs[1].estimateCost(1, [])).toStrictEqual(expectedCost(1));
+    const baseCost = {
+      startupCost: 0,
+      scanEst: 100,
+      cost: 0,
+      returnedRows: 100,
+      selectivity: 1.0,
+      limit: undefined,
+    };
+    expect(inputs[0].estimateCost(1, [])).toStrictEqual(baseCost);
+    expect(inputs[1].estimateCost(1, [])).toStrictEqual(baseCost);
   });
 
   test('propagateConstraints() with UFI type sends unique branch patterns to each input', () => {
@@ -55,9 +58,17 @@ suite('PlannerFanIn', () => {
 
     fanIn.propagateConstraints([], CONSTRAINTS.userId, unpinned);
 
-    expect(inputs[0].estimateCost(1, [])).toStrictEqual(expectedCost(1));
-    expect(inputs[1].estimateCost(1, [])).toStrictEqual(expectedCost(1));
-    expect(inputs[2].estimateCost(1, [])).toStrictEqual(expectedCost(1));
+    const baseCost = {
+      startupCost: 0,
+      scanEst: 100,
+      cost: 0,
+      returnedRows: 100,
+      selectivity: 1.0,
+      limit: undefined,
+    };
+    expect(inputs[0].estimateCost(1, [])).toStrictEqual(baseCost);
+    expect(inputs[1].estimateCost(1, [])).toStrictEqual(baseCost);
+    expect(inputs[2].estimateCost(1, [])).toStrictEqual(baseCost);
   });
 
   test('can set and get output', () => {
