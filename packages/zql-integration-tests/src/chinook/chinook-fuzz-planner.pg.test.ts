@@ -308,10 +308,9 @@ async function runManualCase(query: AnyQuery) {
   // Analyze each attempt
   const results: AttemptResult[] = [];
 
+  // Create a fresh plan graph for this attempt
+  const attemptPlans = buildPlanGraph(mappedASTWithoutFlips, costModel, true);
   for (const event of planCompleteEvents) {
-    // Create a fresh plan graph for this attempt
-    const attemptPlans = buildPlanGraph(mappedASTWithoutFlips, costModel, true);
-
     // Reset and apply the flip pattern by manually setting join types
     attemptPlans.plan.resetPlanningState();
     const flippableJoins = attemptPlans.plan.joins.filter(j => j.isFlippable());
@@ -457,6 +456,65 @@ async function runManualCase(query: AnyQuery) {
   console.log('  Join states:');
   for (const j of bestByRows.joinStates) {
     console.log(`    ${j.join}: ${j.type}`);
+  }
+  console.log('═'.repeat(90));
+
+  // Show detailed cost breakdown for all attempts
+  console.log('\n' + '═'.repeat(90));
+  console.log('DETAILED COST BREAKDOWN');
+  console.log('═'.repeat(90));
+
+  // Get cost events from planner debugger for each attempt
+  const connectionCostEvents = planDebugger.getEvents('node-cost');
+
+  for (const result of results) {
+    const attemptEvents = connectionCostEvents.filter(
+      e => e.attemptNumber === result.attemptNumber,
+    );
+
+    console.log(`\nAttempt ${result.attemptNumber + 1}:`);
+    console.log(`  Total estimated cost: ${result.estimatedCost.toFixed(2)}`);
+    console.log(`  Actual rows considered: ${result.rowsConsidered}`);
+    console.log(`  Join states:`);
+    for (const j of result.joinStates) {
+      console.log(`    ${j.join}: ${j.type}`);
+    }
+
+    // Group by node type
+    const connections = attemptEvents.filter(e => e.nodeType === 'connection');
+    const joins = attemptEvents.filter(e => e.nodeType === 'join');
+
+    if (connections.length > 0) {
+      console.log(`  Connections:`);
+      for (const c of connections) {
+        console.log(`    ${c.node}:`);
+        console.log(
+          `      cost=${c.costEstimate.cost.toFixed(2)}, startup=${c.costEstimate.startupCost.toFixed(2)}, scan=${c.costEstimate.scanEst.toFixed(2)}`,
+        );
+        console.log(
+          `      returnedRows=${c.costEstimate.returnedRows.toFixed(2)}, selectivity=${c.costEstimate.selectivity.toFixed(6)}`,
+        );
+        console.log(
+          `      downstreamChildSelectivity=${c.downstreamChildSelectivity.toFixed(6)}`,
+        );
+      }
+    }
+
+    if (joins.length > 0) {
+      console.log(`  Joins:`);
+      for (const j of joins) {
+        console.log(`    ${j.node} (${j.joinType}):`);
+        console.log(
+          `      cost=${j.costEstimate.cost.toFixed(2)}, startup=${j.costEstimate.startupCost.toFixed(2)}, scan=${j.costEstimate.scanEst.toFixed(2)}`,
+        );
+        console.log(
+          `      returnedRows=${j.costEstimate.returnedRows.toFixed(2)}, selectivity=${j.costEstimate.selectivity.toFixed(6)}`,
+        );
+        console.log(
+          `      downstreamChildSelectivity=${j.downstreamChildSelectivity.toFixed(6)}`,
+        );
+      }
+    }
   }
   console.log('═'.repeat(90));
 
