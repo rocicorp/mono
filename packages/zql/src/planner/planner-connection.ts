@@ -4,6 +4,7 @@ import {
   mergeConstraints,
   type PlannerConstraint,
 } from './planner-constraint.ts';
+import type {PlanDebugger} from './planner-debug.ts';
 import type {
   CostEstimate,
   JoinOrConnection,
@@ -89,11 +90,7 @@ export class PlannerConnection {
    */
   readonly #constraints: Map<string, PlannerConstraint | undefined>;
 
-  /**
-   * Cached total cost (sum of all branches) to avoid redundant calculations.
-   * Invalidated when constraints change.
-   */
-  #cachedTotalCost: CostEstimate | undefined = undefined;
+  readonly #isRoot: boolean;
 
   /**
    * Cached per-constraint costs to avoid redundant cost model calls.
@@ -102,13 +99,12 @@ export class PlannerConnection {
    */
   #cachedConstraintCosts: Map<string, CostEstimate> = new Map();
 
-  #costDirty = true;
-
   constructor(
     table: string,
     model: ConnectionCostModel,
     sort: Ordering,
     filters: Condition | undefined,
+    isRoot: boolean,
     baseConstraints?: PlannerConstraint,
     limit?: number,
     name?: string,
@@ -122,6 +118,7 @@ export class PlannerConnection {
     this.#baseLimit = limit;
     this.limit = limit;
     this.#constraints = new Map();
+    this.#isRoot = isRoot;
 
     // Compute selectivity for EXISTS child connections (baseLimit === 1)
     // Selectivity = fraction of rows that pass filters
@@ -165,96 +162,32 @@ export class PlannerConnection {
    * The max of the last element of the paths is the number of
    * root branches.
    */
-  propagateConstraints(path: number[], c: PlannerConstraint | undefined): void {
+  propagateConstraints(
+    path: number[],
+    c: PlannerConstraint | undefined,
+    from?: PlannerNode,
+    planDebugger?: PlanDebugger,
+  ): void {
     const key = path.join(',');
     this.#constraints.set(key, c);
     // Constraints changed, invalidate cost caches
-    this.#cachedTotalCost = undefined;
     this.#cachedConstraintCosts.clear();
-    this.#costDirty = true;
+
+    planDebugger?.log({
+      type: 'node-constraint',
+      nodeType: 'connection',
+      node: this.name,
+      branchPattern: path,
+      constraint: c,
+      from: from?.kind ?? 'unknown',
+    });
   }
 
-  estimateCost(branchPattern?: number[]): CostEstimate {
-    // If no branch pattern specified, return sum of all branches
-    // This is used by getUnpinnedConnectionCosts to get total cost
-    if (branchPattern === undefined) {
-      // Return cached total cost if still valid
-      if (!this.#costDirty && this.#cachedTotalCost !== undefined) {
-        return this.#cachedTotalCost;
-      }
-
-      // Calculate fresh cost - sum of all branch costs
-      let totalRows = 0;
-      let maxStartupCost = 0;
-      if (this.#constraints.size === 0) {
-        // No constraints - compute unconstrained cost (but still merge base constraints)
-        const key = '';
-        let cost = this.#cachedConstraintCosts.get(key);
-        if (cost === undefined) {
-          // Merge base constraints even when no propagated constraints
-          const {startupCost, rows} = this.#model(
-            this.table,
-            this.#sort,
-            this.#filters,
-            this.#baseConstraints,
-          );
-          cost = {
-            rows,
-            runningCost: rows,
-            startupCost,
-            selectivity: this.selectivity,
-            limit: this.limit,
-          };
-          this.#cachedConstraintCosts.set(key, cost);
-        }
-        totalRows = cost.rows;
-        maxStartupCost = cost.startupCost;
-      } else {
-        // Sum costs for all constraint branches
-        for (const [key, constraint] of this.#constraints.entries()) {
-          let cost = this.#cachedConstraintCosts.get(key);
-          if (cost === undefined) {
-            // Merge base constraints with propagated constraints
-            const mergedConstraint = mergeConstraints(
-              this.#baseConstraints,
-              constraint,
-            );
-            const {startupCost, rows} = this.#model(
-              this.table,
-              this.#sort,
-              this.#filters,
-              mergedConstraint,
-            );
-            cost = {
-              rows,
-              runningCost: rows,
-              startupCost,
-              selectivity: this.selectivity,
-              limit: this.limit,
-            };
-            this.#cachedConstraintCosts.set(key, cost);
-          }
-          totalRows += cost.rows;
-          // TODO: if no branch pattern is specified, should we sum startup costs?
-          maxStartupCost = Math.max(maxStartupCost, cost.startupCost);
-        }
-      }
-
-      const ret = {
-        rows: totalRows,
-        runningCost: totalRows,
-        startupCost: maxStartupCost,
-        selectivity: this.selectivity,
-        limit: this.limit,
-      };
-
-      // Cache total and mark as clean
-      this.#cachedTotalCost = ret;
-      this.#costDirty = false;
-
-      return ret;
-    }
-
+  estimateCost(
+    downstreamChildSelectivity: number,
+    branchPattern: number[],
+    planDebugger?: PlanDebugger,
+  ): CostEstimate {
     // Branch pattern specified - return cost for this specific branch
     const key = branchPattern.join(',');
 
@@ -278,13 +211,27 @@ export class PlannerConnection {
       mergedConstraint,
     );
     cost = {
-      rows,
-      runningCost: rows,
       startupCost,
+      scanEst:
+        this.limit === undefined
+          ? rows
+          : Math.min(rows, this.limit / downstreamChildSelectivity),
+      cost: 0,
+      returnedRows: rows,
       selectivity: this.selectivity,
       limit: this.limit,
     };
     this.#cachedConstraintCosts.set(key, cost);
+
+    planDebugger?.log({
+      type: 'node-cost',
+      nodeType: 'connection',
+      node: this.name,
+      branchPattern,
+      downstreamChildSelectivity,
+      costEstimate: cost,
+      filters: this.#filters,
+    });
 
     return cost;
   }
@@ -295,6 +242,10 @@ export class PlannerConnection {
    * outer loop that should produce all rows rather than stopping at the limit.
    */
   unlimit(): void {
+    if (this.#isRoot) {
+      // We cannot unlimit root connections
+      return;
+    }
     if (this.limit !== undefined) {
       this.limit = undefined;
       // Limit changes do not impact connection costs.
@@ -315,9 +266,7 @@ export class PlannerConnection {
     this.#constraints.clear();
     this.limit = this.#baseLimit;
     // Clear all cost caches
-    this.#cachedTotalCost = undefined;
     this.#cachedConstraintCosts.clear();
-    this.#costDirty = true;
   }
 
   /**
@@ -340,9 +289,7 @@ export class PlannerConnection {
       this.#constraints.set(key, value);
     }
     // Constraints changed, invalidate cost caches
-    this.#cachedTotalCost = undefined;
     this.#cachedConstraintCosts.clear();
-    this.#costDirty = true;
   }
 
   /**
@@ -354,19 +301,28 @@ export class PlannerConnection {
   }
 
   /**
+   * Get filters for debugging.
+   * Returns the filters applied to this connection.
+   */
+  getFiltersForDebug(): Condition | undefined {
+    return this.#filters;
+  }
+
+  /**
    * Get estimated cost for each constraint branch.
    * Returns a map of constraint key to cost estimate.
    * Forces cost calculation if not already cached.
    */
   getConstraintCostsForDebug(): Map<string, CostEstimate> {
-    // Trigger cost calculation to populate cache
-    this.estimateCost(undefined);
     // Return copy of cached costs
     return new Map(this.#cachedConstraintCosts);
   }
 }
 
-export type CostModelCost = {startupCost: number; rows: number};
+export type CostModelCost = {
+  startupCost: number;
+  rows: number;
+};
 export type ConnectionCostModel = (
   table: string,
   sort: Ordering,

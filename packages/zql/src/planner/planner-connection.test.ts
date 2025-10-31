@@ -10,7 +10,7 @@ suite('PlannerConnection', () => {
   test('estimateCost() with no constraints returns base cost', () => {
     const connection = createConnection();
 
-    expect(connection.estimateCost()).toStrictEqual({
+    expect(connection.estimateCost(1, [])).toStrictEqual({
       rows: BASE_COST,
       runningCost: BASE_COST,
       startupCost: 0,
@@ -24,7 +24,7 @@ suite('PlannerConnection', () => {
 
     connection.propagateConstraints([0], CONSTRAINTS.userId);
 
-    expect(connection.estimateCost()).toStrictEqual(expectedCost(1));
+    expect(connection.estimateCost(1, [])).toStrictEqual(expectedCost(1));
   });
 
   test('multiple constraints reduce cost further', () => {
@@ -35,7 +35,7 @@ suite('PlannerConnection', () => {
       postId: undefined,
     });
 
-    expect(connection.estimateCost()).toStrictEqual(expectedCost(2));
+    expect(connection.estimateCost(1, [])).toStrictEqual(expectedCost(2));
   });
 
   test('multiple branch patterns sum costs', () => {
@@ -45,7 +45,7 @@ suite('PlannerConnection', () => {
     connection.propagateConstraints([1], CONSTRAINTS.postId);
 
     const ec = expectedCost(1);
-    expect(connection.estimateCost()).toStrictEqual({
+    expect(connection.estimateCost(1, [])).toStrictEqual({
       rows: ec.rows * 2,
       runningCost: ec.runningCost * 2,
       startupCost: 0,
@@ -58,11 +58,11 @@ suite('PlannerConnection', () => {
     const connection = createConnection();
 
     connection.propagateConstraints([0], CONSTRAINTS.userId);
-    expect(connection.estimateCost()).toStrictEqual(expectedCost(1));
+    expect(connection.estimateCost(1, [])).toStrictEqual(expectedCost(1));
 
     connection.reset();
 
-    expect(connection.estimateCost()).toStrictEqual({
+    expect(connection.estimateCost(1, [])).toStrictEqual({
       rows: BASE_COST,
       runningCost: BASE_COST,
       startupCost: 0,

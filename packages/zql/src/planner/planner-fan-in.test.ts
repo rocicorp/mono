@@ -45,8 +45,8 @@ suite('PlannerFanIn', () => {
 
     fanIn.propagateConstraints([], CONSTRAINTS.userId, unpinned);
 
-    expect(inputs[0].estimateCost()).toStrictEqual(expectedCost(1));
-    expect(inputs[1].estimateCost()).toStrictEqual(expectedCost(1));
+    expect(inputs[0].estimateCost(1, [])).toStrictEqual(expectedCost(1));
+    expect(inputs[1].estimateCost(1, [])).toStrictEqual(expectedCost(1));
   });
 
   test('propagateConstraints() with UFI type sends unique branch patterns to each input', () => {
@@ -55,9 +55,9 @@ suite('PlannerFanIn', () => {
 
     fanIn.propagateConstraints([], CONSTRAINTS.userId, unpinned);
 
-    expect(inputs[0].estimateCost()).toStrictEqual(expectedCost(1));
-    expect(inputs[1].estimateCost()).toStrictEqual(expectedCost(1));
-    expect(inputs[2].estimateCost()).toStrictEqual(expectedCost(1));
+    expect(inputs[0].estimateCost(1, [])).toStrictEqual(expectedCost(1));
+    expect(inputs[1].estimateCost(1, [])).toStrictEqual(expectedCost(1));
+    expect(inputs[2].estimateCost(1, [])).toStrictEqual(expectedCost(1));
   });
 
   test('can set and get output', () => {
@@ -114,7 +114,7 @@ suite('PlannerFanIn', () => {
         if (convert) fanIn.convertToUFI();
 
         // P(A OR B) = 1 - (1-0.5)(1-0.3) = 1 - (0.5)(0.7) = 0.65
-        expect(fanIn.estimateCost([]).selectivity).toBeCloseTo(0.65, 10);
+        expect(fanIn.estimateCost(1, []).selectivity).toBeCloseTo(0.65, 10);
       },
     );
 
@@ -126,7 +126,7 @@ suite('PlannerFanIn', () => {
       const fanIn = new PlannerFanIn([connectionA, connectionB, connectionC]);
 
       // P(A OR B OR C) = 1 - (1-0.5)(1-0.4)(1-0.6) = 1 - 0.12 = 0.88
-      expect(fanIn.estimateCost([]).selectivity).toBeCloseTo(0.88, 10);
+      expect(fanIn.estimateCost(1, []).selectivity).toBeCloseTo(0.88, 10);
     });
 
     test('selectivity never exceeds 1.0 with high individual selectivities', () => {
@@ -136,7 +136,7 @@ suite('PlannerFanIn', () => {
       const fanIn = new PlannerFanIn([connectionA, connectionB]);
 
       // P(A OR B) = 1 - (1-0.99)(1-0.99) = 0.9999
-      const selectivity = fanIn.estimateCost([]).selectivity;
+      const selectivity = fanIn.estimateCost(1, []).selectivity;
       expect(selectivity).toBeCloseTo(0.9999, 10);
       expect(selectivity).toBeLessThanOrEqual(1.0);
     });
