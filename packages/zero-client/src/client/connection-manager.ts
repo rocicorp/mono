@@ -1,7 +1,12 @@
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import {Subscribable} from '../../../shared/src/subscribable.ts';
 import {ConnectionStatus} from './connection-status.ts';
-import {ClientError, isClientError, type ZeroError} from './error.ts';
+import {
+  ClientError,
+  isClientError,
+  type AuthError,
+  type ZeroError,
+} from './error.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 
 const DEFAULT_TIMEOUT_CHECK_INTERVAL_MS = 1_000;
@@ -16,6 +21,9 @@ const DEFAULT_TIMEOUT_CHECK_INTERVAL_MS = 1_000;
  * - `disconnected`: The client is now in an "offline" state. It will continue
  *   to try to connect every 5 seconds.
  * - `connected`: The client has opened a successful connection to the server.
+ * - `needs-auth`: Authentication is invalid or expired. No connection retries will be made
+ *   until the host application calls `connect({auth: token})`.
+ *   - `reason` is the `ZeroError` associated with the error state.
  * - `error`: A fatal error occurred. No connection retries will be made until the host
  *   application calls `connect()` again.
  *   - `reason` is the `ZeroError` associated with the error state.
@@ -35,6 +43,10 @@ export type ConnectionState =
     }
   | {
       name: ConnectionStatus.Connected;
+    }
+  | {
+      name: ConnectionStatus.NeedsAuth;
+      reason: AuthError;
     }
   | {
       name: ConnectionStatus.Error;
@@ -59,6 +71,7 @@ export type ConnectionManagerOptions = {
 };
 
 const TERMINAL_STATES = [
+  ConnectionStatus.NeedsAuth,
   ConnectionStatus.Error,
 ] as const satisfies ConnectionStatus[];
 
@@ -150,8 +163,8 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
 
   /**
    * Returns true if the run loop should continue.
-   * The run loop continues in disconnected, connecting, connected, and error states.
-   * It stops in closed state.
+   * The run loop continues in all states except closed.
+   * In needs-auth and error states, the run loop pauses and waits for connect() to be called.
    */
   shouldContinueRunLoop(): boolean {
     return this.#state.name !== ConnectionStatus.Closed;
@@ -290,9 +303,41 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
   }
 
   /**
+   * Transition to needs-auth state.
+   * This pauses the run loop until connect() is called with new credentials.
+   * Resets the retry window and attempt counter.
+   *
+   * @returns An object containing a promise that resolves on the next state change.
+   */
+  needsAuth(reason: AuthError): {
+    nextStatePromise: Promise<ConnectionState>;
+  } {
+    // cannot transition from closed to any other status
+    if (this.#state.name === ConnectionStatus.Closed) {
+      return {nextStatePromise: this.#nextStatePromise()};
+    }
+
+    // Already in needs-auth state, no-op
+    if (this.#state.name === ConnectionStatus.NeedsAuth) {
+      return {nextStatePromise: this.#nextStatePromise()};
+    }
+
+    // Reset the timeout timer and connecting start time
+    this.#connectingStartedAt = undefined;
+    this.#maybeStopTimeoutInterval();
+
+    this.#state = {
+      name: ConnectionStatus.NeedsAuth,
+      reason,
+    };
+    const nextStatePromise = this.#publishStateAndGetPromise();
+    return {nextStatePromise};
+  }
+
+  /**
    * Transition to error state.
    * This pauses the run loop until connect() is called.
-   * Resets the 5-minute retry window and attempt counter.
+   * Resets the retry window and attempt counter.
    *
    * @returns An object containing a promise that resolves on the next state change.
    */

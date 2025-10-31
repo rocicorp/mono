@@ -1,6 +1,5 @@
 import type {LogLevel} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
-import type {MaybePromise} from '../../../shared/src/types.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {CustomMutatorDefs} from './custom.ts';
@@ -28,27 +27,18 @@ export interface ZeroOptions<
   server?: string | null | undefined;
 
   /**
-   * A JWT to identify and authenticate the user. Can be provided as either:
-   * - A string containing the JWT token
-   * - A function that returns a JWT token
-   * - `undefined` if there is no logged in user
+   * A token to identify and authenticate the user.
    *
-   * Token validation behavior:
-   * 1. **For function providers:**
-   *    When zero-cache reports that a token is invalid (expired, malformed,
-   *    or has an invalid signature), Zero will call the function again with
-   *    `error='invalid-token'` to obtain a new token.
+   * Set `auth` to `null` or `undefined` if there is no logged in user.
    *
-   * 2. **For string tokens:**
-   *    Zero will continue to use the provided token even if zero-cache initially
-   *    reports it as invalid. This is because zero-cache may be able to validate
-   *    the token after fetching new public keys from its configured JWKS URL
-   *    (if `ZERO_AUTH_JWKS_URL` is set).
+   * When a 401 or 403 HTTP status code is received from your server, Zero will
+   * transition to the `needs-auth` connection state. The app should call
+   * `zero.connection.connect({auth: newToken})` with a new token to reconnect.
+   *
+   * The call to `connect` is handled automatically by the ZeroProvider component
+   * for React and SolidJS when the `auth` prop changes.
    */
-  auth?:
-    | string
-    | ((error?: 'invalid-token') => MaybePromise<string | undefined>)
-    | undefined;
+  auth?: string | null | undefined;
 
   /**
    * A unique identifier for the user. Must be non-empty.

@@ -151,7 +151,13 @@ export type {
   MutatorResult as PromiseWithServerResult,
 } from './client/custom.ts';
 export {ClientError} from './client/error.ts';
-export type {ZeroError, ZeroErrorBody, ZeroErrorKind} from './client/error.ts';
+export type {
+  AuthError,
+  NeedsAuthReason,
+  ZeroError,
+  ZeroErrorBody,
+  ZeroErrorKind,
+} from './client/error.ts';
 export type {ClientGroup as InspectorClientGroup} from './client/inspector/client-group.ts';
 export type {Client as InspectorClient} from './client/inspector/client.ts';
 export type {Inspector} from './client/inspector/inspector.ts';

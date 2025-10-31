@@ -82,13 +82,13 @@ export async function fetchFromAPIServer<TValidator extends Type>(
     'Content-Type': 'application/json',
   };
 
-  if (headerOptions.apiKey !== undefined) {
+  if (headerOptions.apiKey) {
     headers['X-Api-Key'] = headerOptions.apiKey;
   }
-  if (headerOptions.token !== undefined) {
+  if (headerOptions.token) {
     headers['Authorization'] = `Bearer ${headerOptions.token}`;
   }
-  if (headerOptions.cookie !== undefined) {
+  if (headerOptions.cookie) {
     headers['Cookie'] = headerOptions.cookie;
   }
 

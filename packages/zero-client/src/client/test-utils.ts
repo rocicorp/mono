@@ -322,7 +322,7 @@ export function zeroForTest<
     server: 'https://example.com/',
     // Make sure we do not reuse IDB instances between tests by default
     userID: options.userID ?? 'test-user-id-' + testZeroCounter++,
-    auth: () => 'test-auth',
+    auth: 'test-auth',
     schema: options.schema ?? ({tables: {}} as S),
     // We do not want any unexpected onUpdateNeeded calls in tests. If the test
     // needs to call onUpdateNeeded it should set this as needed.

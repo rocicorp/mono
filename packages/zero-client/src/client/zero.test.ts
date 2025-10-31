@@ -86,6 +86,7 @@ import type {ConnectionState} from './connection-manager.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 
 const startTime = 1678829450000;
 
@@ -190,29 +191,24 @@ describe('onOnlineChange callback', () => {
     expect(getOfflineCount()).toBe(0);
     await z.triggerConnected();
     await z.waitForConnectionStatus(ConnectionStatus.Connected);
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     expect(getOnlineCount()).toBe(1);
     expect(getOfflineCount()).toBe(0);
     await z.triggerClose();
     await z.waitForConnectionStatus(ConnectionStatus.Connecting);
-    // Still connected because we haven't yet failed to reconnect.
-    await vi.advanceTimersByTimeAsync(0);
-    expect(z.online).toBe(true);
+    expect(z.online).toBe(false);
     expect(getOnlineCount()).toBe(1);
-    expect(getOfflineCount()).toBe(0);
+    expect(getOfflineCount()).toBe(1);
     await z.triggerConnected();
     await z.waitForConnectionStatus(ConnectionStatus.Connected);
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
-    expect(getOnlineCount()).toBe(1);
-    expect(getOfflineCount()).toBe(0);
+    expect(getOnlineCount()).toBe(2);
+    expect(getOfflineCount()).toBe(1);
   });
 
   test('triggers after fatal error and reconnects', async () => {
     const {z, getOnlineCount, getOfflineCount} = getNewZero();
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     await z.triggerError({
       kind: ErrorKind.InvalidMessage,
@@ -220,7 +216,6 @@ describe('onOnlineChange callback', () => {
       origin: ErrorOrigin.Server,
     });
     await z.waitForConnectionStatus(ConnectionStatus.Error);
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(false);
     // we connected once and then disconnected once
     expect(getOnlineCount()).toBe(1);
@@ -229,7 +224,6 @@ describe('onOnlineChange callback', () => {
     await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
     await z.connection.connect();
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     // we reconnected once more
     expect(getOnlineCount()).toBe(2);
@@ -239,7 +233,6 @@ describe('onOnlineChange callback', () => {
   test('respects large backoff directives', async () => {
     const {z, getOnlineCount, getOfflineCount} = getNewZero();
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(0);
     const BACKOFF_MS = RUN_LOOP_INTERVAL_MS * 10;
     await z.triggerError({
       kind: ErrorKind.ServerOverloaded,
@@ -248,7 +241,6 @@ describe('onOnlineChange callback', () => {
       minBackoffMs: BACKOFF_MS,
     });
     await z.waitForConnectionStatus(ConnectionStatus.Connecting);
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(false);
     // we connected once and then disconnected once
     expect(getOnlineCount()).toBe(1);
@@ -256,7 +248,6 @@ describe('onOnlineChange callback', () => {
     // And followed by a reconnect with the longer BACKOFF_MS.
     await tickAFewTimes(vi, BACKOFF_MS);
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     // we reconnected once more
     expect(getOnlineCount()).toBe(2);
@@ -266,7 +257,6 @@ describe('onOnlineChange callback', () => {
   test('respects short backoff directives with reconnect params', async () => {
     const {z, getOnlineCount, getOfflineCount} = getNewZero();
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     const BACKOFF_MS = 10;
     await z.triggerError({
@@ -280,7 +270,6 @@ describe('onOnlineChange callback', () => {
       },
     });
     await z.waitForConnectionStatus(ConnectionStatus.Connecting);
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(false);
     // we connected once and then disconnected once
     expect(getOnlineCount()).toBe(1);
@@ -295,75 +284,64 @@ describe('onOnlineChange callback', () => {
     expect(connectMsg?.[2][1]).matches(
       /&reason=rehomed&fromServer=foo%2Fbar%2Fbaz/,
     );
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     // we reconnected once more
     expect(getOnlineCount()).toBe(2);
     expect(getOfflineCount()).toBe(1);
   });
 
-  test('does not trigger offline on first unauthorized error', async () => {
+  test('transitions to needs-auth on unauthorized error', async () => {
     const {z, getOnlineCount, getOfflineCount} = getNewZero();
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     await z.triggerError({
       kind: ErrorKind.Unauthorized,
       message: 'bbb',
       origin: ErrorOrigin.ZeroCache,
     });
-    await z.waitForConnectionStatus(ConnectionStatus.Connecting);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(z.online).toBe(true);
+    await z.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+    expect(z.online).toBe(false);
     // we connected once
     expect(getOnlineCount()).toBe(1);
-    // we did not get an offline callback on the first error, as expected
-    expect(getOfflineCount()).toBe(0);
-    // And followed by a reconnect.
-    await z.triggerConnected();
+    // auth error triggered offline callback
+    expect(getOfflineCount()).toBe(1);
     await vi.advanceTimersByTimeAsync(0);
+    // Call connect with new auth to resume
+    await z.connection.connect({auth: 'new-token'});
+    await z.triggerConnected();
     expect(z.online).toBe(true);
-    // online is only called once, since the first auth error
-    // did not trigger an offline callback
-    expect(getOnlineCount()).toBe(1);
-    expect(getOfflineCount()).toBe(0);
+    // online callback triggered again after reconnect
+    expect(getOnlineCount()).toBe(2);
+    expect(getOfflineCount()).toBe(1);
   });
 
-  test('triggers offline on second unauthorized error', async () => {
+  test('stays in needs-auth state until connect is called', async () => {
     const {z, getOnlineCount, getOfflineCount} = getNewZero();
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(0);
     await z.triggerError({
-      kind: ErrorKind.Unauthorized,
+      kind: ErrorKind.PushFailed,
+      reason: 'http',
+      status: 401,
       message: 'ccc',
       origin: ErrorOrigin.ZeroCache,
+      mutationIDs: [],
     });
-    await z.waitForConnectionStatus(ConnectionStatus.Connecting);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(z.online).toBe(true);
+    await z.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+    expect(z.online).toBe(false);
     // we connected once
     expect(getOnlineCount()).toBe(1);
-    // we did not get an offline callback on the first error, as expected
-    expect(getOfflineCount()).toBe(0);
-    const reconnectingSocket = z.socket;
-    await reconnectingSocket;
-    await z.triggerError({
-      kind: ErrorKind.Unauthorized,
-      message: 'ddd',
-      origin: ErrorOrigin.ZeroCache,
-    });
-    await z.waitForConnectionStatus(ConnectionStatus.Connecting);
-    await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(z.online).toBe(false);
-    expect(getOnlineCount()).toBe(1);
-    // on the second error, we got an offline callback
+    // auth error triggered offline callback
     expect(getOfflineCount()).toBe(1);
-    // And followed by a reconnect.
-    const reconnectAfterOffline = z.socket;
-    await reconnectAfterOffline;
+    // Wait a while - should stay in needs-auth state
+    await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS * 10);
+    expect(z.connectionStatus).toBe(ConnectionStatus.NeedsAuth);
+    expect(z.online).toBe(false);
+    // No additional callbacks
+    expect(getOnlineCount()).toBe(1);
+    expect(getOfflineCount()).toBe(1);
+    // Call connect with new auth to resume
+    await z.connection.connect({auth: 'new-token'});
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     expect(getOnlineCount()).toBe(2);
     expect(getOfflineCount()).toBe(1);
@@ -381,7 +359,6 @@ describe('onOnlineChange callback', () => {
     // and back online
     await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS);
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     expect(getOnlineCount()).toBe(2);
     expect(getOfflineCount()).toBe(1);
@@ -402,7 +379,6 @@ describe('connect error metrics', () => {
         origin: ErrorOrigin.ZeroCache,
       });
       await z.waitForConnectionStatus(ConnectionStatus.Error);
-      await vi.advanceTimersByTimeAsync(0);
 
       const newLogs = z.testLogSink.messages.slice(initialLogCount);
       const disconnectLog = newLogs.find(
@@ -427,7 +403,6 @@ describe('connect error metrics', () => {
       const initialLogCount = z.testLogSink.messages.length;
       await z.triggerClose();
       await z.waitForConnectionStatus(ConnectionStatus.Connecting);
-      await vi.advanceTimersByTimeAsync(0);
 
       const newLogs = z.testLogSink.messages.slice(initialLogCount);
       const disconnectLog = newLogs.find(
@@ -478,7 +453,6 @@ test('onOnline listener', async () => {
   await z.waitForConnectionStatus(ConnectionStatus.Connecting);
   await z.triggerConnected();
   await z.waitForConnectionStatus(ConnectionStatus.Connected);
-  await vi.advanceTimersByTimeAsync(0);
   expect(z.online).toBe(true);
   expect(online1).toBe(1);
   expect(offline1).toBe(0);
@@ -2210,168 +2184,87 @@ test('passing server null allows queries without WS connection', async () => {
 // });
 
 test('Authentication', async () => {
-  const log: number[] = [];
+  const r = zeroForTest({auth: 'initial-token'});
 
-  let authCounter = 0;
-
-  const auth = () => {
-    if (authCounter > 0) {
-      log.push(Date.now());
-    }
-
-    if (authCounter++ > 3) {
-      return `new-auth-token-${authCounter}`;
-    }
-    return 'auth-token';
-  };
-
-  const r = zeroForTest({auth});
+  // Initially connecting with 'initial-token'
   let currentSocket = await r.socket;
-
-  const emulateErrorWhenConnecting = async (
-    tickMS: number,
-    expectedAuthToken: string,
-    expectedTimeOfCall: number,
-  ) => {
-    expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
-      expectedAuthToken,
-    );
-    await r.triggerError({
-      kind: ErrorKind.Unauthorized,
-      message: 'auth error ' + authCounter,
-      origin: ErrorOrigin.ZeroCache,
-    });
-    expect(r.connectionStatus).toBe(ConnectionStatus.Connecting);
-    await vi.advanceTimersByTimeAsync(tickMS);
-    expect(log).length(1);
-    expect(log[0]).toBe(expectedTimeOfCall);
-    log.length = 0;
-    currentSocket = await r.socket;
-    expect(r.connectionStatus).equal(ConnectionStatus.Connecting);
-  };
-
-  await emulateErrorWhenConnecting(0, 'auth-token', startTime);
-  await emulateErrorWhenConnecting(5_000, 'auth-token', startTime + 5_000);
-  await emulateErrorWhenConnecting(5_000, 'auth-token', startTime + 10_000);
-  await emulateErrorWhenConnecting(5_000, 'auth-token', startTime + 15_000);
-  await emulateErrorWhenConnecting(
-    5_000,
-    'new-auth-token-5',
-    startTime + 20_000,
-  );
-  await emulateErrorWhenConnecting(
-    5_000,
-    'new-auth-token-6',
-    startTime + 25_000,
-  );
-  await emulateErrorWhenConnecting(
-    5_000,
-    'new-auth-token-7',
-    startTime + 30_000,
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
+    'initial-token',
   );
 
-  let socket: MockSocket | undefined;
-  {
-    socket = await r.socket;
-    expect(decodeSecProtocols(socket.protocol).authToken).toBe(
-      'new-auth-token-8',
-    );
-    await r.triggerConnected();
-    await r.waitForConnectionStatus(ConnectionStatus.Connected);
-    // getAuth should not be called again.
-    expect(log).toHaveLength(0);
-  }
+  // Trigger auth error - should transition to needs-auth
+  await r.triggerError({
+    kind: ErrorKind.Unauthorized,
+    message: 'auth error',
+    origin: ErrorOrigin.ZeroCache,
+  });
+  await r.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
 
-  {
-    // Ping/pong should happen every 5 seconds.
-    await tickAFewTimes(vi, PING_INTERVAL_MS);
-    const socket = await r.socket;
-    expect(socket.messages[0]).toEqual(JSON.stringify(['ping', {}]));
-    expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
-    await r.triggerPong();
-    expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
-    // getAuth should not be called again.
-    expect(log).toHaveLength(0);
-    // Socket is kept as long as we are connected.
-    expect(await r.socket).toBe(socket);
-  }
+  // Reconnect with new auth token
+  await r.connection.connect({auth: 'new-token-1'});
+  currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
+    'new-token-1',
+  );
+  await r.triggerConnected();
 
-  {
-    await r.triggerError({
-      kind: ErrorKind.Unauthorized,
-      message: 'auth error ' + authCounter,
-      origin: ErrorOrigin.ZeroCache,
-    });
-    currentSocket = await r.socket;
+  // Ping/pong should work normally
+  await tickAFewTimes(vi, PING_INTERVAL_MS);
+  const socket = await r.socket;
+  expect(socket.messages[0]).toEqual(JSON.stringify(['ping', {}]));
+  expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
+  await r.triggerPong();
+  expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
+  // Socket is kept as long as we are connected.
+  expect(await r.socket).toBe(socket);
 
-    // wait the full timeout period and we should be disconnected now
-    await vi.advanceTimersByTimeAsync(5 * 60 * 1_000);
-    await r.waitForConnectionStatus(ConnectionStatus.Disconnected);
-  }
+  // Another auth error
+  await r.triggerError({
+    kind: ErrorKind.Unauthorized,
+    message: 'auth error 2',
+    origin: ErrorOrigin.ZeroCache,
+  });
+  await r.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+
+  // Reconnect with another new auth token
+  await r.connection.connect({auth: 'new-token-2'});
+  await r.triggerConnected();
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
+  currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
+    'new-token-2',
+  );
 });
 
-test('throttles reauth on rapid auth errors', async () => {
-  const authCallTimes: number[] = [];
-  let nextToken = 1;
-  const auth = () => {
-    const now = Date.now();
-    authCallTimes.push(now);
-    return `auth-token-${nextToken++}`;
-  };
-
-  const r = zeroForTest({auth});
+test('auth errors do not auto-retry', async () => {
+  const r = zeroForTest({auth: 'initial-token'});
 
   await r.waitForConnectionStatus(ConnectionStatus.Connecting);
   await r.triggerConnected();
-  await r.waitForConnectionStatus(ConnectionStatus.Connected);
 
-  await vi.advanceTimersByTimeAsync(0);
-  expect(authCallTimes).length(1);
-  const initialAuthTime = authCallTimes.shift();
-  expect(initialAuthTime).toBe(startTime);
-
+  // Trigger first auth error
   await r.triggerError({
     kind: ErrorKind.Unauthorized,
     message: 'first auth error',
     origin: ErrorOrigin.ZeroCache,
   });
-  await r.waitForConnectionStatus(ConnectionStatus.Connecting);
-  await vi.advanceTimersByTimeAsync(0);
-  expect(authCallTimes).length(1);
-  expect(authCallTimes[0]).toBe(startTime);
+  await r.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
 
-  const reconnectingSocketAfterFirstError = r.socket;
-  await reconnectingSocketAfterFirstError;
+  // Wait a long time - should stay in needs-auth state without retrying
+  await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS * 100);
+  expect(r.connectionStatus).toBe(ConnectionStatus.NeedsAuth);
+
+  // Only resumes when connect() is called with new auth
+  await r.connection.connect({auth: 'new-token'});
   await r.triggerConnected();
-  await r.waitForConnectionStatus(ConnectionStatus.Connected);
-
-  await r.triggerError({
-    kind: ErrorKind.Unauthorized,
-    message: 'second auth error',
-    origin: ErrorOrigin.ZeroCache,
-  });
-  await r.waitForConnectionStatus(ConnectionStatus.Connecting);
-  await vi.advanceTimersByTimeAsync(0);
-  expect(authCallTimes).length(1);
-  const reconnectingSocketAfterSecondError = r.socket;
-
-  await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS - 1);
-  expect(authCallTimes).length(1);
-
-  await vi.advanceTimersByTimeAsync(1);
-  await reconnectingSocketAfterSecondError;
-  expect(authCallTimes).length(2);
-  expect(authCallTimes[1]).toBe(startTime + RUN_LOOP_INTERVAL_MS);
 });
 
 test(ErrorKind.AuthInvalidated, async () => {
   // In steady state we can get an AuthInvalidated error if the tokens expire on the server.
-  // At this point we should disconnect and reconnect with a new auth token.
-
-  let authCounter = 1;
+  // At this point we should disconnect and transition to needs-auth state.
 
   const r = zeroForTest({
-    auth: () => `auth-token-${authCounter++}`,
+    auth: 'auth-token-1',
   });
 
   await r.triggerConnected();
@@ -2384,11 +2277,174 @@ test(ErrorKind.AuthInvalidated, async () => {
     message: 'auth error',
     origin: ErrorOrigin.ZeroCache,
   });
-  await r.waitForConnectionStatus(ConnectionStatus.Connecting);
+  await r.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+  await vi.advanceTimersByTimeAsync(0);
 
+  // Reconnect with new auth token
+  await r.connection.connect({auth: 'auth-token-2'});
+  await r.triggerConnected();
   const reconnectingSocket = await r.socket;
   expect(decodeSecProtocols(reconnectingSocket.protocol).authToken).toBe(
     'auth-token-2',
+  );
+});
+
+test('connect() with null auth clears authentication', async () => {
+  const r = zeroForTest({auth: 'initial-token'});
+
+  await r.triggerConnected();
+  let currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
+    'initial-token',
+  );
+
+  // Trigger auth error
+  await r.triggerError({
+    kind: ErrorKind.Unauthorized,
+    message: 'auth error',
+    origin: ErrorOrigin.ZeroCache,
+  });
+  await r.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+  await vi.advanceTimersByTimeAsync(0);
+
+  // Reconnect with null auth - should clear auth token (empty string is used for no auth)
+  await r.connection.connect({auth: null});
+  currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(undefined);
+  await r.triggerConnected();
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
+});
+
+test('connect() with undefined auth clears authentication', async () => {
+  const r = zeroForTest({auth: 'initial-token'});
+
+  await r.triggerConnected();
+  let currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
+    'initial-token',
+  );
+
+  // Trigger auth error
+  await r.triggerError({
+    kind: ErrorKind.Unauthorized,
+    message: 'auth error',
+    origin: ErrorOrigin.ZeroCache,
+  });
+  await r.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+  await vi.advanceTimersByTimeAsync(0);
+
+  // Reconnect with undefined auth - should clear auth token (empty string is used for no auth)
+  await r.connection.connect({auth: undefined});
+  currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(undefined);
+  await r.triggerConnected();
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
+});
+
+test('connect() without opts preserves existing auth', async () => {
+  const r = zeroForTest({auth: 'initial-token'});
+
+  await r.triggerConnected();
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
+
+  // Trigger a non-auth error
+  await r.triggerError({
+    kind: ErrorKind.Internal,
+    message: 'internal error',
+    origin: ErrorOrigin.ZeroCache,
+  });
+  await r.waitForConnectionStatus(ConnectionStatus.Error);
+  await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
+
+  // Reconnect without providing auth opts - should keep existing auth
+  await r.connection.connect();
+  const currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
+    'initial-token',
+  );
+  await r.triggerConnected();
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
+});
+
+test('can start with no auth and add it later', async () => {
+  const r = zeroForTest({auth: undefined});
+
+  await r.triggerConnected();
+  let currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(undefined);
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
+
+  // Simulate server requiring auth
+  await r.triggerError({
+    kind: ErrorKind.Unauthorized,
+    message: 'auth required',
+    origin: ErrorOrigin.ZeroCache,
+  });
+  await r.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+  await vi.advanceTimersByTimeAsync(0);
+
+  // Add auth for the first time
+  await r.connection.connect({auth: 'new-auth-token'});
+  currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
+    'new-auth-token',
+  );
+  await r.triggerConnected();
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
+});
+
+test('PushFailed with 401 status transitions to needs-auth', async () => {
+  const r = zeroForTest({auth: 'initial-token'});
+
+  await r.triggerConnected();
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
+
+  // Trigger PushFailed with 401 status
+  await r.triggerError({
+    kind: ErrorKind.PushFailed,
+    message: 'Unauthorized',
+    origin: ErrorOrigin.ZeroCache,
+    reason: ErrorReason.HTTP,
+    status: 401,
+    mutationIDs: [],
+  });
+  await r.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+
+  await vi.advanceTimersByTimeAsync(0);
+
+  // Verify we can reconnect with new auth
+  await r.connection.connect({auth: 'new-token'});
+  await r.triggerConnected();
+
+  const currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
+    'new-token',
+  );
+});
+
+test('TransformFailed with 403 status transitions to needs-auth', async () => {
+  const r = zeroForTest({auth: 'initial-token'});
+
+  await r.triggerConnected();
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
+
+  // Trigger TransformFailed with 403 status
+  await r.triggerError({
+    kind: ErrorKind.TransformFailed,
+    message: 'Forbidden',
+    origin: ErrorOrigin.ZeroCache,
+    reason: ErrorReason.HTTP,
+    status: 403,
+    queryIDs: ['query1'],
+  });
+  await r.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+  await vi.advanceTimersByTimeAsync(0);
+
+  // Verify we can reconnect with new auth
+  await r.connection.connect({auth: 'new-token'});
+  const currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
+    'new-token',
   );
 });
 
@@ -2556,6 +2612,7 @@ test('Connect timeout', async () => {
 
   // And success after this...
   await r.triggerConnected();
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
   expect([...new Set(connectionStates.map(s => s.name))]).toEqual([
     ConnectionStatus.Connecting,
@@ -2599,7 +2656,6 @@ test('Logs errors in connect', async () => {
     origin: ErrorOrigin.ZeroCache,
   });
   expect(r.connectionStatus).toBe(ConnectionStatus.Error);
-  await vi.advanceTimersByTimeAsync(0);
 
   const index = r.testLogSink.messages.findIndex(
     ([level, _context, args]) =>
@@ -3082,6 +3138,7 @@ describe('Disconnect on hide', () => {
 
     await c.test(z, changeVisibilityState);
 
+    await z.waitForConnectionStatus(ConnectionStatus.Connecting);
     expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
     expect(await onOnlineChangeP).toBe(false);
     expect(z.online).toBe(false);
@@ -3127,7 +3184,6 @@ test(ErrorKind.InvalidConnectionRequest, async () => {
     origin: ErrorOrigin.ZeroCache,
   });
   expect(r.connectionStatus).toBe(ConnectionStatus.Error);
-  await vi.advanceTimersByTimeAsync(0);
   const msg = r.testLogSink.messages.at(-1);
   assert(msg);
 
@@ -3163,11 +3219,6 @@ describe('Invalid Downstream message', () => {
       cookie: '1',
       timestamp: 123456,
     });
-    await vi.advanceTimersByTimeAsync(0);
-
-    // if (c.duringPing) { // TODO(0xcadams): do we need to trigger pong here?
-    //   await r.triggerPong();
-    // }
 
     // Invalid downstream messages trigger error state
     expect(r.online).toEqual(false);
@@ -3193,7 +3244,6 @@ describe('Downstream message with unknown fields', () => {
       cookie: '1',
       timestamp: 123456,
     });
-    await vi.advanceTimersByTimeAsync(0);
 
     expect(r.online).eq(true);
     expect(r.connectionStatus).eq(ConnectionStatus.Connected);
@@ -3342,7 +3392,6 @@ test('Close during connect should sleep', async () => {
   await r.triggerConnected();
 
   await r.waitForConnectionStatus(ConnectionStatus.Connected);
-  await vi.advanceTimersByTimeAsync(0);
   expect(r.online).toBe(true);
 
   (await r.socket).close();
@@ -3352,8 +3401,8 @@ test('Close during connect should sleep', async () => {
 
   (await r.socket).close();
   await r.waitForConnectionStatus(ConnectionStatus.Connecting);
-  await vi.advanceTimersByTimeAsync(0);
   expect(r.online).toBe(false);
+  await vi.advanceTimersByTimeAsync(0);
   const hasSleeping = r.testLogSink.messages.some(m =>
     m[2].some(v => v === 'Sleeping'),
   );
@@ -3365,7 +3414,6 @@ test('Close during connect should sleep', async () => {
   await reconnectAfterSleep;
   await r.triggerConnected();
   await r.waitForConnectionStatus(ConnectionStatus.Connected);
-  await vi.advanceTimersByTimeAsync(0);
   expect(r.online).toBe(true);
 });
 
@@ -4225,7 +4273,6 @@ test('push is called on initial connect and reconnect', async () => {
     expect(z.online).toBe(false);
     await z.triggerConnected();
     await z.waitForConnectionStatus(ConnectionStatus.Connected);
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     expect(pushSpy).toBeCalledTimes(1);
 
@@ -4234,7 +4281,6 @@ test('push is called on initial connect and reconnect', async () => {
     await z.waitForConnectionStatus(ConnectionStatus.Connecting);
     await z.triggerConnected();
     await z.waitForConnectionStatus(ConnectionStatus.Connected);
-    await vi.advanceTimersByTimeAsync(0);
     expect(pushSpy).toBeCalledTimes(2);
   }
 });
