@@ -14,9 +14,9 @@ import {
   type MessageEvent,
   type WebSocket,
 } from 'ws';
+import {BigIntJSON, type JSONValue} from '../../../shared/src/bigint-json.ts';
 import {Queue} from '../../../shared/src/queue.ts';
 import * as v from '../../../shared/src/valita.ts';
-import {BigIntJSON, type JSONValue} from '../../../shared/src/bigint-json.ts';
 import {Subscription, type Options} from './subscription.ts';
 import {
   closeWithError,
@@ -286,8 +286,8 @@ export async function streamIn<T extends JSONValue>(
 
   function handleMessage(event: MessageEvent) {
     const data = event.data.toString();
-    if (closer.closed()) {
-      lc.debug?.('Ignoring message received after closed', data);
+    if (!sink.active) {
+      lc.warn?.('dropping ws message received after close', data);
       return;
     }
     try {
