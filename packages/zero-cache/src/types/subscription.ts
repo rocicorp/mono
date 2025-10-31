@@ -1,4 +1,5 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
+import {assert} from '../../../shared/src/asserts.ts';
 import type {Sink, Source} from './streams.ts';
 
 /**
@@ -76,7 +77,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
   // Consumers waiting to consume messages (i.e. an async iteration awaiting the next message).
   readonly #consumers: Resolver<Entry<M> | null>[] = [];
   // Messages waiting to be consumed.
-  readonly #messages: Entry<M>[] = [];
+  readonly #messages: (Entry<M> | 'terminus')[] = [];
   readonly #pipelineEnabled: boolean;
   // Sentinel value signaling that the subscription is "done" and no more
   // messages can be added.
@@ -150,9 +151,17 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     const consumer = this.#consumers.shift();
     if (consumer) {
       consumer.resolve(entry);
-    } else if (this.#coalesce && this.#messages.length) {
-      const prev = this.#messages[0];
-      this.#messages[0] = {value: this.#coalesce(entry, prev), resolve};
+    } else if (
+      this.#coalesce &&
+      this.#messages.length &&
+      this.#messages[this.#messages.length - 1] !== 'terminus'
+    ) {
+      const prev = this.#messages[this.#messages.length - 1];
+      assert(prev !== 'terminus');
+      this.#messages[this.#messages.length - 1] = {
+        value: this.#coalesce(entry, prev),
+        resolve,
+      };
     } else {
       this.#messages.push(entry);
     }
@@ -169,7 +178,31 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     return this.#messages.length;
   }
 
-  /** Cancels the subscription, cleans up, and terminates any iteration. */
+  /**
+   * Cancels the subscription after any queued messages are consumed. This is
+   * meant for the producer-side code.
+   *
+   * Any messages pushed after calling `end()` will be unconsumed as if
+   * `cancel()` were called (once the first set of pending messages is
+   * consumed). In particular, if a coalesce function is defined, the new
+   * messages will not be coalesced with the messages enqueued before `end()`
+   * was called. However, to effect the intent of memory efficiency, multiple
+   * messages pushed after calling `end()` will be coalesced together.
+   *
+   */
+  end() {
+    if (this.#sentinel) {
+      // already terminated
+    } else if (this.#messages.length === 0) {
+      this.cancel();
+    } else {
+      this.#messages.push('terminus');
+    }
+  }
+
+  /**
+   * Cancels the subscription immediately, cleans up, and terminates any iteration.
+   */
   cancel() {
     this.#terminate('canceled');
   }
@@ -183,7 +216,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     if (!this.#sentinel) {
       this.#sentinel = sentinel;
       this.#cleanup(
-        this.#messages,
+        this.#messages.filter(m => m !== 'terminus'),
         sentinel instanceof Error ? sentinel : undefined,
       );
       this.#messages.splice(0);
@@ -210,6 +243,10 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     return {
       next: async () => {
         const entry = this.#messages.shift();
+        if (entry === 'terminus') {
+          this.cancel();
+          return {value: undefined, done: true};
+        }
         if (entry !== undefined) {
           return {
             value: {
