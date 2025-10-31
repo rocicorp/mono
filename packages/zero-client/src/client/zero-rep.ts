@@ -19,8 +19,15 @@ import type {
 } from '../../../replicache/src/replicache-options.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 
-// Used to indicate that no auth token is set, since Replicache doesn't support undefined auth tokens
-export const REPLICACHE_NO_AUTH_TOKEN = '';
+// Replicache doesn't support undefined auth tokens
+const REPLICACHE_NO_AUTH_TOKEN = '';
+
+export const toReplicacheAuthToken = (
+  auth: string | undefined | null,
+): string => auth ?? REPLICACHE_NO_AUTH_TOKEN;
+
+export const fromReplicacheAuthToken = (auth: string): string | undefined =>
+  !auth ? undefined : auth;
 
 type TxData = {
   ivmSources: IVMSourceBranch;
@@ -87,9 +94,7 @@ export class ZeroRep implements ZeroOption {
       .forkToHead(must(this.#store), desiredHead, readOptions)
       .then(branch => ({
         ivmSources: branch,
-        // we map to the Zero undefined only here, so all unauth states
-        // (null, undefined, empty string) are collapsed into the empty string
-        token: this.#auth === REPLICACHE_NO_AUTH_TOKEN ? undefined : this.#auth,
+        token: fromReplicacheAuthToken(this.#auth),
       }));
   };
 

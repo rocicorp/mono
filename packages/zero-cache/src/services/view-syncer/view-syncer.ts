@@ -104,6 +104,7 @@ import {
 
 export type TokenData = {
   readonly raw: string;
+  /** @deprecated */
   readonly decoded: JWTPayload;
 };
 

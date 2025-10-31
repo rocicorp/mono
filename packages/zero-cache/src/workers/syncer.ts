@@ -205,7 +205,6 @@ export class Syncer implements SingletonService {
         new SyncerWsMessageHandler(
           this.#lc,
           params,
-          // auth is an empty string if the user is not authenticated
           auth
             ? {
                 raw: auth,

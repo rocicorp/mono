@@ -170,7 +170,11 @@ import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
-import {REPLICACHE_NO_AUTH_TOKEN, ZeroRep} from './zero-rep.ts';
+import {
+  fromReplicacheAuthToken,
+  toReplicacheAuthToken,
+  ZeroRep,
+} from './zero-rep.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {Subscribable} from '../../../shared/src/subscribable.ts';
@@ -1438,7 +1442,7 @@ export class Zero<
       await this.clientGroupID,
       this.#clientSchema,
       this.userID,
-      this.#rep.auth,
+      fromReplicacheAuthToken(this.#rep.auth),
       this.#lastMutationIDReceived,
       wsid,
       this.#options.logLevel === 'debug',
@@ -2022,12 +2026,10 @@ export class Zero<
   /**
    * Sets the authentication token on the replicache instance.
    *
-   * We keep Replicache's expectation of no auth being the empty string.
-   *
    * @param auth - The authentication token to set.
    */
   #setAuth(auth: string | undefined | null): void {
-    this.#rep.auth = auth ?? REPLICACHE_NO_AUTH_TOKEN;
+    this.#rep.auth = toReplicacheAuthToken(auth);
   }
 
   /**

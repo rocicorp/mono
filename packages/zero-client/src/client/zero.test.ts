@@ -300,13 +300,12 @@ describe('onOnlineChange callback', () => {
       origin: ErrorOrigin.ZeroCache,
     });
     await z.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
-    // Wait for run loop to process needs-auth state transition
-    await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
     expect(z.online).toBe(false);
     // we connected once
     expect(getOnlineCount()).toBe(1);
     // auth error triggered offline callback
     expect(getOfflineCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(0);
     // Call connect with new auth to resume
     await z.connection.connect({auth: 'new-token'});
     await z.triggerConnected();
@@ -2311,8 +2310,7 @@ test('connect() with null auth clears authentication', async () => {
   // Reconnect with null auth - should clear auth token (empty string is used for no auth)
   await r.connection.connect({auth: null});
   currentSocket = await r.socket;
-  // Empty string means no auth token
-  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe('');
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(undefined);
   await r.triggerConnected();
   await r.waitForConnectionStatus(ConnectionStatus.Connected);
 });
@@ -2338,8 +2336,7 @@ test('connect() with undefined auth clears authentication', async () => {
   // Reconnect with undefined auth - should clear auth token (empty string is used for no auth)
   await r.connection.connect({auth: undefined});
   currentSocket = await r.socket;
-  // Empty string means no auth token
-  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe('');
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(undefined);
   await r.triggerConnected();
   await r.waitForConnectionStatus(ConnectionStatus.Connected);
 });
@@ -2374,8 +2371,7 @@ test('can start with no auth and add it later', async () => {
 
   await r.triggerConnected();
   let currentSocket = await r.socket;
-  // Empty string means no auth token
-  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe('');
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(undefined);
   await r.waitForConnectionStatus(ConnectionStatus.Connected);
 
   // Simulate server requiring auth
