@@ -8,19 +8,26 @@ describe('ConnectionImpl', () => {
   let manager: ConnectionManager;
   let lc: ZeroLogContext;
   let setAuthSpy: ReturnType<typeof vi.fn>;
+  let isInTerminalStateMock: ReturnType<typeof vi.fn>;
+  let connectingMock: ReturnType<typeof vi.fn>;
+  let subscribeMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     lc = new ZeroLogContext('debug', {});
     setAuthSpy = vi.fn();
+    isInTerminalStateMock = vi.fn().mockReturnValue(false);
+    connectingMock = vi
+      .fn()
+      .mockReturnValue({nextStatePromise: Promise.resolve()});
+    const unsubscribe = vi.fn();
+    subscribeMock = vi.fn().mockReturnValue(unsubscribe);
 
     // Mock connection manager with minimal required behavior
     manager = {
       state: {name: ConnectionStatus.Connecting},
-      isInTerminalState: vi.fn().mockReturnValue(false),
-      connecting: vi
-        .fn()
-        .mockReturnValue({nextStatePromise: Promise.resolve()}),
-      subscribe: vi.fn().mockReturnValue(vi.fn()),
+      isInTerminalState: isInTerminalStateMock,
+      connecting: connectingMock,
+      subscribe: subscribeMock,
     } as unknown as ConnectionManager;
   });
 
@@ -37,39 +44,39 @@ describe('ConnectionImpl', () => {
 
       connection.state.subscribe(listener);
 
-      expect(manager.subscribe).toHaveBeenCalledWith(listener);
+      expect(subscribeMock).toHaveBeenCalledWith(listener);
     });
   });
 
   describe('connect', () => {
     test('returns early when not in terminal state', async () => {
-      vi.mocked(manager.isInTerminalState).mockReturnValue(false);
+      isInTerminalStateMock.mockReturnValue(false);
       const connection = new ConnectionImpl(manager, lc, setAuthSpy);
 
       await connection.connect();
 
-      expect(manager.connecting).not.toHaveBeenCalled();
+      expect(connectingMock).not.toHaveBeenCalled();
       expect(setAuthSpy).not.toHaveBeenCalled();
     });
 
     test('calls manager.connecting() and waits for state change', async () => {
-      vi.mocked(manager.isInTerminalState).mockReturnValue(true);
+      isInTerminalStateMock.mockReturnValue(true);
       const nextStatePromise = Promise.resolve(manager.state);
-      vi.mocked(manager.connecting).mockReturnValue({
+      connectingMock.mockReturnValue({
         nextStatePromise,
       } as ReturnType<ConnectionManager['connecting']>);
       const connection = new ConnectionImpl(manager, lc, setAuthSpy);
 
       await connection.connect();
 
-      expect(manager.connecting).toHaveBeenCalledTimes(1);
+      expect(connectingMock).toHaveBeenCalledTimes(1);
       expect(setAuthSpy).not.toHaveBeenCalled();
     });
 
     test('updates auth when string token is provided', async () => {
-      vi.mocked(manager.isInTerminalState).mockReturnValue(true);
+      isInTerminalStateMock.mockReturnValue(true);
       const nextStatePromise = Promise.resolve(manager.state);
-      vi.mocked(manager.connecting).mockReturnValue({
+      connectingMock.mockReturnValue({
         nextStatePromise,
       } as ReturnType<ConnectionManager['connecting']>);
       const connection = new ConnectionImpl(manager, lc, setAuthSpy);
@@ -78,13 +85,13 @@ describe('ConnectionImpl', () => {
 
       expect(setAuthSpy).toHaveBeenCalledWith('test-token-123');
       expect(setAuthSpy).toHaveBeenCalledTimes(1);
-      expect(manager.connecting).toHaveBeenCalledTimes(1);
+      expect(connectingMock).toHaveBeenCalledTimes(1);
     });
 
     test('clears auth when null is provided', async () => {
-      vi.mocked(manager.isInTerminalState).mockReturnValue(true);
+      isInTerminalStateMock.mockReturnValue(true);
       const nextStatePromise = Promise.resolve(manager.state);
-      vi.mocked(manager.connecting).mockReturnValue({
+      connectingMock.mockReturnValue({
         nextStatePromise,
       } as ReturnType<ConnectionManager['connecting']>);
       const connection = new ConnectionImpl(manager, lc, setAuthSpy);
@@ -93,13 +100,13 @@ describe('ConnectionImpl', () => {
 
       expect(setAuthSpy).toHaveBeenCalledWith(null);
       expect(setAuthSpy).toHaveBeenCalledTimes(1);
-      expect(manager.connecting).toHaveBeenCalledTimes(1);
+      expect(connectingMock).toHaveBeenCalledTimes(1);
     });
 
     test('clears auth when undefined is provided', async () => {
-      vi.mocked(manager.isInTerminalState).mockReturnValue(true);
+      isInTerminalStateMock.mockReturnValue(true);
       const nextStatePromise = Promise.resolve(manager.state);
-      vi.mocked(manager.connecting).mockReturnValue({
+      connectingMock.mockReturnValue({
         nextStatePromise,
       } as ReturnType<ConnectionManager['connecting']>);
       const connection = new ConnectionImpl(manager, lc, setAuthSpy);
@@ -108,17 +115,18 @@ describe('ConnectionImpl', () => {
 
       expect(setAuthSpy).toHaveBeenCalledWith(undefined);
       expect(setAuthSpy).toHaveBeenCalledTimes(1);
-      expect(manager.connecting).toHaveBeenCalledTimes(1);
+      expect(connectingMock).toHaveBeenCalledTimes(1);
     });
 
-    test('does not update auth when in terminal state', async () => {
-      vi.mocked(manager.isInTerminalState).mockReturnValue(false);
+    test('updates auth when called outside terminal state', async () => {
+      isInTerminalStateMock.mockReturnValue(false);
       const connection = new ConnectionImpl(manager, lc, setAuthSpy);
 
       await connection.connect({auth: 'new-token'});
 
-      expect(setAuthSpy).not.toHaveBeenCalled();
-      expect(manager.connecting).not.toHaveBeenCalled();
+      expect(setAuthSpy).toHaveBeenCalledWith('new-token');
+      expect(setAuthSpy).toHaveBeenCalledTimes(1);
+      expect(connectingMock).not.toHaveBeenCalled();
     });
   });
 });

@@ -63,6 +63,11 @@ export class ConnectionImpl implements Connection {
   async connect(opts?: {auth: string | null | undefined}): Promise<void> {
     const lc = this.#lc.withContext('connect');
 
+    if (opts && 'auth' in opts) {
+      lc.debug?.('Updating auth credential from connect()');
+      this.#setAuth(opts.auth);
+    }
+
     // only allow connect() to be called from a terminal state
     if (!this.#connectionManager.isInTerminalState()) {
       lc.debug?.(
@@ -70,12 +75,6 @@ export class ConnectionImpl implements Connection {
         this.#connectionManager.state.name,
       );
       return;
-    }
-
-    // If opts is provided, update the stored auth credential
-    if (opts && 'auth' in opts) {
-      lc.debug?.('Updating auth credential from connect()');
-      this.#setAuth(opts.auth);
     }
 
     lc.info?.(
