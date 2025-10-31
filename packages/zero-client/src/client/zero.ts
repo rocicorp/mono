@@ -1377,6 +1377,10 @@ export class Zero<
     lc: ZeroLogContext,
     additionalConnectParams: Record<string, string> | undefined,
   ): Promise<void> {
+    if (this.closed) {
+      return;
+    }
+
     assert(this.#server, 'No server provided');
 
     // can be called from both disconnected and connecting states.
