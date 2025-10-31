@@ -87,6 +87,8 @@ export class ZeroRep implements ZeroOption {
       .forkToHead(must(this.#store), desiredHead, readOptions)
       .then(branch => ({
         ivmSources: branch,
+        // we map to the Zero undefined only here, so all unauth states
+        // (null, undefined, empty string) are collapsed into the empty string
         token: this.#auth === REPLICACHE_NO_AUTH_TOKEN ? undefined : this.#auth,
       }));
   };

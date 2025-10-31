@@ -29,13 +29,14 @@ export interface ZeroOptions<
   /**
    * A token to identify and authenticate the user.
    *
-   * When authentication fails (expired, malformed, or invalid signature), Zero will
-   * transition to the `needs-auth` connection state. The app should call
-   * `zero.connection.connect({auth: newToken})` with a new token to resume the connection.
-   *
-   * This is handled automatically by the ZeroProvider component for React and SolidJS.
-   *
    * Set `auth` to `null` or `undefined` if there is no logged in user.
+   *
+   * When a 401 or 403 HTTP status code is received from your server, Zero will
+   * transition to the `needs-auth` connection state. The app should call
+   * `zero.connection.connect({auth: newToken})` with a new token to reconnect.
+   *
+   * The call to `connect` is handled automatically by the ZeroProvider component
+   * for React and SolidJS when the `auth` prop changes.
    */
   auth?: string | null | undefined;
 

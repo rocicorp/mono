@@ -2019,6 +2019,13 @@ export class Zero<
     }
   }
 
+  /**
+   * Sets the authentication token on the replicache instance.
+   *
+   * We keep Replicache's expectation of no auth being the empty string.
+   *
+   * @param auth - The authentication token to set.
+   */
   #setAuth(auth: string | undefined | null): void {
     this.#rep.auth = auth ?? REPLICACHE_NO_AUTH_TOKEN;
   }
