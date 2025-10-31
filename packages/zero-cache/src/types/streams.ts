@@ -52,8 +52,6 @@ export type Source<T> = AsyncIterable<T> & {
 
 export type Sink<T> = {
   push(message: T): void;
-
-  end(): void;
 };
 
 /**
@@ -327,7 +325,7 @@ class WebSocketCloser {
   static forSink<T>(
     lc: LogContext,
     ws: WebSocket,
-    stream: Sink<T>,
+    stream: Subscription<T, Streamed<T>>,
     messageHandler: (e: MessageEvent) => void | undefined,
   ) {
     // If the websocket is closed, call end() to allow the downstream Sink
