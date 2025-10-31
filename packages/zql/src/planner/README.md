@@ -2,6 +2,53 @@
 
 This directory contains a cost-based query planner that optimizes `WHERE EXISTS` (correlated subquery) statements by choosing optimal join execution strategies.
 
+## Query Graph Visualization
+
+```mermaid
+graph TD
+    %% Leaf nodes - table scans
+    UsersConn["Connection: users<br/>filters, ordering, limit"]
+    PostsConn["Connection: posts<br/>filters, ordering"]
+    CommentsConn["Connection: comments<br/>filters, ordering"]
+
+    %% Join nodes
+    PostsJoin["Join: posts EXISTS<br/>type: semi/flipped<br/>parent/child constraints"]
+    CommentsJoin["Join: comments EXISTS<br/>type: semi/flipped<br/>parent/child constraints"]
+
+    %% Fan nodes
+    FanOut["FanOut<br/>type: FO/UFO"]
+    FanIn["FanIn<br/>type: FI/UFI"]
+
+    %% Terminus
+    Terminus["Terminus<br/>final output"]
+
+    %% Structure flow (data dependencies)
+    UsersConn --> FanOut
+    FanOut --> PostsJoin
+    FanOut --> CommentsJoin
+    PostsConn --> PostsJoin
+    CommentsConn --> CommentsJoin
+    PostsJoin --> FanIn
+    CommentsJoin --> FanIn
+    FanIn --> Terminus
+
+    %% Annotations
+    classDef connection fill:#e1f5ff,stroke:#0066cc
+    classDef join fill:#fff4e1,stroke:#cc8800
+    classDef fan fill:#f0e1ff,stroke:#8800cc
+    classDef terminus fill:#e1ffe1,stroke:#00aa00
+
+    class UsersConn,PostsConn,CommentsConn connection
+    class PostsJoin,CommentsJoin join
+    class FanOut,FanIn fan
+    class Terminus terminus
+```
+
+**Key flows shown above:**
+- **Constraint propagation** ⬅️ flows backwards from Terminus → Connections
+- **Cost estimation** ➡️ flows forward from Connections → Terminus
+- **Planning** evaluates different join types (semi vs flipped) to minimize total cost
+
 ## Table of Contents
 
 - [Overview](#overview)
