@@ -71,7 +71,6 @@ export type PlanCompleteEvent = {
   joinStates: Array<{
     join: string;
     type: JoinType;
-    pinned: boolean;
   }>;
 };
 
@@ -185,17 +184,13 @@ function formatEvent(event: PlanDebugEvent): string {
         // Format each branch's constraints with costs
         if (c.constraints.size === 0) {
           const cost = c.constraintCosts.get('');
-          const costStr = cost
-            ? ` cost=${cost.baseCardinality.toFixed(2)}`
-            : '';
+          const costStr = cost ? ` cost=${cost.rows.toFixed(2)}` : '';
           lines.push(`    Branch [none]: {}${costStr}`);
         } else {
           for (const [branchKey, constraint] of c.constraints) {
             const branchLabel = branchKey === '' ? 'none' : branchKey;
             const cost = c.constraintCosts.get(branchKey);
-            const costStr = cost
-              ? ` cost=${cost.baseCardinality.toFixed(2)}`
-              : '';
+            const costStr = cost ? ` cost=${cost.rows.toFixed(2)}` : '';
             lines.push(
               `    Branch [${branchLabel}]: ${formatConstraint(constraint)}${costStr}`,
             );
@@ -221,17 +216,13 @@ function formatEvent(event: PlanDebugEvent): string {
         // Format each branch's constraints with costs
         if (c.constraints.size === 0) {
           const cost = c.constraintCosts.get('');
-          const costStr = cost
-            ? ` cost=${cost.baseCardinality.toFixed(2)}`
-            : '';
+          const costStr = cost ? ` cost=${cost.rows.toFixed(2)}` : '';
           lines.push(`    Branch [none]: {}${costStr}`);
         } else {
           for (const [branchKey, constraint] of c.constraints) {
             const branchLabel = branchKey === '' ? 'none' : branchKey;
             const cost = c.constraintCosts.get(branchKey);
-            const costStr = cost
-              ? ` cost=${cost.baseCardinality.toFixed(2)}`
-              : '';
+            const costStr = cost ? ` cost=${cost.rows.toFixed(2)}` : '';
             lines.push(
               `    Branch [${branchLabel}]: ${formatConstraint(constraint)}${costStr}`,
             );

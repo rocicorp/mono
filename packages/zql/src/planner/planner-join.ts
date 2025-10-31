@@ -10,6 +10,24 @@ import type {
 } from './planner-node.ts';
 
 /**
+ * Semi-join overhead multiplier.
+ *
+ * Semi-joins represent correlated subqueries (EXISTS checks) which have
+ * execution overhead compared to flipped joins, even when logical row counts
+ * are identical. This overhead comes from:
+ * - Need to execute a separate correlation check for each parent row
+ * - Cannot leverage combined constraint checking as effectively as flipped joins
+ *
+ * A multiplier of 1.5 means semi-joins are estimated to be ~50% more expensive
+ * than equivalent flipped joins, which empirically matches observed performance
+ * differences in production workloads (e.g., 1.7x in zbugs benchmarks).
+ *
+ * Flipped joins have a different overhead in that they become unlimited. This
+ * is accounted for when propagating unlimits rather than here.
+ */
+const SEMI_JOIN_OVERHEAD_MULTIPLIER = 1.5;
+
+/**
  * Represents a join between two data streams (parent and child).
  *
  * # Dual-State Pattern
@@ -50,7 +68,6 @@ export class PlannerJoin {
 
   // Reset between planning attempts
   #type: 'semi' | 'flipped';
-  #pinned: boolean;
 
   constructor(
     parent: PlannerNode,
@@ -61,7 +78,6 @@ export class PlannerJoin {
     planId: number,
   ) {
     this.#type = 'semi';
-    this.#pinned = false;
     this.#parent = parent;
     this.#child = child;
     this.#childConstraint = childConstraint;
@@ -84,7 +100,6 @@ export class PlannerJoin {
   }
 
   flipIfNeeded(input: PlannerNode): void {
-    assert(this.#pinned === false, 'Cannot flip a pinned join');
     if (input === this.#child) {
       this.flip();
     } else {
@@ -97,7 +112,6 @@ export class PlannerJoin {
 
   flip(): void {
     assert(this.#type === 'semi', 'Can only flip a semi-join');
-    assert(this.#pinned === false, 'Cannot flip a pinned join');
     if (!this.#flippable) {
       throw new UnflippableJoinError(
         'Cannot flip a non-flippable join (e.g., NOT EXISTS)',
@@ -109,14 +123,8 @@ export class PlannerJoin {
   get type(): 'semi' | 'flipped' {
     return this.#type;
   }
-
-  pin(): void {
-    assert(this.#pinned === false, 'Cannot pin a pinned join');
-    this.#pinned = true;
-  }
-
-  get pinned(): boolean {
-    return this.#pinned;
+  isFlippable(): boolean {
+    return this.#flippable;
   }
 
   /**
@@ -150,18 +158,10 @@ export class PlannerJoin {
   propagateConstraints(
     branchPattern: number[],
     constraint: PlannerConstraint | undefined,
-    from: PlannerNode,
   ): void {
-    if (this.#pinned) {
-      assert(
-        from.pinned,
-        'It should be impossible for a pinned join to receive constraints from a non-pinned node',
-      );
-    }
-
-    if (this.#pinned && this.#type === 'semi') {
+    if (this.#type === 'semi') {
       // A semi-join always has constraints for its child.
-      // They are defined by the correlated between parent and child.
+      // They are defined by the correlation between parent and child.
       this.#child.propagateConstraints(
         branchPattern,
         this.#childConstraint,
@@ -169,8 +169,7 @@ export class PlannerJoin {
       );
       // A semi-join forwards constraints to its parent.
       this.#parent.propagateConstraints(branchPattern, constraint, this);
-    }
-    if (this.#pinned && this.#type === 'flipped') {
+    } else if (this.#type === 'flipped') {
       // A flipped join has no constraints to pass to its child.
       // It is a standalone fetch that is relying on the filters of the child
       // connection to do the heavy work.
@@ -184,30 +183,17 @@ export class PlannerJoin {
         this,
       );
     }
-    if (!this.#pinned && this.#type === 'semi') {
-      // If a join is not pinned, it cannot contribute constraints to its child.
-      // Contributing constraints to its child would reduce the child's cost too early
-      // causing the child to be picked by the planning algorithm before the parent
-      // that is contributing the constraints has been picked.
-      this.#parent.propagateConstraints(branchPattern, constraint, this);
-    }
-    if (!this.#pinned && this.#type === 'flipped') {
-      // If a join has been flipped that means it has been picked by the planning algorithm.
-      // If it has been picked, it must be pinned.
-      throw new Error('Impossible to be flipped and not pinned');
-    }
   }
 
   reset(): void {
     this.#type = 'semi';
-    this.#pinned = false;
   }
 
   estimateCost(branchPattern?: number[]): CostEstimate {
     const parentCost = this.#parent.estimateCost(branchPattern);
     const childCost = this.#child.estimateCost(branchPattern);
 
-    let scanEst = parentCost.baseCardinality;
+    let scanEst = parentCost.rows;
     if (this.#type === 'semi' && parentCost.limit !== undefined) {
       if (childCost.selectivity !== 0) {
         scanEst = Math.min(scanEst, parentCost.limit / childCost.selectivity);
@@ -216,14 +202,19 @@ export class PlannerJoin {
 
     if (this.#parent.closestJoinOrSource() === 'join') {
       // if the parent is a join, we're in a pipeline rather than nesting of joins.
+      const pipelineCost =
+        this.#type === 'flipped'
+          ? childCost.startupCost +
+            childCost.runningCost *
+              (parentCost.startupCost + parentCost.runningCost)
+          : parentCost.runningCost +
+            SEMI_JOIN_OVERHEAD_MULTIPLIER *
+              scanEst *
+              (childCost.startupCost + childCost.runningCost);
+
       return {
-        baseCardinality: parentCost.baseCardinality,
-        runningCost:
-          this.#type === 'flipped'
-            ? childCost.startupCost +
-              childCost.runningCost * (parentCost.startupCost + scanEst)
-            : parentCost.runningCost +
-              scanEst * (childCost.startupCost + childCost.runningCost),
+        rows: parentCost.rows,
+        runningCost: pipelineCost,
         startupCost: parentCost.startupCost,
         selectivity: parentCost.selectivity,
         limit: parentCost.limit,
@@ -231,12 +222,17 @@ export class PlannerJoin {
     }
 
     // if the parent is a source, we're in a nested loop join
+    const nestedLoopCost =
+      this.#type === 'flipped'
+        ? childCost.runningCost *
+          (parentCost.startupCost + parentCost.runningCost)
+        : SEMI_JOIN_OVERHEAD_MULTIPLIER *
+          scanEst *
+          (childCost.startupCost + childCost.runningCost);
+
     return {
-      baseCardinality: parentCost.baseCardinality,
-      runningCost:
-        this.#type === 'flipped'
-          ? childCost.runningCost * (parentCost.startupCost + scanEst)
-          : scanEst * (childCost.startupCost + childCost.runningCost),
+      rows: parentCost.rows,
+      runningCost: nestedLoopCost,
       startupCost: parentCost.startupCost,
       selectivity: parentCost.selectivity,
       limit: parentCost.limit,
@@ -259,13 +255,11 @@ export class PlannerJoin {
   getDebugInfo(): {
     name: string;
     type: 'semi' | 'flipped';
-    pinned: boolean;
     planId: number;
   } {
     return {
       name: this.getName(),
       type: this.#type,
-      pinned: this.#pinned,
       planId: this.planId,
     };
   }

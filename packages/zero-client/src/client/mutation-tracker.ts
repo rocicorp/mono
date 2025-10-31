@@ -3,8 +3,13 @@ import type {
   EphemeralID,
   MutationTrackingData,
 } from '../../../replicache/src/replicache-options.ts';
+import type {ReplicacheImpl} from '../../../replicache/src/impl.ts';
+import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {must} from '../../../shared/src/must.ts';
 import {emptyObject} from '../../../shared/src/sentinels.ts';
+import * as v from '../../../shared/src/valita.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {
   mutationResultSchema,
   type MutationError,
@@ -12,16 +17,18 @@ import {
   type MutationOk,
   type PushError,
   type PushOk,
-  type PushResponse,
+  type PushResponseBody,
 } from '../../../zero-protocol/src/push.ts';
-import type {ZeroLogContext} from './zero-log-context.ts';
-import type {ReplicacheImpl} from '../../../replicache/src/impl.ts';
+import {type ZeroError} from './error.ts';
 import {MUTATIONS_KEY_PREFIX} from './keys.ts';
-import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
-import {must} from '../../../shared/src/must.ts';
-import * as v from '../../../shared/src/valita.ts';
-import {ServerError, type ZeroError} from './error.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import type {ZeroLogContext} from './zero-log-context.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ProtocolError} from '../../../zero-protocol/src/error.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
+import {
+  ApplicationError,
+  wrapWithApplicationError,
+} from '../../../zero-protocol/src/application-error.ts';
 
 type ErrorType =
   | MutationError
@@ -116,7 +123,7 @@ export class MutationTracker {
   rejectMutation(id: EphemeralID, e: unknown): void {
     const entry = this.#outstandingMutations.get(id);
     if (entry) {
-      this.#settleMutation(id, entry, 'reject', e);
+      this.#settleMutation(id, entry, 'reject', wrapWithApplicationError(e));
     }
   }
 
@@ -160,7 +167,7 @@ export class MutationTracker {
     }
   }
 
-  processPushResponse(response: PushResponse): void {
+  processPushResponse(response: PushResponseBody): void {
     if ('error' in response) {
       this.#lc.error?.(
         'Received an error response when pushing mutations',
@@ -178,24 +185,37 @@ export class MutationTracker {
   #fatalErrorFromPushError(error: PushError): ZeroError | undefined {
     switch (error.error) {
       case 'unsupportedPushVersion':
-        return new ServerError({
-          kind: ErrorKind.Internal,
+        return new ProtocolError({
+          kind: ErrorKind.PushFailed,
+          origin: ErrorOrigin.ZeroCache,
+          reason: ErrorReason.Internal,
           message: `Unsupported push version`,
+          mutationIDs: [],
         });
       case 'unsupportedSchemaVersion':
-        return new ServerError({
-          kind: ErrorKind.Internal,
+        return new ProtocolError({
+          kind: ErrorKind.PushFailed,
+          origin: ErrorOrigin.ZeroCache,
+          reason: ErrorReason.Internal,
           message: `Unsupported schema version`,
+          mutationIDs: [],
         });
       case 'http':
-        return new ServerError({
-          kind: ErrorKind.Internal,
+        return new ProtocolError({
+          kind: ErrorKind.PushFailed,
+          origin: ErrorOrigin.ZeroCache,
+          reason: ErrorReason.HTTP,
+          status: error.status,
           message: `Fetch from API server returned non-OK status ${error.status}: ${error.details ?? 'unknown'}`,
+          mutationIDs: [],
         });
       case 'zeroPusher':
-        return new ServerError({
-          kind: ErrorKind.Internal,
+        return new ProtocolError({
+          kind: ErrorKind.PushFailed,
+          origin: ErrorOrigin.ZeroCache,
+          reason: ErrorReason.Internal,
           message: `ZeroPusher error: ${error.details ?? 'unknown'}`,
+          mutationIDs: [],
         });
       default:
         unreachable(error);
@@ -318,9 +338,36 @@ export class MutationTracker {
 
     const entry = this.#outstandingMutations.get(ephemeralID);
     assert(entry && entry.mutationID === mid);
-    // Resolving the promise with an error was an intentional API decision
-    // so the user receives typed errors.
-    this.#settleMutation(ephemeralID, entry, 'reject', error);
+    this.#settleMutation(
+      ephemeralID,
+      entry,
+      'reject',
+      error.error === 'app'
+        ? new ApplicationError(
+            error.message ?? `Unknown application error: ${error.error}`,
+            error.details ? {details: error.details} : undefined,
+          )
+        : new Error(
+            error.error === 'alreadyProcessed'
+              ? 'Mutation already processed'
+              : error.error === 'oooMutation'
+                ? 'Server reported an out-of-order mutation'
+                : `Unknown fallback error with mutation ID ${mid}: ${error.error}`,
+          ),
+    );
+
+    // this is included for backwards compatibility with the per-mutation fatal error responses
+    if (error.error === 'oooMutation') {
+      this.#onFatalError(
+        new ProtocolError({
+          kind: ErrorKind.InvalidPush,
+          origin: ErrorOrigin.Server,
+          reason: ErrorReason.Internal,
+          message: 'Server reported an out-of-order mutation',
+          details: error.details,
+        }),
+      );
+    }
   }
 
   #processMutationOk(clientID: string, mid: number, result: MutationOk): void {
@@ -347,7 +394,7 @@ export class MutationTracker {
       resolver: Resolver<MutationOk, ErrorType>;
     },
     type: Type,
-    result: 'resolve' extends Type ? MutationOk : unknown,
+    result: 'resolve' extends Type ? MutationOk : Error,
   ): void {
     switch (type) {
       case 'resolve':

@@ -10,7 +10,7 @@ function localStorageRead() {
     name: 'localStorage read',
     group: 'storage',
     key: '',
-    value: <string | null>null,
+    value: null as string | null,
     setup() {
       this.key = randomString(36);
       localStorage.setItem(this.key, randomString(100));

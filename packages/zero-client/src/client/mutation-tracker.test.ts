@@ -4,16 +4,22 @@ import type {
   NoIndexDiff,
 } from '../../../replicache/src/btree/node.ts';
 import {zeroData} from '../../../replicache/src/transactions.ts';
-import {unreachable} from '../../../shared/src/asserts.ts';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
-import type {PushResponse} from '../../../zero-protocol/src/push.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import type {
+  PushResponse,
+  PushResponseBody,
+} from '../../../zero-protocol/src/push.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {makeReplicacheMutator} from './custom.ts';
 import {toMutationResponseKey} from './keys.ts';
+import {isServerError} from './error.ts';
 import {MutationTracker} from './mutation-tracker.ts';
 import type {WriteTransaction} from './replicache-types.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ProtocolError} from '../../../zero-protocol/src/error.ts';
+import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 
 const lc = createSilentLogContext();
 
@@ -58,16 +64,61 @@ describe('MutationTracker', () => {
           id: {clientID: CLIENT_ID, id: 1},
           result: {
             error: 'app',
-            details: '',
+            message: 'server error',
           },
         },
       ],
     };
 
     tracker.processPushResponse(response);
-    await expect(serverPromise).rejects.toEqual({
-      error: 'app',
-      details: '',
+
+    let caughtError: unknown;
+    try {
+      await serverPromise;
+    } catch (e) {
+      caughtError = e;
+    }
+
+    expect(caughtError).toBeInstanceOf(ApplicationError);
+    expect((caughtError as ApplicationError).message).toBe('server error');
+    expect((caughtError as ApplicationError).details).toBeUndefined();
+    expect(onFatalError).not.toHaveBeenCalled();
+  });
+
+  test('includes server-provided details when rejecting mutations', async () => {
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
+    const {serverPromise, ephemeralID} = tracker.trackMutation();
+    tracker.mutationIDAssigned(ephemeralID, 1);
+
+    const response: PushResponse = {
+      mutations: [
+        {
+          id: {clientID: CLIENT_ID, id: 1},
+          result: {
+            error: 'app',
+            message: 'server error',
+            details: {source: 'server', code: 42},
+          },
+        },
+      ],
+    };
+
+    tracker.processPushResponse(response);
+
+    let caughtError: unknown;
+    try {
+      await serverPromise;
+    } catch (e) {
+      caughtError = e;
+    }
+
+    expect(caughtError).toBeInstanceOf(ApplicationError);
+    expect((caughtError as ApplicationError).message).toBe('server error');
+    expect((caughtError as ApplicationError).details).toEqual({
+      source: 'server',
+      code: 42,
     });
     expect(onFatalError).not.toHaveBeenCalled();
   });
@@ -99,13 +150,62 @@ describe('MutationTracker', () => {
     expect(onFatalError).toHaveBeenCalledOnce();
     expect(onFatalError).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'ServerError',
-        errorBody: {
-          kind: ErrorKind.Internal,
+        name: 'ProtocolError',
+        errorBody: expect.objectContaining({
+          kind: ErrorKind.PushFailed,
           message: 'Unsupported push version',
-        },
+        }),
       }),
     );
+  });
+
+  test('emits fatal error for http push failure', () => {
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
+
+    const response: PushResponseBody = {
+      error: 'http',
+      status: 500,
+      details: 'Internal Server Error',
+      mutationIDs: [{clientID: CLIENT_ID, id: 1}],
+    };
+
+    tracker.processPushResponse(response);
+
+    expect(onFatalError).toHaveBeenCalledTimes(1);
+    const fatalError = onFatalError.mock.calls[0][0];
+    expect(fatalError).toBeInstanceOf(ProtocolError);
+    assert(isServerError(fatalError));
+    expect(fatalError.kind).toBe(ErrorKind.PushFailed);
+  });
+
+  test('emits fatal error for ooo mutation result', async () => {
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
+
+    const {ephemeralID, serverPromise} = tracker.trackMutation();
+    tracker.mutationIDAssigned(ephemeralID, 1);
+
+    const response: PushResponse = {
+      mutations: [
+        {
+          id: {clientID: CLIENT_ID, id: 1},
+          result: {error: 'oooMutation', details: 'out-of-order'},
+        },
+      ],
+    };
+
+    tracker.processPushResponse(response);
+
+    await expect(serverPromise).rejects.toMatchInlineSnapshot(
+      `[Error: Server reported an out-of-order mutation]`,
+    );
+    expect(onFatalError).toHaveBeenCalledTimes(1);
+    const fatalError = onFatalError.mock.calls[0][0] as ProtocolError;
+    expect(fatalError).toBeInstanceOf(ProtocolError);
+    expect(fatalError.kind).toBe(ErrorKind.InvalidPush);
   });
 
   test('rejects mutations from other clients', () => {
@@ -121,7 +221,7 @@ describe('MutationTracker', () => {
           id: {clientID: 'other-client', id: 1},
           result: {
             error: 'app',
-            details: '',
+            message: 'server error',
           },
         },
         {
@@ -196,6 +296,7 @@ describe('MutationTracker', () => {
           id: {clientID: CLIENT_ID, id: 2},
           result: {
             error: 'app',
+            message: 'server error',
           },
         },
       ],
@@ -278,7 +379,7 @@ describe('MutationTracker', () => {
         op: 'put',
         mutation: {
           id: {clientID: CLIENT_ID, id: 2},
-          result: {error: 'app'},
+          result: {error: 'app', message: 'server error'},
         },
       },
     ];
@@ -286,10 +387,18 @@ describe('MutationTracker', () => {
     // process mutations
     cb!(patches.map(p => mutationPatchToDiffOp(p)));
 
-    await expect(mutation1.serverPromise).resolves.toEqual({});
-    await expect(mutation2.serverPromise).rejects.toEqual({
-      error: 'app',
-    });
+    let r: unknown;
+    let caughtError: unknown;
+    try {
+      r = await mutation2.serverPromise;
+    } catch (e) {
+      caughtError = e;
+    }
+
+    expect(r).toBeUndefined();
+    expect(caughtError).toBeInstanceOf(ApplicationError);
+    expect((caughtError as ApplicationError).message).toBe('server error');
+    expect((caughtError as ApplicationError).details).toBeUndefined();
 
     tracker.lmidAdvanced(2);
 
@@ -406,7 +515,7 @@ describe('MutationTracker', () => {
       mutations: [
         {
           id: {clientID: CLIENT_ID, id: 4},
-          result: {error: 'app'},
+          result: {error: 'app', message: 'server error'},
         },
       ],
     });
@@ -445,7 +554,35 @@ describe('MutationTracker', () => {
       caught = e;
     }
 
-    expect(caught).toMatchInlineSnapshot(`[Error: test error]`);
+    // the error is wrapped in an ApplicationError
+    expect(caught).toBeInstanceOf(ApplicationError);
+    expect((caught as ApplicationError).message).toBe('test error');
+    expect((caught as ApplicationError).details).toBeUndefined();
+    expect(tracker.size).toBe(0);
+    expect(onFatalError).not.toHaveBeenCalled();
+  });
+
+  test('mutations can be rejected locally with an unwrapped application error', async () => {
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
+
+    const {ephemeralID, serverPromise} = tracker.trackMutation();
+    tracker.rejectMutation(
+      ephemeralID,
+      new ApplicationError('test app error', {details: {location: 'client'}}),
+    );
+    let caught: unknown | undefined;
+
+    try {
+      await serverPromise;
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(ApplicationError);
+    expect((caught as ApplicationError).message).toBe('test app error');
+    expect((caught as ApplicationError).details).toEqual({location: 'client'});
     expect(tracker.size).toBe(0);
     expect(onFatalError).not.toHaveBeenCalled();
   });
@@ -513,6 +650,7 @@ describe('MutationTracker', () => {
             id: {clientID: CLIENT_ID, id: 1},
             result: {
               error: 'app',
+              message: 'server error',
             },
           },
         ],
@@ -572,12 +710,12 @@ describe('MutationTracker', () => {
     expect(onFatalError).toHaveBeenCalledOnce();
     expect(onFatalError).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'ServerError',
-        errorBody: {
-          kind: ErrorKind.Internal,
+        name: 'ProtocolError',
+        errorBody: expect.objectContaining({
+          kind: ErrorKind.PushFailed,
           message:
             'Fetch from API server returned non-OK status 500: Internal Server Error',
-        },
+        }),
       }),
     );
 
@@ -626,12 +764,12 @@ describe('MutationTracker', () => {
     expect(onFatalError).toHaveBeenCalledOnce();
     expect(onFatalError).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: 'ServerError',
-        errorBody: {
-          kind: ErrorKind.Internal,
+        name: 'ProtocolError',
+        errorBody: expect.objectContaining({
+          kind: ErrorKind.PushFailed,
           message:
             'Fetch from API server returned non-OK status 500: Internal Server Error',
-        },
+        }),
       }),
     );
 
@@ -700,11 +838,11 @@ describe('MutationTracker', () => {
       expect(onFatalError).toHaveBeenCalledOnce();
       expect(onFatalError).toHaveBeenCalledWith(
         expect.objectContaining({
-          name: 'ServerError',
-          errorBody: {
-            kind: ErrorKind.Internal,
+          name: 'ProtocolError',
+          errorBody: expect.objectContaining({
+            kind: ErrorKind.PushFailed,
             message: 'Unsupported schema version',
-          },
+          }),
         }),
       );
     });
@@ -724,12 +862,12 @@ describe('MutationTracker', () => {
       expect(onFatalError).toHaveBeenCalledOnce();
       expect(onFatalError).toHaveBeenCalledWith(
         expect.objectContaining({
-          name: 'ServerError',
-          errorBody: {
-            kind: ErrorKind.Internal,
+          name: 'ProtocolError',
+          errorBody: expect.objectContaining({
+            kind: ErrorKind.PushFailed,
             message:
               'Fetch from API server returned non-OK status 404: Not Found',
-          },
+          }),
         }),
       );
     });
@@ -748,13 +886,75 @@ describe('MutationTracker', () => {
       expect(onFatalError).toHaveBeenCalledOnce();
       expect(onFatalError).toHaveBeenCalledWith(
         expect.objectContaining({
-          name: 'ServerError',
-          errorBody: {
-            kind: ErrorKind.Internal,
+          name: 'ProtocolError',
+          errorBody: expect.objectContaining({
+            kind: ErrorKind.PushFailed,
             message: 'ZeroPusher error: Custom error message',
-          },
+          }),
         }),
       );
     });
+  });
+
+  test('emits fatal error for unsupportedPushVersion', () => {
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
+
+    const response: PushResponseBody = {
+      error: 'unsupportedPushVersion',
+      mutationIDs: [{clientID: CLIENT_ID, id: 1}],
+    };
+
+    tracker.processPushResponse(response);
+
+    expect(onFatalError).toHaveBeenCalledTimes(1);
+    const fatalError = onFatalError.mock.calls[0][0];
+    expect(fatalError).toBeInstanceOf(ProtocolError);
+    assert(isServerError(fatalError));
+    expect(fatalError.kind).toBe(ErrorKind.PushFailed);
+    expect(fatalError.message).toContain('Unsupported push version');
+  });
+
+  test('emits fatal error for unsupportedSchemaVersion', () => {
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
+
+    const response: PushResponseBody = {
+      error: 'unsupportedSchemaVersion',
+      mutationIDs: [{clientID: CLIENT_ID, id: 1}],
+    };
+
+    tracker.processPushResponse(response);
+
+    expect(onFatalError).toHaveBeenCalledTimes(1);
+    const fatalError = onFatalError.mock.calls[0][0];
+    expect(fatalError).toBeInstanceOf(ProtocolError);
+    assert(isServerError(fatalError));
+    expect(fatalError.kind).toBe(ErrorKind.PushFailed);
+    expect(fatalError.message).toContain('Unsupported schema version');
+  });
+
+  test('emits fatal error for zeroPusher error', () => {
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
+
+    const response: PushResponseBody = {
+      error: 'zeroPusher',
+      details: 'pusher failed',
+      mutationIDs: [{clientID: CLIENT_ID, id: 1}],
+    };
+
+    tracker.processPushResponse(response);
+
+    expect(onFatalError).toHaveBeenCalledTimes(1);
+    const fatalError = onFatalError.mock.calls[0][0];
+    expect(fatalError).toBeInstanceOf(ProtocolError);
+    assert(isServerError(fatalError));
+    expect(fatalError.kind).toBe(ErrorKind.PushFailed);
+    expect(fatalError.message).toContain('ZeroPusher error');
+    expect(fatalError.message).toContain('pusher failed');
   });
 });

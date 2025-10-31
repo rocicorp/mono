@@ -1,6 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import {unreachable} from '../../shared/src/asserts.ts';
-import {pgToZqlTypeMap} from '../../zero-cache/src/types/pg.ts';
+import {pgToZqlTypeMap} from '../../zero-cache/src/types/pg-data-type.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,

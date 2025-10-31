@@ -5,24 +5,13 @@ import {
   createConnection,
   expectedCost,
 } from './test/helpers.ts';
-import type {PlannerNode} from './planner-node.ts';
-
-const unpinned = {
-  pinned: false,
-} as PlannerNode;
 
 suite('PlannerConnection', () => {
-  test('initial state is unpinned', () => {
-    const connection = createConnection();
-
-    expect(connection.pinned).toBe(false);
-  });
-
   test('estimateCost() with no constraints returns base cost', () => {
     const connection = createConnection();
 
     expect(connection.estimateCost()).toStrictEqual({
-      baseCardinality: BASE_COST,
+      rows: BASE_COST,
       runningCost: BASE_COST,
       startupCost: 0,
       selectivity: 1.0,
@@ -33,7 +22,7 @@ suite('PlannerConnection', () => {
   test('estimateCost() with constraints reduces cost', () => {
     const connection = createConnection();
 
-    connection.propagateConstraints([0], CONSTRAINTS.userId, unpinned);
+    connection.propagateConstraints([0], CONSTRAINTS.userId);
 
     expect(connection.estimateCost()).toStrictEqual(expectedCost(1));
   });
@@ -41,11 +30,10 @@ suite('PlannerConnection', () => {
   test('multiple constraints reduce cost further', () => {
     const connection = createConnection();
 
-    connection.propagateConstraints(
-      [0],
-      {userId: undefined, postId: undefined},
-      unpinned,
-    );
+    connection.propagateConstraints([0], {
+      userId: undefined,
+      postId: undefined,
+    });
 
     expect(connection.estimateCost()).toStrictEqual(expectedCost(2));
   });
@@ -53,12 +41,12 @@ suite('PlannerConnection', () => {
   test('multiple branch patterns sum costs', () => {
     const connection = createConnection();
 
-    connection.propagateConstraints([0], CONSTRAINTS.userId, unpinned);
-    connection.propagateConstraints([1], CONSTRAINTS.postId, unpinned);
+    connection.propagateConstraints([0], CONSTRAINTS.userId);
+    connection.propagateConstraints([1], CONSTRAINTS.postId);
 
     const ec = expectedCost(1);
     expect(connection.estimateCost()).toStrictEqual({
-      baseCardinality: ec.baseCardinality * 2,
+      rows: ec.rows * 2,
       runningCost: ec.runningCost * 2,
       startupCost: 0,
       selectivity: 1.0,
@@ -66,26 +54,16 @@ suite('PlannerConnection', () => {
     });
   });
 
-  test('reset() clears pinned state', () => {
-    const connection = createConnection();
-
-    connection.pinned = true;
-    expect(connection.pinned).toBe(true);
-
-    connection.reset();
-    expect(connection.pinned).toBe(false);
-  });
-
   test('reset() clears propagated constraints', () => {
     const connection = createConnection();
 
-    connection.propagateConstraints([0], CONSTRAINTS.userId, unpinned);
+    connection.propagateConstraints([0], CONSTRAINTS.userId);
     expect(connection.estimateCost()).toStrictEqual(expectedCost(1));
 
     connection.reset();
 
     expect(connection.estimateCost()).toStrictEqual({
-      baseCardinality: BASE_COST,
+      rows: BASE_COST,
       runningCost: BASE_COST,
       startupCost: 0,
       selectivity: 1.0,

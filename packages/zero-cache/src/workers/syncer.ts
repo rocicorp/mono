@@ -31,6 +31,7 @@ import {
   recordConnectionAttempted,
   setActiveClientGroupsGetter,
 } from '../server/anonymous-otel-start.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 
 export type SyncerWorkerData = {
   replicatorPort: MessagePort;
@@ -173,6 +174,7 @@ export class Syncer implements SingletonService {
             {
               kind: ErrorKind.AuthInvalidated,
               message: `Failed to decode auth token: ${String(e)}`,
+              origin: ErrorOrigin.ZeroCache,
             },
             e,
           );

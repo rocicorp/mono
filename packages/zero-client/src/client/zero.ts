@@ -42,7 +42,10 @@ import type {DeleteClientsBody} from '../../../zero-protocol/src/delete-clients.
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {downstreamSchema} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import type {ErrorMessage} from '../../../zero-protocol/src/error.ts';
+import {
+  ProtocolError,
+  type ErrorMessage,
+} from '../../../zero-protocol/src/error.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
 import type {PingMessage} from '../../../zero-protocol/src/ping.ts';
 import type {
@@ -154,11 +157,12 @@ import {
 } from './reload-error-handler.ts';
 import {
   ClientError,
-  ServerError,
   getBackoffParams,
   getErrorConnectionTransition,
   isAuthError,
+  isClientError,
   isServerError,
+  NO_STATUS_TRANSITION,
   type ZeroError,
 } from './error.ts';
 import {getServer} from './server-option.ts';
@@ -523,7 +527,7 @@ export class Zero<
     this.#mutationTracker = new MutationTracker(
       lc,
       (upTo: MutationID) => this.#send(['ackMutationResponses', upTo]),
-      (error: ZeroError) => {
+      error => {
         this.#disconnect(lc, error);
       },
     );
@@ -643,11 +647,7 @@ export class Zero<
     this.#server = server;
     this.userID = userID;
     this.#lc = lc.withContext('clientID', rep.clientID);
-    this.#connection = new ConnectionImpl(
-      this.#connectionManager,
-      this.#lc,
-      // () => this.#handleUserDisconnect(),
-    );
+    this.#connection = new ConnectionImpl(this.#connectionManager, this.#lc);
     this.#mutationTracker.setClientIDAndWatch(
       rep.clientID,
       rep.experimentalWatch.bind(rep),
@@ -1206,7 +1206,7 @@ export class Zero<
     }
 
     lc.info?.(`${kind}: ${message}}`);
-    const error = new ServerError(downMessage[1]);
+    const error = new ProtocolError(downMessage[1]);
     lc.error?.(`${error.kind}:\n\n${error.errorBody.message}`, error);
 
     lc.debug?.('Rejecting connect resolver due to error', error);
@@ -1505,7 +1505,7 @@ export class Zero<
         break;
       }
       case ConnectionStatus.Closed:
-        lc.error?.('disconnect() called while closed');
+        lc.debug?.('disconnect() called while closed');
         return;
 
       case ConnectionStatus.Disconnected:
@@ -1543,37 +1543,13 @@ export class Zero<
       case ConnectionStatus.Closed:
         this.#connectionManager.closed();
         break;
-      case null:
+      case NO_STATUS_TRANSITION:
         this.#connectionManager.connecting(transition.reason);
         break;
       default:
         unreachable(transition);
     }
   }
-
-  /**
-   * Handles user-initiated disconnection via the connection.disconnect() API.
-   */
-  // TODO(0xcadams): reenable when disconnect is implemented
-  // #handleUserDisconnect(): Promise<void> {
-  //   const lc = this.#lc.withContext('handleUserDisconnect');
-
-  //   // don't disconnect if already closed
-  //   if (this.#connectionManager.is(ConnectionStatus.Closed)) {
-  //     lc.debug?.('Cannot disconnect: Zero instance is already closed');
-  //     return promiseVoid;
-  //   }
-
-  //   const userDisconnectError = new ClientError({
-  //     kind: ClientErrorKind.UserDisconnect,
-  //     message: 'User requested disconnect via connection.disconnect()',
-  //   });
-
-  //   this.#disconnect(lc, userDisconnectError, CLOSE_CODE_NORMAL);
-  //   this.#setOnline(false);
-
-  //   return promiseVoid;
-  // }
 
   #handlePokeStart(_lc: ZeroLogContext, pokeMessage: PokeStartMessage): void {
     this.#abortPingTimeout();
@@ -1860,7 +1836,7 @@ export class Zero<
           case ConnectionStatus.Error: {
             // we pause the run loop and wait for a state change
             lc.info?.(
-              `Run loop paused in error state. Call connect() to resume.`,
+              `Run loop paused in error state. Call zero.connection.connect() to resume.`,
               currentState.reason,
             );
 
@@ -1876,7 +1852,13 @@ export class Zero<
             unreachable(currentState);
         }
       } catch (ex) {
-        if (!this.#connectionManager.is(ConnectionStatus.Connected)) {
+        const isClientClosedError =
+          isClientError(ex) && ex.kind === ClientErrorKind.ClientClosed;
+
+        if (
+          !this.#connectionManager.is(ConnectionStatus.Connected) &&
+          !isClientClosedError
+        ) {
           const level = isAuthError(ex) ? 'warn' : 'error';
           const kind = isServerError(ex) ? ex.kind : 'Unknown Error';
           lc[level]?.('Failed to connect', ex, kind, {
@@ -1896,7 +1878,7 @@ export class Zero<
         const transition = getErrorConnectionTransition(ex);
 
         switch (transition.status) {
-          case null: {
+          case NO_STATUS_TRANSITION: {
             // We continue the loop because the error does not indicate
             // a need to transition to a new state and we should continue retrying
 

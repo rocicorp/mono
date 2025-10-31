@@ -4,16 +4,27 @@ import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import * as v from '../../shared/src/valita.ts';
 import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
 import {
+  ApplicationError,
+  isApplicationError,
+  wrapWithApplicationError,
+} from '../../zero-protocol/src/application-error.ts';
+import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
+import type {PushFailedBody} from '../../zero-protocol/src/error.ts';
+import {
   pushBodySchema,
   pushParamsSchema,
   type CustomMutation,
   type Mutation,
+  type MutationID,
   type MutationResponse,
   type PushBody,
   type PushResponse,
 } from '../../zero-protocol/src/push.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
 import {createLogContext} from './logging.ts';
+import {getErrorDetails, getErrorMessage} from '../../shared/src/error.ts';
 
 export interface TransactionProviderHooks {
   updateClientMutationID: () => Promise<{lastMutationID: number | bigint}>;
@@ -58,6 +69,23 @@ export type Parsed = {
   mutations: CustomMutation[];
 };
 
+const applicationErrorWrapper = async <T>(fn: () => Promise<T>): Promise<T> => {
+  try {
+    return await fn();
+  } catch (error) {
+    if (
+      error instanceof DatabaseTransactionError ||
+      error instanceof OutOfOrderMutation ||
+      error instanceof MutationAlreadyProcessedError ||
+      isApplicationError(error)
+    ) {
+      throw error;
+    }
+
+    throw wrapWithApplicationError(error);
+  }
+};
+
 /**
  * Call `cb` for each mutation in the request.
  * The callback is called sequentially for each mutation.
@@ -99,50 +127,141 @@ export async function handleMutationRequest(
     }
   }
 
-  let queryString: URLSearchParams | Record<string, string>;
-  if (queryOrQueryString instanceof Request) {
-    const url = new URL(queryOrQueryString.url);
-    queryString = url.searchParams;
+  const lc = createLogContext(logLevel).withContext('PushProcessor');
 
-    body = await queryOrQueryString.json();
-  } else {
-    queryString = queryOrQueryString;
+  let mutationIDs: MutationID[] = [];
+
+  let req: PushBody;
+  try {
+    let rawBody: unknown;
+    if (queryOrQueryString instanceof Request) {
+      rawBody = await queryOrQueryString.json();
+    } else {
+      rawBody = body;
+    }
+    req = v.parse(rawBody, pushBodySchema);
+
+    mutationIDs = req.mutations.map(m => ({
+      id: m.id,
+      clientID: m.clientID,
+    }));
+  } catch (error) {
+    lc.error?.('Failed to parse push body', error);
+
+    const message = `Failed to parse push body: ${getErrorMessage(error)}`;
+    const details = getErrorDetails(error);
+
+    return {
+      kind: ErrorKind.PushFailed,
+      origin: ErrorOrigin.Server,
+      reason: ErrorReason.Parse,
+      message,
+      mutationIDs,
+      ...(details ? {details} : {}),
+    } as const satisfies PushFailedBody;
   }
-  const req = v.parse(body, pushBodySchema);
-  if (queryString instanceof URLSearchParams) {
-    queryString = Object.fromEntries(queryString);
+
+  let queryParams: Params;
+  try {
+    let queryString: URLSearchParams | Record<string, string>;
+
+    if (queryOrQueryString instanceof Request) {
+      const url = new URL(queryOrQueryString.url);
+      queryString = url.searchParams;
+    } else {
+      queryString = queryOrQueryString;
+    }
+
+    if (queryString instanceof URLSearchParams) {
+      queryString = Object.fromEntries(queryString);
+    }
+
+    queryParams = v.parse(queryString, pushParamsSchema, 'passthrough');
+  } catch (error) {
+    lc.error?.('Failed to parse push query parameters', error);
+
+    const message = `Failed to parse push query parameters: ${getErrorMessage(error)}`;
+    const details = getErrorDetails(error);
+
+    return {
+      kind: ErrorKind.PushFailed,
+      origin: ErrorOrigin.Server,
+      reason: ErrorReason.Parse,
+      message,
+      mutationIDs,
+      ...(details ? {details} : {}),
+    } as const satisfies PushFailedBody;
   }
-  const queryParams = v.parse(queryString, pushParamsSchema, 'passthrough');
 
   if (req.pushVersion !== 1) {
-    return {
-      error: 'unsupportedPushVersion',
-    };
+    const response = {
+      kind: ErrorKind.PushFailed,
+      origin: ErrorOrigin.Server,
+      reason: ErrorReason.UnsupportedPushVersion,
+      mutationIDs,
+      message: `Unsupported push version: ${req.pushVersion}`,
+    } as const satisfies PushFailedBody;
+    return response;
   }
-
-  const transactor = new Transactor(req, queryParams, logLevel);
 
   const responses: MutationResponse[] = [];
-  for (const m of req.mutations) {
-    assert(m.type === 'custom', 'Expected custom mutation');
+  let processedCount = 0;
 
-    const res = await cb(
-      (dbProvider, innerCb) => transactor.transact(dbProvider, m, innerCb),
-      m,
-    );
-    responses.push(res);
+  try {
+    const transactor = new Transactor(req, queryParams, lc);
 
-    // We only stop processing if the mutation is out of order.
-    // If the mutation has already been processed or if it returns an application error,
-    // we continue processing the next mutation.
-    if ('error' in res.result && res.result.error === 'oooMutation') {
-      break;
+    for (const m of req.mutations) {
+      assert(m.type === 'custom', 'Expected custom mutation');
+
+      const transactProxy: TransactFn = (dbProvider, innerCb) =>
+        transactor.transact(dbProvider, m, (tx, name, args) =>
+          applicationErrorWrapper(() => innerCb(tx, name, args)),
+        );
+
+      try {
+        const res = await applicationErrorWrapper(() => cb(transactProxy, m));
+        responses.push(res);
+
+        processedCount++;
+      } catch (error) {
+        if (!isApplicationError(error)) {
+          throw error;
+        }
+
+        lc.warn?.(
+          `Application error processing mutation ${m.id} for client ${m.clientID}`,
+          error,
+        );
+        responses.push(makeAppErrorResponse(m, error));
+        processedCount++;
+      }
     }
-  }
 
-  return {
-    mutations: responses,
-  };
+    return {
+      mutations: responses,
+    };
+  } catch (error) {
+    lc.error?.('Failed to process push request', error);
+    // only include mutationIDs for mutations that were not processed
+    const unprocessedMutationIDs = mutationIDs.slice(processedCount);
+
+    const message = getErrorMessage(error);
+    const details = getErrorDetails(error);
+
+    return {
+      kind: ErrorKind.PushFailed,
+      origin: ErrorOrigin.Server,
+      reason:
+        error instanceof OutOfOrderMutation
+          ? ErrorReason.OutOfOrderMutation
+          : error instanceof DatabaseTransactionError
+            ? ErrorReason.Database
+            : ErrorReason.Internal,
+      message,
+      mutationIDs: unprocessedMutationIDs,
+      ...(details ? {details} : {}),
+    };
+  }
 }
 
 class Transactor {
@@ -150,10 +269,10 @@ class Transactor {
   readonly #params: Params;
   readonly #lc: LogContext;
 
-  constructor(req: PushBody, params: Params, logLevel: LogLevel) {
+  constructor(req: PushBody, params: Params, lc: LogContext) {
     this.#req = req;
     this.#params = params;
-    this.#lc = createLogContext(logLevel).withContext('PushProcessor');
+    this.#lc = lc;
   }
 
   transact = async <D extends Database<ExtractTransactionType<D>>>(
@@ -161,43 +280,32 @@ class Transactor {
     mutation: CustomMutation,
     cb: TransactFnCallback<D>,
   ): Promise<MutationResponse> => {
-    let caughtError: unknown = undefined;
+    let appError: ApplicationError | undefined = undefined;
     for (;;) {
       try {
         const ret = await this.#transactImpl(
           dbProvider,
           mutation,
           cb,
-          caughtError,
+          appError,
         );
-        // The first time through we caught an error.
-        // We want to report that error as it was an application
-        // level error.
-        if (caughtError !== undefined) {
+        if (appError !== undefined) {
           this.#lc.warn?.(
-            `Mutation ${mutation.id} for client ${mutation.clientID} was retried after an error: ${caughtError}`,
+            `Mutation ${mutation.id} for client ${mutation.clientID} was retried after an error`,
+            appError,
           );
-          return makeAppErrorResponse(mutation, caughtError);
+          return makeAppErrorResponse(mutation, appError);
         }
 
         return ret;
-      } catch (e) {
-        if (e instanceof OutOfOrderMutation) {
-          this.#lc.error?.(e);
-          return {
-            id: {
-              clientID: mutation.clientID,
-              id: mutation.id,
-            },
-            result: {
-              error: 'oooMutation',
-              details: e.message,
-            },
-          };
+      } catch (error) {
+        if (error instanceof OutOfOrderMutation) {
+          this.#lc.error?.(error);
+          throw error;
         }
 
-        if (e instanceof MutationAlreadyProcessedError) {
-          this.#lc.warn?.(e);
+        if (error instanceof MutationAlreadyProcessedError) {
+          this.#lc.warn?.(error);
           return {
             id: {
               clientID: mutation.clientID,
@@ -205,24 +313,33 @@ class Transactor {
             },
             result: {
               error: 'alreadyProcessed',
-              details: e.message,
+              details: error.message,
             },
           };
         }
 
-        // We threw an error while running in error mode.
-        // Re-throw the error and stop processing any further
-        // mutations as all subsequent mutations will fail by being
-        // out of order.
-        if (caughtError !== undefined) {
-          throw e;
+        if (isApplicationError(error)) {
+          appError = error;
+          this.#lc.warn?.(
+            `Application error processing mutation ${mutation.id} for client ${mutation.clientID}`,
+            appError,
+          );
+          continue;
         }
 
-        caughtError = e;
-        this.#lc.error?.(
-          `Unexpected error processing mutation ${mutation.id} for client ${mutation.clientID}`,
-          e,
-        );
+        if (error instanceof DatabaseTransactionError) {
+          this.#lc.error?.(
+            `Database error processing mutation ${mutation.id} for client ${mutation.clientID}`,
+            error,
+          );
+        } else {
+          this.#lc.error?.(
+            `Unexpected error processing mutation ${mutation.id} for client ${mutation.clientID}`,
+            error,
+          );
+        }
+
+        throw error;
       }
     }
   };
@@ -231,38 +348,59 @@ class Transactor {
     dbProvider: D,
     mutation: CustomMutation,
     cb: TransactFnCallback<D>,
-    caughtError: unknown,
+    appError: ApplicationError | undefined,
   ): Promise<MutationResponse> {
-    return dbProvider.transaction(
-      async (dbTx, transactionHooks) => {
-        await this.#checkAndIncrementLastMutationID(
-          transactionHooks,
-          mutation.clientID,
-          mutation.id,
-        );
+    let transactionPhase: DatabaseTransactionPhase = 'open';
 
-        if (caughtError === undefined) {
-          await cb(dbTx, mutation.name, mutation.args[0]);
-        } else {
-          const appError = makeAppErrorResponse(mutation, caughtError);
-          await transactionHooks.writeMutationResult(appError);
+    return dbProvider
+      .transaction(
+        async (dbTx, transactionHooks) => {
+          // update the transaction phase to 'execute' after the transaction is opened
+          transactionPhase = 'execute';
+
+          await this.#checkAndIncrementLastMutationID(
+            transactionHooks,
+            mutation.clientID,
+            mutation.id,
+          );
+
+          if (appError === undefined) {
+            try {
+              await cb(dbTx, mutation.name, mutation.args[0]);
+            } catch (appError) {
+              throw wrapWithApplicationError(appError);
+            }
+          } else {
+            const mutationResult = makeAppErrorResponse(mutation, appError);
+            await transactionHooks.writeMutationResult(mutationResult);
+          }
+
+          return {
+            id: {
+              clientID: mutation.clientID,
+              id: mutation.id,
+            },
+            result: {},
+          };
+        },
+        {
+          upstreamSchema: this.#params.schema,
+          clientGroupID: this.#req.clientGroupID,
+          clientID: mutation.clientID,
+          mutationID: mutation.id,
+        },
+      )
+      .catch(error => {
+        if (
+          isApplicationError(error) ||
+          error instanceof OutOfOrderMutation ||
+          error instanceof MutationAlreadyProcessedError
+        ) {
+          throw error;
         }
 
-        return {
-          id: {
-            clientID: mutation.clientID,
-            id: mutation.id,
-          },
-          result: {},
-        };
-      },
-      {
-        upstreamSchema: this.#params.schema,
-        clientGroupID: this.#req.clientGroupID,
-        clientID: mutation.clientID,
-        mutationID: mutation.id,
-      },
-    );
+        throw new DatabaseTransactionError(transactionPhase, {cause: error});
+      });
   }
 
   async #checkAndIncrementLastMutationID(
@@ -300,7 +438,10 @@ export class OutOfOrderMutation extends Error {
   }
 }
 
-function makeAppErrorResponse(m: Mutation, e: unknown): MutationResponse {
+function makeAppErrorResponse(
+  m: Mutation,
+  error: ApplicationError<ReadonlyJSONValue | undefined>,
+): MutationResponse {
   return {
     id: {
       clientID: m.clientID,
@@ -308,8 +449,8 @@ function makeAppErrorResponse(m: Mutation, e: unknown): MutationResponse {
     },
     result: {
       error: 'app',
-      details:
-        e instanceof Error ? e.message : 'exception was not of type `Error`',
+      message: error.message,
+      ...(error.details ? {details: error.details} : {}),
     },
   };
 }
@@ -342,4 +483,17 @@ export function getMutation(
 
   assert(typeof mutator === 'function', () => `could not find mutator ${name}`);
   return mutator;
+}
+
+type DatabaseTransactionPhase = 'open' | 'execute';
+class DatabaseTransactionError extends Error {
+  constructor(phase: DatabaseTransactionPhase, options?: ErrorOptions) {
+    super(
+      phase === 'open'
+        ? `Failed to open database transaction: ${getErrorMessage(options?.cause)}`
+        : `Database transaction failed after opening: ${getErrorMessage(options?.cause)}`,
+      options,
+    );
+    this.name = 'DatabaseTransactionError';
+  }
 }

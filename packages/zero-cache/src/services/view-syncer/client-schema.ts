@@ -5,8 +5,9 @@ import {
   intersection,
 } from '../../../../shared/src/set-utils.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
+import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
+import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
-import {ErrorForClient} from '../../types/error-for-client.ts';
 import {appSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/constants.ts';
 
@@ -17,11 +18,12 @@ export function checkClientSchema(
   fullTables: Map<string, LiteTableSpec>,
 ) {
   if (fullTables.size === 0) {
-    throw new ErrorForClient({
+    throw new ProtocolError({
       kind: 'Internal',
       message:
         `No tables have been synced from upstream. ` +
         `Please check that the ZERO_UPSTREAM_DB has been properly set.`,
+      origin: ErrorOrigin.ZeroCache,
     });
   }
   const errors: string[] = [];
@@ -109,9 +111,10 @@ export function checkClientSchema(
     }
   }
   if (errors.length) {
-    throw new ErrorForClient({
+    throw new ProtocolError({
       kind: 'SchemaVersionNotSupported',
       message: errors.join('\n'),
+      origin: ErrorOrigin.ZeroCache,
     });
   }
 }

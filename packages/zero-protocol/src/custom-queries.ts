@@ -1,6 +1,7 @@
 import {jsonSchema} from '../../shared/src/json-schema.ts';
 import * as v from '../../shared/src/valita.ts';
 import {astSchema} from './ast.ts';
+import {transformFailedBodySchema} from './error.ts';
 
 export const transformRequestBodySchema = v.array(
   v.object({
@@ -17,36 +18,26 @@ export const transformedQuerySchema = v.object({
   ast: astSchema,
 });
 
-export const appQueryErrorSchema = v.object({
+export const appErroredQuerySchema = v.object({
   error: v.literal('app'),
   id: v.string(),
   name: v.string(),
-  details: jsonSchema,
+  // optional for backwards compatibility
+  message: v.string().optional(),
+  details: jsonSchema.optional(),
 });
-
-export const zeroErrorSchema = v.object({
-  error: v.literal('zero'),
+export const parseErroredQuerySchema = v.object({
+  error: v.literal('parse'),
   id: v.string(),
   name: v.string(),
-  details: jsonSchema,
+  message: v.string(),
+  details: jsonSchema.optional(),
 });
-
-export const httpQueryErrorSchema = v.object({
-  error: v.literal('http'),
-  id: v.string(),
-  name: v.string(),
-  status: v.number(),
-  details: jsonSchema,
-});
-
 export const erroredQuerySchema = v.union(
-  appQueryErrorSchema,
-  httpQueryErrorSchema,
-  zeroErrorSchema,
+  appErroredQuerySchema,
+  parseErroredQuerySchema,
 );
 export type ErroredQuery = v.Infer<typeof erroredQuerySchema>;
-export type AppQueryError = v.Infer<typeof appQueryErrorSchema>;
-export type HttpQueryError = v.Infer<typeof httpQueryErrorSchema>;
 
 export const transformResponseBodySchema = v.array(
   v.union(transformedQuerySchema, erroredQuerySchema),
@@ -66,10 +57,19 @@ export const transformErrorMessageSchema = v.tuple([
 ]);
 export type TransformErrorMessage = v.Infer<typeof transformErrorMessageSchema>;
 
-export const transformResponseMessageSchema = v.tuple([
+const transformFailedMessageSchema = v.tuple([
+  v.literal('transformFailed'),
+  transformFailedBodySchema,
+]);
+const transformOkMessageSchema = v.tuple([
   v.literal('transformed'),
   transformResponseBodySchema,
 ]);
+
+export const transformResponseMessageSchema = v.union(
+  transformOkMessageSchema,
+  transformFailedMessageSchema,
+);
 export type TransformResponseMessage = v.Infer<
   typeof transformResponseMessageSchema
 >;
