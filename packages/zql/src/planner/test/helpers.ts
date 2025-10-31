@@ -66,9 +66,10 @@ export const simpleCostModel: ConnectionCostModel = (
 export function expectedCost(constraintCount: number): CostEstimate {
   const c = Math.max(1, BASE_COST - constraintCount * CONSTRAINT_REDUCTION);
   return {
-    rows: c,
-    runningCost: c,
     startupCost: 0,
+    scanEst: c,
+    cost: c,
+    returnedRows: c,
     selectivity: 1.0,
     limit: undefined,
   };
@@ -76,9 +77,10 @@ export function expectedCost(constraintCount: number): CostEstimate {
 
 export function multCost(base: CostEstimate, factor: number): CostEstimate {
   return {
-    rows: base.rows * factor,
-    runningCost: base.runningCost * factor,
     startupCost: base.startupCost,
+    scanEst: base.scanEst * factor,
+    cost: base.cost * factor,
+    returnedRows: base.returnedRows * factor,
     selectivity: base.selectivity,
     limit: base.limit,
   };
@@ -97,7 +99,7 @@ export function createConnection(
   filters: Condition | undefined = undefined,
 ): PlannerConnection {
   const source = new PlannerSource(tableName, simpleCostModel);
-  return source.connect(sort, filters);
+  return source.connect(sort, filters, false);
 }
 
 /**

@@ -1,10 +1,12 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
+import type {PlanDebugger} from './planner-debug.ts';
 import type {
   CostEstimate,
   JoinOrConnection,
   PlannerNode,
 } from './planner-node.ts';
+import type {PlannerTerminus} from './planner-terminus.ts';
 
 /**
  * A PlannerFanIn node can either be a normal FanIn or UnionFanIn.
@@ -26,9 +28,9 @@ export class PlannerFanIn {
   readonly kind = 'fan-in' as const;
   #type: 'FI' | 'UFI';
   #output?: PlannerNode | undefined;
-  readonly #inputs: PlannerNode[];
+  readonly #inputs: Exclude<PlannerNode, PlannerTerminus>[];
 
-  constructor(inputs: PlannerNode[]) {
+  constructor(inputs: Exclude<PlannerNode, PlannerTerminus>[]) {
     this.#type = 'FI';
     this.#inputs = inputs;
   }
@@ -75,18 +77,21 @@ export class PlannerFanIn {
     }
   }
 
-  estimateCost(branchPattern?: number[]): CostEstimate {
+  estimateCost(
+    downstreamChildSelectivity: number,
+    branchPattern: number[],
+    planDebugger?: PlanDebugger,
+  ): CostEstimate {
     // FanIn always sums costs of its inputs
     // But it needs to pass the correct branch pattern to each input
     let totalCost: CostEstimate = {
-      rows: 0,
-      runningCost: 0,
+      returnedRows: 0,
+      cost: 0,
+      scanEst: 0,
       startupCost: 0,
       selectivity: 0,
       limit: undefined,
     };
-
-    branchPattern = branchPattern ?? [];
 
     if (this.#type === 'FI') {
       // Normal FanIn: all inputs get the same branch pattern with 0 prepended
@@ -94,19 +99,26 @@ export class PlannerFanIn {
       let maxrows = 0;
       let maxRunningCost = 0;
       let maxStartupCost = 0;
-      // Track complement probability for OR selectivity: P(A OR B) = 1 - (1-A)(1-B)
+      let maxScanEst = 0;
+
       let noMatchProb = 1.0;
       for (const input of this.#inputs) {
-        const cost = input.estimateCost(updatedPattern);
-        if (cost.rows > maxrows) {
-          maxrows = cost.rows;
+        const cost = input.estimateCost(
+          downstreamChildSelectivity,
+          updatedPattern,
+          planDebugger,
+        );
+        if (cost.returnedRows > maxrows) {
+          maxrows = cost.returnedRows;
         }
-        if (cost.runningCost > maxRunningCost) {
-          maxRunningCost = cost.runningCost;
+        if (cost.cost > maxRunningCost) {
+          maxRunningCost = cost.cost;
         }
-        // FI fetches from the root only once, so take the max startup cost
         if (cost.startupCost > maxStartupCost) {
           maxStartupCost = cost.startupCost;
+        }
+        if (cost.scanEst > maxScanEst) {
+          maxScanEst = cost.scanEst;
         }
 
         // OR branches: combine selectivities assuming independent events
@@ -122,22 +134,27 @@ export class PlannerFanIn {
         totalCost.limit = cost.limit;
       }
 
-      totalCost.rows = maxrows;
-      totalCost.runningCost = maxRunningCost;
-      totalCost.startupCost = maxStartupCost;
+      totalCost.returnedRows = maxrows;
+      totalCost.cost = maxRunningCost;
       totalCost.selectivity = 1 - noMatchProb;
+      totalCost.startupCost = maxStartupCost;
+      totalCost.scanEst = maxScanEst;
     } else {
       // Union FanIn (UFI): each input gets unique branch pattern
       let i = 0;
-      // Track complement probability for OR selectivity: P(A OR B) = 1 - (1-A)(1-B)
+
       let noMatchProb = 1.0;
       for (const input of this.#inputs) {
         const updatedPattern = [i, ...branchPattern];
-        const cost = input.estimateCost(updatedPattern);
-        totalCost.rows += cost.rows;
-        totalCost.runningCost += cost.runningCost;
-        // UFI runs all branches, so startup costs add up
-        totalCost.startupCost += cost.startupCost;
+        const cost = input.estimateCost(
+          downstreamChildSelectivity,
+          updatedPattern,
+          planDebugger,
+        );
+        totalCost.returnedRows += cost.returnedRows;
+        totalCost.cost += cost.cost;
+        totalCost.scanEst += cost.scanEst;
+        totalCost.startupCost = totalCost.startupCost + cost.startupCost;
 
         // OR branches: combine selectivities assuming independent events
         // P(A OR B) = 1 - (1-A)(1-B)
@@ -155,14 +172,33 @@ export class PlannerFanIn {
       totalCost.selectivity = 1 - noMatchProb;
     }
 
+    planDebugger?.log({
+      type: 'node-cost',
+      nodeType: 'fan-in',
+      node: this.#type,
+      branchPattern,
+      downstreamChildSelectivity,
+      costEstimate: totalCost,
+    });
+
     return totalCost;
   }
 
   propagateConstraints(
     branchPattern: number[],
     constraint: PlannerConstraint | undefined,
-    from: PlannerNode,
+    from?: PlannerNode,
+    planDebugger?: PlanDebugger,
   ): void {
+    planDebugger?.log({
+      type: 'node-constraint',
+      nodeType: 'fan-in',
+      node: this.#type,
+      branchPattern,
+      constraint,
+      from: from?.kind ?? 'unknown',
+    });
+
     if (this.#type === 'FI') {
       const updatedPattern = [0, ...branchPattern];
       /**
@@ -173,14 +209,24 @@ export class PlannerFanIn {
        *    to send to their children.
        */
       for (const input of this.#inputs) {
-        input.propagateConstraints(updatedPattern, constraint, from);
+        input.propagateConstraints(
+          updatedPattern,
+          constraint,
+          this,
+          planDebugger,
+        );
       }
       return;
     }
 
     let i = 0;
     for (const input of this.#inputs) {
-      input.propagateConstraints([i, ...branchPattern], constraint, from);
+      input.propagateConstraints(
+        [i, ...branchPattern],
+        constraint,
+        this,
+        planDebugger,
+      );
       i++;
     }
   }

@@ -16,9 +16,39 @@ export type PlannerNode =
   | PlannerTerminus;
 
 export type CostEstimate = {
-  rows: number;
-  runningCost: number;
   startupCost: number;
+  scanEst: number;
+
+  /**
+   * The cumulative cost to run the pipeline so far.
+   *
+   * In a semi-join, each row output by the parent is multiplied by the cost to evaluate the child.
+   * In a flipped join, each row output by the child is multiplied by the cost to evaluate the parent.
+   *
+   * "each row output by the parent" is determined by the downstreamChildSelectivity parameter in combination
+   * with the limit or the rows output by the parent node.
+   *
+   * We pull on the parent and stop when hitting a limit or exhausting rows.
+   */
+  cost: number;
+
+  /**
+   * The number of rows output from a node.
+   * - For a connection, this is the estimated number of rows returned by the source query.
+   * - For a semi-join, this is the estimated number of rows that pass the semi-join filter.
+   * - For a flipped join, this is the estimated number of rows that match all child rows.
+   * - For fan-in, this is the sum of the rows from each input.
+   * - For fan-out, this is the rows from its input.
+   */
+  returnedRows: number;
+
+  /**
+   * The selectivity of the node.
+   * For a connection, this is the fraction of rows passing filters (1.0 = no filtering).
+   * For joins, this is the fraction of parent rows that match child rows.
+   * For fan-in, this is the probability of a match in any branch, assuming independent events.
+   * For fan-out, this is the selectivity of its input.
+   */
   selectivity: number;
   limit: number | undefined;
 };
