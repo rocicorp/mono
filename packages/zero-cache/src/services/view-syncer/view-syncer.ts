@@ -217,8 +217,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #lock = new Lock();
   readonly #cvrStore: CVRStore;
   readonly #stopped = resolver();
-  readonly #initialized = resolver<void>();
-  #initializedResolved = false;
+  readonly #initialized = resolver<'initialized'>();
 
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
@@ -371,11 +370,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     });
   }
 
+  readyState(): Promise<'initialized' | 'draining'> {
+    return Promise.race([
+      this.#initialized.promise,
+      this.#drainCoordinator.draining,
+    ]);
+  }
+
   async run(): Promise<void> {
     try {
       // Wait for initialization if we need to process queries.
       // This ensures authData is available before transforming custom queries.
-      await this.#initialized.promise;
+      if ((await this.readyState()) === 'draining') {
+        this.#lc.debug?.(`draining view-syncer ${this.id} before running`);
+        void this.stop();
+      }
       for await (const {state} of this.#stateChanges) {
         if (this.#drainCoordinator.shouldDrain()) {
           this.#lc.debug?.(`draining view-syncer ${this.id} (elective)`);
@@ -573,8 +582,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         protocolVersion,
       } = ctx;
       this.#authData = pickToken(this.#lc, this.#authData, tokenData);
-      this.#initialized.resolve(); // Signal that initialization is complete.
-      this.#initializedResolved = true;
+      this.#initialized.resolve('initialized'); // Signal that initialization is complete.
       this.#lc.debug?.(
         `Picked auth token: ${JSON.stringify(this.#authData?.decoded)}`,
       );
@@ -1894,9 +1902,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   stop(): Promise<void> {
     this.#lc.info?.('stopping view syncer');
-    if (!this.#initializedResolved) {
-      this.#initialized.reject('shut down before initialization completed');
-    }
+    this.#initialized.reject('shut down before initialization completed');
     this.#stateChanges.cancel();
     return this.#stopped.promise;
   }
@@ -1920,7 +1926,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    * This should only be used in tests that don't call initConnection().
    */
   markInitialized() {
-    this.#initialized.resolve();
+    this.#initialized.resolve('initialized');
   }
 }
 
