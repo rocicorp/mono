@@ -383,7 +383,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // This ensures authData is available before transforming custom queries.
       if ((await this.readyState()) === 'draining') {
         this.#lc.debug?.(`draining view-syncer ${this.id} before running`);
-        this.stop();
+        void this.stop();
       }
       for await (const {state} of this.#stateChanges) {
         if (this.#drainCoordinator.shouldDrain()) {
