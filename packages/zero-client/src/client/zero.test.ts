@@ -2557,6 +2557,39 @@ test('Custom pingTimeoutMs', async () => {
   expect(r.connectionStatus).toBe(ConnectionStatus.Connecting);
 });
 
+test('Runtime pingTimeoutMs configuration', async () => {
+  const r = zeroForTest(); // Start with default timeout
+  await r.triggerConnected();
+  expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
+  (await r.socket).messages.length = 0;
+
+  // Verify initial timeout is the default
+  expect(r.pingTimeoutMs).toBe(DEFAULT_PING_TIMEOUT_MS);
+
+  // First ping cycle uses default timeout
+  await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
+  expect((await r.socket).messages).toEqual([JSON.stringify(['ping', {}])]);
+  await r.triggerPong(); // Complete first cycle
+  (await r.socket).messages.length = 0;
+
+  // Change timeout at runtime
+  const newTimeout = 2000;
+  r.pingTimeoutMs = newTimeout;
+  expect(r.pingTimeoutMs).toBe(newTimeout);
+
+  // New timeout should take effect on next ping cycle
+  await vi.advanceTimersByTimeAsync(newTimeout - 1);
+  expect((await r.socket).messages).toHaveLength(0);
+  await vi.advanceTimersByTimeAsync(1);
+  expect((await r.socket).messages).toEqual([JSON.stringify(['ping', {}])]);
+
+  // Should timeout after newTimeout if no pong
+  await vi.advanceTimersByTimeAsync(newTimeout - 1);
+  expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(r.connectionStatus).toBe(ConnectionStatus.Connecting);
+});
+
 const connectTimeoutMessage = 'Rejecting connect resolver due to timeout';
 
 function expectLogMessages(r: TestZero<Schema>) {
