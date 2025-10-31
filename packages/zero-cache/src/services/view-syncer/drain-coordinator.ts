@@ -29,15 +29,21 @@ const TARGET_UTILIZATION = 0.6;
  * for the next elective or forced drain.
  */
 export class DrainCoordinator {
+  readonly #draining = resolver<'draining'>();
   #nextDrainTime = 0;
   #timeout = resolver();
   #timeoutID: NodeJS.Timeout | undefined;
+
+  get draining(): Promise<'draining'> {
+    return this.#draining.promise;
+  }
 
   shouldDrain() {
     return this.#nextDrainTime && this.#nextDrainTime <= Date.now();
   }
 
   drainNextIn(interval: number) {
+    this.#draining.resolve('draining');
     // Increase the timeout between drains to give the receiving
     // server space to perform normal processing.
     interval /= TARGET_UTILIZATION;
