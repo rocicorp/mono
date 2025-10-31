@@ -153,6 +153,17 @@ export interface ZeroOptions<
   hiddenTabDisconnectDelay?: number | undefined;
 
   /**
+   * The timeout in milliseconds for ping operations. This value is used for:
+   * - How long to wait in idle before sending a ping to the server
+   * - How long to wait for a pong response after sending a ping
+   *
+   * Total time to detect a dead connection is 2 × pingTimeoutMs.
+   *
+   * Default is 5_000.
+   */
+  pingTimeoutMs?: number | undefined;
+
+  /**
    * This gets called when the Zero instance encounters an error. The default
    * behavior is to log the error to the console. Provide your own function to
    * prevent the default behavior.

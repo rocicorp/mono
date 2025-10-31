@@ -217,14 +217,11 @@ function asTestZero<S extends Schema, MD extends CustomMutatorDefs | undefined>(
 export const RUN_LOOP_INTERVAL_MS = 5_000;
 
 /**
- * How frequently we should ping the server to keep the connection alive.
+ * Default timeout for ping operations. Controls both:
+ * - How long to wait in idle before sending a ping
+ * - How long to wait for a pong response
  */
-export const PING_INTERVAL_MS = 5_000;
-
-/**
- * The amount of time we wait for a pong before we consider the ping timed out.
- */
-export const PING_TIMEOUT_MS = 5_000;
+export const DEFAULT_PING_TIMEOUT_MS = 5_000;
 
 /**
  * The amount of time we wait for a pull response before we consider a pull
@@ -376,6 +373,8 @@ export class Zero<
     // intentionally empty
   };
 
+  readonly #pingTimeoutMs: number;
+
   readonly #zeroContext: ZeroContext;
   readonly queryDelegate: QueryDelegate;
 
@@ -433,6 +432,7 @@ export class Zero<
       onUpdateNeeded,
       onClientStateNotFound,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
+      pingTimeoutMs = DEFAULT_PING_TIMEOUT_MS,
       schema,
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
       maxRecentQueries = 0,
@@ -467,6 +467,15 @@ export class Zero<
         message: 'ZeroOptions.hiddenTabDisconnectDelay must not be negative.',
       });
     }
+
+    if (pingTimeoutMs <= 0) {
+      throw new ClientError({
+        kind: ClientErrorKind.Internal,
+        message: 'ZeroOptions.pingTimeoutMs must be positive.',
+      });
+    }
+
+    this.#pingTimeoutMs = pingTimeoutMs;
 
     this.#onlineManager = new OnlineManager();
 
@@ -1790,7 +1799,7 @@ export class Zero<
 
           case ConnectionStatus.Connected: {
             // When connected we wait for whatever happens first out of:
-            // - After PING_INTERVAL_MS we send a ping
+            // - After pingTimeoutMs we send a ping
             // - We get a message
             // - The tab becomes hidden (with a delay)
             // - We get a state change (e.g. an error or disconnect)
@@ -1798,7 +1807,7 @@ export class Zero<
             const controller = new AbortController();
             this.#abortPingTimeout = () => controller.abort();
             const [pingTimeoutPromise, pingTimeoutAborted] = sleepWithAbort(
-              PING_INTERVAL_MS,
+              this.#pingTimeoutMs,
               controller.signal,
             );
 
@@ -2073,7 +2082,7 @@ export class Zero<
 
     const raceResult = await promiseRace({
       waitForPong: promise,
-      pingTimeout: sleep(PING_TIMEOUT_MS),
+      pingTimeout: sleep(this.#pingTimeoutMs),
       stateChange: this.#connectionManager.waitForStateChange(),
     });
 

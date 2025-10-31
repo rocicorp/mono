@@ -76,8 +76,7 @@ import {
   createSocket,
   DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
   DEFAULT_DISCONNECT_TIMEOUT_MS,
-  PING_INTERVAL_MS,
-  PING_TIMEOUT_MS,
+  DEFAULT_PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
 } from './zero.ts';
@@ -350,7 +349,7 @@ describe('onOnlineChange callback', () => {
   test('triggers offline when ping times out', async () => {
     const {z, getOnlineCount, getOfflineCount} = getNewZero();
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS + PING_TIMEOUT_MS);
+    await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS * 2);
     expect(z.online).toBe(false);
     // we connected once
     expect(getOnlineCount()).toBe(1);
@@ -501,9 +500,9 @@ test('transition to connecting state if ping fails', async () => {
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
   (await r.socket).messages.length = 0;
 
-  // Wait PING_INTERVAL_MS which will trigger a ping
-  // Pings timeout after PING_TIMEOUT_MS so reply before that.
-  await tickAFewTimes(vi, PING_INTERVAL_MS);
+  // Wait DEFAULT_PING_TIMEOUT_MS which will trigger a ping
+  // Pings timeout after DEFAULT_PING_TIMEOUT_MS so reply before that.
+  await tickAFewTimes(vi, DEFAULT_PING_TIMEOUT_MS);
   expect((await r.socket).messages).toEqual(['["ping",{}]']);
 
   await r.triggerPong();
@@ -546,7 +545,7 @@ test('does not ping when ping timeout is aborted by inbound message', async () =
   ).length;
   expect(pingCountAfterAbort).toBe(0);
 
-  await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
+  await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
 
   const pingMessages = socket.messages.filter(message =>
     message.startsWith('["ping"'),
@@ -2135,8 +2134,8 @@ test('passing server null allows queries without WS connection', async () => {
 //   await r.triggerConnected();
 //   await r.waitForConnectionStatus(ConnectionStatus.Connected);
 
-//   for (let t = 0; t < REPORT_INTERVAL_MS; t += PING_INTERVAL_MS) {
-//     await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
+//   for (let t = 0; t < REPORT_INTERVAL_MS; t += DEFAULT_PING_TIMEOUT_MS) {
+//     await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
 //     await r.triggerPong();
 //   }
 
@@ -2153,8 +2152,8 @@ test('passing server null allows queries without WS connection', async () => {
 //   await r.triggerConnected();
 //   await r.waitForConnectionStatus(ConnectionStatus.Connected);
 
-//   for (let t = 0; t < REPORT_INTERVAL_MS; t += PING_INTERVAL_MS) {
-//     await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
+//   for (let t = 0; t < REPORT_INTERVAL_MS; t += DEFAULT_PING_TIMEOUT_MS) {
+//     await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
 //     await r.triggerPong();
 //   }
 
@@ -2171,8 +2170,8 @@ test('passing server null allows queries without WS connection', async () => {
 //   await r.triggerConnected();
 //   await r.waitForConnectionStatus(ConnectionStatus.Connected);
 
-//   for (let t = 0; t < REPORT_INTERVAL_MS; t += PING_INTERVAL_MS) {
-//     await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
+//   for (let t = 0; t < REPORT_INTERVAL_MS; t += DEFAULT_PING_TIMEOUT_MS) {
+//     await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
 //     await r.triggerPong();
 //   }
 
@@ -2209,7 +2208,7 @@ test('Authentication', async () => {
   await r.triggerConnected();
 
   // Ping/pong should work normally
-  await tickAFewTimes(vi, PING_INTERVAL_MS);
+  await tickAFewTimes(vi, DEFAULT_PING_TIMEOUT_MS);
   const socket = await r.socket;
   expect(socket.messages[0]).toEqual(JSON.stringify(['ping', {}]));
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
@@ -2509,12 +2508,12 @@ test('Ping pong', async () => {
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
   (await r.socket).messages.length = 0;
 
-  await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS - 1);
+  await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS - 1);
   expect((await r.socket).messages).toHaveLength(0);
   await vi.advanceTimersByTimeAsync(1);
 
   expect((await r.socket).messages).toEqual([JSON.stringify(['ping', {}])]);
-  await vi.advanceTimersByTimeAsync(PING_TIMEOUT_MS - 1);
+  await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS - 1);
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
   await vi.advanceTimersByTimeAsync(1);
 
@@ -2527,15 +2526,35 @@ test('Ping timeout', async () => {
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
   (await r.socket).messages.length = 0;
 
-  await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS - 1);
+  await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS - 1);
   expect((await r.socket).messages).toHaveLength(0);
   await vi.advanceTimersByTimeAsync(1);
   expect((await r.socket).messages).toEqual([JSON.stringify(['ping', {}])]);
-  await vi.advanceTimersByTimeAsync(PING_TIMEOUT_MS - 1);
+  await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS - 1);
   await r.triggerPong();
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
   await vi.advanceTimersByTimeAsync(1);
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
+});
+
+test('Custom pingTimeoutMs', async () => {
+  const customTimeout = 1000; // 1 second instead of default 5 seconds
+  const r = zeroForTest({pingTimeoutMs: customTimeout});
+  await r.triggerConnected();
+  expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
+  (await r.socket).messages.length = 0;
+
+  // Should wait customTimeout before sending ping
+  await vi.advanceTimersByTimeAsync(customTimeout - 1);
+  expect((await r.socket).messages).toHaveLength(0);
+  await vi.advanceTimersByTimeAsync(1);
+  expect((await r.socket).messages).toEqual([JSON.stringify(['ping', {}])]);
+
+  // Should timeout after customTimeout if no pong
+  await vi.advanceTimersByTimeAsync(customTimeout - 1);
+  expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(r.connectionStatus).toBe(ConnectionStatus.Connecting);
 });
 
 const connectTimeoutMessage = 'Rejecting connect resolver due to timeout';
@@ -2972,16 +2991,16 @@ describe('Disconnect on hide', () => {
     {
       name: 'default delay not during ping',
       test: async (r, changeVisibilityState) => {
-        expect(PING_INTERVAL_MS).lessThanOrEqual(
+        expect(DEFAULT_PING_TIMEOUT_MS).lessThanOrEqual(
           DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
         );
-        expect(PING_INTERVAL_MS * 2).greaterThanOrEqual(
+        expect(DEFAULT_PING_TIMEOUT_MS * 2).greaterThanOrEqual(
           DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
         );
         let timeTillHiddenDisconnect = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS;
         changeVisibilityState('hidden');
-        await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS); // sends ping
-        timeTillHiddenDisconnect -= PING_INTERVAL_MS;
+        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS); // sends ping
+        timeTillHiddenDisconnect -= DEFAULT_PING_TIMEOUT_MS;
         await r.triggerPong();
         await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
       },
@@ -2989,17 +3008,17 @@ describe('Disconnect on hide', () => {
     {
       name: 'default delay during ping',
       test: async (r, changeVisibilityState) => {
-        expect(PING_INTERVAL_MS).lessThanOrEqual(
+        expect(DEFAULT_PING_TIMEOUT_MS).lessThanOrEqual(
           DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
         );
-        expect(PING_INTERVAL_MS + PING_TIMEOUT_MS).greaterThanOrEqual(
+        expect(DEFAULT_PING_TIMEOUT_MS * 2).greaterThanOrEqual(
           DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
         );
-        await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS / 2);
+        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS / 2);
         let timeTillHiddenDisconnect = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS;
         changeVisibilityState('hidden');
-        await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS / 2); // sends ping
-        timeTillHiddenDisconnect -= PING_INTERVAL_MS / 2;
+        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS / 2); // sends ping
+        timeTillHiddenDisconnect -= DEFAULT_PING_TIMEOUT_MS / 2;
         await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
         // Disconnect due to visibility does not happen until pong is received
         // and microtask queue is processed.
@@ -3010,13 +3029,15 @@ describe('Disconnect on hide', () => {
     },
     {
       name: 'custom delay longer than ping interval not during ping',
-      hiddenTabDisconnectDelay: Math.floor(PING_INTERVAL_MS * 6.3),
+      hiddenTabDisconnectDelay: Math.floor(DEFAULT_PING_TIMEOUT_MS * 6.3),
       test: async (r, changeVisibilityState) => {
-        let timeTillHiddenDisconnect = Math.floor(PING_INTERVAL_MS * 6.3);
+        let timeTillHiddenDisconnect = Math.floor(
+          DEFAULT_PING_TIMEOUT_MS * 6.3,
+        );
         changeVisibilityState('hidden');
-        while (timeTillHiddenDisconnect > PING_INTERVAL_MS) {
-          await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS); // sends ping
-          timeTillHiddenDisconnect -= PING_INTERVAL_MS;
+        while (timeTillHiddenDisconnect > DEFAULT_PING_TIMEOUT_MS) {
+          await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS); // sends ping
+          timeTillHiddenDisconnect -= DEFAULT_PING_TIMEOUT_MS;
           await r.triggerPong();
         }
         await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
@@ -3024,22 +3045,22 @@ describe('Disconnect on hide', () => {
     },
     {
       name: 'custom delay longer than ping interval during ping',
-      hiddenTabDisconnectDelay: Math.floor(PING_INTERVAL_MS * 6.3),
+      hiddenTabDisconnectDelay: Math.floor(DEFAULT_PING_TIMEOUT_MS * 6.3),
       test: async (r, changeVisibilityState) => {
-        let timeTillHiddenDisconnect = Math.floor(PING_INTERVAL_MS * 6.3);
-        expect(timeTillHiddenDisconnect > PING_INTERVAL_MS + PING_TIMEOUT_MS);
+        let timeTillHiddenDisconnect = Math.floor(
+          DEFAULT_PING_TIMEOUT_MS * 6.3,
+        );
+        expect(timeTillHiddenDisconnect > DEFAULT_PING_TIMEOUT_MS * 2);
         changeVisibilityState('hidden');
-        while (timeTillHiddenDisconnect > PING_INTERVAL_MS + PING_TIMEOUT_MS) {
-          await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
-          timeTillHiddenDisconnect -= PING_INTERVAL_MS;
+        while (timeTillHiddenDisconnect > DEFAULT_PING_TIMEOUT_MS * 2) {
+          await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
+          timeTillHiddenDisconnect -= DEFAULT_PING_TIMEOUT_MS;
           await r.triggerPong();
         }
-        expect(timeTillHiddenDisconnect).lessThan(
-          PING_INTERVAL_MS + PING_TIMEOUT_MS,
-        );
-        expect(timeTillHiddenDisconnect).greaterThan(PING_INTERVAL_MS);
-        await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS); // sends ping
-        timeTillHiddenDisconnect -= PING_INTERVAL_MS;
+        expect(timeTillHiddenDisconnect).lessThan(DEFAULT_PING_TIMEOUT_MS * 2);
+        expect(timeTillHiddenDisconnect).greaterThan(DEFAULT_PING_TIMEOUT_MS);
+        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS); // sends ping
+        timeTillHiddenDisconnect -= DEFAULT_PING_TIMEOUT_MS;
         await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
         // Disconnect due to visibility does not happen until pong is received
         // and microtask queue is processed.
@@ -3050,21 +3071,25 @@ describe('Disconnect on hide', () => {
     },
     {
       name: 'custom delay shorter than ping interval not during ping',
-      hiddenTabDisconnectDelay: Math.floor(PING_INTERVAL_MS * 0.3),
+      hiddenTabDisconnectDelay: Math.floor(DEFAULT_PING_TIMEOUT_MS * 0.3),
       test: async (r, changeVisibilityState) => {
-        await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
+        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
         await r.triggerPong();
-        const timeTillHiddenDisconnect = Math.floor(PING_INTERVAL_MS * 0.3);
+        const timeTillHiddenDisconnect = Math.floor(
+          DEFAULT_PING_TIMEOUT_MS * 0.3,
+        );
         changeVisibilityState('hidden');
         await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
       },
     },
     {
       name: 'custom delay shorter than ping interval during ping',
-      hiddenTabDisconnectDelay: Math.floor(PING_INTERVAL_MS * 0.3),
+      hiddenTabDisconnectDelay: Math.floor(DEFAULT_PING_TIMEOUT_MS * 0.3),
       test: async (r, changeVisibilityState) => {
-        await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
-        const timeTillHiddenDisconnect = Math.floor(PING_INTERVAL_MS * 0.3);
+        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
+        const timeTillHiddenDisconnect = Math.floor(
+          DEFAULT_PING_TIMEOUT_MS * 0.3,
+        );
         changeVisibilityState('hidden');
         await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
         // Disconnect due to visibility does not happen until pong is received
@@ -3078,7 +3103,7 @@ describe('Disconnect on hide', () => {
       name: 'custom delay 0, not during ping',
       hiddenTabDisconnectDelay: 0,
       test: async (r, changeVisibilityState) => {
-        await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
+        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
         await r.triggerPong();
         changeVisibilityState('hidden');
         await vi.advanceTimersByTimeAsync(0);
@@ -3088,7 +3113,7 @@ describe('Disconnect on hide', () => {
       name: 'custom delay 0, during ping',
       hiddenTabDisconnectDelay: 0,
       test: async (r, changeVisibilityState) => {
-        await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
+        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
         changeVisibilityState('hidden');
         await vi.advanceTimersByTimeAsync(0);
         // Disconnect due to visibility does not happen until pong is received
