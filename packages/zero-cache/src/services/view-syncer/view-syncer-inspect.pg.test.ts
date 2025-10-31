@@ -594,7 +594,7 @@ describe('view-syncer/service', () => {
             id: 'test-query',
             name: 'myQuery',
             error: 'app',
-            details: 'Invalid query syntax: Missing required field',
+            message: 'Invalid query syntax: Missing required field',
           },
         ]);
 

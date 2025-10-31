@@ -19,6 +19,7 @@ import {isServerError} from './error.ts';
 import {MutationTracker} from './mutation-tracker.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 import {ProtocolError} from '../../../zero-protocol/src/error.ts';
+import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 
 const lc = createSilentLogContext();
 
@@ -63,16 +64,61 @@ describe('MutationTracker', () => {
           id: {clientID: CLIENT_ID, id: 1},
           result: {
             error: 'app',
-            details: '',
+            message: 'server error',
           },
         },
       ],
     };
 
     tracker.processPushResponse(response);
-    await expect(serverPromise).rejects.toEqual({
-      error: 'app',
-      details: '',
+
+    let caughtError: unknown;
+    try {
+      await serverPromise;
+    } catch (e) {
+      caughtError = e;
+    }
+
+    expect(caughtError).toBeInstanceOf(ApplicationError);
+    expect((caughtError as ApplicationError).message).toBe('server error');
+    expect((caughtError as ApplicationError).details).toBeUndefined();
+    expect(onFatalError).not.toHaveBeenCalled();
+  });
+
+  test('includes server-provided details when rejecting mutations', async () => {
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
+    const {serverPromise, ephemeralID} = tracker.trackMutation();
+    tracker.mutationIDAssigned(ephemeralID, 1);
+
+    const response: PushResponse = {
+      mutations: [
+        {
+          id: {clientID: CLIENT_ID, id: 1},
+          result: {
+            error: 'app',
+            message: 'server error',
+            details: {source: 'server', code: 42},
+          },
+        },
+      ],
+    };
+
+    tracker.processPushResponse(response);
+
+    let caughtError: unknown;
+    try {
+      await serverPromise;
+    } catch (e) {
+      caughtError = e;
+    }
+
+    expect(caughtError).toBeInstanceOf(ApplicationError);
+    expect((caughtError as ApplicationError).message).toBe('server error');
+    expect((caughtError as ApplicationError).details).toEqual({
+      source: 'server',
+      code: 42,
     });
     expect(onFatalError).not.toHaveBeenCalled();
   });
@@ -153,11 +199,9 @@ describe('MutationTracker', () => {
 
     tracker.processPushResponse(response);
 
-    await expect(serverPromise).rejects.toEqual({
-      error: 'oooMutation',
-      details: 'out-of-order',
-    });
-
+    await expect(serverPromise).rejects.toMatchInlineSnapshot(
+      `[Error: Server reported an out-of-order mutation]`,
+    );
     expect(onFatalError).toHaveBeenCalledTimes(1);
     const fatalError = onFatalError.mock.calls[0][0] as ProtocolError;
     expect(fatalError).toBeInstanceOf(ProtocolError);
@@ -177,7 +221,7 @@ describe('MutationTracker', () => {
           id: {clientID: 'other-client', id: 1},
           result: {
             error: 'app',
-            details: '',
+            message: 'server error',
           },
         },
         {
@@ -252,6 +296,7 @@ describe('MutationTracker', () => {
           id: {clientID: CLIENT_ID, id: 2},
           result: {
             error: 'app',
+            message: 'server error',
           },
         },
       ],
@@ -334,7 +379,7 @@ describe('MutationTracker', () => {
         op: 'put',
         mutation: {
           id: {clientID: CLIENT_ID, id: 2},
-          result: {error: 'app'},
+          result: {error: 'app', message: 'server error'},
         },
       },
     ];
@@ -342,10 +387,18 @@ describe('MutationTracker', () => {
     // process mutations
     cb!(patches.map(p => mutationPatchToDiffOp(p)));
 
-    await expect(mutation1.serverPromise).resolves.toEqual({});
-    await expect(mutation2.serverPromise).rejects.toEqual({
-      error: 'app',
-    });
+    let r: unknown;
+    let caughtError: unknown;
+    try {
+      r = await mutation2.serverPromise;
+    } catch (e) {
+      caughtError = e;
+    }
+
+    expect(r).toBeUndefined();
+    expect(caughtError).toBeInstanceOf(ApplicationError);
+    expect((caughtError as ApplicationError).message).toBe('server error');
+    expect((caughtError as ApplicationError).details).toBeUndefined();
 
     tracker.lmidAdvanced(2);
 
@@ -462,7 +515,7 @@ describe('MutationTracker', () => {
       mutations: [
         {
           id: {clientID: CLIENT_ID, id: 4},
-          result: {error: 'app'},
+          result: {error: 'app', message: 'server error'},
         },
       ],
     });
@@ -501,7 +554,35 @@ describe('MutationTracker', () => {
       caught = e;
     }
 
-    expect(caught).toMatchInlineSnapshot(`[Error: test error]`);
+    // the error is wrapped in an ApplicationError
+    expect(caught).toBeInstanceOf(ApplicationError);
+    expect((caught as ApplicationError).message).toBe('test error');
+    expect((caught as ApplicationError).details).toBeUndefined();
+    expect(tracker.size).toBe(0);
+    expect(onFatalError).not.toHaveBeenCalled();
+  });
+
+  test('mutations can be rejected locally with an unwrapped application error', async () => {
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
+
+    const {ephemeralID, serverPromise} = tracker.trackMutation();
+    tracker.rejectMutation(
+      ephemeralID,
+      new ApplicationError('test app error', {details: {location: 'client'}}),
+    );
+    let caught: unknown | undefined;
+
+    try {
+      await serverPromise;
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(ApplicationError);
+    expect((caught as ApplicationError).message).toBe('test app error');
+    expect((caught as ApplicationError).details).toEqual({location: 'client'});
     expect(tracker.size).toBe(0);
     expect(onFatalError).not.toHaveBeenCalled();
   });
@@ -569,6 +650,7 @@ describe('MutationTracker', () => {
             id: {clientID: CLIENT_ID, id: 1},
             result: {
               error: 'app',
+              message: 'server error',
             },
           },
         ],

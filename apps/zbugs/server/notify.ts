@@ -1,11 +1,11 @@
 import {type ServerTransaction, type UpdateValue} from '@rocicorp/zero';
 import type {TransactionSql} from 'postgres';
-import {assert, assertNotNull} from '../../../packages/shared/src/asserts.ts';
 import {assertIsLoggedIn, type AuthData} from '../shared/auth.ts';
 import {schema, type Schema} from '../shared/schema.ts';
 import {postToDiscord} from './discord.ts';
 import {sendEmail} from './email.ts';
 import type {PostCommitTask} from './server-mutators.ts';
+import {MutationError, MutationErrorCode} from '../shared/error.ts';
 
 type CreateIssueNotification = {
   kind: 'create-issue';
@@ -57,15 +57,30 @@ export async function notify(
   assertIsLoggedIn(authData);
 
   const {issueID, kind} = args;
+
   const issue = await tx.query.issue.where('id', issueID).one().run();
-  assert(issue);
+
+  if (!issue) {
+    throw new MutationError(
+      `Issue not found`,
+      MutationErrorCode.NOTIFICATION_FAILED,
+      issueID,
+    );
+  }
 
   const modifierUserID = authData.sub;
   const modifierUser = await tx.query.user
     .where('id', modifierUserID)
     .one()
     .run();
-  assert(modifierUser);
+
+  if (!modifierUser) {
+    throw new MutationError(
+      `Modifier user not found`,
+      MutationErrorCode.NOTIFICATION_FAILED,
+      modifierUserID,
+    );
+  }
 
   // include the actor only for the initial `create-issue` action
   // exclude them for all other actions
@@ -77,7 +92,13 @@ export async function notify(
     excludeActor,
   );
 
-  assertNotNull(issue.shortID);
+  if (!issue.shortID) {
+    throw new MutationError(
+      `Issue short ID not found`,
+      MutationErrorCode.NOTIFICATION_FAILED,
+      issueID,
+    );
+  }
 
   // Only send to Discord for public issues
   const shouldSendToDiscord = issue.visibility === 'public';
@@ -189,8 +210,16 @@ export async function notify(
 
     case 'add-emoji-to-comment': {
       const {commentID, emoji} = args;
+
       const comment = await tx.query.comment.where('id', commentID).one().run();
-      assert(comment);
+
+      if (!comment) {
+        throw new MutationError(
+          `Comment not found`,
+          MutationErrorCode.NOTIFICATION_FAILED,
+          commentID,
+        );
+      }
 
       await sendNotifications({
         title: `${modifierUser.login} reacted to a comment`,

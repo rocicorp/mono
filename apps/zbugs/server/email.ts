@@ -1,5 +1,6 @@
 import {type Row, type Transaction} from '@rocicorp/zero';
 import {schema, type Schema} from '../shared/schema.ts';
+import {MutationError, MutationErrorCode} from '../shared/error.ts';
 
 export async function sendEmail({
   tx,
@@ -79,8 +80,9 @@ export async function sendEmail({
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(
+    throw new MutationError(
       `Failed to send Loops email: ${response.status} ${errorText}`,
+      MutationErrorCode.NOTIFICATION_FAILED,
     );
   }
 

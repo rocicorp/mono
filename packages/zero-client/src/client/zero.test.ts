@@ -3252,7 +3252,7 @@ describe('Mutation responses poked down', () => {
             },
             result: {
               error: 'app',
-              details: '...test ',
+              message: '...test ',
             },
           },
           op: 'put',
@@ -3268,12 +3268,7 @@ describe('Mutation responses poked down', () => {
       caught = e;
     }
 
-    expect(caught).toMatchInlineSnapshot(`
-      {
-        "details": "...test ",
-        "error": "app",
-      }
-    `);
+    expect(caught).toMatchInlineSnapshot(`[ApplicationError: ...test ]`);
     await r.close();
   });
 });
