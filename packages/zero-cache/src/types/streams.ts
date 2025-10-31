@@ -52,6 +52,8 @@ export type Source<T> = AsyncIterable<T> & {
 
 export type Sink<T> = {
   push(message: T): void;
+
+  end(): void;
 };
 
 /**
@@ -205,7 +207,7 @@ export async function streamOut<T extends JSONValue>(
 ): Promise<void> {
   sendPingsForLiveness(lc, sink, PING_INTERVAL_MS);
 
-  const closer = new WebSocketCloser(lc, sink, source);
+  const closer = WebSocketCloser.forSource(lc, sink, source);
 
   const acks = new Queue<Ack>();
   sink.addEventListener('message', ({data}) => {
@@ -282,7 +284,7 @@ export async function streamIn<T extends JSONValue>(
     ({msg}) => msg,
   );
 
-  const closer = new WebSocketCloser(lc, source, sink, handleMessage);
+  const closer = WebSocketCloser.forSink(lc, source, sink, handleMessage);
 
   function handleMessage(event: MessageEvent) {
     const data = event.data.toString();
@@ -305,10 +307,10 @@ export async function streamIn<T extends JSONValue>(
   return sink;
 }
 
-class WebSocketCloser<T> {
+class WebSocketCloser {
   readonly #lc: LogContext;
   readonly #ws: WebSocket;
-  readonly #stream: Source<T>;
+  readonly #closeStream: () => void;
   readonly #messageHandler: ((e: MessageEvent) => void | undefined) | null;
   readonly #connected = resolver();
 
@@ -316,15 +318,32 @@ class WebSocketCloser<T> {
     return this.#connected.promise;
   }
 
-  constructor(
+  static forSource<T>(lc: LogContext, ws: WebSocket, stream: Source<T>) {
+    // If the websocket is closed, call cancel() to notify the Source of
+    // any unconsumed messages.
+    return new WebSocketCloser(lc, ws, () => stream.cancel());
+  }
+
+  static forSink<T>(
     lc: LogContext,
     ws: WebSocket,
-    stream: Source<T>,
+    stream: Sink<T>,
+    messageHandler: (e: MessageEvent) => void | undefined,
+  ) {
+    // If the websocket is closed, call end() to allow the downstream Sink
+    // to process any pending messages before closing the stream.
+    return new WebSocketCloser(lc, ws, () => stream.end(), messageHandler);
+  }
+
+  private constructor(
+    lc: LogContext,
+    ws: WebSocket,
+    closeStream: () => void,
     messageHandler?: (e: MessageEvent) => void | undefined,
   ) {
     this.#lc = lc;
     this.#ws = ws;
-    this.#stream = stream;
+    this.#closeStream = closeStream;
     this.#messageHandler = messageHandler ?? null;
 
     ws.addEventListener('open', this.#handleOpen);
@@ -379,7 +398,7 @@ class WebSocketCloser<T> {
     if (err) {
       this.#lc.error?.(`closing stream with error`, err);
     }
-    this.#stream.cancel();
+    this.#closeStream();
     if (!this.closed()) {
       this.#ws.close();
     }

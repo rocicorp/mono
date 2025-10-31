@@ -3,7 +3,7 @@ import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import Fastify, {type FastifyInstance} from 'fastify';
 import {getDefaultHighWaterMark} from 'stream';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import WebSocket from 'ws';
 import {unreachable} from '../../../shared/src/asserts.ts';
 import {
@@ -376,11 +376,21 @@ describe('streams with internal acks', () => {
           producer.push({from: 9, to: 10, str: 'doo'});
           ws.terminate(); // Close the websocket abruptly.
           break;
+        case 3:
+          expect(await consumed.dequeue()).toEqual({
+            from: 5,
+            to: 8,
+            str: 'fooboodoo',
+          });
+          expect(msg).toEqual({from: 8, to: 10, str: 'voodoo'});
+          break;
       }
       expect(consumed.size()).toBe(0);
     }
 
     expect(consumed.size()).toBe(0);
+    // In this case, the producer does not get the ack that the last messages
+    // were consumed
     expect(await cleanedUp).toEqual([{from: 8, to: 10, str: 'voodoo'}]);
   });
 
@@ -437,6 +447,24 @@ describe('streams with internal acks', () => {
         ],
       },
     ]);
+  });
+
+  test('unconsumed array receives pending messages after close', async () => {
+    const consumer = (await startReceiver()) as Subscription<Message>;
+
+    for (let i = 0; i < 100; i++) {
+      producer.push({from: i, to: i + 1, str: 'foo' + 1});
+    }
+
+    await vi.waitFor(() => expect(consumer.queued).toBe(100));
+    producer.cancel(); // Closes the websocket
+    await sleep(10);
+
+    let i = 0;
+    for await (const _ of consumer) {
+      i++;
+    }
+    expect(i).toBe(100);
   });
 
   test('propagates connection failures', async () => {
