@@ -10,7 +10,7 @@
     "lint": "eslint --ext .ts,.tsx,.js,.jsx src/"
   },
   "dependencies": {
-    "@rocicorp/zero": "file:rocicorp-zero.tgz"
+    "@rocicorp/zero": "0.22.3000000001"
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.3.0"
