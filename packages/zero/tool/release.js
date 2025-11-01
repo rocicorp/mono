@@ -308,33 +308,51 @@ try {
     console.log(`Creating stable release from ${from}`);
   }
 
-  // Check that local and remote heads match
-  // This ensures we're building from code that exists on origin
-  const rootHash = execute('git rev-parse HEAD', {stdio: 'pipe'});
+  // Check that the ref we're building from exists both locally and remotely
+  // and that they point to the same commit
+  console.log(
+    `Verifying ref ${from} exists and matches between local and remote...`,
+  );
+
+  let localRefHash;
   let remoteRefHash;
+
+  // Get local ref hash
   try {
-    // Try to resolve as a remote ref (works for branches like main, maint/zero/v0.24)
+    localRefHash = execute(`git rev-parse ${from}`, {stdio: 'pipe'});
+  } catch {
+    console.error(`Could not resolve local ref: ${from}`);
+    console.error(`Make sure the branch/tag exists locally`);
+    process.exit(1);
+  }
+
+  // Get remote ref hash
+  try {
+    // For branches, check origin/branch
+    // For tags, just check the tag (tags are fetched from remote)
     remoteRefHash = execute(`git rev-parse origin/${from}`, {stdio: 'pipe'});
   } catch {
-    // If that fails, try to resolve as a tag or commit hash
+    // If origin/from doesn't exist, try just the ref (works for tags)
     try {
+      // For tags, we need to ensure we have the latest from remote
+      execute(`git fetch origin tag ${from}`, {stdio: 'pipe'});
       remoteRefHash = execute(`git rev-parse ${from}`, {stdio: 'pipe'});
     } catch {
-      console.error(`Could not resolve ref: ${from}`);
-      console.error(`Make sure the branch/tag/commit exists`);
+      console.error(`Could not resolve remote ref: ${from}`);
+      console.error(`Make sure the branch/tag has been pushed to origin`);
       process.exit(1);
     }
   }
 
-  if (rootHash !== remoteRefHash) {
-    console.error(`Root hash of working directory does not match ref ${from}`);
-    console.error(`Working directory HEAD: ${rootHash}`);
-    console.error(`Ref ${from}: ${remoteRefHash}`);
-    console.error(
-      `Perhaps you need to push your changes or checkout the correct ref?`,
-    );
+  if (localRefHash !== remoteRefHash) {
+    console.error(`Local and remote versions of ${from} do not match`);
+    console.error(`Local:  ${localRefHash}`);
+    console.error(`Remote: ${remoteRefHash}`);
+    console.error(`Perhaps you need to push your changes?`);
     process.exit(1);
   }
+
+  console.log(`✓ Ref ${from} matches between local and remote`);
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
 
