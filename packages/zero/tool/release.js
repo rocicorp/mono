@@ -219,6 +219,9 @@ if (isCanary) {
 }
 
 try {
+  // Find the git root directory
+  const gitRoot = execute('git rev-parse --show-toplevel', {stdio: 'pipe'});
+
   // Check that there are no uncommitted changes
   const uncommittedChanges = execute('git status --porcelain', {
     stdio: 'pipe',
@@ -228,6 +231,18 @@ try {
     console.error(`Perhaps you need to commit them?`);
     process.exit(1);
   }
+
+  // For stable releases, read the base version from the current working directory
+  // before we chdir to the temp directory
+  const ZERO_PACKAGE_JSON_PATH = path.join(
+    gitRoot,
+    'packages',
+    'zero',
+    'package.json',
+  );
+  const baseVersionForStableRelease = isCanary
+    ? null
+    : getPackageData(ZERO_PACKAGE_JSON_PATH).version;
 
   // Check that local and remote heads match
   // This ensures we're building from code that exists on origin
@@ -258,8 +273,6 @@ try {
   }
 
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
-  // Find the git root directory
-  const gitRoot = execute('git rev-parse --show-toplevel', {stdio: 'pipe'});
 
   // Copy the working directory to temp dir (faster than cloning)
   console.log(`Copying repo from ${gitRoot} to ${tempDir}...`);
@@ -281,21 +294,26 @@ try {
 
   //installs turbo and other build dependencies
   execute('npm install');
-  const ZERO_PACKAGE_JSON_PATH = basePath('packages', 'zero', 'package.json');
-  const currentPackageData = getPackageData(ZERO_PACKAGE_JSON_PATH);
+  // After chdir, use basePath() which is now relative to temp directory
+  const ZERO_PACKAGE_JSON_PATH_IN_TEMP = basePath(
+    'packages',
+    'zero',
+    'package.json',
+  );
+  const currentPackageData = getPackageData(ZERO_PACKAGE_JSON_PATH_IN_TEMP);
 
   const nextVersion = isCanary
     ? bumpCanaryVersion(currentPackageData.version)
-    : currentPackageData.version;
+    : baseVersionForStableRelease;
 
-  console.log(`Current base version is ${currentPackageData.version}`);
+  console.log(`Package version in ${from}: ${currentPackageData.version}`);
   console.log(`Next version is ${nextVersion}`);
 
   currentPackageData.version = nextVersion;
 
   const tagName = `zero/v${nextVersion}`;
 
-  writePackageData(ZERO_PACKAGE_JSON_PATH, currentPackageData);
+  writePackageData(ZERO_PACKAGE_JSON_PATH_IN_TEMP, currentPackageData);
 
   const dependencyPaths = [
     basePath('apps', 'zbugs', 'package.json'),
