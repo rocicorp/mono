@@ -19,6 +19,8 @@ export interface DebugDelegate {
   rowVended(table: SourceName, query: SQL, row: Row): void;
   getVendedRowCounts(): RowCountsBySource;
   getVendedRows(): RowsBySource;
+  rowsVisited(table: SourceName, query: SQL, count: number): void;
+  getVisitedRowCounts(): RowCountsBySource;
   // clears all internal state
   reset(): void;
 }
@@ -26,10 +28,12 @@ export interface DebugDelegate {
 export class Debug implements DebugDelegate {
   #rowCountsBySource: RowCountsBySource;
   #rowsBySource: RowsBySource;
+  #visitedRowCountsBySource: RowCountsBySource;
 
   constructor() {
     this.#rowCountsBySource = {};
     this.#rowsBySource = {};
+    this.#visitedRowCountsBySource = {};
   }
 
   getVendedRowCounts(): RowCountsBySource {
@@ -52,6 +56,7 @@ export class Debug implements DebugDelegate {
   reset(): void {
     this.#rowCountsBySource = {};
     this.#rowsBySource = {};
+    this.#visitedRowCountsBySource = {};
   }
 
   rowVended(table: SourceName, query: SQL, row: Row): void {
@@ -62,6 +67,17 @@ export class Debug implements DebugDelegate {
     if (rows) {
       rows[query] = [...(rows[query] ?? []), row];
     }
+  }
+
+  rowsVisited(table: SourceName, query: SQL, count: number): void {
+    const counts = this.#getVisitedRowStats(table);
+    if (counts) {
+      counts[query] = (counts[query] ?? 0) + count;
+    }
+  }
+
+  getVisitedRowCounts(): RowCountsBySource {
+    return this.#visitedRowCountsBySource;
   }
 
   #getRowStats(source: SourceName) {
@@ -78,5 +94,14 @@ export class Debug implements DebugDelegate {
       this.#rowsBySource[source] = rows;
     }
     return {counts, rows};
+  }
+
+  #getVisitedRowStats(source: SourceName): RowCountsByQuery {
+    let counts = this.#visitedRowCountsBySource[source];
+    if (!counts) {
+      counts = {};
+      this.#visitedRowCountsBySource[source] = counts;
+    }
+    return counts;
   }
 }

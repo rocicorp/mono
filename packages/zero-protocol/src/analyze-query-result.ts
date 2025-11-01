@@ -31,6 +31,8 @@ export const analyzeQueryResultSchema = v.object({
   readRows: rowsBySourceSchema.optional(),
   readRowCountsByQuery: rowCountsBySourceSchema.optional(),
   readRowCount: v.number().optional(),
+  visitedRowCountsByQuery: rowCountsBySourceSchema.optional(),
+  visitedRowCount: v.number().optional(),
 });
 
 export type AnalyzeQueryResult = v.Infer<typeof analyzeQueryResultSchema>;

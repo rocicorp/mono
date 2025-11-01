@@ -269,7 +269,7 @@ export class PlannerGraph {
 
     // Enumerate all flip patterns
     // try 7 and 32 (6 and 31)
-    const forcePattern = undefined; // 11 14
+    const forcePattern = 3; // 11 14
     for (let pattern = 0; pattern < numPatterns; pattern++) {
       if (forcePattern !== undefined && pattern !== forcePattern) {
         continue;

@@ -150,8 +150,11 @@ export class FlippedJoin implements Input {
     }
     const parentIterators: Iterator<Node>[] = [];
     let threw = false;
+    let parentNodesProcessed = 0;
+    let childNodeCount = 0;
     try {
       for (const childNode of childNodes) {
+        childNodeCount++;
         // TODO: consider adding the ability to pass a set of
         // ids to fetch, and have them applied to sqlite using IN.
         const constraintFromChild: Writable<Constraint> = {};
@@ -176,6 +179,7 @@ export class FlippedJoin implements Input {
           parentIterators.push(iterator);
         }
       }
+
       const nextParentNodes: (Node | null)[] = [];
       for (let i = 0; i < parentIterators.length; i++) {
         const iter = parentIterators[i];
@@ -191,6 +195,7 @@ export class FlippedJoin implements Input {
           if (parentNode === null) {
             continue;
           }
+          ++parentNodesProcessed;
           if (minParentNode === null) {
             minParentNode = parentNode;
             minParentNodeChildIndexes.push(i);
@@ -278,6 +283,8 @@ export class FlippedJoin implements Input {
       }
       throw e;
     } finally {
+      console.log('PROCESSED child nodes:', childNodeCount);
+      console.log('PROCESSED parent nodes:', parentNodesProcessed);
       if (!threw) {
         for (const iter of parentIterators) {
           try {

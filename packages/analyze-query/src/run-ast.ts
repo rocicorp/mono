@@ -127,6 +127,16 @@ export async function runAst(
   }
   result.readRowCount = readRowCount;
 
+  // Include visited row counts from scan statistics
+  result.visitedRowCountsByQuery = host.debug?.getVisitedRowCounts() ?? {};
+  let visitedRowCount = 0;
+  for (const c of Object.values(result.visitedRowCountsByQuery)) {
+    for (const v of Object.values(c)) {
+      visitedRowCount += v;
+    }
+  }
+  result.visitedRowCount = visitedRowCount;
+
   if (options.vendedRows) {
     result.readRows = host.debug?.getVendedRows();
   }

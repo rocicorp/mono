@@ -42,6 +42,7 @@ import type {Stream} from '../../zql/src/ivm/stream.ts';
 import {Database, Statement} from './db.ts';
 import {compile, format, sql} from './internal/sql.ts';
 import {StatementCache} from './internal/statement-cache.ts';
+import SQLite3Database from '@rocicorp/zero-sqlite3';
 
 type Statements = {
   readonly cache: StatementCache;
@@ -297,6 +298,24 @@ export class TableSource implements Source {
         comparator,
       );
     } finally {
+      // Capture scan statistics after iteration completes
+      if (debug) {
+        let totalVisited = 0;
+        for (let idx = 0; ; idx++) {
+          const nvisit = cachedStatement.statement.scanStatus(
+            idx,
+            SQLite3Database.SQLITE_SCANSTAT_NVISIT,
+            1, // resetFlag = 1 for COMPLEX mode
+          );
+          if (nvisit === undefined) {
+            break;
+          }
+          // Convert BigInt to number (scan status returns BigInt)
+          totalVisited += Number(nvisit);
+        }
+        debug.rowsVisited(this.#table, sqlAndBindings.text, totalVisited);
+      }
+
       this.#stmts.cache.return(cachedStatement);
     }
   }

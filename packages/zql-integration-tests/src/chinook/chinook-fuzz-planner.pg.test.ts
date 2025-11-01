@@ -22,7 +22,11 @@ import {
 } from '../../../zql/src/planner/planner-builder.ts';
 import {AccumulatorDebugger} from '../../../zql/src/planner/planner-debug.ts';
 import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
-import {mapAST, type AST} from '../../../zero-protocol/src/ast.ts';
+import {
+  mapAST,
+  type AST,
+  type Condition,
+} from '../../../zero-protocol/src/ast.ts';
 import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import {
   clientToServer,
@@ -66,7 +70,7 @@ test('manual: track.whereExists(album)', async () => {
   await runManualCase(query);
 });
 
-test.only('manual: track.whereExists(album).whereExists(genre)', async () => {
+test('manual: track.whereExists(album).whereExists(genre)', async () => {
   const query = builder.track.whereExists('album').whereExists('genre');
   await runManualCase(query);
 });
@@ -197,7 +201,7 @@ async function runCase({
  * Helper to set flip to false in all correlated subquery conditions
  */
 function setFlipToFalse(queryAst: AST): AST {
-  const processCondition = (cond: any): any => {
+  const processCondition = (cond: Condition): Condition => {
     if (cond.type === 'correlatedSubquery') {
       return {
         ...cond,
@@ -232,7 +236,7 @@ function setFlipToFalse(queryAst: AST): AST {
  *
  * Note: queryAst must be in server names (already mapped).
  */
-async function executeQueryAST(queryAst: AST): Promise<number> {
+function executeQueryAST(queryAst: AST): number {
   // Enable row count tracking
   const prevTrackRowCounts = runtimeDebugFlags.trackRowCountsVended;
   runtimeDebugFlags.trackRowCountsVended = true;
@@ -388,135 +392,7 @@ async function runManualCase(query: AnyQuery) {
 
   console.log('═'.repeat(90));
 
-  // Find top 5 inversions
-  const inversions = results
-    .map(r => {
-      const cRank = must(
-        costRank.get(r.attemptNumber),
-        `Cost rank not found for attempt ${r.attemptNumber}`,
-      );
-      const rRank = must(
-        rowsRank.get(r.attemptNumber),
-        `Rows rank not found for attempt ${r.attemptNumber}`,
-      );
-      return {
-        ...r,
-        costRank: cRank,
-        rowsRank: rRank,
-        delta: Math.abs(cRank - rRank),
-      };
-    })
-    .sort((a, b) => b.delta - a.delta)
-    .slice(0, 5);
-
-  if (inversions.length > 0 && inversions[0].delta > 0) {
-    console.log('\nTop 5 Cost Model Inversions:\n');
-    for (const inv of inversions) {
-      console.log(`Attempt ${inv.attemptNumber + 1}:`);
-      console.log(
-        `  Estimated cost: ${inv.estimatedCost.toFixed(2)} (rank ${inv.costRank})`,
-      );
-      console.log(
-        `  Rows considered: ${inv.rowsConsidered} (rank ${inv.rowsRank})`,
-      );
-      console.log(`  Rank delta: ${inv.delta}`);
-      console.log(
-        `  Flip pattern: ${inv.flipPattern.toString(2).padStart(5, '0')} (binary)`,
-      );
-      console.log('  Join states:');
-      for (const j of inv.joinStates) {
-        console.log(`    ${j.join}: ${j.type}`);
-      }
-      console.log('');
-    }
-  }
-
-  // Print best plans by each metric
-  const bestByCost = sortedByCost[0];
-  const bestByRows = sortedByRows[0];
-
-  console.log('═'.repeat(90));
-  console.log('BEST PLANS\n');
-  console.log(
-    `Best by estimated cost: Attempt ${bestByCost.attemptNumber + 1}`,
-  );
-  console.log(`  Cost: ${bestByCost.estimatedCost.toFixed(2)}`);
-  console.log(`  Rows: ${bestByCost.rowsConsidered}`);
-  console.log('  Join states:');
-  for (const j of bestByCost.joinStates) {
-    console.log(`    ${j.join}: ${j.type}`);
-  }
-  console.log('');
-
-  console.log(
-    `Best by rows considered: Attempt ${bestByRows.attemptNumber + 1}`,
-  );
-  console.log(`  Cost: ${bestByRows.estimatedCost.toFixed(2)}`);
-  console.log(`  Rows: ${bestByRows.rowsConsidered}`);
-  console.log('  Join states:');
-  for (const j of bestByRows.joinStates) {
-    console.log(`    ${j.join}: ${j.type}`);
-  }
-  console.log('═'.repeat(90));
-
-  // Show detailed cost breakdown for all attempts
-  console.log('\n' + '═'.repeat(90));
-  console.log('DETAILED COST BREAKDOWN');
-  console.log('═'.repeat(90));
-
-  // Get cost events from planner debugger for each attempt
-  const connectionCostEvents = planDebugger.getEvents('node-cost');
-
-  for (const result of results) {
-    const attemptEvents = connectionCostEvents.filter(
-      e => e.attemptNumber === result.attemptNumber,
-    );
-
-    console.log(`\nAttempt ${result.attemptNumber + 1}:`);
-    console.log(`  Total estimated cost: ${result.estimatedCost.toFixed(2)}`);
-    console.log(`  Actual rows considered: ${result.rowsConsidered}`);
-    console.log(`  Join states:`);
-    for (const j of result.joinStates) {
-      console.log(`    ${j.join}: ${j.type}`);
-    }
-
-    // Group by node type
-    const connections = attemptEvents.filter(e => e.nodeType === 'connection');
-    const joins = attemptEvents.filter(e => e.nodeType === 'join');
-
-    if (connections.length > 0) {
-      console.log(`  Connections:`);
-      for (const c of connections) {
-        console.log(`    ${c.node}:`);
-        console.log(
-          `      cost=${c.costEstimate.cost.toFixed(2)}, startup=${c.costEstimate.startupCost.toFixed(2)}, scan=${c.costEstimate.scanEst.toFixed(2)}`,
-        );
-        console.log(
-          `      returnedRows=${c.costEstimate.returnedRows.toFixed(2)}, selectivity=${c.costEstimate.selectivity.toFixed(6)}`,
-        );
-        console.log(
-          `      downstreamChildSelectivity=${c.downstreamChildSelectivity.toFixed(6)}`,
-        );
-      }
-    }
-
-    if (joins.length > 0) {
-      console.log(`  Joins:`);
-      for (const j of joins) {
-        console.log(`    ${j.node} (${j.joinType}):`);
-        console.log(
-          `      cost=${j.costEstimate.cost.toFixed(2)}, startup=${j.costEstimate.startupCost.toFixed(2)}, scan=${j.costEstimate.scanEst.toFixed(2)}`,
-        );
-        console.log(
-          `      returnedRows=${j.costEstimate.returnedRows.toFixed(2)}, selectivity=${j.costEstimate.selectivity.toFixed(6)}`,
-        );
-        console.log(
-          `      downstreamChildSelectivity=${j.downstreamChildSelectivity.toFixed(6)}`,
-        );
-      }
-    }
-  }
-  console.log('═'.repeat(90));
+  console.log(planDebugger.format());
 
   // Run the originally planned query (using the planner's choice)
   const plannedAST = planAST(queryAst);
@@ -529,7 +405,7 @@ async function runManualCase(query: AnyQuery) {
 }
 
 function getTotalRowCount(debug: Debug): number {
-  const counts = debug.getVendedRowCounts();
+  const counts = debug.getVisitedRowCounts();
   let total = 0;
   for (const tableQueries of Object.values(counts)) {
     for (const count of Object.values(tableQueries)) {
