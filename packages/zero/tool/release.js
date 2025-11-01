@@ -122,6 +122,46 @@ function bumpCanaryVersion(version) {
 }
 
 /**
+ * Find the latest canary tag for a given base version
+ * @param {string} baseVersion - e.g., "0.24.0"
+ * @returns {string | null} - e.g., "zero/v0.24.0-canary.5" or null if none found
+ */
+function findLatestCanaryTag(baseVersion) {
+  console.log(
+    `Looking for latest canary tag for base version ${baseVersion}...`,
+  );
+  execute('git fetch --tags', {stdio: 'pipe'});
+
+  const tagPattern = `zero/v${baseVersion}-canary.*`;
+  const tagsOutput = execute(`git tag -l "${tagPattern}"`, {stdio: 'pipe'});
+
+  if (!tagsOutput) {
+    return null;
+  }
+
+  const tags = tagsOutput.split('\n').filter(Boolean);
+  const attemptRegex = new RegExp(
+    `^zero/v${baseVersion.replace(/\./g, '\\.')}-canary\\.(\\d+)$`,
+  );
+
+  let maxAttempt = -1;
+  let latestTag = null;
+
+  for (const tag of tags) {
+    const match = tag.match(attemptRegex);
+    if (match) {
+      const attempt = parseInt(match[1]);
+      if (attempt > maxAttempt) {
+        maxAttempt = attempt;
+        latestTag = tag;
+      }
+    }
+  }
+
+  return latestTag;
+}
+
+/**
  * Parse command line arguments
  */
 function parseArgs() {
@@ -136,8 +176,8 @@ function parseArgs() {
       name: 'from',
       alias: 'f',
       type: String,
-      defaultValue: 'main',
-      description: 'Branch, tag, or commit to build from (default: main)',
+      description:
+        'Branch, tag, or commit to build from. For canary: defaults to "main". For stable: defaults to latest canary tag',
     },
     {
       name: 'canary',
@@ -193,14 +233,13 @@ Options:`);
 
   console.log(`
 Canary Examples:
-  node release.js --canary
-  node release.js --canary --from main
-  node release.js -c -f maint/zero/v0.24
-  node release.js -c -f zero/v0.24.0  # Build canary from specific tag
+  node release.js --canary                    # Build canary from main
+  node release.js -c -f maint/zero/v0.24      # Build canary from maintenance branch
+  node release.js -c -f zero/v0.24.0          # Build canary from specific tag
 
-Release Examples:
-  node release.js --from zero/v0.24.0-canary.5
-  node release.js -f zero/v0.24.1-canary.3
+Stable Release Examples:
+  node release.js                             # Promote latest canary to stable (auto-detected)
+  node release.js -f zero/v0.24.0-canary.3    # Promote specific canary to stable
 
 Maintenance/cherry-pick workflow:
   1. Create a maintenance branch from tag: git checkout -b maint/zero/v0.24 zero/v0.24.0
@@ -210,13 +249,7 @@ Maintenance/cherry-pick workflow:
 `);
 }
 
-const {from, isCanary} = parseArgs();
-
-if (isCanary) {
-  console.log(`Creating canary from ${from}`);
-} else {
-  console.log(`Creating stable release from ${from}`);
-}
+const {from: fromArg, isCanary} = parseArgs();
 
 try {
   // Find the git root directory
@@ -243,6 +276,37 @@ try {
   const baseVersionForStableRelease = isCanary
     ? null
     : getPackageData(ZERO_PACKAGE_JSON_PATH).version;
+
+  // Determine the source to build from
+  let from;
+  if (isCanary) {
+    // Canary: default to main if not specified
+    from = fromArg || 'main';
+  } else {
+    // Stable release: if --from not specified, find latest canary
+    if (fromArg) {
+      from = fromArg;
+    } else {
+      const latestCanary = findLatestCanaryTag(baseVersionForStableRelease);
+      if (!latestCanary) {
+        console.error(
+          `No canary tags found for base version ${baseVersionForStableRelease}`,
+        );
+        console.error(
+          `Create a canary first: node release.js --canary --from main`,
+        );
+        process.exit(1);
+      }
+      from = latestCanary;
+      console.log(`Auto-detected latest canary: ${latestCanary}`);
+    }
+  }
+
+  if (isCanary) {
+    console.log(`Creating canary from ${from}`);
+  } else {
+    console.log(`Creating stable release from ${from}`);
+  }
 
   // Check that local and remote heads match
   // This ensures we're building from code that exists on origin
