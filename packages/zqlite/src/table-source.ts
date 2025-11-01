@@ -305,7 +305,7 @@ export class TableSource implements Source {
           const nvisit = cachedStatement.statement.scanStatus(
             idx,
             SQLite3Database.SQLITE_SCANSTAT_NVISIT,
-            1, // resetFlag = 1 for COMPLEX mode
+            1, // resetFlag = 1 to reset after reading
           );
           if (nvisit === undefined) {
             break;
@@ -327,6 +327,7 @@ export class TableSource implements Source {
     debug: DebugDelegate | undefined,
   ): IterableIterator<Row> {
     let result;
+    let count = 0;
     try {
       do {
         result = timeSampled(
@@ -344,8 +345,12 @@ export class TableSource implements Source {
         const row = fromSQLiteTypes(valueTypes, result.value, this.#table);
         debug?.rowVended(this.#table, query, row);
         yield row;
+        count++;
       } while (!result.done);
     } finally {
+      if (count === 0) {
+        debug?.rowVended(this.#table, query, {});
+      }
       rowIterator.return?.();
     }
   }

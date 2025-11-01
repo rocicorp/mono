@@ -44,6 +44,10 @@ export class Debug implements DebugDelegate {
     return this.#rowsBySource;
   }
 
+  getVisitedRowCounts(): RowCountsBySource {
+    return this.#visitedRowCountsBySource;
+  }
+
   initQuery(table: SourceName, query: SQL): void {
     const {counts} = this.#getRowStats(table);
     if (counts) {
@@ -76,22 +80,25 @@ export class Debug implements DebugDelegate {
     }
   }
 
-  getVisitedRowCounts(): RowCountsBySource {
-    return this.#visitedRowCountsBySource;
-  }
-
-  #getRowStats(source: SourceName) {
-    let counts: RowCountsByQuery | undefined;
-    let rows: RowsByQuery | undefined;
-    counts = this.#rowCountsBySource[source];
+  #getRowStats(table: SourceName): {
+    counts: RowCountsByQuery | undefined;
+    rows: RowsByQuery | undefined;
+  } {
+    if (!runtimeDebugFlags.trackRowCountsVended) {
+      return {counts: undefined, rows: undefined};
+    }
+    let counts = this.#rowCountsBySource[table];
     if (!counts) {
       counts = {};
-      this.#rowCountsBySource[source] = counts;
+      this.#rowCountsBySource[table] = counts;
     }
-    rows = this.#rowsBySource[source];
-    if (!rows) {
-      rows = {};
-      this.#rowsBySource[source] = rows;
+    let rows = undefined;
+    if (runtimeDebugFlags.trackRowsVended) {
+      rows = this.#rowsBySource[table];
+      if (!rows) {
+        rows = {};
+        this.#rowsBySource[table] = rows;
+      }
     }
     return {counts, rows};
   }
@@ -104,4 +111,20 @@ export class Debug implements DebugDelegate {
     }
     return counts;
   }
+}
+
+export class NoOpDebug implements DebugDelegate {
+  initQuery(_table: SourceName, _query: SQL): void {}
+  rowVended(_table: SourceName, _query: SQL, _row: Row): void {}
+  rowsVisited(_table: SourceName, _query: SQL, _count: number): void {}
+  getVendedRowCounts(): RowCountsBySource {
+    return {};
+  }
+  getVendedRows(): RowsBySource {
+    return {};
+  }
+  getVisitedRowCounts(): RowCountsBySource {
+    return {};
+  }
+  reset(): void {}
 }

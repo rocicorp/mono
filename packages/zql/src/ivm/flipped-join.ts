@@ -283,8 +283,8 @@ export class FlippedJoin implements Input {
       }
       throw e;
     } finally {
-      console.log('PROCESSED child nodes:', childNodeCount);
-      console.log('PROCESSED parent nodes:', parentNodesProcessed);
+      // console.log('PROCESSED child nodes:', childNodeCount);
+      // console.log('PROCESSED parent nodes:', parentNodesProcessed);
       if (!threw) {
         for (const iter of parentIterators) {
           try {
