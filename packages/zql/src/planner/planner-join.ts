@@ -338,7 +338,8 @@ export class PlannerJoin {
                 parent.limit / downstreamChildSelectivity,
               ),
         cost:
-          parent.cost + parent.scanEst * (child.startupCost + child.scanEst),
+          parent.cost +
+          parent.scanEst * (child.startupCost + child.cost + child.scanEst),
         returnedRows: parent.returnedRows * child.selectivity,
         selectivity: child.selectivity * parent.selectivity,
         limit: parent.limit,
@@ -354,7 +355,8 @@ export class PlannerJoin {
                 parent.limit / downstreamChildSelectivity,
               ),
         cost:
-          child.cost + child.scanEst * (parent.startupCost + parent.scanEst),
+          child.cost +
+          child.scanEst * (parent.startupCost + parent.cost + parent.scanEst),
         returnedRows:
           parent.returnedRows * child.returnedRows * child.selectivity,
         selectivity: parent.selectivity * child.selectivity,
