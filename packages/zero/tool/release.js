@@ -118,11 +118,11 @@ function parseArgs() {
       description: 'Branch, tag, or commit to build from (default: main)',
     },
     {
-      name: 'version',
-      alias: 'v',
-      type: String,
+      name: 'canary',
+      alias: 'c',
+      type: Boolean,
       description:
-        'Version for release (e.g., 0.24.0). If not provided, creates next canary',
+        'Create a canary release (auto-calculated version). If not provided, creates a stable release using base version',
     },
   ];
 
@@ -140,14 +140,11 @@ function parseArgs() {
     process.exit(0);
   }
 
-  // If version is provided, it's a release build
-  // Otherwise, it's a canary build
-  const isRelease = Boolean(options.version);
+  const isCanary = Boolean(options.canary);
 
   return {
     from: options.from,
-    version: options.version,
-    isRelease,
+    isCanary,
   };
 }
 
@@ -157,13 +154,13 @@ function parseArgs() {
  */
 function showHelp(optionDefinitions) {
   console.log(`
-Usage: node create-canary.js [options]
+Usage: node release.js [options]
 
 Creates canary or stable release builds for @rocicorp/zero.
 
 Modes:
   Canary:  Builds from branch/tag/commit, auto-calculates version from git tags
-  Release: Builds from branch/tag/commit with explicit version
+  Release: Builds from branch/tag/commit using base version from package.json
 
 Options:`);
 
@@ -174,29 +171,29 @@ Options:`);
 
   console.log(`
 Canary Examples:
-  node create-canary.js
-  node create-canary.js --from main
-  node create-canary.js -f maint/zero/v0.24
-  node create-canary.js -f zero/v0.24.0  # Build canary from specific tag
+  node release.js --canary
+  node release.js --canary --from main
+  node release.js -c -f maint/zero/v0.24
+  node release.js -c -f zero/v0.24.0  # Build canary from specific tag
 
 Release Examples:
-  node create-canary.js --version 0.24.0 --from zero/v0.24.0-canary.5
-  node create-canary.js -v 0.24.1 -f zero/v0.24.1-canary.3
+  node release.js --from zero/v0.24.0-canary.5
+  node release.js -f zero/v0.24.1-canary.3
 
-Maintenance/cherry-pick releases:
+Maintenance/cherry-pick workflow:
   1. Create a maintenance branch from tag: git checkout -b maint/zero/v0.24 zero/v0.24.0
   2. Cherry-pick commits: git cherry-pick <commit-hash>
   3. Push to origin: git push origin maint/zero/v0.24
-  4. Run: node create-canary.js --from maint/zero/v0.24
+  4. Run: node release.js --canary --from maint/zero/v0.24
 `);
 }
 
-const {from, version: explicitVersion, isRelease} = parseArgs();
+const {from, isCanary} = parseArgs();
 
-if (isRelease) {
-  console.log(`Creating release ${explicitVersion} from ${from}`);
-} else {
+if (isCanary) {
   console.log(`Creating canary from ${from}`);
+} else {
+  console.log(`Creating stable release from ${from}`);
 }
 
 try {
@@ -265,12 +262,13 @@ try {
   const ZERO_PACKAGE_JSON_PATH = basePath('packages', 'zero', 'package.json');
   const currentPackageData = getPackageData(ZERO_PACKAGE_JSON_PATH);
 
-  const nextVersion = isRelease
-    ? explicitVersion
-    : bumpCanaryVersion(currentPackageData.version);
+  const nextVersion = isCanary
+    ? bumpCanaryVersion(currentPackageData.version)
+    : currentPackageData.version;
 
-  console.log(`Current version is ${currentPackageData.version}`);
+  console.log(`Current base version is ${currentPackageData.version}`);
   console.log(`Next version is ${nextVersion}`);
+
   currentPackageData.version = nextVersion;
 
   const tagName = `zero/v${nextVersion}`;
@@ -303,8 +301,14 @@ try {
   execute(`git tag ${tagName}`);
   execute(`git push origin ${tagName}`);
 
-  execute('npm publish --tag=canary', {cwd: basePath('packages', 'zero')});
-  execute(`npm dist-tag rm @rocicorp/zero@${nextVersion} canary`);
+  if (isCanary) {
+    execute('npm publish --tag=canary', {cwd: basePath('packages', 'zero')});
+    execute(`npm dist-tag rm @rocicorp/zero@${nextVersion} canary`);
+  } else {
+    // For stable releases, publish without a dist-tag (we'll add 'latest' separately)
+    execute('npm publish --tag=staging', {cwd: basePath('packages', 'zero')});
+    execute(`npm dist-tag rm @rocicorp/zero@${nextVersion} staging`);
+  }
 
   try {
     // Check if our specific multiarch builder exists
@@ -360,13 +364,14 @@ try {
   console.log(
     `* Test apps by installing: npm install @rocicorp/zero@${nextVersion}`,
   );
-  if (!isRelease) {
+  if (isCanary) {
     console.log('* When ready to promote to stable:');
     console.log(
-      `  1. Run: node create-canary.js --version X.Y.Z --from ${tagName}`,
+      `  1. Update base version in package.json if needed: node bump-version.js X.Y.Z`,
     );
+    console.log(`  2. Run: node release.js --from ${tagName}`);
     console.log(
-      `  2. When ready for users: npm dist-tag add @rocicorp/zero@X.Y.Z latest`,
+      `  3. When ready for users: npm dist-tag add @rocicorp/zero@X.Y.Z latest`,
     );
   } else {
     console.log('* When ready for users to install:');
