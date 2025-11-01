@@ -139,6 +139,10 @@ export class QueryManager implements InspectorDelegate {
     return ast && mapAST(ast, this.#serverToClient);
   }
 
+  mapClientASTToServer(ast: AST): AST {
+    return mapAST(ast, this.#clientToServer);
+  }
+
   #fireGotCallbacks(queryHash: string, got: boolean) {
     const gotCallbacks = this.#queries.get(queryHash)?.gotCallbacks ?? [];
     for (const gotCallback of gotCallbacks) {
