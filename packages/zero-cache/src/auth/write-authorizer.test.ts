@@ -425,3 +425,185 @@ describe('pre & post mutation', () => {
     expect(() => authorizer.destroy()).not.toThrow();
   });
 });
+
+describe('primary key validation', () => {
+  test('rejects update when primary key column missing from value', async () => {
+    setPermissions({
+      tables: {
+        foo: {
+          row: {
+            update: {
+              preMutation: [allowIfSubject],
+            },
+          },
+        },
+      },
+    });
+
+    const authorizer = new WriteAuthorizerImpl(
+      lc,
+      zeroConfig,
+      replica,
+      'the_app',
+      'cg',
+    );
+
+    const op: UpdateOp = {
+      op: 'update',
+      primaryKey: ['a'],
+      tableName: 'foo',
+      value: {a: 'value'},
+    };
+
+    await expect(authorizer.canPreMutation({sub: '1'}, [op])).rejects.toThrow(
+      "Primary key column 'id' is missing from operation value for table foo",
+    );
+  });
+
+  test('rejects delete when primary key column missing from value', async () => {
+    setPermissions({
+      tables: {
+        foo: {
+          row: {
+            delete: [allowIfSubject],
+          },
+        },
+      },
+    });
+
+    const authorizer = new WriteAuthorizerImpl(
+      lc,
+      zeroConfig,
+      replica,
+      'the_app',
+      'cg',
+    );
+
+    const op: DeleteOp = {
+      op: 'delete',
+      primaryKey: ['a'],
+      tableName: 'foo',
+      value: {a: 'value'},
+    };
+
+    await expect(authorizer.canPreMutation({sub: '1'}, [op])).rejects.toThrow(
+      "Primary key column 'id' is missing from operation value for table foo",
+    );
+  });
+
+  test('rejects insert when primary key column missing from value', async () => {
+    setPermissions({
+      tables: {
+        foo: {
+          row: {
+            insert: [allowIfSubject],
+          },
+        },
+      },
+    });
+
+    const authorizer = new WriteAuthorizerImpl(
+      lc,
+      zeroConfig,
+      replica,
+      'the_app',
+      'cg',
+    );
+
+    const op: InsertOp = {
+      op: 'insert',
+      primaryKey: ['a'],
+      tableName: 'foo',
+      value: {a: 'value'},
+    };
+
+    await expect(authorizer.canPostMutation({sub: '2'}, [op])).rejects.toThrow(
+      "Primary key column 'id' is missing from operation value for table foo",
+    );
+  });
+
+  test('rejects upsert when primary key column missing from value', () => {
+    const authorizer = new WriteAuthorizerImpl(
+      lc,
+      zeroConfig,
+      replica,
+      'the_app',
+      'cg',
+    );
+
+    expect(() =>
+      authorizer.normalizeOps([
+        {
+          op: 'upsert',
+          primaryKey: ['a'],
+          tableName: 'foo',
+          value: {a: 'value'},
+        },
+      ]),
+    ).toThrow(
+      "Primary key column 'id' is missing from operation value for table foo",
+    );
+  });
+
+  test('accepts update with required primary key column in value', async () => {
+    setPermissions({
+      tables: {
+        foo: {
+          row: {
+            update: {
+              preMutation: [allowIfSubject],
+            },
+          },
+        },
+      },
+    });
+
+    const authorizer = new WriteAuthorizerImpl(
+      lc,
+      zeroConfig,
+      replica,
+      'the_app',
+      'cg',
+    );
+
+    const op: UpdateOp = {
+      op: 'update',
+      primaryKey: ['id'],
+      tableName: 'foo',
+      value: {id: '1', a: 'b'},
+    };
+
+    expect(await authorizer.canPreMutation({sub: '1'}, [op])).toBe(true);
+  });
+
+  test('ignores client-provided primaryKey array and uses server schema', async () => {
+    setPermissions({
+      tables: {
+        foo: {
+          row: {
+            update: {
+              preMutation: [allowIfSubject],
+            },
+          },
+        },
+      },
+    });
+
+    const authorizer = new WriteAuthorizerImpl(
+      lc,
+      zeroConfig,
+      replica,
+      'the_app',
+      'cg',
+    );
+
+    const op: UpdateOp = {
+      op: 'update',
+      primaryKey: ['a'],
+      tableName: 'foo',
+      value: {id: '1', a: 'b'},
+    };
+
+    expect(await authorizer.canPreMutation({sub: '1'}, [op])).toBe(true);
+  });
+});
