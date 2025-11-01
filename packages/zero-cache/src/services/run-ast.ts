@@ -130,6 +130,7 @@ export async function runAst(
     }
   }
   result.readRowCount = readRowCount;
+  result.dbScansByQuery = host.debug?.getNVisitCounts() ?? {};
 
   if (options.vendedRows) {
     result.readRows = host.debug?.getVendedRows();
