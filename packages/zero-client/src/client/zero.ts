@@ -373,7 +373,16 @@ export class Zero<
     // intentionally empty
   };
 
-  readonly #pingTimeoutMs: number;
+  /**
+   * The timeout in milliseconds for ping operations. Controls both:
+   * - How long to wait in idle before sending a ping
+   * - How long to wait for a pong response
+   *
+   * Total time to detect a dead connection is 2 × pingTimeoutMs.
+   *
+   * The new value will take effect on the next ping cycle.
+   */
+  pingTimeoutMs: number;
 
   readonly #zeroContext: ZeroContext;
   readonly queryDelegate: QueryDelegate;
@@ -468,14 +477,7 @@ export class Zero<
       });
     }
 
-    if (pingTimeoutMs <= 0) {
-      throw new ClientError({
-        kind: ClientErrorKind.Internal,
-        message: 'ZeroOptions.pingTimeoutMs must be positive.',
-      });
-    }
-
-    this.#pingTimeoutMs = pingTimeoutMs;
+    this.pingTimeoutMs = pingTimeoutMs;
 
     this.#onlineManager = new OnlineManager();
 
@@ -1807,7 +1809,7 @@ export class Zero<
             const controller = new AbortController();
             this.#abortPingTimeout = () => controller.abort();
             const [pingTimeoutPromise, pingTimeoutAborted] = sleepWithAbort(
-              this.#pingTimeoutMs,
+              this.pingTimeoutMs,
               controller.signal,
             );
 
@@ -2082,7 +2084,7 @@ export class Zero<
 
     const raceResult = await promiseRace({
       waitForPong: promise,
-      pingTimeout: sleep(this.#pingTimeoutMs),
+      pingTimeout: sleep(this.pingTimeoutMs),
       stateChange: this.#connectionManager.waitForStateChange(),
     });
 
