@@ -52,7 +52,7 @@ export type ConstraintsPropagatedEvent = {
   attemptNumber: number;
   connectionConstraints: Array<{
     connection: string;
-    constraints: Map<string, PlannerConstraint | undefined>;
+    constraints: Map<string, Map<string, PlannerConstraint>>;
     constraintCosts: Map<string, CostEstimate>;
   }>;
 };

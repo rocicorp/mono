@@ -18,7 +18,7 @@ type PlanState = {
   joins: Array<{type: 'semi' | 'flipped'}>;
   fanOuts: Array<{type: 'FO' | 'UFO'}>;
   fanIns: Array<{type: 'FI' | 'UFI'}>;
-  connectionConstraints: Array<Map<string, PlannerConstraint | undefined>>;
+  connectionConstraints: Array<Map<string, Map<string, PlannerConstraint>>>;
 };
 
 /**

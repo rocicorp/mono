@@ -83,12 +83,14 @@ export class PlannerConnection {
 
   /**
    * Constraints accumulated from parent joins during planning.
-   * Key is a path through the graph (e.g., "0,1" for branch pattern [0,1]).
+   * Outer key: branch pattern (e.g., "0,1")
+   * Inner key: source join ID (e.g., "join-5")
+   * Value: constraint from that specific join
    *
-   * Undefined constraints are possible when a FO converts to UFO and only
-   * a single join in the UFO is flipped - other branches report undefined.
+   * This allows tracking which join contributed which constraint keys,
+   * enabling per-join fanout factor lookups for semi-join selectivity.
    */
-  readonly #constraints: Map<string, PlannerConstraint | undefined>;
+  readonly #constraints: Map<string, Map<string, PlannerConstraint>>;
 
   readonly #isRoot: boolean;
 
@@ -169,7 +171,38 @@ export class PlannerConnection {
     planDebugger?: PlanDebugger,
   ): void {
     const key = path.join(',');
-    this.#constraints.set(key, c);
+
+    // Group constraint keys by their source join ID
+    if (!c) {
+      // Undefined constraint - can happen when FO → UFO and only some branches flip
+      // Don't store anything for this branch pattern
+      return;
+    }
+
+    // Get or create the inner map for this branch pattern
+    let sourcesMap = this.#constraints.get(key);
+    if (!sourcesMap) {
+      sourcesMap = new Map();
+      this.#constraints.set(key, sourcesMap);
+    }
+
+    // Group constraint columns by source join ID
+    const bySource = new Map<string, PlannerConstraint>();
+    for (const [col, metadata] of Object.entries(c)) {
+      const sourceId = metadata.sourceJoinId ?? 'unknown';
+      let sourceConstraint = bySource.get(sourceId);
+      if (!sourceConstraint) {
+        sourceConstraint = {};
+        bySource.set(sourceId, sourceConstraint);
+      }
+      sourceConstraint[col] = metadata;
+    }
+
+    // Store each source's constraints separately
+    for (const [sourceId, constraint] of bySource) {
+      sourcesMap.set(sourceId, constraint);
+    }
+
     // Constraints changed, invalidate cost caches
     this.#cachedConstraintCosts.clear();
 
@@ -198,11 +231,23 @@ export class PlannerConnection {
     }
 
     // Cache miss - compute and cache
-    const constraint = this.#constraints.get(key);
-    // Merge base constraints with propagated constraints
+    const sourcesMap = this.#constraints.get(key);
+
+    // Merge all constraints from all sources for this branch pattern
+    let propagatedConstraint: PlannerConstraint | undefined = undefined;
+    if (sourcesMap) {
+      for (const sourceConstraint of sourcesMap.values()) {
+        propagatedConstraint = mergeConstraints(
+          propagatedConstraint,
+          sourceConstraint,
+        );
+      }
+    }
+
+    // Merge base constraints with all propagated constraints
     const mergedConstraint = mergeConstraints(
       this.#baseConstraints,
-      constraint,
+      propagatedConstraint,
     );
     const {startupCost, rows} = this.#model(
       this.table,
@@ -273,8 +318,13 @@ export class PlannerConnection {
    * Capture constraint state for snapshotting.
    * Used by PlannerGraph to save/restore planning state.
    */
-  captureConstraints(): Map<string, PlannerConstraint | undefined> {
-    return new Map(this.#constraints);
+  captureConstraints(): Map<string, Map<string, PlannerConstraint>> {
+    // Deep copy the nested map structure
+    const snapshot = new Map<string, Map<string, PlannerConstraint>>();
+    for (const [branchKey, sourcesMap] of this.#constraints) {
+      snapshot.set(branchKey, new Map(sourcesMap));
+    }
+    return snapshot;
   }
 
   /**
@@ -282,11 +332,11 @@ export class PlannerConnection {
    * Used by PlannerGraph to restore planning state.
    */
   restoreConstraints(
-    constraints: Map<string, PlannerConstraint | undefined>,
+    constraints: Map<string, Map<string, PlannerConstraint>>,
   ): void {
     this.#constraints.clear();
-    for (const [key, value] of constraints) {
-      this.#constraints.set(key, value);
+    for (const [branchKey, sourcesMap] of constraints) {
+      this.#constraints.set(branchKey, new Map(sourcesMap));
     }
     // Constraints changed, invalidate cost caches
     this.#cachedConstraintCosts.clear();
@@ -296,8 +346,21 @@ export class PlannerConnection {
    * Get current constraints for debugging.
    * Returns a copy of the constraints map.
    */
-  getConstraintsForDebug(): Map<string, PlannerConstraint | undefined> {
-    return new Map(this.#constraints);
+  getConstraintsForDebug(): Map<string, Map<string, PlannerConstraint>> {
+    return this.captureConstraints();
+  }
+
+  /**
+   * Get constraints for a specific source join within a branch pattern.
+   * Used for fanout factor lookups.
+   */
+  getConstraintsBySource(
+    branchPattern: number[],
+    sourceJoinId: string,
+  ): PlannerConstraint | undefined {
+    const key = branchPattern.join(',');
+    const sourcesMap = this.#constraints.get(key);
+    return sourcesMap?.get(sourceJoinId);
   }
 
   /**
