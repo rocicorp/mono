@@ -295,12 +295,19 @@ export function getStat1Fanout(
   }
 
   // Query sqlite_stat1 for statistics on the best matching index
-  const statStmt = db.prepare(
-    `SELECT stat FROM sqlite_stat1 WHERE tbl = ? AND idx = ?`,
-  );
-  const statRow = statStmt.get(tableName, bestMatch.indexName) as
-    | {stat: string}
-    | undefined;
+  // sqlite_stat1 may not exist if ANALYZE has never been run
+  let statRow: {stat: string} | undefined;
+  try {
+    const statStmt = db.prepare(
+      `SELECT stat FROM sqlite_stat1 WHERE tbl = ? AND idx = ?`,
+    );
+    statRow = statStmt.get(tableName, bestMatch.indexName) as
+      | {stat: string}
+      | undefined;
+  } catch (e) {
+    // sqlite_stat1 doesn't exist (ANALYZE never run)
+    return undefined;
+  }
 
   if (!statRow) {
     return undefined;
