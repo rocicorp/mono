@@ -1,6 +1,7 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import {
   mergeConstraints,
+  tagConstraint,
   type PlannerConstraint,
 } from './planner-constraint.ts';
 import type {PlanDebugger} from './planner-debug.ts';
@@ -100,6 +101,7 @@ export class PlannerJoin {
   readonly #childConstraint: PlannerConstraint;
   readonly #flippable: boolean;
   readonly planId: number;
+  readonly id: string; // Unique ID for constraint source tracking
   #output?: PlannerNode | undefined; // Set once during graph construction
 
   // Reset between planning attempts
@@ -120,6 +122,7 @@ export class PlannerJoin {
     this.#parentConstraint = parentConstraint;
     this.#flippable = flippable;
     this.planId = planId;
+    this.id = `join-${planId}`;
   }
 
   setOutput(node: PlannerNode): void {
@@ -214,9 +217,10 @@ export class PlannerJoin {
     if (this.#type === 'semi') {
       // A semi-join always has constraints for its child.
       // They are defined by the correlation between parent and child.
+      // Tag the child constraint with this join's ID for fanout tracking.
       this.#child.propagateConstraints(
         branchPattern,
-        this.#childConstraint,
+        tagConstraint(this.#childConstraint, this.id),
         this,
         planDebugger,
       );
@@ -246,10 +250,13 @@ export class PlannerJoin {
       );
       // A flipped join will have constraints to send to its parent.
       // - The constraints its output sent
-      // - The constraints its child creates
+      // - The constraints its child creates (tagged with this join's ID)
       this.#parent.propagateConstraints(
         branchPattern,
-        mergeConstraints(constraint, this.#parentConstraint),
+        mergeConstraints(
+          constraint,
+          tagConstraint(this.#parentConstraint, this.id),
+        ),
         this,
         planDebugger,
       );

@@ -322,6 +322,15 @@ export class PlannerConnection {
 export type CostModelCost = {
   startupCost: number;
   rows: number;
+  /**
+   * Optional fanout factor for semi-join selectivity calculations.
+   * Represents the average number of child rows per parent row for
+   * the given constraint. Used to compute:
+   * semiJoinSelectivity = 1 - (1 - filterSelectivity)^fanOut
+   *
+   * If undefined, defaults to 1.0 (assumes 1-to-1 relationship).
+   */
+  fanOut?: number | undefined;
 };
 export type ConnectionCostModel = (
   table: string,

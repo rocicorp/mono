@@ -266,7 +266,7 @@ function extractConstraint(
   fields: readonly string[],
   _tableName: string,
 ): PlannerConstraint {
-  return Object.fromEntries(fields.map(field => [field, undefined]));
+  return Object.fromEntries(fields.map(field => [field, {}]));
 }
 
 function planRecursively(plans: Plans, planDebugger?: PlanDebugger): void {

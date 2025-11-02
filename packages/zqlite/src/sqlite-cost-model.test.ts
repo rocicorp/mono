@@ -82,7 +82,7 @@ describe('SQLite cost model', () => {
 
   test('primary key lookup via constraint', () => {
     const {rows, startupCost} = costModel('foo', [['a', 'asc']], undefined, {
-      a: undefined,
+      a: {},
     });
     expect(rows).toBe(1);
     expect(startupCost).toBe(0);

@@ -34,8 +34,8 @@ suite('PlannerConnection', () => {
     const connection = createConnection();
 
     connection.propagateConstraints([0], {
-      userId: undefined,
-      postId: undefined,
+      userId: {},
+      postId: {},
     });
 
     expect(connection.estimateCost(1, [])).toStrictEqual({

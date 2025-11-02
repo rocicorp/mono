@@ -34,10 +34,10 @@ export const DEFAULT_SORT: Ordering = [['id', 'asc']];
  * Common constraints used in tests.
  */
 export const CONSTRAINTS = {
-  userId: {userId: undefined} as PlannerConstraint,
-  id: {id: undefined} as PlannerConstraint,
-  postId: {postId: undefined} as PlannerConstraint,
-  name: {name: undefined} as PlannerConstraint,
+  userId: {userId: {}} as PlannerConstraint,
+  id: {id: {}} as PlannerConstraint,
+  postId: {postId: {}} as PlannerConstraint,
+  name: {name: {}} as PlannerConstraint,
 } as const;
 
 /**

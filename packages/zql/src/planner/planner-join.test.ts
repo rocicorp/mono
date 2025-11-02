@@ -94,7 +94,7 @@ suite('PlannerJoin', () => {
 
     join.flip();
 
-    const outputConstraint: PlannerConstraint = {name: undefined};
+    const outputConstraint: PlannerConstraint = {name: {}};
     join.propagateConstraints([0], outputConstraint);
 
     expect(parent.estimateCost(1, [])).toStrictEqual({
