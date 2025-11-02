@@ -79,7 +79,17 @@ export function createSQLiteCostModel(
       `Expected scanstatus to return at least one loop for query: ${sql}`,
     );
 
-    return estimateCost(loops);
+    const costEstimate = estimateCost(loops);
+
+    // Get fanout factor from sqlite_stat1 if constraint is provided
+    const fanOut = constraint
+      ? getStat1Fanout(db, tableName, constraint)
+      : undefined;
+
+    return {
+      ...costEstimate,
+      fanOut,
+    };
   };
 }
 
@@ -198,4 +208,120 @@ export function btreeCost(rows: number): number {
   // We divide the cost by 10 because sorting in SQLite is ~10x faster
   // than bringing the data into JS and sorting there.
   return (rows * Math.log2(rows)) / 10;
+}
+
+/**
+ * Gets fanout factor from sqlite_stat1 for a given constraint.
+ *
+ * Fanout represents the average number of child rows per parent row for
+ * a foreign key relationship. It's extracted from sqlite_stat1's stat column.
+ *
+ * The stat column format is: "totalRows avgRowsPerDistinct1 avgRowsPerDistinct2 ..."
+ * For a constraint on column(s), we find the best matching index and extract
+ * the corresponding avgRowsPerDistinct value.
+ *
+ * @param db Database instance
+ * @param tableName Table to query
+ * @param constraint Constraint columns to find fanout for
+ * @returns Fanout factor, or undefined if no statistics available
+ */
+export function getStat1Fanout(
+  db: Database,
+  tableName: string,
+  constraint: PlannerConstraint,
+): number | undefined {
+  const constraintCols = Object.keys(constraint);
+  if (constraintCols.length === 0) {
+    return undefined;
+  }
+
+  // Query sqlite_master to find all indexes on this table
+  const indexesStmt = db.prepare(
+    `SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?`,
+  );
+  const indexes = indexesStmt.all(tableName) as Array<{name: string}>;
+
+  if (indexes.length === 0) {
+    return undefined;
+  }
+
+  // Find the best matching index
+  let bestMatch:
+    | {
+        indexName: string;
+        matchLength: number;
+        indexCols: string[];
+      }
+    | undefined;
+
+  for (const {name: indexName} of indexes) {
+    // Get columns in this index using PRAGMA index_info
+    const indexInfoStmt = db.prepare(`PRAGMA index_info('${indexName}')`);
+    const indexInfo = indexInfoStmt.all() as Array<{
+      seqno: number;
+      cid: number;
+      name: string;
+    }>;
+
+    const indexCols = indexInfo
+      .sort((a, b) => a.seqno - b.seqno)
+      .map(info => info.name);
+
+    // Check how many constraint columns match the index prefix
+    let matchLength = 0;
+    for (
+      let i = 0;
+      i < Math.min(constraintCols.length, indexCols.length);
+      i++
+    ) {
+      if (constraintCols[i] === indexCols[i]) {
+        matchLength++;
+      } else {
+        break; // Index prefix must match exactly
+      }
+    }
+
+    // Update best match if this is better (longer prefix match)
+    if (
+      matchLength > 0 &&
+      (!bestMatch || matchLength > bestMatch.matchLength)
+    ) {
+      bestMatch = {indexName, matchLength, indexCols};
+    }
+  }
+
+  if (!bestMatch) {
+    return undefined;
+  }
+
+  // Query sqlite_stat1 for statistics on the best matching index
+  const statStmt = db.prepare(
+    `SELECT stat FROM sqlite_stat1 WHERE tbl = ? AND idx = ?`,
+  );
+  const statRow = statStmt.get(tableName, bestMatch.indexName) as
+    | {stat: string}
+    | undefined;
+
+  if (!statRow) {
+    return undefined;
+  }
+
+  // Parse stat column: "totalRows avgRowsPerDistinct1 avgRowsPerDistinct2 ..."
+  const statParts = statRow.stat.split(' ');
+
+  if (statParts.length < 2) {
+    return undefined;
+  }
+
+  // The fanout for the first N columns is at index N
+  // For matchLength columns, we want the Nth avgRowsPerDistinct
+  const fanoutIndex = bestMatch.matchLength;
+
+  if (fanoutIndex >= statParts.length) {
+    return undefined;
+  }
+
+  const fanout = Number(statParts[fanoutIndex]);
+
+  return isNaN(fanout) ? undefined : fanout;
 }

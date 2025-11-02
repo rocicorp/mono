@@ -119,8 +119,8 @@ suite('PlannerFanIn', () => {
         const connectionA = createSelectiveConnection('branchA', 50); // 50% selective
         const connectionB = createSelectiveConnection('branchB', 30); // 30% selective
 
-        expect(connectionA.selectivity).toBe(0.5);
-        expect(connectionB.selectivity).toBe(0.3);
+        expect(connectionA.filterSelectivity).toBe(0.5);
+        expect(connectionB.filterSelectivity).toBe(0.3);
 
         const fanIn = new PlannerFanIn([connectionA, connectionB]);
         if (convert) fanIn.convertToUFI();

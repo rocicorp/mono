@@ -68,7 +68,7 @@ export class PlannerConnection {
   readonly name: string; // Human-readable name for debugging (defaults to table name)
   readonly #baseConstraints: PlannerConstraint | undefined; // Constraints from parent correlation
   readonly #baseLimit: number | undefined; // Original limit from query structure (never modified)
-  readonly selectivity: number; // Fraction of rows passing filters (1.0 = no filtering)
+  readonly filterSelectivity: number; // Fraction of rows passing filters (1.0 = no filtering)
   #output?: PlannerNode | undefined; // Set once during graph construction
 
   // ========================================================================
@@ -101,6 +101,13 @@ export class PlannerConnection {
    */
   #cachedConstraintCosts: Map<string, CostEstimate> = new Map();
 
+  /**
+   * Fanout factors per source join ID.
+   * Maps source join ID to fanout (average child rows per parent row).
+   * Used for computing semi-join selectivity: 1 - (1 - filterSelectivity)^fanOut
+   */
+  #fanOuts: Map<string, number> = new Map();
+
   constructor(
     table: string,
     model: ConnectionCostModel,
@@ -127,13 +134,13 @@ export class PlannerConnection {
     if (limit !== undefined && filters) {
       const costWithFilters = model(table, sort, filters, undefined);
       const costWithoutFilters = model(table, sort, undefined, undefined);
-      this.selectivity =
+      this.filterSelectivity =
         costWithoutFilters.rows > 0
           ? costWithFilters.rows / costWithoutFilters.rows
           : 1.0;
     } else {
       // Root connections or connections without filters
-      this.selectivity = 1.0;
+      this.filterSelectivity = 1.0;
     }
   }
 
@@ -233,6 +240,28 @@ export class PlannerConnection {
     // Cache miss - compute and cache
     const sourcesMap = this.#constraints.get(key);
 
+    // Compute fanout for each source join and store it
+    if (sourcesMap) {
+      for (const [sourceId, sourceConstraint] of sourcesMap) {
+        // Only compute fanout if we don't already have it for this source
+        if (!this.#fanOuts.has(sourceId)) {
+          // Merge base constraints with this source's constraint
+          const constraintForFanout = mergeConstraints(
+            this.#baseConstraints,
+            sourceConstraint,
+          );
+          const {fanOut} = this.#model(
+            this.table,
+            this.#sort,
+            this.#filters,
+            constraintForFanout,
+          );
+          // Store fanout (default to 1.0 if undefined)
+          this.#fanOuts.set(sourceId, fanOut ?? 1.0);
+        }
+      }
+    }
+
     // Merge all constraints from all sources for this branch pattern
     let propagatedConstraint: PlannerConstraint | undefined = undefined;
     if (sourcesMap) {
@@ -263,7 +292,7 @@ export class PlannerConnection {
           : Math.min(rows, this.limit / downstreamChildSelectivity),
       cost: 0,
       returnedRows: rows,
-      selectivity: this.selectivity,
+      selectivity: this.filterSelectivity,
       limit: this.limit,
     };
     this.#cachedConstraintCosts.set(key, cost);
@@ -279,6 +308,32 @@ export class PlannerConnection {
     });
 
     return cost;
+  }
+
+  /**
+   * Get semi-join selectivity for a specific source join.
+   * Semi-join selectivity represents the fraction of parent rows that have
+   * at least one matching child row.
+   *
+   * Formula: 1 - (1 - filterSelectivity)^fanOut
+   * Where:
+   * - filterSelectivity: fraction of rows passing filters
+   * - fanOut: average number of child rows per parent row
+   *
+   * Example:
+   * - If filterSelectivity = 0.1 (10% of rows pass filters)
+   * - And fanOut = 5 (average 5 child rows per parent)
+   * - Then semiJoinSelectivity = 1 - (1 - 0.1)^5 = 1 - 0.9^5 ≈ 0.41
+   *
+   * This captures the fact that with multiple child rows, it's more likely
+   * that at least one passes the filter.
+   *
+   * @param sourceJoinId - ID of the join whose fanout should be used
+   * @returns Semi-join selectivity (0.0 to 1.0)
+   */
+  getSemiJoinSelectivity(sourceJoinId: string): number {
+    const fanOut = this.#fanOuts.get(sourceJoinId) ?? 1.0;
+    return 1 - Math.pow(1 - this.filterSelectivity, fanOut);
   }
 
   /**
@@ -312,6 +367,8 @@ export class PlannerConnection {
     this.limit = this.#baseLimit;
     // Clear all cost caches
     this.#cachedConstraintCosts.clear();
+    // Clear fanout cache
+    this.#fanOuts.clear();
   }
 
   /**

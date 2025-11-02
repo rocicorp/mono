@@ -324,10 +324,18 @@ export class PlannerJoin {
      * NOTE: We do not know if the probabilities are correlated so we assume independence.
      * This is a fundamental limitation of the planner.
      */
+    // Get child selectivity for semi-join calculation
+    // If child is a connection, use semi-join selectivity which accounts for fanout
+    // Otherwise, use the selectivity from the cost estimate (already combined)
+    const childSelectivity =
+      this.#child.kind === 'connection'
+        ? this.#child.getSemiJoinSelectivity(this.id)
+        : child.selectivity;
+
     const parent = this.#parent.estimateCost(
       // Selectivity flows up the graph from child to parent
       // so we can determine the total selectivity of all ANDed exists checks.
-      child.selectivity * downstreamChildSelectivity,
+      childSelectivity * downstreamChildSelectivity,
       branchPattern,
       planDebugger,
     );
@@ -347,8 +355,8 @@ export class PlannerJoin {
         cost:
           parent.cost +
           parent.scanEst * (child.startupCost + child.cost + child.scanEst),
-        returnedRows: parent.returnedRows * child.selectivity,
-        selectivity: child.selectivity * parent.selectivity,
+        returnedRows: parent.returnedRows * childSelectivity,
+        selectivity: childSelectivity * parent.selectivity,
         limit: parent.limit,
       };
     } else {
