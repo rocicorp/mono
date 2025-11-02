@@ -4,6 +4,50 @@ import {sleep} from '../../../shared/src/sleep.ts';
 import {type Result, Subscription} from './subscription.ts';
 
 describe('types/subscription', () => {
+  test('end', async () => {
+    const consumed = new Set<number>();
+    const cleanup = vi.fn();
+    const results: Promise<Result>[] = [];
+
+    const subscription = Subscription.create<number>({
+      cleanup,
+      consumed: m => consumed.add(m),
+    });
+    for (let i = 0; i < 5; i++) {
+      const {result} = subscription.push(i);
+      results.push(result);
+    }
+
+    const received: number[] = [];
+
+    let j = 0;
+    for await (const m of subscription) {
+      expect(consumed.has(m)).toBe(false);
+      for (let i = 0; i < m; i++) {
+        expect(consumed.has(i)).toBe(true);
+        expect(await results[i]).toBe('consumed');
+      }
+      received.push(m);
+      if (j++ === 2) {
+        expect(subscription.active).toBe(true);
+        subscription.end();
+        expect(subscription.active).toBe(true);
+      }
+    }
+    expect(subscription.active).toBe(false);
+
+    for (let i = 3; i < 5; i++) {
+      expect(await results[i]).toBe('consumed');
+    }
+
+    expect(received).toEqual([0, 1, 2, 3, 4]);
+    expect(consumed).toEqual(new Set(received));
+    expect(cleanup).toBeCalledTimes(1);
+    expect(cleanup.mock.calls[0][0]).toEqual([]);
+
+    expect(await subscription.push(6).result).toBe('unconsumed');
+  });
+
   test('cancel', async () => {
     const consumed = new Set<number>();
     const cleanup = vi.fn();
@@ -275,6 +319,51 @@ describe('types/subscription', () => {
     expect(cleanup.mock.calls[0][0]).toEqual([]);
 
     expect(await subscription.push('e').result).toBe('unconsumed');
+  });
+
+  test('coalesce end', async () => {
+    const consumed = new Set<string>();
+    const cleanup = vi.fn();
+    const results: Promise<Result>[] = [];
+
+    const subscription = Subscription.create<string>({
+      cleanup,
+      consumed: m => consumed.add(m),
+      coalesce: (curr, prev) => `${prev},${curr}`,
+    });
+    results.push(subscription.push('a').result);
+    results.push(subscription.push('b').result);
+
+    const received: string[] = [];
+    let i = 0;
+    for await (const m of subscription) {
+      received.push(m);
+
+      if (i++ === 0) {
+        expect(consumed.has('a,b')).toBe(false);
+        expect(consumed.has('c,d')).toBe(false);
+        results.push(subscription.push('c').result);
+        results.push(subscription.push('d').result);
+        subscription.end();
+        // Post-end() results are coalesced separately.
+        results.push(subscription.push('e').result);
+        results.push(subscription.push('f').result);
+      } else {
+        expect(consumed.has('a,b')).toBe(true);
+        expect(await results[0]).toBe('coalesced');
+        expect(await results[1]).toBe('consumed');
+        expect(consumed.has('c,d')).toBe(false);
+      }
+    }
+    expect(await results[2]).toBe('coalesced');
+    expect(await results[3]).toBe('consumed');
+    expect(await results[4]).toBe('coalesced');
+    expect(await results[5]).toBe('unconsumed');
+
+    expect(received).toEqual(['a,b', 'c,d']);
+    expect(consumed).toEqual(new Set(received));
+    expect(cleanup).toBeCalledTimes(1);
+    expect(cleanup.mock.calls[0][0]).toEqual(['e,f']);
   });
 
   test('coalesce break', async () => {

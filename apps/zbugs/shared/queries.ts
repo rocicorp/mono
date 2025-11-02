@@ -8,6 +8,7 @@ import * as z from 'zod/mini';
 import type {AuthData, Role} from './auth.ts';
 import {INITIAL_COMMENT_LIMIT} from './consts.ts';
 import {builder, ZERO_PROJECT_NAME, type Schema} from './schema.ts';
+import {QueryError, QueryErrorCode} from './error.ts';
 
 // oxlint-disable-next-line no-explicit-any
 function applyIssuePermissions<TQuery extends Query<Schema, 'issue', any>>(
@@ -149,7 +150,11 @@ export const queries = {
             ),
           );
         } else {
-          throw new Error(`Unknown filter: ${filter}`);
+          throw new QueryError(
+            `Unknown filter: ${filter}`,
+            QueryErrorCode.UNKNOWN_FILTER,
+            filter,
+          );
         }
       }
       return q;
@@ -277,7 +282,11 @@ export const queries = {
         } else if (filter === 'creators') {
           q = q.whereExists('createdIssues');
         } else {
-          throw new Error(`Unknown filter: ${filter}`);
+          throw new QueryError(
+            `Unknown filter: ${filter}`,
+            QueryErrorCode.UNKNOWN_FILTER,
+            filter,
+          );
         }
       }
       return q;

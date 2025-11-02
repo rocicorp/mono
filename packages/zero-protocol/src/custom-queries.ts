@@ -18,42 +18,24 @@ export const transformedQuerySchema = v.object({
   ast: astSchema,
 });
 
-export const appQueryErrorSchema = v.object({
+export const appErroredQuerySchema = v.object({
   error: v.literal('app'),
   id: v.string(),
   name: v.string(),
-  details: jsonSchema,
+  // optional for backwards compatibility
+  message: v.string().optional(),
+  details: jsonSchema.optional(),
 });
-
-/** @deprecated zero errors are now represented as ['error', { ... }] messages */
-export const zeroErrorSchema = v.object({
-  /** @deprecated */
-  error: v.literal('zero'),
-  /** @deprecated */
+export const parseErroredQuerySchema = v.object({
+  error: v.literal('parse'),
   id: v.string(),
-  /** @deprecated */
   name: v.string(),
-  /** @deprecated */
-  details: jsonSchema,
+  message: v.string(),
+  details: jsonSchema.optional(),
 });
-/** @deprecated http errors are now represented as ['error', { ... }] messages */
-export const httpQueryErrorSchema = v.object({
-  /** @deprecated */
-  error: v.literal('http'),
-  /** @deprecated */
-  id: v.string(),
-  /** @deprecated */
-  name: v.string(),
-  /** @deprecated */
-  status: v.number(),
-  /** @deprecated */
-  details: jsonSchema,
-});
-
 export const erroredQuerySchema = v.union(
-  appQueryErrorSchema,
-  httpQueryErrorSchema,
-  zeroErrorSchema,
+  appErroredQuerySchema,
+  parseErroredQuerySchema,
 );
 export type ErroredQuery = v.Infer<typeof erroredQuerySchema>;
 

@@ -30,33 +30,43 @@ export interface Connection {
    *
    * If called when not in a terminal state, this method does nothing.
    *
+   * @param opts - Optional connection options
+   * @param opts.auth - Token to use for authentication. If provided, this overrides
+   *                    the stored auth credential for this connection attempt.
+   *                    If `null` or `undefined`, the stored auth credential is cleared.
    * @returns A promise that resolves once the connection state has transitioned to connecting.
    */
-  connect(): Promise<void>;
+  connect(opts?: {auth: string | null | undefined}): Promise<void>;
 }
 
 export class ConnectionImpl implements Connection {
   readonly #connectionManager: ConnectionManager;
   readonly #lc: ZeroLogContext;
   readonly #source: ConnectionSource;
+  readonly #setAuth: (auth: string | null | undefined) => void;
 
-  constructor(connectionManager: ConnectionManager, lc: ZeroLogContext) {
+  constructor(
+    connectionManager: ConnectionManager,
+    lc: ZeroLogContext,
+    setAuth: (auth: string | null | undefined) => void,
+  ) {
     this.#connectionManager = connectionManager;
     this.#lc = lc;
     this.#source = new ConnectionSource(connectionManager);
+    this.#setAuth = setAuth;
   }
 
   get state(): Source<ConnectionState> {
     return this.#source;
   }
 
-  async connect(): Promise<void> {
+  async connect(opts?: {auth: string | null | undefined}): Promise<void> {
     const lc = this.#lc.withContext('connect');
 
-    // TODO(0xcadams): Support auth parameter when auth flow is implemented
-    // if (opts?.auth !== undefined) {
-    //   lc.warn?.('connect() auth parameter not yet implemented');
-    // }
+    if (opts && 'auth' in opts) {
+      lc.debug?.('Updating auth credential from connect()');
+      this.#setAuth(opts.auth);
+    }
 
     // only allow connect() to be called from a terminal state
     if (!this.#connectionManager.isInTerminalState()) {

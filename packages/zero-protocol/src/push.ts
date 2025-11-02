@@ -105,6 +105,7 @@ export const pushMessageSchema = v.tuple([v.literal('push'), pushBodySchema]);
 const appErrorSchema = v.object({
   error: v.literal('app'),
   // The user can return any additional data here
+  message: v.string().optional(),
   details: jsonSchema.optional(),
 });
 const zeroErrorSchema = v.object({

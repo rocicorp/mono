@@ -22,6 +22,8 @@ export type {
   ReadonlyJSONValue,
 } from '../../shared/src/json.ts';
 export type {MaybePromise} from '../../shared/src/types.ts';
+export {ApplicationError} from '../../zero-protocol/src/application-error.ts';
+export type {ApplicationErrorOptions} from '../../zero-protocol/src/application-error.ts';
 export type {
   AST,
   Bound,
@@ -149,7 +151,13 @@ export type {
   MutatorResult as PromiseWithServerResult,
 } from './client/custom.ts';
 export {ClientError} from './client/error.ts';
-export type {ZeroError, ZeroErrorBody, ZeroErrorKind} from './client/error.ts';
+export type {
+  AuthError,
+  NeedsAuthReason,
+  ZeroError,
+  ZeroErrorBody,
+  ZeroErrorKind,
+} from './client/error.ts';
 export type {ClientGroup as InspectorClientGroup} from './client/inspector/client-group.ts';
 export type {Client as InspectorClient} from './client/inspector/client.ts';
 export type {Inspector} from './client/inspector/inspector.ts';
@@ -158,3 +166,7 @@ export type {OnError, OnErrorParameters} from './client/on-error.ts';
 export type {UpdateNeededReason, ZeroOptions} from './client/options.ts';
 export {UpdateNeededReasonType} from './client/update-needed-reason-type.ts';
 export {Zero, type MakeEntityQueriesFromSchema} from './client/zero.ts';
+export type {
+  QueryErrorDetails,
+  QueryResultDetails,
+} from './types/query-result.ts';

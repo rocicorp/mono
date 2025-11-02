@@ -124,6 +124,18 @@ INSERT INTO "dataTypeTest" (
 ) VALUES (
   '100', '{}', true, 1.1, 100
 );
+
+CREATE TABLE "pkSecurity" (
+  id text PRIMARY KEY,
+  "groupId" text,
+  "ownerId" text,
+  data text
+);
+
+-- Multiple rows with same groupId but different owners
+INSERT INTO "pkSecurity" VALUES ('row1', 'group1', 'user1', 'data1');
+INSERT INTO "pkSecurity" VALUES ('row2', 'group1', 'user2', 'data2');
+INSERT INTO "pkSecurity" VALUES ('row3', 'group1', 'user1', 'data3');
 `;
 
 async function createUpstreamTables(db: PostgresDB) {
@@ -206,6 +218,15 @@ const schema = createSchema({
         i: number().optional(),
       })
       .primaryKey('id'),
+
+    table('pkSecurity')
+      .columns({
+        id: string(),
+        groupId: string(),
+        ownerId: string(),
+        data: string(),
+      })
+      .primaryKey('id'),
   ],
 });
 
@@ -240,6 +261,10 @@ const permissionsConfig = await definePermissions<AuthData, typeof schema>(
       authData: AuthData,
       {cmp}: ExpressionBuilder<Schema, 'userMatch'>,
     ) => cmp('id', '=', authData.sub);
+    const allowIfOwner = (
+      authData: AuthData,
+      {cmp}: ExpressionBuilder<Schema, 'pkSecurity'>,
+    ) => cmp('ownerId', '=', authData.sub);
 
     return {
       roColumn: {
@@ -324,6 +349,14 @@ const permissionsConfig = await definePermissions<AuthData, typeof schema>(
             postMutation: ANYONE_CAN,
           },
           delete: ANYONE_CAN,
+        },
+      },
+      pkSecurity: {
+        row: {
+          update: {
+            preMutation: [allowIfOwner],
+            postMutation: ANYONE_CAN,
+          },
         },
       },
     };
@@ -843,4 +876,59 @@ describe('data type test', () => {
       ]
     `);
   });
+});
+
+test('rejects malicious primary key to prevent privilege escalation', async () => {
+  // Setup: user1 owns row1 and row3, user2 owns row2
+  // All three rows share groupId='group1'
+
+  // Attacker (user1) tries to omit the required primary key column 'id' from the value
+  // and sends only groupId, attempting to update multiple rows
+  // The server should reject this because 'id' is missing from the operation value
+  const error = await processMutation(
+    lc,
+    {sub: 'user1', role: 'user'},
+    upstream,
+    SHARD,
+    CG_ID,
+    {
+      clientID: 'attacker-client',
+      id: 1,
+      type: MutationType.CRUD,
+      name: '_zero_crud',
+      args: [
+        {
+          ops: [
+            {
+              op: 'update',
+              tableName: 'pkSecurity',
+              primaryKey: ['groupId'], // Malicious: attacker uses non-unique column
+              value: {
+                groupId: 'group1',
+                ownerId: 'user1',
+                data: 'hacked',
+              },
+            },
+          ],
+        },
+      ],
+      timestamp: Date.now(),
+    },
+    authorizer,
+    undefined,
+  );
+
+  // Mutation should fail with missing primary key column error
+  expect(error).toBeDefined();
+  expect(error?.[1]).toContain(
+    "Primary key column 'id' is missing from operation value for table pkSecurity",
+  );
+
+  // Verify no rows were modified
+  const rows = await upstream`SELECT * FROM "pkSecurity" ORDER BY id`;
+  expect(rows).toEqual([
+    {id: 'row1', groupId: 'group1', ownerId: 'user1', data: 'data1'}, // Unchanged
+    {id: 'row2', groupId: 'group1', ownerId: 'user2', data: 'data2'}, // Unchanged
+    {id: 'row3', groupId: 'group1', ownerId: 'user1', data: 'data3'}, // Unchanged
+  ]);
 });

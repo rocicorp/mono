@@ -6,8 +6,11 @@ import {
   throwIfConnectionError,
 } from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
-import {ClientError} from './error.ts';
+import {ClientError, type AuthError} from './error.ts';
 import {assert} from '../../../shared/src/asserts.ts';
+import {ProtocolError} from '../../../zero-protocol/src/error.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -751,6 +754,145 @@ describe('ConnectionManager', () => {
     });
   });
 
+  describe('needsAuth', () => {
+    test('transitions to needs-auth state and pauses run loop', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+      const listener = subscribe(manager);
+      const authError = new ProtocolError({
+        kind: ErrorKind.Unauthorized,
+        message: 'unauthorized',
+        origin: ErrorOrigin.ZeroCache,
+      }) as AuthError;
+
+      manager.needsAuth(authError);
+
+      expect(manager.state).toEqual({
+        name: ConnectionStatus.NeedsAuth,
+        reason: authError,
+      });
+      expect(manager.isInTerminalState()).toBe(true);
+      expect(listener).toHaveBeenCalledWith({
+        name: ConnectionStatus.NeedsAuth,
+        reason: authError,
+      });
+    });
+
+    test('is no-op when already in needs-auth state', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+      const firstError = new ProtocolError({
+        kind: ErrorKind.Unauthorized,
+        message: 'first unauthorized',
+        origin: ErrorOrigin.ZeroCache,
+      }) as AuthError;
+      const secondError = new ProtocolError({
+        kind: ErrorKind.AuthInvalidated,
+        message: 'second auth invalidated',
+        origin: ErrorOrigin.ZeroCache,
+      }) as AuthError;
+
+      manager.needsAuth(firstError);
+      const listener = subscribe(manager);
+      manager.needsAuth(secondError);
+
+      expect(manager.state).toEqual({
+        name: ConnectionStatus.NeedsAuth,
+        reason: firstError,
+      });
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    test('is no-op when closed', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+      manager.closed();
+
+      const listener = subscribe(manager);
+      const authError = new ProtocolError({
+        kind: ErrorKind.Unauthorized,
+        message: 'auth error after closed',
+        origin: ErrorOrigin.ZeroCache,
+      }) as AuthError;
+      manager.needsAuth(authError);
+
+      expect(listener).not.toHaveBeenCalled();
+      expect(manager.is(ConnectionStatus.Closed)).toBe(true);
+    });
+
+    test('stops timeout checking when transitioning to needs-auth', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: 5_000,
+        timeoutCheckIntervalMs: 100,
+      });
+      const listener = subscribe(manager);
+      const authError = new ProtocolError({
+        kind: ErrorKind.Unauthorized,
+        message: 'unauthorized',
+        origin: ErrorOrigin.ZeroCache,
+      }) as AuthError;
+
+      manager.needsAuth(authError);
+      listener.mockClear();
+
+      // Advance time - timeout interval should not fire
+      vi.advanceTimersByTime(10_000);
+
+      expect(listener).not.toHaveBeenCalled();
+      expect(manager.is(ConnectionStatus.NeedsAuth)).toBe(true);
+    });
+
+    test('can transition from connected to needs-auth', () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+      manager.connected();
+      const listener = subscribe(manager);
+
+      const authError = new ProtocolError({
+        kind: ErrorKind.AuthInvalidated,
+        message: 'auth invalidated',
+        origin: ErrorOrigin.ZeroCache,
+      }) as AuthError;
+
+      manager.needsAuth(authError);
+
+      expect(manager.state).toEqual({
+        name: ConnectionStatus.NeedsAuth,
+        reason: authError,
+      });
+      expect(listener).toHaveBeenCalledWith({
+        name: ConnectionStatus.NeedsAuth,
+        reason: authError,
+      });
+    });
+
+    test('needsAuth nextStatePromise resolves when transitioning out of needs-auth', async () => {
+      const manager = new ConnectionManager({
+        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+      });
+      const authError = new ProtocolError({
+        kind: ErrorKind.Unauthorized,
+        message: 'unauthorized',
+        origin: ErrorOrigin.ZeroCache,
+      }) as AuthError;
+
+      const {nextStatePromise} = manager.needsAuth(authError);
+
+      manager.connecting();
+
+      await expect(nextStatePromise).resolves.toEqual(
+        expect.objectContaining({
+          name: ConnectionStatus.Connecting,
+          attempt: 1,
+        }),
+      );
+    });
+  });
+
   describe('throwIfConnectionError', () => {
     test('does nothing when state is connecting without reason', () => {
       const state: ConnectionState = {
@@ -810,6 +952,20 @@ describe('ConnectionManager', () => {
       });
       const state: ConnectionState = {
         name: ConnectionStatus.Disconnected,
+        reason,
+      };
+
+      expect(() => throwIfConnectionError(state)).toThrow(reason);
+    });
+
+    test('throws when in needs-auth state', () => {
+      const reason = new ProtocolError({
+        kind: ErrorKind.Unauthorized,
+        message: 'unauthorized',
+        origin: ErrorOrigin.ZeroCache,
+      }) as AuthError;
+      const state: ConnectionState = {
+        name: ConnectionStatus.NeedsAuth,
         reason,
       };
 
