@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1761796114211,
+  "lastUpdate": 1762180770203,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54465,6 +54465,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/bcbdaeeedc0dc4a8362bd35ad2cd2e4bd1496091"
         },
         "date": 1761796101864,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 302365,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54477,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111453,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31872,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2d9fb4e627a4a51d092922f8da99521a5d30df7a",
+          "message": "feat(zero)!: defineQuery again  (#5103)\n\nBREAKING CHANGE!\n\n- This adds another type parameter to a lot of the types.\n- This removes run, preload and materialize from `Query`.\n\nRevert the revert.\n\nThe main issue was that builder.tableName returns a QueryImpl and not a\nZPGQuery. Then we tried to `.run()` that which fails.\n\nInstead, we only use QueryImpl and let the DBTransaction handle running\nthe query.\n\nRemove ZPGQuery and RunnableQuery.\n\nThis simplifies a lot of things :-)",
+          "timestamp": "2025-11-03T14:30:20Z",
+          "tree_id": "cda659c96ec4e300dbd86f82aab92a48846461bd",
+          "url": "https://github.com/rocicorp/mono/commit/2d9fb4e627a4a51d092922f8da99521a5d30df7a"
+        },
+        "date": 1762180755986,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
