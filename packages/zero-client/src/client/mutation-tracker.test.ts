@@ -6,20 +6,21 @@ import type {
 import {zeroData} from '../../../replicache/src/transactions.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
+import {promiseUndefined} from '../../../shared/src/resolved-promises.ts';
+import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ProtocolError} from '../../../zero-protocol/src/error.ts';
+import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
 import type {
   PushResponse,
   PushResponseBody,
 } from '../../../zero-protocol/src/push.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {makeReplicacheMutator} from './custom.ts';
-import {toMutationResponseKey} from './keys.ts';
 import {isServerError} from './error.ts';
+import {toMutationResponseKey} from './keys.ts';
 import {MutationTracker} from './mutation-tracker.ts';
 import type {WriteTransaction} from './replicache-types.ts';
-import {ProtocolError} from '../../../zero-protocol/src/error.ts';
-import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 
 const lc = createSilentLogContext();
 
@@ -562,13 +563,16 @@ describe('MutationTracker', () => {
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
-  test('not awaiting the server promise does not trigger unhandled rejection', () => {
+  test('not awaiting the server promise does not trigger unhandled rejection', async () => {
     const onFatalError = vi.fn();
     const tracker = new MutationTracker(lc, ackMutations, onFatalError);
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const {ephemeralID} = tracker.trackMutation();
     tracker.rejectMutation(ephemeralID, new Error('test error'));
+
+    // wait one tick to ensure the unhandled rejection is not thrown
+    await promiseUndefined;
 
     expect(onFatalError).not.toHaveBeenCalled();
   });
