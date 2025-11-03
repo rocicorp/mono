@@ -83,8 +83,9 @@ export class Stat1Cache {
    */
   #prepareStatements(): void {
     // Schema metadata statements (always available)
+    // Get all tables that have indexes
     this.#getAllIndexDefinitionsStmt = this.#db.prepare(`
-      SELECT name, tbl_name, sql
+      SELECT DISTINCT tbl_name
       FROM sqlite_master
       WHERE type = 'index' AND sql IS NOT NULL
     `);
@@ -127,33 +128,45 @@ export class Stat1Cache {
   }
 
   /**
-   * Load all index metadata from sqlite_master.
-   * Parses index definitions to extract column names and builds lookup maps.
+   * Load all index metadata using pragma functions.
+   * Uses pragma_index_list and pragma_index_info for robust column extraction.
    */
   #loadSchemaMetadata(): void {
     this.#indexColumns.clear();
     this.#tableIndexes.clear();
 
-    const indexes = this.#getAllIndexDefinitionsStmt.all() as Array<{
-      name: string;
+    // Get all tables that have indexes
+    const tables = this.#getAllIndexDefinitionsStmt.all() as Array<{
       tbl_name: string;
-      sql: string;
     }>;
 
-    for (const index of indexes) {
-      // Parse columns from CREATE INDEX statement
-      const columns = this.#parseIndexColumns(index.sql);
-      if (columns) {
-        this.#indexColumns.set(index.name, columns);
-      }
+    for (const {tbl_name: tableName} of tables) {
+      // Use pragma_index_list to get all indexes for this table
+      const indexes = this.#db
+        .prepare(`SELECT name FROM pragma_index_list(?)`)
+        .all(tableName) as Array<{name: string}>;
 
-      // Track which indexes belong to each table
-      let tableSet = this.#tableIndexes.get(index.tbl_name);
-      if (!tableSet) {
-        tableSet = new Set();
-        this.#tableIndexes.set(index.tbl_name, tableSet);
+      for (const {name: indexName} of indexes) {
+        // Use pragma_index_info to get columns in order
+        const columns = this.#db
+          .prepare(`SELECT name FROM pragma_index_info(?) ORDER BY seqno`)
+          .all(indexName) as Array<{name: string}>;
+
+        if (columns.length > 0) {
+          this.#indexColumns.set(
+            indexName,
+            columns.map(c => c.name),
+          );
+
+          // Track which indexes belong to each table
+          let tableSet = this.#tableIndexes.get(tableName);
+          if (!tableSet) {
+            tableSet = new Set();
+            this.#tableIndexes.set(tableName, tableSet);
+          }
+          tableSet.add(indexName);
+        }
       }
-      tableSet.add(index.name);
     }
   }
 
@@ -200,23 +213,6 @@ export class Stat1Cache {
         });
       }
     }
-  }
-
-  /**
-   * Parse column names from a CREATE INDEX SQL statement.
-   *
-   * @param sql CREATE INDEX statement
-   * @returns Array of column names, or undefined if parsing fails
-   */
-  #parseIndexColumns(sql: string): string[] | undefined {
-    // Format: CREATE INDEX name ON table(col1, col2 DESC, ...)
-    const match = sql.match(/\((.*)\)/);
-    if (!match) {
-      return undefined;
-    }
-
-    // Split on comma and extract just the column name (removing ASC/DESC/COLLATE)
-    return match[1].split(',').map(col => col.trim().split(/\s+/)[0]);
   }
 
   /**

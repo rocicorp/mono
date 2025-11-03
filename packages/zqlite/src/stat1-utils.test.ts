@@ -433,6 +433,28 @@ describe('Stat1Cache', () => {
   });
 
   describe('edge cases', () => {
+    test('handles indexes with DESC modifier', () => {
+      // Create index with DESC - pragma handles this correctly
+      db.exec('CREATE INDEX idx_posts_created_desc ON posts(createdAt DESC)');
+      db.exec('ANALYZE');
+      cache.schemaUpdated();
+
+      const fanOut = cache.getJoinFanOut('posts', ['createdAt']);
+      expect(fanOut).toBeDefined();
+    });
+
+    test('handles indexes with COLLATE', () => {
+      // Create index with COLLATE - pragma handles this correctly
+      db.exec(
+        'CREATE INDEX idx_posts_content_nocase ON posts(content COLLATE NOCASE)',
+      );
+      db.exec('ANALYZE');
+      cache.schemaUpdated();
+
+      const fanOut = cache.getJoinFanOut('posts', ['content']);
+      expect(fanOut).toBeDefined();
+    });
+
     test('database without ANALYZE', () => {
       const lc = createSilentLogContext();
       const freshDb = new Database(lc, ':memory:');
