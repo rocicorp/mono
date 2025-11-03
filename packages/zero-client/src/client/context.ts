@@ -3,17 +3,20 @@ import type {Hash} from '../../../replicache/src/hash.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import type {FilterInput} from '../../../zql/src/ivm/filter-operators.ts';
-import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
-import type {Input, Storage} from '../../../zql/src/ivm/operator.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {DebugDelegate} from '../../../zql/src/builder/debug-delegate.ts';
+import type {Input} from '../../../zql/src/ivm/operator.ts';
 import type {Source, SourceInput} from '../../../zql/src/ivm/source.ts';
 import {MeasurePushOperator} from '../../../zql/src/query/measure-push-operator.ts';
 import type {MetricsDelegate} from '../../../zql/src/query/metrics-delegate.ts';
+import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
+import type {CommitListener} from '../../../zql/src/query/query-delegate.ts';
+import {type AnyQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {
-  CommitListener,
-  QueryDelegate,
-} from '../../../zql/src/query/query-delegate.ts';
-import type {RunOptions} from '../../../zql/src/query/query.ts';
+  AnyQuery,
+  Query,
+  RunOptions,
+} from '../../../zql/src/query/query.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
 import type {QueryManager} from './query-manager.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
@@ -30,12 +33,15 @@ export type FlushQueryChanges = QueryManager['flushBatch'];
  * Replicache data and pushes them into IVM and on tells the server about new
  * queries.
  */
-export class ZeroContext implements QueryDelegate {
+export class ZeroContext<TContext> extends QueryDelegateBase<TContext> {
+  readonly #lc: ZeroLogContext;
+
   // It is a bummer to have to maintain separate MemorySources here and copy the
   // data in from the Replicache db. But we want the data to be accessible via
   // pipelines *synchronously* and the core Replicache infra is all async. So
   // that needs to be fixed.
   readonly #mainSources: IVMSourceBranch;
+
   readonly addServerQuery: AddQuery;
   readonly addCustomQuery: AddCustomQuery;
   readonly updateServerQuery: UpdateQuery;
@@ -44,7 +50,6 @@ export class ZeroContext implements QueryDelegate {
   readonly #batchViewUpdates: (applyViewUpdates: () => void) => void;
   readonly #commitListeners: Set<CommitListener> = new Set();
 
-  readonly #lc: ZeroLogContext;
   readonly assertValidRunOptions: (options?: RunOptions) => void;
 
   /**
@@ -55,9 +60,12 @@ export class ZeroContext implements QueryDelegate {
 
   readonly addMetric: MetricsDelegate['addMetric'];
 
+  readonly #queryInternals = new WeakMap<AnyQuery, AnyQueryInternals>();
+
   constructor(
     lc: ZeroLogContext,
     mainSources: IVMSourceBranch,
+    context: TContext,
     addQuery: AddQuery,
     addCustomQuery: AddCustomQuery,
     updateQuery: UpdateQuery,
@@ -67,17 +75,37 @@ export class ZeroContext implements QueryDelegate {
     addMetric: MetricsDelegate['addMetric'],
     assertValidRunOptions: (options?: RunOptions) => void,
   ) {
+    super(context);
+    this.#lc = lc;
     this.#mainSources = mainSources;
     this.addServerQuery = addQuery;
     this.updateServerQuery = updateQuery;
     this.updateCustomQuery = updateCustomQuery;
     this.#batchViewUpdates = batchViewUpdates;
-    this.#lc = lc;
     this.assertValidRunOptions = assertValidRunOptions;
     this.addCustomQuery = addCustomQuery;
     this.flushQueryChanges = flushQueryChanges;
     this.addMetric = addMetric;
   }
+
+  override withContext<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+  >(query: Query<TSchema, TTable, TReturn, TContext>) {
+    const existing = this.#queryInternals.get(query);
+    if (existing) {
+      return existing;
+    }
+
+    const qi = super.withContext(query);
+    this.#queryInternals.set(query, qi);
+    return qi;
+  }
+
+  applyFiltersAnyway?: boolean | undefined;
+
+  debug?: DebugDelegate | undefined;
 
   getSource(name: string): Source | undefined {
     return this.#mainSources.getSource(name);
@@ -87,23 +115,9 @@ export class ZeroContext implements QueryDelegate {
     return ast;
   }
 
-  createStorage(): Storage {
-    return new MemoryStorage();
-  }
-
-  decorateInput(input: Input): Input {
-    return input;
-  }
-
-  decorateFilterInput(input: FilterInput): FilterInput {
-    return input;
-  }
-
-  decorateSourceInput(input: SourceInput, queryID: string): Input {
+  override decorateSourceInput(input: SourceInput, queryID: string): Input {
     return new MeasurePushOperator(input, queryID, this, 'query-update-client');
   }
-
-  addEdge() {}
 
   onTransactionCommit(cb: CommitListener): () => void {
     this.#commitListeners.add(cb);
@@ -112,7 +126,7 @@ export class ZeroContext implements QueryDelegate {
     };
   }
 
-  batchViewUpdates<T>(applyViewUpdates: () => T) {
+  override batchViewUpdates<T>(applyViewUpdates: () => T) {
     let result: T | undefined;
     let viewChangesPerformed = false;
     this.#batchViewUpdates(() => {

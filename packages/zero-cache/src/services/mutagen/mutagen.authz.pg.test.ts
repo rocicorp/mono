@@ -3,10 +3,7 @@ import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {h128} from '../../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
-import {
-  createSchema,
-  type Schema as ZeroSchema,
-} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
   json,
@@ -19,6 +16,7 @@ import {
   definePermissions,
   NOBODY_CAN,
 } from '../../../../zero-schema/src/permissions.ts';
+import type {Schema as ZeroSchema} from '../../../../zero-types/src/schema.ts';
 import {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
 import type {Row} from '../../../../zql/src/query/query.ts';
 import {Database} from '../../../../zqlite/src/db.ts';

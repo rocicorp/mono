@@ -1,19 +1,22 @@
 import {type ServerTransaction, type UpdateValue} from '@rocicorp/zero';
 import type {PostgresJsTransaction} from '@rocicorp/zero/server/adapters/postgresjs';
 import {type AuthData} from '../shared/auth.ts';
+import {MutationError, MutationErrorCode} from '../shared/error.ts';
 import {
   createMutators,
   type AddCommentArgs,
   type AddEmojiArgs,
   type CreateIssueArgs,
 } from '../shared/mutators.ts';
-import {schema, type Schema} from '../shared/schema.ts';
+import {builder, schema, type Schema} from '../shared/schema.ts';
 import {notify} from './notify.ts';
-import {MutationErrorCode} from '../shared/error.ts';
-import {MutationError} from '../shared/error.ts';
 
 export type PostCommitTask = () => Promise<void>;
-type MutatorTx = ServerTransaction<Schema, PostgresJsTransaction>;
+type MutatorTx = ServerTransaction<
+  Schema,
+  PostgresJsTransaction,
+  AuthData | undefined
+>;
 
 export function createServerMutators(
   authData: AuthData | undefined,
@@ -133,10 +136,9 @@ export function createServerMutators(
           created: Date.now(),
         });
 
-        const comment = await tx.query.comment
-          .where('id', args.subjectID)
-          .one()
-          .run();
+        const comment = await tx.run(
+          builder.comment.where('id', args.subjectID).one(),
+        );
 
         if (!comment) {
           throw new MutationError(
@@ -187,7 +189,7 @@ export function createServerMutators(
       async edit(tx: MutatorTx, {id, body}: {id: string; body: string}) {
         await mutators.comment.edit(tx, {id, body});
 
-        const comment = await tx.query.comment.where('id', id).one().run();
+        const comment = await tx.run(builder.comment.where('id', id).one());
 
         if (!comment) {
           throw new MutationError(

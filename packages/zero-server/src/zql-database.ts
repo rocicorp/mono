@@ -1,15 +1,24 @@
+import type {MaybePromise} from '../../shared/src/types.ts';
+import {formatPg, sql} from '../../z2s/src/sql.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
+import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
 import type {
   DBConnection,
   DBTransaction,
   SchemaCRUD,
   SchemaQuery,
 } from '../../zql/src/mutate/custom.ts';
-import {formatPg, sql} from '../../z2s/src/sql.ts';
-import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
-import {makeSchemaQuery} from './query.ts';
-import {makeSchemaCRUD, TransactionImpl} from './custom.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import {makeServerTransaction} from './custom.ts';
+import {createBuilder} from '../../zql/src/query/named.ts';
+import type {
+  HumanReadable,
+  Query,
+  RunOptions,
+} from '../../zql/src/query/query.ts';
+import {
+  makeSchemaCRUD,
+  makeServerTransaction,
+  TransactionImpl,
+} from './custom.ts';
 import type {
   Database,
   TransactionProviderHooks,
@@ -23,60 +32,52 @@ import type {
  * writing data that the Zero client does, so that mutator functions can be
  * shared across client and server.
  */
-export class ZQLDatabase<S extends Schema, WrappedTransaction>
-  implements Database<TransactionImpl<S, WrappedTransaction>>
+export class ZQLDatabase<S extends Schema, WrappedTransaction, TContext>
+  implements Database<TransactionImpl<S, WrappedTransaction, TContext>>
 {
   readonly connection: DBConnection<WrappedTransaction>;
   readonly #mutate: (
     dbTransaction: DBTransaction<WrappedTransaction>,
     serverSchema: ServerSchema,
   ) => SchemaCRUD<S>;
-  readonly #query: (
-    dbTransaction: DBTransaction<WrappedTransaction>,
-    serverSchema: ServerSchema,
-  ) => SchemaQuery<S>;
+  readonly #query: SchemaQuery<S, TContext>;
   readonly #schema: S;
 
   constructor(connection: DBConnection<WrappedTransaction>, schema: S) {
     this.connection = connection;
     this.#mutate = makeSchemaCRUD(schema);
-    this.#query = makeSchemaQuery(schema);
+    this.#query = createBuilder(schema);
     this.#schema = schema;
   }
 
   transaction<R>(
     callback: (
-      tx: TransactionImpl<S, WrappedTransaction>,
+      tx: TransactionImpl<S, WrappedTransaction, TContext>,
       transactionHooks: TransactionProviderHooks,
-    ) => Promise<R>,
+    ) => MaybePromise<R>,
     transactionInput?: TransactionProviderInput,
   ): Promise<R> {
-    if (!transactionInput) {
-      // Icky hack. This is just here to have user not have to do this.
-      // These interfaces need to be factored better.
-      transactionInput = {
-        upstreamSchema: undefined as unknown as string,
-        clientGroupID: undefined as unknown as string,
-        clientID: undefined as unknown as string,
-        mutationID: undefined as unknown as number,
-      };
-    }
+    // Icky hack. This is just here to have user not have to do this.
+    // These interfaces need to be factored better.
+    const {
+      upstreamSchema = '',
+      clientGroupID = '',
+      clientID = '',
+      mutationID = 0,
+    } = transactionInput ?? {};
     return this.connection.transaction(async dbTx => {
-      const zeroTx = await makeServerTransaction(
+      const zeroTx = await this.#makeServerTransaction(
         dbTx,
-        transactionInput.clientID,
-        transactionInput.mutationID,
-        this.#schema,
-        this.#mutate,
-        this.#query,
+        clientID,
+        mutationID,
       );
 
       return callback(zeroTx, {
         async updateClientMutationID() {
           const formatted = formatPg(
-            sql`INSERT INTO ${sql.ident(transactionInput.upstreamSchema)}.clients 
+            sql`INSERT INTO ${sql.ident(upstreamSchema)}.clients 
                     as current ("clientGroupID", "clientID", "lastMutationID")
-                        VALUES (${transactionInput.clientGroupID}, ${transactionInput.clientID}, ${1})
+                        VALUES (${clientGroupID}, ${clientID}, ${1})
                     ON CONFLICT ("clientGroupID", "clientID")
                     DO UPDATE SET "lastMutationID" = current."lastMutationID" + 1
                     RETURNING "lastMutationID"`,
@@ -92,9 +93,9 @@ export class ZQLDatabase<S extends Schema, WrappedTransaction>
 
         async writeMutationResult(result) {
           const formatted = formatPg(
-            sql`INSERT INTO ${sql.ident(transactionInput.upstreamSchema)}.mutations
+            sql`INSERT INTO ${sql.ident(upstreamSchema)}.mutations
                     ("clientGroupID", "clientID", "mutationID", "result")
-                VALUES (${transactionInput.clientGroupID}, ${result.id.clientID}, ${result.id.id}, ${JSON.stringify(
+                VALUES (${clientGroupID}, ${result.id.clientID}, ${result.id.id}, ${JSON.stringify(
                   result.result,
                 )}::text::json)`,
           );
@@ -102,5 +103,28 @@ export class ZQLDatabase<S extends Schema, WrappedTransaction>
         },
       });
     });
+  }
+
+  async #makeServerTransaction(
+    dbTx: DBTransaction<WrappedTransaction>,
+    clientID: string,
+    mutationID: number,
+  ) {
+    return await makeServerTransaction(
+      dbTx,
+      clientID,
+      mutationID,
+      this.#schema,
+      this.#mutate,
+      this.#query,
+      undefined as TContext,
+    );
+  }
+
+  run<TTable extends keyof S['tables'] & string, TReturn, TContext>(
+    query: Query<S, TTable, TReturn, TContext>,
+    options?: RunOptions,
+  ): Promise<HumanReadable<TReturn>> {
+    return this.transaction(tx => tx.run(query, options));
   }
 }

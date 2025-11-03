@@ -60,10 +60,7 @@ export {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 export {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
 export {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
 export {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
-export {
-  createSchema,
-  type Schema,
-} from '../../zero-schema/src/builder/schema-builder.ts';
+export {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 export {
   boolean,
   enumeration,
@@ -97,6 +94,7 @@ export type {
   SchemaValueWithCustomType,
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
+export type {Schema} from '../../zero-types/src/schema.ts';
 export type {Change} from '../../zql/src/ivm/change.ts';
 export type {Node} from '../../zql/src/ivm/data.ts';
 export type {Input, Output} from '../../zql/src/ivm/operator.ts';
@@ -105,7 +103,13 @@ export {
   applyChange,
   type ViewChange,
 } from '../../zql/src/ivm/view-apply-change.ts';
-export type {Entry, Format, View, ViewFactory} from '../../zql/src/ivm/view.ts';
+export type {
+  AnyViewFactory,
+  Entry,
+  Format,
+  View,
+  ViewFactory,
+} from '../../zql/src/ivm/view.ts';
 export type {
   DeleteID,
   InsertValue,
@@ -115,14 +119,38 @@ export type {
   UpdateValue,
   UpsertValue,
 } from '../../zql/src/mutate/custom.ts';
+export {
+  defineQuery,
+  defineQueryWithContextType,
+} from '../../zql/src/query/define-query.ts';
+export type {
+  AnyNamedQueryFunction,
+  DefineQueryFunc,
+  DefineQueryOptions,
+  NamedQueryFunction,
+} from '../../zql/src/query/define-query.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {
   ExpressionBuilder,
   ExpressionFactory,
 } from '../../zql/src/query/expression.ts';
-export * from '../../zql/src/query/named.ts';
-export type {AnyQuery} from '../../zql/src/query/query-impl.ts';
+export {
+  createBuilder,
+  syncedQuery,
+  syncedQueryWithContext,
+  withValidation,
+} from '../../zql/src/query/named.ts';
 export type {
+  CustomQueryID,
+  HasParseFn,
+  ParseFn,
+  Parser,
+  QueryFn,
+  SyncedQuery,
+} from '../../zql/src/query/named.ts';
+export type {QueryInternals} from '../../zql/src/query/query-internals.ts';
+export type {
+  AnyQuery,
   HumanReadable,
   PullRow,
   Query,
@@ -132,8 +160,14 @@ export type {
   RunOptions,
   ZeRow,
 } from '../../zql/src/query/query.ts';
+export {RootNamedQuery} from '../../zql/src/query/root-named-query.ts';
 export {type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
+export {
+  bindingsForZero,
+  registerZeroDelegate,
+  type BindingsForZero,
+} from './client/bindings.ts';
 export {ClientErrorKind} from './client/client-error-kind.ts';
 export type {ConnectionState} from './client/connection-manager.ts';
 export {ConnectionStatus} from './client/connection-status.ts';

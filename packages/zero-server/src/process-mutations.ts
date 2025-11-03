@@ -1,6 +1,8 @@
 import type {LogContext, LogLevel} from '@rocicorp/logger';
 import {assert} from '../../shared/src/asserts.ts';
+import {getErrorDetails, getErrorMessage} from '../../shared/src/error.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import type {MaybePromise} from '../../shared/src/types.ts';
 import * as v from '../../shared/src/valita.ts';
 import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
 import {
@@ -24,7 +26,6 @@ import {
 } from '../../zero-protocol/src/push.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
 import {createLogContext} from './logging.ts';
-import {getErrorDetails, getErrorMessage} from '../../shared/src/error.ts';
 
 export interface TransactionProviderHooks {
   updateClientMutationID: () => Promise<{lastMutationID: number | bigint}>;
@@ -44,7 +45,10 @@ export interface TransactionProviderInput {
  */
 export interface Database<T> {
   transaction: <R>(
-    callback: (tx: T, transactionHooks: TransactionProviderHooks) => Promise<R>,
+    callback: (
+      tx: T,
+      transactionHooks: TransactionProviderHooks,
+    ) => MaybePromise<R>,
     transactionInput?: TransactionProviderInput,
   ) => Promise<R>;
 }
@@ -349,7 +353,7 @@ class Transactor {
     mutation: CustomMutation,
     cb: TransactFnCallback<D>,
     appError: ApplicationError | undefined,
-  ): Promise<MutationResponse> {
+  ): MaybePromise<MutationResponse> {
     let transactionPhase: DatabaseTransactionPhase = 'open';
 
     return dbProvider

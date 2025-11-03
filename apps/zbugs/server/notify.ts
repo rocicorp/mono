@@ -1,11 +1,11 @@
 import {type ServerTransaction, type UpdateValue} from '@rocicorp/zero';
 import type {TransactionSql} from 'postgres';
 import {assertIsLoggedIn, type AuthData} from '../shared/auth.ts';
-import {schema, type Schema} from '../shared/schema.ts';
+import {MutationError, MutationErrorCode} from '../shared/error.ts';
+import {builder, schema, type Schema} from '../shared/schema.ts';
 import {postToDiscord} from './discord.ts';
 import {sendEmail} from './email.ts';
 import type {PostCommitTask} from './server-mutators.ts';
-import {MutationError, MutationErrorCode} from '../shared/error.ts';
 
 type CreateIssueNotification = {
   kind: 'create-issue';
@@ -49,7 +49,7 @@ type NotificationArgs = {issueID: string} & (
 );
 
 export async function notify(
-  tx: ServerTransaction<Schema, TransactionSql>,
+  tx: ServerTransaction<Schema, TransactionSql, AuthData | undefined>,
   authData: AuthData | undefined,
   args: NotificationArgs,
   postCommitTasks: PostCommitTask[],
@@ -58,8 +58,7 @@ export async function notify(
 
   const {issueID, kind} = args;
 
-  const issue = await tx.query.issue.where('id', issueID).one().run();
-
+  const issue = await tx.run(builder.issue.where('id', issueID).one());
   if (!issue) {
     throw new MutationError(
       `Issue not found`,
@@ -69,11 +68,9 @@ export async function notify(
   }
 
   const modifierUserID = authData.sub;
-  const modifierUser = await tx.query.user
-    .where('id', modifierUserID)
-    .one()
-    .run();
-
+  const modifierUser = await tx.run(
+    builder.user.where('id', modifierUserID).one(),
+  );
   if (!modifierUser) {
     throw new MutationError(
       `Modifier user not found`,
@@ -145,9 +142,9 @@ export async function notify(
 
   switch (kind) {
     case 'create-issue': {
-      await sendNotifications({
+      sendNotifications({
         title: `${modifierUser.login} reported an issue`,
-        message: [issue.title, clip((await issue.description) ?? '')]
+        message: [issue.title, clip(issue.description ?? '')]
           .filter(Boolean)
           .join('\n'),
       });
@@ -165,10 +162,9 @@ export async function notify(
         if (update.assigneeID === null) {
           changes.push('Assignee was removed');
         } else {
-          const newAssignee = await tx.query.user
-            .where('id', update.assigneeID)
-            .one()
-            .run();
+          const newAssignee = await tx.run(
+            builder.user.where('id', update.assigneeID).one(),
+          );
           if (newAssignee) {
             changes.push(`Assignee changed to ${newAssignee.login}`);
           }
@@ -184,13 +180,9 @@ export async function notify(
         changes.push('Description was updated');
       }
 
-      await sendNotifications({
+      sendNotifications({
         title: `${modifierUser.login} updated an issue`,
-        message: [
-          issue.title,
-          ...changes,
-          clip((await issue.description) ?? ''),
-        ]
+        message: [issue.title, ...changes, clip(issue.description ?? '')]
           .filter(Boolean)
           .join('\n'),
       });
@@ -200,7 +192,7 @@ export async function notify(
     case 'add-emoji-to-issue': {
       const {emoji} = args;
 
-      await sendNotifications({
+      sendNotifications({
         title: `${modifierUser.login} reacted to an issue`,
         message: [issue.title, emoji].join('\n'),
       });
@@ -210,8 +202,9 @@ export async function notify(
 
     case 'add-emoji-to-comment': {
       const {commentID, emoji} = args;
-
-      const comment = await tx.query.comment.where('id', commentID).one().run();
+      const comment = await tx.run(
+        builder.comment.where('id', commentID).one(),
+      );
 
       if (!comment) {
         throw new MutationError(
@@ -221,9 +214,9 @@ export async function notify(
         );
       }
 
-      await sendNotifications({
+      sendNotifications({
         title: `${modifierUser.login} reacted to a comment`,
-        message: [clip(await comment.body), emoji].filter(Boolean).join('\n'),
+        message: [clip(comment.body), emoji].filter(Boolean).join('\n'),
       });
 
       break;
@@ -232,9 +225,9 @@ export async function notify(
     case 'add-comment': {
       const {commentID, comment} = args;
 
-      await sendNotifications({
+      sendNotifications({
         title: `${modifierUser.login} commented on an issue`,
-        message: [issue.title, clip(await comment)].join('\n'),
+        message: [issue.title, clip(comment)].join('\n'),
         link: `${baseIssueLink}#comment-${commentID}`,
       });
 
@@ -244,9 +237,9 @@ export async function notify(
     case 'edit-comment': {
       const {commentID, comment} = args;
 
-      await sendNotifications({
+      sendNotifications({
         title: `${modifierUser.login} edited a comment`,
-        message: [issue.title, clip(await comment)].join('\n'),
+        message: [issue.title, clip(comment)].join('\n'),
         link: `${baseIssueLink}#comment-${commentID}`,
       });
 
@@ -264,7 +257,7 @@ const emailRegex =
   /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
 
 export async function gatherRecipients(
-  tx: ServerTransaction<Schema, TransactionSql>,
+  tx: ServerTransaction<Schema, TransactionSql, AuthData | undefined>,
   issueID: string,
   actorID: string,
   excludeActor = true,

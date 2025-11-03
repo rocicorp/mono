@@ -13,10 +13,11 @@ import {
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import {QueryParseError} from '../../../zql/src/query/error.ts';
-import type {AnyQuery} from '../../../zql/src/query/query-impl.ts';
+import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
+import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {createLogContext} from '../logging.ts';
 
 /**
@@ -27,13 +28,14 @@ import {createLogContext} from '../logging.ts';
  *
  * If you need to limit concurrency, you can use a library like `p-limit` to wrap the `cb` function.
  */
-export async function handleGetQueriesRequest<S extends Schema>(
+export async function handleGetQueriesRequest<S extends Schema, Context>(
   cb: (
     name: string,
     args: readonly ReadonlyJSONValue[],
-  ) => MaybePromise<{query: AnyQuery}>,
+  ) => MaybePromise<{query: AnyQuery} | AnyQuery>,
   schema: S,
   requestOrJsonBody: Request | ReadonlyJSONValue,
+  context: Context,
   logLevel?: LogLevel,
 ): Promise<TransformResponseMessage> {
   const lc = createLogContext(logLevel ?? 'info').withContext('GetQueries');
@@ -78,8 +80,7 @@ export async function handleGetQueriesRequest<S extends Schema>(
         let finalQuery: AnyQuery;
         try {
           const result = await cb(req.name, req.args);
-
-          finalQuery = result.query;
+          finalQuery = 'query' in result ? result.query : result;
         } catch (error) {
           const message = getErrorMessage(error);
           const details = getErrorDetails(error);
@@ -94,7 +95,8 @@ export async function handleGetQueriesRequest<S extends Schema>(
         }
 
         try {
-          const ast = mapAST(finalQuery.ast, nameMapper);
+          const q = queryWithContext(finalQuery, context);
+          const ast = mapAST(q.ast, nameMapper);
 
           return {
             id: req.id,

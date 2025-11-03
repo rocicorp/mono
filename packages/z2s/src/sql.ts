@@ -10,7 +10,7 @@ import {
   isPgStringType,
 } from '../../zero-cache/src/types/pg-data-type.ts';
 import type {LiteralValue} from '../../zero-protocol/src/ast.ts';
-import type {ServerColumnSchema} from '../../zero-schema/src/server-schema.ts';
+import type {ServerColumnSchema} from '../../zero-types/src/server-schema.ts';
 
 export const Z2S_COLLATION = 'ucs_basic';
 

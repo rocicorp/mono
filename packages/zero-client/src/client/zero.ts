@@ -33,6 +33,7 @@ import {navigator} from '../../../shared/src/navigator.ts';
 import {promiseRace} from '../../../shared/src/promise-race.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
+import {Subscribable} from '../../../shared/src/subscribable.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
@@ -43,8 +44,8 @@ import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {downstreamSchema} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {
-  ProtocolError,
   type ErrorMessage,
+  ProtocolError,
 } from '../../../zero-protocol/src/error.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
 import type {PingMessage} from '../../../zero-protocol/src/ping.ts';
@@ -71,14 +72,12 @@ import type {UpQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts
 import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
 import {nullableVersionSchema} from '../../../zero-protocol/src/version.ts';
-import {
-  type Schema,
-  clientSchemaFrom,
-} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {clientSchemaFrom} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   type NameMapper,
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
 import {
@@ -87,30 +86,27 @@ import {
   isClientMetric,
 } from '../../../zql/src/query/metrics-delegate.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {
-  type AnyQuery,
-  materialize,
-  newQuery,
-} from '../../../zql/src/query/query-impl.ts';
+import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import {
   type HumanReadable,
   type MaterializeOptions,
   type PreloadOptions,
+  type PullRow,
   type Query,
-  type QueryRowType,
-  type QueryTable,
   type RunOptions,
-  delegateSymbol,
 } from '../../../zql/src/query/query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
 import {ActiveClientsManager} from './active-clients-manager.ts';
+import {registerZeroDelegate} from './bindings.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
 import {
   ConnectionManager,
-  throwIfConnectionError,
   type ConnectionState,
+  throwIfConnectionError,
 } from './connection-manager.ts';
+import {ConnectionStatus} from './connection-status.ts';
 import {type Connection, ConnectionImpl} from './connection.ts';
 import {ZeroContext} from './context.ts';
 import {
@@ -129,6 +125,16 @@ import type {
 import {makeReplicacheMutator} from './custom.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
 import {shouldEnableAnalytics} from './enable-analytics.ts';
+import {
+  ClientError,
+  NO_STATUS_TRANSITION,
+  type ZeroError,
+  getBackoffParams,
+  getErrorConnectionTransition,
+  isAuthError,
+  isClientError,
+  isServerError,
+} from './error.ts';
 import {
   type HTTPString,
   type WSString,
@@ -156,28 +162,15 @@ import {
   reportReloadReason,
   resetBackoff,
 } from './reload-error-handler.ts';
-import {
-  ClientError,
-  getBackoffParams,
-  getErrorConnectionTransition,
-  isAuthError,
-  isClientError,
-  isServerError,
-  NO_STATUS_TRANSITION,
-  type ZeroError,
-} from './error.ts';
 import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {
+  ZeroRep,
   fromReplicacheAuthToken,
   toReplicacheAuthToken,
-  ZeroRep,
 } from './zero-rep.ts';
-import {ConnectionStatus} from './connection-status.ts';
-import {ClientErrorKind} from './client-error-kind.ts';
-import {Subscribable} from '../../../shared/src/subscribable.ts';
 
 export type NoRelations = Record<string, never>;
 
@@ -187,7 +180,7 @@ export type MakeEntityQueriesFromSchema<S extends Schema> = {
 
 declare const TESTING: boolean;
 
-export type TestingContext = {
+export type TestingContext<TContext> = {
   puller: Puller;
   pusher: Pusher;
   setReload: (r: () => void) => void;
@@ -195,23 +188,26 @@ export type TestingContext = {
   connectStart: () => number | undefined;
   socketResolver: () => Resolver<WebSocket>;
   connectionManager: () => ConnectionManager;
+  queryDelegate: () => QueryDelegate<TContext>;
 };
 
 export const exposedToTestingSymbol = Symbol();
 export const createLogOptionsSymbol = Symbol();
 
-interface TestZero {
-  [exposedToTestingSymbol]?: TestingContext;
+interface TestZero<TContext> {
+  [exposedToTestingSymbol]?: TestingContext<TContext>;
   [createLogOptionsSymbol]?: (options: {
     consoleLogLevel: LogLevel;
     server: string | null;
   }) => LogOptions;
 }
 
-function asTestZero<S extends Schema, MD extends CustomMutatorDefs | undefined>(
-  z: Zero<S, MD>,
-): TestZero {
-  return z as TestZero;
+function asTestZero<
+  S extends Schema,
+  MD extends CustomMutatorDefs | undefined,
+  Context,
+>(z: Zero<S, MD, Context>): TestZero<Context> {
+  return z as TestZero<Context>;
 }
 
 export const RUN_LOOP_INTERVAL_MS = 5_000;
@@ -310,6 +306,7 @@ type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
 export class Zero<
   const S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
+  TContext = unknown,
 > {
   readonly version = version;
 
@@ -384,8 +381,7 @@ export class Zero<
    */
   pingTimeoutMs: number;
 
-  readonly #zeroContext: ZeroContext;
-  readonly queryDelegate: QueryDelegate;
+  readonly #zeroContext: ZeroContext<TContext>;
 
   #pendingPullsByRequestID: Map<string, Resolver<PullResponseBody>> = new Map();
   #lastMutationIDReceived = 0;
@@ -418,7 +414,7 @@ export class Zero<
   // 2. client successfully connects
   #totalToConnectStart: number | undefined = undefined;
 
-  readonly #options: ZeroOptions<S, MD>;
+  readonly #options: ZeroOptions<S, MD, TContext>;
 
   readonly query: MakeEntityQueriesFromSchema<S>;
 
@@ -433,7 +429,7 @@ export class Zero<
   /**
    * Constructs a new Zero client.
    */
-  constructor(options: ZeroOptions<S, MD>) {
+  constructor(options: ZeroOptions<S, MD, TContext>) {
     const {
       userID,
       storageKey,
@@ -624,6 +620,7 @@ export class Zero<
     this.#zeroContext = new ZeroContext(
       lc,
       this.#ivmMain,
+      this.#options.context as TContext,
       (ast, ttl, gotCallback) => {
         if (enableLegacyQueries) {
           return this.#queryManager.addLegacy(ast, ttl, gotCallback);
@@ -645,7 +642,10 @@ export class Zero<
       this.#addMetric,
       assertValidRunOptions,
     );
-    this.queryDelegate = this.#zeroContext;
+
+    // Register the delegate for bindings to access via WeakMap.
+    // This avoids exposing the delegate as a public API on Zero.
+    registerZeroDelegate(this, this.#zeroContext);
 
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
@@ -817,6 +817,7 @@ export class Zero<
         connectStart: () => this.#connectStart,
         socketResolver: () => this.#socketResolver,
         connectionManager: () => this.#connectionManager,
+        queryDelegate: () => this.#zeroContext,
       };
     }
   }
@@ -876,45 +877,110 @@ export class Zero<
     return createLogOptions(options);
   }
 
-  preload(
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    query: Query<S, keyof S['tables'] & string, any>,
-    options?: PreloadOptions,
-  ) {
-    return query[delegateSymbol](this.#zeroContext).preload(options);
+  /**
+   * Preloads data for a query into the cache, without keeping it in memory.
+   *
+   * This function is useful when you want to populate the cache ahead of time,
+   * for example after login, to avoid a flash of loading screen on the next page.
+   *
+   * Returns an object with two properties:
+   * - `complete`: a Promise that resolves when the data is loaded
+   * - `cleanup`: a function that can be called to cancel the preload
+   *
+   * @example
+   * ```ts
+   * const {complete, cleanup} = zero.preload(userQuery);
+   * await complete;
+   * // Now the data is cached and can be used immediately
+   * ```
+   */
+  preload<
+    TTable extends keyof S['tables'] & string,
+    TReturn extends PullRow<TTable, S>,
+  >(query: Query<S, TTable, TReturn, TContext>, options?: PreloadOptions) {
+    return this.#zeroContext.preload(query, options);
   }
 
-  run<Q>(
-    query: Q,
+  /**
+   * Executes a query once and returns the results.
+   *
+   * By default, waits for any pending data to sync before running the query.
+   * This ensures fresh results from the server. Use `{type: 'unknown'}` to
+   * run immediately with whatever data is available locally.
+   *
+   * @param query - The query to execute
+   * @param runOptions - Options controlling query execution
+   * @returns A Promise resolving to the query results
+   *
+   * @example
+   * ```ts
+   * // Wait for server sync
+   * const users = await zero.run(userQuery);
+   *
+   * // Run with local data only
+   * const cachedUsers = await zero.run(userQuery, {type: 'unknown'});
+   * ```
+   */
+  run<TTable extends keyof S['tables'] & string, TReturn>(
+    query: Query<S, TTable, TReturn, TContext>,
     runOptions?: RunOptions,
-  ): Promise<HumanReadable<QueryRowType<Q>>> {
-    return (query as AnyQuery)
-      [delegateSymbol](this.#zeroContext)
-      .run(runOptions) as Promise<HumanReadable<QueryRowType<Q>>>;
+  ): Promise<HumanReadable<TReturn>> {
+    return this.#zeroContext.run(query, runOptions);
   }
 
-  materialize<Q>(
-    query: Q,
+  get context(): TContext {
+    return this.#options.context as TContext;
+  }
+
+  /**
+   * Creates a materialized view of a query that stays synchronized with the database.
+   *
+   * The materialized view automatically updates when the underlying data changes.
+   * When done with the view, call `view.destroy()` to clean up subscriptions.
+   *
+   * Optionally accepts a factory function to create a custom view implementation.
+   *
+   * @param query - The query to materialize
+   * @param factory - Optional factory function to create a custom view
+   * @param options - Options controlling view behavior
+   * @returns A TypedView that stays synchronized with the data
+   *
+   * @example
+   * ```ts
+   * // Create a standard view
+   * const view = zero.materialize(userQuery);
+   * console.log(view.data); // Current query results
+   * view.destroy(); // Clean up when done
+   *
+   * // Create a custom view
+   * const customView = zero.materialize(userQuery, (query) => new MyCustomView(query));
+   * ```
+   */
+  materialize<TTable extends keyof S['tables'] & string, TReturn>(
+    query: Query<S, TTable, TReturn, TContext>,
     options?: MaterializeOptions,
-  ): TypedView<HumanReadable<QueryRowType<Q>>>;
-  materialize<T, Q>(
-    query: Q,
-    factory: ViewFactory<S, QueryTable<Q>, QueryRowType<Q>, T>,
+  ): TypedView<HumanReadable<TReturn>>;
+  materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
+    query: Query<S, TTable, TReturn, TContext>,
+    factory: ViewFactory<S, TTable, TReturn, TContext, T>,
     options?: MaterializeOptions,
   ): T;
-  materialize<T, Q>(
-    query: Q,
+  materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
+    query: Query<S, TTable, TReturn, TContext>,
     factoryOrOptions?:
-      | ViewFactory<S, QueryTable<Q>, QueryRowType<Q>, T>
+      | ViewFactory<S, TTable, TReturn, TContext, T>
       | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
-    return materialize(
-      query,
-      this.#zeroContext,
-      factoryOrOptions,
-      maybeOptions,
-    );
+    let factory;
+    let options;
+    if (typeof factoryOrOptions === 'function') {
+      factory = factoryOrOptions;
+      options = maybeOptions;
+    } else {
+      options = factoryOrOptions;
+    }
+    return this.#zeroContext.materialize(query, factory, options);
   }
 
   /**
@@ -994,8 +1060,8 @@ export class Zero<
    */
   readonly mutate: MD extends CustomMutatorDefs
     ? S['enableLegacyMutators'] extends false
-      ? MakeCustomMutatorInterfaces<S, MD>
-      : DeepMerge<DBMutator<S>, MakeCustomMutatorInterfaces<S, MD>>
+      ? MakeCustomMutatorInterfaces<S, MD, TContext>
+      : DeepMerge<DBMutator<S>, MakeCustomMutatorInterfaces<S, MD, TContext>>
     : DBMutator<S>;
 
   /**
@@ -2147,7 +2213,7 @@ export class Zero<
   }
 
   #checkConnectivity(reason: string) {
-    void this.#checkConnectivityAsync(reason);
+    this.#checkConnectivityAsync(reason);
   }
 
   #checkConnectivityAsync(_reason: string) {
@@ -2172,10 +2238,9 @@ export class Zero<
 
   #registerQueries(schema: Schema): MakeEntityQueriesFromSchema<S> {
     const rv = {} as Record<string, Query<Schema, string>>;
-    const context = this.#zeroContext;
     // Not using parse yet
     for (const name of Object.keys(schema.tables)) {
-      rv[name] = newQuery(context, schema, name);
+      rv[name] = newQuery(schema, name);
     }
 
     return rv as MakeEntityQueriesFromSchema<S>;
@@ -2195,6 +2260,7 @@ export class Zero<
       return (this.#inspector ??= new Inspector(
         this.#rep,
         this.#queryManager,
+        this.#zeroContext,
         async () => {
           await this.#connectResolver.promise;
           return this.#socket!;

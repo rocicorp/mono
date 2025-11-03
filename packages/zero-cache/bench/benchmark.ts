@@ -3,9 +3,8 @@
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
 import type {Source} from '../../zql/src/ivm/source.ts';
-import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
+import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
@@ -24,8 +23,15 @@ export function bench(opts: Options) {
   const db = new Database(lc, dbFile);
   const sources = new Map<string, Source>();
   const tableSpecs = computeZqlSpecs(lc, db);
-  const host: QueryDelegate = {
-    getSource: (name: string) => {
+
+  class BenchmarkQueryDelegate extends QueryDelegateBase<undefined> {
+    readonly defaultQueryComplete = true;
+
+    constructor() {
+      super(undefined);
+    }
+
+    getSource(name: string): Source | undefined {
       let source = sources.get(name);
       if (source) {
         return source;
@@ -50,44 +56,19 @@ export function bench(opts: Options) {
 
       sources.set(name, source);
       return source;
-    },
+    }
+  }
 
-    createStorage() {
-      // TODO: table storage!!
-      return new MemoryStorage();
-    },
-    decorateInput: input => input,
-    addEdge() {},
-    decorateSourceInput: input => input,
-    decorateFilterInput: input => input,
-    addServerQuery() {
-      return () => {};
-    },
-    addCustomQuery() {
-      return () => {};
-    },
-    updateServerQuery() {},
-    updateCustomQuery() {},
-    onTransactionCommit() {
-      return () => {};
-    },
-    batchViewUpdates<T>(applyViewUpdates: () => T): T {
-      return applyViewUpdates();
-    },
-    assertValidRunOptions() {},
-    flushQueryChanges() {},
-    defaultQueryComplete: true,
-    addMetric() {},
-  };
+  const delegate = new BenchmarkQueryDelegate();
 
-  const issueQuery = newQuery(host, schema, 'issue');
+  const issueQuery = newQuery(schema, 'issue');
   const q = issueQuery
     .related('labels')
     .orderBy('modified', 'desc')
     .limit(10_000);
 
   const start = performance.now();
-  q.materialize();
+  delegate.materialize(q);
 
   const end = performance.now();
   // oxlint-disable-next-line no-console

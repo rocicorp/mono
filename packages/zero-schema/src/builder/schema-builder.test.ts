@@ -1,10 +1,16 @@
 import {expect, expectTypeOf, test} from 'vitest';
-import type {Query} from '../../../zql/src/query/query.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {
+  AnyQuery,
+  HumanReadable,
+  Query,
+  QueryReturn,
+} from '../../../zql/src/query/query.ts';
 import {relationships} from './relationship-builder.ts';
 import {clientSchemaFrom, createSchema} from './schema-builder.ts';
 import {boolean, json, number, string, table} from './table-builder.ts';
 
-const mockQuery = {
+const mockQueryInst = {
   select() {
     return this;
   },
@@ -34,6 +40,19 @@ const mockQuery = {
     return this;
   },
 };
+
+function mockQuery<
+  S extends Schema,
+  T extends keyof S['tables'] & string,
+>(): Query<S, T> {
+  return mockQueryInst as unknown as Query<S, T>;
+}
+
+function run<Q extends AnyQuery>(
+  _q: Q,
+): Promise<HumanReadable<QueryReturn<Q>>> {
+  return {} as unknown as Promise<HumanReadable<QueryReturn<Q>>>;
+}
 
 test('building a schema', async () => {
   const user = table('user')
@@ -119,13 +138,15 @@ test('building a schema', async () => {
     relationships: [userRelationships, issueRelationships, labelRelationships],
   });
 
-  const q = mockQuery as unknown as Query<typeof schema, 'user'>;
-  const iq = mockQuery as unknown as Query<typeof schema, 'issue'>;
-  const r = await q
-    .related('recruiter', q => q.related('recruiter', q => q.one()).one())
-    .one()
-    .run();
-  expectTypeOf<typeof r>().toEqualTypeOf<
+  const q = mockQuery<typeof schema, 'user'>();
+  const iq = mockQuery<typeof schema, 'issue'>();
+  const r = await run(
+    q
+      .related('recruiter', q => q.related('recruiter', q => q.one()).one())
+      .one(),
+  );
+
+  expectTypeOf(r).toEqualTypeOf<
     | {
         readonly id: string;
         readonly name: string;
@@ -150,7 +171,7 @@ test('building a schema', async () => {
   >({} as any);
 
   // recruiter is a singular relationship
-  expectTypeOf(await q.related('recruiter').run()).toEqualTypeOf<
+  expectTypeOf(await run(q.related('recruiter'))).toEqualTypeOf<
     {
       readonly id: string;
       readonly name: string;
@@ -166,7 +187,7 @@ test('building a schema', async () => {
   >();
 
   // recruiter is a singular relationship
-  expectTypeOf(await q.related('recruiter', q => q).run()).toEqualTypeOf<
+  expectTypeOf(await run(q.related('recruiter', q => q))).toEqualTypeOf<
     {
       readonly id: string;
       readonly name: string;
@@ -181,9 +202,9 @@ test('building a schema', async () => {
     }[]
   >();
 
-  const id1 = await iq
-    .related('owner', q => q.related('ownedIssues', q => q.where('id', '1')))
-    .run();
+  const id1 = await run(
+    iq.related('owner', q => q.related('ownedIssues', q => q.where('id', '1'))),
+  );
   expectTypeOf(id1).toEqualTypeOf<
     {
       readonly id: string;
@@ -204,7 +225,7 @@ test('building a schema', async () => {
     }[]
   >({} as never);
 
-  const id = await iq.related('labels').run();
+  const id = await run(iq.related('labels'));
   expectTypeOf(id).toEqualTypeOf<
     {
       readonly id: string;
@@ -217,8 +238,8 @@ test('building a schema', async () => {
     }[]
   >();
 
-  const lq = mockQuery as unknown as Query<typeof schema, 'label'>;
-  const ld = await lq.related('issues').run();
+  const lq = mockQuery<typeof schema, 'label'>();
+  const ld = await run(lq.related('issues'));
   expectTypeOf(ld).toEqualTypeOf<
     {
       readonly id: number;
@@ -429,7 +450,7 @@ test('too many relationships', () => {
     ],
   });
 
-  const q = mockQuery as unknown as Query<typeof schema, 'a'>;
+  const q = mockQuery<typeof schema, 'a'>();
   const q2 = q
     .related('toB')
     .related('toC')

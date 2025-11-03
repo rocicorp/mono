@@ -1,4 +1,3 @@
-/* oxlint-disable arrow-body-style */
 import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
@@ -12,10 +11,7 @@ import type {
   UpdateOp,
 } from '../../../zero-protocol/src/push.ts';
 import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
-import {
-  createSchema,
-  type Schema as ZeroSchema,
-} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
   number,
@@ -28,17 +24,19 @@ import {
   definePermissions,
 } from '../../../zero-schema/src/permissions.ts';
 import type {ValueType} from '../../../zero-schema/src/table-schema.ts';
+import type {Schema as ZeroSchema} from '../../../zero-types/src/schema.ts';
 import {
   bindStaticParameters,
   buildPipeline,
 } from '../../../zql/src/builder/builder.ts';
 import {Catch, type CaughtNode} from '../../../zql/src/ivm/catch.ts';
-import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import type {Source} from '../../../zql/src/ivm/source.ts';
 import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
+import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {completedAST, newQuery} from '../../../zql/src/query/query-impl.ts';
-import {type Query, type Row} from '../../../zql/src/query/query.ts';
+import {newQuery} from '../../../zql/src/query/query-impl.ts';
+import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
+import type {Query, Row} from '../../../zql/src/query/query.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
@@ -452,7 +450,7 @@ const permissions = must(
   }),
 );
 
-let queryDelegate: QueryDelegate;
+let queryDelegate: QueryDelegate<undefined>;
 let replica: Database;
 function toDbType(type: ValueType) {
   switch (type) {
@@ -467,6 +465,51 @@ function toDbType(type: ValueType) {
   }
 }
 let writeAuthorizer: WriteAuthorizerImpl;
+
+class ReadAuthorizerTestQueryDelegate extends QueryDelegateBase<undefined> {
+  readonly defaultQueryComplete = true;
+
+  readonly #sources = new Map<string, Source>();
+  readonly #replica: Database;
+  readonly #lc: LogContext;
+
+  constructor(replica: Database, lc: LogContext) {
+    super(undefined);
+    this.#replica = replica;
+    this.#lc = lc;
+  }
+
+  override getSource(name: string): Source {
+    let source = this.#sources.get(name);
+    if (source) {
+      return source;
+    }
+    const tableSchema = schema.tables[name as keyof Schema['tables']];
+    assert(tableSchema, `Table schema not found for ${name}`);
+
+    // create the SQLite table
+    this.#replica.exec(`
+      CREATE TABLE "${name}" (
+        ${Object.entries(tableSchema.columns)
+          .map(([name, c]) => `"${name}" ${toDbType(c.type)}`)
+          .join(', ')},
+        PRIMARY KEY (${tableSchema.primaryKey.map(k => `"${k}"`).join(', ')})
+      )`);
+
+    source = new TableSource(
+      this.#lc,
+      testLogConfig,
+      this.#replica,
+      name,
+      tableSchema.columns,
+      tableSchema.primaryKey,
+    );
+
+    this.#sources.set(name, source);
+    return source;
+  }
+}
+
 beforeEach(() => {
   replica = new Database(lc, ':memory:');
   replica.exec(`
@@ -477,64 +520,7 @@ beforeEach(() => {
     .prepare(`INSERT INTO "app.permissions" (permissions, hash) VALUES (?, ?)`)
     .run(permsJSON, h128(permsJSON).toString(16));
 
-  const sources = new Map<string, Source>();
-  queryDelegate = {
-    getSource: (name: string) => {
-      let source = sources.get(name);
-      if (source) {
-        return source;
-      }
-      const tableSchema = schema.tables[name as keyof Schema['tables']];
-      assert(tableSchema, `Table schema not found for ${name}`);
-
-      // create the SQLite table
-      replica.exec(`
-      CREATE TABLE "${name}" (
-        ${Object.entries(tableSchema.columns)
-          .map(([name, c]) => `"${name}" ${toDbType(c.type)}`)
-          .join(', ')},
-        PRIMARY KEY (${tableSchema.primaryKey.map(k => `"${k}"`).join(', ')})
-      )`);
-
-      source = new TableSource(
-        lc,
-        testLogConfig,
-        replica,
-        name,
-        tableSchema.columns,
-        tableSchema.primaryKey,
-      );
-
-      sources.set(name, source);
-      return source;
-    },
-
-    createStorage() {
-      return new MemoryStorage();
-    },
-    decorateInput: input => input,
-    addEdge() {},
-    decorateFilterInput: input => input,
-    decorateSourceInput: input => input,
-    addServerQuery() {
-      return () => {};
-    },
-    addCustomQuery() {
-      return () => {};
-    },
-    updateServerQuery() {},
-    updateCustomQuery() {},
-    onTransactionCommit() {
-      return () => {};
-    },
-    batchViewUpdates<T>(applyViewUpdates: () => T): T {
-      return applyViewUpdates();
-    },
-    assertValidRunOptions() {},
-    flushQueryChanges() {},
-    defaultQueryComplete: true,
-    addMetric() {},
-  };
+  queryDelegate = new ReadAuthorizerTestQueryDelegate(replica, lc);
 
   for (const table of Object.values(schema.tables)) {
     // force the sqlite tables to be created by getting all the sources
@@ -840,7 +826,8 @@ describe('issue permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '005', role: 'admin'},
-        newQuery(queryDelegate, schema, 'issue'),
+        newQuery(schema, 'issue'),
+        queryDelegate,
       ).map(r => r.row.id),
     ).toEqual(['001', '002', '003']);
   });
@@ -850,7 +837,8 @@ describe('issue permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '001', role: 'user'},
-        newQuery(queryDelegate, schema, 'issue'),
+        newQuery(schema, 'issue'),
+        queryDelegate,
       ).map(r => r.row.id),
     ).toEqual(['001', '002', '003']);
 
@@ -858,7 +846,8 @@ describe('issue permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '002', role: 'user'},
-        newQuery(queryDelegate, schema, 'issue'),
+        newQuery(schema, 'issue'),
+        queryDelegate,
       ).map(r => r.row.id),
     ).toEqual([]);
 
@@ -866,7 +855,8 @@ describe('issue permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '003', role: 'user'},
-        newQuery(queryDelegate, schema, 'issue'),
+        newQuery(schema, 'issue'),
+        queryDelegate,
       ).map(r => r.row.id),
     ).toEqual(['001', '002', '003']);
 
@@ -874,7 +864,8 @@ describe('issue permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '011', role: 'user'},
-        newQuery(queryDelegate, schema, 'issue'),
+        newQuery(schema, 'issue'),
+        queryDelegate,
       ).map(r => r.row.id),
     ).toEqual(['001']);
 
@@ -882,7 +873,8 @@ describe('issue permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '012', role: 'user'},
-        newQuery(queryDelegate, schema, 'issue'),
+        newQuery(schema, 'issue'),
+        queryDelegate,
       ).map(r => r.row.id),
     ).toEqual(['002', '003']);
   });
@@ -914,11 +906,12 @@ describe('issue permissions', () => {
 function runReadQueryWithPermissions(
   authData: AuthData,
   query: Query<ZeroSchema, string>,
+  queryDelegate: QueryDelegate<undefined>,
 ) {
   const updatedAst = bindStaticParameters(
     transformQuery(
       new LogContext('debug'),
-      completedAST(query),
+      queryWithContext(query, undefined).ast,
       permissions,
       authData,
     ),
@@ -1126,7 +1119,8 @@ describe('comment & issueLabel permissions', () => {
       expect(
         runReadQueryWithPermissions(
           {sub, role: sub === '005' ? 'admin' : 'user'},
-          newQuery(queryDelegate, schema, 'comment'),
+          newQuery(schema, 'comment'),
+          queryDelegate,
         ).map(r => r.row.id),
       ).toEqual(['001', '002']);
     }
@@ -1134,7 +1128,8 @@ describe('comment & issueLabel permissions', () => {
     expect(
       runReadQueryWithPermissions(
         {sub: '004', role: 'user'},
-        newQuery(queryDelegate, schema, 'comment'),
+        newQuery(schema, 'comment'),
+        queryDelegate,
       ).map(r => r.row.id),
     ).toEqual([]);
   });
@@ -1317,7 +1312,7 @@ describe('read permissions against nested paths', () => {
     {
       name: 'User can view everything they are attached to through owner/creator relationships',
       sub: 'owner-creator',
-      query: newQuery(queryDelegate, schema, 'user')
+      query: newQuery(schema, 'user')
         .where('id', '=', 'owner-creator')
         .related('createdIssues', q => q.related('comments', q => q.limit(1)))
         .related('ownedIssues', q => q.related('comments', q => q.limit(1))),
@@ -1366,7 +1361,7 @@ describe('read permissions against nested paths', () => {
     {
       name: 'User cannot see previously viewed issues if they were moved out of the project and are not the owner/creator',
       sub: 'not-project-member',
-      query: newQuery(queryDelegate, schema, 'user')
+      query: newQuery(schema, 'user')
         .where('id', '=', 'not-project-member')
         .related('viewedIssues', q => q.related('comments')),
       expected: [
@@ -1386,7 +1381,7 @@ describe('read permissions against nested paths', () => {
     {
       name: 'User can see previously viewed issues (even if they are not in the project) if they are the owner/creator',
       sub: 'owner-creator',
-      query: newQuery(queryDelegate, schema, 'user')
+      query: newQuery(schema, 'user')
         .where('id', 'owner-creator')
         .related('viewedIssues', q => q.related('comments', q => q.limit(2))),
       expected: [
@@ -1430,7 +1425,7 @@ describe('read permissions against nested paths', () => {
     {
       name: 'User can see everything they are attached to through project membership',
       sub: 'project-member',
-      query: newQuery(queryDelegate, schema, 'user').related('projects', q =>
+      query: newQuery(schema, 'user').related('projects', q =>
         q.related('issues', q => q.related('comments')),
       ),
       expected: [
@@ -1493,6 +1488,7 @@ describe('read permissions against nested paths', () => {
         role: sub === 'admin' ? 'admin' : 'user',
       },
       query,
+      queryDelegate,
     );
     expect(toIdsOnly(actual)).toEqual(expected);
   });
@@ -1518,7 +1514,8 @@ describe('read permissions against nested paths', () => {
   test('nested property access', () => {
     let actual = runReadQueryWithPermissions(
       {sub: 'dne', role: '', properties: {role: 'admin'}},
-      newQuery(queryDelegate, schema, 'issue'),
+      newQuery(schema, 'issue'),
+      queryDelegate,
     );
     expect(toIdsOnly(actual)).toEqual([
       {
@@ -1528,7 +1525,8 @@ describe('read permissions against nested paths', () => {
 
     actual = runReadQueryWithPermissions(
       {sub: 'dne', role: ''},
-      newQuery(queryDelegate, schema, 'issue'),
+      newQuery(schema, 'issue'),
+      queryDelegate,
     );
     expect(toIdsOnly(actual)).toEqual([]);
   });
@@ -1537,16 +1535,14 @@ describe('read permissions against nested paths', () => {
 // maps over nodes, drops all information from `row` except the id
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
 function toIdsOnly(nodes: CaughtNode[]): any[] {
-  return nodes.map(node => {
-    return {
-      id: node.row.id,
-      ...Object.fromEntries(
-        Object.entries(node.relationships)
-          .filter(([k]) => !k.startsWith('zsubq_'))
-          .map(([k, v]) => [k, toIdsOnly(Array.isArray(v) ? v : [...v])]),
-      ),
-    };
-  });
+  return nodes.map(node => ({
+    id: node.row.id,
+    ...Object.fromEntries(
+      Object.entries(node.relationships)
+        .filter(([k]) => !k.startsWith('zsubq_'))
+        .map(([k, v]) => [k, toIdsOnly(Array.isArray(v) ? v : [...v])]),
+    ),
+  }));
 }
 
 // TODO (mlaw): test that `exists` does not provide an oracle
