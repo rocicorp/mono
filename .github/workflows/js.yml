@@ -87,29 +87,29 @@ jobs:
       - run: npm run check-types
 
   test:
-    name: Test (${{ matrix.browser }})
+    name: Test (${{ matrix.engine }})
     runs-on: ubuntu-latest
     needs: [format, lint, check-types]
     strategy:
       matrix:
-        browser: [chromium, firefox, webkit, node]
+        engine: [chromium, firefox, webkit, node]
         include:
-          - browser: chromium
+          - engine: chromium
             install-cmd: npx playwright install chromium --with-deps
             test-filter: --project="!**/node"
-          - browser: firefox
+          - engine: firefox
             install-cmd: npx playwright install firefox --with-deps
             test-filter: --project="!**/node"
-          - browser: webkit
+          - engine: webkit
             install-cmd: npx playwright install webkit --with-deps
             test-filter: --project="!**/node"
-          - browser: node
+          - engine: node
             install-cmd: echo "No browser installation needed for node-only tests"
             test-filter: --project="**/node"
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: rocicorp
-      TEST_BROWSER: ${{ matrix.browser != 'node' && matrix.browser || '' }}
+      TEST_BROWSER: ${{ matrix.engine != 'node' && matrix.engine || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
