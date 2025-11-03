@@ -4,7 +4,7 @@ import type {PlannerFanOut} from './planner-fan-out.ts';
 import type {PlannerFanIn} from './planner-fan-in.ts';
 import type {PlannerConnection} from './planner-connection.ts';
 import type {PlannerTerminus} from './planner-terminus.ts';
-import type {CostEstimate, PlannerNode} from './planner-node.ts';
+import type {PlannerNode} from './planner-node.ts';
 import {PlannerSource, type ConnectionCostModel} from './planner-source.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -105,21 +105,21 @@ export class PlannerGraph {
    * This sends constraints up through the graph to update
    * connection cost estimates.
    */
-  propagateConstraints(): void {
+  propagateConstraints(planDebugger?: PlanDebugger): void {
     assert(
       this.#terminus !== undefined,
       'Cannot propagate constraints without a terminus node',
     );
-    this.#terminus.propagateConstraints();
+    this.#terminus.propagateConstraints(planDebugger);
   }
 
   /**
    * Calculate total cost of the current plan.
    * Total cost includes both startup cost (one-time, e.g., sorting) and running cost.
    */
-  getTotalCost(): number {
-    const estimate = must(this.#terminus).estimateCost();
-    return estimate.startupCost + estimate.runningCost;
+  getTotalCost(planDebugger?: PlanDebugger): number {
+    const estimate = must(this.#terminus).estimateCost(planDebugger);
+    return estimate.cost + estimate.startupCost;
   }
 
   /**
@@ -157,59 +157,6 @@ export class PlannerGraph {
     this.#restoreConnections(state);
     this.#restoreJoins(state);
     this.#restoreFanNodes(state);
-  }
-
-  /**
-   * Collect cost estimates from all nodes in the graph for debugging.
-   */
-  #collectNodeCosts(): Array<{
-    node: string;
-    nodeType: PlannerNode['kind'];
-    costEstimate: CostEstimate;
-  }> {
-    const costs: Array<{
-      node: string;
-      nodeType: PlannerNode['kind'];
-      costEstimate: CostEstimate;
-    }> = [];
-
-    // Collect connection costs
-    for (const c of this.connections) {
-      costs.push({
-        node: c.name,
-        nodeType: 'connection',
-        costEstimate: c.estimateCost(undefined),
-      });
-    }
-
-    // Collect join costs
-    for (const j of this.joins) {
-      costs.push({
-        node: j.getName(),
-        nodeType: 'join',
-        costEstimate: j.estimateCost(undefined),
-      });
-    }
-
-    // Collect fan-out costs
-    for (const fo of this.fanOuts) {
-      costs.push({
-        node: 'FO',
-        nodeType: 'fan-out',
-        costEstimate: fo.estimateCost(undefined),
-      });
-    }
-
-    // Collect fan-in costs
-    for (const fi of this.fanIns) {
-      costs.push({
-        node: 'FI',
-        nodeType: 'fan-in',
-        costEstimate: fi.estimateCost(undefined),
-      });
-    }
-
-    return costs;
   }
 
   /**
@@ -321,7 +268,12 @@ export class PlannerGraph {
     let bestAttemptNumber = -1;
 
     // Enumerate all flip patterns
+    // try 7 and 32 (6 and 31)
+    const forcePattern = undefined; // 11 14
     for (let pattern = 0; pattern < numPatterns; pattern++) {
+      if (forcePattern !== undefined && pattern !== forcePattern) {
+        continue;
+      }
       // Reset to initial state
       this.resetPlanningState();
 
@@ -349,7 +301,7 @@ export class PlannerGraph {
         propagateUnlimitForFlippedJoins(this);
 
         // Propagate constraints through the graph
-        this.propagateConstraints();
+        this.propagateConstraints(planDebugger);
 
         if (planDebugger) {
           planDebugger.log({
@@ -364,14 +316,16 @@ export class PlannerGraph {
         }
 
         // Evaluate this plan
-        const totalCost = this.getTotalCost();
+        const totalCost = this.getTotalCost(planDebugger);
 
         if (planDebugger) {
           planDebugger.log({
             type: 'plan-complete',
             attemptNumber: pattern,
             totalCost,
-            nodeCosts: this.#collectNodeCosts(),
+            flipPattern: pattern, // Bitmask of which joins are flipped
+            // TODO: we'll need a different way to collect these
+            // nodeCosts: this.#collectNodeCosts(),
             joinStates: this.joins.map(j => {
               const info = j.getDebugInfo();
               return {
@@ -405,13 +359,14 @@ export class PlannerGraph {
     if (bestPlan) {
       this.restorePlanningSnapshot(bestPlan);
       // Propagate constraints to ensure all derived state is consistent
-      this.propagateConstraints();
+      this.propagateConstraints(planDebugger);
 
       if (planDebugger) {
         planDebugger.log({
           type: 'best-plan-selected',
           bestAttemptNumber,
           totalCost: bestCost,
+          flipPattern: bestAttemptNumber, // The best attempt number is also the flip pattern
           joinStates: this.joins.map(j => ({
             join: j.getName(),
             type: j.type,

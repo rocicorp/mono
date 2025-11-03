@@ -106,7 +106,7 @@ describe('analyzeQuery', () => {
     expect(runAst).toHaveBeenCalledWith(
       lc,
       simpleAST,
-      true, // isTransformed
+      true, // isTransformed (AST already has server names)
       expect.objectContaining({
         applyPermissions: false,
         syncedRows: true,

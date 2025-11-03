@@ -1,17 +1,19 @@
 import type {PlannerConstraint} from './planner-constraint.ts';
+import type {PlanDebugger} from './planner-debug.ts';
 import type {
   CostEstimate,
   JoinOrConnection,
   PlannerNode,
 } from './planner-node.ts';
+import type {PlannerTerminus} from './planner-terminus.ts';
 
 export class PlannerFanOut {
   readonly kind = 'fan-out' as const;
   #type: 'FO' | 'UFO';
   readonly #outputs: PlannerNode[] = [];
-  readonly #input: PlannerNode;
+  readonly #input: Exclude<PlannerNode, PlannerTerminus>;
 
-  constructor(input: PlannerNode) {
+  constructor(input: Exclude<PlannerNode, PlannerTerminus>) {
     this.#type = 'FO';
     this.#input = input;
   }
@@ -35,13 +37,47 @@ export class PlannerFanOut {
   propagateConstraints(
     branchPattern: number[],
     constraint: PlannerConstraint | undefined,
-    _from: PlannerNode,
+    from?: PlannerNode,
+    planDebugger?: PlanDebugger,
   ): void {
-    this.#input.propagateConstraints(branchPattern, constraint, this);
+    planDebugger?.log({
+      type: 'node-constraint',
+      nodeType: 'fan-out',
+      node: 'FO',
+      branchPattern,
+      constraint,
+      from: from?.kind ?? 'unknown',
+    });
+
+    this.#input.propagateConstraints(
+      branchPattern,
+      constraint,
+      this,
+      planDebugger,
+    );
   }
 
-  estimateCost(branchPattern?: number[]): CostEstimate {
-    return this.#input.estimateCost(branchPattern);
+  estimateCost(
+    downstreamChildSelectivity: number,
+    branchPattern: number[],
+    planDebugger?: PlanDebugger,
+  ): CostEstimate {
+    const ret = this.#input.estimateCost(
+      downstreamChildSelectivity,
+      branchPattern,
+      planDebugger,
+    );
+
+    planDebugger?.log({
+      type: 'node-cost',
+      nodeType: 'fan-out',
+      node: 'FO',
+      branchPattern,
+      downstreamChildSelectivity,
+      costEstimate: ret,
+    });
+
+    return ret;
   }
 
   convertToUFO(): void {

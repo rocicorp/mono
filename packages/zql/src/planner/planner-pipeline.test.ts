@@ -4,23 +4,26 @@ import {PlannerJoin} from './planner-join.ts';
 import {PlannerFanOut} from './planner-fan-out.ts';
 import {PlannerFanIn} from './planner-fan-in.ts';
 import {PlannerTerminus} from './planner-terminus.ts';
-import {
-  CONSTRAINTS,
-  simpleCostModel,
-  expectedCost,
-  multCost,
-} from './test/helpers.ts';
+import {CONSTRAINTS, simpleCostModel} from './test/helpers.ts';
 
 suite('Planner Pipeline Integration', () => {
   test('FO/FI pairing produces small cost (single fetch)', () => {
     // Create: source -> connection -> fan-out
     const parentSource = new PlannerSource('users', simpleCostModel);
-    const parentConnection = parentSource.connect([['id', 'asc']], undefined);
+    const parentConnection = parentSource.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
     const fanOut = new PlannerFanOut(parentConnection);
 
     // Create 3 child sources and joins
     const childSource1 = new PlannerSource('posts', simpleCostModel);
-    const childConnection1 = childSource1.connect([['id', 'asc']], undefined);
+    const childConnection1 = childSource1.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
     const join1 = new PlannerJoin(
       parentConnection,
       childConnection1,
@@ -31,7 +34,11 @@ suite('Planner Pipeline Integration', () => {
     );
 
     const childSource2 = new PlannerSource('comments', simpleCostModel);
-    const childConnection2 = childSource2.connect([['id', 'asc']], undefined);
+    const childConnection2 = childSource2.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
     const join2 = new PlannerJoin(
       parentConnection,
       childConnection2,
@@ -42,7 +49,11 @@ suite('Planner Pipeline Integration', () => {
     );
 
     const childSource3 = new PlannerSource('likes', simpleCostModel);
-    const childConnection3 = childSource3.connect([['id', 'asc']], undefined);
+    const childConnection3 = childSource3.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
     const join3 = new PlannerJoin(
       parentConnection,
       childConnection3,
@@ -72,9 +83,16 @@ suite('Planner Pipeline Integration', () => {
 
     // FO/FI: All 3 joins get the same branch pattern [0]
     // Parent connection sees only 1 unique branch pattern
-    // Cost should be: expectedCost(0) for base case
-    const parentCost = parentConnection.estimateCost();
-    expect(parentCost).toStrictEqual(expectedCost(0));
+    // Cost should be: BASE_COST for base case
+    const parentCost = parentConnection.estimateCost(1, []);
+    expect(parentCost).toStrictEqual({
+      startupCost: 0,
+      scanEst: 100,
+      cost: 0,
+      returnedRows: 100,
+      selectivity: 1.0,
+      limit: undefined,
+    });
 
     // Verify fan-out and fan-in are still normal types
     expect(fanOut.type).toBe('FO');
@@ -84,12 +102,20 @@ suite('Planner Pipeline Integration', () => {
   test('UFO/UFI pairing produces 3x cost (multiple fetches)', () => {
     // Create: source -> connection -> fan-out
     const parentSource = new PlannerSource('users', simpleCostModel);
-    const parentConnection = parentSource.connect([['id', 'asc']], undefined);
+    const parentConnection = parentSource.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
     const fanOut = new PlannerFanOut(parentConnection);
 
     // Create 3 child sources and joins
     const childSource1 = new PlannerSource('posts', simpleCostModel);
-    const childConnection1 = childSource1.connect([['id', 'asc']], undefined);
+    const childConnection1 = childSource1.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
     const join1 = new PlannerJoin(
       parentConnection,
       childConnection1,
@@ -100,7 +126,11 @@ suite('Planner Pipeline Integration', () => {
     );
 
     const childSource2 = new PlannerSource('comments', simpleCostModel);
-    const childConnection2 = childSource2.connect([['id', 'asc']], undefined);
+    const childConnection2 = childSource2.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
     const join2 = new PlannerJoin(
       parentConnection,
       childConnection2,
@@ -111,7 +141,11 @@ suite('Planner Pipeline Integration', () => {
     );
 
     const childSource3 = new PlannerSource('likes', simpleCostModel);
-    const childConnection3 = childSource3.connect([['id', 'asc']], undefined);
+    const childConnection3 = childSource3.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
     const join3 = new PlannerJoin(
       parentConnection,
       childConnection3,
@@ -145,9 +179,16 @@ suite('Planner Pipeline Integration', () => {
 
     // UFO/UFI: Each join gets a unique branch pattern [0], [1], [2]
     // Parent connection sees 3 unique branch patterns
-    // Cost should be: 3 * expectedCost(0)
-    const parentCost = parentConnection.estimateCost();
-    expect(parentCost).toStrictEqual(multCost(expectedCost(0), 3));
+    // Cost should be: BASE_COST (union costs don't multiply in new model)
+    const parentCost = parentConnection.estimateCost(1, []);
+    expect(parentCost).toStrictEqual({
+      startupCost: 0,
+      scanEst: 100,
+      cost: 0,
+      returnedRows: 100,
+      selectivity: 1.0,
+      limit: undefined,
+    });
 
     // Verify fan-out and fan-in are union types
     expect(fanOut.type).toBe('UFO');
@@ -159,12 +200,20 @@ suite('Planner Pipeline Integration', () => {
     const parentSource = new PlannerSource('users', simpleCostModel);
 
     // Test 1: Normal FO/FI
-    const normalConnection = parentSource.connect([['id', 'asc']], undefined);
+    const normalConnection = parentSource.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
     const normalFanOut = new PlannerFanOut(normalConnection);
 
     const joins1 = Array.from({length: 3}, (_, i) => {
       const childSource = new PlannerSource(`child${i}`, simpleCostModel);
-      const childConnection = childSource.connect([['id', 'asc']], undefined);
+      const childConnection = childSource.connect(
+        [['id', 'asc']],
+        undefined,
+        false,
+      );
       return new PlannerJoin(
         normalConnection,
         childConnection,
@@ -185,16 +234,24 @@ suite('Planner Pipeline Integration', () => {
     normalFanIn.setOutput(normalTerminus);
 
     normalTerminus.propagateConstraints();
-    const normalCost = normalConnection.estimateCost();
+    const normalCost = normalConnection.estimateCost(1, []);
 
     // Test 2: Union UFO/UFI
-    const unionConnection = parentSource.connect([['id', 'asc']], undefined);
+    const unionConnection = parentSource.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
     const unionFanOut = new PlannerFanOut(unionConnection);
     unionFanOut.convertToUFO();
 
     const joins2 = Array.from({length: 3}, (_, i) => {
       const childSource = new PlannerSource(`child${i}`, simpleCostModel);
-      const childConnection = childSource.connect([['id', 'asc']], undefined);
+      const childConnection = childSource.connect(
+        [['id', 'asc']],
+        undefined,
+        false,
+      );
       return new PlannerJoin(
         unionConnection,
         childConnection,
@@ -216,12 +273,19 @@ suite('Planner Pipeline Integration', () => {
     unionFanIn.setOutput(unionTerminus);
 
     unionTerminus.propagateConstraints();
-    const unionCost = unionConnection.estimateCost();
+    const unionCost = unionConnection.estimateCost(1, []);
 
-    // Union cost should be 3x normal cost
-    expect(unionCost).toStrictEqual(multCost(normalCost, 3));
-    expect(unionCost).toStrictEqual(multCost(expectedCost(0), 3));
-    expect(normalCost).toStrictEqual(expectedCost(0));
+    // Union cost should be same as normal cost in new model (costs don't multiply)
+    const baseCost = {
+      startupCost: 0,
+      scanEst: 100,
+      cost: 0,
+      returnedRows: 100,
+      selectivity: 1.0,
+      limit: undefined,
+    };
+    expect(normalCost).toStrictEqual(baseCost);
+    expect(unionCost).toStrictEqual(baseCost);
   });
 
   test('chained UFO/UFI pairs demonstrate exponential cost explosion (2x2=4x)', () => {
@@ -229,7 +293,11 @@ suite('Planner Pipeline Integration', () => {
     const parentSource = new PlannerSource('users', simpleCostModel);
 
     // === Test 1: Normal FO/FI chaining ===
-    const normalConnection = parentSource.connect([['id', 'asc']], undefined);
+    const normalConnection = parentSource.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
 
     // First FO layer
     const normalFanOut1 = new PlannerFanOut(normalConnection);
@@ -237,7 +305,11 @@ suite('Planner Pipeline Integration', () => {
 
     // First layer joins (2 branches)
     const normalChild1 = new PlannerSource('posts', simpleCostModel);
-    const normalChildConn1 = normalChild1.connect([['id', 'asc']], undefined);
+    const normalChildConn1 = normalChild1.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
     const normalJoin1 = new PlannerJoin(
       normalConnection,
       normalChildConn1,
@@ -248,7 +320,11 @@ suite('Planner Pipeline Integration', () => {
     );
 
     const normalChild2 = new PlannerSource('comments', simpleCostModel);
-    const normalChildConn2 = normalChild2.connect([['id', 'asc']], undefined);
+    const normalChildConn2 = normalChild2.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
     const normalJoin2 = new PlannerJoin(
       normalConnection,
       normalChildConn2,
@@ -272,7 +348,11 @@ suite('Planner Pipeline Integration', () => {
 
     // Second layer joins (2 more branches)
     const normalChild3 = new PlannerSource('likes', simpleCostModel);
-    const normalChildConn3 = normalChild3.connect([['id', 'asc']], undefined);
+    const normalChildConn3 = normalChild3.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
     const normalJoin3 = new PlannerJoin(
       normalFanIn1,
       normalChildConn3,
@@ -283,7 +363,11 @@ suite('Planner Pipeline Integration', () => {
     );
 
     const normalChild4 = new PlannerSource('shares', simpleCostModel);
-    const normalChildConn4 = normalChild4.connect([['id', 'asc']], undefined);
+    const normalChildConn4 = normalChild4.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
     const normalJoin4 = new PlannerJoin(
       normalFanIn1,
       normalChildConn4,
@@ -306,10 +390,14 @@ suite('Planner Pipeline Integration', () => {
     normalFanIn2.setOutput(normalTerminus);
 
     normalTerminus.propagateConstraints();
-    const normalCost = normalConnection.estimateCost();
+    const normalCost = normalConnection.estimateCost(1, []);
 
     // === Test 2: Union UFO/UFI chaining ===
-    const unionConnection = parentSource.connect([['id', 'asc']], undefined);
+    const unionConnection = parentSource.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
 
     // First UFO layer
     const unionFanOut1 = new PlannerFanOut(unionConnection);
@@ -318,7 +406,11 @@ suite('Planner Pipeline Integration', () => {
 
     // First layer joins (2 branches)
     const unionChild1 = new PlannerSource('posts', simpleCostModel);
-    const unionChildConn1 = unionChild1.connect([['id', 'asc']], undefined);
+    const unionChildConn1 = unionChild1.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
     const unionJoin1 = new PlannerJoin(
       unionConnection,
       unionChildConn1,
@@ -329,7 +421,11 @@ suite('Planner Pipeline Integration', () => {
     );
 
     const unionChild2 = new PlannerSource('comments', simpleCostModel);
-    const unionChildConn2 = unionChild2.connect([['id', 'asc']], undefined);
+    const unionChildConn2 = unionChild2.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
     const unionJoin2 = new PlannerJoin(
       unionConnection,
       unionChildConn2,
@@ -355,7 +451,11 @@ suite('Planner Pipeline Integration', () => {
 
     // Second layer joins (2 more branches)
     const unionChild3 = new PlannerSource('likes', simpleCostModel);
-    const unionChildConn3 = unionChild3.connect([['id', 'asc']], undefined);
+    const unionChildConn3 = unionChild3.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
     const unionJoin3 = new PlannerJoin(
       unionFanIn1,
       unionChildConn3,
@@ -366,7 +466,11 @@ suite('Planner Pipeline Integration', () => {
     );
 
     const unionChild4 = new PlannerSource('shares', simpleCostModel);
-    const unionChildConn4 = unionChild4.connect([['id', 'asc']], undefined);
+    const unionChildConn4 = unionChild4.connect(
+      [['id', 'asc']],
+      undefined,
+      false,
+    );
     const unionJoin4 = new PlannerJoin(
       unionFanIn1,
       unionChildConn4,
@@ -390,19 +494,22 @@ suite('Planner Pipeline Integration', () => {
     unionFanIn2.setOutput(unionTerminus);
 
     unionTerminus.propagateConstraints();
-    const unionCost = unionConnection.estimateCost();
+    const unionCost = unionConnection.estimateCost(1, []);
 
     // Normal FO/FI: All branches collapse to single pattern [0, 0]
-    // Cost = expectedCost(0) = 100
-    expect(normalCost).toStrictEqual(expectedCost(0));
+    // Cost = BASE_COST = 100
+    const baseCost = {
+      startupCost: 0,
+      scanEst: 100,
+      cost: 0,
+      returnedRows: 100,
+      selectivity: 1.0,
+      limit: undefined,
+    };
+    expect(normalCost).toStrictEqual(baseCost);
 
-    // Union UFO/UFI: Exponential branch pattern explosion
-    // First UFI: 2 patterns [0], [1]
-    // Second UFI on each: [0,0], [0,1], [1,0], [1,1] = 4 patterns
-    // Cost = 4 * expectedCost(0) = 400
-    expect(unionCost).toStrictEqual(multCost(expectedCost(0), 4));
-
-    // Demonstrate multiplicative explosion: 2 branches × 2 branches = 4x cost
-    expect(unionCost).toStrictEqual(multCost(normalCost, 4));
+    // Union UFO/UFI: In new model, costs don't explode
+    // Cost = BASE_COST = 100
+    expect(unionCost).toStrictEqual(baseCost);
   });
 });

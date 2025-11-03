@@ -1,7 +1,9 @@
 export type {Expand} from '../../shared/src/expand.ts';
 export type {ConnectionState} from '../../zero-client/src/client/connection-manager.ts';
-export type {ConnectionStatus} from '../../zero-client/src/client/connection-status.ts';
+export {ConnectionStatus} from '../../zero-client/src/client/connection-status.ts';
 export type {
+  AuthError,
+  NeedsAuthReason,
   ZeroError,
   ZeroErrorKind,
 } from '../../zero-client/src/client/error.ts';

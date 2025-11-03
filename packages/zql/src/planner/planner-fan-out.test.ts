@@ -1,10 +1,5 @@
 import {expect, suite, test} from 'vitest';
-import {
-  CONSTRAINTS,
-  createConnection,
-  createFanOut,
-  expectedCost,
-} from './test/helpers.ts';
+import {CONSTRAINTS, createConnection, createFanOut} from './test/helpers.ts';
 import type {PlannerNode} from './planner-node.ts';
 
 const unpinned = {
@@ -45,7 +40,14 @@ suite('PlannerFanOut', () => {
 
     fanOut.propagateConstraints([0], CONSTRAINTS.userId, unpinned);
 
-    expect(input.estimateCost()).toStrictEqual(expectedCost(1));
+    expect(input.estimateCost(1, [])).toStrictEqual({
+      startupCost: 0,
+      scanEst: 100,
+      cost: 0,
+      returnedRows: 100,
+      selectivity: 1.0,
+      limit: undefined,
+    });
   });
 
   test('reset() restores FO type', () => {

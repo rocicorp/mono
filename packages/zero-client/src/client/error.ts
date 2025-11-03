@@ -8,13 +8,26 @@ import {
   type ErrorBody,
   isProtocolError,
   ProtocolError,
+  type PushFailedBody,
+  type TransformFailedBody,
 } from '../../../zero-protocol/src/error.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
 
-export type ZeroError = ProtocolError | ClientError;
+export type ZeroError = ProtocolError<ErrorBody> | ClientError;
 export type ZeroErrorBody = Expand<ErrorBody | ClientErrorBody>;
 export type ZeroErrorKind = Expand<ErrorKind | ClientErrorKind>;
+export type AuthError = ProtocolError<NeedsAuthReason>;
+
+export type NeedsAuthReason = Expand<
+  | (ErrorBody & {
+      kind: ErrorKind.AuthInvalidated | ErrorKind.Unauthorized;
+    })
+  | (Extract<PushFailedBody, {reason: ErrorReason.HTTP}> & {status: 401 | 403})
+  | (Extract<TransformFailedBody, {reason: ErrorReason.HTTP}> & {
+      status: 401 | 403;
+    })
+>;
 
 export type ClientErrorBody = {
   kind: ClientErrorKind;
@@ -52,11 +65,12 @@ export function isServerError(ex: unknown): ex is ProtocolError<ErrorBody> {
   );
 }
 
-export function isAuthError(ex: unknown): ex is ProtocolError & {
-  kind: ErrorKind.AuthInvalidated | ErrorKind.Unauthorized;
-} {
+export function isAuthError(ex: unknown): ex is AuthError {
   if (isServerError(ex)) {
-    if (isAuthErrorKind(ex.errorBody.kind)) {
+    if (
+      ex.kind === ErrorKind.AuthInvalidated ||
+      ex.kind === ErrorKind.Unauthorized
+    ) {
       return true;
     }
     if (
@@ -70,12 +84,6 @@ export function isAuthError(ex: unknown): ex is ProtocolError & {
   }
 
   return false;
-}
-
-function isAuthErrorKind(
-  kind: ErrorKind,
-): kind is ErrorKind.AuthInvalidated | ErrorKind.Unauthorized {
-  return kind === ErrorKind.AuthInvalidated || kind === ErrorKind.Unauthorized;
 }
 
 export function getBackoffParams(error: ZeroError): BackoffBody | undefined {
@@ -98,11 +106,28 @@ export function isClientError(ex: unknown): ex is ClientError<ClientErrorBody> {
 
 export const NO_STATUS_TRANSITION = 'NO_STATUS_TRANSITION';
 
+export type ErrorConnectionTransition =
+  | {status: typeof NO_STATUS_TRANSITION; reason: ZeroError}
+  | {status: ConnectionStatus.NeedsAuth; reason: AuthError}
+  | {status: ConnectionStatus.Error; reason: ZeroError}
+  | {status: ConnectionStatus.Disconnected; reason: ZeroError}
+  | {status: ConnectionStatus.Closed; reason: ZeroError};
+
 /**
  * Returns the status to transition to, or null if the error
  * indicates that the connection should continue in the current state.
  */
-export function getErrorConnectionTransition(ex: unknown) {
+export function getErrorConnectionTransition(
+  ex: unknown,
+): ErrorConnectionTransition {
+  // Handle auth errors by transitioning to needs-auth state
+  if (isAuthError(ex)) {
+    return {
+      status: ConnectionStatus.NeedsAuth,
+      reason: ex,
+    } as const;
+  }
+
   if (isClientError(ex)) {
     switch (ex.kind) {
       // Connecting errors that should continue in the current state
@@ -135,11 +160,6 @@ export function getErrorConnectionTransition(ex: unknown) {
     }
   }
 
-  // TODO(0xcadams): change this once we have a proper auth error handling flow
-  if (isAuthError(ex)) {
-    return {status: NO_STATUS_TRANSITION, reason: ex} as const;
-  }
-
   if (isServerError(ex)) {
     switch (ex.kind) {
       // Errors that should transition to error state
@@ -153,6 +173,8 @@ export function getErrorConnectionTransition(ex: unknown) {
       case ErrorKind.VersionNotSupported:
       case ErrorKind.SchemaVersionNotSupported:
       case ErrorKind.Internal:
+      // PushFailed and TransformFailed can be auth errors (401/403)
+      // or other errors - handle non-auth cases here
       case ErrorKind.PushFailed:
       case ErrorKind.TransformFailed:
         return {status: ConnectionStatus.Error, reason: ex} as const;
@@ -163,11 +185,13 @@ export function getErrorConnectionTransition(ex: unknown) {
       case ErrorKind.ServerOverloaded:
         return {status: NO_STATUS_TRANSITION, reason: ex} as const;
 
-      // Auth errors will eventually transition to needs-auth state
-      // For now, treat them as non-fatal so we can retry
+      // Auth errors are handled above by isAuthError check
       case ErrorKind.AuthInvalidated:
       case ErrorKind.Unauthorized:
-        return {status: NO_STATUS_TRANSITION, reason: ex} as const;
+        return {
+          status: ConnectionStatus.NeedsAuth,
+          reason: ex as AuthError,
+        } as const;
 
       // Mutation-specific errors don't affect connection state
       case ErrorKind.MutationRateLimited:

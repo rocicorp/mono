@@ -16,13 +16,8 @@ export function ZeroInit({children}: {children: ReactNode}) {
         userID: login.loginState?.decoded?.sub ?? 'anon',
         mutators: createMutators(login.loginState?.decoded),
         logLevel: 'info' as const,
-        auth: (error?: 'invalid-token') => {
-          if (error === 'invalid-token') {
-            login.logout();
-            return undefined;
-          }
-          return login.loginState?.encoded;
-        },
+        // changing the auth token will cause ZeroProvider to call connection.connect
+        auth: login.loginState?.encoded,
         mutateURL: `${window.location.origin}/api/mutate`,
         getQueriesURL: `${window.location.origin}/api/get-queries`,
       }) satisfies ZeroOptions<Schema, CustomMutatorDefs>,

@@ -41,6 +41,7 @@ export type Plans = {
 export function buildPlanGraph(
   ast: AST,
   model: ConnectionCostModel,
+  isRoot: boolean,
   baseConstraints?: PlannerConstraint,
 ): Plans {
   const graph = new PlannerGraph();
@@ -50,6 +51,7 @@ export function buildPlanGraph(
   const connection = source.connect(
     ast.orderBy ?? [],
     ast.where,
+    isRoot,
     baseConstraints,
     ast.limit,
   );
@@ -82,7 +84,12 @@ export function buildPlanGraph(
         csq.correlation.childField,
         csq.subquery.table,
       );
-      subPlans[alias] = buildPlanGraph(csq.subquery, model, childConstraints);
+      subPlans[alias] = buildPlanGraph(
+        csq.subquery,
+        model,
+        true,
+        childConstraints,
+      );
     }
   }
 
@@ -91,12 +98,12 @@ export function buildPlanGraph(
 
 function processCondition(
   condition: Condition,
-  input: PlannerNode,
+  input: Exclude<PlannerNode, PlannerTerminus>,
   graph: PlannerGraph,
   model: ConnectionCostModel,
   parentTable: string,
   getPlanId: () => number,
-): PlannerNode {
+): Exclude<PlannerNode, PlannerTerminus> {
   switch (condition.type) {
     case 'simple':
       return input;
@@ -118,12 +125,12 @@ function processCondition(
 
 function processAnd(
   condition: Conjunction,
-  input: PlannerNode,
+  input: Exclude<PlannerNode, PlannerTerminus>,
   graph: PlannerGraph,
   model: ConnectionCostModel,
   parentTable: string,
   getPlanId: () => number,
-): PlannerNode {
+): Exclude<PlannerNode, PlannerTerminus> {
   let end = input;
   for (const subCondition of condition.conditions) {
     end = processCondition(
@@ -140,12 +147,12 @@ function processAnd(
 
 function processOr(
   condition: Disjunction,
-  input: PlannerNode,
+  input: Exclude<PlannerNode, PlannerTerminus>,
   graph: PlannerGraph,
   model: ConnectionCostModel,
   parentTable: string,
   getPlanId: () => number,
-): PlannerNode {
+): Exclude<PlannerNode, PlannerTerminus> {
   const subqueryConditions = condition.conditions.filter(
     c => c.type === 'correlatedSubquery' || hasCorrelatedSubquery(c),
   );
@@ -158,7 +165,7 @@ function processOr(
   graph.fanOuts.push(fanOut);
   wireOutput(input, fanOut);
 
-  const branches: PlannerNode[] = [];
+  const branches: Exclude<PlannerNode, PlannerTerminus>[] = [];
   for (const subCondition of subqueryConditions) {
     const branch = processCondition(
       subCondition,
@@ -183,12 +190,12 @@ function processOr(
 
 function processCorrelatedSubquery(
   condition: CorrelatedSubqueryCondition,
-  input: PlannerNode,
+  input: Exclude<PlannerNode, PlannerTerminus>,
   graph: PlannerGraph,
   model: ConnectionCostModel,
   parentTable: string,
   getPlanId: () => number,
-): PlannerNode {
+): Exclude<PlannerNode, PlannerTerminus> {
   const {related} = condition;
   const childTable = related.subquery.table;
 
@@ -199,6 +206,7 @@ function processCorrelatedSubquery(
   const childConnection = childSource.connect(
     related.subquery.orderBy ?? [],
     related.subquery.where,
+    false,
     undefined, // no base constraints for EXISTS/NOT EXISTS
     condition.op === 'EXISTS' ? 1 : undefined,
   );
@@ -273,7 +281,7 @@ export function planQuery(
   model: ConnectionCostModel,
   planDebugger?: PlanDebugger,
 ): AST {
-  const plans = buildPlanGraph(ast, model);
+  const plans = buildPlanGraph(ast, model, true);
   planRecursively(plans, planDebugger);
   return applyPlansToAST(ast, plans);
 }
@@ -313,7 +321,7 @@ function applyToCondition(
   };
 }
 
-function applyPlansToAST(ast: AST, plans: Plans): AST {
+export function applyPlansToAST(ast: AST, plans: Plans): AST {
   const flippedIds = new Set<number>();
   for (const join of plans.plan.joins) {
     if (join.type === 'flipped' && join.planId !== undefined) {
