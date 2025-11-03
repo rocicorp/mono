@@ -1,5 +1,6 @@
 import {describe, expect, expectTypeOf, test} from 'vitest';
 import * as v from '../../../shared/src/valita.ts';
+import {QueryParseError} from './error.ts';
 import {
   createBuilder,
   syncedQuery,
@@ -353,6 +354,55 @@ test('syncedQueryWithContext', () => {
     },
     orderBy: [['id', 'asc']],
   });
+});
+
+test('withValidation throws QueryParseError on parse failure', () => {
+  const idArgs = v.tuple([v.string()]);
+  const def = syncedQuery('myQuery', idArgs, (id: string) =>
+    builder.issue.where('id', id),
+  );
+  const wv = withValidation(def);
+
+  let thrownError: Error | undefined;
+  try {
+    // @ts-expect-error 123 is not a string
+    wv('ignored', 123);
+    expect.fail('Expected QueryParseError to be thrown');
+  } catch (error) {
+    thrownError = error as Error;
+  }
+
+  expect(thrownError).toBeInstanceOf(QueryParseError);
+  expect(thrownError?.name).toBe('QueryParseError');
+  expect(thrownError?.message).toMatchInlineSnapshot(
+    `"Failed to parse arguments for query: invalid_type at .0 (expected string)"`,
+  );
+});
+
+test('withValidation throws QueryParseError for syncedQueryWithContext', () => {
+  const idArgs = v.tuple([v.string(), v.number()]);
+  const def = syncedQueryWithContext(
+    'contextQuery',
+    idArgs,
+    (context: string, id: string, _count: number) =>
+      builder.issue.where('id', id).where('ownerId', context),
+  );
+  const wv = withValidation(def);
+
+  let thrownError: Error | undefined;
+  try {
+    // @ts-expect-error 'not-a-number' is not a number
+    wv('user1', 'not-a-number', 'also-not-a-number');
+    expect.fail('Expected QueryParseError to be thrown');
+  } catch (error) {
+    thrownError = error as Error;
+  }
+
+  expect(thrownError).toBeInstanceOf(QueryParseError);
+  expect(thrownError?.name).toBe('QueryParseError');
+  expect(thrownError?.message).toMatchInlineSnapshot(
+    `"Failed to parse arguments for query: invalid_type at .1 (expected number)"`,
+  );
 });
 
 // TODO: test unions

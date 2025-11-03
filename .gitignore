@@ -95,3 +95,4 @@ WARP.md
 bun.lock
 
 .claude/
+packages/zql-integration-tests/Chinook_Sqlite.sqlite

@@ -1,3 +1,4 @@
+import type {PlanDebugger} from './planner-debug.ts';
 import type {
   CostEstimate,
   JoinOrConnection,
@@ -6,9 +7,9 @@ import type {
 
 export class PlannerTerminus {
   readonly kind = 'terminus' as const;
-  readonly #input: PlannerNode;
+  readonly #input: Exclude<PlannerNode, PlannerTerminus>;
 
-  constructor(input: PlannerNode) {
+  constructor(input: Exclude<PlannerNode, PlannerTerminus>) {
     this.#input = input;
   }
 
@@ -20,13 +21,13 @@ export class PlannerTerminus {
     return this.#input.closestJoinOrSource();
   }
 
-  propagateConstraints(): void {
-    this.#input.propagateConstraints([], undefined, this);
+  propagateConstraints(planDebugger?: PlanDebugger): void {
+    this.#input.propagateConstraints([], undefined, this, planDebugger);
   }
 
-  estimateCost(): CostEstimate {
+  estimateCost(planDebugger?: PlanDebugger): CostEstimate {
     // Terminus starts the cost estimation flow with empty branch pattern
-    return this.#input.estimateCost([]);
+    return this.#input.estimateCost(1, [], planDebugger);
   }
 
   /**

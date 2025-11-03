@@ -40,7 +40,7 @@ export interface Pusher extends RefCountedService {
   enqueuePush(
     clientID: string,
     push: PushBody,
-    jwt: string | undefined,
+    auth: string | undefined,
     httpCookie: string | undefined,
   ): HandlerResult;
   ackMutationResponses(upToID: MutationID): Promise<void>;
@@ -108,13 +108,13 @@ export class PusherService implements Service, Pusher {
   enqueuePush(
     clientID: string,
     push: PushBody,
-    jwt: string | undefined,
+    auth: string | undefined,
     httpCookie: string | undefined,
   ): Exclude<HandlerResult, StreamResult> {
     if (!this.#pushConfig.forwardCookies) {
       httpCookie = undefined; // remove cookies if not forwarded
     }
-    this.#queue.enqueue({push, jwt, clientID, httpCookie});
+    this.#queue.enqueue({push, auth, clientID, httpCookie});
 
     return {
       type: 'ok',
@@ -166,7 +166,7 @@ export class PusherService implements Service, Pusher {
 
 type PusherEntry = {
   push: PushBody;
-  jwt: string | undefined;
+  auth: string | undefined;
   httpCookie: string | undefined;
   clientID: string;
 };
@@ -452,7 +452,7 @@ class PushWorker {
         },
         {
           apiKey: this.#apiKey,
-          token: entry.jwt,
+          token: entry.auth,
           cookie: entry.httpCookie,
         },
         entry.push,
@@ -544,8 +544,8 @@ function assertAreCompatiblePushes(left: PusherEntry, right: PusherEntry) {
     'clientID must be the same for all pushes',
   );
   assert(
-    left.jwt === right.jwt,
-    'jwt must be the same for all pushes with the same clientID',
+    left.auth === right.auth,
+    'auth must be the same for all pushes with the same clientID',
   );
   assert(
     left.push.schemaVersion === right.push.schemaVersion,

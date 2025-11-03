@@ -30,6 +30,8 @@ export class Inspector {
       getQueryMetrics:
         inspectorDelegate.getQueryMetrics.bind(inspectorDelegate),
       getAST: inspectorDelegate.getAST.bind(inspectorDelegate),
+      mapClientASTToServer:
+        inspectorDelegate.mapClientASTToServer.bind(inspectorDelegate),
       get metrics() {
         return inspectorDelegate.metrics;
       },

@@ -46,14 +46,14 @@ describe('combine pushes', () => {
     const [pushes, terminate] = combinePushes([
       {
         push: makePush(1),
-        jwt: 'a',
+        auth: 'a',
         httpCookie: undefined,
 
         clientID,
       },
       {
         push: makePush(1),
-        jwt: 'a',
+        auth: 'a',
         httpCookie: undefined,
 
         clientID,
@@ -68,7 +68,7 @@ describe('combine pushes', () => {
     const [pushes, terminate] = combinePushes([
       {
         push: makePush(1),
-        jwt: 'a',
+        auth: 'a',
         httpCookie: undefined,
 
         clientID,
@@ -76,7 +76,7 @@ describe('combine pushes', () => {
       undefined,
       {
         push: makePush(1),
-        jwt: 'a',
+        auth: 'a',
         httpCookie: undefined,
 
         clientID,
@@ -92,19 +92,19 @@ describe('combine pushes', () => {
     const [pushes, terminate] = combinePushes([
       {
         push: makePush(1, 'client1'),
-        jwt: 'a',
+        auth: 'a',
         httpCookie: undefined,
         clientID: 'client1',
       },
       {
         push: makePush(2, 'client1'),
-        jwt: 'a',
+        auth: 'a',
         httpCookie: undefined,
         clientID: 'client1',
       },
       {
         push: makePush(1, 'client2'),
-        jwt: 'b',
+        auth: 'b',
         httpCookie: undefined,
         clientID: 'client2',
       },
@@ -129,18 +129,18 @@ describe('combine pushes', () => {
       combinePushes([
         {
           push: makePush(1, 'client1'),
-          jwt: 'a',
+          auth: 'a',
           httpCookie: undefined,
           clientID: 'client1',
         },
         {
           push: makePush(2, 'client1'),
-          jwt: 'b',
+          auth: 'b',
           httpCookie: undefined, // Different JWT
           clientID: 'client1',
         },
       ]),
-    ).toThrow('jwt must be the same for all pushes with the same clientID');
+    ).toThrow('auth must be the same for all pushes with the same clientID');
   });
 
   test('throws on schema version mismatch for same client', () => {
@@ -151,7 +151,7 @@ describe('combine pushes', () => {
             ...makePush(1, 'client1'),
             schemaVersion: 1,
           },
-          jwt: 'a',
+          auth: 'a',
           httpCookie: undefined,
           clientID: 'client1',
         },
@@ -160,7 +160,7 @@ describe('combine pushes', () => {
             ...makePush(2, 'client1'),
             schemaVersion: 2, // Different schema version
           },
-          jwt: 'a',
+          auth: 'a',
           httpCookie: undefined,
           clientID: 'client1',
         },
@@ -178,7 +178,7 @@ describe('combine pushes', () => {
             ...makePush(1, 'client1'),
             pushVersion: 1,
           },
-          jwt: 'a',
+          auth: 'a',
           httpCookie: undefined,
           clientID: 'client1',
         },
@@ -187,7 +187,7 @@ describe('combine pushes', () => {
             ...makePush(2, 'client1'),
             pushVersion: 2, // Different push version
           },
-          jwt: 'a',
+          auth: 'a',
           httpCookie: undefined,
           clientID: 'client1',
         },
@@ -205,7 +205,7 @@ describe('combine pushes', () => {
           schemaVersion: 1,
           pushVersion: 1,
         },
-        jwt: 'a',
+        auth: 'a',
         httpCookie: undefined,
         clientID: 'client1',
       },
@@ -215,7 +215,7 @@ describe('combine pushes', () => {
           schemaVersion: 1,
           pushVersion: 1,
         },
-        jwt: 'a',
+        auth: 'a',
         httpCookie: undefined,
         clientID: 'client1',
       },
@@ -230,25 +230,25 @@ describe('combine pushes', () => {
     const [pushes, terminate] = combinePushes([
       {
         push: makePush(1, 'client1'),
-        jwt: 'a',
+        auth: 'a',
         httpCookie: undefined,
         clientID: 'client1',
       },
       {
         push: makePush(2, 'client2'),
-        jwt: 'b',
+        auth: 'b',
         httpCookie: undefined,
         clientID: 'client2',
       },
       {
         push: makePush(1, 'client1'),
-        jwt: 'a',
+        auth: 'a',
         httpCookie: undefined,
         clientID: 'client1',
       },
       {
         push: makePush(3, 'client2'),
-        jwt: 'b',
+        auth: 'b',
         httpCookie: undefined,
         clientID: 'client2',
       },
@@ -270,19 +270,19 @@ describe('combine pushes', () => {
     const [pushes] = combinePushes([
       {
         push: makePush(1, 'client1'),
-        jwt: 'a',
+        auth: 'a',
         httpCookie: undefined,
         clientID: 'client1',
       },
       {
         push: makePush(1, 'client2'),
-        jwt: 'b',
+        auth: 'b',
         httpCookie: undefined,
         clientID: 'client2',
       },
       {
         push: makePush(1, 'client1'),
-        jwt: 'a',
+        auth: 'a',
         httpCookie: undefined,
         clientID: 'client1',
       },

@@ -3,6 +3,7 @@ import type {
   AnyQuery,
   ReadonlyJSONValue,
 } from '@rocicorp/zero';
+import {QueryError, QueryErrorCode} from '../shared/error.ts';
 import {queries as sharedQueries} from '../shared/queries.ts';
 
 // It's important to map incoming queries by queryName, not the
@@ -21,5 +22,5 @@ export function getQuery(
     const f = queriesByQueryName[name] as AnyNamedQueryFunction;
     return f(...args);
   }
-  throw new Error(`Unknown query: ${name}`);
+  throw new QueryError(`Unknown query: ${name}`, QueryErrorCode.UNKNOWN_QUERY);
 }

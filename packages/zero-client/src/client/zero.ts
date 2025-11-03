@@ -103,6 +103,7 @@ import {registerZeroDelegate} from './bindings.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {
   ConnectionManager,
+  type ConnectionState,
   throwIfConnectionError,
 } from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
@@ -165,7 +166,11 @@ import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
-import {ZeroRep} from './zero-rep.ts';
+import {
+  ZeroRep,
+  fromReplicacheAuthToken,
+  toReplicacheAuthToken,
+} from './zero-rep.ts';
 
 export type NoRelations = Record<string, never>;
 
@@ -208,14 +213,11 @@ function asTestZero<
 export const RUN_LOOP_INTERVAL_MS = 5_000;
 
 /**
- * How frequently we should ping the server to keep the connection alive.
+ * Default timeout for ping operations. Controls both:
+ * - How long to wait in idle before sending a ping
+ * - How long to wait for a pong response
  */
-export const PING_INTERVAL_MS = 5_000;
-
-/**
- * The amount of time we wait for a pong before we consider the ping timed out.
- */
-export const PING_TIMEOUT_MS = 5_000;
+export const DEFAULT_PING_TIMEOUT_MS = 5_000;
 
 /**
  * The amount of time we wait for a pull response before we consider a pull
@@ -368,6 +370,17 @@ export class Zero<
     // intentionally empty
   };
 
+  /**
+   * The timeout in milliseconds for ping operations. Controls both:
+   * - How long to wait in idle before sending a ping
+   * - How long to wait for a pong response
+   *
+   * Total time to detect a dead connection is 2 × pingTimeoutMs.
+   *
+   * The new value will take effect on the next ping cycle.
+   */
+  pingTimeoutMs: number;
+
   readonly #zeroContext: ZeroContext<TContext>;
 
   #pendingPullsByRequestID: Map<string, Resolver<PullResponseBody>> = new Map();
@@ -388,6 +401,7 @@ export class Zero<
 
   readonly #connectionManager: ConnectionManager;
   readonly #connection: Connection;
+  #unsubscribeConnectionState: (() => void) | undefined = undefined;
   readonly #activeClientsManager: Promise<ActiveClientsManager>;
   #inspector: Inspector | undefined;
 
@@ -423,6 +437,7 @@ export class Zero<
       onUpdateNeeded,
       onClientStateNotFound,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
+      pingTimeoutMs = DEFAULT_PING_TIMEOUT_MS,
       schema,
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
       maxRecentQueries = 0,
@@ -458,6 +473,8 @@ export class Zero<
       });
     }
 
+    this.pingTimeoutMs = pingTimeoutMs;
+
     this.#onlineManager = new OnlineManager();
 
     if (onOnlineChange) {
@@ -476,6 +493,12 @@ export class Zero<
     this.#connectionManager = new ConnectionManager({
       disconnectTimeoutMs: DEFAULT_DISCONNECT_TIMEOUT_MS,
     });
+    const syncOnlineState = (state: ConnectionState) => {
+      this.#onlineManager.setOnline(state.name === ConnectionStatus.Connected);
+    };
+    syncOnlineState(this.#connectionManager.state);
+    this.#unsubscribeConnectionState =
+      this.#connectionManager.subscribe(syncOnlineState);
 
     const {enableLegacyMutators = true, enableLegacyQueries = true} = schema;
 
@@ -647,7 +670,11 @@ export class Zero<
     this.#server = server;
     this.userID = userID;
     this.#lc = lc.withContext('clientID', rep.clientID);
-    this.#connection = new ConnectionImpl(this.#connectionManager, this.#lc);
+    this.#connection = new ConnectionImpl(
+      this.#connectionManager,
+      this.#lc,
+      auth => this.#setAuth(auth),
+    );
     this.#mutationTracker.setClientIDAndWatch(
       rep.clientID,
       rep.experimentalWatch.bind(rep),
@@ -1103,6 +1130,8 @@ export class Zero<
 
       lc.debug?.('Closing Zero instance. Stack:', new Error().stack);
 
+      this.#unsubscribeConnectionState?.();
+      this.#unsubscribeConnectionState = undefined;
       this.#onlineManager.cleanup();
 
       if (!this.#connectionManager.is(ConnectionStatus.Disconnected)) {
@@ -1425,13 +1454,19 @@ export class Zero<
     lc: ZeroLogContext,
     additionalConnectParams: Record<string, string> | undefined,
   ): Promise<void> {
-    assert(this.#server);
+    if (this.closed) {
+      return;
+    }
+
+    assert(this.#server, 'No server provided');
 
     // can be called from both disconnected and connecting states.
     // connecting() handles incrementing attempt counter if already connecting.
     assert(
       this.#connectionManager.is(ConnectionStatus.Disconnected) ||
         this.#connectionManager.is(ConnectionStatus.Connecting),
+      'connect() called from invalid state: ' +
+        this.#connectionManager.state.name,
     );
 
     const wsid = nanoid();
@@ -1442,7 +1477,7 @@ export class Zero<
 
     // connect() called but connect start time is defined. This should not
     // happen.
-    assert(this.#connectStart === undefined);
+    assert(this.#connectStart === undefined, 'connect start time is defined');
 
     const now = Date.now();
     this.#connectStart = now;
@@ -1488,7 +1523,7 @@ export class Zero<
       await this.clientGroupID,
       this.#clientSchema,
       this.userID,
-      this.#rep.auth,
+      fromReplicacheAuthToken(this.#rep.auth),
       this.#lastMutationIDReceived,
       wsid,
       this.#options.logLevel === 'debug',
@@ -1576,6 +1611,7 @@ export class Zero<
 
       case ConnectionStatus.Disconnected:
       case ConnectionStatus.Connecting:
+      case ConnectionStatus.NeedsAuth:
       case ConnectionStatus.Error:
         break;
 
@@ -1600,6 +1636,9 @@ export class Zero<
     const transition = getErrorConnectionTransition(reason);
 
     switch (transition.status) {
+      case ConnectionStatus.NeedsAuth:
+        this.#connectionManager.needsAuth(transition.reason);
+        break;
       case ConnectionStatus.Error:
         this.#connectionManager.error(transition.reason);
         break;
@@ -1747,20 +1786,6 @@ export class Zero<
     };
   }
 
-  async #updateAuthToken(
-    lc: ZeroLogContext,
-    error?: 'invalid-token',
-  ): Promise<void> {
-    const {auth: authOption} = this.#options;
-    const auth = await (typeof authOption === 'function'
-      ? authOption(error)
-      : authOption);
-    if (auth) {
-      lc.debug?.('Got auth token');
-      this.#rep.auth = auth;
-    }
-  }
-
   async #runLoop() {
     this.#lc.info?.(`Starting Zero version: ${this.version}`);
 
@@ -1785,10 +1810,10 @@ export class Zero<
       return lc.withContext('runLoopCounter', runLoopCounter);
     };
 
-    await this.#updateAuthToken(bareLogContext);
+    // Set initial auth from options
+    const {auth} = this.#options;
+    this.#setAuth(auth);
 
-    let needsReauth = false;
-    let lastReauthAttemptAt: number | undefined;
     let backoffMs: number | undefined;
     let additionalConnectParams: Record<string, string> | undefined;
 
@@ -1822,12 +1847,6 @@ export class Zero<
               break;
             }
 
-            // If we got an auth error we try to get a new auth token before reconnecting.
-            if (needsReauth) {
-              lastReauthAttemptAt = Date.now();
-              await this.#updateAuthToken(lc, 'invalid-token');
-            }
-
             // If a reload is pending, do not try to reconnect.
             if (reloadScheduled()) {
               break;
@@ -1843,14 +1862,12 @@ export class Zero<
             lc = getLogContext();
 
             lc.debug?.('Connected successfully');
-            needsReauth = false;
-            this.#setOnline(true);
             break;
           }
 
           case ConnectionStatus.Connected: {
             // When connected we wait for whatever happens first out of:
-            // - After PING_INTERVAL_MS we send a ping
+            // - After pingTimeoutMs we send a ping
             // - We get a message
             // - The tab becomes hidden (with a delay)
             // - We get a state change (e.g. an error or disconnect)
@@ -1858,7 +1875,7 @@ export class Zero<
             const controller = new AbortController();
             this.#abortPingTimeout = () => controller.abort();
             const [pingTimeoutPromise, pingTimeoutAborted] = sleepWithAbort(
-              PING_INTERVAL_MS,
+              this.pingTimeoutMs,
               controller.signal,
             );
 
@@ -1884,7 +1901,6 @@ export class Zero<
                   message: 'Connection closed because tab was hidden',
                 });
                 this.#disconnect(lc, hiddenError);
-                this.#setOnline(false);
                 break;
               }
 
@@ -1896,6 +1912,17 @@ export class Zero<
                 unreachable(raceResult);
             }
 
+            break;
+          }
+
+          case ConnectionStatus.NeedsAuth: {
+            // we pause the run loop and wait for connect() to be called with new credentials
+            lc.info?.(
+              `Run loop paused in needs-auth state. Call zero.connection.connect({auth}) to resume.`,
+              currentState.reason,
+            );
+
+            await this.#connectionManager.waitForStateChange();
             break;
           }
 
@@ -1959,25 +1986,6 @@ export class Zero<
               additionalConnectParams = backoffParams.reconnectParams;
             }
 
-            // Only authentication errors are retried immediately the first time they
-            // occur. All other errors wait a few seconds before retrying the first
-            // time. We specifically do not use a backoff for consecutive errors
-            // because it's a bad experience to wait many seconds for reconnection.
-            if (isAuthError(transition.reason)) {
-              const now = Date.now();
-              const msSinceLastReauthAttempt =
-                lastReauthAttemptAt === undefined
-                  ? Number.POSITIVE_INFINITY
-                  : now - lastReauthAttemptAt;
-              needsReauth = true;
-              if (msSinceLastReauthAttempt > RUN_LOOP_INTERVAL_MS) {
-                // First auth error (or first in a while), try right away without waiting.
-                continue;
-              }
-            }
-
-            this.#setOnline(false);
-
             lc.debug?.(
               'Sleeping',
               backoffMs,
@@ -1987,20 +1995,26 @@ export class Zero<
             await sleep(backoffMs);
             break;
           }
+          case ConnectionStatus.NeedsAuth: {
+            lc.debug?.(
+              'Auth error encountered, transitioning to needs-auth state',
+            );
+            this.#connectionManager.needsAuth(transition.reason);
+            // run loop will enter the needs-auth state case and await a state change
+            break;
+          }
           case ConnectionStatus.Error: {
             lc.debug?.('Fatal error encountered, transitioning to error state');
-            this.#setOnline(false);
+
             this.#connectionManager.error(transition.reason);
             // run loop will enter the error state case and await a state change
             break;
           }
           case ConnectionStatus.Disconnected: {
-            this.#setOnline(false);
             this.#connectionManager.disconnected(transition.reason);
             break;
           }
           case ConnectionStatus.Closed: {
-            this.#setOnline(false);
             break;
           }
           default:
@@ -2090,8 +2104,13 @@ export class Zero<
     }
   }
 
-  #setOnline(online: boolean): void {
-    this.#onlineManager.setOnline(online);
+  /**
+   * Sets the authentication token on the replicache instance.
+   *
+   * @param auth - The authentication token to set.
+   */
+  #setAuth(auth: string | undefined | null): void {
+    this.#rep.auth = toReplicacheAuthToken(auth);
   }
 
   /**
@@ -2131,7 +2150,7 @@ export class Zero<
 
     const raceResult = await promiseRace({
       waitForPong: promise,
-      pingTimeout: sleep(PING_TIMEOUT_MS),
+      pingTimeout: sleep(this.pingTimeoutMs),
       stateChange: this.#connectionManager.waitForStateChange(),
     });
 

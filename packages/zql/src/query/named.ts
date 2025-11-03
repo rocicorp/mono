@@ -97,6 +97,7 @@ function syncedQueryImpl<
 
 // oxlint-disable-next-line no-explicit-any
 type AnySyncedQuery = SyncedQuery<any, any, any, any, any>;
+
 type AnyNamedQueryFunction = NamedQueryFunction<
   // oxlint-disable-next-line no-explicit-any
   any,

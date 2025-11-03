@@ -19,6 +19,16 @@ import type {IVMSourceBranch} from './ivm-branch.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 
+// Replicache doesn't support undefined auth tokens
+const REPLICACHE_NO_AUTH_TOKEN = '';
+
+export const toReplicacheAuthToken = (
+  auth: string | undefined | null,
+): string => auth ?? REPLICACHE_NO_AUTH_TOKEN;
+
+export const fromReplicacheAuthToken = (auth: string): string | undefined =>
+  !auth ? undefined : auth;
+
 type TxData = {
   ivmSources: IVMSourceBranch;
   token: string | undefined;
@@ -31,7 +41,8 @@ export class ZeroRep<TContext> implements ZeroOption {
   readonly #customMutatorsEnabled: boolean;
   readonly #mutationTracker: MutationTracker;
   #store: LazyStore | undefined;
-  #auth: string | undefined;
+  // matches replicache's auth token type
+  #auth: string = REPLICACHE_NO_AUTH_TOKEN;
 
   constructor(
     context: ZeroContext<TContext>,
@@ -46,11 +57,7 @@ export class ZeroRep<TContext> implements ZeroOption {
   }
 
   set auth(auth: string) {
-    if (auth === '') {
-      this.#auth = undefined;
-    } else {
-      this.#auth = auth;
-    }
+    this.#auth = auth;
   }
 
   async init(hash: Hash, store: LazyStore) {
@@ -88,7 +95,7 @@ export class ZeroRep<TContext> implements ZeroOption {
       .forkToHead(must(this.#store), desiredHead, readOptions)
       .then(branch => ({
         ivmSources: branch,
-        token: this.#auth,
+        token: fromReplicacheAuthToken(this.#auth),
         context: this.#context,
       }));
   };

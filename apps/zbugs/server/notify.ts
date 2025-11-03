@@ -1,7 +1,7 @@
 import {type ServerTransaction, type UpdateValue} from '@rocicorp/zero';
 import type {TransactionSql} from 'postgres';
-import {assert, assertNotNull} from '../../../packages/shared/src/asserts.ts';
 import {assertIsLoggedIn, type AuthData} from '../shared/auth.ts';
+import {MutationError, MutationErrorCode} from '../shared/error.ts';
 import {builder, schema, type Schema} from '../shared/schema.ts';
 import {postToDiscord} from './discord.ts';
 import {sendEmail} from './email.ts';
@@ -57,14 +57,27 @@ export async function notify(
   assertIsLoggedIn(authData);
 
   const {issueID, kind} = args;
+
   const issue = await tx.run(builder.issue.where('id', issueID).one());
-  assert(issue);
+  if (!issue) {
+    throw new MutationError(
+      `Issue not found`,
+      MutationErrorCode.NOTIFICATION_FAILED,
+      issueID,
+    );
+  }
 
   const modifierUserID = authData.sub;
   const modifierUser = await tx.run(
     builder.user.where('id', modifierUserID).one(),
   );
-  assert(modifierUser);
+  if (!modifierUser) {
+    throw new MutationError(
+      `Modifier user not found`,
+      MutationErrorCode.NOTIFICATION_FAILED,
+      modifierUserID,
+    );
+  }
 
   // include the actor only for the initial `create-issue` action
   // exclude them for all other actions
@@ -76,7 +89,13 @@ export async function notify(
     excludeActor,
   );
 
-  assertNotNull(issue.shortID);
+  if (!issue.shortID) {
+    throw new MutationError(
+      `Issue short ID not found`,
+      MutationErrorCode.NOTIFICATION_FAILED,
+      issueID,
+    );
+  }
 
   // Only send to Discord for public issues
   const shouldSendToDiscord = issue.visibility === 'public';
@@ -186,7 +205,14 @@ export async function notify(
       const comment = await tx.run(
         builder.comment.where('id', commentID).one(),
       );
-      assert(comment);
+
+      if (!comment) {
+        throw new MutationError(
+          `Comment not found`,
+          MutationErrorCode.NOTIFICATION_FAILED,
+          commentID,
+        );
+      }
 
       sendNotifications({
         title: `${modifierUser.login} reacted to a comment`,

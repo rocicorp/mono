@@ -1,7 +1,7 @@
 import {type ServerTransaction, type UpdateValue} from '@rocicorp/zero';
 import type {PostgresJsTransaction} from '@rocicorp/zero/server/adapters/postgresjs';
-import {assert} from '../../../packages/shared/src/asserts.ts';
 import {type AuthData} from '../shared/auth.ts';
+import {MutationError, MutationErrorCode} from '../shared/error.ts';
 import {
   createMutators,
   type AddCommentArgs,
@@ -43,7 +43,6 @@ export function createServerMutators(
           modified: Date.now(),
         });
 
-        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -61,7 +60,6 @@ export function createServerMutators(
           modified: Date.now(),
         });
 
-        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -80,7 +78,6 @@ export function createServerMutators(
       ) {
         await mutators.issue.addLabel(tx, {issueID, labelID});
 
-        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -99,7 +96,6 @@ export function createServerMutators(
       ) {
         await mutators.issue.removeLabel(tx, {issueID, labelID});
 
-        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -122,7 +118,6 @@ export function createServerMutators(
           created: Date.now(),
         });
 
-        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -144,8 +139,15 @@ export function createServerMutators(
         const comment = await tx.run(
           builder.comment.where('id', args.subjectID).one(),
         );
-        assert(comment);
-        assert(tx.location === 'server');
+
+        if (!comment) {
+          throw new MutationError(
+            `Comment not found`,
+            MutationErrorCode.NOTIFICATION_FAILED,
+            args.subjectID,
+          );
+        }
+
         await notify(
           tx,
           authData,
@@ -170,7 +172,7 @@ export function createServerMutators(
           body,
           created: Date.now(),
         });
-        assert(tx.location === 'server');
+
         await notify(
           tx,
           authData,
@@ -188,9 +190,15 @@ export function createServerMutators(
         await mutators.comment.edit(tx, {id, body});
 
         const comment = await tx.run(builder.comment.where('id', id).one());
-        assert(comment);
 
-        assert(tx.location === 'server');
+        if (!comment) {
+          throw new MutationError(
+            `Comment not found`,
+            MutationErrorCode.NOTIFICATION_FAILED,
+            id,
+          );
+        }
+
         await notify(
           tx,
           authData,
