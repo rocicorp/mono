@@ -10,6 +10,7 @@ import {
 import {zeroData} from '../../../replicache/src/transactions.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
+import {promiseUndefined} from '../../../shared/src/resolved-promises.ts';
 import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
@@ -807,6 +808,31 @@ test('run waiting for complete results throws in custom mutations', async () => 
   expect(err).toMatchInlineSnapshot(
     `[Error: Cannot wait for complete results in custom mutations]`,
   );
+
+  await z.close();
+});
+
+test('not awaiting the client promise does not trigger unhandled rejection', async () => {
+  const z = zeroForTest({
+    schema,
+    mutators: {
+      issue: {
+        // oxlint-disable-next-line require-await
+        create: async (_tx: MutatorTx) => {
+          throw new Error('test error');
+        },
+      },
+    } as const,
+  });
+
+  await z.triggerConnected();
+  await z.waitForConnectionStatus(ConnectionStatus.Connected);
+
+  // do not await the client promise
+  z.mutate.issue.create();
+
+  // wait one tick to ensure the unhandled rejection is not thrown
+  await promiseUndefined;
 
   await z.close();
 });

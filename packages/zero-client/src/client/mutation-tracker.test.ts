@@ -562,6 +562,17 @@ describe('MutationTracker', () => {
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
+  test('not awaiting the server promise does not trigger unhandled rejection', () => {
+    const onFatalError = vi.fn();
+    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
+
+    const {ephemeralID} = tracker.trackMutation();
+    tracker.rejectMutation(ephemeralID, new Error('test error'));
+
+    expect(onFatalError).not.toHaveBeenCalled();
+  });
+
   test('mutations can be rejected locally with an unwrapped application error', async () => {
     const onFatalError = vi.fn();
     const tracker = new MutationTracker(lc, ackMutations, onFatalError);
