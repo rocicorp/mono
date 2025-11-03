@@ -401,28 +401,31 @@ describe('column-metadata', () => {
     });
 
     test('new-style array formats remain consistent', () => {
-      const cases = [
-        'text[]',
-        'int4[]',
-        'int4[]|NOT_NULL',
-        'varchar[]',
-        'int4[][]', // multidimensional
+      const cases: Array<{input: string; expected: string}> = [
+        {input: 'text[]', expected: 'text[]|TEXT_ARRAY'},
+        {input: 'int4[]', expected: 'int4[]|TEXT_ARRAY'},
+        {input: 'int4[]|NOT_NULL', expected: 'int4[]|NOT_NULL|TEXT_ARRAY'},
+        {input: 'varchar[]', expected: 'varchar[]|TEXT_ARRAY'},
+        {input: 'int4[][]', expected: 'int4[][]|TEXT_ARRAY'}, // multidimensional
       ];
 
-      for (const input of cases) {
+      for (const {input, expected} of cases) {
         const metadata = liteTypeStringToMetadata(input);
         const output = metadataToLiteTypeString(metadata);
-        expect(output).toBe(input);
+        expect(output).toBe(expected);
       }
     });
 
     test('old-style array formats normalize to new-style', () => {
       // Old-style format: attributes before brackets, e.g., 'int4|NOT_NULL[]'
-      // Should normalize to: 'int4[]|NOT_NULL'
+      // Should normalize to: 'int4[]|NOT_NULL|TEXT_ARRAY'
       const oldStyleCases: Array<{input: string; expected: string}> = [
-        {input: 'int4|NOT_NULL[]', expected: 'int4[]|NOT_NULL'},
-        {input: 'text[]', expected: 'text[]'}, // Already new-style
-        {input: 'varchar|NOT_NULL[]', expected: 'varchar[]|NOT_NULL'},
+        {input: 'int4|NOT_NULL[]', expected: 'int4[]|NOT_NULL|TEXT_ARRAY'},
+        {input: 'text[]', expected: 'text[]|TEXT_ARRAY'}, // Normalized to include |TEXT_ARRAY
+        {
+          input: 'varchar|NOT_NULL[]',
+          expected: 'varchar[]|NOT_NULL|TEXT_ARRAY',
+        },
       ];
 
       for (const {input, expected} of oldStyleCases) {
@@ -434,14 +437,17 @@ describe('column-metadata', () => {
 
     test('array of enums converts correctly', () => {
       const cases: Array<{input: string; expected: string}> = [
-        {input: 'user_role[]|TEXT_ENUM', expected: 'user_role[]|TEXT_ENUM'},
+        {
+          input: 'user_role[]|TEXT_ENUM',
+          expected: 'user_role[]|TEXT_ENUM|TEXT_ARRAY',
+        },
         {
           input: 'user_role[]|NOT_NULL|TEXT_ENUM',
-          expected: 'user_role[]|NOT_NULL|TEXT_ENUM',
+          expected: 'user_role[]|NOT_NULL|TEXT_ENUM|TEXT_ARRAY',
         },
         {
           input: 'status[]|TEXT_ENUM',
-          expected: 'status[]|TEXT_ENUM',
+          expected: 'status[]|TEXT_ENUM|TEXT_ARRAY',
         },
       ];
 
@@ -467,8 +473,8 @@ describe('column-metadata', () => {
         characterMaxLength: null,
       });
 
-      // Verify round-trip produces the same format
-      expect(output).toBe(input);
+      // Verify round-trip produces the normalized format with |TEXT_ARRAY
+      expect(output).toBe('status[]|NOT_NULL|TEXT_ENUM|TEXT_ARRAY');
     });
 
     test('character max length is preserved in metadata but not in type string', () => {
@@ -485,7 +491,18 @@ describe('column-metadata', () => {
     });
 
     test('all metadata fields are correctly preserved', () => {
-      const testCases = [
+      const testCases: Array<{
+        input: string;
+        expectedOutput?: string;
+        characterMaxLength?: number;
+        expectedMetadata: {
+          upstreamType: string;
+          isNotNull: boolean;
+          isEnum: boolean;
+          isArray: boolean;
+          characterMaxLength: number | null;
+        };
+      }> = [
         {
           input: 'int8',
           expectedMetadata: {
@@ -519,6 +536,7 @@ describe('column-metadata', () => {
         },
         {
           input: 'int4[]|NOT_NULL',
+          expectedOutput: 'int4[]|NOT_NULL|TEXT_ARRAY',
           expectedMetadata: {
             upstreamType: 'int4[]',
             isNotNull: true,
@@ -529,6 +547,7 @@ describe('column-metadata', () => {
         },
         {
           input: 'status[]|NOT_NULL|TEXT_ENUM',
+          expectedOutput: 'status[]|NOT_NULL|TEXT_ENUM|TEXT_ARRAY',
           expectedMetadata: {
             upstreamType: 'status[]',
             isNotNull: true,
@@ -539,13 +558,18 @@ describe('column-metadata', () => {
         },
       ];
 
-      for (const {input, characterMaxLength, expectedMetadata} of testCases) {
+      for (const {
+        input,
+        expectedOutput,
+        characterMaxLength,
+        expectedMetadata,
+      } of testCases) {
         const metadata = liteTypeStringToMetadata(input, characterMaxLength);
         expect(metadata).toEqual(expectedMetadata);
 
         // Verify round-trip back to string
         const output = metadataToLiteTypeString(metadata);
-        expect(output).toBe(input);
+        expect(output).toBe(expectedOutput ?? input);
       }
     });
   });

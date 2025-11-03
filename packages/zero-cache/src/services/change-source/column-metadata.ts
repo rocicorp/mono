@@ -285,7 +285,7 @@ export function liteTypeStringToMetadata(
  * This is a compatibility helper for the migration period.
  */
 export function metadataToLiteTypeString(metadata: ColumnMetadata): string {
-  const {upstreamType, isNotNull, isEnum} = metadata;
+  const {upstreamType, isNotNull, isEnum, isArray} = metadata;
 
   let typeString = upstreamType;
   if (isNotNull) {
@@ -293,6 +293,9 @@ export function metadataToLiteTypeString(metadata: ColumnMetadata): string {
   }
   if (isEnum) {
     typeString += '|TEXT_ENUM';
+  }
+  if (isArray) {
+    typeString += '|TEXT_ARRAY';
   }
   return typeString;
 }
@@ -302,7 +305,13 @@ export function metadataToLiteTypeString(metadata: ColumnMetadata): string {
  * Used during replication to populate the metadata table from upstream schema.
  */
 export function pgColumnSpecToMetadata(spec: ColumnSpec): ColumnMetadata {
-  const {dataType, notNull, pgTypeClass, elemPgTypeClass, characterMaximumLength} = spec;
+  const {
+    dataType,
+    notNull,
+    pgTypeClass,
+    elemPgTypeClass,
+    characterMaximumLength,
+  } = spec;
   const isArray = dataType.includes('[]');
   const isEnum = (elemPgTypeClass ?? pgTypeClass) === PostgresTypeClass.Enum;
 
