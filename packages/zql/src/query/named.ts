@@ -2,6 +2,7 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {SchemaQuery} from '../mutate/custom.ts';
 import type {NamedQueryFunction} from './define-query.ts';
+import {QueryParseError} from './error.ts';
 import {newQuery} from './query-impl.ts';
 import {queryWithContext} from './query-internals.ts';
 import {type AnyQuery, type Query} from './query.ts';
@@ -140,7 +141,12 @@ export function withValidation<
     }
     // oxlint-disable-next-line no-explicit-any
     const ret: any = (context: unknown, ...args: unknown[]) => {
-      const parsed = parse(args);
+      let parsed;
+      try {
+        parsed = parse(args);
+      } catch (error) {
+        throw new QueryParseError({cause: error});
+      }
       // oxlint-disable-next-line no-explicit-any
       return fn.takesContext ? fn(context, ...parsed) : (fn as any)(...parsed);
     };
