@@ -9,10 +9,15 @@ import {
   vi,
   type Mock,
 } from 'vitest';
+import {registerZeroDelegate} from '../../zero-client/src/client/bindings.ts';
+import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
+import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {type AbstractQuery} from '../../zql/src/query/query-impl.ts';
+import type {QueryInternals} from '../../zql/src/query/query-internals.ts';
+import type {Query} from '../../zql/src/query/query.ts';
 import type {ResultType} from '../../zql/src/query/typed-view.ts';
 import {
   getAllViewsSizeForTesting,
@@ -26,7 +31,7 @@ import type {QueryResultDetails} from '../../zero-client/src/types/query-result.
 function newMockQuery(
   query: string,
   singular = false,
-): AbstractQuery<Schema, string> {
+): Query<Schema, string, unknown> {
   const ret = {
     hash() {
       return query;
@@ -36,13 +41,39 @@ function newMockQuery(
   return ret;
 }
 
-function newMockZero(clientID: string): Zero<Schema> {
+function newMockZero<MD extends CustomMutatorDefs, Context>(
+  clientID: string,
+): {zero: Zero<Schema, MD, Context>; delegate: QueryDelegate<Context>} {
   const view = newView();
-
-  return {
+  const delegate = newMockDelegate<Context>();
+  const zero = {
     clientID,
     materialize: vi.fn().mockImplementation(() => view),
-  } as unknown as Zero<Schema>;
+  } as unknown as Zero<Schema, MD, Context>;
+  registerZeroDelegate(zero, delegate);
+  return {zero, delegate};
+}
+
+function newMockDelegate<TContext>(): QueryDelegate<TContext> {
+  return {
+    materialize: vi.fn().mockImplementation(() => newView()),
+    withContext<
+      TSchema extends Schema,
+      TTable extends keyof TSchema['tables'] & string,
+      TReturn,
+    >(
+      q: Query<TSchema, TTable, TReturn, TContext>,
+    ): QueryInternals<TSchema, TTable, TReturn, TContext> {
+      return {
+        hash() {
+          // oxlint-disable-next-line no-explicit-any
+          return (q as any).query;
+        },
+        // oxlint-disable-next-line no-explicit-any
+        format: (q as any).format,
+      } as QueryInternals<TSchema, TTable, TReturn, TContext>;
+    },
+  } as unknown as QueryDelegate<TContext>;
 }
 
 function newView() {
@@ -67,14 +98,17 @@ describe('ViewStore', () => {
     test('duplicate queries do not create duplicate views', () => {
       const viewStore = new ViewStore();
 
+      const {zero: zero1} = newMockZero('client1');
       const view1 = viewStore.getView(
-        newMockZero('client1'),
+        zero1,
         newMockQuery('query1'),
         true,
         'forever',
       );
+
+      const {zero: zero2} = newMockZero('client1');
       const view2 = viewStore.getView(
-        newMockZero('client1'),
+        zero2,
         newMockQuery('query1'),
         true,
         'forever',
@@ -88,14 +122,16 @@ describe('ViewStore', () => {
     test('removing a duplicate query does not destroy the shared view', () => {
       const viewStore = new ViewStore();
 
+      const {zero: zero1} = newMockZero('client1');
       const view1 = viewStore.getView(
-        newMockZero('client1'),
+        zero1,
         newMockQuery('query1'),
         true,
         'forever',
       );
+      const {zero: zero2} = newMockZero('client1');
       const view2 = viewStore.getView(
-        newMockZero('client1'),
+        zero2,
         newMockQuery('query1'),
         true,
         'forever',
@@ -115,18 +151,18 @@ describe('ViewStore', () => {
       const viewStore = new ViewStore();
 
       const q1 = newMockQuery('query1');
-      const zero = newMockZero('client1');
-      const materializeSpy = vi.spyOn(zero, 'materialize');
+      const {zero, delegate} = newMockZero('client1');
+      const materializeSpy = vi.spyOn(delegate, 'materialize');
       const view1 = viewStore.getView(zero, q1, true, '1s');
 
       const updateTTLSpy = vi.spyOn(view1, 'updateTTL');
       expect(materializeSpy).toHaveBeenCalledTimes(1);
       expect(materializeSpy.mock.calls[0][0]).toBe(q1);
-      expect(materializeSpy.mock.calls[0][1]).toEqual({ttl: '1s'});
+      expect(materializeSpy.mock.calls[0][2]).toEqual({ttl: '1s'});
 
       const q2 = newMockQuery('query1');
-      const zeroClient2 = newMockZero('client1');
-      const materializeSpy2 = vi.spyOn(zero, 'materialize');
+      const {zero: zeroClient2, delegate: delegate2} = newMockZero('client1');
+      const materializeSpy2 = vi.spyOn(delegate2, 'materialize');
       const view2 = viewStore.getView(zeroClient2, q2, true, '1m');
       expect(view1).toBe(view2);
 
@@ -142,20 +178,22 @@ describe('ViewStore', () => {
       const viewStore = new ViewStore();
 
       const q1 = newMockQuery('query1');
-      const zero = newMockZero('client1');
-      const materializeSpy = vi.spyOn(zero, 'materialize');
+      const {zero, delegate} = newMockZero('client1');
+      const materializeSpy = vi.spyOn(delegate, 'materialize');
       const view1 = viewStore.getView(zero, q1, true, '60s');
       const updateTTLSpy = vi.spyOn(view1, 'updateTTL');
       expect(materializeSpy).toHaveBeenCalledTimes(1);
 
       const q2 = newMockQuery('query1');
-      const view2 = viewStore.getView(newMockZero('client1'), q2, true, '1m');
+      const {zero: zeroClient2} = newMockZero('client1');
+      const view2 = viewStore.getView(zeroClient2, q2, true, '1m');
       expect(view1).toBe(view2);
 
       expect(updateTTLSpy).toHaveBeenCalledExactlyOnceWith('1m');
 
       const q3 = newMockQuery('query1');
-      const view3 = viewStore.getView(newMockZero('client1'), q3, true, 60_000);
+      const {zero: zeroClient3} = newMockZero('client1');
+      const view3 = viewStore.getView(zeroClient3, q3, true, 60_000);
 
       expect(view1).toBe(view3);
 
@@ -167,14 +205,17 @@ describe('ViewStore', () => {
     test('removing all duplicate queries destroys the shared view', () => {
       const viewStore = new ViewStore();
 
+      const {zero: zero1} = newMockZero('client1');
       const view1 = viewStore.getView(
-        newMockZero('client1'),
+        zero1,
         newMockQuery('query1'),
         true,
         'forever',
       );
+
+      const {zero: zero2} = newMockZero('client1');
       const view2 = viewStore.getView(
-        newMockZero('client1'),
+        zero2,
         newMockQuery('query1'),
         true,
         'forever',
@@ -194,8 +235,9 @@ describe('ViewStore', () => {
     test('removing a unique query destroys the view', () => {
       const viewStore = new ViewStore();
 
+      const {zero} = newMockZero('client1');
       const view = viewStore.getView(
-        newMockZero('client1'),
+        zero,
         newMockQuery('query1'),
         true,
         'forever',
@@ -211,8 +253,9 @@ describe('ViewStore', () => {
     test('view destruction is delayed via setTimeout', () => {
       const viewStore = new ViewStore();
 
+      const {zero} = newMockZero('client1');
       const view = viewStore.getView(
-        newMockZero('client1'),
+        zero,
         newMockQuery('query1'),
         true,
         'forever',
@@ -230,8 +273,9 @@ describe('ViewStore', () => {
 
     test('subscribing to a view scheduled for cleanup prevents the cleanup', () => {
       const viewStore = new ViewStore();
+      const {zero: zero1} = newMockZero('client1');
       const view = viewStore.getView(
-        newMockZero('client1'),
+        zero1,
         newMockQuery('query1'),
         true,
         'forever',
@@ -244,13 +288,14 @@ describe('ViewStore', () => {
       vi.advanceTimersByTime(5);
       expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
 
+      const {zero: zero2} = newMockZero('client1');
       const view2 = viewStore.getView(
-        newMockZero('client1'),
+        zero2,
         newMockQuery('query1'),
         true,
         'forever',
       );
-      const cleanup2 = view.subscribeReactInternals(() => {});
+      const cleanup2 = view2.subscribeReactInternals(() => {});
       vi.advanceTimersByTime(100);
 
       expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
@@ -264,8 +309,9 @@ describe('ViewStore', () => {
 
     test('destroying the same underlying view twice is a no-op', () => {
       const viewStore = new ViewStore();
+      const {zero} = newMockZero('client1');
       const view = viewStore.getView(
-        newMockZero('client1'),
+        zero,
         newMockQuery('query1'),
         true,
         'forever',
@@ -284,14 +330,17 @@ describe('ViewStore', () => {
     test('the same query for different clients results in different views', () => {
       const viewStore = new ViewStore();
 
+      const {zero: zero1} = newMockZero('client1');
       const view1 = viewStore.getView(
-        newMockZero('client1'),
+        zero1,
         newMockQuery('query1'),
         true,
         'forever',
       );
+
+      const {zero: zero2} = newMockZero('client2');
       const view2 = viewStore.getView(
-        newMockZero('client2'),
+        zero2,
         newMockQuery('query1'),
         true,
         'forever',
@@ -305,8 +354,8 @@ describe('ViewStore', () => {
     test('plural', () => {
       const viewStore = new ViewStore();
       const q = newMockQuery('query1');
-      const zero = newMockZero('client1');
-      const materializeSpy = vi.spyOn(zero, 'materialize');
+      const {zero, delegate} = newMockZero('client1');
+      const materializeSpy = vi.spyOn(delegate, 'materialize');
       const view = viewStore.getView(zero, q, true, 'forever');
 
       expect(materializeSpy).toHaveBeenCalledTimes(1);
@@ -345,8 +394,8 @@ describe('ViewStore', () => {
     test('singular', () => {
       const viewStore = new ViewStore();
       const q = newMockQuery('query1', true);
-      const zero = newMockZero('client1');
-      const materializeSpy = vi.spyOn(zero, 'materialize');
+      const {zero, delegate} = newMockZero('client1');
+      const materializeSpy = vi.spyOn(delegate, 'materialize');
       const view = viewStore.getView(zero, q, true, 'forever');
 
       expect(materializeSpy).toHaveBeenCalledTimes(1);
@@ -401,8 +450,8 @@ describe('useSuspenseQuery', () => {
 
   test('suspendsUntil complete', async () => {
     const q = newMockQuery('query' + unique);
-    const zero = newMockZero('client' + unique);
-    const materializeSpy = vi.spyOn(zero, 'materialize');
+    const {zero, delegate} = newMockZero('client' + unique);
+    const materializeSpy = vi.spyOn(delegate, 'materialize');
 
     function Comp() {
       const [data] = useSuspenseQuery(q, {suspendUntil: 'complete'});
@@ -429,8 +478,8 @@ describe('useSuspenseQuery', () => {
 
   test('suspendsUntil complete, already complete', async () => {
     const q = newMockQuery('query' + unique);
-    const zero = newMockZero('client' + unique);
-    const materializeSpy = vi.spyOn(zero, 'materialize');
+    const {zero, delegate} = newMockZero('client' + unique);
+    const materializeSpy = vi.spyOn(delegate, 'materialize');
 
     function Comp({label}: {label: string}) {
       const [data] = useSuspenseQuery(q, {suspendUntil: 'complete'});
@@ -467,8 +516,8 @@ describe('useSuspenseQuery', () => {
 
   test('suspendsUntil partial, partial array before complete', async () => {
     const q = newMockQuery('query' + unique);
-    const zero = newMockZero('client' + unique);
-    const materializeSpy = vi.spyOn(zero, 'materialize');
+    const {zero, delegate} = newMockZero('client' + unique);
+    const materializeSpy = vi.spyOn(delegate, 'materialize');
 
     function Comp() {
       const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
@@ -495,8 +544,8 @@ describe('useSuspenseQuery', () => {
 
   test('suspendsUntil partial, already partial array before complete', async () => {
     const q = newMockQuery('query' + unique);
-    const zero = newMockZero('client' + unique);
-    const materializeSpy = vi.spyOn(zero, 'materialize');
+    const {zero, delegate} = newMockZero('client' + unique);
+    const materializeSpy = vi.spyOn(delegate, 'materialize');
 
     function Comp({label}: {label: string}) {
       const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
@@ -533,8 +582,8 @@ describe('useSuspenseQuery', () => {
 
   test('suspendsUntil partial singular, defined value before complete', async () => {
     const q = newMockQuery('query' + unique, true);
-    const zero = newMockZero('client' + unique);
-    const materializeSpy = vi.spyOn(zero, 'materialize');
+    const {zero, delegate} = newMockZero('client' + unique);
+    const materializeSpy = vi.spyOn(delegate, 'materialize');
 
     function Comp() {
       const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
@@ -561,8 +610,8 @@ describe('useSuspenseQuery', () => {
 
   test('suspendUntil partial, complete with empty array', async () => {
     const q = newMockQuery('query' + unique);
-    const zero = newMockZero('client' + unique);
-    const materializeSpy = vi.spyOn(zero, 'materialize');
+    const {zero, delegate} = newMockZero('client' + unique);
+    const materializeSpy = vi.spyOn(delegate, 'materialize');
 
     function Comp() {
       const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
@@ -589,8 +638,8 @@ describe('useSuspenseQuery', () => {
 
   test('suspendUntil partial, complete with undefined', async () => {
     const q = newMockQuery('query' + unique, true);
-    const zero = newMockZero('client' + unique);
-    const materializeSpy = vi.spyOn(zero, 'materialize');
+    const {zero, delegate} = newMockZero('client' + unique);
+    const materializeSpy = vi.spyOn(delegate, 'materialize');
 
     function Comp() {
       const [data] = useSuspenseQuery(q, {suspendUntil: 'partial'});
@@ -633,8 +682,8 @@ describe('useSuspenseQuery', () => {
 
     test('plural query returns error details when query fails', async () => {
       const q = newMockQuery('query' + unique);
-      const zero = newMockZero('client' + unique);
-      const materializeSpy = vi.spyOn(zero, 'materialize');
+      const {zero, delegate} = newMockZero('client' + unique);
+      const materializeSpy = vi.spyOn(delegate, 'materialize');
 
       function Comp() {
         const [data, details] = useSuspenseQuery(q, {suspendUntil: 'complete'});
@@ -670,8 +719,8 @@ describe('useSuspenseQuery', () => {
 
     test('singular query returns error details when query fails', async () => {
       const q = newMockQuery('query' + unique, true);
-      const zero = newMockZero('client' + unique);
-      const materializeSpy = vi.spyOn(zero, 'materialize');
+      const {zero, delegate} = newMockZero('client' + unique);
+      const materializeSpy = vi.spyOn(delegate, 'materialize');
 
       function Comp() {
         const [data, details] = useSuspenseQuery(q, {suspendUntil: 'complete'});
@@ -707,8 +756,8 @@ describe('useSuspenseQuery', () => {
 
     test('query transitions from error to success state', async () => {
       const q = newMockQuery('query' + unique);
-      const zero = newMockZero('client' + unique);
-      const materializeSpy = vi.spyOn(zero, 'materialize');
+      const {zero, delegate} = newMockZero('client' + unique);
+      const materializeSpy = vi.spyOn(delegate, 'materialize');
 
       function Comp() {
         const [data, details] = useSuspenseQuery(q, {suspendUntil: 'partial'});
@@ -753,8 +802,8 @@ describe('useSuspenseQuery', () => {
 
     test('query can return partial data with error state', async () => {
       const q = newMockQuery('query' + unique);
-      const zero = newMockZero('client' + unique);
-      const materializeSpy = vi.spyOn(zero, 'materialize');
+      const {zero, delegate} = newMockZero('client' + unique);
+      const materializeSpy = vi.spyOn(delegate, 'materialize');
 
       function Comp() {
         const [data, details] = useSuspenseQuery(q, {suspendUntil: 'partial'});
@@ -793,8 +842,8 @@ describe('useSuspenseQuery', () => {
 
     test('error state without suspense returns immediately', async () => {
       const q = newMockQuery('query' + unique);
-      const zero = newMockZero('client' + unique);
-      const materializeSpy = vi.spyOn(zero, 'materialize');
+      const {zero, delegate} = newMockZero('client' + unique);
+      const materializeSpy = vi.spyOn(delegate, 'materialize');
 
       function Comp() {
         const [data, details] = useSuspenseQuery(q, {suspendUntil: 'partial'});
@@ -833,8 +882,8 @@ describe('useSuspenseQuery', () => {
 
     test('parse error type is handled correctly', async () => {
       const q = newMockQuery('query' + unique);
-      const zero = newMockZero('client' + unique);
-      const materializeSpy = vi.spyOn(zero, 'materialize');
+      const {zero, delegate} = newMockZero('client' + unique);
+      const materializeSpy = vi.spyOn(delegate, 'materialize');
 
       function Comp() {
         const [data, details] = useSuspenseQuery(q, {suspendUntil: 'partial'});
@@ -878,8 +927,8 @@ describe('useSuspenseQuery', () => {
 
     test('retry function retries the query after error', async () => {
       const q = newMockQuery('query' + unique);
-      const zero = newMockZero('client' + unique);
-      const materializeSpy = vi.spyOn(zero, 'materialize');
+      const {zero, delegate} = newMockZero('client' + unique);
+      const materializeSpy = vi.spyOn(delegate, 'materialize');
 
       let retryFn: (() => void) | undefined;
       let refetchFn: (() => void) | undefined;
@@ -959,8 +1008,8 @@ describe('useSuspenseQuery', () => {
 
     test('retry function can be called multiple times', async () => {
       const q = newMockQuery('query' + unique, true);
-      const zero = newMockZero('client' + unique);
-      const materializeSpy = vi.spyOn(zero, 'materialize');
+      const {zero, delegate} = newMockZero('client' + unique);
+      const materializeSpy = vi.spyOn(delegate, 'materialize');
 
       let retryFn: (() => void) | undefined;
 
@@ -1056,8 +1105,8 @@ describe('useSuspenseQuery', () => {
 
     test('retry function is undefined when query is not in error state', async () => {
       const q = newMockQuery('query' + unique);
-      const zero = newMockZero('client' + unique);
-      const materializeSpy = vi.spyOn(zero, 'materialize');
+      const {zero, delegate} = newMockZero('client' + unique);
+      const materializeSpy = vi.spyOn(delegate, 'materialize');
 
       let capturedDetails: QueryResultDetails | undefined;
 
@@ -1114,7 +1163,7 @@ describe('useSuspenseQuery', () => {
 
     test('concurrent getView calls ideally share the same view', async () => {
       const viewStore = new ViewStore();
-      const zero = newMockZero('client1');
+      const {zero} = newMockZero('client1');
       const query = newMockQuery('query1');
 
       // Simulate concurrent calls
@@ -1143,7 +1192,7 @@ describe('useSuspenseQuery', () => {
 
     test('rapid mount/unmount/remount reuses view when possible', () => {
       const viewStore = new ViewStore();
-      const zero = newMockZero('client1');
+      const {zero} = newMockZero('client1');
       const query = newMockQuery('query1');
 
       const views = [];
@@ -1178,7 +1227,7 @@ describe('useSuspenseQuery', () => {
 
     test('overlapping cleanup timers all resolve correctly', () => {
       const viewStore = new ViewStore();
-      const zero = newMockZero('client1');
+      const {zero} = newMockZero('client1');
       const query = newMockQuery('query1');
 
       // Create multiple views that might or might not be shared

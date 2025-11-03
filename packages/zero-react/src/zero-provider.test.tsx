@@ -2,7 +2,7 @@ import {act} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
 import {createUseZero, useZero, ZeroProvider} from './zero-provider.tsx';
 
 // Mock the Zero constructor
@@ -10,8 +10,8 @@ vi.mock('../../zero-client/src/client/zero.ts', () => ({
   Zero: vi.fn(),
 }));
 
-import {Zero as ZeroConstructor} from '../../zero-client/src/client/zero.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
+import {Zero as ZeroConstructor} from '../../zero-client/src/client/zero.ts';
 
 function createMockZero(clientID = 'test-client'): Zero<Schema> {
   const closeMock = vi.fn().mockResolvedValue(undefined);

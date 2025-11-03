@@ -21,6 +21,7 @@ import {
   type ListContextParams,
 } from '../../../shared/queries.ts';
 import {type IssueRow} from '../../../shared/schema.ts';
+import InfoIcon from '../../assets/images/icon-info.svg?react';
 import {Button} from '../../components/button.tsx';
 import {Filter, type Selection} from '../../components/filter.tsx';
 import {IssueLink} from '../../components/issue-link.tsx';
@@ -35,9 +36,8 @@ import {useZero} from '../../hooks/use-zero.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
 import {CACHE_NAV, CACHE_NONE} from '../../query-cache-policy.ts';
-import {preload} from '../../zero-preload.ts';
 import {isGigabugs, useListContext} from '../../routes.tsx';
-import InfoIcon from '../../assets/images/icon-info.svg?react';
+import {preload} from '../../zero-preload.ts';
 
 let firstRowRendered = false;
 const ITEM_SIZE = 56;
@@ -187,20 +187,19 @@ export function ListPage({onReady}: {onReady: () => void}) {
       ? queryAnchor.anchor
       : TOP_ANCHOR;
 
-  const q = queries.issueListV2(
-    login.loginState?.decoded,
-    listContextParams,
-    z.userID,
-    pageSize,
-    anchor.startRow
+  const q = queries.issueListV2({
+    listContext: listContextParams,
+    userID: z.userID,
+    limit: pageSize,
+    start: anchor.startRow
       ? {
           id: anchor.startRow.id,
           modified: anchor.startRow.modified,
           created: anchor.startRow.created,
         }
       : null,
-    anchor.direction,
-  );
+    dir: anchor.direction,
+  });
 
   const [estimatedTotal, setEstimatedTotal] = useState(0);
   const [total, setTotal] = useState<number | undefined>(undefined);
@@ -258,7 +257,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
   useEffect(() => {
     if (issuesResult.type === 'complete') {
       recordPageLoad('list-page');
-      preload(login.loginState?.decoded, projectName, z);
+      preload(z, projectName);
     }
   }, [login.loginState?.decoded, issuesResult.type, z]);
 

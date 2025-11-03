@@ -1,6 +1,7 @@
 import {produce, reconcile, type SetStoreFunction} from 'solid-js/store';
 import {
   applyChange,
+  type AnyViewFactory,
   type Change,
   type Entry,
   type Format,
@@ -12,7 +13,6 @@ import {
   type Stream,
   type TTL,
   type ViewChange,
-  type ViewFactory,
 } from '../../zero-client/src/mod.js';
 import type {
   QueryErrorDetails,
@@ -255,8 +255,9 @@ export function createSolidViewFactory(
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
+    TContext,
   >(
-    _query: Query<TSchema, TTable, TReturn>,
+    _query: Query<TSchema, TTable, TReturn, TContext>,
     input: Input,
     format: Format,
     onDestroy: () => void,
@@ -276,7 +277,7 @@ export function createSolidViewFactory(
     );
   }
 
-  solidViewFactory satisfies ViewFactory<Schema, string, unknown, unknown>;
+  solidViewFactory satisfies AnyViewFactory;
 
   return solidViewFactory;
 }

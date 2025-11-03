@@ -1,22 +1,17 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {LogConfig} from '../../otel/src/log-options.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
-import type {FilterInput} from '../../zql/src/ivm/filter-operators.ts';
-import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
-import type {Input} from '../../zql/src/ivm/operator.ts';
-import type {Source, SourceInput} from '../../zql/src/ivm/source.ts';
-import type {
-  CommitListener,
-  QueryDelegate,
-} from '../../zql/src/query/query-delegate.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
+import type {Source} from '../../zql/src/ivm/source.ts';
+import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
+import type {CommitListener} from '../../zql/src/query/query-delegate.ts';
 import type {Database} from './db.ts';
 import {TableSource} from './table-source.ts';
 
-export class QueryDelegateImpl implements QueryDelegate {
+export class QueryDelegateImpl<TContext> extends QueryDelegateBase<TContext> {
   readonly #lc: LogContext;
   readonly #db: Database;
   readonly #schema: Schema;
-  readonly #sources: Map<string, Source>;
+  readonly #sources: Map<string, Source> = new Map();
   readonly #logConfig: LogConfig;
   readonly defaultQueryComplete = true;
   readonly #commitObservers = new Set<() => void>();
@@ -25,12 +20,13 @@ export class QueryDelegateImpl implements QueryDelegate {
     lc: LogContext,
     db: Database,
     schema: Schema,
+    context: TContext,
     logConfig?: LogConfig,
   ) {
+    super(context);
     this.#lc = lc.withContext('class', 'QueryDelegateImpl');
     this.#db = db;
     this.#schema = schema;
-    this.#sources = new Map();
     this.#logConfig = logConfig ?? {
       format: 'text',
       ivmSampling: 0,
@@ -61,48 +57,17 @@ export class QueryDelegateImpl implements QueryDelegate {
     return source;
   }
 
-  createStorage() {
-    return new MemoryStorage();
-  }
-
-  decorateSourceInput(input: SourceInput): Input {
-    return input;
-  }
-
-  decorateInput(input: Input): Input {
-    return input;
-  }
-
-  decorateFilterInput(input: FilterInput): FilterInput {
-    return input;
-  }
-
-  addServerQuery() {
-    return () => {};
-  }
-
-  addEdge() {}
-
-  addCustomQuery() {
-    return () => {};
-  }
-
-  updateServerQuery() {}
-  updateCustomQuery() {}
-  flushQueryChanges() {}
   onTransactionCommit(cb: CommitListener) {
     this.#commitObservers.add(cb);
     return () => {
       this.#commitObservers.delete(cb);
     };
   }
-  batchViewUpdates<T>(applyViewUpdates: () => T): T {
+  override batchViewUpdates<T>(applyViewUpdates: () => T): T {
     const ret = applyViewUpdates();
     for (const observer of this.#commitObservers) {
       observer();
     }
     return ret;
   }
-  assertValidRunOptions() {}
-  addMetric() {}
 }

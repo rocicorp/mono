@@ -217,9 +217,10 @@ async function getQueriesHandler(
   await withAuth(request, reply, async authData => {
     reply.send(
       await handleGetQueriesRequest(
-        (name, args) => ({query: getQuery(authData, name, args)}),
+        (name, args) => getQuery(name, args),
         schema,
         request.body,
+        authData,
       ),
     );
   });

@@ -5,12 +5,17 @@ import type {
   PgTransaction,
 } from 'drizzle-orm/pg-core';
 import type {ExtractTablesWithRelations} from 'drizzle-orm/relations';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {Format} from '../../../zero-types/src/format.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {ServerSchema} from '../../../zero-types/src/server-schema.ts';
 import type {
   DBConnection,
   DBTransaction,
   Row,
 } from '../../../zql/src/mutate/custom.ts';
+import type {HumanReadable} from '../../../zql/src/query/query.ts';
+import {executePostgresQuery} from '../pg-query-executor.ts';
 import {ZQLDatabase} from '../zql-database.ts';
 
 export type {ZQLDatabase};
@@ -58,7 +63,7 @@ export class DrizzleConnection<
       fn(
         new DrizzleInternalTransaction(
           drizzleTx,
-        ) as unknown as DBTransaction<TTransaction>,
+        ) as DBTransaction<TTransaction>,
       ),
     );
   }
@@ -72,6 +77,21 @@ class DrizzleInternalTransaction<
 
   constructor(drizzleTx: TTransaction) {
     this.wrappedTransaction = drizzleTx;
+  }
+
+  executeQuery<TReturn>(
+    ast: AST,
+    format: Format,
+    schema: Schema,
+    serverSchema: ServerSchema,
+  ): Promise<HumanReadable<TReturn>> {
+    return executePostgresQuery<TReturn>(
+      this,
+      ast,
+      format,
+      schema,
+      serverSchema,
+    );
   }
 
   async query(sql: string, params: unknown[]): Promise<Iterable<Row>> {
@@ -169,10 +189,14 @@ export function toIterableRows(result: unknown): Iterable<Row> {
  * }
  * ```
  */
-export function zeroDrizzle<S extends Schema, TDrizzle extends DrizzleDatabase>(
-  schema: S,
+export function zeroDrizzle<
+  TSchema extends Schema,
+  TDrizzle extends DrizzleDatabase,
+  TContext,
+>(
+  schema: TSchema,
   client: TDrizzle,
-): ZQLDatabase<S, DrizzleTransaction<TDrizzle>> {
+): ZQLDatabase<TSchema, DrizzleTransaction<TDrizzle>, TContext> {
   return new ZQLDatabase(
     new DrizzleConnection<TDrizzle, DrizzleTransaction<TDrizzle>>(client),
     schema,
