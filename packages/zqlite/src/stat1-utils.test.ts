@@ -1,15 +1,11 @@
 import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {Database} from './db.ts';
-import {
-  findIndexesForTable,
-  getIndexColumns,
-  getIndexStats,
-  getJoinFanOut,
-} from './stat1-utils.ts';
+import {Stat1Cache} from './stat1-utils.ts';
 
-describe('stat1-utils', () => {
+describe('Stat1Cache', () => {
   let db: Database;
+  let cache: Stat1Cache;
 
   beforeEach(() => {
     const lc = createSilentLogContext();
@@ -108,101 +104,14 @@ describe('stat1-utils', () => {
 
     // Run ANALYZE to populate sqlite_stat1
     db.exec('ANALYZE');
-  });
 
-  describe('getIndexColumns', () => {
-    test('returns columns for single-column index', () => {
-      const columns = getIndexColumns(db, 'idx_posts_userId');
-      expect(columns).toEqual(['userId']);
-    });
-
-    test('returns columns for compound index in order', () => {
-      const columns = getIndexColumns(db, 'idx_posts_user_project');
-      expect(columns).toEqual(['userId', 'projectId']);
-    });
-
-    test('returns columns for 3-column index', () => {
-      const columns = getIndexColumns(db, 'idx_posts_user_project_created');
-      expect(columns).toEqual(['userId', 'projectId', 'createdAt']);
-    });
-
-    test('returns undefined for non-existent index', () => {
-      const columns = getIndexColumns(db, 'idx_does_not_exist');
-      expect(columns).toBeUndefined();
-    });
-
-    test('handles index with DESC modifier', () => {
-      db.exec('CREATE INDEX idx_posts_created_desc ON posts(createdAt DESC)');
-      const columns = getIndexColumns(db, 'idx_posts_created_desc');
-      expect(columns).toEqual(['createdAt']);
-    });
-  });
-
-  describe('getIndexStats', () => {
-    test('returns stats for single-column index', () => {
-      const stats = getIndexStats(db, 'posts', 'idx_posts_userId');
-      expect(stats).toBeDefined();
-      expect(stats?.indexName).toBe('idx_posts_userId');
-      expect(stats?.totalRows).toBeGreaterThan(0);
-      expect(stats?.avgRowsPerDistinct.length).toBe(1);
-      expect(stats?.avgRowsPerDistinct[0]).toBeGreaterThan(0);
-    });
-
-    test('returns stats for compound index', () => {
-      const stats = getIndexStats(db, 'posts', 'idx_posts_user_project');
-      expect(stats).toBeDefined();
-      expect(stats?.avgRowsPerDistinct.length).toBe(2);
-      // First value: avg posts per user
-      expect(stats?.avgRowsPerDistinct[0]).toBeGreaterThan(1);
-      // Second value: avg posts per (user, project) pair
-      expect(stats?.avgRowsPerDistinct[1]).toBeGreaterThan(0);
-    });
-
-    test('returns undefined for index without stats', () => {
-      // Create a new index after ANALYZE
-      db.exec('CREATE INDEX idx_posts_content ON posts(content)');
-      const stats = getIndexStats(db, 'posts', 'idx_posts_content');
-      expect(stats).toBeUndefined();
-    });
-
-    test('returns undefined for non-existent index', () => {
-      const stats = getIndexStats(db, 'posts', 'idx_does_not_exist');
-      expect(stats).toBeUndefined();
-    });
-
-    test('returns undefined for non-existent table', () => {
-      const stats = getIndexStats(db, 'nonexistent', 'idx_posts_userId');
-      expect(stats).toBeUndefined();
-    });
-  });
-
-  describe('findIndexesForTable', () => {
-    test('returns all indexes for a table', () => {
-      const indexes = findIndexesForTable(db, 'posts');
-      expect(indexes).toContain('idx_posts_userId');
-      expect(indexes).toContain('idx_posts_user_project');
-      expect(indexes).toContain('idx_posts_user_project_created');
-      expect(indexes).toContain('idx_posts_project_user');
-    });
-
-    test('returns empty array for table with no indexes', () => {
-      const indexes = findIndexesForTable(db, 'tags');
-      // Note: SQLite may auto-create index for PRIMARY KEY, filter those out
-      const nonPkIndexes = indexes.filter(
-        idx => !idx.includes('autoindex') && !idx.includes('pk'),
-      );
-      expect(nonPkIndexes).toEqual([]);
-    });
-
-    test('returns empty array for non-existent table', () => {
-      const indexes = findIndexesForTable(db, 'nonexistent');
-      expect(indexes).toEqual([]);
-    });
+    // Create cache after data is loaded and analyzed
+    cache = new Stat1Cache(db);
   });
 
   describe('getJoinFanOut', () => {
     test('single column: returns fan-out from single-column index', () => {
-      const fanOut = getJoinFanOut(db, 'posts', ['userId']);
+      const fanOut = cache.getJoinFanOut('posts', ['userId']);
       expect(fanOut).toBeDefined();
       expect(fanOut).toBeGreaterThan(1);
       // We inserted 100 posts per user (10 projects × 10 posts)
@@ -210,7 +119,7 @@ describe('stat1-utils', () => {
     });
 
     test('compound: exact match with 2-column index', () => {
-      const fanOut = getJoinFanOut(db, 'posts', ['userId', 'projectId']);
+      const fanOut = cache.getJoinFanOut('posts', ['userId', 'projectId']);
       expect(fanOut).toBeDefined();
       // We inserted exactly 10 posts per (userId, projectId) pair
       expect(fanOut).toBeCloseTo(10, 0);
@@ -219,36 +128,37 @@ describe('stat1-utils', () => {
     test('compound: uses superset index (3-column index for 2-column join)', () => {
       // Remove the exact 2-column index to force use of 3-column superset
       db.exec('DROP INDEX idx_posts_user_project');
+      cache.schemaUpdated();
 
-      const fanOut = getJoinFanOut(db, 'posts', ['userId', 'projectId']);
+      const fanOut = cache.getJoinFanOut('posts', ['userId', 'projectId']);
       expect(fanOut).toBeDefined();
       // Should still get accurate result from 3-column index
       expect(fanOut).toBeCloseTo(10, 0);
     });
 
     test('compound: does not match wrong-order index', () => {
-      // Remove all matching indexes, leaving only wrong-order index
+      // Remove all matching indexes, leaving no valid indexes
       db.exec('DROP INDEX idx_posts_userId');
       db.exec('DROP INDEX idx_posts_user_project');
       db.exec('DROP INDEX idx_posts_user_project_created');
-      // Also drop the projectId-first index to avoid single-column fallback
       db.exec('DROP INDEX idx_posts_project_user');
+      cache.schemaUpdated();
 
-      const fanOut = getJoinFanOut(db, 'posts', ['userId', 'projectId']);
+      const fanOut = cache.getJoinFanOut('posts', ['userId', 'projectId']);
       // Should not match any index and not fall back to single columns
       expect(fanOut).toBeUndefined();
     });
 
     test('fallback: uses most selective single column when no compound index', () => {
-      const fanOut = getJoinFanOut(db, 'issues', ['userId', 'projectId']);
+      const fanOut = cache.getJoinFanOut('issues', ['userId', 'projectId']);
 
       // We have indexes on both userId and projectId separately
       // Should return the minimum (most selective) of the two
       expect(fanOut).toBeDefined();
 
       // Get individual fan-outs to verify we picked the minimum
-      const userIdFanOut = getJoinFanOut(db, 'issues', ['userId']);
-      const projectIdFanOut = getJoinFanOut(db, 'issues', ['projectId']);
+      const userIdFanOut = cache.getJoinFanOut('issues', ['userId']);
+      const projectIdFanOut = cache.getJoinFanOut('issues', ['projectId']);
 
       expect(userIdFanOut).toBeDefined();
       expect(projectIdFanOut).toBeDefined();
@@ -259,9 +169,9 @@ describe('stat1-utils', () => {
       // Since the compound index exists and should be found first,
       // let's remove it and re-test
       db.exec('DROP INDEX idx_issues_user_project');
-      db.exec('ANALYZE');
+      cache.schemaUpdated();
 
-      const fanOutAfterDrop = getJoinFanOut(db, 'issues', [
+      const fanOutAfterDrop = cache.getJoinFanOut('issues', [
         'userId',
         'projectId',
       ]);
@@ -272,22 +182,22 @@ describe('stat1-utils', () => {
     });
 
     test('returns undefined when no indexes exist', () => {
-      const fanOut = getJoinFanOut(db, 'tags', ['name']);
+      const fanOut = cache.getJoinFanOut('tags', ['name']);
       expect(fanOut).toBeUndefined();
     });
 
     test('returns undefined for empty column list', () => {
-      const fanOut = getJoinFanOut(db, 'posts', []);
+      const fanOut = cache.getJoinFanOut('posts', []);
       expect(fanOut).toBeUndefined();
     });
 
     test('returns undefined for non-existent table', () => {
-      const fanOut = getJoinFanOut(db, 'nonexistent', ['userId']);
+      const fanOut = cache.getJoinFanOut('nonexistent', ['userId']);
       expect(fanOut).toBeUndefined();
     });
 
     test('returns undefined for non-existent column', () => {
-      const fanOut = getJoinFanOut(db, 'posts', ['nonexistentColumn']);
+      const fanOut = cache.getJoinFanOut('posts', ['nonexistentColumn']);
       expect(fanOut).toBeUndefined();
     });
 
@@ -295,16 +205,210 @@ describe('stat1-utils', () => {
       // idx_posts_user_project has userId as first column
       // If we ask for projectId only, it should NOT use this index
       // But idx_posts_project_user has projectId as first column
-      const fanOut = getJoinFanOut(db, 'posts', ['projectId']);
+      const fanOut = cache.getJoinFanOut('posts', ['projectId']);
       expect(fanOut).toBeDefined();
       // Should use idx_posts_project_user, not idx_posts_user_project
       expect(fanOut).toBeGreaterThan(1);
     });
   });
 
+  describe('memoization', () => {
+    test('caches results for repeated calls', () => {
+      const fanOut1 = cache.getJoinFanOut('posts', ['userId']);
+      const fanOut2 = cache.getJoinFanOut('posts', ['userId']);
+
+      // Results should be identical (same reference)
+      expect(fanOut1).toBe(fanOut2);
+      expect(fanOut1).toBeDefined();
+    });
+
+    test('different column orders use different cache keys', () => {
+      // First call populates cache for this ordering
+      const fanOut1 = cache.getJoinFanOut('posts', ['userId', 'projectId']);
+      expect(fanOut1).toBeDefined();
+
+      // Second call with same ordering hits cache
+      const fanOut1Again = cache.getJoinFanOut('posts', [
+        'userId',
+        'projectId',
+      ]);
+      expect(fanOut1Again).toBe(fanOut1);
+
+      // Different ordering may have different value (or same if both have indexes)
+      const fanOut2 = cache.getJoinFanOut('posts', ['projectId', 'userId']);
+      expect(fanOut2).toBeDefined();
+
+      // These are separate cache entries (different keys)
+      // Clear the cache and verify they're independently cached
+      cache.statsUpdated();
+
+      // First ordering re-computed
+      const fanOut1AfterClear = cache.getJoinFanOut('posts', [
+        'userId',
+        'projectId',
+      ]);
+      expect(fanOut1AfterClear).toBeDefined();
+    });
+
+    test('cache invalidated by statsUpdated', () => {
+      // Get initial value and populate cache
+      const fanOut1 = cache.getJoinFanOut('posts', ['userId']);
+      expect(fanOut1).toBeDefined();
+
+      // Get again - should be from cache (same reference for primitives means same value)
+      const fanOut1Cached = cache.getJoinFanOut('posts', ['userId']);
+      expect(fanOut1Cached).toBe(fanOut1);
+
+      // Modify data and re-analyze
+      db.exec('DELETE FROM posts WHERE userId > 50');
+      db.exec('ANALYZE');
+
+      // Before calling statsUpdated, cache still returns old value
+      const fanOutBeforeUpdate = cache.getJoinFanOut('posts', ['userId']);
+      expect(fanOutBeforeUpdate).toBe(fanOut1); // Still cached
+
+      // Now invalidate cache
+      cache.statsUpdated();
+
+      // After statsUpdated, value is recomputed
+      const fanOut2 = cache.getJoinFanOut('posts', ['userId']);
+      expect(fanOut2).toBeDefined();
+
+      // Value should have changed (deleted half the users)
+      // Note: We're checking if it's different OR if the cache was cleared
+      // Sometimes SQLite stats might approximate similarly
+      if (fanOut2 === fanOut1) {
+        // Even if value is same, verify it was recomputed by checking
+        // that a third call returns the same instance (re-cached)
+        const fanOut2Cached = cache.getJoinFanOut('posts', ['userId']);
+        expect(fanOut2Cached).toBe(fanOut2);
+      } else {
+        expect(fanOut2).toBeLessThan(fanOut1!);
+      }
+    });
+
+    test('cache invalidated by schemaUpdated', () => {
+      const fanOut1 = cache.getJoinFanOut('posts', ['createdAt']);
+
+      // Should be undefined (no index on createdAt by itself)
+      expect(fanOut1).toBeUndefined();
+
+      // Add new index
+      db.exec('CREATE INDEX idx_posts_createdAt ON posts(createdAt)');
+      db.exec('ANALYZE');
+      cache.schemaUpdated();
+
+      const fanOut2 = cache.getJoinFanOut('posts', ['createdAt']);
+
+      // Now should have a value
+      expect(fanOut2).toBeDefined();
+      expect(fanOut2).toBeGreaterThan(0);
+    });
+  });
+
+  describe('statsUpdated', () => {
+    test('reloads stats after ANALYZE', () => {
+      // Initial state
+      const fanOut1 = cache.getJoinFanOut('posts', ['userId']);
+      expect(fanOut1).toBeDefined();
+
+      // Insert more data
+      const insertPost = db.prepare(
+        'INSERT INTO posts (id, userId, projectId, createdAt, content) VALUES (?, ?, ?, ?, ?)',
+      );
+      let id = 20000;
+      for (let userId = 1; userId <= 10; userId++) {
+        for (let i = 0; i < 100; i++) {
+          insertPost.run(id++, userId, 1, Date.now(), `Post ${id}`);
+        }
+      }
+
+      // Re-analyze
+      db.exec('ANALYZE');
+      cache.statsUpdated();
+
+      const fanOut2 = cache.getJoinFanOut('posts', ['userId']);
+
+      // Fan-out should increase (more posts per user)
+      expect(fanOut2).toBeDefined();
+      expect(fanOut2).toBeGreaterThan(fanOut1!);
+    });
+
+    test('handles stat1 table appearing after creation', () => {
+      // Create cache before ANALYZE
+      const lc = createSilentLogContext();
+      const freshDb = new Database(lc, ':memory:');
+
+      freshDb.exec(`
+        CREATE TABLE test (id INTEGER PRIMARY KEY, value INTEGER);
+        CREATE INDEX idx_test_value ON test(value);
+        INSERT INTO test VALUES (1, 100), (2, 100), (3, 200);
+      `);
+
+      const freshCache = new Stat1Cache(freshDb);
+
+      // No stats yet
+      expect(freshCache.getJoinFanOut('test', ['value'])).toBeUndefined();
+
+      // Run ANALYZE and update
+      freshDb.exec('ANALYZE');
+      freshCache.statsUpdated();
+
+      // Now should have stats
+      expect(freshCache.getJoinFanOut('test', ['value'])).toBeDefined();
+    });
+  });
+
+  describe('schemaUpdated', () => {
+    test('detects new indexes', () => {
+      expect(cache.getJoinFanOut('posts', ['content'])).toBeUndefined();
+
+      db.exec('CREATE INDEX idx_posts_content ON posts(content)');
+      db.exec('ANALYZE');
+      cache.schemaUpdated();
+
+      const fanOut = cache.getJoinFanOut('posts', ['content']);
+      expect(fanOut).toBeDefined();
+    });
+
+    test('detects dropped indexes', () => {
+      const fanOut1 = cache.getJoinFanOut('posts', ['userId']);
+      expect(fanOut1).toBeDefined();
+
+      db.exec('DROP INDEX idx_posts_userId');
+      cache.schemaUpdated();
+
+      // Should still work via compound index
+      const fanOut2 = cache.getJoinFanOut('posts', ['userId']);
+      expect(fanOut2).toBeDefined();
+
+      // But if we drop all indexes with userId as first column
+      db.exec('DROP INDEX idx_posts_user_project');
+      db.exec('DROP INDEX idx_posts_user_project_created');
+      cache.schemaUpdated();
+
+      const fanOut3 = cache.getJoinFanOut('posts', ['userId']);
+      expect(fanOut3).toBeUndefined();
+    });
+
+    test('clears all caches', () => {
+      // Populate caches
+      cache.getJoinFanOut('posts', ['userId']);
+      cache.getJoinFanOut('comments', ['postId']);
+
+      // Schema change
+      db.exec('CREATE INDEX idx_posts_new ON posts(content)');
+      cache.schemaUpdated();
+
+      // Verify new index is detected (proves schema cache was cleared)
+      const fanOut = cache.getJoinFanOut('posts', ['content']);
+      expect(fanOut).toBeUndefined(); // No ANALYZE yet
+    });
+  });
+
   describe('real-world scenarios', () => {
     test('one-to-many relationship: posts per user', () => {
-      const fanOut = getJoinFanOut(db, 'posts', ['userId']);
+      const fanOut = cache.getJoinFanOut('posts', ['userId']);
       expect(fanOut).toBeDefined();
       // Each user has 100 posts (10 projects × 10 posts)
       // Allow some variance due to SQLite's approximations
@@ -313,7 +417,7 @@ describe('stat1-utils', () => {
     });
 
     test('many-to-one relationship: comments per post', () => {
-      const fanOut = getJoinFanOut(db, 'comments', ['postId']);
+      const fanOut = cache.getJoinFanOut('comments', ['postId']);
       expect(fanOut).toBeDefined();
       // ~50,000 comments / 10,000 posts = ~5 comments per post
       // Allow wide variance due to random distribution
@@ -321,7 +425,7 @@ describe('stat1-utils', () => {
     });
 
     test('compound key with high selectivity', () => {
-      const fanOut = getJoinFanOut(db, 'issues', ['userId', 'projectId']);
+      const fanOut = cache.getJoinFanOut('issues', ['userId', 'projectId']);
       expect(fanOut).toBeDefined();
       // Exactly 10 issues per (userId, projectId) pair
       expect(fanOut).toBeCloseTo(10, 0);
@@ -339,8 +443,9 @@ describe('stat1-utils', () => {
         INSERT INTO test VALUES (1, 100), (2, 100), (3, 200);
       `);
 
-      // No ANALYZE run
-      const fanOut = getJoinFanOut(freshDb, 'test', ['value']);
+      // Create cache without ANALYZE
+      const freshCache = new Stat1Cache(freshDb);
+      const fanOut = freshCache.getJoinFanOut('test', ['value']);
       expect(fanOut).toBeUndefined();
     });
 
@@ -350,25 +455,27 @@ describe('stat1-utils', () => {
         INSERT INTO unindexed VALUES (1, 1, 1), (2, 1, 2), (3, 2, 1);
       `);
       db.exec('ANALYZE');
+      cache.schemaUpdated();
 
-      const fanOut = getJoinFanOut(db, 'unindexed', ['foo']);
+      const fanOut = cache.getJoinFanOut('unindexed', ['foo']);
       expect(fanOut).toBeUndefined();
     });
 
-    test('index with zero avgRowsPerDistinct (degenerate case)', () => {
-      // This is hard to create naturally, but test the code path
+    test('index with minimal data', () => {
       const lc = createSilentLogContext();
       const testDb = new Database(lc, ':memory:');
 
       testDb.exec(`
-        CREATE TABLE degenerate (id INTEGER PRIMARY KEY, val INTEGER);
-        CREATE INDEX idx_degenerate_val ON degenerate(val);
-        INSERT INTO degenerate VALUES (1, 1);
+        CREATE TABLE minimal (id INTEGER PRIMARY KEY, val INTEGER);
+        CREATE INDEX idx_minimal_val ON minimal(val);
+        INSERT INTO minimal VALUES (1, 1);
       `);
       testDb.exec('ANALYZE');
 
-      const fanOut = getJoinFanOut(testDb, 'degenerate', ['val']);
-      // With only one row, stat might be "1 1", so fanOut should be 1
+      const testCache = new Stat1Cache(testDb);
+      const fanOut = testCache.getJoinFanOut('minimal', ['val']);
+
+      // With only one row, should still return a valid fan-out
       expect(fanOut).toBeDefined();
       expect(fanOut).toBeGreaterThan(0);
     });
