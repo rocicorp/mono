@@ -11,9 +11,9 @@ import {BackupMonitor} from '../services/change-streamer/backup-monitor.ts';
 import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.ts';
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.ts';
 import type {ChangeStreamerService} from '../services/change-streamer/change-streamer.ts';
+import {ReplicaMonitor} from '../services/change-streamer/replica-monitor.ts';
 import {AutoResetSignal} from '../services/change-streamer/schema/tables.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
-import type {Service} from '../services/service.ts';
 import {pgClient} from '../types/pg.ts';
 import {
   parentWorker,
@@ -111,9 +111,8 @@ export default async function runWorker(
   assert(changeStreamer, `resetting replica did not advance replicaVersion`);
 
   const {backupURL, port: metricsPort} = litestream;
-  const backupMonitor = !backupURL
-    ? null
-    : new BackupMonitor(
+  const monitor = backupURL
+    ? new BackupMonitor(
         lc,
         backupURL,
         `http://localhost:${metricsPort}/metrics`,
@@ -126,7 +125,8 @@ export default async function runWorker(
         //
         // Consider: Also account for permanent volumes?
         Date.now() - parentStartMs,
-      );
+      )
+    : new ReplicaMonitor(lc, replica.file, changeStreamer);
 
   const changeStreamerWebServer = new ChangeStreamerHttpServer(
     lc,
@@ -134,17 +134,18 @@ export default async function runWorker(
     {port},
     parent,
     changeStreamer,
-    backupMonitor,
+    monitor instanceof BackupMonitor ? monitor : null,
   );
 
   parent.send(['ready', {ready: true}]);
 
-  const services: Service[] = [changeStreamer, changeStreamerWebServer];
-  if (backupMonitor) {
-    services.push(backupMonitor);
-  }
-
-  return runUntilKilled(lc, parent, ...services);
+  return runUntilKilled(
+    lc,
+    parent,
+    changeStreamer,
+    changeStreamerWebServer,
+    monitor,
+  );
 }
 
 // fork()

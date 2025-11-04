@@ -1,4 +1,4 @@
-import '../../shared/src/dotenv.ts';
+import '../../../packages/shared/src/dotenv.ts';
 
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {nanoid} from 'nanoid/non-secure';
