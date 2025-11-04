@@ -19,7 +19,7 @@ function mb(bytes: number): string {
   return (bytes / MB).toFixed(2);
 }
 
-export class Database {
+export class Database implements Disposable {
   readonly #db: SQLite3Database.Database;
   readonly #threshold: number;
   readonly #lc: LogContext;
