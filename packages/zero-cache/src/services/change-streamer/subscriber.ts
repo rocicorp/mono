@@ -87,7 +87,7 @@ export class Subscriber {
   #send(change: WatermarkedChange): PendingResult {
     const [watermark, downstream] = change;
     if (watermark <= this.watermark) {
-      return OLD_WATERMARK_RESULT;
+      return ALREADY_CONSUMED_RESULT;
     }
     const pending = this.#downstream.push(downstream);
     if (downstream[0] === 'commit') {
@@ -116,6 +116,6 @@ export class Subscriber {
   }
 }
 
-const OLD_WATERMARK_RESULT: PendingResult = {
+const ALREADY_CONSUMED_RESULT: PendingResult = {
   result: Promise.resolve('consumed'),
 };
