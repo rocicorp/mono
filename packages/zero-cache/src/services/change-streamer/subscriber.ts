@@ -1,7 +1,7 @@
 import {assert} from '../../../../shared/src/asserts.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
 import {max} from '../../types/lexi-version.ts';
-import {Subscription} from '../../types/subscription.ts';
+import {Subscription, type PendingResult} from '../../types/subscription.ts';
 import type {WatermarkedChange} from './change-streamer-service.ts';
 import {type Downstream} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
@@ -66,9 +66,9 @@ export class Subscriber {
   }
 
   /** catchup() is called on ChangeEntries loaded from the store. */
-  catchup(change: WatermarkedChange) {
+  catchup(change: WatermarkedChange): PendingResult {
     this.#ensureInitialStatusSent();
-    this.#send(change);
+    return this.#send(change);
   }
 
   /**
@@ -84,19 +84,21 @@ export class Subscriber {
     this.#backlog = null;
   }
 
-  #send(change: WatermarkedChange) {
+  #send(change: WatermarkedChange): PendingResult {
     const [watermark, downstream] = change;
-    if (watermark > this.watermark) {
-      const {result} = this.#downstream.push(downstream);
-      if (downstream[0] === 'commit') {
-        this.#watermark = watermark;
-        void result.then(val => {
-          if (val === 'consumed') {
-            this.#acked = max(this.#acked, watermark);
-          }
-        });
-      }
+    if (watermark <= this.watermark) {
+      return ALREADY_CONSUMED_RESULT;
     }
+    const pending = this.#downstream.push(downstream);
+    if (downstream[0] === 'commit') {
+      this.#watermark = watermark;
+      void pending.result.then(val => {
+        if (val === 'consumed') {
+          this.#acked = max(this.#acked, watermark);
+        }
+      });
+    }
+    return pending;
   }
 
   fail(err?: unknown) {
@@ -113,3 +115,7 @@ export class Subscriber {
     }
   }
 }
+
+const ALREADY_CONSUMED_RESULT: PendingResult = {
+  result: Promise.resolve('consumed'),
+};

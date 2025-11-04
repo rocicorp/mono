@@ -414,17 +414,34 @@ export class Storer implements Service {
         // equal to the replica version. This is the empty changeLog scenario.
         let watermarkFound = sub.watermark === this.#replicaVersion;
         let count = 0;
+        let lastBatchConsumed: Promise<unknown> = Promise.resolve();
+
         for await (const entries of tx<ChangeEntry[]>`
           SELECT watermark, change FROM ${this.#cdc('changeLog')}
            WHERE watermark >= ${sub.watermark}
            ORDER BY watermark, pos`.cursor(2000)) {
+          // Wait for the last batch of entries to be consumed by the
+          // subscriber before sending down the current batch. This pipelining
+          // allows one batch of changes to be received from the change-db
+          // while the previous batch of changes are sent to the subscriber,
+          // resulting in flow control that caps the number of changes
+          // referenced in memory to 2 * batch-size.
+          const start = performance.now();
+          await lastBatchConsumed;
+          const elapsed = performance.now() - start;
+          if (elapsed > 1) {
+            this.#lc.info?.(
+              `waited ${elapsed.toFixed(3)} ms for ${sub.id} to consume last batch of catchup entries`,
+            );
+          }
+
           for (const entry of entries) {
             if (entry.watermark === sub.watermark) {
               // This should be the first entry.
               // Catchup starts from *after* the watermark.
               watermarkFound = true;
             } else if (watermarkFound) {
-              sub.catchup(toDownstream(entry));
+              lastBatchConsumed = sub.catchup(toDownstream(entry)).result;
               count++;
             } else if (mode === 'backup') {
               throw new AutoResetSignal(
@@ -443,6 +460,7 @@ export class Storer implements Service {
           }
         }
         if (watermarkFound) {
+          await lastBatchConsumed;
           this.#lc.info?.(
             `caught up ${sub.id} with ${count} changes (${
               Date.now() - start
