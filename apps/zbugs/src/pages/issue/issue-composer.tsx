@@ -7,6 +7,7 @@ import {
   type TextAreaPatch,
 } from '../../components/image-upload-area.tsx';
 import {Modal, ModalActions, ModalBody} from '../../components/modal.tsx';
+import {useIsOffline} from '../../hooks/use-is-offline.ts';
 import {useZero} from '../../hooks/use-zero.ts';
 import {
   MAX_ISSUE_DESCRIPTION_LENGTH,
@@ -32,6 +33,7 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
   const [description, setDescription] = useState<string>('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const z = useZero();
+  const isOffline = useIsOffline();
 
   // Function to handle textarea resizing
   function autoResizeTextarea(textarea: HTMLTextAreaElement) {
@@ -116,6 +118,7 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
       <ModalBody>
         <div className="flex items-center w-full px-4">
           <input
+            disabled={isOffline}
             className="new-issue-title"
             placeholder="Issue title"
             value={title}
@@ -129,6 +132,7 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
         <div className="w-full px-4">
           <ImageUploadArea textAreaRef={textareaRef} onInsert={onInsert}>
             <textarea
+              disabled={isOffline}
               className="new-issue-description autoResize"
               value={description || ''}
               onChange={e => setDescription(e.target.value)}
@@ -149,7 +153,7 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
           className="modal-confirm"
           eventName="New issue confirm"
           onAction={() => void handleSubmit()}
-          disabled={!canSave()}
+          disabled={!canSave() || isOffline}
           tabIndex={3}
         >
           Save Issue

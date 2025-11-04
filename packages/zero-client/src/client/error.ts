@@ -1,4 +1,5 @@
 import {unreachable} from '../../../shared/src/asserts.ts';
+import {getErrorMessage} from '../../../shared/src/error.ts';
 import type {Expand} from '../../../shared/src/expand.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
@@ -229,13 +230,7 @@ export function getErrorConnectionTransition(
     reason: new ClientError(
       {
         kind: ClientErrorKind.Internal,
-        message:
-          'Unexpected internal error: ' +
-          (ex instanceof Error
-            ? ex.message
-            : typeof ex === 'string'
-              ? ex
-              : String(ex ?? 'Unknown error')),
+        message: 'Unexpected internal error: ' + getErrorMessage(ex),
       },
       {cause: ex},
     ),

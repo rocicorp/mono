@@ -1,15 +1,16 @@
-import {useEffect, useRef, useState} from 'react';
 import {nanoid} from 'nanoid';
+import {useEffect, useRef, useState} from 'react';
 import {Button} from '../../components/button.tsx';
+import {GigabugsPromo} from '../../components/gigabugs-promo.tsx';
 import {
   ImageUploadArea,
   type TextAreaPatch,
 } from '../../components/image-upload-area.tsx';
+import {useIsOffline} from '../../hooks/use-is-offline.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
 import {maxCommentLength} from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
-import {GigabugsPromo} from '../../components/gigabugs-promo.tsx';
 
 export function CommentComposer({
   id,
@@ -24,6 +25,7 @@ export function CommentComposer({
 }) {
   const z = useZero();
   const login = useLogin();
+  const isOffline = useIsOffline();
   const [currentBody, setCurrentBody] = useState(body ?? '');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -91,6 +93,7 @@ export function CommentComposer({
     <div className="comment-composer">
       <ImageUploadArea textAreaRef={textareaRef} onInsert={onInsert}>
         <textarea
+          disabled={isOffline}
           value={currentBody}
           onChange={handleChange}
           onKeyDown={handleKeyDown}
@@ -105,7 +108,7 @@ export function CommentComposer({
           className="secondary-button"
           eventName={id ? 'Save comment edits' : 'Add new comment'}
           onAction={save}
-          disabled={currentBody.trim().length === 0}
+          disabled={currentBody.trim().length === 0 || isOffline}
         >
           {id ? 'Save' : 'Add comment'}
         </Button>

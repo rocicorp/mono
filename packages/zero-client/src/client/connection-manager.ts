@@ -61,10 +61,10 @@ export type ConnectionState =
 
 export type ConnectionManagerOptions = {
   /**
-   * The amount of time we allow for continuous connecting attempts before
+   * The amount of milliseconds we allow for continuous connecting attempts before
    * transitioning to disconnected state.
    */
-  disconnectTimeoutMs: number;
+  disconnectTimeout: number;
   /**
    * How frequently we check whether the connecting timeout has elapsed.
    * Defaults to 1 second.
@@ -94,10 +94,10 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
   #connectingStartedAt: number | undefined;
 
   /**
-   * The amount of time we allow for continuous connecting attempts before
+   * The amount of milliseconds we allow for continuous connecting attempts before
    * transitioning to disconnected state.
    */
-  #disconnectTimeoutMs: number;
+  #disconnectTimeout: number;
 
   /**
    * Handle for the timeout interval that periodically checks whether we've
@@ -120,13 +120,13 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
 
     const now = Date.now();
 
-    this.#disconnectTimeoutMs = options.disconnectTimeoutMs;
+    this.#disconnectTimeout = options.disconnectTimeout;
     this.#timeoutCheckIntervalMs =
       options.timeoutCheckIntervalMs ?? DEFAULT_TIMEOUT_CHECK_INTERVAL_MS;
     this.#state = {
       name: ConnectionStatus.Connecting,
       attempt: 0,
-      disconnectAt: now + this.#disconnectTimeoutMs,
+      disconnectAt: now + this.#disconnectTimeout,
     };
     this.#connectingStartedAt = now;
     this.#maybeStartTimeoutInterval();
@@ -224,7 +224,7 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
       this.#connectingStartedAt = now;
     }
 
-    const disconnectAt = this.#connectingStartedAt + this.#disconnectTimeoutMs;
+    const disconnectAt = this.#connectingStartedAt + this.#disconnectTimeout;
 
     this.#state = {
       name: ConnectionStatus.Connecting,
@@ -428,7 +428,7 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
       this.disconnected(
         new ClientError({
           kind: ClientErrorKind.Offline,
-          message: `Zero was unable to connect for ${Math.floor(this.#disconnectTimeoutMs / 1000)} seconds and was disconnected`,
+          message: `Zero was unable to connect for ${Math.floor(this.#disconnectTimeout / 1_000)} seconds and was disconnected`,
         }),
       );
       return true;
