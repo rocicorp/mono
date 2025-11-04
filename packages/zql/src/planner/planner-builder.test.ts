@@ -496,8 +496,8 @@ suite('buildPlanGraph', () => {
   suite('manual flip flag respects user intent', () => {
     test('flip: undefined allows planner to decide (join is flippable)', () => {
       // When flip is not specified, it should be undefined and the join should be flippable
-      const ast = builder.users.whereExists('posts').ast;
-      const plans = buildPlanGraph(ast, simpleCostModel);
+      const ast = getAST(builder.users.whereExists('posts'));
+      const plans = buildPlanGraph(ast, simpleCostModel, true);
 
       expect(plans.plan.joins).toHaveLength(1);
       const join = plans.plan.joins[0];
@@ -512,8 +512,8 @@ suite('buildPlanGraph', () => {
     });
 
     test('flip: true forces join to be flipped and not flippable', () => {
-      const ast = builder.users.whereExists('posts', {flip: true}).ast;
-      const plans = buildPlanGraph(ast, simpleCostModel);
+      const ast = getAST(builder.users.whereExists('posts', {flip: true}));
+      const plans = buildPlanGraph(ast, simpleCostModel, true);
 
       expect(plans.plan.joins).toHaveLength(1);
       const join = plans.plan.joins[0];
@@ -525,8 +525,8 @@ suite('buildPlanGraph', () => {
     });
 
     test('flip: false forces join to stay semi and not be flippable', () => {
-      const ast = builder.users.whereExists('posts', {flip: false}).ast;
-      const plans = buildPlanGraph(ast, simpleCostModel);
+      const ast = getAST(builder.users.whereExists('posts', {flip: false}));
+      const plans = buildPlanGraph(ast, simpleCostModel, true);
 
       expect(plans.plan.joins).toHaveLength(1);
       const join = plans.plan.joins[0];
@@ -557,7 +557,7 @@ suite('buildPlanGraph', () => {
           },
         },
       } as const;
-      const plans = buildPlanGraph(ast, simpleCostModel);
+      const plans = buildPlanGraph(ast, simpleCostModel, true);
 
       expect(plans.plan.joins).toHaveLength(1);
       const join = plans.plan.joins[0];
@@ -569,11 +569,13 @@ suite('buildPlanGraph', () => {
     });
 
     test('multiple joins with mixed flip settings', () => {
-      const ast = builder.users
-        .whereExists('posts', {flip: true}) // Force flip
-        .whereExists('comments', {flip: false}) // Force semi
-        .whereExists('likes').ast; // Let planner decide (flip: undefined)
-      const plans = buildPlanGraph(ast, simpleCostModel);
+      const ast = getAST(
+        builder.users
+          .whereExists('posts', {flip: true}) // Force flip
+          .whereExists('comments', {flip: false}) // Force semi
+          .whereExists('likes'),
+      ); // Let planner decide (flip: undefined)
+      const plans = buildPlanGraph(ast, simpleCostModel, true);
 
       expect(plans.plan.joins).toHaveLength(3);
 
@@ -591,8 +593,8 @@ suite('buildPlanGraph', () => {
     });
 
     test('reset() restores join to initial type', () => {
-      const ast = builder.users.whereExists('posts', {flip: true}).ast;
-      const plans = buildPlanGraph(ast, simpleCostModel);
+      const ast = getAST(builder.users.whereExists('posts', {flip: true}));
+      const plans = buildPlanGraph(ast, simpleCostModel, true);
 
       const join = plans.plan.joins[0];
       expect(join.type).toBe('flipped');
