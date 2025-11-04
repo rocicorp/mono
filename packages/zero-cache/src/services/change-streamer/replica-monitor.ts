@@ -37,7 +37,7 @@ export class ReplicaMonitor implements Service {
     this.#lc.info?.(`starting replica monitor`);
     await this.#state.sleep(CHECK_INTERVAL_MS);
 
-    while (this.#state.shouldRun) {
+    while (this.#state.shouldRun()) {
       const db = new Database(this.#lc, this.#replicaFile);
       try {
         const {stateVersion} = getReplicationState(new StatementRunner(db));
