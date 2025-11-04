@@ -551,7 +551,7 @@ export class Zero<
           void onError(error);
         }
       : error => {
-          lc.warn?.('An error occurred in Zero', error);
+          lc.error?.('An error occurred in Zero', error);
         };
 
     this.#mutationTracker = new MutationTracker(
