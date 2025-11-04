@@ -47,17 +47,23 @@ The Ubuntu-24-x64-16-Cores runner should provide:
 3. **Faster build times**: TypeScript compilation and linting should benefit from more cores
 4. **Improved test execution**: Vitest and Playwright tests can use more workers
 
+### Runner Availability Status
+
+> **⚠️ Important**: The workflow runs show status "action_required" which indicates that the `Ubuntu-24-x64-16-Cores` runner label may not be configured or available for this repository.
+> 
+> **Next Steps Required**:
+> 1. Verify runner label availability with GitHub repository administrator
+> 2. Ensure GitHub-hosted larger runners are enabled for the organization/repository
+> 3. The runner label may need to be: `ubuntu-24.04-16core` or similar variant
+> 4. Check GitHub's documentation for the exact runner label naming convention
+>
+> See: [About larger runners](https://docs.github.com/en/actions/using-github-hosted-runners/about-larger-runners)
+
 ### Results (Ubuntu-24-x64-16-Cores)
 
-> **Note**: This section will be populated after the first successful run on the new runner.
-> 
-> To compare performance:
-> 1. Push this PR to trigger the workflow
-> 2. Monitor the workflow run times
-> 3. Update this document with actual metrics
-> 4. Calculate percentage improvements
+> **Note**: This section will be populated after the runner is properly configured and the first successful run completes.
 
-**Workflow Run**: _Pending first run_
+**Workflow Run**: _Waiting for runner configuration_
 
 | Job Name | Duration | Improvement |
 |----------|----------|-------------|
