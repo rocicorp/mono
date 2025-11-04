@@ -15,6 +15,8 @@ import * as v from '../../../../shared/src/valita.ts';
 import {astSchema} from '../../../../zero-protocol/src/ast.ts';
 import {clientSchemaSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
+import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
 import type {InspectQueryRow} from '../../../../zero-protocol/src/inspect-down.ts';
 import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import * as Mode from '../../db/mode-enum.ts';
@@ -56,8 +58,6 @@ import {
   ttlClockAsNumber,
   ttlClockFromNumber,
 } from './ttl-clock.ts';
-import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
-import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 
 export type CVRFlushStats = {
   instances: number;
@@ -260,7 +260,7 @@ export class CVRStore {
           "patchVersion",
           "deleted",
           EXTRACT(EPOCH FROM "ttl") * 1000 AS "ttl",
-          "inactivatedAt"
+          (EXTRACT(EPOCH FROM "inactivatedAt") * 1000)::double precision AS "inactivatedAt"
           FROM ${this.#cvr('desires')}
           WHERE "clientGroupID" = ${id}`,
       ]);
@@ -589,7 +589,13 @@ export class CVRStore {
       clientGroupID: this.#id,
       clientID: client.id,
       deleted,
-      inactivatedAt: inactivatedAt ?? null,
+      // inactivatedAt is in ms but the postgres table uses TIMESTAMPTZ.
+      // We use to_timestamp() to convert from seconds to TIMESTAMPTZ, so divide by 1000.
+      // On read, we use EXTRACT(EPOCH FROM ...) * 1000 to convert back to ms.
+      inactivatedAt:
+        inactivatedAt === undefined
+          ? null
+          : ttlClockFromNumber(ttlClockAsNumber(inactivatedAt) / 1000),
       patchVersion: versionString(newVersion),
       queryHash: query.id,
 
