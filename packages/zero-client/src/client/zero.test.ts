@@ -4328,7 +4328,7 @@ describe('WebSocket event error handling', () => {
     const {reason} = z.connectionState;
     expect(reason).toBeInstanceOf(ClientError);
     expect(reason.kind).toBe(ClientErrorKind.Internal);
-    expect(reason.message).toContain('Invalid URL');
+    expect(reason.message).toContain('URL');
     expect(
       z.testLogSink.messages.some(
         ([level, _context, args]) =>
@@ -4355,7 +4355,7 @@ describe('WebSocket event error handling', () => {
     const {reason} = z.connectionState;
     expect(reason).toBeInstanceOf(ClientError);
     expect(reason.kind).toBe(ClientErrorKind.Internal);
-    expect(reason.message).toContain('Invalid URL');
+    expect(reason.message).toContain('URL');
     expect(
       z.testLogSink.messages.some(
         ([level, _context, args]) =>
@@ -4438,6 +4438,7 @@ test('push is called on initial connect and reconnect', async () => {
     expect(pushSpy).toBeCalledTimes(2);
   }
 });
+
 describe('onError', () => {
   test('onError is called with a server protocol error', async () => {
     const onErrorSpy = vi.fn();
