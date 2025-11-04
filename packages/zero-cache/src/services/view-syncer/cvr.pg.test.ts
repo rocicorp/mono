@@ -6189,7 +6189,7 @@ describe('view-syncer/cvr', () => {
             "clientGroupID": "abc123",
             "clientID": "client-b",
             "deleted": true,
-            "inactivatedAt": 1709683200000,
+            "inactivatedAt": 1709683200,
             "patchVersion": "1aa:01",
             "queryHash": "oneHash",
             "ttl": "00:05:00",
