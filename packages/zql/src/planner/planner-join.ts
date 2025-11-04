@@ -104,6 +104,7 @@ export class PlannerJoin {
 
   // Reset between planning attempts
   #type: 'semi' | 'flipped';
+  readonly #initialType: 'semi' | 'flipped';
 
   constructor(
     parent: Exclude<PlannerNode, PlannerTerminus>,
@@ -112,8 +113,10 @@ export class PlannerJoin {
     childConstraint: PlannerConstraint,
     flippable: boolean,
     planId: number,
+    initialType: 'semi' | 'flipped' = 'semi',
   ) {
-    this.#type = 'semi';
+    this.#type = initialType;
+    this.#initialType = initialType;
     this.#parent = parent;
     this.#child = child;
     this.#childConstraint = childConstraint;
@@ -257,7 +260,7 @@ export class PlannerJoin {
   }
 
   reset(): void {
-    this.#type = 'semi';
+    this.#type = this.#initialType;
   }
 
   estimateCost(

@@ -178,8 +178,14 @@ export abstract class AbstractQuery<
   ): Query<TSchema, TTable, TReturn, TContext> => {
     const cb = typeof cbOrOptions === 'function' ? cbOrOptions : undefined;
     const opts = typeof cbOrOptions === 'function' ? options : cbOrOptions;
-    const flipped = opts?.flip ?? false;
-    return this.where(({exists}) => exists(relationship, cb, {flip: flipped}));
+    const flipped = opts?.flip;
+    return this.where(({exists}) =>
+      exists(
+        relationship,
+        cb,
+        flipped !== undefined ? {flip: flipped} : undefined,
+      ),
+    );
   };
 
   related = (
@@ -451,7 +457,7 @@ export abstract class AbstractQuery<
     options?: ExistsOptions,
   ): Condition => {
     cb = cb ?? (q => q);
-    const flip = options?.flip ?? false;
+    const flip = options?.flip;
     const related = this.#schema.relationships[this.#tableName][relationship];
     assert(related, 'Invalid relationship');
 

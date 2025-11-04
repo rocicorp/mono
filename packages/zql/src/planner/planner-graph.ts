@@ -26,7 +26,7 @@ type PlanState = {
  * With n flippable joins, we explore 2^n plans.
  * 10 joins = 1024 plans (~100-200ms), 12 joins = 4096 plans (~400ms - 1 second)
  */
-const MAX_FLIPPABLE_JOINS = 13;
+const MAX_FLIPPABLE_JOINS = 9;
 
 /**
  * Cached information about FanOut→FanIn relationships.
