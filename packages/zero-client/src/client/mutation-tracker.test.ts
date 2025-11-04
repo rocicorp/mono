@@ -6,7 +6,6 @@ import type {
 import {zeroData} from '../../../replicache/src/transactions.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {promiseUndefined} from '../../../shared/src/resolved-promises.ts';
 import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
@@ -60,7 +59,7 @@ describe('MutationTracker', () => {
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
-  test('tracks a mutation and resolves with error on error', async () => {
+  test('tracks a mutation and rejects with error on error', async () => {
     const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const {serverPromise, ephemeralID} = tracker.trackMutation();
@@ -80,13 +79,11 @@ describe('MutationTracker', () => {
 
     tracker.processPushResponse(response);
 
-    const result = await serverPromise;
-
-    expect(result.type).toBe('error');
-    assert(result.type === 'error');
-    assert(result.error.type === 'app');
-    expect(result.error.message).toBe('server error');
-    expect(result.error.details).toBeUndefined();
+    await expect(serverPromise).rejects.toMatchObject({
+      name: 'ApplicationError',
+      message: 'server error',
+      details: undefined,
+    });
 
     expect(onFatalError).not.toHaveBeenCalled();
   });
@@ -112,15 +109,13 @@ describe('MutationTracker', () => {
 
     tracker.processPushResponse(response);
 
-    const result = await serverPromise;
-
-    expect(result.type).toBe('error');
-    assert(result.type === 'error');
-    assert(result.error.type === 'app');
-    expect(result.error.message).toBe('server error');
-    expect(result.error.details).toEqual({
-      source: 'server',
-      code: 42,
+    await expect(serverPromise).rejects.toMatchObject({
+      name: 'ApplicationError',
+      message: 'server error',
+      details: {
+        source: 'server',
+        code: 42,
+      },
     });
     expect(onFatalError).not.toHaveBeenCalled();
   });
@@ -198,14 +193,11 @@ describe('MutationTracker', () => {
 
     tracker.processPushResponse(response);
 
-    const result = await serverPromise;
-    expect(result.type).toBe('error');
-    assert(result.type === 'error');
-    expect(result.error.message).toBe(
-      'Server reported an out-of-order mutation',
-    );
-    assert(result.error.type === 'zero');
-    expect(result.error.details.kind).toBe(ErrorKind.InvalidPush);
+    await expect(serverPromise).rejects.toMatchObject({
+      name: 'ProtocolError',
+      message: 'Server reported an out-of-order mutation',
+      kind: ErrorKind.InvalidPush,
+    });
 
     expect(onFatalError).toHaveBeenCalledTimes(1);
     const fatalError = onFatalError.mock.calls[0][0] as ProtocolError;
@@ -275,7 +267,7 @@ describe('MutationTracker', () => {
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
-  test('mutation tracker size goes down each time a mutation is resolved or rejected', () => {
+  test('mutation tracker size goes down each time a mutation is resolved or rejected', async () => {
     const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const mutation1 = tracker.trackMutation();
@@ -283,10 +275,6 @@ describe('MutationTracker', () => {
 
     const mutation2 = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation2.ephemeralID, 2);
-
-    mutation2.serverPromise.catch(() => {
-      // expected
-    });
 
     const response: PushResponse = {
       mutations: [
@@ -307,6 +295,9 @@ describe('MutationTracker', () => {
     tracker.processPushResponse(response);
 
     expect(tracker.size).toBe(0);
+
+    await expect(mutation2.serverPromise).rejects.toThrow('server error');
+
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
@@ -389,13 +380,11 @@ describe('MutationTracker', () => {
     // process mutations
     cb!(patches.map(p => mutationPatchToDiffOp(p)));
 
-    const result = await mutation2.serverPromise;
-
-    expect(result.type).toBe('error');
-    assert(result.type === 'error');
-    assert(result.error.type === 'app');
-    expect(result.error.message).toBe('server error');
-    expect(result.error.details).toBeUndefined();
+    await expect(mutation2.serverPromise).rejects.toMatchObject({
+      name: 'ApplicationError',
+      message: 'server error',
+      details: undefined,
+    });
 
     tracker.lmidAdvanced(2);
 
@@ -542,26 +531,12 @@ describe('MutationTracker', () => {
     const {ephemeralID, serverPromise} = tracker.trackMutation();
     tracker.rejectMutation(ephemeralID, new Error('test error'));
 
-    const result = await serverPromise;
-
-    expect(result.type).toBe('error');
-    assert(result.type === 'error');
-    assert(result.error.type === 'app');
-    expect(result.error.message).toBe('test error');
-    expect(result.error.details).toBeUndefined();
+    await expect(serverPromise).rejects.toMatchObject({
+      name: 'ApplicationError',
+      message: 'test error',
+      details: undefined,
+    });
     expect(tracker.size).toBe(0);
-    expect(onFatalError).not.toHaveBeenCalled();
-  });
-
-  test('not awaiting the server promise does not trigger unhandled rejection', async () => {
-    const {tracker, onFatalError} = createTracker();
-    tracker.setClientIDAndWatch(CLIENT_ID, watch);
-
-    const {ephemeralID} = tracker.trackMutation();
-    tracker.rejectMutation(ephemeralID, new Error('possible unhandled error'));
-
-    await promiseUndefined;
-
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
@@ -569,19 +544,18 @@ describe('MutationTracker', () => {
     const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
+    const appError = new ApplicationError('test app error', {
+      details: {location: 'client'},
+    });
+
     const {ephemeralID, serverPromise} = tracker.trackMutation();
-    tracker.rejectMutation(
-      ephemeralID,
-      new ApplicationError('test app error', {details: {location: 'client'}}),
-    );
+    tracker.rejectMutation(ephemeralID, appError);
 
-    const result = await serverPromise;
-
-    expect(result.type).toBe('error');
-    assert(result.type === 'error');
-    assert(result.error.type === 'app');
-    expect(result.error.message).toBe('test app error');
-    expect(result.error.details).toEqual({location: 'client'});
+    await expect(serverPromise).rejects.toMatchObject({
+      name: 'ApplicationError',
+      message: 'test app error',
+      details: {location: 'client'},
+    });
     expect(tracker.size).toBe(0);
     expect(onFatalError).not.toHaveBeenCalled();
   });
@@ -664,26 +638,22 @@ describe('MutationTracker', () => {
 
     tracker.rejectAllOutstandingMutations(rejection);
 
-    await expect(promise1).resolves.toMatchObject({
-      type: 'error',
-      error: {
-        type: 'zero',
+    await expect(promise1).rejects.toMatchObject({
+      name: 'ClientError',
+      message: 'offline',
+      errorBody: {
+        kind: ClientErrorKind.Offline,
         message: 'offline',
-        details: {
-          kind: ClientErrorKind.Offline,
-          origin: ErrorOrigin.Client,
-        },
+        origin: ErrorOrigin.Client,
       },
     });
-    await expect(promise2).resolves.toMatchObject({
-      type: 'error',
-      error: {
-        type: 'zero',
+    await expect(promise2).rejects.toMatchObject({
+      name: 'ClientError',
+      message: 'offline',
+      errorBody: {
+        kind: ClientErrorKind.Offline,
         message: 'offline',
-        details: {
-          kind: ClientErrorKind.Offline,
-          origin: ErrorOrigin.Client,
-        },
+        origin: ErrorOrigin.Client,
       },
     });
     expect(tracker.size).toBe(0);
@@ -704,15 +674,13 @@ describe('MutationTracker', () => {
     });
     tracker.rejectAllOutstandingMutations(rejection);
 
-    await expect(serverPromise).resolves.toMatchObject({
-      type: 'error',
-      error: {
-        type: 'zero',
+    await expect(serverPromise).rejects.toMatchObject({
+      name: 'ClientError',
+      message: 'offline',
+      errorBody: {
+        kind: ClientErrorKind.Offline,
         message: 'offline',
-        details: {
-          kind: ClientErrorKind.Offline,
-          origin: ErrorOrigin.Client,
-        },
+        origin: ErrorOrigin.Client,
       },
     });
 

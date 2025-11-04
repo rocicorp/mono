@@ -37,6 +37,7 @@ import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import {Subscribable} from '../../../shared/src/subscribable.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
+import type {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
@@ -357,7 +358,7 @@ export class Zero<
 
   #onPong: () => void = () => undefined;
 
-  #onError: Required<ZeroOptions<S, MD, TContext>>['onError'];
+  #onError: (error: ZeroError | ApplicationError) => void;
 
   readonly #onlineManager: OnlineManager;
 
@@ -513,7 +514,7 @@ export class Zero<
         state.reason !== undefined &&
         state.name !== ConnectionStatus.Closed
       ) {
-        void this.#onError(state.reason);
+        this.#onError(state.reason);
       }
     };
     syncConnectionState(this.#connectionManager.state);
@@ -563,11 +564,13 @@ export class Zero<
 
     const lc = new ZeroLogContext(logOptions.logLevel, {}, logSink);
 
-    this.#onError =
-      onError ??
-      (error => {
-        lc.error?.('An error occurred in Zero', error);
-      });
+    this.#onError = onError
+      ? error => {
+          void onError(error);
+        }
+      : error => {
+          lc.error?.('An error occurred in Zero', error);
+        };
 
     this.#mutationTracker = new MutationTracker(
       lc,
@@ -750,7 +753,8 @@ export class Zero<
     const mutatorProxy = new MutatorProxy(
       this.#connectionManager,
       this.#mutationTracker,
-      error => this.#onError(error),
+      // we track app errors here since this wraps both client and server errors
+      applicationError => this.#onError(applicationError),
     );
 
     if (options.mutators) {

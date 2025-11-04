@@ -563,7 +563,7 @@ describe('MutatorProxy', () => {
       expect(mutator).toHaveBeenCalledWith(args);
     });
 
-    test('handles both client and server rejection', async () => {
+    test('notifies once when both client and server reject', async () => {
       const {manager, mutationTracker} = createMockConnectionManager();
       const onApplicationError = vi.fn();
       const proxy = new MutatorProxy(
@@ -574,7 +574,9 @@ describe('MutatorProxy', () => {
 
       const mutator = vi.fn(() => ({
         client: Promise.reject(new Error('client error')),
-        server: Promise.reject(new Error('server error')),
+        server: new Promise<unknown>((_, reject) => {
+          setTimeout(() => reject(new Error('client error')), 0);
+        }),
       }));
       const wrapped = proxy.wrapCustomMutator(mutator);
 
@@ -596,29 +598,19 @@ describe('MutatorProxy', () => {
         type: 'error',
         error: {
           type: 'app',
-          message: 'server error',
+          message: 'client error',
           details: undefined,
         },
       });
 
-      // onApplicationError should be called twice - once for client, once for server
-      expect(onApplicationError).toHaveBeenCalledTimes(2);
-      expect(onApplicationError).toHaveBeenNthCalledWith(
-        1,
+      // onApplicationError should be called once per failing mutation
+      expect(onApplicationError).toHaveBeenCalledTimes(1);
+      expect(onApplicationError).toHaveBeenCalledWith(
         expect.objectContaining({
           message: 'client error',
         }),
       );
-      expect(onApplicationError).toHaveBeenNthCalledWith(
-        2,
-        expect.objectContaining({
-          message: 'server error',
-        }),
-      );
       expect(isApplicationError(onApplicationError.mock.calls[0][0])).toBe(
-        true,
-      );
-      expect(isApplicationError(onApplicationError.mock.calls[1][0])).toBe(
         true,
       );
     });

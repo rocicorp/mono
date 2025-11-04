@@ -7,7 +7,7 @@ import {
 import type {ConnectionManager, ConnectionState} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import type {MutatorResult, MutatorResultDetails} from './custom.ts';
-import {type ZeroError} from './error.ts';
+import {isZeroError, type ZeroError} from './error.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 
 const successResultDetails: MutatorResultDetails = {type: 'success'};
@@ -70,7 +70,7 @@ export class MutatorProxy {
   >(f: F): (...args: Parameters<F>) => MutatorResult {
     return (...args) => {
       if (this.#mutationRejectionError) {
-        const errorDetails = this.#wrapWithZeroError(
+        const errorDetails = this.#makeZeroErrorResultDetails(
           this.#mutationRejectionError,
         );
         return {
@@ -83,10 +83,28 @@ export class MutatorProxy {
         client: Promise<unknown>;
         server: Promise<unknown>;
       };
+
+      let hasNotified = false;
+      const wrapError = (error: unknown): MutatorResultDetails => {
+        if (isZeroError(error)) {
+          return this.#makeZeroErrorResultDetails(error);
+        }
+
+        const applicationError = wrapWithApplicationError(error);
+
+        const shouldNotify = !hasNotified;
+        if (shouldNotify) {
+          this.#onApplicationError(applicationError);
+
+          hasNotified = true;
+        }
+        return this.#makeApplicationErrorResultDetails(applicationError);
+      };
+
       try {
         result = f(...args);
       } catch (error) {
-        const errorDetails = this.#wrapWithApplicationError(error);
+        const errorDetails = wrapError(error);
         return {
           client: Promise.resolve(errorDetails),
           server: Promise.resolve(errorDetails),
@@ -99,14 +117,14 @@ export class MutatorProxy {
             ? (result as MutatorResultDetails)
             : successResultDetails,
         )
-        .catch(error => this.#wrapWithApplicationError(error));
+        .catch(error => wrapError(error));
       const server = result.server
         .then(result =>
           result && typeof result === 'object' && 'type' in result
             ? (result as MutatorResultDetails)
             : successResultDetails,
         )
-        .catch(error => this.#wrapWithApplicationError(error));
+        .catch(error => wrapError(error));
 
       return {
         client,
@@ -115,29 +133,27 @@ export class MutatorProxy {
     };
   }
 
-  #wrapWithApplicationError(error: unknown): MutatorResultDetails {
-    const wrappedError = wrapWithApplicationError(error);
-    this.#onApplicationError(wrappedError);
-
-    return {
-      type: 'error',
-      error: {
-        type: 'app',
-        message: wrappedError.message,
-        details: wrappedError.details,
-      },
-    } as const satisfies MutatorResultDetails;
-  }
-
-  #wrapWithZeroError(error: ZeroError): MutatorResultDetails {
-    const {message, ...errorBody} = error.errorBody;
-
+  #makeZeroErrorResultDetails(zeroError: ZeroError): MutatorResultDetails {
+    const {message, ...errorBody} = zeroError.errorBody;
     return {
       type: 'error',
       error: {
         type: 'zero',
         message,
         details: errorBody,
+      },
+    } as const satisfies MutatorResultDetails;
+  }
+
+  #makeApplicationErrorResultDetails(
+    applicationError: ApplicationError,
+  ): MutatorResultDetails {
+    return {
+      type: 'error',
+      error: {
+        type: 'app',
+        message: applicationError.message,
+        details: applicationError.details,
       },
     } as const satisfies MutatorResultDetails;
   }

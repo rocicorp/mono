@@ -33,18 +33,15 @@ import {isZeroError, type ZeroError} from './error.ts';
 import {MUTATIONS_KEY_PREFIX} from './keys.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
 
-type ErrorType =
-  | MutationError
-  | Omit<PushError, 'mutationIDs'>
-  | Error
-  | unknown;
+type MutationSuccessType = Extract<MutatorResultDetails, {type: 'success'}>;
+type MutationErrorType = ApplicationError | ZeroError;
 
 let currentEphemeralID = 0;
 function nextEphemeralID(): EphemeralID {
   return ++currentEphemeralID as EphemeralID;
 }
 
-const successResultDetails: MutatorResultDetails = {type: 'success'};
+const successResultDetails: MutationSuccessType = {type: 'success'};
 
 /**
  * Tracks what pushes are in-flight and resolves promises when they're acked.
@@ -54,7 +51,7 @@ export class MutationTracker {
     EphemeralID,
     {
       mutationID?: number | undefined;
-      resolver: Resolver<MutatorResultDetails, ErrorType>;
+      resolver: Resolver<MutationSuccessType, MutationErrorType>;
     }
   >;
   readonly #ephemeralIDsByMutationID: Map<number, EphemeralID>;
@@ -100,9 +97,9 @@ export class MutationTracker {
     );
   }
 
-  trackMutation(): MutationTrackingData<MutatorResultDetails> {
+  trackMutation(): MutationTrackingData<MutationSuccessType> {
     const id = nextEphemeralID();
-    const mutationResolver = resolver<MutatorResultDetails, ErrorType>();
+    const mutationResolver = resolver<MutationSuccessType, MutationErrorType>();
 
     this.#outstandingMutations.set(id, {
       resolver: mutationResolver,
@@ -431,21 +428,14 @@ export class MutationTracker {
     ephemeralID: EphemeralID,
     entry: {
       mutationID?: number | undefined;
-      resolver: Resolver<MutatorResultDetails, ErrorType>;
+      resolver: Resolver<MutationSuccessType, MutationErrorType>;
     },
     result: Result,
   ): void {
-    if (isApplicationError(result)) {
-      entry.resolver.resolve({
-        type: 'error',
-        error: {type: 'app', message: result.message, details: result.details},
-      });
-    } else if (isZeroError(result)) {
-      const {message, ...errorBody} = result.errorBody;
-      entry.resolver.resolve({
-        type: 'error',
-        error: {type: 'zero', message, details: errorBody},
-      });
+    if (isApplicationError(result) || isZeroError(result)) {
+      // we reject here and catch in the mutator proxy
+      // the mutator proxy catches both client and server errors
+      entry.resolver.reject(result);
     } else {
       entry.resolver.resolve(successResultDetails);
     }

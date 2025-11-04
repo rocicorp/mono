@@ -72,7 +72,7 @@ import type {ConnectionState} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
-import {ClientError, isServerError, type ZeroError} from './error.ts';
+import {ClientError, isServerError} from './error.ts';
 import type {WSString} from './http-string.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import type {QueryManager} from './query-manager.ts';
@@ -4684,6 +4684,7 @@ describe('onError', () => {
       kind: ClientErrorKind.Offline,
       message: 'Connection offline',
     });
+
     z.connectionManager.disconnected(offlineError);
     await z.waitForConnectionStatus(ConnectionStatus.Disconnected);
 
@@ -4708,15 +4709,7 @@ describe('onError', () => {
     });
 
     expect(onErrorSpy).toHaveBeenCalledTimes(1);
-    // First call is from the connection state change
-    const firstError = onErrorSpy.mock.calls[0][0];
-    expect(firstError).toBe(offlineError);
-
-    // Second call is from the mutator proxy when mutation is attempted
-    if (onErrorSpy.mock.calls.length > 1) {
-      const secondError = onErrorSpy.mock.calls[1][0];
-      expect(secondError).toBe(offlineError);
-    }
+    expect(onErrorSpy.mock.calls[0][0]).toBe(offlineError);
 
     await z.close();
   });
@@ -4876,11 +4869,9 @@ describe('onError', () => {
   });
 
   test('onError includes server error reason', async () => {
-    let error: ZeroError | ApplicationError | undefined;
+    const onErrorSpy = vi.fn();
     const z = zeroForTest({
-      onError: e => {
-        error = e;
-      },
+      onError: onErrorSpy,
     });
 
     await z.triggerConnected();
@@ -4893,9 +4884,99 @@ describe('onError', () => {
       origin: ErrorOrigin.ZeroCache,
     });
 
-    expect(error).toBeDefined();
-    expect(error?.kind).toBe(ErrorKind.VersionNotSupported);
-    expect(error?.message).toBe(serverMessage);
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalled();
+    });
+
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    const error = onErrorSpy.mock.calls[0][0];
+    assert(isServerError(error), 'error should be a server error');
+    expect(error.kind).toBe(ErrorKind.VersionNotSupported);
+    expect(error.message).toBe(serverMessage);
+  });
+
+  test('onError receives server-side ApplicationError from custom mutations', async () => {
+    const onErrorSpy = vi.fn();
+    const testSchema = createSchema({
+      tables: [
+        table('issue')
+          .columns({
+            id: string(),
+            title: string(),
+          })
+          .primaryKey('id'),
+      ],
+    });
+
+    type MutatorTx = Transaction<typeof testSchema>;
+
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema: testSchema,
+      mutators: {
+        issue: {
+          create: async (tx: MutatorTx, args: {id: string; title: string}) => {
+            await tx.mutate.issue.insert(args);
+          },
+        },
+      },
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    // Trigger a mutation
+    const mutationResult = z.mutate.issue.create({
+      id: '1',
+      title: 'Test Issue',
+    });
+
+    // Wait for the mutation to be tracked and get its ID
+    await vi.advanceTimersByTimeAsync(1);
+
+    // Simulate server response with an application error
+    await z.triggerPushResponse({
+      mutations: [
+        {
+          id: {clientID: z.clientID, id: 1},
+          result: {
+            error: 'app',
+            message: 'Server validation failed',
+            details: {
+              field: 'title',
+              reason: 'contains_profanity',
+            },
+          },
+        },
+      ],
+    });
+
+    // Wait for onError to be called
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalled();
+    });
+
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    const error = onErrorSpy.mock.calls[0][0];
+    assert(isApplicationError(error), 'error should be an ApplicationError');
+    expect(error.message).toBe('Server validation failed');
+    expect(error.details).toEqual({
+      field: 'title',
+      reason: 'contains_profanity',
+    });
+
+    // Verify the server promise also rejects with the same error
+    const serverResult = await mutationResult.server;
+    assert(serverResult.type === 'error');
+    assert(serverResult.error.type === 'app');
+    expect(serverResult.error.message).toBe('Server validation failed');
+    expect(serverResult.error.details).toEqual({
+      field: 'title',
+      reason: 'contains_profanity',
+    });
+
+    await z.close();
   });
 });
 
