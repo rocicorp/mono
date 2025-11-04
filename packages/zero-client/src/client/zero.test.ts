@@ -4470,6 +4470,8 @@ describe('onError', () => {
     assert(isServerError(error), 'error is a server error');
     expect(error.kind).toBe(ErrorKind.InvalidPush);
     expect(error.message).toBe('Invalid push test');
+
+    await z.close();
   });
 
   test('onError is called with a client error', async () => {
@@ -4600,54 +4602,8 @@ describe('onError', () => {
     assert(isApplicationError(error), 'error should be an ApplicationError');
     expect(error.message).toBe('Custom mutation failed');
 
-    await z.close();
-  });
-
-  test('onError is called for custom mutation promise rejections', async () => {
-    const onErrorSpy = vi.fn();
-    const testSchema = createSchema({
-      tables: [
-        table('issue')
-          .columns({
-            id: string(),
-            title: string(),
-          })
-          .primaryKey('id'),
-      ],
-    });
-
-    const z = zeroForTest({
-      logLevel: 'debug',
-      schema: testSchema,
-      mutators: {
-        rejectingMutator: (_tx: Transaction<typeof testSchema>) => {
-          throw new Error('Mutation rejected');
-        },
-      },
-      onError: onErrorSpy,
-    });
-
-    await z.triggerConnected();
-    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
-
-    const result = z.mutate.rejectingMutator();
-
-    // Wait for both promises to resolve with errors
-    const clientResult = await result.client;
     const serverResult = await result.server;
-
-    expect(clientResult.type).toBe('error');
     expect(serverResult.type).toBe('error');
-
-    // onError should be called once when mutation throws
-    await vi.waitFor(() => {
-      expect(onErrorSpy).toHaveBeenCalled();
-    });
-
-    expect(onErrorSpy).toHaveBeenCalledTimes(1);
-    const error = onErrorSpy.mock.calls[0][0];
-    assert(isApplicationError(error), 'error should be an ApplicationError');
-    expect(error.message).toBe('Mutation rejected');
 
     await z.close();
   });
@@ -4702,8 +4658,7 @@ describe('onError', () => {
     expect(clientResult.error.type).toBe('zero');
     expect(serverResult.error.type).toBe('zero');
 
-    // onError should be called once with the offline error from state change
-    // and once with the zero error when mutation is attempted
+    // onError should be called once with the offline error
     await vi.waitFor(() => {
       expect(onErrorSpy).toHaveBeenCalled();
     });

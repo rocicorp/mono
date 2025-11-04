@@ -710,6 +710,8 @@ describe('error handling', () => {
     const error = onErrorSpy.mock.calls[0][0];
     expect(error).toBeInstanceOf(ApplicationError);
     expect(error.message).toBe('test error');
+
+    await z.close();
   });
 
   test('cannot await the promise directly', async () => {
