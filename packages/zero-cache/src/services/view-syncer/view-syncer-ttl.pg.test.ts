@@ -458,8 +458,7 @@ describe('ttl', () => {
     expect(desires).toEqual([
       {
         deleted: true,
-        // inactivatedAt is stored as TIMESTAMPTZ in seconds, so 2000ms = 2s
-        inactivatedAt: 2,
+        inactivatedAt: 2_000,
       },
     ]);
 
