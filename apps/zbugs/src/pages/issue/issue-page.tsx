@@ -378,9 +378,15 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     return null;
   }
 
-  const remove = () => {
+  const remove = async () => {
     // TODO: Implement undo - https://github.com/rocicorp/undo
-    z.mutate.issue.delete(displayed.id);
+    const result = z.mutate.issue.delete(displayed.id);
+
+    // we wait for the client result to redirect to the list page
+    const clientResult = await result.client;
+    if (clientResult.type === 'error') {
+      return;
+    }
     navigate(listContext?.href ?? links.list({projectName}));
   };
 
@@ -729,7 +735,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
         okButtonLabel="Delete"
         onClose={b => {
           if (b) {
-            remove();
+            void remove();
           }
           setDeleteConfirmationShown(false);
         }}

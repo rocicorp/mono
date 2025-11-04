@@ -3,7 +3,6 @@ import {
   zeroData,
 } from '../../../replicache/src/transactions.ts';
 import {assert} from '../../../shared/src/asserts.ts';
-import type {Expand} from '../../../shared/src/expand.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
@@ -47,7 +46,7 @@ export type CustomMutatorDefs = {
     | CustomMutatorImpl<any>;
 };
 
-export type MutatorResultDetails = Expand<
+export type MutatorResultDetails =
   | {
       readonly type: 'success';
     }
@@ -64,13 +63,7 @@ export type MutatorResultDetails = Expand<
             readonly message: string;
             readonly details: ZeroErrorDetails;
           };
-    }
->;
-
-export type MutatorResult = {
-  client: Promise<MutatorResultDetails & {}>;
-  server: Promise<MutatorResultDetails & {}>;
-};
+    };
 
 export type MutationResultSuccessDetails = Extract<
   MutatorResultDetails,
@@ -80,6 +73,11 @@ export type MutationResultErrorDetails = Extract<
   MutatorResultDetails,
   {type: 'error'}
 >;
+
+export type MutatorResult = {
+  client: Promise<MutatorResultDetails & {}>;
+  server: Promise<MutatorResultDetails & {}>;
+} & {};
 
 export type CustomMutatorImpl<
   S extends Schema,

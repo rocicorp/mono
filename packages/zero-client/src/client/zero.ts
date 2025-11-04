@@ -550,7 +550,7 @@ export class Zero<
           void onError(error);
         }
       : error => {
-          lc.error?.('An error occurred in Zero', error);
+          lc.warn?.('An error occurred in Zero', error);
         };
 
     this.#mutationTracker = new MutationTracker(
@@ -867,9 +867,12 @@ export class Zero<
   #unexpose() {
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     const g = globalThis as any;
-    assert(g.__zero !== undefined);
+    assert(g.__zero !== undefined, 'No global zero instance found');
     if (g.__zero instanceof Zero) {
-      assert(g.__zero === this);
+      assert(
+        g.__zero === this,
+        'Global zero instance does not match this instance',
+      );
       delete g.__zero;
     } else {
       delete g.__zero[this.clientID];

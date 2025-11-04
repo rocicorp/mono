@@ -1,6 +1,7 @@
 import {nanoid} from 'nanoid';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {Button} from '../../components/button.tsx';
+import {GigabugsPromo} from '../../components/gigabugs-promo.tsx';
 import {
   ImageUploadArea,
   type TextAreaPatch,
@@ -12,7 +13,6 @@ import {
   MAX_ISSUE_TITLE_LENGTH,
 } from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
-import {GigabugsPromo} from '../../components/gigabugs-promo.tsx';
 
 interface Props {
   /** If id is defined the issue created by the composer. */
@@ -56,10 +56,10 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
     });
   }, [description]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const id = nanoid();
 
-    z.mutate.issue.create({
+    const result = z.mutate.issue.create({
       id,
       projectID,
       title,
@@ -67,6 +67,13 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
       created: Date.now(),
       modified: Date.now(),
     });
+
+    // we wait for the client result to redirect to the issue page
+    const clientResult = await result.client;
+    if (clientResult.type === 'error') {
+      return;
+    }
+
     reset();
     onDismiss(id);
   };
@@ -86,7 +93,7 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (canSave() && isCtrlEnter(e)) {
       e.preventDefault();
-      handleSubmit();
+      void handleSubmit();
     }
   };
 
@@ -141,7 +148,7 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
         <Button
           className="modal-confirm"
           eventName="New issue confirm"
-          onAction={handleSubmit}
+          onAction={() => void handleSubmit()}
           disabled={!canSave()}
           tabIndex={3}
         >
