@@ -1,4 +1,4 @@
-import {type LogLevel, type LogSink} from '@rocicorp/logger';
+import {type LogLevel} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import {type DeletedClients} from '../../../replicache/src/deleted-clients.ts';
 import {
@@ -157,11 +157,7 @@ import {
 } from './metrics.ts';
 import {MutationTracker} from './mutation-tracker.ts';
 import {MutatorProxy} from './mutator-proxy.ts';
-import type {
-  OnLogParameters,
-  UpdateNeededReason,
-  ZeroOptions,
-} from './options.ts';
+import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import {QueryManager} from './query-manager.ts';
 import {
   reloadScheduled,
@@ -544,25 +540,10 @@ export class Zero<
       );
     }
 
-    const {onLog, onError} = options;
+    const {onError} = options;
 
-    // We create a special log sink that calls onLog if defined instead of
-    // logging browser console messages.
     const sink = logOptions.logSink;
-    const logSink: LogSink<OnLogParameters> = {
-      log(level, context, ...args) {
-        if (onLog) {
-          void onLog(level, ...(args as OnLogParameters));
-        } else {
-          sink.log(level, context, ...args);
-        }
-      },
-      async flush() {
-        await sink.flush?.();
-      },
-    };
-
-    const lc = new ZeroLogContext(logOptions.logLevel, {}, logSink);
+    const lc = new ZeroLogContext(logOptions.logLevel, {}, sink);
 
     this.#onError = onError
       ? error => {

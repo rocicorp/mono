@@ -3356,6 +3356,8 @@ describe('Downstream handler errors', () => {
     expect(reason.message).toBe('handler boom');
 
     spy.mockRestore();
+
+    await r.close();
   });
 });
 
@@ -4930,34 +4932,6 @@ describe('onError', () => {
       field: 'title',
       reason: 'contains_profanity',
     });
-
-    await z.close();
-  });
-});
-
-describe('onLog', () => {
-  test('routes log messages through onLog callback', async () => {
-    const onLogSpy = vi.fn();
-    const z = zeroForTest({
-      logLevel: 'debug',
-      onLog: onLogSpy,
-    });
-
-    await z.triggerConnected();
-
-    await z.triggerError({
-      kind: ErrorKind.MutationRateLimited,
-      message: 'Rate limited test',
-      origin: ErrorOrigin.ZeroCache,
-    });
-
-    await vi.waitFor(() => {
-      expect(onLogSpy).toHaveBeenCalled();
-    });
-
-    expect(
-      onLogSpy.mock.calls.some(call => call.includes('Mutation rate limited')),
-    ).toBe(true);
 
     await z.close();
   });

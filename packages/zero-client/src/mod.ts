@@ -182,6 +182,8 @@ export type {
   CustomMutatorImpl,
   MakeCustomMutatorInterface,
   MakeCustomMutatorInterfaces,
+  MutationResultErrorDetails,
+  MutationResultSuccessDetails,
   MutatorResultDetails,
   MutatorResult as PromiseWithServerResult,
 } from './client/custom.ts';

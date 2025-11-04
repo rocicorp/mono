@@ -181,20 +181,6 @@ export interface ZeroOptions<
   onError?: (error: ZeroError | ApplicationError) => MaybePromise<void>;
 
   /**
-   * Receives every log message emitted by Zero.
-   *
-   * Supplying this hook lets you forward logs to your own logger or telemetry
-   * pipeline.
-   *
-   * When `onLog` is omitted, Zero logs the message to the browser console.
-   */
-  onLog?: (
-    level: LogLevel,
-    message: string,
-    ...rest: unknown[]
-  ) => MaybePromise<void>;
-
-  /**
    * Determines what kind of storage implementation to use on the client.
    *
    * Defaults to `'idb'` which means that Zero uses an IndexedDB storage
@@ -308,5 +294,3 @@ export const updateNeededReasonTypeSchema: v.Type<UpdateNeededReason['type']> =
     UpdateNeededReasonType.VersionNotSupported,
     UpdateNeededReasonType.SchemaVersionNotSupported,
   );
-
-export type OnLogParameters = [message: string, ...rest: unknown[]];

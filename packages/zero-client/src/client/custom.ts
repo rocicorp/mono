@@ -72,6 +72,15 @@ export type MutatorResult = {
   server: Promise<MutatorResultDetails & {}>;
 };
 
+export type MutationResultSuccessDetails = Extract<
+  MutatorResultDetails,
+  {type: 'success'}
+>;
+export type MutationResultErrorDetails = Extract<
+  MutatorResultDetails,
+  {type: 'error'}
+>;
+
 export type CustomMutatorImpl<
   S extends Schema,
   TWrappedTransaction = unknown,

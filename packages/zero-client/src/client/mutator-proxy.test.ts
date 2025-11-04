@@ -27,6 +27,9 @@ function createMockConnectionManager(): {
       stateCallback = cb;
       return () => {};
     }),
+    state: {
+      name: ConnectionStatus.Connected,
+    } as ConnectionState,
   } as unknown as ConnectionManager;
 
   const rejectAllOutstandingMutations = vi.fn();
@@ -641,7 +644,7 @@ describe('MutatorProxy', () => {
       expect(onApplicationError).not.toHaveBeenCalled();
     });
 
-    test('returns already-wrapped error result from server promise', async () => {
+    test('wraps rejection from server promise as app error', async () => {
       const {manager, mutationTracker} = createMockConnectionManager();
       const onApplicationError = vi.fn();
       const proxy = new MutatorProxy(
@@ -650,26 +653,32 @@ describe('MutatorProxy', () => {
         onApplicationError,
       );
 
-      const errorResult = {
-        type: 'error' as const,
-        error: {
-          type: 'app' as const,
-          details: new ApplicationError('custom error'),
-        },
-      };
+      const clientError = new ApplicationError('client error');
+      const serverError = new ApplicationError('server error');
+
       const mutator = vi.fn(() => ({
-        client: Promise.resolve(),
-        server: Promise.resolve(errorResult),
+        client: Promise.reject(clientError),
+        server: new Promise((_, reject) => {
+          setTimeout(() => reject(serverError), 1);
+        }),
       }));
       const wrapped = proxy.wrapCustomMutator(mutator);
 
       const result = wrapped();
       const serverResult = await result.server;
 
-      expect(serverResult).toEqual(errorResult);
+      expect(serverResult).toEqual({
+        type: 'error',
+        error: {
+          type: 'app',
+          message: serverError.message,
+          details: serverError.details,
+        },
+      });
       expect(mutator).toHaveBeenCalledTimes(1);
-
-      expect(onApplicationError).not.toHaveBeenCalled();
+      // onApplicationError should be called with the client error
+      // because the client error was thrown first
+      expect(onApplicationError).toHaveBeenCalledExactlyOnceWith(clientError);
     });
 
     test('handles non-object result as success', async () => {
