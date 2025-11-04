@@ -4,7 +4,6 @@ import {
   stringify,
   type JSONObject,
 } from '../../../../shared/src/bigint-json.ts';
-import {recordQuery} from '../../server/anonymous-otel-start.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
 import {
   deepEqual,
@@ -19,11 +18,14 @@ import {
 import {stringCompare} from '../../../../shared/src/string-compare.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
+import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
+import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
 import {
   clampTTL,
   compareTTL,
   DEFAULT_TTL_MS,
 } from '../../../../zql/src/query/ttl.ts';
+import {recordQuery} from '../../server/anonymous-otel-start.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {rowIDString} from '../../types/row-key.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
@@ -44,8 +46,6 @@ import {
   type RowRecord,
 } from './schema/types.ts';
 import {ttlClockAsNumber, type TTLClock} from './ttl-clock.ts';
-import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
-import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 
 export type RowUpdate = {
   version?: string; // Undefined for an unref.
@@ -436,7 +436,8 @@ export class CVRConfigDrivenUpdater extends CVRUpdater {
             clientState.inactivatedAt === undefined,
             `Query ${id} is already inactivated`,
           );
-          ({ttl} = clientState);
+          // Clamp TTL to ensure we don't propagate historical unclamped values.
+          ttl = clampTTL(clientState.ttl);
           query.clientState[clientID] = {
             inactivatedAt,
             ttl,

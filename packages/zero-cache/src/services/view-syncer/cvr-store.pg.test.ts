@@ -881,8 +881,8 @@ describe('view-syncer/cvr-store', () => {
         VALUES('${CVR_ID}', 'client1');
       INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion")
         VALUES('${CVR_ID}', 'client1', 'foo', '01');
-      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "ttl", "inactivatedAt")
-        VALUES('${CVR_ID}', 'missing-client', 'foo', '01', '3600', '2025-03-10T00:00:00Z');
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "ttlMs", "inactivatedAtMs")
+        VALUES('${CVR_ID}', 'missing-client', 'foo', '01', 3600000, ${Date.UTC(2025, 2, 10)});
     `);
 
     const cvr = await store.load(lc, CONNECT_TIME);
@@ -915,7 +915,7 @@ describe('view-syncer/cvr-store', () => {
               },
               "missing-client": {
                 "inactivatedAt": 1741564800000,
-                "ttl": 3600000,
+                "ttl": 600000,
                 "version": {
                   "stateVersion": "01",
                 },
@@ -964,11 +964,11 @@ describe('view-syncer/cvr-store', () => {
       INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion")
         VALUES('${CVR_ID}', 'client1', 'bar', '02');
       
-      -- Client2 desires baz with TTL and bar with inactivatedAt
-      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "ttl")
-        VALUES('${CVR_ID}', 'client2', 'baz', '03', INTERVAL '7200 milliseconds');
-      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "inactivatedAt")
-        VALUES('${CVR_ID}', 'client2', 'bar', '02', '2024-10-15T00:00:00Z');
+      -- Client2 desires baz with TTL and bar with inactivatedAtMs
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "ttlMs")
+        VALUES('${CVR_ID}', 'client2', 'baz', '03', 7200);
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "inactivatedAtMs")
+        VALUES('${CVR_ID}', 'client2', 'bar', '02', ${Date.UTC(2024, 9, 15)});
     `);
 
     // Test inspectQueries with no clientID (should return all queries)
@@ -1139,23 +1139,23 @@ describe('view-syncer/cvr-store', () => {
       INSERT INTO "roze_1/cvr".queries ("clientGroupID", "queryHash", "clientAST", "patchVersion")
         VALUES('${CVR_ID}', 'deleted-not-expired-query', '{"table":"deleted"}', '01');
       
-      -- Insert desires with TTL: expired query (inactivatedAt + ttl <= ttlClock)
-      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "inactivatedAt", "ttl")
+      -- Insert desires with TTL: expired query (inactivatedAtMs + ttlMs <= ttlClock)
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "inactivatedAtMs", "ttlMs")
         VALUES('${CVR_ID}', 'test-client', 'expired-query', '01', 
-               to_timestamp(${ttlClockAsNumber(expiredInactivatedAt) / 1000}), 
-               INTERVAL '${expiredTTL / 1000} seconds');
+               ${ttlClockAsNumber(expiredInactivatedAt)}, 
+               ${expiredTTL});
       
-      -- Insert desires with TTL: active query (inactivatedAt + ttl > ttlClock)
-      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "inactivatedAt", "ttl")
+      -- Insert desires with TTL: active query (inactivatedAtMs + ttlMs > ttlClock)
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "inactivatedAtMs", "ttlMs")
         VALUES('${CVR_ID}', 'test-client', 'active-query', '01', 
-               to_timestamp(${ttlClockAsNumber(activeInactivatedAt) / 1000}), 
-               INTERVAL '${activeTTL / 1000} seconds');
+               ${ttlClockAsNumber(activeInactivatedAt)}, 
+               ${activeTTL});
       
-      -- Insert desires with TTL: deleted but not expired query (has deleted=true but inactivatedAt + ttl > ttlClock)
-      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "inactivatedAt", "ttl", "deleted")
+      -- Insert desires with TTL: deleted but not expired query (has deleted=true but inactivatedAtMs + ttlMs > ttlClock)
+      INSERT INTO "roze_1/cvr".desires ("clientGroupID", "clientID", "queryHash", "patchVersion", "inactivatedAtMs", "ttlMs", "deleted")
         VALUES('${CVR_ID}', 'test-client', 'deleted-not-expired-query', '01', 
-               to_timestamp(${ttlClockAsNumber(deletedNotExpiredInactivatedAt) / 1000}), 
-               INTERVAL '${deletedNotExpiredTTL / 1000} seconds',
+               ${ttlClockAsNumber(deletedNotExpiredInactivatedAt)}, 
+               ${deletedNotExpiredTTL},
                true);
     `);
 
