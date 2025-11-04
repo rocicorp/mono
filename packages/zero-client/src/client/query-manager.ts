@@ -4,6 +4,7 @@ import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {TDigest} from '../../../shared/src/tdigest.ts';
+import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {
   mapAST,
   normalizeAST,
@@ -30,7 +31,8 @@ import type {ClientMetricMap} from '../../../zql/src/query/metrics-delegate.ts';
 import type {CustomQueryID} from '../../../zql/src/query/named.ts';
 import type {GotCallback} from '../../../zql/src/query/query-delegate.ts';
 import {clampTTL, compareTTL, type TTL} from '../../../zql/src/query/ttl.ts';
-import {type ZeroError} from './error.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
+import {ClientError, type ZeroError} from './error.ts';
 import type {InspectorDelegate} from './inspector/inspector.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
@@ -64,6 +66,7 @@ export class QueryManager implements InspectorDelegate {
   readonly #serverToClient: NameMapper;
   readonly #send: (change: ChangeDesiredQueriesMessage) => void;
   readonly #onFatalError: (error: ZeroError) => void;
+  readonly #onApplicationError: (error: ApplicationError) => void;
   readonly #queries: Map<QueryHash, Entry> = new Map();
   readonly #recentQueriesMaxSize: number;
   readonly #recentQueries: Set<string> = new Set();
@@ -77,6 +80,7 @@ export class QueryManager implements InspectorDelegate {
   readonly #metrics: ClientMetric = newMetrics();
   readonly #queryMetrics: Map<string, ClientMetric> = new Map();
   readonly #slowMaterializeThreshold: number;
+  #closedError: ZeroError | undefined;
 
   constructor(
     lc: ZeroLogContext,
@@ -89,6 +93,7 @@ export class QueryManager implements InspectorDelegate {
     queryChangeThrottleMs: number,
     slowMaterializeThreshold: number,
     onFatalError: (error: ZeroError) => void,
+    onApplicationError: (error: ApplicationError) => void,
   ) {
     this.#lc = lc.withContext('QueryManager');
     this.#clientID = clientID;
@@ -100,6 +105,7 @@ export class QueryManager implements InspectorDelegate {
     this.#queryChangeThrottleMs = queryChangeThrottleMs;
     this.#slowMaterializeThreshold = slowMaterializeThreshold;
     this.#onFatalError = onFatalError;
+    this.#onApplicationError = onApplicationError;
     this.#mutationTracker.onAllMutationsApplied(() => {
       if (this.#pendingRemovals.length === 0) {
         return;
@@ -228,6 +234,12 @@ export class QueryManager implements InspectorDelegate {
 
       if (error.error === 'app' || error.error === 'parse') {
         entry.gotCallbacks.forEach(callback => callback(false, error));
+
+        this.#onApplicationError(
+          new ApplicationError(error.message ?? 'Unknown application error', {
+            details: error.details,
+          }),
+        );
       }
       // this code path is not possible technically since errors were never implemented in the legacy query transform error
       // but is included for backwards compatibility and we have a test case for it
@@ -242,6 +254,27 @@ export class QueryManager implements InspectorDelegate {
           }),
         );
         // unreachable(error); TODO(0xcadams): this should eventually be unreachable
+      }
+    }
+  }
+
+  handleClosed(
+    reason: ClientError<{kind: ClientErrorKind.ClientClosed; message: string}>,
+  ) {
+    if (this.#closedError) {
+      return;
+    }
+    this.#closedError = reason;
+    for (const [queryId, entry] of this.#queries) {
+      const erroredQuery: ErroredQuery = {
+        error: 'app',
+        id: queryId,
+        name: entry.name ?? 'legacy',
+        message: reason.message,
+        details: {kind: reason.kind},
+      };
+      for (const gotCallback of entry.gotCallbacks) {
+        gotCallback(false, erroredQuery);
       }
     }
   }

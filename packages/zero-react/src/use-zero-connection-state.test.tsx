@@ -3,7 +3,7 @@ import {createRoot, type Root} from 'react-dom/client';
 import {afterEach, expect, test, vi, describe, type Mock} from 'vitest';
 import type {ConnectionState} from '../../zero-client/src/client/connection-manager.ts';
 import {ConnectionStatus} from '../../zero-client/src/client/connection-status.ts';
-import type {ZeroError} from '../../zero-client/src/client/error.ts';
+import {ClientError} from '../../zero-client/src/client/error.ts';
 
 vi.mock('./zero-provider.tsx', () => ({
   useZero: vi.fn(),
@@ -11,6 +11,7 @@ vi.mock('./zero-provider.tsx', () => ({
 
 import {useZero} from './zero-provider.tsx';
 import {useZeroConnectionState} from './use-zero-connection-state.tsx';
+import {ClientErrorKind} from '../../zero-client/src/client/client-error-kind.ts';
 
 type ZeroLike = {
   connection: {
@@ -98,10 +99,12 @@ describe('useZeroConnectionState (React)', () => {
     expect(subscribeMock).toHaveBeenCalledTimes(1);
     expect(observedStates).toEqual([initialState]);
 
-    const offlineReason = new Error('offline') as unknown as ZeroError;
     const nextState: ConnectionState = {
       name: ConnectionStatus.Disconnected,
-      reason: offlineReason,
+      reason: new ClientError({
+        kind: ClientErrorKind.Offline,
+        message: 'disconnected',
+      }),
     };
 
     act(() => {

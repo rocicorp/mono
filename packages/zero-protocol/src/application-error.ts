@@ -6,13 +6,6 @@ import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
  *
  * Use these when you need to attach additional context to an error that will
  * be sent back to the client.
- *
- * @property details Structured data forwarded to the client alongside the
- * error. Values must be JSON-serializable so they can safely cross the network
- * boundary.
- * @property cause Optional underlying error that triggered this application
- * error. This is surfaced through the standard `cause` property for debugging
- * on the server.
  */
 export interface ApplicationErrorOptions<
   T extends ReadonlyJSONValue | undefined,
@@ -29,7 +22,7 @@ export interface ApplicationErrorOptions<
  * JSON-serializable `details`.
  */
 export class ApplicationError<
-  const T extends ReadonlyJSONValue | undefined = undefined,
+  const T extends ReadonlyJSONValue | undefined = ReadonlyJSONValue | undefined,
 > extends Error {
   /**
    * This maps onto errors for transform and push app-level failures.
@@ -47,6 +40,10 @@ export class ApplicationError<
 
   get details(): T {
     return this.#details;
+  }
+
+  get kind(): 'Application' {
+    return 'Application';
   }
 }
 

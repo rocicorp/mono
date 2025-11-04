@@ -20,7 +20,7 @@ const ZeroContext = createContext<Accessor<Zero<any, any, any>> | undefined>(
   undefined,
 );
 
-const NO_AUTH_SET = Symbol('NO_AUTH_SET');
+const NO_AUTH_SET = Symbol();
 
 export function createZero<
   S extends Schema,

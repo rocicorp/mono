@@ -1,4 +1,8 @@
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {assert} from '../../../shared/src/asserts.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import type {ConnectionState} from './connection-manager.ts';
 import {
@@ -7,15 +11,11 @@ import {
 } from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {ClientError, type AuthError} from './error.ts';
-import {assert} from '../../../shared/src/asserts.ts';
-import {ProtocolError} from '../../../zero-protocol/src/error.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
 const sharedDisconnectError = new ClientError({
-  kind: ClientErrorKind.DisconnectTimeout,
+  kind: ClientErrorKind.Offline,
   message: 'Disconnect timed out',
 });
 
@@ -39,7 +39,7 @@ describe('ConnectionManager', () => {
     test('starts in connecting state with default timeout', () => {
       vi.setSystemTime(1_000);
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
 
       expect(manager.state).toEqual({
@@ -52,7 +52,7 @@ describe('ConnectionManager', () => {
 
     test('respects custom disconnect timeout', () => {
       vi.setSystemTime(5_000);
-      const manager = new ConnectionManager({disconnectTimeoutMs: 10_000});
+      const manager = new ConnectionManager({disconnectTimeout: 10_000});
 
       expect(
         manager.state.name === ConnectionStatus.Connecting
@@ -66,7 +66,7 @@ describe('ConnectionManager', () => {
     test('increments attempt and keeps disconnect deadline while already connecting', () => {
       vi.setSystemTime(2_500);
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       const listener = subscribe(manager);
 
@@ -89,7 +89,7 @@ describe('ConnectionManager', () => {
 
     test('starts a new session after the timer resets', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       manager.connected();
 
@@ -105,7 +105,7 @@ describe('ConnectionManager', () => {
 
     test('does nothing while disconnected before the timeout expires', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
 
       vi.setSystemTime(DEFAULT_TIMEOUT_MS / 2);
@@ -122,7 +122,7 @@ describe('ConnectionManager', () => {
 
     test('does nothing when disconnected after timing out', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
 
       vi.advanceTimersByTime(DEFAULT_TIMEOUT_MS + 100);
@@ -138,7 +138,7 @@ describe('ConnectionManager', () => {
 
     test('does nothing once closed', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       manager.closed();
 
@@ -151,7 +151,7 @@ describe('ConnectionManager', () => {
 
     test('does not create multiple timeout intervals when called rapidly', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: 1_000,
+        disconnectTimeout: 1_000,
         timeoutCheckIntervalMs: 100,
       });
       const listener = subscribe(manager);
@@ -195,7 +195,7 @@ describe('ConnectionManager', () => {
   describe('connected', () => {
     test('transitions to connected and resets retry window', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       const listener = subscribe(manager);
 
@@ -219,7 +219,7 @@ describe('ConnectionManager', () => {
 
     test('is no-op when already connected', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       manager.connected();
 
@@ -231,7 +231,7 @@ describe('ConnectionManager', () => {
 
     test('is no-op when closed', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       manager.closed();
 
@@ -244,7 +244,7 @@ describe('ConnectionManager', () => {
 
     test('safely handles stopping timeout interval multiple times', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
         timeoutCheckIntervalMs: 100,
       });
 
@@ -264,7 +264,7 @@ describe('ConnectionManager', () => {
   describe('disconnected', () => {
     test('transitions to disconnected from connecting', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       const listener = subscribe(manager);
 
@@ -282,7 +282,7 @@ describe('ConnectionManager', () => {
 
     test('stays disconnected after leaving connected', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
 
       vi.setSystemTime(2 * 60 * 1000);
@@ -300,7 +300,7 @@ describe('ConnectionManager', () => {
 
     test('is no-op when already disconnected', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       manager.disconnected(sharedDisconnectError);
 
@@ -312,7 +312,7 @@ describe('ConnectionManager', () => {
 
     test('is no-op when closed', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       manager.closed();
 
@@ -327,7 +327,7 @@ describe('ConnectionManager', () => {
   describe('closed', () => {
     test('transitions to closed and blocks further updates', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       const listener = subscribe(manager);
 
@@ -358,7 +358,7 @@ describe('ConnectionManager', () => {
 
     test('is no-op when already closed', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       manager.closed();
 
@@ -373,7 +373,7 @@ describe('ConnectionManager', () => {
   describe('checkTimeout', () => {
     test('automatically disconnects once the interval detects timeout', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: 1_000,
+        disconnectTimeout: 1_000,
         timeoutCheckIntervalMs: 100,
       });
       const listener = subscribe(manager);
@@ -398,7 +398,7 @@ describe('ConnectionManager', () => {
       const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
 
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: 5_000,
+        disconnectTimeout: 5_000,
         timeoutCheckIntervalMs: 2_500,
       });
 
@@ -416,7 +416,7 @@ describe('ConnectionManager', () => {
 
     test('stops checking timeouts after disconnecting', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: 1_000,
+        disconnectTimeout: 1_000,
         timeoutCheckIntervalMs: 100,
       });
       const listener = subscribe(manager);
@@ -431,7 +431,7 @@ describe('ConnectionManager', () => {
 
     test('timeout check handles being in non-connecting state gracefully', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: 1_000,
+        disconnectTimeout: 1_000,
         timeoutCheckIntervalMs: 100,
       });
       const listener = subscribe(manager);
@@ -455,7 +455,7 @@ describe('ConnectionManager', () => {
   describe('shouldContinueRunLoop', () => {
     test('is true until the manager is closed', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       expect(manager.shouldContinueRunLoop()).toBe(true);
 
@@ -477,7 +477,7 @@ describe('ConnectionManager', () => {
     test('handles cycle through disconnected: Connecting → Connected → Disconnected → Connected', () => {
       vi.setSystemTime(1_000);
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       const listener = subscribe(manager);
 
@@ -523,7 +523,7 @@ describe('ConnectionManager', () => {
   describe('state change promises', () => {
     test('waitForStateChange resolves on next transition', async () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
 
       const waitForChange = manager.waitForStateChange();
@@ -536,7 +536,7 @@ describe('ConnectionManager', () => {
 
     test('transition nextStatePromise resolves after subsequent state change', async () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
 
       // Move to connected first so connecting() starts a fresh session
@@ -551,7 +551,7 @@ describe('ConnectionManager', () => {
 
     test('transition nextStatePromise resolves on closed', async () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
 
       const {nextStatePromise} = manager.connected();
@@ -565,7 +565,7 @@ describe('ConnectionManager', () => {
 
     test('waitForStateChange reuses promise until resolved, then creates a new one', async () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
 
       const first = manager.waitForStateChange();
@@ -596,7 +596,7 @@ describe('ConnectionManager', () => {
 
     test('error nextStatePromise resolves when transitioning from connected to connecting', async () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
 
       const {nextStatePromise} = manager.connected();
@@ -612,7 +612,7 @@ describe('ConnectionManager', () => {
 
     test('error nextStatePromise resolves when transitioning out of error', async () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       const errorDetail = new ClientError({
         kind: ClientErrorKind.ConnectTimeout,
@@ -633,7 +633,7 @@ describe('ConnectionManager', () => {
 
     test('cleanup resolves pending waiters', async () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
 
       const waitPromise = manager.waitForStateChange();
@@ -650,7 +650,7 @@ describe('ConnectionManager', () => {
   describe('isInTerminalState', () => {
     test('returns true only for error state', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       const errorDetail = new ClientError({
         kind: ClientErrorKind.ConnectTimeout,
@@ -670,7 +670,7 @@ describe('ConnectionManager', () => {
   describe('error', () => {
     test('transitions to error state and pauses run loop', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       const listener = subscribe(manager);
       const errorDetail = new ClientError({
@@ -693,7 +693,7 @@ describe('ConnectionManager', () => {
 
     test('is no-op when already in error state', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       const firstError = new ClientError({
         kind: ClientErrorKind.Internal,
@@ -717,7 +717,7 @@ describe('ConnectionManager', () => {
 
     test('is no-op when closed', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       manager.closed();
 
@@ -734,7 +734,7 @@ describe('ConnectionManager', () => {
 
     test('stops timeout checking when transitioning to error', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: 5_000,
+        disconnectTimeout: 5_000,
         timeoutCheckIntervalMs: 100,
       });
       const listener = subscribe(manager);
@@ -757,7 +757,7 @@ describe('ConnectionManager', () => {
   describe('needsAuth', () => {
     test('transitions to needs-auth state and pauses run loop', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       const listener = subscribe(manager);
       const authError = new ProtocolError({
@@ -781,7 +781,7 @@ describe('ConnectionManager', () => {
 
     test('is no-op when already in needs-auth state', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       const firstError = new ProtocolError({
         kind: ErrorKind.Unauthorized,
@@ -807,7 +807,7 @@ describe('ConnectionManager', () => {
 
     test('is no-op when closed', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       manager.closed();
 
@@ -825,7 +825,7 @@ describe('ConnectionManager', () => {
 
     test('stops timeout checking when transitioning to needs-auth', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: 5_000,
+        disconnectTimeout: 5_000,
         timeoutCheckIntervalMs: 100,
       });
       const listener = subscribe(manager);
@@ -847,7 +847,7 @@ describe('ConnectionManager', () => {
 
     test('can transition from connected to needs-auth', () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       manager.connected();
       const listener = subscribe(manager);
@@ -872,7 +872,7 @@ describe('ConnectionManager', () => {
 
     test('needsAuth nextStatePromise resolves when transitioning out of needs-auth', async () => {
       const manager = new ConnectionManager({
-        disconnectTimeoutMs: DEFAULT_TIMEOUT_MS,
+        disconnectTimeout: DEFAULT_TIMEOUT_MS,
       });
       const authError = new ProtocolError({
         kind: ErrorKind.Unauthorized,
@@ -906,7 +906,7 @@ describe('ConnectionManager', () => {
 
     test('throws when state is closed with non-tolerated client error reason', () => {
       const reason = new ClientError({
-        kind: ClientErrorKind.Internal,
+        kind: ClientErrorKind.ClientClosed,
         message: 'internal failure',
       });
       const state: ConnectionState = {
@@ -938,7 +938,7 @@ describe('ConnectionManager', () => {
         message: 'clean close',
       });
       const state: ConnectionState = {
-        name: ConnectionStatus.Disconnected,
+        name: ConnectionStatus.Error,
         reason,
       };
 
@@ -951,7 +951,7 @@ describe('ConnectionManager', () => {
         message: 'disconnect internal',
       });
       const state: ConnectionState = {
-        name: ConnectionStatus.Disconnected,
+        name: ConnectionStatus.Error,
         reason,
       };
 

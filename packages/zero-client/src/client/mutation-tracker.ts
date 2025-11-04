@@ -1,15 +1,24 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
+import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
+import type {ReplicacheImpl} from '../../../replicache/src/impl.ts';
 import type {
   EphemeralID,
   MutationTrackingData,
 } from '../../../replicache/src/replicache-options.ts';
-import type {ReplicacheImpl} from '../../../replicache/src/impl.ts';
-import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {getErrorDetails} from '../../../shared/src/error.ts';
 import {must} from '../../../shared/src/must.ts';
 import {emptyObject} from '../../../shared/src/sentinels.ts';
 import * as v from '../../../shared/src/valita.ts';
+import {
+  ApplicationError,
+  isApplicationError,
+  wrapWithApplicationError,
+} from '../../../zero-protocol/src/application-error.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
+import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import {
   mutationResultSchema,
   type MutationError,
@@ -19,27 +28,20 @@ import {
   type PushOk,
   type PushResponseBody,
 } from '../../../zero-protocol/src/push.ts';
-import {type ZeroError} from './error.ts';
+import type {MutationResultSuccessDetails} from './custom.ts';
+import {isZeroError, type ZeroError} from './error.ts';
 import {MUTATIONS_KEY_PREFIX} from './keys.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
-import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
-import {ProtocolError} from '../../../zero-protocol/src/error.ts';
-import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
-import {
-  ApplicationError,
-  wrapWithApplicationError,
-} from '../../../zero-protocol/src/application-error.ts';
 
-type ErrorType =
-  | MutationError
-  | Omit<PushError, 'mutationIDs'>
-  | Error
-  | unknown;
+type MutationSuccessType = MutationResultSuccessDetails;
+type MutationErrorType = ApplicationError | ZeroError;
 
 let currentEphemeralID = 0;
 function nextEphemeralID(): EphemeralID {
   return ++currentEphemeralID as EphemeralID;
 }
+
+const successResultDetails: MutationSuccessType = {type: 'success'};
 
 /**
  * Tracks what pushes are in-flight and resolves promises when they're acked.
@@ -49,7 +51,7 @@ export class MutationTracker {
     EphemeralID,
     {
       mutationID?: number | undefined;
-      resolver: Resolver<MutationOk, ErrorType>;
+      resolver: Resolver<MutationSuccessType, MutationErrorType>;
     }
   >;
   readonly #ephemeralIDsByMutationID: Map<number, EphemeralID>;
@@ -58,6 +60,7 @@ export class MutationTracker {
 
   readonly #ackMutations: (upTo: MutationID) => void;
   readonly #onFatalError: (error: ZeroError) => void;
+
   #clientID: string | undefined;
   #largestOutstandingMutationID: number;
   #currentMutationID: number;
@@ -94,9 +97,9 @@ export class MutationTracker {
     );
   }
 
-  trackMutation(): MutationTrackingData {
+  trackMutation(): MutationTrackingData<MutationSuccessType> {
     const id = nextEphemeralID();
-    const mutationResolver = resolver<MutationOk, ErrorType>();
+    const mutationResolver = resolver<MutationSuccessType, MutationErrorType>();
 
     this.#outstandingMutations.set(id, {
       resolver: mutationResolver,
@@ -123,8 +126,23 @@ export class MutationTracker {
   rejectMutation(id: EphemeralID, e: unknown): void {
     const entry = this.#outstandingMutations.get(id);
     if (entry) {
-      this.#settleMutation(id, entry, 'reject', wrapWithApplicationError(e));
+      this.#settleMutation(id, entry, wrapWithApplicationError(e));
     }
+  }
+
+  /**
+   * Reject all outstanding mutations. Called when the client is in a state
+   * that prevents mutations from being applied, such as offline or closed.
+   */
+  rejectAllOutstandingMutations(error: ZeroError): void {
+    if (this.#outstandingMutations.size === 0) {
+      return;
+    }
+    for (const [id, entry] of this.#outstandingMutations) {
+      this.#settleMutation(id, entry, error);
+    }
+    this.#largestOutstandingMutationID = this.#currentMutationID;
+    this.#notifyAllMutationsAppliedListeners();
   }
 
   /**
@@ -283,7 +301,7 @@ export class MutationTracker {
     // the upTo mutation ID.
     for (const [id, entry] of this.#outstandingMutations) {
       if (entry.mutationID && entry.mutationID <= upTo) {
-        this.#settleMutation(id, entry, 'resolve', emptyObject);
+        this.#settleMutation(id, entry, emptyObject);
       } else {
         break; // the map is in insertion order which is in mutation ID order
       }
@@ -318,42 +336,53 @@ export class MutationTracker {
       'received mutation for the wrong client',
     );
 
-    const ephemeralID = this.#ephemeralIDsByMutationID.get(mid);
-    if (!ephemeralID && error.error === 'alreadyProcessed') {
-      return;
-    }
-
     // Each tab sends all mutations for the client group
     // and the server responds back to the individual client that actually
     // ran the mutation. This means that N clients can send the same
     // mutation concurrently. If that happens, the promise for the mutation tracked
     // by this class will try to be resolved N times.
-    // Every time after the first, the ephemeral ID will not be
-    // found in the map. These later times, however, should always have been
-    // "mutation already processed" events which we ignore (above).
-    assert(
-      ephemeralID,
-      `ephemeral ID is missing for mutation error: ${error.error}.`,
-    );
+    // Every time after the first, the ephemeral ID will not be found.
+    //
+    // We also reject all outstanding mutations when the client is in a state
+    // that prevents mutations from being applied, such as offline or closed.
+    // In this case, the ephemeral ID will also not be found.
+    const ephemeralID = this.#ephemeralIDsByMutationID.get(mid);
+    if (!ephemeralID) {
+      this.#lc.debug?.(
+        'Mutation already resolved or rejected (e.g. due to disconnect); ignore late reject.',
+      );
+      return;
+    }
 
     const entry = this.#outstandingMutations.get(ephemeralID);
-    assert(entry && entry.mutationID === mid);
+    assert(
+      entry && entry.mutationID === mid,
+      `outstanding mutation not found for mutation ID ${mid} and ephemeral ID ${ephemeralID}`,
+    );
+
+    if (error.error === 'alreadyProcessed') {
+      this.#settleMutation(ephemeralID, entry, emptyObject);
+      return;
+    }
+
     this.#settleMutation(
       ephemeralID,
       entry,
-      'reject',
       error.error === 'app'
         ? new ApplicationError(
             error.message ?? `Unknown application error: ${error.error}`,
             error.details ? {details: error.details} : undefined,
           )
-        : new Error(
-            error.error === 'alreadyProcessed'
-              ? 'Mutation already processed'
-              : error.error === 'oooMutation'
+        : new ProtocolError({
+            kind: ErrorKind.InvalidPush,
+            origin: ErrorOrigin.Server,
+            reason: ErrorReason.Internal,
+            message:
+              error.error === 'oooMutation'
                 ? 'Server reported an out-of-order mutation'
                 : `Unknown fallback error with mutation ID ${mid}: ${error.error}`,
-          ),
+            details: getErrorDetails(error),
+          }),
     );
 
     // this is included for backwards compatibility with the per-mutation fatal error responses
@@ -376,33 +405,39 @@ export class MutationTracker {
       'received mutation for the wrong client',
     );
 
+    // We reject all outstanding mutations when the client is in a state
+    // that prevents mutations from being applied, such as offline or closed.
+    // In this case, the ephemeral ID will not be found.
     const ephemeralID = this.#ephemeralIDsByMutationID.get(mid);
-    assert(
-      ephemeralID,
-      'ephemeral ID is missing. This can happen if a mutation response is received twice ' +
-        'but it should be impossible to receive a success response twice for the same mutation.',
-    );
+    if (!ephemeralID) {
+      this.#lc.debug?.(
+        'Mutation already resolved or rejected (e.g. due to disconnect); ignore late resolve.',
+      );
+      return;
+    }
+
     const entry = this.#outstandingMutations.get(ephemeralID);
-    assert(entry && entry.mutationID === mid);
-    this.#settleMutation(ephemeralID, entry, 'resolve', result);
+    assert(
+      entry && entry.mutationID === mid,
+      `outstanding mutation not found for mutation ID ${mid} and ephemeral ID ${ephemeralID}`,
+    );
+    this.#settleMutation(ephemeralID, entry, result);
   }
 
-  #settleMutation<Type extends 'resolve' | 'reject'>(
+  #settleMutation<Result extends MutationOk | ApplicationError | ZeroError>(
     ephemeralID: EphemeralID,
     entry: {
       mutationID?: number | undefined;
-      resolver: Resolver<MutationOk, ErrorType>;
+      resolver: Resolver<MutationSuccessType, MutationErrorType>;
     },
-    type: Type,
-    result: 'resolve' extends Type ? MutationOk : Error,
+    result: Result,
   ): void {
-    switch (type) {
-      case 'resolve':
-        entry.resolver.resolve(result as MutationOk);
-        break;
-      case 'reject':
-        entry.resolver.reject(result);
-        break;
+    if (isApplicationError(result) || isZeroError(result)) {
+      // we reject here and catch in the mutator proxy
+      // the mutator proxy catches both client and server errors
+      entry.resolver.reject(result);
+    } else {
+      entry.resolver.resolve(successResultDetails);
     }
 
     this.#outstandingMutations.delete(ephemeralID);

@@ -1,10 +1,10 @@
 import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {useCallback, useRef, useState} from 'react';
+import {queries} from '../../shared/queries.ts';
 import {useClickOutside} from '../hooks/use-click-outside.ts';
 import {Button} from './button.tsx';
 import style from './label-picker.module.css';
-import {queries} from '../../shared/queries.ts';
 
 const focusInput = (input: HTMLInputElement | null) => {
   if (input) {
@@ -13,12 +13,14 @@ const focusInput = (input: HTMLInputElement | null) => {
 };
 
 export function LabelPicker({
+  disabled,
   projectName,
   selected,
   onDisassociateLabel,
   onAssociateLabel,
   onCreateNewLabel,
 }: {
+  disabled: boolean;
   projectName: string;
   selected: Set<string>;
   onDisassociateLabel: (id: string) => void;
@@ -39,6 +41,7 @@ export function LabelPicker({
   return (
     <div className={style.root} ref={ref}>
       <Button
+        disabled={disabled}
         title="Add label"
         eventName="Add issue label toggle"
         className={style.addLabel}

@@ -1,0 +1,195 @@
+import {unreachable} from '../../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {
+  ApplicationError,
+  wrapWithApplicationError,
+} from '../../../zero-protocol/src/application-error.ts';
+import type {ConnectionManager, ConnectionState} from './connection-manager.ts';
+import {ConnectionStatus} from './connection-status.ts';
+import type {
+  MutationResultErrorDetails,
+  MutationResultSuccessDetails,
+  MutatorResult,
+} from './custom.ts';
+import {isZeroError, type ZeroError} from './error.ts';
+import type {MutationTracker} from './mutation-tracker.ts';
+
+const successResultDetails = {
+  type: 'success',
+} as const satisfies MutationResultSuccessDetails;
+const successResult = () => successResultDetails;
+
+type CachedMutationRejection = {
+  readonly error: ZeroError;
+  readonly promise: Promise<MutationResultErrorDetails>;
+};
+
+export class MutatorProxy {
+  readonly #connectionManager: ConnectionManager;
+  readonly #mutationTracker: MutationTracker;
+  #mutationRejection: CachedMutationRejection | undefined;
+
+  readonly #onApplicationError: (error: ApplicationError) => void;
+
+  constructor(
+    connectionManager: ConnectionManager,
+    mutationTracker: MutationTracker,
+    onApplicationError: (error: ApplicationError) => void,
+  ) {
+    this.#connectionManager = connectionManager;
+    this.#mutationTracker = mutationTracker;
+    this.#onApplicationError = onApplicationError;
+
+    this.#connectionManager.subscribe(state =>
+      this.#onConnectionStateChange(state),
+    );
+    this.#onConnectionStateChange(connectionManager.state);
+  }
+
+  get mutationRejectionError(): ZeroError | undefined {
+    return this.#mutationRejection?.error;
+  }
+
+  /**
+   * Called when the connection state changes.
+   *
+   * If the connection state is disconnected, error, or closed, the
+   * mutation rejection error is set and all outstanding `.server` promises in
+   * the mutation tracker are rejected with the error.
+   */
+  #onConnectionStateChange(state: ConnectionState) {
+    switch (state.name) {
+      case ConnectionStatus.Disconnected:
+      case ConnectionStatus.Error:
+      case ConnectionStatus.Closed:
+        this.#mutationRejection = {
+          error: state.reason,
+          promise: Promise.resolve(
+            this.#makeZeroErrorResultDetails(state.reason),
+          ),
+        };
+        this.#mutationTracker.rejectAllOutstandingMutations(state.reason);
+        break;
+      case ConnectionStatus.Connected:
+      case ConnectionStatus.Connecting:
+      case ConnectionStatus.NeedsAuth:
+        this.#mutationRejection = undefined;
+        return;
+      default:
+        unreachable(state);
+    }
+  }
+
+  wrapCustomMutator<
+    F extends (...args: [] | [ReadonlyJSONValue]) => {
+      client: Promise<unknown>;
+      server: Promise<unknown>;
+    },
+  >(f: F): (...args: Parameters<F>) => MutatorResult {
+    return (...args) => {
+      if (this.#mutationRejection) {
+        return {
+          client: this.#mutationRejection.promise,
+          server: this.#mutationRejection.promise,
+        } as const satisfies MutatorResult;
+      }
+
+      let result: {
+        client: Promise<unknown>;
+        server: Promise<unknown>;
+      };
+
+      const cachedMutationPromises: Partial<
+        Record<'client' | 'server', Promise<MutationResultErrorDetails>>
+      > = {};
+
+      let hasNotifiedApplicationError = false;
+
+      const wrapErrorFor =
+        (origin: 'client' | 'server') =>
+        (error: unknown): Promise<MutationResultErrorDetails> => {
+          const cachedPromise = cachedMutationPromises[origin];
+          if (cachedPromise) {
+            return cachedPromise;
+          }
+
+          if (isZeroError(error)) {
+            const zeroErrorPromise = this.#makeZeroErrorResultDetails(error);
+            cachedMutationPromises[origin] = zeroErrorPromise;
+            return zeroErrorPromise;
+          }
+
+          const applicationError = wrapWithApplicationError(error);
+
+          if (!hasNotifiedApplicationError) {
+            this.#onApplicationError(applicationError);
+            hasNotifiedApplicationError = true;
+          }
+
+          const applicationErrorPromise =
+            this.#makeApplicationErrorResultDetails(applicationError);
+          cachedMutationPromises[origin] = applicationErrorPromise;
+          return applicationErrorPromise;
+        };
+
+      try {
+        result = f(...args);
+      } catch (error) {
+        const clientPromise = wrapErrorFor('client')(error);
+        const serverPromise = wrapErrorFor('server')(error);
+
+        return {
+          client: clientPromise,
+          server: serverPromise,
+        } as const satisfies MutatorResult;
+      }
+
+      const client = this.#normalizeResultPromise(
+        result.client,
+        wrapErrorFor('client'),
+      );
+      const server = this.#normalizeResultPromise(
+        result.server,
+        wrapErrorFor('server'),
+      );
+
+      return {
+        client,
+        server,
+      };
+    };
+  }
+
+  #normalizeResultPromise(
+    promise: Promise<unknown>,
+    wrapError: (error: unknown) => Promise<MutationResultErrorDetails>,
+  ) {
+    return promise.then<
+      MutationResultSuccessDetails,
+      MutationResultErrorDetails
+    >(successResult, wrapError);
+  }
+
+  #makeZeroErrorResultDetails(zeroError: ZeroError) {
+    const {message, ...errorBody} = zeroError.errorBody;
+    return Promise.resolve({
+      type: 'error',
+      error: {
+        type: 'zero',
+        message,
+        details: errorBody,
+      },
+    } as const satisfies MutationResultErrorDetails);
+  }
+
+  #makeApplicationErrorResultDetails(applicationError: ApplicationError) {
+    return Promise.resolve({
+      type: 'error',
+      error: {
+        type: 'app',
+        message: applicationError.message,
+        details: applicationError.details,
+      },
+    } as const satisfies MutationResultErrorDetails);
+  }
+}

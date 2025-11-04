@@ -6,7 +6,6 @@ import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
-import type {MutationOk} from '../../../zero-protocol/src/push.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {
@@ -29,6 +28,7 @@ import {
 import type {ClientID} from '../types/client-state.ts';
 import {ZeroContext} from './context.ts';
 import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
+import type {ZeroErrorDetails} from './error.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 import type {ZeroLogContext} from './zero-log-context.ts';
@@ -46,10 +46,38 @@ export type CustomMutatorDefs = {
     | CustomMutatorImpl<any>;
 };
 
+export type MutatorResultDetails =
+  | {
+      readonly type: 'success';
+    }
+  | {
+      readonly type: 'error';
+      readonly error:
+        | {
+            readonly type: 'app';
+            readonly message: string;
+            readonly details: ReadonlyJSONValue | undefined;
+          }
+        | {
+            readonly type: 'zero';
+            readonly message: string;
+            readonly details: ZeroErrorDetails;
+          };
+    };
+
+export type MutationResultSuccessDetails = Extract<
+  MutatorResultDetails,
+  {type: 'success'}
+>;
+export type MutationResultErrorDetails = Extract<
+  MutatorResultDetails,
+  {type: 'error'}
+>;
+
 export type MutatorResult = {
-  client: Promise<void>;
-  server: Promise<MutationOk>;
-};
+  client: Promise<MutatorResultDetails & {}>;
+  server: Promise<MutatorResultDetails & {}>;
+} & {};
 
 export type CustomMutatorImpl<
   S extends Schema,

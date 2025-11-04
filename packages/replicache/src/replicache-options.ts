@@ -265,9 +265,9 @@ export type ZeroReadOptions = {
 declare const idTag: unique symbol;
 export type EphemeralID = number & {[idTag]: true};
 
-export type MutationTrackingData = {
+export type MutationTrackingData<TResult = unknown> = {
   ephemeralID: EphemeralID;
-  serverPromise: Promise<unknown>;
+  serverPromise: Promise<TResult>;
 };
 
 /**

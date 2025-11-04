@@ -1,23 +1,24 @@
+import {ConnectionStatus} from '@rocicorp/zero';
+import {useQuery, useZeroConnectionState} from '@rocicorp/zero/react';
 import {FPSMeter} from '@schickling/fps-meter';
 import classNames from 'classnames';
 import {memo, useCallback, useEffect, useMemo, useState} from 'react';
 import {useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
-import {useQuery, useZeroConnectionState} from '@rocicorp/zero/react';
-import logoURL from '../assets/images/logo.svg';
+import {queries, type ListContext} from '../../shared/queries.ts';
 import logoGigabugsURL from '../assets/images/logo-gigabugs.svg';
+import logoURL from '../assets/images/logo.svg';
 import markURL from '../assets/images/mark.svg';
+import {useIsOffline} from '../hooks/use-is-offline.ts';
 import {useLogin} from '../hooks/use-login.tsx';
 import {IssueComposer} from '../pages/issue/issue-composer.tsx';
 import {isGigabugs, links, useListContext, useProjectName} from '../routes.tsx';
 import {AvatarImage} from './avatar-image.tsx';
 import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
 import {Button} from './button.tsx';
-import {Link} from './link.tsx';
-import {queries, type ListContext} from '../../shared/queries.ts';
-import {ProjectPicker} from './project-picker.tsx';
-import {ConnectionStatus} from '@rocicorp/zero';
 import {ErrorModal} from './error-modal.tsx';
+import {Link} from './link.tsx';
+import {ProjectPicker} from './project-picker.tsx';
 
 export const Nav = memo(() => {
   const search = useSearch();
@@ -26,6 +27,7 @@ export const Nav = memo(() => {
   const status = getStatus(listContext);
   const projectName = useProjectName();
   const login = useLogin();
+  const isOffline = useIsOffline();
   const [isMobile, setIsMobile] = useState(false);
   const [showUserPanel, setShowUserPanel] = useState(false); // State to control visibility of user-panel-mobile
   const [user] = useQuery(queries.user(login.loginState?.decoded.sub ?? ''));
@@ -79,6 +81,7 @@ export const Nav = memo(() => {
         </Link>{' '}
         {/* could not figure out how to add this color to tailwind.config.js */}
         <ButtonWithLoginCheck
+          disabled={isOffline}
           className="primary-cta"
           eventName="New issue modal"
           onAction={newIssue}

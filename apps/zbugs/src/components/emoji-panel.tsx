@@ -11,6 +11,7 @@ import {
   useRole,
   useTransitionStatus,
 } from '@floating-ui/react';
+import {nanoid} from 'nanoid';
 import {
   forwardRef,
   memo,
@@ -25,13 +26,13 @@ import {
   normalizeEmoji,
   type Emoji,
 } from '../emoji-utils.ts';
+import {useIsOffline} from '../hooks/use-is-offline.ts';
 import {useLogin} from '../hooks/use-login.tsx';
 import {useZero} from '../hooks/use-zero.ts';
 import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
 import {type ButtonProps} from './button.tsx';
 import {EmojiPicker} from './emoji-picker.tsx';
 import {EmojiPill} from './emoji-pill.tsx';
-import {nanoid} from 'nanoid';
 
 const loginMessage = 'You need to be logged in to modify emoji reactions.';
 
@@ -51,6 +52,7 @@ export const EmojiPanel = memo(
     ) => {
       const subjectID = commentID ?? issueID;
       const z = useZero();
+      const isOffline = useIsOffline();
 
       const addEmoji = useCallback(
         (unicode: string, annotation: string) => {
@@ -103,6 +105,7 @@ export const EmojiPanel = memo(
           <div className="emoji-reaction-container" ref={ref}>
             {Object.entries(groups).map(([normalizedEmoji, emojis]) => (
               <EmojiPill
+                disabled={isOffline}
                 key={normalizedEmoji}
                 normalizedEmoji={normalizedEmoji}
                 emojis={emojis}
@@ -113,9 +116,12 @@ export const EmojiPanel = memo(
               />
             ))}
             {login.loginState === undefined ? (
-              <EmojiButton />
+              <EmojiButton disabled={isOffline} />
             ) : (
-              <EmojiMenuButton onEmojiChange={addOrRemoveEmoji} />
+              <EmojiMenuButton
+                disabled={isOffline}
+                onEmojiChange={addOrRemoveEmoji}
+              />
             )}
           </div>
         </FloatingDelayGroup>
@@ -139,7 +145,13 @@ const EmojiButton = memo(
 );
 
 const EmojiMenuButton = memo(
-  ({onEmojiChange}: {onEmojiChange: AddOrRemoveEmoji}) => {
+  ({
+    disabled,
+    onEmojiChange,
+  }: {
+    disabled: boolean;
+    onEmojiChange: AddOrRemoveEmoji;
+  }) => {
     const [isOpen, setIsOpen] = useState(false);
     const {refs, floatingStyles, placement, context} = useFloating({
       open: isOpen,
@@ -176,6 +188,7 @@ const EmojiMenuButton = memo(
       <>
         <EmojiButton
           ref={refs.setReference}
+          disabled={disabled}
           onAction={() => setIsOpen(v => !v)}
           {...getReferenceProps()}
         />

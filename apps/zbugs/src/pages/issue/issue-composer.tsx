@@ -1,18 +1,19 @@
 import {nanoid} from 'nanoid';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {Button} from '../../components/button.tsx';
+import {GigabugsPromo} from '../../components/gigabugs-promo.tsx';
 import {
   ImageUploadArea,
   type TextAreaPatch,
 } from '../../components/image-upload-area.tsx';
 import {Modal, ModalActions, ModalBody} from '../../components/modal.tsx';
+import {useIsOffline} from '../../hooks/use-is-offline.ts';
 import {useZero} from '../../hooks/use-zero.ts';
 import {
   MAX_ISSUE_DESCRIPTION_LENGTH,
   MAX_ISSUE_TITLE_LENGTH,
 } from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
-import {GigabugsPromo} from '../../components/gigabugs-promo.tsx';
 
 interface Props {
   /** If id is defined the issue created by the composer. */
@@ -32,6 +33,7 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
   const [description, setDescription] = useState<string>('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const z = useZero();
+  const isOffline = useIsOffline();
 
   // Function to handle textarea resizing
   function autoResizeTextarea(textarea: HTMLTextAreaElement) {
@@ -56,10 +58,10 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
     });
   }, [description]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const id = nanoid();
 
-    z.mutate.issue.create({
+    const result = z.mutate.issue.create({
       id,
       projectID,
       title,
@@ -67,6 +69,13 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
       created: Date.now(),
       modified: Date.now(),
     });
+
+    // we wait for the client result to redirect to the issue page
+    const clientResult = await result.client;
+    if (clientResult.type === 'error') {
+      return;
+    }
+
     reset();
     onDismiss(id);
   };
@@ -86,7 +95,7 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (canSave() && isCtrlEnter(e)) {
       e.preventDefault();
-      handleSubmit();
+      void handleSubmit();
     }
   };
 
@@ -109,6 +118,7 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
       <ModalBody>
         <div className="flex items-center w-full px-4">
           <input
+            disabled={isOffline}
             className="new-issue-title"
             placeholder="Issue title"
             value={title}
@@ -122,6 +132,7 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
         <div className="w-full px-4">
           <ImageUploadArea textAreaRef={textareaRef} onInsert={onInsert}>
             <textarea
+              disabled={isOffline}
               className="new-issue-description autoResize"
               value={description || ''}
               onChange={e => setDescription(e.target.value)}
@@ -141,8 +152,8 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
         <Button
           className="modal-confirm"
           eventName="New issue confirm"
-          onAction={handleSubmit}
-          disabled={!canSave()}
+          onAction={() => void handleSubmit()}
+          disabled={!canSave() || isOffline}
           tabIndex={3}
         >
           Save Issue

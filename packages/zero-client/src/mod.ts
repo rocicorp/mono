@@ -182,21 +182,29 @@ export type {
   CustomMutatorImpl,
   MakeCustomMutatorInterface,
   MakeCustomMutatorInterfaces,
+  MutationResultErrorDetails,
+  MutationResultSuccessDetails,
+  MutatorResultDetails,
   MutatorResult as PromiseWithServerResult,
 } from './client/custom.ts';
-export {ClientError} from './client/error.ts';
+export {isClientError, isServerError, isZeroError} from './client/error.ts';
 export type {
   AuthError,
+  ClientError,
+  ClientErrorBody,
+  ClosedError,
   NeedsAuthReason,
+  OfflineError,
+  ServerError,
   ZeroError,
   ZeroErrorBody,
+  ZeroErrorDetails,
   ZeroErrorKind,
 } from './client/error.ts';
 export type {ClientGroup as InspectorClientGroup} from './client/inspector/client-group.ts';
 export type {Client as InspectorClient} from './client/inspector/client.ts';
 export type {Inspector} from './client/inspector/inspector.ts';
 export type {Query as InspectorQuery} from './client/inspector/query.ts';
-export type {OnError, OnErrorParameters} from './client/on-error.ts';
 export type {UpdateNeededReason, ZeroOptions} from './client/options.ts';
 export {UpdateNeededReasonType} from './client/update-needed-reason-type.ts';
 export {Zero, type MakeEntityQueriesFromSchema} from './client/zero.ts';

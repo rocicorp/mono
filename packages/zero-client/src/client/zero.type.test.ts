@@ -211,7 +211,8 @@ test('CRUD and custom mutators work together with enableLegacyMutators: true', a
 
   // Runtime: Verify both work
   await z.mutate.issues.insert({id: '1', title: 'Test Issue', status: 'open'});
-  await z.mutate.issue.closeIssue({id: '1'});
+  const result = z.mutate.issue.closeIssue({id: '1'});
+  await result.client;
 
   const issues = await z.run(z.query.issues.where('id', '1').one());
   expect(issues?.status).toBe('closed');

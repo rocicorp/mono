@@ -16,7 +16,7 @@ import {useZero} from './use-zero.ts';
 
 export type QueryResult<TReturn> = readonly [
   Accessor<HumanReadable<TReturn>>,
-  Accessor<QueryResultDetails>,
+  Accessor<QueryResultDetails & {}>,
 ];
 
 // Deprecated in 0.22

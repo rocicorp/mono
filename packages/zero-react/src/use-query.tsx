@@ -23,7 +23,7 @@ import {useZero} from './zero-provider.tsx';
 
 export type QueryResult<TReturn> = readonly [
   HumanReadable<TReturn>,
-  QueryResultDetails,
+  QueryResultDetails & {},
 ];
 
 export type UseQueryOptions = {
