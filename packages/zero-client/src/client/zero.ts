@@ -27,6 +27,7 @@ import {
 } from '../../../shared/src/browser-env.ts';
 import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
+import {getErrorMessage} from '../../../shared/src/error.ts';
 import {h64} from '../../../shared/src/hash.ts';
 import {must} from '../../../shared/src/must.ts';
 import {navigator} from '../../../shared/src/navigator.ts';
@@ -121,6 +122,7 @@ import type {
   CustomMutatorDefs,
   CustomMutatorImpl,
   MakeCustomMutatorInterfaces,
+  MutatorResult,
 } from './custom.ts';
 import {makeReplicacheMutator} from './custom.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
@@ -153,8 +155,12 @@ import {
   shouldReportConnectError,
 } from './metrics.ts';
 import {MutationTracker} from './mutation-tracker.ts';
-import type {OnErrorParameters} from './on-error.ts';
-import type {UpdateNeededReason, ZeroOptions} from './options.ts';
+import {MutatorProxy} from './mutator-proxy.ts';
+import type {
+  OnLogParameters,
+  UpdateNeededReason,
+  ZeroOptions,
+} from './options.ts';
 import {QueryManager} from './query-manager.ts';
 import {
   reloadScheduled,
@@ -351,6 +357,8 @@ export class Zero<
 
   #onPong: () => void = () => undefined;
 
+  #onError: Required<ZeroOptions<S, MD, TContext>>['onError'];
+
   readonly #onlineManager: OnlineManager;
 
   readonly #onUpdateNeeded: (reason: UpdateNeededReason) => void;
@@ -401,7 +409,6 @@ export class Zero<
 
   readonly #connectionManager: ConnectionManager;
   readonly #connection: Connection;
-  #unsubscribeConnectionState: (() => void) | undefined = undefined;
   readonly #activeClientsManager: Promise<ActiveClientsManager>;
   #inspector: Inspector | undefined;
 
@@ -493,12 +500,24 @@ export class Zero<
     this.#connectionManager = new ConnectionManager({
       disconnectTimeoutMs: DEFAULT_DISCONNECT_TIMEOUT_MS,
     });
-    const syncOnlineState = (state: ConnectionState) => {
+
+    const syncConnectionState = (state: ConnectionState) => {
       this.#onlineManager.setOnline(state.name === ConnectionStatus.Connected);
+
+      if (state.name === ConnectionStatus.Closed) {
+        this.#queryManager.handleClosed(state.reason);
+      }
+
+      if (
+        'reason' in state &&
+        state.reason !== undefined &&
+        state.name !== ConnectionStatus.Closed
+      ) {
+        void this.#onError(state.reason);
+      }
     };
-    syncOnlineState(this.#connectionManager.state);
-    this.#unsubscribeConnectionState =
-      this.#connectionManager.subscribe(syncOnlineState);
+    syncConnectionState(this.#connectionManager.state);
+    this.#connectionManager.subscribe(syncConnectionState);
 
     const {enableLegacyMutators = true, enableLegacyQueries = true} = schema;
 
@@ -524,14 +543,15 @@ export class Zero<
       );
     }
 
-    // We create a special log sink that calls onError if defined instead of
-    // logging error messages.
-    const {onError} = options;
+    const {onLog, onError} = options;
+
+    // We create a special log sink that calls onLog if defined instead of
+    // logging browser console messages.
     const sink = logOptions.logSink;
-    const logSink: LogSink<OnErrorParameters> = {
+    const logSink: LogSink<OnLogParameters> = {
       log(level, context, ...args) {
-        if (level === 'error' && onError) {
-          onError(...(args as OnErrorParameters));
+        if (onLog) {
+          void onLog(level, ...(args as OnLogParameters));
         } else {
           sink.log(level, context, ...args);
         }
@@ -543,12 +563,16 @@ export class Zero<
 
     const lc = new ZeroLogContext(logOptions.logLevel, {}, logSink);
 
+    this.#onError =
+      onError ??
+      (error => {
+        lc.error?.('An error occurred in Zero', error);
+      });
+
     this.#mutationTracker = new MutationTracker(
       lc,
       (upTo: MutationID) => this.#send(['ackMutationResponses', upTo]),
-      error => {
-        this.#disconnect(lc, error);
-      },
+      error => this.#disconnect(lc, error),
     );
     if (options.mutators) {
       for (const [namespaceOrKey, mutatorOrMutators] of Object.entries(
@@ -723,12 +747,22 @@ export class Zero<
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     const {mutate, mutateBatch} = makeCRUDMutate<S>(schema, rep.mutate) as any;
 
+    const mutatorProxy = new MutatorProxy(
+      this.#connectionManager,
+      this.#mutationTracker,
+      error => this.#onError(error),
+    );
+
     if (options.mutators) {
       for (const [namespaceOrKey, mutatorsOrMutator] of Object.entries(
         options.mutators,
       )) {
         if (typeof mutatorsOrMutator === 'function') {
-          mutate[namespaceOrKey] = must(rep.mutate[namespaceOrKey as string]);
+          mutate[namespaceOrKey] = mutatorProxy.wrapCustomMutator(
+            must(rep.mutate[namespaceOrKey as string]) as unknown as (
+              ...args: unknown[]
+            ) => MutatorResult,
+          );
           continue;
         }
 
@@ -739,8 +773,10 @@ export class Zero<
         }
 
         for (const name of Object.keys(mutatorsOrMutator)) {
-          existing[name] = must(
-            rep.mutate[customMutatorKey(namespaceOrKey, name)],
+          existing[name] = mutatorProxy.wrapCustomMutator(
+            must(
+              rep.mutate[customMutatorKey(namespaceOrKey, name)],
+            ) as unknown as (...args: unknown[]) => MutatorResult,
           );
         }
       }
@@ -759,10 +795,14 @@ export class Zero<
       maxRecentQueries,
       options.queryChangeThrottleMs ?? DEFAULT_QUERY_CHANGE_THROTTLE_MS,
       slowMaterializeThreshold,
-      (error: ZeroError) => {
+      error => {
         this.#disconnect(lc, error);
       },
+      error => {
+        void this.#onError(error);
+      },
     );
+
     this.#clientToServer = clientToServer(schema.tables);
 
     this.#deleteClientsManager = new DeleteClientsManager(
@@ -1130,8 +1170,6 @@ export class Zero<
 
       lc.debug?.('Closing Zero instance. Stack:', new Error().stack);
 
-      this.#unsubscribeConnectionState?.();
-      this.#unsubscribeConnectionState = undefined;
       this.#onlineManager.cleanup();
 
       if (!this.#connectionManager.is(ConnectionStatus.Disconnected)) {
@@ -1175,113 +1213,158 @@ export class Zero<
         'passthrough',
       );
     } catch (e) {
-      const invalidMessageError = new ClientError({
-        kind: ClientErrorKind.InvalidMessage,
-        message: `Invalid message received from server: ${e instanceof Error ? e.message + '. ' : ''}${data}`,
-      });
+      const invalidMessageError = new ClientError(
+        {
+          kind: ClientErrorKind.InvalidMessage,
+          message: `Invalid message received from server: ${getErrorMessage(e)}${data}`,
+        },
+        {cause: e},
+      );
       this.#disconnect(lc, invalidMessageError);
       return;
     }
     this.#messageCount++;
     const msgType = downMessage[0];
-    switch (msgType) {
-      case 'connected':
-        return this.#handleConnectedMessage(lc, downMessage);
+    try {
+      switch (msgType) {
+        case 'connected':
+          return this.#handleConnectedMessage(lc, downMessage);
 
-      case 'error':
-        return this.#handleErrorMessage(lc, downMessage);
+        case 'error':
+          return this.#handleErrorMessage(lc, downMessage);
 
-      case 'pong':
-        // Receiving a pong means that the connection is healthy, as the
-        // initial schema / versioning negotiations would produce an error
-        // before a ping-pong timeout.
-        resetBackoff();
-        return this.#onPong();
-
-      case 'pokeStart':
-        return this.#handlePokeStart(lc, downMessage);
-
-      case 'pokePart':
-        if (downMessage[1].rowsPatch) {
-          // Receiving row data indicates that the client is in a good state
-          // and can reset the reload backoff state.
+        case 'pong':
+          // Receiving a pong means that the connection is healthy, as the
+          // initial schema / versioning negotiations would produce an error
+          // before a ping-pong timeout.
           resetBackoff();
-        }
-        return this.#handlePokePart(lc, downMessage);
+          return this.#onPong();
 
-      case 'pokeEnd':
-        return this.#handlePokeEnd(lc, downMessage);
+        case 'pokeStart':
+          return this.#handlePokeStart(lc, downMessage);
 
-      case 'pull':
-        return this.#handlePullResponse(lc, downMessage);
+        case 'pokePart':
+          if (downMessage[1].rowsPatch) {
+            // Receiving row data indicates that the client is in a good state
+            // and can reset the reload backoff state.
+            resetBackoff();
+          }
+          return this.#handlePokePart(lc, downMessage);
 
-      case 'deleteClients':
-        return this.#deleteClientsManager.clientsDeletedOnServer(
-          downMessage[1],
-        );
+        case 'pokeEnd':
+          return this.#handlePokeEnd(lc, downMessage);
 
-      case 'pushResponse':
-        return this.#mutationTracker.processPushResponse(downMessage[1]);
+        case 'pull':
+          return this.#handlePullResponse(lc, downMessage);
 
-      case 'transformError':
-        this.#queryManager.handleTransformErrors(downMessage[1]);
-        break;
+        case 'deleteClients':
+          return this.#deleteClientsManager.clientsDeletedOnServer(
+            downMessage[1],
+          );
 
-      case 'inspect':
-        // ignore at this layer.
-        break;
+        case 'pushResponse':
+          return this.#mutationTracker.processPushResponse(downMessage[1]);
 
-      default: {
-        const invalidMessageError = new ClientError({
-          kind: ClientErrorKind.InvalidMessage,
-          message: `Invalid message received from server: ${data}`,
-        });
-        this.#disconnect(lc, invalidMessageError);
-        return;
+        case 'transformError':
+          this.#queryManager.handleTransformErrors(downMessage[1]);
+          break;
+
+        case 'inspect':
+          // ignore at this layer.
+          break;
+
+        default:
+          unreachable(msgType);
       }
+    } catch (e) {
+      lc.error?.('Unhandled error in onOpen', e);
+      this.#disconnect(
+        lc,
+        new ClientError(
+          {
+            kind: ClientErrorKind.Internal,
+            message: getErrorMessage(e),
+          },
+          {cause: e},
+        ),
+      );
+      return;
     }
   };
 
   #onOpen = () => {
-    const l = addWebSocketIDFromSocketToLogContext(this.#socket!, this.#lc);
-    if (this.#connectStart === undefined) {
-      l.error?.('Got open event but connect start time is undefined.');
-    } else {
-      const now = Date.now();
-      const timeToOpenMs = now - this.#connectStart;
-      l.info?.('Got socket open event', {
-        navigatorOnline: navigator?.onLine,
-        timeToOpenMs,
-      });
+    let lc = this.#lc;
+    try {
+      assert(this.#socket, 'Socket is not set before onOpen');
+
+      lc = addWebSocketIDFromSocketToLogContext(this.#socket, lc);
+      if (this.#connectStart === undefined) {
+        throw new Error('Got open event but connect start time is undefined.');
+      } else {
+        const now = Date.now();
+        const timeToOpenMs = now - this.#connectStart;
+        lc.info?.('Got socket open event', {
+          navigatorOnline: navigator?.onLine,
+          timeToOpenMs,
+        });
+      }
+    } catch (e) {
+      lc.error?.('Unhandled error in onOpen', e);
+      this.#disconnect(
+        lc,
+        new ClientError(
+          {
+            kind: ClientErrorKind.Internal,
+            message: getErrorMessage(e),
+          },
+          {cause: e},
+        ),
+      );
     }
   };
 
   #onClose = (e: CloseEvent) => {
-    const lc = addWebSocketIDFromSocketToLogContext(this.#socket!, this.#lc);
-    const {code, reason, wasClean} = e;
-    if (code <= 1001) {
-      lc.info?.('Got socket close event', {code, reason, wasClean});
-    } else {
-      lc.error?.('Got unexpected socket close event', {
-        code,
-        reason,
-        wasClean,
-      });
-    }
+    let lc = this.#lc;
+    try {
+      assert(this.#socket, 'Socket is not set before onClose');
 
-    const closeError = new ClientError(
-      wasClean
-        ? {
-            kind: ClientErrorKind.CleanClose,
-            message: 'WebSocket connection closed cleanly',
-          }
-        : {
-            kind: ClientErrorKind.AbruptClose,
-            message: 'WebSocket connection closed abruptly',
-          },
-    );
-    this.#connectResolver.reject(closeError);
-    this.#disconnect(lc, closeError);
+      lc = addWebSocketIDFromSocketToLogContext(this.#socket, lc);
+      const {code, reason, wasClean} = e;
+      if (code <= 1001) {
+        lc.info?.('Got socket close event', {code, reason, wasClean});
+      } else {
+        lc.error?.('Got unexpected socket close event', {
+          code,
+          reason,
+          wasClean,
+        });
+      }
+
+      const closeError = new ClientError(
+        wasClean
+          ? {
+              kind: ClientErrorKind.CleanClose,
+              message: 'WebSocket connection closed cleanly',
+            }
+          : {
+              kind: ClientErrorKind.AbruptClose,
+              message: 'WebSocket connection closed abruptly',
+            },
+      );
+      this.#connectResolver.reject(closeError);
+      this.#disconnect(lc, closeError);
+    } catch (e) {
+      lc.error?.('Unhandled error in onClose', e);
+      const internalError = new ClientError(
+        {
+          kind: ClientErrorKind.Internal,
+          message: getErrorMessage(e),
+        },
+        {cause: e},
+      );
+      this.#connectResolver.reject(internalError);
+      this.#disconnect(lc, internalError);
+    }
   };
 
   // An error on the connection is fatal for the connection.

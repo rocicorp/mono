@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import type {OnErrorParameters} from './on-error.ts';
+import type {OnLogParameters} from './options.ts';
 
-export const ZeroLogContext = LogContext<OnErrorParameters>;
-export type ZeroLogContext = LogContext<OnErrorParameters>;
+export const ZeroLogContext = LogContext<OnLogParameters>;
+export type ZeroLogContext = LogContext<OnLogParameters>;

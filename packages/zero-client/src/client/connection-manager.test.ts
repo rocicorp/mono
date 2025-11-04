@@ -15,7 +15,7 @@ import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 const DEFAULT_TIMEOUT_MS = 5 * 60 * 1000;
 
 const sharedDisconnectError = new ClientError({
-  kind: ClientErrorKind.DisconnectTimeout,
+  kind: ClientErrorKind.Offline,
   message: 'Disconnect timed out',
 });
 
@@ -906,7 +906,7 @@ describe('ConnectionManager', () => {
 
     test('throws when state is closed with non-tolerated client error reason', () => {
       const reason = new ClientError({
-        kind: ClientErrorKind.Internal,
+        kind: ClientErrorKind.ClientClosed,
         message: 'internal failure',
       });
       const state: ConnectionState = {
@@ -938,7 +938,7 @@ describe('ConnectionManager', () => {
         message: 'clean close',
       });
       const state: ConnectionState = {
-        name: ConnectionStatus.Disconnected,
+        name: ConnectionStatus.Error,
         reason,
       };
 
@@ -951,7 +951,7 @@ describe('ConnectionManager', () => {
         message: 'disconnect internal',
       });
       const state: ConnectionState = {
-        name: ConnectionStatus.Disconnected,
+        name: ConnectionStatus.Error,
         reason,
       };
 

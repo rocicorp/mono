@@ -29,7 +29,7 @@ export interface ApplicationErrorOptions<
  * JSON-serializable `details`.
  */
 export class ApplicationError<
-  const T extends ReadonlyJSONValue | undefined = undefined,
+  const T extends ReadonlyJSONValue | undefined = ReadonlyJSONValue | undefined,
 > extends Error {
   /**
    * This maps onto errors for transform and push app-level failures.
@@ -47,6 +47,10 @@ export class ApplicationError<
 
   get details(): T {
     return this.#details;
+  }
+
+  get kind(): 'Application' {
+    return 'Application';
   }
 }
 

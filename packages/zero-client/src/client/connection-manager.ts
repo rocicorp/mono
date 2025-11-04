@@ -1,13 +1,15 @@
-import {type Resolver, resolver} from '@rocicorp/resolver';
+import {resolver, type Resolver} from '@rocicorp/resolver';
 import {Subscribable} from '../../../shared/src/subscribable.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {
   ClientError,
   isClientError,
   type AuthError,
+  type ClosedError,
+  type OfflineError,
   type ZeroError,
 } from './error.ts';
-import {ClientErrorKind} from './client-error-kind.ts';
 
 const DEFAULT_TIMEOUT_CHECK_INTERVAL_MS = 1_000;
 
@@ -33,7 +35,7 @@ const DEFAULT_TIMEOUT_CHECK_INTERVAL_MS = 1_000;
 export type ConnectionState =
   | {
       name: ConnectionStatus.Disconnected;
-      reason: ZeroError;
+      reason: OfflineError;
     }
   | {
       name: ConnectionStatus.Connecting;
@@ -54,7 +56,7 @@ export type ConnectionState =
     }
   | {
       name: ConnectionStatus.Closed;
-      reason: ZeroError;
+      reason: ClosedError;
     };
 
 export type ConnectionManagerOptions = {
@@ -181,7 +183,7 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
   /**
    * Transition to connecting state.
    *
-   * This starts the 5-minute timeout timer, but if we've entered disconnected state,
+   * This starts the timeout timer, but if we've entered disconnected state,
    * we stay there and continue retrying.
    *
    * @returns An object containing a promise that resolves on the next state change.
@@ -265,13 +267,12 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
 
   /**
    * Transition to disconnected state.
-   * This is called when the 5-minute timeout expires, or when we're intentionally
-   * disconnecting due to an error (this will eventually be a separate state, error).
+   * This is called when the timeout expires.
    * The run loop will continue trying to reconnect.
    *
    * @returns An object containing a promise that resolves on the next state change.
    */
-  disconnected(reason: ZeroError): {
+  disconnected(reason: OfflineError): {
     nextStatePromise: Promise<ConnectionState>;
   } {
     // cannot transition from closed to any other status
@@ -285,7 +286,7 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
     }
 
     // When transitioning from connected to disconnected, we've lost a connection
-    // we previously had. Clear the timeout timer so we can start a fresh 5-minute window.
+    // we previously had. Clear the timeout timer so we can start a fresh timeout window.
     if (this.#state.name === ConnectionStatus.Connected) {
       this.#connectingStartedAt = undefined;
     }
@@ -426,7 +427,7 @@ export class ConnectionManager extends Subscribable<ConnectionState> {
     if (now >= this.#state.disconnectAt) {
       this.disconnected(
         new ClientError({
-          kind: ClientErrorKind.DisconnectTimeout,
+          kind: ClientErrorKind.Offline,
           message: `Zero was unable to connect for ${Math.floor(this.#disconnectTimeoutMs / 1000)} seconds and was disconnected`,
         }),
       );

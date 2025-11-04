@@ -1,9 +1,11 @@
 import type {LogLevel} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
+import type {MaybePromise} from '../../../shared/src/types.ts';
 import * as v from '../../../shared/src/valita.ts';
+import type {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {CustomMutatorDefs} from './custom.ts';
-import type {OnError} from './on-error.ts';
+import type {ZeroError} from './error.ts';
 import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 
 /**
@@ -165,11 +167,32 @@ export interface ZeroOptions<
   pingTimeoutMs?: number | undefined;
 
   /**
-   * This gets called when the Zero instance encounters an error. The default
-   * behavior is to log the error to the console. Provide your own function to
-   * prevent the default behavior.
+   * Invoked whenever Zero encounters an error.
+   *
+   * The argument is either an error originating from the server/zero-cache,
+   * client error (offline transitions, ping timeouts, websocket errors, etc),
+   * or an application error (e.g. a custom mutator error).
+   *
+   * Use this callback only to surface errors in your metrics/telemetry - use the
+   * `zero.connection` API for handling errors in the UI.
+   *
+   * When `onError` is omitted, Zero logs the error to the browser console.
    */
-  onError?: OnError | undefined;
+  onError?: (error: ZeroError | ApplicationError) => MaybePromise<void>;
+
+  /**
+   * Receives every log message emitted by Zero.
+   *
+   * Supplying this hook lets you forward logs to your own logger or telemetry
+   * pipeline.
+   *
+   * When `onLog` is omitted, Zero logs the message to the browser console.
+   */
+  onLog?: (
+    level: LogLevel,
+    message: string,
+    ...rest: unknown[]
+  ) => MaybePromise<void>;
 
   /**
    * Determines what kind of storage implementation to use on the client.
@@ -285,3 +308,5 @@ export const updateNeededReasonTypeSchema: v.Type<UpdateNeededReason['type']> =
     UpdateNeededReasonType.VersionNotSupported,
     UpdateNeededReasonType.SchemaVersionNotSupported,
   );
+
+export type OnLogParameters = [message: string, ...rest: unknown[]];

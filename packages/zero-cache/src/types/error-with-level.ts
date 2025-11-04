@@ -21,7 +21,11 @@ export class ProtocolErrorWithLevel extends ProtocolError {
 }
 
 export function getLogLevel(error: unknown): LogLevel {
-  return error instanceof ProtocolErrorWithLevel ? error.logLevel : 'error';
+  return error instanceof ProtocolErrorWithLevel
+    ? error.logLevel
+    : isProtocolError(error)
+      ? 'warn'
+      : 'error';
 }
 
 export function wrapWithProtocolError(error: unknown): ProtocolError {

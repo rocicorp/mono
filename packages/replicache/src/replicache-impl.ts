@@ -1470,14 +1470,6 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         return {
           client: result,
           server: trackingData.serverPromise,
-          // oxlint-disable-next-line no-thenable
-          then: (onFulfilled, onRejected) => {
-            this.#lc.warn?.(
-              'Awaiting the mutator result directly is being deprecated.' +
-                ' Please use `await z.mutate[mutatorName].client` or `await result.mutate[mutatorName].server`',
-            );
-            return result.then(onFulfilled, onRejected);
-          },
         };
       }
 

@@ -2,7 +2,7 @@ import {renderHook} from '@solidjs/testing-library';
 import {afterEach, describe, expect, test, vi, type Mock} from 'vitest';
 import type {ConnectionState} from '../../zero-client/src/client/connection-manager.ts';
 import {ConnectionStatus} from '../../zero-client/src/client/connection-status.ts';
-import type {ZeroError} from '../../zero-client/src/client/error.ts';
+import {ClientError} from '../../zero-client/src/client/error.ts';
 
 vi.mock('./use-zero.ts', () => ({
   useZero: vi.fn(),
@@ -10,6 +10,7 @@ vi.mock('./use-zero.ts', () => ({
 
 import {useZero} from './use-zero.ts';
 import {useZeroConnectionState} from './use-zero-connection-state.ts';
+import {ClientErrorKind} from '../../zero-client/src/client/client-error-kind.ts';
 
 type ZeroLike = {
   connection: {
@@ -71,10 +72,12 @@ describe('useZeroConnectionState (Solid)', () => {
     expect(subscribeMock).toHaveBeenCalledTimes(1);
     expect(result()).toEqual(initialState);
 
-    const offlineReason = new Error('offline') as unknown as ZeroError;
     const nextState: ConnectionState = {
       name: ConnectionStatus.Disconnected,
-      reason: offlineReason,
+      reason: new ClientError({
+        kind: ClientErrorKind.Offline,
+        message: 'disconnected',
+      }),
     };
 
     stateStore.current = nextState;
