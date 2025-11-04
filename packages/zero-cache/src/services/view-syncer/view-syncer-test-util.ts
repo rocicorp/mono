@@ -679,6 +679,9 @@ export async function setup(
   const config = {
     getQueries: queryConfig,
     adminPassword: TEST_ADMIN_PASSWORD,
+    app: {
+      id: 'this_app',
+    },
     replica: {
       file: replicaDbFile.path,
     },

@@ -4,7 +4,10 @@ import {Queue} from '../../../../shared/src/queue.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
-import type {InspectDownMessage} from '../../../../zero-protocol/src/inspect-down.ts';
+import type {
+  InspectAnalyzeQueryDown,
+  InspectDownMessage,
+} from '../../../../zero-protocol/src/inspect-down.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import type {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
@@ -21,6 +24,7 @@ import {
   ISSUES_QUERY,
   messages,
   nextPoke,
+  permissions,
   permissionsAll,
   serviceID,
   setup,
@@ -618,6 +622,172 @@ describe('view-syncer/service', () => {
       });
 
       expect(transformSpy).toHaveBeenCalledOnce();
+    });
+  });
+
+  describe('applyPermissions with restrictive rules', () => {
+    let restrictiveReplicaDbFile: DbFile;
+    let restrictiveCvrDB: PostgresDB;
+    let restrictiveUpstreamDb: PostgresDB;
+    let restrictiveStateChanges: Subscription<ReplicaState>;
+    let restrictiveVs: ViewSyncerService;
+    let restrictiveViewSyncerDone: Promise<void>;
+    let restrictiveConnectWithQueueAndSource: (
+      ctx: SyncContext,
+      desiredQueriesPatch: UpQueriesPatch,
+      clientSchema?: ClientSchema,
+      activeClients?: string[],
+    ) => {
+      queue: Queue<Downstream>;
+      source: Source<Downstream>;
+    };
+    let restrictiveDelegate: InspectorDelegate;
+
+    beforeEach<PgTest>(async ({testDBs}) => {
+      ({
+        replicaDbFile: restrictiveReplicaDbFile,
+        cvrDB: restrictiveCvrDB,
+        upstreamDb: restrictiveUpstreamDb,
+        stateChanges: restrictiveStateChanges,
+        vs: restrictiveVs,
+        viewSyncerDone: restrictiveViewSyncerDone,
+        connectWithQueueAndSource: restrictiveConnectWithQueueAndSource,
+        inspectorDelegate: restrictiveDelegate,
+      } = await setup(
+        testDBs,
+        'view_syncer_restrictive_permissions_test',
+        permissions,
+      ));
+
+      restrictiveDelegate.setAuthenticated(serviceID);
+
+      return async () => {
+        vi.useRealTimers();
+        await restrictiveVs.stop();
+        await restrictiveViewSyncerDone;
+        await testDBs.drop(restrictiveCvrDB, restrictiveUpstreamDb);
+        restrictiveReplicaDbFile.delete();
+        restrictiveDelegate.clearAuthenticated(serviceID);
+      };
+    });
+
+    test('actual permission filter is added to AST', async () => {
+      // This test uses restrictive permissions that require authData.role = 'admin'
+      // to see issues. We'll verify that the permission filter is actually added
+      // to the AST when permissions are applied.
+
+      const {queue: client} = restrictiveConnectWithQueueAndSource(
+        SYNC_CONTEXT,
+        [],
+      );
+
+      await nextPoke(client);
+      restrictiveStateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+      await expectNoPokes(client);
+
+      const inspectId = 'test-restrictive-permissions-ast';
+
+      await restrictiveVs.inspect(SYNC_CONTEXT, [
+        'inspect',
+        {
+          op: 'analyze-query',
+          id: inspectId,
+          ast: ISSUES_QUERY,
+          options: {},
+        },
+      ]);
+
+      const msg = (await client.dequeue()) as InspectDownMessage;
+      expect(msg[0]).toBe('inspect');
+      expect(msg[1]).toMatchObject({
+        id: inspectId,
+        op: 'analyze-query',
+      });
+
+      const result = (msg[1] as InspectAnalyzeQueryDown).value;
+
+      // The key assertion: the afterPermissions should include the permission filter
+      // The restrictive permissions require authData.role = 'admin' to see issues
+      // Since no auth data is provided, the filter will be: WHERE NULL = 'admin'
+      // The permission filter is added as a second .where() clause:
+      // .where(null, "admin") which is the authData.role = 'admin' check
+      // with null substituted for the missing authData.role value
+      expect(result.afterPermissions).toMatchInlineSnapshot(`
+        "issues
+          .where("id", "IN", ["1", "2", "3", "4"])
+          .where(null, "admin")
+          .orderBy("id", "asc")
+        "
+      `);
+
+      // There should be a warning about no auth data
+      expect(result.warnings).toContain(
+        'No auth data provided. Permission rules will compare to `NULL` wherever an auth data field is referenced.',
+      );
+    });
+
+    test('permission filter with auth data substitutes actual values', async () => {
+      // Create a sync context with tokenData that includes role='admin'
+      const ADMIN_SYNC_CONTEXT: SyncContext = {
+        ...SYNC_CONTEXT,
+        tokenData: {
+          raw: JSON.stringify({
+            sub: 'user-123',
+            role: 'admin',
+            iat: Date.now(),
+          }),
+          decoded: {
+            sub: 'user-123',
+            role: 'admin',
+            iat: Date.now(),
+          },
+        },
+      };
+
+      const {queue: client} = restrictiveConnectWithQueueAndSource(
+        ADMIN_SYNC_CONTEXT,
+        [],
+      );
+
+      await nextPoke(client);
+      restrictiveStateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+      await expectNoPokes(client);
+
+      const inspectId = 'test-restrictive-permissions-with-auth';
+
+      await restrictiveVs.inspect(ADMIN_SYNC_CONTEXT, [
+        'inspect',
+        {
+          op: 'analyze-query',
+          id: inspectId,
+          ast: ISSUES_QUERY,
+          options: {},
+        },
+      ]);
+
+      const msg = (await client.dequeue()) as InspectDownMessage;
+      expect(msg[0]).toBe('inspect');
+      expect(msg[1]).toMatchObject({
+        id: inspectId,
+        op: 'analyze-query',
+      });
+
+      const result = (msg[1] as InspectAnalyzeQueryDown).value;
+
+      // With auth data provided where role='admin', the permission filter
+      // should substitute the actual value: .where("admin", "admin")
+      expect(result.afterPermissions).toMatchInlineSnapshot(`
+        "issues
+          .where("id", "IN", ["1", "2", "3", "4"])
+          .where("admin", "admin")
+          .orderBy("id", "asc")
+        "
+      `);
+
+      // No warning since auth data was provided
+      expect(result.warnings).toEqual([]);
     });
   });
 });

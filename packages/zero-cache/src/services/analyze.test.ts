@@ -148,10 +148,7 @@ describe('analyzeQuery', () => {
     vi.mocked(runAst).mockResolvedValue(mockResult);
     vi.mocked(explainQueries).mockReturnValue({});
 
-    const result = await analyzeQuery(lc, mockConfig, simpleAST, {
-      syncedRows: false,
-      vendedRows: true,
-    });
+    const result = await analyzeQuery(lc, mockConfig, simpleAST, false, true);
 
     expect(runAst).toHaveBeenCalledWith(
       lc,
@@ -351,11 +348,6 @@ describe('analyzeQuery', () => {
   });
 
   test('passes through all analyze options correctly', async () => {
-    const options = {
-      syncedRows: false,
-      vendedRows: true,
-    };
-
     vi.mocked(runAst).mockResolvedValue({
       warnings: [],
       syncedRowCount: 0,
@@ -363,13 +355,16 @@ describe('analyzeQuery', () => {
       end: 1010,
     });
 
-    await analyzeQuery(lc, mockConfig, simpleAST, options);
+    await analyzeQuery(lc, mockConfig, simpleAST, false, true);
 
     expect(runAst).toHaveBeenCalledWith(
       lc,
       simpleAST,
       true,
-      expect.objectContaining(options),
+      expect.objectContaining({
+        syncedRows: false,
+        vendedRows: true,
+      }),
     );
   });
 
