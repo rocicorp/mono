@@ -1,12 +1,15 @@
 import type {LogContext} from '@rocicorp/logger';
 import {unreachable} from '../../../../shared/src/asserts.ts';
 import type {InspectUpBody} from '../../../../zero-protocol/src/inspect-up.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
+import {loadPermissions} from '../../auth/load-permissions.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import {
   getServerVersion,
   isAdminPasswordValid,
 } from '../../config/zero-config.ts';
 import type {HeaderOptions} from '../../custom/fetch.ts';
+import {StatementRunner} from '../../db/statements.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {analyzeQuery} from '../analyze.ts';
 import type {ClientHandler} from './client-handler.ts';
@@ -24,6 +27,7 @@ export async function handleInspect(
   config: NormalizedZeroConfig,
   headerOptions: HeaderOptions,
   userQueryURL: string | undefined,
+  authData: string | undefined,
 ): Promise<void> {
   // Check if the client is already authenticated. We only authenticate the clientGroup
   // once per "worker".
@@ -103,6 +107,7 @@ export async function handleInspect(
 
       case 'analyze-query': {
         let ast = body.ast ?? body.value;
+        let legacyQuery = true;
 
         if (ast === undefined && body.name && body.args) {
           // Get the AST from the API server by transforming the named query
@@ -112,6 +117,7 @@ export async function handleInspect(
             headerOptions,
             userQueryURL,
           );
+          legacyQuery = false;
         }
 
         if (ast === undefined) {
@@ -119,7 +125,30 @@ export async function handleInspect(
             'AST is required for analyze-query operation. Either provide an AST directly or ensure custom query transformation is configured.',
           );
         }
-        const result = await analyzeQuery(lc, config, ast, body.options);
+
+        let permissions;
+        if (legacyQuery) {
+          using db = new Database(lc, config.replica.file);
+          const dbRunner = new StatementRunner(db);
+          const loaded = loadPermissions(lc, dbRunner, config.app.id);
+          if (loaded.permissions) {
+            permissions = loaded.permissions;
+          } else {
+            lc.info?.(
+              'No permissions loaded; analyze-query will run without applying permissions.',
+            );
+          }
+        }
+
+        const result = await analyzeQuery(
+          lc,
+          config,
+          ast,
+          body.options?.syncedRows,
+          body.options?.vendedRows,
+          permissions,
+          authData,
+        );
         client.sendInspectResponse(lc, {
           op: 'analyze-query',
           id: body.id,
