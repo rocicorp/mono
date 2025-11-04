@@ -1898,6 +1898,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#config,
       this.#getHeaderOptions(this.#queryConfig.forwardCookies ?? false),
       this.userQueryURL,
+      this.#authData?.raw,
     );
   };
 

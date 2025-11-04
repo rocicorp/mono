@@ -5,6 +5,7 @@ import * as valita from '../../../shared/src/valita.ts';
 import type {AnalyzeQueryResult} from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {astSchema} from '../../../zero-protocol/src/ast.ts';
+import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
 import {Debug} from '../../../zql/src/builder/debug-delegate.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import {Database} from '../../../zqlite/src/db.ts';
@@ -45,16 +46,14 @@ export async function handleAnalyzeQueryRequest(
   await res.send(result);
 }
 
-type AnalyzeQueryOptions = {
-  syncedRows?: boolean | undefined;
-  vendedRows?: boolean | undefined;
-};
-
 export async function analyzeQuery(
   lc: LogContext,
   config: NormalizedZeroConfig,
   ast: AST,
-  options: AnalyzeQueryOptions = {},
+  syncedRows = true,
+  vendedRows = false,
+  permissions?: PermissionsConfig,
+  authData?: string,
 ): Promise<AnalyzeQueryResult> {
   using db = new Database(lc, config.replica.file);
   const fullTables = new Map<string, LiteTableSpec>();
@@ -63,14 +62,14 @@ export async function analyzeQuery(
 
   computeZqlSpecs(lc, db, tableSpecs, fullTables);
 
-  const {syncedRows = true, vendedRows = false} = options;
-
   const result = await runAst(lc, ast, true, {
-    applyPermissions: false,
+    applyPermissions: permissions !== undefined,
     syncedRows,
     vendedRows,
+    authData,
     db,
     tableSpecs,
+    permissions,
     host: {
       debug: new Debug(),
       getSource(tableName: string) {
