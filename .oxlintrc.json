@@ -49,12 +49,7 @@
 
     // Vitest rules uses "jest" plugin
     "jest/no-focused-tests": "error",
-    "jest/no-standalone-expect": [
-      "error",
-      {
-        "additionalTestBlockFunctions": ["test"]
-      }
-    ],
+    "jest/no-standalone-expect": "off",
 
     // Private class members (with inline disables for false positives)
     "no-unused-private-class-members": "error",
