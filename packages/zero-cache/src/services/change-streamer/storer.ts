@@ -414,7 +414,7 @@ export class Storer implements Service {
         // equal to the replica version. This is the empty changeLog scenario.
         let watermarkFound = sub.watermark === this.#replicaVersion;
         let count = 0;
-        let lastBatchConsumed: Promise<unknown> = Promise.resolve();
+        let lastBatchConsumed: Promise<unknown> | undefined;
 
         for await (const entries of tx<ChangeEntry[]>`
           SELECT watermark, change FROM ${this.#cdc('changeLog')}
@@ -429,8 +429,8 @@ export class Storer implements Service {
           const start = performance.now();
           await lastBatchConsumed;
           const elapsed = performance.now() - start;
-          if (elapsed > 1) {
-            this.#lc.info?.(
+          if (lastBatchConsumed) {
+            (elapsed > 100 ? this.#lc.info : this.#lc.debug)?.(
               `waited ${elapsed.toFixed(3)} ms for ${sub.id} to consume last batch of catchup entries`,
             );
           }
