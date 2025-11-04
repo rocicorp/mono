@@ -32,15 +32,13 @@ import type {WriteTransaction} from './replicache-types.ts';
 
 /**
  * The shape which a user's custom mutator definitions must conform to.
+ * Supports arbitrary depth nesting of namespaces.
  */
 export type CustomMutatorDefs = {
-  [namespaceOrKey: string]:
-    | {
-        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-        [key: string]: CustomMutatorImpl<any>;
-      }
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    | CustomMutatorImpl<any>;
+  [
+    namespaceOrKey: string
+  ]: // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  CustomMutatorImpl<any> | CustomMutatorDefs;
 };
 
 export type MutatorResultDetails =
@@ -93,6 +91,7 @@ export type CustomMutatorImpl<
  * but the user does not provide this arg when calling the mutator.
  *
  * This utility strips the `tx` arg from the user's custom mutator signatures.
+ * Supports arbitrary depth nesting of namespaces.
  */
 export type MakeCustomMutatorInterfaces<
   S extends Schema,
@@ -104,13 +103,9 @@ export type MakeCustomMutatorInterfaces<
     ...args: infer Args
   ) => Promise<void>
     ? (...args: Args) => MutatorResult
-    : {
-        readonly [P in keyof MD[NamespaceOrName]]: MakeCustomMutatorInterface<
-          S,
-          MD[NamespaceOrName][P],
-          TContext
-        >;
-      };
+    : MD[NamespaceOrName] extends CustomMutatorDefs
+      ? MakeCustomMutatorInterfaces<S, MD[NamespaceOrName], TContext>
+      : never;
 };
 
 export type MakeCustomMutatorInterface<
