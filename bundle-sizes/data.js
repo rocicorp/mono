@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1762180770203,
+  "lastUpdate": 1762300318325,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54529,6 +54529,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 31872,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "c@cadams.io",
+            "name": "Chase Adams",
+            "username": "0xcadams"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f61c8f1af019a4802fa3a165d007fe0971c64039",
+          "message": "feat(zero-client)!: types mutator results, adds MutatorProxy, and clean up error handling (#5117)\n\n- **Changed mutator types to be type-safe and always resolve**. The\n`.client` and `.server` now has a discriminated union very similar to\n`useQuery` (and avoids any unhandled promise rejections). This also\nmeant removing the deprecated `.then` method on mutator results.\n- Adds a `MutatorProxy` which wraps custom mutators and throws when\nConnectionManager is in `disconnected`, `error`, or `closed` states, and\nrejects all pending client/server mutations when transitioned into these\nstates.\n- Added more try-catches around zero client, to catch asserts and other\nerrors and have them put Zero into an `error` state, instead of going\nunhandled.\n- Changes `onError` to have typed errors.\n- Fixed an issue with `alreadyProcessed`: in any scenario where the\noriginal success response was lost (connection drop, reconnect race) it\nwould reject the caller’s promise even though the mutation actually\ncommitted on the server.\n- Fixed regression with default log level to be `warn` for\nProtocolErrors.\n- Added `disconnectTimeout` to ZeroOptions to configure how long Zero\nwaits until offline.",
+          "timestamp": "2025-11-04T23:43:37Z",
+          "tree_id": "9b6917ec8189ec7ff0a5a9b32a5d5037b9c4f4b7",
+          "url": "https://github.com/rocicorp/mono/commit/f61c8f1af019a4802fa3a165d007fe0971c64039"
+        },
+        "date": 1762300303648,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 301987,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54431,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111258,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31825,
             "unit": "bytes"
           }
         ]
