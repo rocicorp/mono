@@ -147,6 +147,20 @@ const user = table('user')
   ): void;
   ```
 
+- **DO NOT use dynamic imports (`await import()`) unless necessary**: Use standard static imports
+
+  ```typescript
+  // Correct - static import
+  import {createBuilder} from '../../../zql/src/query/named.ts';
+
+  // Incorrect - unnecessary dynamic import
+  const {createBuilder} = await import('../../../zql/src/query/named.ts');
+  ```
+
+  Dynamic imports are only needed for:
+  - Lazy-loading heavy modules
+  - Conditional imports based on runtime conditions
+
 - **AVOID re-exports that create cycles**: Re-exports can introduce circular dependencies between packages
 
   ```typescript

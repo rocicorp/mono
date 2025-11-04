@@ -9,6 +9,10 @@ import {
 } from '../../zero-client/src/client/bindings.ts';
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
+import type {
+  QueryErrorDetails,
+  QueryResultDetails,
+} from '../../zero-client/src/types/query-result.ts';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
@@ -16,10 +20,6 @@ import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 import {useZero} from './zero-provider.tsx';
-import type {
-  QueryErrorDetails,
-  QueryResultDetails,
-} from '../../zero-client/src/types/query-result.ts';
 
 export type QueryResult<TReturn> = readonly [
   HumanReadable<TReturn>,
