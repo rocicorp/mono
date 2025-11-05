@@ -45,7 +45,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 37 adds `elapsed` to AnalyzeQueryResult (0.25)
 // -- version 38 adds structured push/transform error responses (0.25)
 // -- version 39 removes per-transform error types and adds `message` to app error (0.25)
-export const PROTOCOL_VERSION = 39;
+// -- version 40 adds `dbRowScansByQuery` to AnalyzeQueryResult (0.25)
+export const PROTOCOL_VERSION = 40;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version

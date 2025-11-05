@@ -319,7 +319,7 @@ colorConsole.log(chalk.blue.bold('=== Query Stats: ===\n'));
 colorConsole.log(chalk.bold('total synced rows:'), result.syncedRowCount);
 showStats();
 if (config.outputVendedRows) {
-  colorConsole.log(chalk.blue.bold('=== Vended Rows: ===\n'));
+  colorConsole.log(chalk.blue.bold('=== JS Row Scan Values: ===\n'));
   for (const source of sources.values()) {
     colorConsole.log(
       chalk.bold(`${source.table}:`),
@@ -327,6 +327,21 @@ if (config.outputVendedRows) {
     );
   }
 }
+
+colorConsole.log(chalk.blue.bold('\n=== Rows Scanned (by SQLite): ===\n'));
+const nvisitCounts = debug.getNVisitCounts();
+let totalNVisit = 0;
+for (const [table, queries] of Object.entries(nvisitCounts)) {
+  colorConsole.log(chalk.bold(`${table}:`), queries);
+  for (const count of Object.values(queries)) {
+    totalNVisit += count;
+  }
+}
+colorConsole.log(
+  chalk.bold('total rows scanned:'),
+  colorRowsConsidered(totalNVisit),
+);
+
 colorConsole.log(chalk.blue.bold('\n\n=== Query Plans: ===\n'));
 const plans = explainQueries(debug.getVendedRowCounts() ?? {}, db);
 for (const [query, plan] of Object.entries(plans)) {
@@ -351,7 +366,7 @@ function showStats() {
   }
 
   colorConsole.log(
-    chalk.bold('total rows considered:'),
+    chalk.bold('Rows Read (into JS):'),
     colorRowsConsidered(totalRowsConsidered),
   );
   colorConsole.log(
