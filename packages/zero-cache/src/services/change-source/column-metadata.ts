@@ -304,8 +304,7 @@ export function metadataToLiteTypeString(metadata: ColumnMetadata): string {
  * Converts PostgreSQL ColumnSpec to structured ColumnMetadata.
  * Used during replication to populate the metadata table from upstream schema.
  *
- * This function uses the canonical liteTypeString() conversion path to ensure
- * consistency with the rest of the codebase, then parses it back to structured format.
+ * This uses the same logic as liteTypeString() to determine array/enum/notNull flags.
  */
 export function pgColumnSpecToMetadata(spec: ColumnSpec): ColumnMetadata {
   const {
@@ -316,15 +315,15 @@ export function pgColumnSpecToMetadata(spec: ColumnSpec): ColumnMetadata {
     characterMaximumLength,
   } = spec;
 
-  // Use the canonical liteTypeString() to construct the pipe-delimited format.
-  // This ensures the same enum/array/notNull logic as used throughout the codebase.
-  const liteType = liteTypeString(
-    dataType,
-    notNull,
-    (elemPgTypeClass ?? pgTypeClass) === PostgresTypeClass.Enum,
-    elemPgTypeClass !== null,
-  );
+  // Use the same logic as liteTypeString() and mapPostgresToLiteColumn()
+  const isArray = elemPgTypeClass !== null;
+  const isEnum = (elemPgTypeClass ?? pgTypeClass) === PostgresTypeClass.Enum;
 
-  // Parse it back to structured format
-  return liteTypeStringToMetadata(liteType, characterMaximumLength);
+  return {
+    upstreamType: dataType,
+    isNotNull: notNull ?? false,
+    isEnum,
+    isArray,
+    characterMaxLength: characterMaximumLength ?? null,
+  };
 }

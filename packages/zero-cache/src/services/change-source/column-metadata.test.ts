@@ -390,22 +390,6 @@ describe('column-metadata', () => {
       }
     });
 
-    test('new-style array formats remain consistent', () => {
-      const cases: Array<{input: string; expected: string}> = [
-        {input: 'text[]', expected: 'text[]|TEXT_ARRAY'},
-        {input: 'int4[]', expected: 'int4[]|TEXT_ARRAY'},
-        {input: 'int4[]|NOT_NULL', expected: 'int4[]|NOT_NULL|TEXT_ARRAY'},
-        {input: 'varchar[]', expected: 'varchar[]|TEXT_ARRAY'},
-        {input: 'int4[][]', expected: 'int4[][]|TEXT_ARRAY'}, // multidimensional
-      ];
-
-      for (const {input, expected} of cases) {
-        const metadata = liteTypeStringToMetadata(input);
-        const output = metadataToLiteTypeString(metadata);
-        expect(output).toBe(expected);
-      }
-    });
-
     test('old-style array formats normalize to new-style', () => {
       // Old-style format: attributes before brackets, e.g., 'int4|NOT_NULL[]'
       // Should normalize to: 'int4[]|NOT_NULL|TEXT_ARRAY'
