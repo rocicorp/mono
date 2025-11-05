@@ -18,6 +18,7 @@ import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../../zero-protocol/src/change-desired-queries.ts';
+import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {
   InitConnectionBody,
   InitConnectionMessage,
@@ -1684,7 +1685,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               this.#pipelines.getRow(table, rowKey),
               `Missing row ${table}:${stringify(rowKey)}`,
             );
-            const {contents} = contentsAndVersion(row);
+            const {contents} = contentsAndVersion(
+              row,
+              table,
+              this.#cvr?.clientSchema ?? null,
+            );
             patch = {type: 'row', op: 'put', id, contents};
           }
           const patchToVersion = {patch, toVersion};
@@ -1763,7 +1768,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             // IVM can output multiple versions of a row as it goes through its
             // intermediate stages. Always update the version and contents;
             // the last version will reflect the final state.
-            const {version, contents} = contentsAndVersion(row);
+            const {version, contents} = contentsAndVersion(
+              row,
+              table,
+              this.#cvr?.clientSchema ?? null,
+            );
             parsedRow.version = version;
             parsedRow.contents = contents;
           };
@@ -1973,11 +1982,43 @@ function yieldProcess() {
   return timeSliceQueue.withLock(() => new Promise(setImmediate));
 }
 
-function contentsAndVersion(row: Row) {
-  const {[ZERO_VERSION_COLUMN_NAME]: version, ...contents} = row;
+function contentsAndVersion(
+  row: Row,
+  table: string,
+  clientSchema: ClientSchema | null,
+) {
+  const {[ZERO_VERSION_COLUMN_NAME]: version, ...allContents} = row;
   if (typeof version !== 'string' || version.length === 0) {
     throw new Error(`Invalid _0_version in ${stringify(row)}`);
   }
+
+  // Filter contents to only include columns defined in the client schema.
+  // This removes unionKey columns (like those with unique indexes) that
+  // are needed internally for row identification but shouldn't be synced to clients.
+  let contents = allContents;
+  const clientCols = clientSchema?.tables[table]?.columns;
+  if (clientCols) {
+    // First check if there are any extra columns that need filtering
+    let needsFiltering = false;
+    for (const colName in allContents) {
+      if (!(colName in clientCols)) {
+        needsFiltering = true;
+        break;
+      }
+    }
+
+    // Only create a new object if we actually need to filter something
+    if (needsFiltering) {
+      const filteredContents: Row = {};
+      for (const colName of Object.keys(clientCols)) {
+        if (colName in allContents) {
+          filteredContents[colName] = allContents[colName];
+        }
+      }
+      contents = filteredContents;
+    }
+  }
+
   return {contents, version};
 }
 
