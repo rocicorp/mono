@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1762300318325,
+  "lastUpdate": 1762356933245,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54553,6 +54553,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/f61c8f1af019a4802fa3a165d007fe0971c64039"
         },
         "date": 1762300303648,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 301987,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54431,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111258,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31825,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "matt.wonlaw@gmail.com",
+            "name": "Matt Wonlaw",
+            "username": "tantaman"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": false,
+          "id": "20bf268673ecbc43d3dda5bd21374097af3d4cd0",
+          "message": "fix(analyze-query): count SQLite row scans, not what is returned to us (#5119)\n\nanalyze-query reported artificially low costs because it did not count\nrow scans done internally by SQLite.\n\nDiscovered when our planner kept giving very large estimates but\nanalyze-query kept returning low \"rows considered\"\n\n# This Query:\n```ts\nnpx analyze-query --query='issue.whereExists(\"labels\", q => q.where(\"name\", \"armor\"), {flip: true}).whereExists(\"labels\", q => q.where(\"name\", \"bug\"), {flip: true}).limit(10)' -p shared/schema.ts\n```\n\nconsider 2k rows but scans 50k rows!!!\n\n<img width=\"818\" height=\"760\" alt=\"CleanShot 2025-11-01 at 09 50 33@2x\"\nsrc=\"https://github.com/user-attachments/assets/7c648688-7a6f-4a28-9561-2bff518a8e24\"\n/>\n\n\n# The planner rightly was choosing this form instead:\n\n```ts\nnpx analyze-query --query='issue.whereExists(\"labels\", q => q.where(\"name\", \"armor\"), {flip: true}).whereExists(\"labels\", q => q.where(\"name\", \"bug\"), {flip: false}).limit(10)' -p shared/schema.ts\n```\n\nwhich is much better on rows scanned.\n\n\n<img width=\"684\" height=\"750\" alt=\"CleanShot 2025-11-01 at 09 54 45@2x\"\nsrc=\"https://github.com/user-attachments/assets/57cdd24b-8b10-4c5d-b437-8c69302aa1a6\"\n/>\n\n\nIt does however have a higher wall time, so we need to do some\ndiscounting for \"internal to sqlite scans\" vs \"scans that end up in ivm\"\n\n\nBut, otoh, the planner's form is way way better for certain label\nvalues.\n\n<img width=\"670\" height=\"512\" alt=\"CleanShot 2025-11-01 at 10 00 12@2x\"\nsrc=\"https://github.com/user-attachments/assets/d0563434-8b69-4b6d-9480-6036ecab4732\"\n/>",
+          "timestamp": "2025-11-05T15:28:20Z",
+          "tree_id": "56ecf4ac9820a616eed98045d3100f98c33bedbf",
+          "url": "https://github.com/rocicorp/mono/commit/20bf268673ecbc43d3dda5bd21374097af3d4cd0"
+        },
+        "date": 1762356918421,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
