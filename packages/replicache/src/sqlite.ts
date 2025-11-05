@@ -1,5 +1,6 @@
 export {
   clearAllNamedStoresForTesting,
+  dropAllProviderDatabases,
   dropStore,
   SQLiteStore,
   type PreparedStatement,

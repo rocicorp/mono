@@ -1,7 +1,8 @@
 import {RWLock} from '@rocicorp/lock';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {deepFreeze} from '../frozen-json.ts';
-import type {Read, Store, Write} from './store.ts';
+import {IDBDatabasesStore} from '../persist/idb-databases-store.ts';
+import type {Read, Store, StoreProvider, Write} from './store.ts';
 import {
   throwIfStoreClosed,
   throwIfTransactionClosed,
@@ -377,4 +378,25 @@ export function dropStore(
   tempDelegate.destroy();
 
   return Promise.resolve();
+}
+
+/**
+ * Drops all databases associated with a store provider.
+ *
+ * TEMPORARY: Only used for testing.
+ */
+export async function dropAllProviderDatabases(
+  storeProvider: StoreProvider,
+): Promise<void> {
+  const idbDatabasesStore = new IDBDatabasesStore(storeProvider.create);
+
+  const databases = await idbDatabasesStore.getDatabases();
+  const dbNames = Object.values(databases).map(db => db.name);
+
+  await Promise.all(
+    dbNames.map(async name => {
+      await storeProvider.drop(name);
+      await idbDatabasesStore.deleteDatabases([name]);
+    }),
+  );
 }

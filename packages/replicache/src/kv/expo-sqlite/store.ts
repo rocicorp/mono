@@ -4,7 +4,6 @@ import {
   type SQLiteDatabase as DB,
   type SQLiteStatement,
 } from 'expo-sqlite';
-import {IDBDatabasesStore} from '../../persist/idb-databases-store.ts';
 import type {
   PreparedStatement,
   SQLiteDatabase,
@@ -32,25 +31,6 @@ export function expoSQLiteStoreProvider(
       new SQLiteStore(name, name => new ExpoSQLiteDatabase(name), opts),
     drop: dropExpoSQLiteStore,
   };
-}
-
-/**
- * Drops all expo-sqlite databases associated with Replicache.
- * Useful for testing.
- */
-export async function dropAllExpoSQLiteDatabases(): Promise<void> {
-  const storeProvider = expoSQLiteStoreProvider();
-  const idbDatabasesStore = new IDBDatabasesStore(storeProvider.create);
-
-  const databases = await idbDatabasesStore.getDatabases();
-  const dbNames = Object.values(databases).map(db => db.name);
-
-  await Promise.all(
-    dbNames.map(async name => {
-      await storeProvider.drop(name);
-      await idbDatabasesStore.deleteDatabases([name]);
-    }),
-  );
 }
 
 class ExpoSQLitePreparedStatement implements PreparedStatement {
