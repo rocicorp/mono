@@ -124,6 +124,7 @@ describe('column-metadata', () => {
   });
 
   test('converts pipe notation to structured metadata', () => {
+    // Simple types
     expect(liteTypeStringToMetadata('int8')).toEqual({
       upstreamType: 'int8',
       isNotNull: false,
@@ -140,6 +141,7 @@ describe('column-metadata', () => {
       characterMaxLength: 255,
     });
 
+    // Enum types
     expect(liteTypeStringToMetadata('user_role|TEXT_ENUM')).toEqual({
       upstreamType: 'user_role',
       isNotNull: false,
@@ -148,6 +150,7 @@ describe('column-metadata', () => {
       characterMaxLength: null,
     });
 
+    // Old-style array format (backward compatibility)
     expect(liteTypeStringToMetadata('text[]')).toEqual({
       upstreamType: 'text[]',
       isNotNull: false,
@@ -160,6 +163,34 @@ describe('column-metadata', () => {
       upstreamType: 'int4[]',
       isNotNull: true,
       isEnum: false,
+      isArray: true,
+      characterMaxLength: null,
+    });
+
+    // New-style array format with |TEXT_ARRAY
+    expect(liteTypeStringToMetadata('text[]|TEXT_ARRAY')).toEqual({
+      upstreamType: 'text[]',
+      isNotNull: false,
+      isEnum: false,
+      isArray: true,
+      characterMaxLength: null,
+    });
+
+    expect(liteTypeStringToMetadata('int4[]|NOT_NULL|TEXT_ARRAY')).toEqual({
+      upstreamType: 'int4[]',
+      isNotNull: true,
+      isEnum: false,
+      isArray: true,
+      characterMaxLength: null,
+    });
+
+    // Array of enums with both flags
+    expect(
+      liteTypeStringToMetadata('user_role[]|TEXT_ENUM|TEXT_ARRAY'),
+    ).toEqual({
+      upstreamType: 'user_role[]',
+      isNotNull: false,
+      isEnum: true,
       isArray: true,
       characterMaxLength: null,
     });
@@ -381,6 +412,21 @@ describe('column-metadata', () => {
         'user_role|TEXT_ENUM',
         'status|TEXT_ENUM',
         'user_role|NOT_NULL|TEXT_ENUM',
+      ];
+
+      for (const input of cases) {
+        const metadata = liteTypeStringToMetadata(input);
+        const output = metadataToLiteTypeString(metadata);
+        expect(output).toBe(input);
+      }
+    });
+
+    test('new-style array formats remain consistent', () => {
+      const cases = [
+        'text[]|TEXT_ARRAY',
+        'int4[]|NOT_NULL|TEXT_ARRAY',
+        'varchar[]|TEXT_ARRAY',
+        'int8[]|NOT_NULL|TEXT_ARRAY',
       ];
 
       for (const input of cases) {
