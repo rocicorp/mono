@@ -17,6 +17,7 @@ import {
   nullableUpstream,
   isEnum as checkIsEnum,
   isArray as checkIsArray,
+  liteTypeString,
 } from '../../types/lite.ts';
 
 /**
@@ -291,41 +292,39 @@ export function liteTypeStringToMetadata(
  * This is a compatibility helper for the migration period.
  */
 export function metadataToLiteTypeString(metadata: ColumnMetadata): string {
-  const {upstreamType, isNotNull, isEnum, isArray} = metadata;
-
-  let typeString = upstreamType;
-  if (isNotNull) {
-    typeString += '|NOT_NULL';
-  }
-  if (isEnum) {
-    typeString += '|TEXT_ENUM';
-  }
-  if (isArray) {
-    typeString += '|TEXT_ARRAY';
-  }
-  return typeString;
+  return liteTypeString(
+    metadata.upstreamType,
+    metadata.isNotNull,
+    metadata.isEnum,
+    metadata.isArray,
+  );
 }
 
 /**
  * Converts PostgreSQL ColumnSpec to structured ColumnMetadata.
  * Used during replication to populate the metadata table from upstream schema.
+ *
+ * This function uses the canonical liteTypeString() conversion path to ensure
+ * consistency with the rest of the codebase, then parses it back to structured format.
  */
 export function pgColumnSpecToMetadata(spec: ColumnSpec): ColumnMetadata {
   const {
     dataType,
     notNull,
     pgTypeClass,
-    elemPgTypeClass,
+    elemPgTypeClass = null,
     characterMaximumLength,
   } = spec;
-  const isArray = dataType.includes('[]');
-  const isEnum = (elemPgTypeClass ?? pgTypeClass) === PostgresTypeClass.Enum;
 
-  return {
-    upstreamType: dataType,
-    isNotNull: notNull ?? false,
-    isEnum,
-    isArray,
-    characterMaxLength: characterMaximumLength ?? null,
-  };
+  // Use the canonical liteTypeString() to construct the pipe-delimited format.
+  // This ensures the same enum/array/notNull logic as used throughout the codebase.
+  const liteType = liteTypeString(
+    dataType,
+    notNull,
+    (elemPgTypeClass ?? pgTypeClass) === PostgresTypeClass.Enum,
+    elemPgTypeClass !== null,
+  );
+
+  // Parse it back to structured format
+  return liteTypeStringToMetadata(liteType, characterMaximumLength);
 }
