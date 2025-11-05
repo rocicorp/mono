@@ -33,7 +33,7 @@ import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {PullRow, Query} from '../../../zql/src/query/query.ts';
 import {bindingsForZero} from './bindings.ts';
-import type {ConnectionState} from './connection-manager.ts';
+import type {ConnectionManager, ConnectionState} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {LogOptions} from './log-options.ts';
@@ -164,10 +164,8 @@ export class TestZero<
     return promise;
   }
 
-  subscribeToConnectionStatus(listener: (state: ConnectionState) => void) {
-    return this[exposedToTestingSymbol].connectionManager().subscribe(state => {
-      listener(state);
-    });
+  get connectionManager(): ConnectionManager {
+    return this[exposedToTestingSymbol].connectionManager();
   }
 
   get socket(): Promise<MockSocket> {

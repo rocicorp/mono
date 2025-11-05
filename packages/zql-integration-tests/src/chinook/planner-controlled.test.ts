@@ -2,7 +2,7 @@
 import {describe, expect, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
-import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
+import type {AST, Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
 import {planQuery} from '../../../zql/src/planner/planner-builder.ts';
 import type {CostModelCost} from '../../../zql/src/planner/planner-connection.ts';
 import type {PlannerConstraint} from '../../../zql/src/planner/planner-constraint.ts';
@@ -15,14 +15,51 @@ function ast(q: AnyQuery) {
   return queryWithContext(q, undefined).ast;
 }
 
+/**
+ * Normalize an AST by setting all undefined flip flags to false.
+ * This matches what the planner outputs after planning.
+ */
+function normalizeFlipFlags(ast: AST): AST {
+  return {
+    ...ast,
+    where: ast.where ? normalizeConditionFlipFlags(ast.where) : undefined,
+    related: ast.related?.map(r => ({
+      ...r,
+      subquery: normalizeFlipFlags(r.subquery),
+    })),
+  };
+}
+
+function normalizeConditionFlipFlags(condition: Condition): Condition {
+  if (condition.type === 'simple') {
+    return condition;
+  }
+
+  if (condition.type === 'correlatedSubquery') {
+    return {
+      ...condition,
+      flip: condition.flip ?? false,
+      related: {
+        ...condition.related,
+        subquery: normalizeFlipFlags(condition.related.subquery),
+      },
+    };
+  }
+
+  return {
+    ...condition,
+    conditions: condition.conditions.map(normalizeConditionFlipFlags),
+  };
+}
+
 describe('one join', () => {
   test('no changes in cost', () => {
     const costModel = () => ({startupCost: 0, rows: 10});
     const unplanned = ast(builder.track.whereExists('album'));
     const planned = planQuery(unplanned, costModel);
 
-    // In the new cost model without semi-join overhead, planner keeps original order when costs are equal
-    expect(pick(planned, ['where', 'flip'])).toBe(false);
+    // All plans are same cost, planner chooses not to flip (keeps original order)
+    expect(planned).toEqual(normalizeFlipFlags(unplanned));
   });
 
   test('track.exists(album): track is more expensive', () => {
@@ -222,7 +259,7 @@ describe('no exists', () => {
     const planned = planQuery(unplanned, costModel);
 
     // No joins to plan, should be unchanged
-    expect(planned).toEqual(unplanned);
+    expect(planned).toEqual(normalizeFlipFlags(unplanned));
   });
 
   test('with related', () => {
@@ -234,7 +271,7 @@ describe('no exists', () => {
     );
     const planned = planQuery(unplanned, costModel);
     // No joins to plan, should be unchanged
-    expect(planned).toEqual(unplanned);
+    expect(planned).toEqual(normalizeFlipFlags(unplanned));
   });
 
   test('with or', () => {
@@ -246,7 +283,7 @@ describe('no exists', () => {
     );
     const planned = planQuery(unplanned, costModel);
     // No joins to plan, should be unchanged
-    expect(planned).toEqual(unplanned);
+    expect(planned).toEqual(normalizeFlipFlags(unplanned));
   });
 });
 

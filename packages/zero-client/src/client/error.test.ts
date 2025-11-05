@@ -15,7 +15,9 @@ import {
   getErrorConnectionTransition,
   isAuthError,
   isClientError,
+  isOfflineError,
   isServerError,
+  isZeroError,
   NO_STATUS_TRANSITION,
 } from './error.ts';
 
@@ -68,6 +70,31 @@ describe('ClientError', () => {
   });
 });
 
+describe('isZeroError', () => {
+  test('returns true for client errors', () => {
+    const error = new ClientError({
+      kind: ClientErrorKind.Hidden,
+      message: 'hidden',
+    });
+
+    expect(isZeroError(error)).toBe(true);
+  });
+
+  test('returns true for server errors', () => {
+    const error = new ProtocolError({
+      kind: ErrorKind.Internal,
+      message: 'internal',
+      origin: ErrorOrigin.Server,
+    });
+
+    expect(isZeroError(error)).toBe(true);
+  });
+
+  test('returns false for non-zero errors', () => {
+    expect(isZeroError(new Error('oops'))).toBe(false);
+  });
+});
+
 describe('ServerError', () => {
   test('exposes error body and metadata', () => {
     const body: ErrorBody = {
@@ -110,6 +137,28 @@ describe('ServerError', () => {
 
     expect(error.stack).toBeDefined();
     expect(error.stack).toContain('ProtocolError');
+  });
+});
+
+describe('isOfflineError', () => {
+  test('returns true for offline client errors', () => {
+    const error = new ClientError({
+      kind: ClientErrorKind.Offline,
+      message: 'offline',
+    });
+
+    expect(isOfflineError(error)).toBe(true);
+  });
+
+  test('returns false for other errors', () => {
+    const clientError = new ClientError({
+      kind: ClientErrorKind.ConnectTimeout,
+      message: 'connect timeout',
+    });
+    const genericError = new Error('boom');
+
+    expect(isOfflineError(clientError)).toBe(false);
+    expect(isOfflineError(genericError)).toBe(false);
   });
 });
 
@@ -290,7 +339,7 @@ describe('getErrorConnectionTransition', () => {
 
   test('returns disconnected status for disconnect timeout', () => {
     const error = new ClientError({
-      kind: ClientErrorKind.DisconnectTimeout,
+      kind: ClientErrorKind.Offline,
       message: 'disconnect',
     });
 

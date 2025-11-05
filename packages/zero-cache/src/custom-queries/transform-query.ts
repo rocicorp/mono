@@ -1,28 +1,29 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {TransformedAndHashed} from '../auth/read-authorizer.ts';
-import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
+import {TimedCache} from '../../../shared/src/cache.ts';
+import {getErrorMessage} from '../../../shared/src/error.ts';
+import {must} from '../../../shared/src/must.ts';
 import {
   transformResponseMessageSchema,
   type ErroredQuery,
   type TransformRequestBody,
   type TransformRequestMessage,
 } from '../../../zero-protocol/src/custom-queries.ts';
-import {
-  fetchFromAPIServer,
-  compileUrlPattern,
-  type HeaderOptions,
-} from '../custom/fetch.ts';
-import type {ShardID} from '../types/shards.ts';
-import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
-import {TimedCache} from '../../../shared/src/cache.ts';
-import {must} from '../../../shared/src/must.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {
   isProtocolError,
   type TransformFailedBody,
 } from '../../../zero-protocol/src/error.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
-import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
+import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
+import type {TransformedAndHashed} from '../auth/read-authorizer.ts';
+import {
+  compileUrlPattern,
+  fetchFromAPIServer,
+  type HeaderOptions,
+} from '../custom/fetch.ts';
+import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
+import type {ShardID} from '../types/shards.ts';
 
 /**
  * Transforms a custom query by calling the user's API server.
@@ -157,10 +158,7 @@ export class CustomQueryTransformer {
         kind: ErrorKind.TransformFailed,
         origin: ErrorOrigin.ZeroCache,
         reason: ErrorReason.Internal,
-        message:
-          e instanceof Error
-            ? e.message
-            : `An unknown error occurred while transforming queries: ${String(e)}`,
+        message: `Failed to transform queries: ${getErrorMessage(e)}`,
         queryIDs,
       } as const satisfies TransformFailedBody;
     }

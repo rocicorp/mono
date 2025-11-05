@@ -19,7 +19,7 @@ describe('ApplicationError', () => {
   test('creates error without details', () => {
     const error = new ApplicationError('Something went wrong');
     expect(error.details).toBeUndefined();
-    expectTypeOf(error.details).toEqualTypeOf<undefined>();
+    expectTypeOf(error.details).toEqualTypeOf<ReadonlyJSONValue | undefined>();
   });
 
   test('creates error with cause', () => {

@@ -6,32 +6,40 @@ import type {
 import {zeroData} from '../../../replicache/src/transactions.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
+import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ProtocolError} from '../../../zero-protocol/src/error.ts';
+import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
 import type {
   PushResponse,
   PushResponseBody,
 } from '../../../zero-protocol/src/push.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
 import {makeReplicacheMutator} from './custom.ts';
+import {ClientError, isServerError} from './error.ts';
 import {toMutationResponseKey} from './keys.ts';
-import {isServerError} from './error.ts';
 import {MutationTracker} from './mutation-tracker.ts';
 import type {WriteTransaction} from './replicache-types.ts';
-import {ProtocolError} from '../../../zero-protocol/src/error.ts';
-import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 
 const lc = createSilentLogContext();
 
 const ackMutations = () => {};
 const watch = () => () => {};
 
+// Helper to create a tracker with mocked callbacks
+function createTracker() {
+  const onFatalError = vi.fn();
+  const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+  return {tracker, onFatalError};
+}
+
 describe('MutationTracker', () => {
   const CLIENT_ID = 'test-client-1';
 
   test('tracks a mutation and resolves on success', async () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const {ephemeralID, serverPromise} = tracker.trackMutation();
     tracker.mutationIDAssigned(ephemeralID, 1);
@@ -47,13 +55,12 @@ describe('MutationTracker', () => {
 
     tracker.processPushResponse(response);
     const result = await serverPromise;
-    expect(result).toEqual({});
+    expect(result.type).toBe('success');
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
-  test('tracks a mutation and resolves with error on error', async () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+  test('tracks a mutation and rejects with error on error', async () => {
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const {serverPromise, ephemeralID} = tracker.trackMutation();
     tracker.mutationIDAssigned(ephemeralID, 1);
@@ -72,22 +79,17 @@ describe('MutationTracker', () => {
 
     tracker.processPushResponse(response);
 
-    let caughtError: unknown;
-    try {
-      await serverPromise;
-    } catch (e) {
-      caughtError = e;
-    }
+    await expect(serverPromise).rejects.toMatchObject({
+      name: 'ApplicationError',
+      message: 'server error',
+      details: undefined,
+    });
 
-    expect(caughtError).toBeInstanceOf(ApplicationError);
-    expect((caughtError as ApplicationError).message).toBe('server error');
-    expect((caughtError as ApplicationError).details).toBeUndefined();
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
   test('includes server-provided details when rejecting mutations', async () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const {serverPromise, ephemeralID} = tracker.trackMutation();
     tracker.mutationIDAssigned(ephemeralID, 1);
@@ -107,25 +109,19 @@ describe('MutationTracker', () => {
 
     tracker.processPushResponse(response);
 
-    let caughtError: unknown;
-    try {
-      await serverPromise;
-    } catch (e) {
-      caughtError = e;
-    }
-
-    expect(caughtError).toBeInstanceOf(ApplicationError);
-    expect((caughtError as ApplicationError).message).toBe('server error');
-    expect((caughtError as ApplicationError).details).toEqual({
-      source: 'server',
-      code: 42,
+    await expect(serverPromise).rejects.toMatchObject({
+      name: 'ApplicationError',
+      message: 'server error',
+      details: {
+        source: 'server',
+        code: 42,
+      },
     });
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
   test('calls onFatalError for unsupportedPushVersion and does not resolve mutations', async () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const {ephemeralID, serverPromise} = tracker.trackMutation();
     tracker.mutationIDAssigned(ephemeralID, 1);
@@ -160,8 +156,7 @@ describe('MutationTracker', () => {
   });
 
   test('emits fatal error for http push failure', () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const response: PushResponseBody = {
@@ -181,8 +176,7 @@ describe('MutationTracker', () => {
   });
 
   test('emits fatal error for ooo mutation result', async () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const {ephemeralID, serverPromise} = tracker.trackMutation();
@@ -199,9 +193,12 @@ describe('MutationTracker', () => {
 
     tracker.processPushResponse(response);
 
-    await expect(serverPromise).rejects.toMatchInlineSnapshot(
-      `[Error: Server reported an out-of-order mutation]`,
-    );
+    await expect(serverPromise).rejects.toMatchObject({
+      name: 'ProtocolError',
+      message: 'Server reported an out-of-order mutation',
+      kind: ErrorKind.InvalidPush,
+    });
+
     expect(onFatalError).toHaveBeenCalledTimes(1);
     const fatalError = onFatalError.mock.calls[0][0] as ProtocolError;
     expect(fatalError).toBeInstanceOf(ProtocolError);
@@ -209,8 +206,7 @@ describe('MutationTracker', () => {
   });
 
   test('rejects mutations from other clients', () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const mutation = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation.ephemeralID, 1);
@@ -237,8 +233,7 @@ describe('MutationTracker', () => {
   });
 
   test('handles multiple concurrent mutations', async () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const mutation1 = tracker.trackMutation();
     const mutation2 = tracker.trackMutation();
@@ -267,24 +262,19 @@ describe('MutationTracker', () => {
       mutation1.serverPromise,
       mutation2.serverPromise,
     ]);
-    expect(result1).toBe(r1);
-    expect(result2).toBe(r2);
+    expect(result1.type).toBe('success');
+    expect(result2.type).toBe('success');
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
-  test('mutation tracker size goes down each time a mutation is resolved or rejected', () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+  test('mutation tracker size goes down each time a mutation is resolved or rejected', async () => {
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
     const mutation1 = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation1.ephemeralID, 1);
 
     const mutation2 = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation2.ephemeralID, 2);
-
-    mutation2.serverPromise.catch(() => {
-      // expected
-    });
 
     const response: PushResponse = {
       mutations: [
@@ -303,13 +293,16 @@ describe('MutationTracker', () => {
     };
 
     tracker.processPushResponse(response);
+
     expect(tracker.size).toBe(0);
+
+    await expect(mutation2.serverPromise).rejects.toThrow('server error');
+
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
   test('mutations are not tracked on rebase', async () => {
-    const onFatalError = vi.fn();
-    const mt = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker: mt} = createTracker();
     mt.setClientIDAndWatch(CLIENT_ID, watch);
     const mutator = makeReplicacheMutator(
       createSilentLogContext(),
@@ -387,18 +380,11 @@ describe('MutationTracker', () => {
     // process mutations
     cb!(patches.map(p => mutationPatchToDiffOp(p)));
 
-    let r: unknown;
-    let caughtError: unknown;
-    try {
-      r = await mutation2.serverPromise;
-    } catch (e) {
-      caughtError = e;
-    }
-
-    expect(r).toBeUndefined();
-    expect(caughtError).toBeInstanceOf(ApplicationError);
-    expect((caughtError as ApplicationError).message).toBe('server error');
-    expect((caughtError as ApplicationError).details).toBeUndefined();
+    await expect(mutation2.serverPromise).rejects.toMatchObject({
+      name: 'ApplicationError',
+      message: 'server error',
+      details: undefined,
+    });
 
     tracker.lmidAdvanced(2);
 
@@ -411,8 +397,7 @@ describe('MutationTracker', () => {
   });
 
   test('tracked mutations are resolved on reconnect', async () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const mutation1 = tracker.trackMutation();
@@ -443,8 +428,7 @@ describe('MutationTracker', () => {
   });
 
   test('notified whenever the outstanding mutation count goes to 0', () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     let callCount = 0;
@@ -537,59 +521,47 @@ describe('MutationTracker', () => {
     tracker.onConnected(7);
 
     expect(callCount).toBe(3);
+    expect(onFatalError).not.toHaveBeenCalled();
   });
 
   test('mutations can be rejected before a mutation id is assigned', async () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const {ephemeralID, serverPromise} = tracker.trackMutation();
     tracker.rejectMutation(ephemeralID, new Error('test error'));
-    let caught: unknown | undefined;
 
-    try {
-      await serverPromise;
-    } catch (e) {
-      caught = e;
-    }
-
-    // the error is wrapped in an ApplicationError
-    expect(caught).toBeInstanceOf(ApplicationError);
-    expect((caught as ApplicationError).message).toBe('test error');
-    expect((caught as ApplicationError).details).toBeUndefined();
+    await expect(serverPromise).rejects.toMatchObject({
+      name: 'ApplicationError',
+      message: 'test error',
+      details: undefined,
+    });
     expect(tracker.size).toBe(0);
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
   test('mutations can be rejected locally with an unwrapped application error', async () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
+    const appError = new ApplicationError('test app error', {
+      details: {location: 'client'},
+    });
+
     const {ephemeralID, serverPromise} = tracker.trackMutation();
-    tracker.rejectMutation(
-      ephemeralID,
-      new ApplicationError('test app error', {details: {location: 'client'}}),
-    );
-    let caught: unknown | undefined;
+    tracker.rejectMutation(ephemeralID, appError);
 
-    try {
-      await serverPromise;
-    } catch (e) {
-      caught = e;
-    }
-
-    expect(caught).toBeInstanceOf(ApplicationError);
-    expect((caught as ApplicationError).message).toBe('test app error');
-    expect((caught as ApplicationError).details).toEqual({location: 'client'});
+    await expect(serverPromise).rejects.toMatchObject({
+      name: 'ApplicationError',
+      message: 'test app error',
+      details: {location: 'client'},
+    });
     expect(tracker.size).toBe(0);
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
-  test('trying to resolve a mutation with an a unassigned ephemeral id throws', () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+  test('trying to resolve a mutation with an unassigned ephemeral id does not throw', () => {
+    const {tracker} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     tracker.trackMutation();
@@ -601,14 +573,133 @@ describe('MutationTracker', () => {
         },
       ],
     };
-    expect(() => tracker.processPushResponse(response)).toThrow(
-      'ephemeral ID is missing. This can happen if a mutation response is received twice but it should be impossible to receive a success response twice for the same mutation.',
-    );
+    expect(() => tracker.processPushResponse(response)).not.toThrow();
   });
 
-  test('resolve a mutation a second time with "already processed" error', () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+  test('trying to reject a mutation with an a unassigned ephemeral id does not throw', () => {
+    const {tracker} = createTracker();
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
+
+    tracker.trackMutation();
+    const response: PushResponse = {
+      mutations: [
+        {
+          id: {clientID: CLIENT_ID, id: 1},
+          result: {error: 'app', message: 'server error'},
+        },
+      ],
+    };
+    expect(() => tracker.processPushResponse(response)).not.toThrow();
+  });
+
+  test('resolves pending mutation when alreadyProcessed error received', async () => {
+    const {tracker, onFatalError} = createTracker();
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
+
+    const {ephemeralID, serverPromise} = tracker.trackMutation();
+    tracker.mutationIDAssigned(ephemeralID, 1);
+
+    tracker.processPushResponse({
+      mutations: [
+        {
+          id: {clientID: CLIENT_ID, id: 1},
+          result: {
+            error: 'alreadyProcessed',
+          },
+        },
+      ],
+    });
+
+    const result = await serverPromise;
+    expect(result.type).toBe('success');
+    expect(tracker.size).toBe(0);
+    expect(onFatalError).not.toHaveBeenCalled();
+  });
+
+  test('rejectAllOutstandingMutations rejects pending mutations and notifies listeners', async () => {
+    const {tracker, onFatalError} = createTracker();
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
+
+    let notifications = 0;
+    tracker.onAllMutationsApplied(() => {
+      notifications++;
+    });
+
+    const {ephemeralID: id1, serverPromise: promise1} = tracker.trackMutation();
+    tracker.mutationIDAssigned(id1, 1);
+
+    const {ephemeralID: id2, serverPromise: promise2} = tracker.trackMutation();
+    tracker.mutationIDAssigned(id2, 2);
+
+    const rejection = new ClientError({
+      kind: ClientErrorKind.Offline,
+      message: 'offline',
+    });
+
+    tracker.rejectAllOutstandingMutations(rejection);
+
+    await expect(promise1).rejects.toMatchObject({
+      name: 'ClientError',
+      message: 'offline',
+      errorBody: {
+        kind: ClientErrorKind.Offline,
+        message: 'offline',
+        origin: ErrorOrigin.Client,
+      },
+    });
+    await expect(promise2).rejects.toMatchObject({
+      name: 'ClientError',
+      message: 'offline',
+      errorBody: {
+        kind: ClientErrorKind.Offline,
+        message: 'offline',
+        origin: ErrorOrigin.Client,
+      },
+    });
+    expect(tracker.size).toBe(0);
+    expect(notifications).toBe(1);
+    expect(onFatalError).not.toHaveBeenCalled();
+  });
+
+  test('handles MutationOk delivered after outstanding mutations rejected', async () => {
+    const {tracker, onFatalError} = createTracker();
+    tracker.setClientIDAndWatch(CLIENT_ID, watch);
+
+    const {ephemeralID, serverPromise} = tracker.trackMutation();
+    tracker.mutationIDAssigned(ephemeralID, 1);
+
+    const rejection = new ClientError({
+      kind: ClientErrorKind.Offline,
+      message: 'offline',
+    });
+    tracker.rejectAllOutstandingMutations(rejection);
+
+    await expect(serverPromise).rejects.toMatchObject({
+      name: 'ClientError',
+      message: 'offline',
+      errorBody: {
+        kind: ClientErrorKind.Offline,
+        message: 'offline',
+        origin: ErrorOrigin.Client,
+      },
+    });
+
+    expect(() =>
+      tracker.processPushResponse({
+        mutations: [
+          {
+            id: {clientID: CLIENT_ID, id: 1},
+            result: {},
+          },
+        ],
+      }),
+    ).not.toThrow();
+
+    expect(onFatalError).not.toHaveBeenCalled();
+  });
+
+  test('ignores alreadyProcessed duplicate results after resolving once', () => {
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const {ephemeralID} = tracker.trackMutation();
@@ -641,8 +732,7 @@ describe('MutationTracker', () => {
       }),
     ).not.toThrow();
 
-    // other errors throw since we should not process a mutation more than once
-    // unless the error is an alreadyProcessed error.
+    // other errors should not throw - we should print a log and ignore them
     expect(() =>
       tracker.processPushResponse({
         mutations: [
@@ -655,13 +745,12 @@ describe('MutationTracker', () => {
           },
         ],
       }),
-    ).toThrow('ephemeral ID is missing for mutation error: app.');
+    ).not.toThrow();
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
   test('advancing lmid past outstanding lmid notifies "all mutations applied" listeners', () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const listener = vi.fn();
@@ -684,8 +773,7 @@ describe('MutationTracker', () => {
   });
 
   test('advancing lmid clears limbo mutations up to that lmid', async () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const mutation1 = tracker.trackMutation();
@@ -736,8 +824,7 @@ describe('MutationTracker', () => {
   });
 
   test('failed push causes mutations to resolve that are under the current lmid', async () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const mutation1 = tracker.trackMutation();
@@ -780,11 +867,11 @@ describe('MutationTracker', () => {
     await Promise.all([mutation1.serverPromise, mutation2.serverPromise]);
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(mutation3Resolved).toBe(false);
+    // No application errors - mutations resolved via lmid advance after fatal error
   });
 
   test('reconnecting puts outstanding mutations in limbo', async () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const mutation1 = tracker.trackMutation();
@@ -807,8 +894,7 @@ describe('MutationTracker', () => {
   });
 
   test('advancing lmid does resolve all mutations before that lmid', () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const mutation1 = tracker.trackMutation();
@@ -826,8 +912,7 @@ describe('MutationTracker', () => {
 
   describe('fatal error handling', () => {
     test('calls onFatalError for unsupportedSchemaVersion', () => {
-      const onFatalError = vi.fn();
-      const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+      const {tracker, onFatalError} = createTracker();
       tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
       tracker.processPushResponse({
@@ -848,8 +933,7 @@ describe('MutationTracker', () => {
     });
 
     test('calls onFatalError for http error', () => {
-      const onFatalError = vi.fn();
-      const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+      const {tracker, onFatalError} = createTracker();
       tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
       tracker.processPushResponse({
@@ -873,8 +957,7 @@ describe('MutationTracker', () => {
     });
 
     test('calls onFatalError for zeroPusher error', () => {
-      const onFatalError = vi.fn();
-      const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+      const {tracker, onFatalError} = createTracker();
       tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
       tracker.processPushResponse({
@@ -897,8 +980,7 @@ describe('MutationTracker', () => {
   });
 
   test('emits fatal error for unsupportedPushVersion', () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const response: PushResponseBody = {
@@ -917,8 +999,7 @@ describe('MutationTracker', () => {
   });
 
   test('emits fatal error for unsupportedSchemaVersion', () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const response: PushResponseBody = {
@@ -937,8 +1018,7 @@ describe('MutationTracker', () => {
   });
 
   test('emits fatal error for zeroPusher error', () => {
-    const onFatalError = vi.fn();
-    const tracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const {tracker, onFatalError} = createTracker();
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     const response: PushResponseBody = {

@@ -23,7 +23,7 @@ function getErrorMessageInternal(error: unknown, seen: Set<unknown>): string {
     }
 
     if ('cause' in error) {
-      const cause = (error as {cause?: unknown}).cause;
+      const {cause} = error as {cause: unknown};
       if (cause !== undefined) {
         const causeMessage = getErrorMessageInternal(cause, seen);
         if (causeMessage) {
@@ -48,7 +48,7 @@ function getErrorMessageInternal(error: unknown, seen: Set<unknown>): string {
   try {
     const json = jsonSchema.parse(error);
     return `Parsed message: ${JSON.stringify(json)}`;
-  } catch (_e) {}
+  } catch {}
 
   return `Unknown error of type ${typeof error} was thrown and the message could not be determined. See cause for details.`;
 }
@@ -58,7 +58,7 @@ export function getErrorDetails(error: unknown): ReadonlyJSONValue | undefined {
     if ('details' in error) {
       try {
         return jsonSchema.parse(error?.details);
-      } catch (_e) {}
+      } catch {}
     }
 
     if (error.name && error.name !== 'Error') {
@@ -71,12 +71,12 @@ export function getErrorDetails(error: unknown): ReadonlyJSONValue | undefined {
   if (typeof error === 'object' && error !== null && 'details' in error) {
     try {
       return jsonSchema.parse((error as {details: ReadonlyJSONValue})?.details);
-    } catch (_e) {}
+    } catch {}
   }
 
   try {
     return jsonSchema.parse(error);
-  } catch (_e) {}
+  } catch {}
 
   return undefined;
 }
