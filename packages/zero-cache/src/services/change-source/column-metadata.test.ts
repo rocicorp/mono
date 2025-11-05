@@ -320,6 +320,49 @@ describe('column-metadata', () => {
 
       expect(store.getTable('empty_table').size).toBe(0);
     });
+
+    test('skips _0_version synthetic column', () => {
+      const store = createTestStore();
+
+      const tables: LiteTableSpec[] = [
+        {
+          name: 'users',
+          columns: {
+            id: {
+              pos: 1,
+              dataType: 'int8|NOT_NULL',
+              characterMaximumLength: null,
+              notNull: true,
+              dflt: null,
+              elemPgTypeClass: null,
+            },
+            _0_version: {
+              pos: 2,
+              dataType: 'text',
+              characterMaximumLength: null,
+              notNull: false,
+              dflt: null,
+              elemPgTypeClass: null,
+            },
+          },
+          primaryKey: ['id'],
+        },
+      ];
+
+      store.populateFromExistingTables(tables);
+
+      // Should have metadata for id
+      expect(store.getColumn('users', 'id')).toEqual({
+        upstreamType: 'int8',
+        isNotNull: true,
+        isEnum: false,
+        isArray: false,
+        characterMaxLength: null,
+      });
+
+      // Should NOT have metadata for _0_version (synthetic column)
+      expect(store.getColumn('users', '_0_version')).toBeUndefined();
+    });
   });
 
   describe('edge cases', () => {

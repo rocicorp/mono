@@ -12,6 +12,7 @@
 import type {Database, Statement} from '../../../../zqlite/src/db.ts';
 import {isArrayColumn, isEnumColumn} from '../../db/pg-to-lite.ts';
 import type {ColumnSpec, LiteTableSpec} from '../../db/specs.ts';
+import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/constants.ts';
 import {
   upstreamDataType,
   nullableUpstream,
@@ -251,6 +252,10 @@ export class ColumnMetadataStore {
   populateFromExistingTables(tables: LiteTableSpec[]): void {
     for (const table of tables) {
       for (const [columnName, columnSpec] of Object.entries(table.columns)) {
+        // Skip synthetic columns that aren't from upstream PostgreSQL
+        if (columnName === ZERO_VERSION_COLUMN_NAME) {
+          continue;
+        }
         const metadata = liteTypeStringToMetadata(
           columnSpec.dataType,
           columnSpec.characterMaximumLength,
