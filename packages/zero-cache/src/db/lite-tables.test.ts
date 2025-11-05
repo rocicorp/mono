@@ -1,5 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../shared/src/must.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {
   ColumnMetadataStore,
@@ -1098,25 +1099,25 @@ describe('metadata table integration', () => {
     const store = ColumnMetadataStore.getInstance(db);
     expect(store).toBeDefined();
 
-    store!.insert('users', 'id', {
+    must(store).insert('users', 'id', {
       pos: 0,
       dataType: 'int8',
       notNull: true,
     });
 
-    store!.insert('users', 'name', {
+    must(store).insert('users', 'name', {
       pos: 1,
       dataType: 'varchar',
     });
 
-    store!.insert('users', 'tags', {
+    must(store).insert('users', 'tags', {
       pos: 2,
       dataType: 'text[]',
       notNull: true,
       elemPgTypeClass: 'b',
     });
 
-    store!.insert('users', 'status', {
+    must(store).insert('users', 'status', {
       pos: 3,
       dataType: 'user_status',
       pgTypeClass: 'e',
@@ -1154,13 +1155,13 @@ describe('metadata table integration', () => {
     expect(store).toBeDefined();
 
     // Only add metadata for 'id' and 'name', not 'email'
-    store!.insert('users', 'id', {
+    must(store).insert('users', 'id', {
       pos: 0,
       dataType: 'int4', // Different from column type!
       notNull: true,
     });
 
-    store!.insert('users', 'name', {
+    must(store).insert('users', 'name', {
       pos: 1,
       dataType: 'text', // Different from column type!
       notNull: true,
@@ -1192,13 +1193,13 @@ describe('metadata table integration', () => {
 
     // Populate metadata for enum array
     const store = ColumnMetadataStore.getInstance(db);
-    store!.insert('posts', 'id', {
+    must(store).insert('posts', 'id', {
       pos: 0,
       dataType: 'int8',
       notNull: true,
     });
 
-    store!.insert('posts', 'statuses', {
+    must(store).insert('posts', 'statuses', {
       pos: 1,
       dataType: 'status[]',
       notNull: true,

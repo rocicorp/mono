@@ -2,6 +2,7 @@ import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test} from 'vitest';
 import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {listIndexes, listTables} from '../../db/lite-tables.ts';
 import type {LiteIndexSpec, LiteTableSpec} from '../../db/specs.ts';
@@ -2260,7 +2261,7 @@ describe('replicator/column-metadata-integration', () => {
     const store = ColumnMetadataStore.getInstance(replica);
     expect(store).toBeDefined();
 
-    const idMetadata = store!.getColumn('foo', 'id');
+    const idMetadata = must(store).getColumn('foo', 'id');
     expect(idMetadata).toEqual({
       upstreamType: 'int8',
       isNotNull: false,
@@ -2269,7 +2270,7 @@ describe('replicator/column-metadata-integration', () => {
       characterMaxLength: null,
     });
 
-    const nameMetadata = store!.getColumn('foo', 'name');
+    const nameMetadata = must(store).getColumn('foo', 'name');
     expect(nameMetadata).toEqual({
       upstreamType: 'varchar',
       isNotNull: false,
@@ -2278,7 +2279,7 @@ describe('replicator/column-metadata-integration', () => {
       characterMaxLength: 255,
     });
 
-    const activeMetadata = store!.getColumn('foo', 'active');
+    const activeMetadata = must(store).getColumn('foo', 'active');
     expect(activeMetadata).toEqual({
       upstreamType: 'bool',
       isNotNull: true,
@@ -2332,11 +2333,11 @@ describe('replicator/column-metadata-integration', () => {
     expect(store).toBeDefined();
 
     // Old table name should not exist
-    expect(store!.getColumn('foo', 'id')).toBeUndefined();
-    expect(store!.getColumn('foo', 'value')).toBeUndefined();
+    expect(must(store).getColumn('foo', 'id')).toBeUndefined();
+    expect(must(store).getColumn('foo', 'value')).toBeUndefined();
 
     // New table name should have the metadata
-    expect(store!.getColumn('bar', 'id')).toEqual({
+    expect(must(store).getColumn('bar', 'id')).toEqual({
       upstreamType: 'int8',
       isNotNull: false,
       isEnum: false,
@@ -2344,7 +2345,7 @@ describe('replicator/column-metadata-integration', () => {
       characterMaxLength: null,
     });
 
-    expect(store!.getColumn('bar', 'value')).toEqual({
+    expect(must(store).getColumn('bar', 'value')).toEqual({
       upstreamType: 'text',
       isNotNull: false,
       isEnum: false,
@@ -2403,7 +2404,7 @@ describe('replicator/column-metadata-integration', () => {
     const store = ColumnMetadataStore.getInstance(replica);
     expect(store).toBeDefined();
 
-    const scoreMetadata = store!.getColumn('foo', 'score');
+    const scoreMetadata = must(store).getColumn('foo', 'score');
     expect(scoreMetadata).toEqual({
       upstreamType: 'int4',
       isNotNull: true,
@@ -2464,10 +2465,10 @@ describe('replicator/column-metadata-integration', () => {
     expect(store).toBeDefined();
 
     // Old column name should not exist
-    expect(store!.getColumn('foo', 'oldName')).toBeUndefined();
+    expect(must(store).getColumn('foo', 'oldName')).toBeUndefined();
 
     // New column name should have the metadata
-    expect(store!.getColumn('foo', 'newName')).toEqual({
+    expect(must(store).getColumn('foo', 'newName')).toEqual({
       upstreamType: 'text',
       isNotNull: false,
       isEnum: false,
@@ -2527,7 +2528,7 @@ describe('replicator/column-metadata-integration', () => {
     expect(store).toBeDefined();
 
     // Metadata should reflect the new type and nullability
-    expect(store!.getColumn('foo', 'value')).toEqual({
+    expect(must(store).getColumn('foo', 'value')).toEqual({
       upstreamType: 'int8',
       isNotNull: true,
       isEnum: false,
@@ -2584,11 +2585,11 @@ describe('replicator/column-metadata-integration', () => {
     expect(store).toBeDefined();
 
     // Dropped column metadata should not exist
-    expect(store!.getColumn('foo', 'dropMe')).toBeUndefined();
+    expect(must(store).getColumn('foo', 'dropMe')).toBeUndefined();
 
     // Other columns should still have metadata
-    expect(store!.getColumn('foo', 'id')).toBeDefined();
-    expect(store!.getColumn('foo', 'keepMe')).toBeDefined();
+    expect(must(store).getColumn('foo', 'id')).toBeDefined();
+    expect(must(store).getColumn('foo', 'keepMe')).toBeDefined();
   });
 
   test('drop table deletes all metadata', () => {
@@ -2636,12 +2637,12 @@ describe('replicator/column-metadata-integration', () => {
     expect(store).toBeDefined();
 
     // All metadata should be deleted
-    expect(store!.getColumn('foo', 'id')).toBeUndefined();
-    expect(store!.getColumn('foo', 'name')).toBeUndefined();
-    expect(store!.getColumn('foo', 'count')).toBeUndefined();
+    expect(must(store).getColumn('foo', 'id')).toBeUndefined();
+    expect(must(store).getColumn('foo', 'name')).toBeUndefined();
+    expect(must(store).getColumn('foo', 'count')).toBeUndefined();
 
     // Table should have no metadata entries
-    const tableMetadata = store!.getTable('foo');
+    const tableMetadata = must(store).getTable('foo');
     expect(tableMetadata.size).toBe(0);
   });
 
@@ -2683,7 +2684,7 @@ describe('replicator/column-metadata-integration', () => {
     const store = ColumnMetadataStore.getInstance(replica);
     expect(store).toBeDefined();
 
-    const tagsMetadata = store!.getColumn('foo', 'tags');
+    const tagsMetadata = must(store).getColumn('foo', 'tags');
     expect(tagsMetadata).toEqual({
       upstreamType: 'text[]',
       isNotNull: false,
@@ -2692,7 +2693,7 @@ describe('replicator/column-metadata-integration', () => {
       characterMaxLength: null,
     });
 
-    const statusMetadata = store!.getColumn('foo', 'status');
+    const statusMetadata = must(store).getColumn('foo', 'status');
     expect(statusMetadata).toEqual({
       upstreamType: 'user_status',
       isNotNull: false,
@@ -2732,7 +2733,7 @@ describe('replicator/column-metadata-integration', () => {
     const store = ColumnMetadataStore.getInstance(replica);
     expect(store).toBeDefined();
 
-    const tableMetadata = store!.getTable('users');
+    const tableMetadata = must(store).getTable('users');
     expect(tableMetadata.size).toBe(3);
 
     expect(tableMetadata.get('id')).toEqual({

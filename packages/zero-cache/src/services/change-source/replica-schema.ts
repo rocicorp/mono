@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {SqliteError} from '@rocicorp/zero-sqlite3';
+import {must} from '../../../../shared/src/must.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {
   runSchemaMigrations,
@@ -90,7 +91,7 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
     migrateData: (_, db) => {
       const store = ColumnMetadataStore.getInstance(db);
       const tables = listTables(db);
-      store!.populateFromExistingTables(tables);
+      must(store).populateFromExistingTables(tables);
     },
   },
 };
