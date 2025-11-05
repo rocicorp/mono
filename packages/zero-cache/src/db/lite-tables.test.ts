@@ -1099,35 +1099,27 @@ describe('metadata table integration', () => {
     expect(store).toBeDefined();
 
     store!.insert('users', 'id', {
-      upstreamType: 'int8',
-      isNotNull: true,
-      isEnum: false,
-      isArray: false,
-      characterMaxLength: null,
+      pos: 0,
+      dataType: 'int8',
+      notNull: true,
     });
 
     store!.insert('users', 'name', {
-      upstreamType: 'varchar',
-      isNotNull: false,
-      isEnum: false,
-      isArray: false,
-      characterMaxLength: null,
+      pos: 1,
+      dataType: 'varchar',
     });
 
     store!.insert('users', 'tags', {
-      upstreamType: 'text[]',
-      isNotNull: true,
-      isEnum: false,
-      isArray: true,
-      characterMaxLength: null,
+      pos: 2,
+      dataType: 'text[]',
+      notNull: true,
+      elemPgTypeClass: 'b',
     });
 
     store!.insert('users', 'status', {
-      upstreamType: 'user_status',
-      isNotNull: false,
-      isEnum: true,
-      isArray: false,
-      characterMaxLength: null,
+      pos: 3,
+      dataType: 'user_status',
+      pgTypeClass: 'e',
     });
 
     // Should read from metadata table
@@ -1163,19 +1155,15 @@ describe('metadata table integration', () => {
 
     // Only add metadata for 'id' and 'name', not 'email'
     store!.insert('users', 'id', {
-      upstreamType: 'int4', // Different from column type!
-      isNotNull: true,
-      isEnum: false,
-      isArray: false,
-      characterMaxLength: null,
+      pos: 0,
+      dataType: 'int4', // Different from column type!
+      notNull: true,
     });
 
     store!.insert('users', 'name', {
-      upstreamType: 'text', // Different from column type!
-      isNotNull: true,
-      isEnum: false,
-      isArray: false,
-      characterMaxLength: null,
+      pos: 1,
+      dataType: 'text', // Different from column type!
+      notNull: true,
     });
 
     const tables = listTables(db);
@@ -1205,19 +1193,17 @@ describe('metadata table integration', () => {
     // Populate metadata for enum array
     const store = ColumnMetadataStore.getInstance(db);
     store!.insert('posts', 'id', {
-      upstreamType: 'int8',
-      isNotNull: true,
-      isEnum: false,
-      isArray: false,
-      characterMaxLength: null,
+      pos: 0,
+      dataType: 'int8',
+      notNull: true,
     });
 
     store!.insert('posts', 'statuses', {
-      upstreamType: 'status[]',
-      isNotNull: true,
-      isEnum: true,
-      isArray: true,
-      characterMaxLength: null,
+      pos: 1,
+      dataType: 'status[]',
+      notNull: true,
+      pgTypeClass: 'e',
+      elemPgTypeClass: 'e',
     });
 
     const tables = listTables(db);

@@ -21,10 +21,7 @@ import {
 } from '../../db/pg-to-lite.ts';
 import type {LiteTableSpec} from '../../db/specs.ts';
 import type {StatementRunner} from '../../db/statements.ts';
-import {
-  ColumnMetadataStore,
-  pgColumnSpecToMetadata,
-} from '../change-source/column-metadata.ts';
+import {ColumnMetadataStore} from '../change-source/column-metadata.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {
   JSON_PARSED,
@@ -536,7 +533,7 @@ class TransactionProcessor {
     const store = ColumnMetadataStore.getInstance(this.#db.db);
     if (store) {
       for (const [colName, colSpec] of Object.entries(create.spec.columns)) {
-        store.insert(table.name, colName, pgColumnSpecToMetadata(colSpec));
+        store.insert(table.name, colName, colSpec);
       }
     }
 
@@ -571,7 +568,7 @@ class TransactionProcessor {
     // Write to metadata table
     const store = ColumnMetadataStore.getInstance(this.#db.db);
     if (store) {
-      store.insert(table, name, pgColumnSpecToMetadata(msg.column.spec));
+      store.insert(table, name, msg.column.spec);
     }
 
     this.#bumpVersions(table);
@@ -633,12 +630,7 @@ class TransactionProcessor {
     // Update metadata table
     const store = ColumnMetadataStore.getInstance(this.#db.db);
     if (store) {
-      store.update(
-        table,
-        msg.old.name,
-        msg.new.name,
-        pgColumnSpecToMetadata(msg.new.spec),
-      );
+      store.update(table, msg.old.name, msg.new.name, msg.new.spec);
     }
 
     this.#bumpVersions(table);

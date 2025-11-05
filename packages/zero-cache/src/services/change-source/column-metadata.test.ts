@@ -31,18 +31,16 @@ describe('column-metadata', () => {
     expect(store.hasTable()).toBe(true);
 
     store.insert('users', 'id', {
-      upstreamType: 'int8',
-      isNotNull: true,
-      isEnum: false,
-      isArray: false,
+      pos: 0,
+      dataType: 'int8',
+      notNull: true,
     });
 
     expect(() => {
       store.insert('users', 'id', {
-        upstreamType: 'int4',
-        isNotNull: false,
-        isEnum: false,
-        isArray: false,
+        pos: 0,
+        dataType: 'int4',
+        notNull: false,
       });
     }).toThrow();
   });
@@ -50,33 +48,33 @@ describe('column-metadata', () => {
   test('insert and read metadata', () => {
     const store = createTestStore();
 
-    const orig = {
+    store.insert('users', 'id', {
+      pos: 0,
+      dataType: 'int8',
+      notNull: true,
+    });
+
+    expect(store.getColumn('users', 'id')).toEqual({
       upstreamType: 'int8',
       isNotNull: true,
       isEnum: false,
       isArray: false,
       characterMaxLength: null,
-    };
-    store.insert('users', 'id', orig);
-
-    expect(store.getColumn('users', 'id')).toEqual(orig);
+    });
   });
 
   test('update column metadata', () => {
     const store = createTestStore();
     store.insert('users', 'name', {
-      upstreamType: 'varchar',
-      isNotNull: false,
-      isEnum: false,
-      isArray: false,
+      pos: 0,
+      dataType: 'varchar',
     });
 
     store.update('users', 'name', 'full_name', {
-      upstreamType: 'varchar',
-      isNotNull: true,
-      isEnum: false,
-      isArray: false,
-      characterMaxLength: 200,
+      pos: 0,
+      dataType: 'varchar',
+      notNull: true,
+      characterMaximumLength: 200,
     });
 
     expect(store.getColumn('users', 'full_name')).toMatchInlineSnapshot(`
@@ -93,16 +91,12 @@ describe('column-metadata', () => {
   test('delete column metadata', () => {
     const store = createTestStore();
     store.insert('users', 'id', {
-      upstreamType: 'int8',
-      isNotNull: false,
-      isEnum: false,
-      isArray: false,
+      pos: 0,
+      dataType: 'int8',
     });
     store.insert('users', 'name', {
-      upstreamType: 'varchar',
-      isNotNull: false,
-      isEnum: false,
-      isArray: false,
+      pos: 1,
+      dataType: 'varchar',
     });
 
     store.deleteColumn('users', 'name');
@@ -113,16 +107,12 @@ describe('column-metadata', () => {
   test('delete and rename table metadata', () => {
     const store = createTestStore();
     store.insert('users', 'id', {
-      upstreamType: 'int8',
-      isNotNull: false,
-      isEnum: false,
-      isArray: false,
+      pos: 0,
+      dataType: 'int8',
     });
     store.insert('posts', 'id', {
-      upstreamType: 'int8',
-      isNotNull: false,
-      isEnum: false,
-      isArray: false,
+      pos: 0,
+      dataType: 'int8',
     });
 
     store.renameTable('users', 'people');

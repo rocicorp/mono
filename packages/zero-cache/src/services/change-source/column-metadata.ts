@@ -149,7 +149,12 @@ export class ColumnMetadataStore {
     return instance;
   }
 
-  insert(
+  insert(tableName: string, columnName: string, spec: ColumnSpec): void {
+    const metadata = pgColumnSpecToMetadata(spec);
+    this.#insertMetadata(tableName, columnName, metadata);
+  }
+
+  #insertMetadata(
     tableName: string,
     columnName: string,
     metadata: ColumnMetadata,
@@ -169,8 +174,9 @@ export class ColumnMetadataStore {
     tableName: string,
     oldColumnName: string,
     newColumnName: string,
-    metadata: ColumnMetadata,
+    spec: ColumnSpec,
   ): void {
+    const metadata = pgColumnSpecToMetadata(spec);
     this.#updateStmt.run(
       newColumnName,
       metadata.upstreamType,
@@ -248,7 +254,7 @@ export class ColumnMetadataStore {
           columnSpec.dataType,
           columnSpec.characterMaximumLength,
         );
-        this.insert(table.name, columnName, metadata);
+        this.#insertMetadata(table.name, columnName, metadata);
       }
     }
   }
