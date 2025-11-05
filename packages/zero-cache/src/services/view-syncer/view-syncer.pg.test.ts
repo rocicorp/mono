@@ -2829,7 +2829,6 @@ describe('view-syncer/service', () => {
                   "big": 9007199254740991,
                   "id": "1",
                   "json": null,
-                  "newColumn": null,
                   "owner": "100",
                   "parent": null,
                   "title": "parent issue foo",
@@ -2842,7 +2841,6 @@ describe('view-syncer/service', () => {
                   "big": -9007199254740991,
                   "id": "2",
                   "json": null,
-                  "newColumn": null,
                   "owner": "101",
                   "parent": null,
                   "title": "parent issue bar",
@@ -2855,7 +2853,6 @@ describe('view-syncer/service', () => {
                   "big": 123,
                   "id": "3",
                   "json": null,
-                  "newColumn": null,
                   "owner": "102",
                   "parent": "1",
                   "title": "foo",
@@ -2868,7 +2865,6 @@ describe('view-syncer/service', () => {
                   "big": 100,
                   "id": "4",
                   "json": null,
-                  "newColumn": null,
                   "owner": "101",
                   "parent": "2",
                   "title": "bar",
@@ -2947,6 +2943,176 @@ describe('view-syncer/service', () => {
         'The "issues"."owner" column does not exist or is not one of the replicated columns: "big","id","json","parent","title".',
       origin: ErrorOrigin.ZeroCache,
     });
+  });
+
+  test('columns not in client schema are filtered from synced data', async () => {
+    // This test validates that when Postgres has extra columns not in the Zero schema,
+    // those columns are completely filtered out and don't appear in client data.
+
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'users-query', ast: USERS_QUERY},
+    ]);
+
+    // Get the initial poke
+    await nextPoke(client);
+
+    // Add an extra column to Postgres that's not in the client schema
+    replicator.processTransaction(
+      '01',
+      messages.addColumn('users', 'secretData', {dataType: 'TEXT', pos: 10}),
+    );
+    replicator.processTransaction(
+      '02',
+      messages.insert('users', {
+        id: 'u1',
+        name: 'Alice',
+        secretData: 'classified',
+      }),
+    );
+
+    // Trigger advancement to send poke to clients
+    stateChanges.push({state: 'version-ready'});
+
+    const poke = await nextPoke(client);
+    const pokeParts = poke.filter(p => p[0] === 'pokePart');
+    const rowsPatch = pokeParts.flatMap(
+      p => (p[1] as PokePartBody).rowsPatch || [],
+    );
+
+    // Find the newly inserted user row
+    const userRow = rowsPatch.find(
+      r => r.op === 'put' && r.tableName === 'users' && r.value?.id === 'u1',
+    );
+    expect(userRow).toBeDefined();
+
+    // The user row should only have columns from the client schema (id, name)
+    // It should NOT have secretData
+    expect(userRow).toMatchObject({
+      op: 'put',
+      tableName: 'users',
+      value: {
+        id: 'u1',
+        name: 'Alice',
+      },
+    });
+
+    // Explicitly verify secretData is not in the row
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((userRow as any).value).not.toHaveProperty('secretData');
+  });
+
+  test('columns with unique indexes (unionKey) are filtered from client but queries still work', async () => {
+    // This test validates that columns in unionKey (due to unique index) but not in client schema
+    // are filtered from client data, yet the system still works correctly (because unionKey columns
+    // are included in SQL queries for row identification).
+
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'users-query', ast: USERS_QUERY},
+    ]);
+
+    // Get the initial poke
+    const initialPoke = await nextPoke(client);
+    const initialParts = initialPoke.filter(p => p[0] === 'pokePart');
+    const initialRows = initialParts.flatMap(
+      p => (p[1] as PokePartBody).rowsPatch || [],
+    );
+
+    // Verify initial users don't have email field (even though it exists in DB)
+    for (const row of initialRows) {
+      if (row.op === 'put' && row.tableName === 'users') {
+        expect(row.value).not.toHaveProperty('email');
+      }
+    }
+
+    // Add email column and a unique index on it
+    replicator.processTransaction(
+      '01',
+      messages.addColumn('users', 'email', {dataType: 'TEXT', pos: 10}),
+    );
+    replicator.processTransaction(
+      '02',
+      messages.createIndex({
+        schema: 'public',
+        tableName: 'users',
+        name: 'users_email_key',
+        columns: {email: 'ASC'},
+        unique: true,
+      }),
+    );
+
+    // Insert a user with email - email should be filtered out even though it's now in unionKey
+    replicator.processTransaction(
+      '03',
+      messages.insert('users', {
+        id: 'u2',
+        name: 'Bob',
+        email: 'bob@example.com',
+      }),
+    );
+
+    // Trigger advancement
+    stateChanges.push({state: 'version-ready'});
+
+    const poke = await nextPoke(client);
+    const pokeParts = poke.filter(p => p[0] === 'pokePart');
+    const rowsPatch = pokeParts.flatMap(
+      p => (p[1] as PokePartBody).rowsPatch || [],
+    );
+
+    // Find the newly inserted user
+    const userRow = rowsPatch.find(
+      r => r.op === 'put' && r.tableName === 'users' && r.value?.id === 'u2',
+    );
+    expect(userRow).toBeDefined();
+
+    // Verify email is NOT in the client data (filtered out)
+    expect(userRow).toMatchObject({
+      op: 'put',
+      tableName: 'users',
+      value: {
+        id: 'u2',
+        name: 'Bob',
+      },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((userRow as any).value).not.toHaveProperty('email');
+
+    // Now update the user - this tests that the system still works correctly
+    // (unionKey is used internally for row identification even though it's filtered from client)
+    replicator.processTransaction(
+      '04',
+      messages.update('users', {
+        id: 'u2',
+        name: 'Bobby',
+        email: 'bob@example.com',
+      }),
+    );
+
+    stateChanges.push({state: 'version-ready'});
+
+    const poke2 = await nextPoke(client);
+    const pokeParts2 = poke2.filter(p => p[0] === 'pokePart');
+    const rowsPatch2 = pokeParts2.flatMap(
+      p => (p[1] as PokePartBody).rowsPatch || [],
+    );
+
+    // Find the updated user
+    const updatedRow = rowsPatch2.find(
+      r => r.op === 'put' && r.tableName === 'users' && r.value?.id === 'u2',
+    );
+    expect(updatedRow).toBeDefined();
+
+    // Verify the update worked and email is still filtered
+    expect(updatedRow).toMatchObject({
+      op: 'put',
+      tableName: 'users',
+      value: {
+        id: 'u2',
+        name: 'Bobby',
+      },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((updatedRow as any).value).not.toHaveProperty('email');
   });
 
   test('process advancement with lmid change, client has no queries.  See https://bugs.rocicorp.dev/issue/3628', async () => {
