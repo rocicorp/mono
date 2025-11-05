@@ -16,6 +16,26 @@ import {
   type TableSpec,
 } from './specs.ts';
 
+/**
+ * Determines if a PostgreSQL column is an enum type.
+ * This checks both the element type class (for arrays of enums) and the main type class.
+ */
+export function isEnumColumn(
+  spec: Pick<ColumnSpec, 'pgTypeClass' | 'elemPgTypeClass'>,
+): boolean {
+  return (spec.elemPgTypeClass ?? spec.pgTypeClass) === PostgresTypeClass.Enum;
+}
+
+/**
+ * Determines if a PostgreSQL column is an array type.
+ * In PostgreSQL's system, array columns have a non-null elemPgTypeClass.
+ */
+export function isArrayColumn(
+  spec: Pick<ColumnSpec, 'elemPgTypeClass'>,
+): boolean {
+  return spec.elemPgTypeClass !== null && spec.elemPgTypeClass !== undefined;
+}
+
 function zeroVersionColumnSpec(defaultVersion: string | undefined): ColumnSpec {
   return {
     pos: Number.MAX_SAFE_INTEGER, // i.e. last
@@ -93,14 +113,7 @@ export function mapPostgresToLiteColumn(
   column: {name: string; spec: ColumnSpec},
   ignoreDefault?: 'ignore-default',
 ): ColumnSpec {
-  const {
-    pos,
-    dataType,
-    pgTypeClass,
-    notNull,
-    dflt,
-    elemPgTypeClass = null,
-  } = column.spec;
+  const {pos, dataType, notNull, dflt, elemPgTypeClass = null} = column.spec;
 
   // PostgreSQL includes [] in dataType for array types (e.g., 'int4[]',
   // 'int4[][]'). liteTypeString() appends attributes:
@@ -108,8 +121,8 @@ export function mapPostgresToLiteColumn(
   const liteType = liteTypeString(
     dataType,
     notNull,
-    (elemPgTypeClass ?? pgTypeClass) === PostgresTypeClass.Enum,
-    elemPgTypeClass !== null,
+    isEnumColumn(column.spec),
+    isArrayColumn(column.spec),
   );
 
   return {

@@ -10,12 +10,14 @@
  */
 
 import type {Database, Statement} from '../../../../zqlite/src/db.ts';
-import type {LiteTableSpec} from '../../db/specs.ts';
+import {isArrayColumn, isEnumColumn} from '../../db/pg-to-lite.ts';
+import type {ColumnSpec, LiteTableSpec} from '../../db/specs.ts';
 import {
   upstreamDataType,
   nullableUpstream,
   isEnum as checkIsEnum,
   isArray as checkIsArray,
+  liteTypeString,
 } from '../../types/lite.ts';
 
 /**
@@ -148,7 +150,12 @@ export class ColumnMetadataStore {
     return instance;
   }
 
-  insert(
+  insert(tableName: string, columnName: string, spec: ColumnSpec): void {
+    const metadata = pgColumnSpecToMetadata(spec);
+    this.#insertMetadata(tableName, columnName, metadata);
+  }
+
+  #insertMetadata(
     tableName: string,
     columnName: string,
     metadata: ColumnMetadata,
@@ -168,8 +175,9 @@ export class ColumnMetadataStore {
     tableName: string,
     oldColumnName: string,
     newColumnName: string,
-    metadata: ColumnMetadata,
+    spec: ColumnSpec,
   ): void {
+    const metadata = pgColumnSpecToMetadata(spec);
     this.#updateStmt.run(
       newColumnName,
       metadata.upstreamType,
@@ -247,7 +255,7 @@ export class ColumnMetadataStore {
           columnSpec.dataType,
           columnSpec.characterMaximumLength,
         );
-        this.insert(table.name, columnName, metadata);
+        this.#insertMetadata(table.name, columnName, metadata);
       }
     }
   }
@@ -284,14 +292,26 @@ export function liteTypeStringToMetadata(
  * This is a compatibility helper for the migration period.
  */
 export function metadataToLiteTypeString(metadata: ColumnMetadata): string {
-  const {upstreamType, isNotNull, isEnum} = metadata;
+  return liteTypeString(
+    metadata.upstreamType,
+    metadata.isNotNull,
+    metadata.isEnum,
+    metadata.isArray,
+  );
+}
 
-  let typeString = upstreamType;
-  if (isNotNull) {
-    typeString += '|NOT_NULL';
-  }
-  if (isEnum) {
-    typeString += '|TEXT_ENUM';
-  }
-  return typeString;
+/**
+ * Converts PostgreSQL ColumnSpec to structured ColumnMetadata.
+ * Used during replication to populate the metadata table from upstream schema.
+ *
+ * Uses the same logic as liteTypeString() and mapPostgresToLiteColumn() via shared helpers.
+ */
+export function pgColumnSpecToMetadata(spec: ColumnSpec): ColumnMetadata {
+  return {
+    upstreamType: spec.dataType,
+    isNotNull: spec.notNull ?? false,
+    isEnum: isEnumColumn(spec),
+    isArray: isArrayColumn(spec),
+    characterMaxLength: spec.characterMaximumLength ?? null,
+  };
 }
