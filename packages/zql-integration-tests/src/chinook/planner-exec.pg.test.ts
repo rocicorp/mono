@@ -26,7 +26,6 @@ import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
 import {spearmanCorrelation} from '../helpers/correlation.ts';
 import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
-import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 
 const pgContent = await getChinook();
 
@@ -102,22 +101,15 @@ function executeAllPlanAttempts(
 
     // Enable row count tracking
     runtimeDebugFlags.trackRowCountsVended = true;
-
-    // Create Debug instance
     const debug = new Debug();
-
-    // Create a delegate with debug support
-    // We need to wrap the existing delegate to add the debug property
-    const delegateWithDebug = {
-      ...delegates.sqlite,
-      debug,
-    } as QueryDelegate<undefined>;
+    delegates.sqlite.debug = debug;
 
     try {
       // Build pipeline
+      delegates.sqlite.mapAst = undefined;
       const pipeline = buildPipeline(
         astWithFlips,
-        delegateWithDebug,
+        delegates.sqlite,
         `query-${planEvent.attemptNumber}`,
       );
 
