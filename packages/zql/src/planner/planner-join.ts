@@ -315,6 +315,8 @@ export class PlannerJoin {
     // Factor in how many child rows match a parent row.
     // E.g., if an issue has 10 comments on average then we're more
     // likely to hit a comment compared to if an issue has 1 comment on average.
+    // If an index is all nulls (no parents match any children)
+    // this will collapse to 0.
     const scaledChildSelectivity =
       1 - Math.pow(1 - child.selectivity, fanoutFactor.fanout);
 
@@ -353,7 +355,9 @@ export class PlannerJoin {
             ? parent.returnedRows
             : Math.min(
                 parent.returnedRows,
-                parent.limit / downstreamChildSelectivity,
+                downstreamChildSelectivity === 0
+                  ? 0
+                  : parent.limit / downstreamChildSelectivity,
               ),
         cost:
           parent.cost +
@@ -371,7 +375,9 @@ export class PlannerJoin {
             ? parent.returnedRows
             : Math.min(
                 parent.returnedRows * child.returnedRows,
-                parent.limit / downstreamChildSelectivity,
+                downstreamChildSelectivity === 0
+                  ? 0
+                  : parent.limit / downstreamChildSelectivity,
               ),
         cost:
           child.cost +
