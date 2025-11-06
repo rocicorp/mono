@@ -11,6 +11,7 @@ import {compile} from './internal/sql.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import type {SchemaValue} from '../../zero-types/src/schema-value.ts';
+import {SQLiteStatFanout} from './sqlite-stat-fanout.ts';
 
 /**
  * Loop information returned by SQLite's scanstatus API.
@@ -39,6 +40,7 @@ export function createSQLiteCostModel(
   db: Database,
   tableSpecs: Map<string, {zqlSpec: Record<string, SchemaValue>}>,
 ): ConnectionCostModel {
+  const fanoutEstimator = new SQLiteStatFanout(db);
   return (
     tableName: string,
     sort: Ordering,
@@ -79,7 +81,7 @@ export function createSQLiteCostModel(
       `Expected scanstatus to return at least one loop for query: ${sql}`,
     );
 
-    return estimateCost(loops);
+    return estimateCost(loops, fanoutEstimator);
   };
 }
 
@@ -159,10 +161,10 @@ function getScanstatusLoops(stmt: Statement): ScanstatusLoop[] {
 /**
  * Estimates the cost of a query based on scanstats from sqlite3_stmt_scanstatus_v2
  */
-function estimateCost(scanstats: ScanstatusLoop[]): {
-  rows: number;
-  startupCost: number;
-} {
+function estimateCost(
+  scanstats: ScanstatusLoop[],
+  fanoutEstimator: SQLiteStatFanout,
+): CostModelCost {
   // Sort by selectId to process in execution order
   const sorted = [...scanstats].sort((a, b) => a.selectId - b.selectId);
 
@@ -190,7 +192,11 @@ function estimateCost(scanstats: ScanstatusLoop[]): {
     }
   }
 
-  return {rows: totalRows, startupCost: totalCost};
+  return {
+    rows: totalRows,
+    startupCost: totalCost,
+    fanout: fanoutEstimator.getFanout,
+  };
 }
 
 export function btreeCost(rows: number): number {
