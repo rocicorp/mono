@@ -13,7 +13,7 @@ import {Zero} from '../../zero-client/src/client/zero.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import {stringCompare} from '../../shared/src/string-compare.ts';
 
-const ZeroContext = createContext<unknown | undefined>(undefined);
+export const ZeroContext = createContext<unknown | undefined>(undefined);
 
 export function useZero<
   S extends Schema,
