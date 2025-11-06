@@ -65,7 +65,8 @@ function sumRowCounts(
  * Execute all planning attempts for a query and measure estimated vs actual costs
  */
 function executeAllPlanAttempts(
-  query: ReturnType<typeof queries.track.whereExists>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query: any,
 ): PlanAttemptResult[] {
   // Get the query AST
   const ast = queryWithContext(query, undefined).ast;
@@ -175,7 +176,6 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('genre', q => q.where('name', 'Rock'))
         .limit(10),
     },
-    // currently fails
     {
       name: 'three-level join - track with album, artist, and condition',
       query: queries.track
@@ -186,6 +186,20 @@ describe('Chinook planner execution cost validation', () => {
         )
         .where('milliseconds', '>', 200000)
         .limit(10),
+    },
+    {
+      name: 'fanout test - album to tracks (high fanout)',
+      query: queries.album
+        .where('title', 'Greatest Hits')
+        .whereExists('tracks', t => t),
+    },
+    {
+      name: 'fanout test - artist to album to track (compound fanout)',
+      query: queries.artist
+        .where('name', 'Iron Maiden')
+        .whereExists('albums', album =>
+          album.whereExists('tracks', track => track),
+        ),
     },
   ])('$name', ({query}) => {
     // Execute all plan attempts and collect results
