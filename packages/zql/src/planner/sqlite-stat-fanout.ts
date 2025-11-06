@@ -1,5 +1,4 @@
 import type {Database} from '../../../zqlite/src/db.ts';
-import type {PlannerConstraint} from './planner-constraint.ts';
 
 /**
  * Result of fanout calculation from SQLite statistics.
@@ -159,11 +158,11 @@ export class SQLiteStatFanout {
    *
    * ## Compound Indexes
    *
-   * For multi-column constraints, finds indexes where ALL columns appear as an
-   * exact prefix (in order). Uses the appropriate depth in stat1/stat4.
+   * For multi-column joins, finds indexes where ALL columns appear as an
+   * exact prefix. Uses the appropriate depth in stat1/stat4.
    *
    * Example:
-   * - Constraint: `{customerId: undefined, storeId: undefined}`
+   * - Columns: `['customerId', 'storeId']`
    * - Matches index: `(customerId, storeId, date)` at depth 2
    * - Uses stat1 parts[2] or stat4 neq[1] for accurate fanout
    *
@@ -173,13 +172,10 @@ export class SQLiteStatFanout {
    * you run ANALYZE to update statistics.
    *
    * @param tableName Table containing the join column(s)
-   * @param constraint PlannerConstraint with one or more columns
+   * @param columns Array of column names (one or more columns)
    * @returns Fanout result with value and source
    */
-  getFanout(tableName: string, constraint: PlannerConstraint): FanoutResult {
-    // Extract column names from constraint
-    const columns = this.#getConstrainedColumns(constraint);
-
+  getFanout(tableName: string, columns: string[]): FanoutResult {
     // Cache key uses sorted columns for consistency
     const cacheKey = `${tableName}:${[...columns].sort().join(',')}`;
     const cached = this.#cache.get(cacheKey);
@@ -218,16 +214,6 @@ export class SQLiteStatFanout {
    */
   clearCache(): void {
     this.#cache.clear();
-  }
-
-  /**
-   * Extracts column names from constraint.
-   *
-   * @param constraint PlannerConstraint object
-   * @returns Array of column names (unsorted, preserves Object.keys() order)
-   */
-  #getConstrainedColumns(constraint: PlannerConstraint): string[] {
-    return Object.keys(constraint);
   }
 
   /**

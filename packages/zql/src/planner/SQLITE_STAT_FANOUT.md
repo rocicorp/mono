@@ -28,23 +28,17 @@ Example: 100 tasks (20 with project_id, 80 NULL)
 
 ```typescript
 import {SQLiteStatFanout} from './planner/sqlite-stat-fanout.ts';
-import type {PlannerConstraint} from './planner-constraint.ts';
 
 const calculator = new SQLiteStatFanout(db);
 
 // Single column join: posts.userId → users.id
-const singleCol: PlannerConstraint = {userId: undefined};
-const result1 = calculator.getFanout('posts', singleCol);
+const result1 = calculator.getFanout('posts', ['userId']);
 
 console.log(`Fanout: ${result1.fanout} (source: ${result1.source})`);
 // Output: "Fanout: 4 (source: stat4)"
 
 // Multi-column join: orders.(customerId, storeId)
-const multiCol: PlannerConstraint = {
-  customerId: undefined,
-  storeId: undefined,
-};
-const result2 = calculator.getFanout('orders', multiCol);
+const result2 = calculator.getFanout('orders', ['customerId', 'storeId']);
 
 console.log(`Fanout: ${result2.fanout} (source: ${result2.source})`);
 // Output: "Fanout: 2 (source: stat4)"
@@ -90,7 +84,7 @@ The class uses a three-tier fallback strategy:
 
 ```typescript
 // 100 tasks: 20 with project_id (4 per project), 80 NULL
-const result = calculator.getFanout('task', {project_id: undefined});
+const result = calculator.getFanout('task', ['project_id']);
 // { fanout: 4, source: 'stat4', nullCount: 80 }
 ```
 
@@ -98,7 +92,7 @@ const result = calculator.getFanout('task', {project_id: undefined});
 
 ```typescript
 // 30 employees evenly distributed across 3 departments
-const result = calculator.getFanout('employee', {dept_id: undefined});
+const result = calculator.getFanout('employee', ['dept_id']);
 // { fanout: 10, source: 'stat4', nullCount: 0 }
 ```
 
@@ -106,51 +100,46 @@ const result = calculator.getFanout('employee', {dept_id: undefined});
 
 ```typescript
 // No index or ANALYZE not run
-const result = calculator.getFanout('table', {column: undefined});
+const result = calculator.getFanout('table', ['column']);
 // { fanout: 3, source: 'default' }
 ```
 
 ## Compound Index Support
 
-The class supports multi-column joins using **flexible prefix matching**. Constraint columns can appear in any order as long as all are present in the first N positions of an index.
+The class supports multi-column joins using **flexible prefix matching**. Columns can appear in any order as long as all are present in the first N positions of an index.
 
 ### How It Works
 
-When you provide a `PlannerConstraint`, the class:
+When you provide an array of columns, the class:
 
-1. **Extracts columns** from the constraint object using `Object.keys()`
-2. **Finds matching index** where ALL constraint columns exist in the first N positions (order-independent)
-3. **Uses depth-based statistics** from stat1/stat4 at depth N (where N = number of constraint columns)
+1. **Finds matching index** where ALL columns exist in the first N positions (order-independent)
+2. **Uses depth-based statistics** from stat1/stat4 at depth N (where N = number of columns)
 
 ### Index Matching Rules
 
-The matching is **order-independent** when all constraint columns are present in the first N positions of an index.
+The matching is **order-independent** when all columns are present in the first N positions of an index.
 
 ```typescript
 // Given index: CREATE INDEX idx ON orders(customerId, storeId, date)
 
 // ✅ Matches at depth 1
-calculator.getFanout('orders', {customerId: undefined});
+calculator.getFanout('orders', ['customerId']);
 
 // ✅ Matches at depth 2 (both columns in first 2 positions)
-calculator.getFanout('orders', {customerId: undefined, storeId: undefined});
+calculator.getFanout('orders', ['customerId', 'storeId']);
 
 // ✅ ALSO matches at depth 2 (order doesn't matter!)
-calculator.getFanout('orders', {storeId: undefined, customerId: undefined});
+calculator.getFanout('orders', ['storeId', 'customerId']);
 
 // ✅ Matches at depth 3
-calculator.getFanout('orders', {
-  customerId: undefined,
-  storeId: undefined,
-  date: undefined,
-});
+calculator.getFanout('orders', ['customerId', 'storeId', 'date']);
 
 // ❌ Does NOT match - storeId not in first 1 position
-calculator.getFanout('orders', {storeId: undefined});
+calculator.getFanout('orders', ['storeId']);
 // Falls back to 'default' source
 
 // ❌ Does NOT match - date not in first 2 positions (gap)
-calculator.getFanout('orders', {customerId: undefined, date: undefined});
+calculator.getFanout('orders', ['customerId', 'date']);
 // Falls back to 'default' source
 ```
 
@@ -162,8 +151,8 @@ calculator.getFanout('orders', {customerId: undefined, date: undefined});
 // - CREATE INDEX idx2 ON orders(storeId, customerId)
 
 // All of these match BOTH indexes at depth 2:
-calculator.getFanout('orders', {customerId: undefined, storeId: undefined});
-calculator.getFanout('orders', {storeId: undefined, customerId: undefined});
+calculator.getFanout('orders', ['customerId', 'storeId']);
+calculator.getFanout('orders', ['storeId', 'customerId']);
 
 // The class picks the first matching index it finds
 // Both give the same fanout (combination of customerId and storeId)
@@ -179,8 +168,8 @@ Gaps are **NOT allowed** because SQLite statistics are cumulative from position 
 // Depth 2 = stats for 'a AND b' (not 'a AND c')
 // Depth 3 = stats for 'a AND b AND c'
 
-// ✅ Constraint {a, b} matches at depth 2
-// ❌ Constraint {a, c} does NOT match (c not in first 2 positions)
+// ✅ ['a', 'b'] matches at depth 2
+// ❌ ['a', 'c'] does NOT match (c not in first 2 positions)
 ```
 
 ### Stat Format Details
@@ -201,16 +190,13 @@ Gaps are **NOT allowed** because SQLite statistics are cumulative from position 
 // Schema: orders table with index (customerId, storeId)
 // Data: 100 orders, 10 customers, 5 stores, 2 orders per (customer, store) pair
 
-// Single column constraint (depth 1)
-const singleCol = calculator.getFanout('orders', {customerId: undefined});
+// Single column (depth 1)
+const singleCol = calculator.getFanout('orders', ['customerId']);
 // Result: { fanout: 10, source: 'stat4' }
 // Interpretation: 100 orders / 10 customers = 10 orders per customer
 
-// Two-column constraint (depth 2)
-const twoCol = calculator.getFanout('orders', {
-  customerId: undefined,
-  storeId: undefined,
-});
+// Two columns (depth 2)
+const twoCol = calculator.getFanout('orders', ['customerId', 'storeId']);
 // Result: { fanout: 2, source: 'stat4' }
 // Interpretation: 100 orders / 50 (customer, store) pairs = 2 orders per pair
 ```

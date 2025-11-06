@@ -48,7 +48,7 @@ describe('SQLiteStatFanout', () => {
       db.exec('ANALYZE');
       fanoutCalc = new SQLiteStatFanout(db);
 
-      const result = fanoutCalc.getFanout('task', {project_id: undefined});
+      const result = fanoutCalc.getFanout('task', ['project_id']);
 
       expect(result.source).toBe('stat4');
       expect(result.fanout).toBe(4); // 20 tasks / 5 distinct project_ids
@@ -85,7 +85,7 @@ describe('SQLiteStatFanout', () => {
       db.exec('ANALYZE');
       fanoutCalc = new SQLiteStatFanout(db);
 
-      const result = fanoutCalc.getFanout('employee', {dept_id: undefined});
+      const result = fanoutCalc.getFanout('employee', ['dept_id']);
 
       expect(result.source).toBe('stat4');
       expect(result.fanout).toBe(10); // 30 employees / 3 departments
@@ -114,7 +114,7 @@ describe('SQLiteStatFanout', () => {
       db.exec('ANALYZE');
       fanoutCalc = new SQLiteStatFanout(db);
 
-      const result = fanoutCalc.getFanout('sparse', {rare_value: undefined});
+      const result = fanoutCalc.getFanout('sparse', ['rare_value']);
 
       expect(result.source).toBe('stat4');
       // Median of samples should be low (most values appear 1-2 times)
@@ -152,7 +152,7 @@ describe('SQLiteStatFanout', () => {
       db.exec('ANALYZE');
       fanoutCalc = new SQLiteStatFanout(db);
 
-      const result = fanoutCalc.getFanout('orders', {customer_id: undefined});
+      const result = fanoutCalc.getFanout('orders', ['customer_id']);
 
       expect(result.source).toBe('stat4');
       // Median should be close to ~55, not the average of 100
@@ -182,7 +182,7 @@ describe('SQLiteStatFanout', () => {
       db.exec('ANALYZE');
       fanoutCalc = new SQLiteStatFanout(db);
 
-      const result = fanoutCalc.getFanout('ticket', {status: undefined});
+      const result = fanoutCalc.getFanout('ticket', ['status']);
 
       expect(result.source).toBe('stat4');
       expect(result.fanout).toBe(30); // 90 tickets / 3 statuses
@@ -210,7 +210,7 @@ describe('SQLiteStatFanout', () => {
       db.exec('ANALYZE');
       fanoutCalc = new SQLiteStatFanout(db);
 
-      const result = fanoutCalc.getFanout('simple', {value: undefined});
+      const result = fanoutCalc.getFanout('simple', ['value']);
 
       // Should get result from either stat4 or stat1
       expect(['stat4', 'stat1']).toContain(result.source);
@@ -234,7 +234,7 @@ describe('SQLiteStatFanout', () => {
       db.exec('ANALYZE');
       fanoutCalc = new SQLiteStatFanout(db);
 
-      const result = fanoutCalc.getFanout('no_index', {value: undefined});
+      const result = fanoutCalc.getFanout('no_index', ['value']);
 
       expect(result.source).toBe('default');
       expect(result.fanout).toBe(3); // Default value
@@ -265,7 +265,7 @@ describe('SQLiteStatFanout', () => {
 
       // Don't run ANALYZE on not_analyzed table
 
-      const result = fanoutCalc.getFanout('not_analyzed', {value: undefined});
+      const result = fanoutCalc.getFanout('not_analyzed', ['value']);
 
       expect(result.source).toBe('default');
       expect(result.fanout).toBe(3);
@@ -285,7 +285,7 @@ describe('SQLiteStatFanout', () => {
         CREATE TABLE no_stats (id INTEGER PRIMARY KEY, value INTEGER);
       `);
 
-      const result = customCalc.getFanout('no_stats', {value: undefined});
+      const result = customCalc.getFanout('no_stats', ['value']);
 
       expect(result.source).toBe('default');
       expect(result.fanout).toBe(10);
@@ -309,8 +309,8 @@ describe('SQLiteStatFanout', () => {
       db.exec('ANALYZE');
       fanoutCalc = new SQLiteStatFanout(db);
 
-      const result1 = fanoutCalc.getFanout('cached', {value: undefined});
-      const result2 = fanoutCalc.getFanout('cached', {value: undefined});
+      const result1 = fanoutCalc.getFanout('cached', ['value']);
+      const result2 = fanoutCalc.getFanout('cached', ['value']);
 
       expect(result1).toBe(result2); // Same object reference (cached)
     });
@@ -331,7 +331,7 @@ describe('SQLiteStatFanout', () => {
       db.exec('ANALYZE');
       fanoutCalc = new SQLiteStatFanout(db);
 
-      const result1 = fanoutCalc.getFanout('clearable', {value: undefined});
+      const result1 = fanoutCalc.getFanout('clearable', ['value']);
 
       // Insert more data and re-analyze
       for (let i = 101; i <= 200; i++) {
@@ -347,7 +347,7 @@ describe('SQLiteStatFanout', () => {
       // Without clearing cache, would get stale result
       fanoutCalc.clearCache();
 
-      const result2 = fanoutCalc.getFanout('clearable', {value: undefined});
+      const result2 = fanoutCalc.getFanout('clearable', ['value']);
 
       expect(result2.fanout).toBeGreaterThanOrEqual(result1.fanout);
     });
@@ -363,7 +363,7 @@ describe('SQLiteStatFanout', () => {
       db.exec('ANALYZE');
       fanoutCalc = new SQLiteStatFanout(db);
 
-      const result = fanoutCalc.getFanout('empty', {value: undefined});
+      const result = fanoutCalc.getFanout('empty', ['value']);
 
       // Should fallback to default (no stats for empty table)
       expect(result.source).toBe('default');
@@ -386,7 +386,7 @@ describe('SQLiteStatFanout', () => {
       db.exec('ANALYZE');
       fanoutCalc = new SQLiteStatFanout(db);
 
-      const result = fanoutCalc.getFanout('all_null', {value: undefined});
+      const result = fanoutCalc.getFanout('all_null', ['value']);
 
       // When all values are NULL:
       // - stat4 will have only NULL samples, so we fallback
@@ -413,8 +413,8 @@ describe('SQLiteStatFanout', () => {
       fanoutCalc = new SQLiteStatFanout(db);
 
       // Should work with different casing
-      const result1 = fanoutCalc.getFanout('case_test', {MixedCase: undefined});
-      const result2 = fanoutCalc.getFanout('case_test', {mixedcase: undefined});
+      const result1 = fanoutCalc.getFanout('case_test', ['MixedCase']);
+      const result2 = fanoutCalc.getFanout('case_test', ['mixedcase']);
 
       expect(result1.source).not.toBe('default');
       expect(result2.source).not.toBe('default');
@@ -438,7 +438,7 @@ describe('SQLiteStatFanout', () => {
       fanoutCalc = new SQLiteStatFanout(db);
 
       // Get stat4 result
-      const stat4Result = fanoutCalc.getFanout('compare', {fk: undefined});
+      const stat4Result = fanoutCalc.getFanout('compare', ['fk']);
 
       // Get stat1 result directly
       const stat1Row = db
@@ -480,7 +480,7 @@ describe('SQLiteStatFanout', () => {
       fanoutCalc = new SQLiteStatFanout(db);
 
       // Should work with single-column constraint
-      const result = fanoutCalc.getFanout('compat', {value: undefined});
+      const result = fanoutCalc.getFanout('compat', ['value']);
 
       expect(result.source).not.toBe('default');
       expect(result.fanout).toBe(10);
@@ -503,7 +503,7 @@ describe('SQLiteStatFanout', () => {
       fanoutCalc = new SQLiteStatFanout(db);
 
       // Should work with constraint object
-      const result = fanoutCalc.getFanout('compat2', {userId: undefined});
+      const result = fanoutCalc.getFanout('compat2', ['userId']);
 
       expect(result.source).not.toBe('default');
       expect(result.fanout).toBe(10);
@@ -537,7 +537,7 @@ describe('SQLiteStatFanout', () => {
       fanoutCalc = new SQLiteStatFanout(db);
 
       // Test single column (should use depth 1)
-      const single = fanoutCalc.getFanout('orders', {customerId: undefined});
+      const single = fanoutCalc.getFanout('orders', ['customerId']);
       expect(single.source).not.toBe('default');
       expect(single.fanout).toBe(10); // 100 orders / 10 customers
 
@@ -545,10 +545,7 @@ describe('SQLiteStatFanout', () => {
       fanoutCalc.clearCache();
 
       // Test both columns (should use depth 2)
-      const compound = fanoutCalc.getFanout('orders', {
-        customerId: undefined,
-        storeId: undefined,
-      });
+      const compound = fanoutCalc.getFanout('orders', ['customerId', 'storeId']);
       expect(compound.source).not.toBe('default');
       expect(compound.fanout).toBe(2); // 100 orders / 50 (customer, store) pairs
     });
@@ -583,22 +580,15 @@ describe('SQLiteStatFanout', () => {
       fanoutCalc = new SQLiteStatFanout(db);
 
       // Depth 1: tenantId only
-      const depth1 = fanoutCalc.getFanout('events', {tenantId: undefined});
+      const depth1 = fanoutCalc.getFanout('events', ['tenantId']);
       expect(depth1.fanout).toBe(60); // 120 / 2 tenants
 
       // Depth 2: tenantId + userId
-      const depth2 = fanoutCalc.getFanout('events', {
-        tenantId: undefined,
-        userId: undefined,
-      });
+      const depth2 = fanoutCalc.getFanout('events', ['tenantId', 'userId']);
       expect(depth2.fanout).toBe(12); // 120 / 10 (tenant, user) pairs
 
       // Depth 3: all three columns
-      const depth3 = fanoutCalc.getFanout('events', {
-        tenantId: undefined,
-        userId: undefined,
-        eventType: undefined,
-      });
+      const depth3 = fanoutCalc.getFanout('events', ['tenantId', 'userId', 'eventType']);
       expect(depth3.fanout).toBe(4); // 120 / 30 (tenant, user, type) tuples
     });
 
@@ -627,10 +617,7 @@ describe('SQLiteStatFanout', () => {
       fanoutCalc = new SQLiteStatFanout(db);
 
       // Should use depth 2 (appId + level)
-      const result = fanoutCalc.getFanout('logs', {
-        appId: undefined,
-        level: undefined,
-      });
+      const result = fanoutCalc.getFanout('logs', ['appId', 'level']);
 
       expect(result.source).not.toBe('default');
       expect(result.fanout).toBe(10); // 60 / 6 (app, level) pairs
@@ -658,19 +645,13 @@ describe('SQLiteStatFanout', () => {
       // With flexible matching, both {a, b} and {b, a} should match index (a, b)
       // Object.keys() returns keys in insertion order: {b, a} → ['b', 'a']
       // But flexible matching checks if both 'a' and 'b' exist in first 2 positions
-      const result1 = fanoutCalc.getFanout('flexible_order', {
-        b: undefined,
-        a: undefined,
-      });
+      const result1 = fanoutCalc.getFanout('flexible_order', ['b', 'a']);
 
       expect(result1.source).not.toBe('default');
       expect(result1.fanout).toBeGreaterThan(0);
 
       // Same result for {a, b} order
-      const result2 = fanoutCalc.getFanout('flexible_order', {
-        a: undefined,
-        b: undefined,
-      });
+      const result2 = fanoutCalc.getFanout('flexible_order', ['a', 'b']);
 
       expect(result2.source).not.toBe('default');
       expect(result2.fanout).toBeGreaterThan(0);
@@ -706,10 +687,7 @@ describe('SQLiteStatFanout', () => {
 
       // Constraint {customerId, storeId} should match index (storeId, customerId)
       // Even though order differs, both columns are in first 2 positions
-      const result = fanoutCalc.getFanout('reversed_index', {
-        customerId: undefined,
-        storeId: undefined,
-      });
+      const result = fanoutCalc.getFanout('reversed_index', ['customerId', 'storeId']);
 
       expect(result.source).not.toBe('default');
       expect(result.fanout).toBe(2); // 100 rows / 50 (store, customer) pairs
@@ -740,10 +718,7 @@ describe('SQLiteStatFanout', () => {
 
       // Constraint has a and c, but not b (gap in the middle)
       // 'c' is not in the first 2 positions, so should not match
-      const result = fanoutCalc.getFanout('partial', {
-        a: undefined,
-        c: undefined,
-      });
+      const result = fanoutCalc.getFanout('partial', ['a', 'c']);
 
       expect(result.source).toBe('default');
       expect(result.fanout).toBe(3);
@@ -768,14 +743,8 @@ describe('SQLiteStatFanout', () => {
       db.exec('ANALYZE');
       fanoutCalc = new SQLiteStatFanout(db);
 
-      const result1 = fanoutCalc.getFanout('cache_compound', {
-        x: undefined,
-        y: undefined,
-      });
-      const result2 = fanoutCalc.getFanout('cache_compound', {
-        x: undefined,
-        y: undefined,
-      });
+      const result1 = fanoutCalc.getFanout('cache_compound', ['x', 'y']);
+      const result2 = fanoutCalc.getFanout('cache_compound', ['x', 'y']);
 
       // Should return same cached object
       expect(result1).toBe(result2);
@@ -803,20 +772,14 @@ describe('SQLiteStatFanout', () => {
       fanoutCalc = new SQLiteStatFanout(db);
 
       // First query: {p, q} matches index (p, q) at depth 2
-      const result1 = fanoutCalc.getFanout('cache_order', {
-        p: undefined,
-        q: undefined,
-      });
+      const result1 = fanoutCalc.getFanout('cache_order', ['p', 'q']);
 
       expect(result1.source).not.toBe('default');
 
       // Second query: {q, p} also matches index (p, q) at depth 2 (flexible matching)
       // Cache key is the same because we sort columns for cache
       // So this returns the SAME cached object as result1
-      const result2 = fanoutCalc.getFanout('cache_order', {
-        q: undefined,
-        p: undefined,
-      });
+      const result2 = fanoutCalc.getFanout('cache_order', ['q', 'p']);
 
       // Should return same cached object (even though object key order differs)
       expect(result1).toBe(result2);
