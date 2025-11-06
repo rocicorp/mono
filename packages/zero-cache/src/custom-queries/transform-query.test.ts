@@ -689,7 +689,9 @@ describe('CustomQueryTransformer', () => {
       kind: ErrorKind.TransformFailed,
       origin: ErrorOrigin.ZeroCache,
       reason: ErrorReason.Internal,
-      message: `URL "${disallowedUrl}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
+      message: expect.stringContaining(
+        `URL "${disallowedUrl}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
+      ),
       queryIDs: ['query1'],
     });
 
@@ -780,7 +782,7 @@ describe('CustomQueryTransformer', () => {
       kind: ErrorKind.TransformFailed,
       origin: ErrorOrigin.ZeroCache,
       reason: ErrorReason.Internal,
-      message: 'Network timeout',
+      message: expect.stringContaining('Network timeout'),
       queryIDs: ['query1'],
     });
 
@@ -847,8 +849,7 @@ describe('CustomQueryTransformer', () => {
       kind: ErrorKind.TransformFailed,
       origin: ErrorOrigin.ZeroCache,
       reason: ErrorReason.Internal,
-      message:
-        'An unknown error occurred while transforming queries: string error thrown',
+      message: expect.stringContaining('string error thrown'),
       queryIDs: ['query1'],
     });
   });

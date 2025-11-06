@@ -61,6 +61,21 @@ a {
   text-decoration: inherit;
 }
 
+button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed !important;
+}
+
+textarea:disabled {
+  opacity: 0.7;
+  cursor: not-allowed !important;
+}
+
+input:disabled {
+  opacity: 0.7;
+  cursor: not-allowed !important;
+}
+
 body {
   margin: 0;
   display: flex;

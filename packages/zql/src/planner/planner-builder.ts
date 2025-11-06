@@ -236,13 +236,39 @@ function processCorrelatedSubquery(
   const planId = getPlanId();
   condition[planIdSymbol] = planId;
 
+  // Determine flippability and initial type based on flip flag and operator
+  const isNotExists = condition.op === 'NOT EXISTS';
+  const manualFlip = condition.flip;
+
+  let flippable: boolean;
+  let initialType: 'semi' | 'flipped';
+
+  if (isNotExists) {
+    // NOT EXISTS joins can never be flipped
+    flippable = false;
+    initialType = 'semi';
+  } else if (manualFlip === true) {
+    // User explicitly requested flip=true: start flipped, don't allow planner to change
+    flippable = false;
+    initialType = 'flipped';
+  } else if (manualFlip === false) {
+    // User explicitly requested flip=false: start semi, don't allow planner to change
+    flippable = false;
+    initialType = 'semi';
+  } else {
+    // flip is undefined: planner can decide
+    flippable = true;
+    initialType = 'semi';
+  }
+
   const join = new PlannerJoin(
     input,
     childEnd,
     parentConstraint,
     childConstraint,
-    condition.op !== 'NOT EXISTS',
+    flippable,
     planId,
+    initialType,
   );
   graph.joins.push(join);
 
@@ -302,7 +328,7 @@ function applyToCondition(
 
     return {
       ...condition,
-      flip: shouldFlip ? true : condition.flip,
+      flip: shouldFlip,
       related: {
         ...condition.related,
         subquery: {

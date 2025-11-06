@@ -158,6 +158,30 @@ export async function initViewSyncerSchema(
     },
   };
 
+  const migratedV14ToV15: Migration = {
+    migrateSchema: async (_, sql) => {
+      // Add new columns for storing inactivatedAt and ttl in milliseconds.
+      // This avoids postgres.js type conversion issues with TIMESTAMPTZ and INTERVAL.
+      await sql`ALTER TABLE ${sql(schema)}.desires 
+        ADD COLUMN "inactivatedAtMs" DOUBLE PRECISION`;
+      await sql`ALTER TABLE ${sql(schema)}.desires 
+        ADD COLUMN "ttlMs" DOUBLE PRECISION`;
+    },
+    // Migrate existing data: convert TIMESTAMPTZ to milliseconds for inactivatedAt
+    // and INTERVAL to milliseconds for ttl
+    // Note: EXTRACT(EPOCH FROM NULL) returns NULL, so NULL values are preserved
+    migrateData: async (lc, sql) => {
+      lc.info?.(
+        'Migrating desires.inactivatedAt to inactivatedAtMs and ttl to ttlMs',
+      );
+      await sql`
+        UPDATE ${sql(schema)}.desires
+        SET "inactivatedAtMs" = EXTRACT(EPOCH FROM "inactivatedAt") * 1000,
+            "ttlMs" = EXTRACT(EPOCH FROM "ttl") * 1000
+      `;
+    },
+  };
+
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: migrateV1toV2,
     3: migrateV2ToV3,
@@ -183,6 +207,10 @@ export async function initViewSyncerSchema(
     // from rows."clientGroupID" to rowsVersion."clientGroupID" for
     // garbage collection
     14: migratedV13ToV14,
+    // V15 adds desires."inactivatedAtTTLClock" to store TTLClock values
+    // directly as DOUBLE PRECISION, avoiding postgres.js TIMESTAMPTZ
+    // type conversion issues
+    15: migratedV14ToV15,
   };
 
   await runSchemaMigrations(

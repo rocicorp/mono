@@ -1,5 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../shared/src/must.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {
   ColumnMetadataStore,
@@ -1098,36 +1099,28 @@ describe('metadata table integration', () => {
     const store = ColumnMetadataStore.getInstance(db);
     expect(store).toBeDefined();
 
-    store!.insert('users', 'id', {
-      upstreamType: 'int8',
-      isNotNull: true,
-      isEnum: false,
-      isArray: false,
-      characterMaxLength: null,
+    must(store).insert('users', 'id', {
+      pos: 0,
+      dataType: 'int8',
+      notNull: true,
     });
 
-    store!.insert('users', 'name', {
-      upstreamType: 'varchar',
-      isNotNull: false,
-      isEnum: false,
-      isArray: false,
-      characterMaxLength: null,
+    must(store).insert('users', 'name', {
+      pos: 1,
+      dataType: 'varchar',
     });
 
-    store!.insert('users', 'tags', {
-      upstreamType: 'text[]',
-      isNotNull: true,
-      isEnum: false,
-      isArray: true,
-      characterMaxLength: null,
+    must(store).insert('users', 'tags', {
+      pos: 2,
+      dataType: 'text[]',
+      notNull: true,
+      elemPgTypeClass: 'b',
     });
 
-    store!.insert('users', 'status', {
-      upstreamType: 'user_status',
-      isNotNull: false,
-      isEnum: true,
-      isArray: false,
-      characterMaxLength: null,
+    must(store).insert('users', 'status', {
+      pos: 3,
+      dataType: 'user_status',
+      pgTypeClass: 'e',
     });
 
     // Should read from metadata table
@@ -1136,7 +1129,7 @@ describe('metadata table integration', () => {
     expect(tables).toHaveLength(1);
     expect(tables[0].columns.id.dataType).toBe('int8|NOT_NULL');
     expect(tables[0].columns.name.dataType).toBe('varchar');
-    expect(tables[0].columns.tags.dataType).toBe('text[]|NOT_NULL');
+    expect(tables[0].columns.tags.dataType).toBe('text[]|NOT_NULL|TEXT_ARRAY');
     expect(tables[0].columns.status.dataType).toBe('user_status|TEXT_ENUM');
     expect(tables[0].columns.tags.elemPgTypeClass).toBe('b');
     expect(tables[0].columns.status.elemPgTypeClass).toBe(null);
@@ -1162,20 +1155,16 @@ describe('metadata table integration', () => {
     expect(store).toBeDefined();
 
     // Only add metadata for 'id' and 'name', not 'email'
-    store!.insert('users', 'id', {
-      upstreamType: 'int4', // Different from column type!
-      isNotNull: true,
-      isEnum: false,
-      isArray: false,
-      characterMaxLength: null,
+    must(store).insert('users', 'id', {
+      pos: 0,
+      dataType: 'int4', // Different from column type!
+      notNull: true,
     });
 
-    store!.insert('users', 'name', {
-      upstreamType: 'text', // Different from column type!
-      isNotNull: true,
-      isEnum: false,
-      isArray: false,
-      characterMaxLength: null,
+    must(store).insert('users', 'name', {
+      pos: 1,
+      dataType: 'text', // Different from column type!
+      notNull: true,
     });
 
     const tables = listTables(db);
@@ -1204,27 +1193,25 @@ describe('metadata table integration', () => {
 
     // Populate metadata for enum array
     const store = ColumnMetadataStore.getInstance(db);
-    store!.insert('posts', 'id', {
-      upstreamType: 'int8',
-      isNotNull: true,
-      isEnum: false,
-      isArray: false,
-      characterMaxLength: null,
+    must(store).insert('posts', 'id', {
+      pos: 0,
+      dataType: 'int8',
+      notNull: true,
     });
 
-    store!.insert('posts', 'statuses', {
-      upstreamType: 'status[]',
-      isNotNull: true,
-      isEnum: true,
-      isArray: true,
-      characterMaxLength: null,
+    must(store).insert('posts', 'statuses', {
+      pos: 1,
+      dataType: 'status[]',
+      notNull: true,
+      pgTypeClass: 'e',
+      elemPgTypeClass: 'e',
     });
 
     const tables = listTables(db);
 
     expect(tables).toHaveLength(1);
     expect(tables[0].columns.statuses.dataType).toBe(
-      'status[]|NOT_NULL|TEXT_ENUM',
+      'status[]|NOT_NULL|TEXT_ENUM|TEXT_ARRAY',
     );
     expect(tables[0].columns.statuses.elemPgTypeClass).toBe('e');
   });

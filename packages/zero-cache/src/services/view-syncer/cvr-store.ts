@@ -15,8 +15,10 @@ import * as v from '../../../../shared/src/valita.ts';
 import {astSchema} from '../../../../zero-protocol/src/ast.ts';
 import {clientSchemaSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
+import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
 import type {InspectQueryRow} from '../../../../zero-protocol/src/inspect-down.ts';
-import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
+import {clampTTL, DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
 import {recordRowsSynced} from '../../server/anonymous-otel-start.ts';
@@ -56,8 +58,6 @@ import {
   ttlClockAsNumber,
   ttlClockFromNumber,
 } from './ttl-clock.ts';
-import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
-import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 
 export type CVRFlushStats = {
   instances: number;
@@ -259,8 +259,8 @@ export class CVRStore {
           "queryHash",
           "patchVersion",
           "deleted",
-          EXTRACT(EPOCH FROM "ttl") * 1000 AS "ttl",
-          "inactivatedAt"
+          "ttlMs" AS "ttl",
+          "inactivatedAtMs" AS "inactivatedAt"
           FROM ${this.#cvr('desires')}
           WHERE "clientGroupID" = ${id}`,
       ]);
@@ -341,6 +341,7 @@ export class CVRStore {
 
     for (const row of desiresRows) {
       const client = cvr.clients[row.clientID];
+      // Note: row.inactivatedAt is mapped from inactivatedAtMs in the SQL query
       if (client) {
         if (!row.deleted && row.inactivatedAt === null) {
           client.desiredQueryIDs.push(row.queryHash);
@@ -358,7 +359,7 @@ export class CVRStore {
       ) {
         query.clientState[row.clientID] = {
           inactivatedAt: row.inactivatedAt ?? undefined,
-          ttl: row.ttl ?? DEFAULT_TTL_MS,
+          ttl: clampTTL(row.ttl ?? DEFAULT_TTL_MS),
           version: versionFromString(row.patchVersion),
         };
       }
@@ -593,15 +594,40 @@ export class CVRStore {
       patchVersion: versionString(newVersion),
       queryHash: query.id,
 
-      // ttl is in ms but the postgres table uses INTERVAL which treats numbers as seconds
-      ttl: ttl < 0 ? null : ttl / 1000,
+      // ttl is in ms in JavaScript
+      ttl: ttl < 0 ? null : ttl,
     };
+
+    // For backward compatibility during rollout, write to both old and new columns:
+    // Old columns: inactivatedAt (TIMESTAMPTZ), ttl (INTERVAL) - need conversion ms->seconds
+    // New columns: inactivatedAtMs (DOUBLE PRECISION), ttlMs (DOUBLE PRECISION) - store ms directly (1:1 with JS)
+    const inactivatedAtTimestamp =
+      inactivatedAt === undefined
+        ? null
+        : ttlClockFromNumber(ttlClockAsNumber(inactivatedAt) / 1000);
+    const inactivatedAtMs = inactivatedAt ?? null;
+    const ttlInterval = ttl < 0 ? null : ttl / 1000; // INTERVAL needs seconds
+    const ttlMs = ttl < 0 ? null : ttl; // New column stores ms directly
+
     this.#writes.add({
       stats: {desires: 1},
       write: tx => tx`
-      INSERT INTO ${this.#cvr('desires')} ${tx(change)}
-        ON CONFLICT ("clientGroupID", "clientID", "queryHash")
-        DO UPDATE SET ${tx(change)}
+      INSERT INTO ${this.#cvr('desires')} (
+        "clientGroupID", "clientID", "queryHash", "patchVersion", "deleted",
+        "ttl", "ttlMs", "inactivatedAt", "inactivatedAtMs"
+      ) VALUES (
+        ${change.clientGroupID}, ${change.clientID}, ${change.queryHash}, 
+        ${change.patchVersion}, ${change.deleted}, ${ttlInterval}, ${ttlMs},
+        ${inactivatedAtTimestamp}, ${inactivatedAtMs}
+      )
+      ON CONFLICT ("clientGroupID", "clientID", "queryHash")
+      DO UPDATE SET
+        "patchVersion" = ${change.patchVersion},
+        "deleted" = ${change.deleted},
+        "ttl" = ${ttlInterval},
+        "ttlMs" = ${ttlMs},
+        "inactivatedAt" = ${inactivatedAtTimestamp},
+        "inactivatedAtMs" = ${inactivatedAtMs}
       `,
     });
   }
@@ -881,8 +907,8 @@ export class CVRStore {
   SELECT DISTINCT ON (d."clientID", d."queryHash")
     d."clientID",
     d."queryHash" AS "queryID",
-    COALESCE((EXTRACT(EPOCH FROM d."ttl") * 1000)::double precision, ${DEFAULT_TTL_MS}) AS "ttl",
-    (EXTRACT(EPOCH FROM d."inactivatedAt") * 1000)::double precision AS "inactivatedAt",
+    COALESCE(d."ttlMs", ${DEFAULT_TTL_MS}) AS "ttl",
+    d."inactivatedAtMs" AS "inactivatedAt",
     (SELECT COUNT(*)::INT FROM ${this.#cvr('rows')} r 
      WHERE r."clientGroupID" = d."clientGroupID" 
      AND r."refCounts" ? d."queryHash") AS "rowCount",
@@ -897,7 +923,11 @@ export class CVRStore {
    AND q."queryHash" = d."queryHash"
   WHERE d."clientGroupID" = ${clientGroupID}
     ${clientID ? tx`AND d."clientID" = ${clientID}` : tx``}
-    AND NOT (d."inactivatedAt" IS NOT NULL AND d."ttl" IS NOT NULL AND d."inactivatedAt" + d."ttl" <= to_timestamp(${ttlClockAsNumber(ttlClock) / 1000}))
+    AND NOT (
+      d."inactivatedAtMs" IS NOT NULL 
+      AND d."ttlMs" IS NOT NULL 
+      AND (d."inactivatedAtMs" + d."ttlMs") <= ${ttlClockAsNumber(ttlClock)}
+    )
   ORDER BY d."clientID", d."queryHash"`,
       );
     } finally {

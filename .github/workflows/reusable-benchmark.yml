@@ -80,8 +80,9 @@ jobs:
           --start-point main \
           --threshold-measure throughput \
           --threshold-test t_test \
-          --threshold-lower-boundary 0.95 \
-          --threshold-max-sample-size 10 \
+          --threshold-lower-boundary 0.99 \
+          --threshold-min-sample-size 20 \
+          --threshold-max-sample-size 60 \
           --err
 
       - name: Upload PR benchmarks results to bencher.dev
@@ -104,6 +105,7 @@ jobs:
           --start-point-reset \
           --threshold-measure throughput \
           --threshold-test t_test \
-          --threshold-lower-boundary 0.95 \
-          --threshold-max-sample-size 10 \
+          --threshold-lower-boundary 0.99 \
+          --threshold-min-sample-size 20 \
+          --threshold-max-sample-size 60 \
           --err

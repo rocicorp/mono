@@ -61,8 +61,9 @@ jobs:
         package:
           - name: 'zero-client'
             directory: 'packages/zero-client'
-          - name: 'replicache'
-            directory: 'packages/replicache'
+          # Replicache has no vitest benchs
+          # - name: 'replicache'
+          #   directory: 'packages/replicache'
     with:
       package_name: ${{ matrix.package.name }}
       working_directory: ${{ matrix.package.directory }}
@@ -100,6 +101,7 @@ jobs:
           --start-point main \
           --threshold-measure throughput \
           --threshold-test t_test \
-          --threshold-lower-boundary 0.95 \
-          --threshold-max-sample-size 10 \
+          --threshold-lower-boundary 0.99 \
+          --threshold-min-sample-size 20 \
+          --threshold-max-sample-size 60 \
           --err

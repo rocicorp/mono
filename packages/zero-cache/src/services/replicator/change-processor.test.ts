@@ -2,11 +2,16 @@ import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test} from 'vitest';
 import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {listIndexes, listTables} from '../../db/lite-tables.ts';
 import type {LiteIndexSpec, LiteTableSpec} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, initDB} from '../../test/lite.ts';
+import {
+  ColumnMetadataStore,
+  CREATE_COLUMN_METADATA_TABLE,
+} from '../change-source/column-metadata.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {ChangeProcessor} from './change-processor.ts';
 import {initChangeLog} from './schema/change-log.ts';
@@ -2206,5 +2211,553 @@ describe('replicator/change-processor-errors', () => {
     expect(replica.inTransaction).toBe(true);
     processor.abort(lc);
     expect(replica.inTransaction).toBe(false);
+  });
+});
+
+describe('replicator/column-metadata-integration', () => {
+  let lc: LogContext;
+  let replica: Database;
+  let processor: ChangeProcessor;
+
+  beforeEach(() => {
+    lc = createSilentLogContext();
+    replica = new Database(lc, ':memory:');
+    initReplicationState(replica, ['zero_data', 'zero_metadata'], '02');
+    initChangeLog(replica);
+
+    // Create the metadata table
+    replica.exec(CREATE_COLUMN_METADATA_TABLE);
+
+    processor = createChangeProcessor(replica);
+  });
+
+  test('create table writes metadata for all columns', () => {
+    const messages = new ReplicationMessages({foo: 'id'});
+
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0e'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.createTable({
+        schema: 'public',
+        name: 'foo',
+        columns: {
+          id: {pos: 0, dataType: 'int8'},
+          name: {pos: 1, dataType: 'varchar', characterMaximumLength: 255},
+          active: {pos: 2, dataType: 'bool', notNull: true},
+        },
+        primaryKey: ['id'],
+      }),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0e'},
+    ]);
+
+    const store = ColumnMetadataStore.getInstance(replica);
+    expect(store).toBeDefined();
+
+    const idMetadata = must(store).getColumn('foo', 'id');
+    expect(idMetadata).toEqual({
+      upstreamType: 'int8',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    });
+
+    const nameMetadata = must(store).getColumn('foo', 'name');
+    expect(nameMetadata).toEqual({
+      upstreamType: 'varchar',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: 255,
+    });
+
+    const activeMetadata = must(store).getColumn('foo', 'active');
+    expect(activeMetadata).toEqual({
+      upstreamType: 'bool',
+      isNotNull: true,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    });
+  });
+
+  test('rename table updates metadata table name', () => {
+    const messages = new ReplicationMessages({foo: 'id'});
+
+    // Create table first
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0d'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.createTable({
+        schema: 'public',
+        name: 'foo',
+        columns: {
+          id: {pos: 0, dataType: 'int8'},
+          value: {pos: 1, dataType: 'text'},
+        },
+        primaryKey: ['id'],
+      }),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0d'},
+    ]);
+
+    // Rename table
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0e'},
+    ]);
+    processor.processMessage(lc, ['data', messages.renameTable('foo', 'bar')]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0e'},
+    ]);
+
+    const store = ColumnMetadataStore.getInstance(replica);
+    expect(store).toBeDefined();
+
+    // Old table name should not exist
+    expect(must(store).getColumn('foo', 'id')).toBeUndefined();
+    expect(must(store).getColumn('foo', 'value')).toBeUndefined();
+
+    // New table name should have the metadata
+    expect(must(store).getColumn('bar', 'id')).toEqual({
+      upstreamType: 'int8',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    });
+
+    expect(must(store).getColumn('bar', 'value')).toEqual({
+      upstreamType: 'text',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    });
+  });
+
+  test('add column writes metadata', () => {
+    const messages = new ReplicationMessages({foo: 'id'});
+
+    // Create table first
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0d'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.createTable({
+        schema: 'public',
+        name: 'foo',
+        columns: {
+          id: {pos: 0, dataType: 'int8'},
+        },
+        primaryKey: ['id'],
+      }),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0d'},
+    ]);
+
+    // Add column
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0e'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.addColumn('foo', 'score', {
+        pos: 1,
+        dataType: 'int4',
+        dflt: '0',
+        notNull: true,
+      }),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0e'},
+    ]);
+
+    const store = ColumnMetadataStore.getInstance(replica);
+    expect(store).toBeDefined();
+
+    const scoreMetadata = must(store).getColumn('foo', 'score');
+    expect(scoreMetadata).toEqual({
+      upstreamType: 'int4',
+      isNotNull: true,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    });
+  });
+
+  test('update column (rename) updates metadata', () => {
+    const messages = new ReplicationMessages({foo: 'id'});
+
+    // Create table with initial column
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0d'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.createTable({
+        schema: 'public',
+        name: 'foo',
+        columns: {
+          id: {pos: 0, dataType: 'int8'},
+          oldName: {pos: 1, dataType: 'text'},
+        },
+        primaryKey: ['id'],
+      }),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0d'},
+    ]);
+
+    // Rename column
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0e'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.updateColumn(
+        'foo',
+        {name: 'oldName', spec: {pos: 1, dataType: 'text'}},
+        {name: 'newName', spec: {pos: 1, dataType: 'text'}},
+      ),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0e'},
+    ]);
+
+    const store = ColumnMetadataStore.getInstance(replica);
+    expect(store).toBeDefined();
+
+    // Old column name should not exist
+    expect(must(store).getColumn('foo', 'oldName')).toBeUndefined();
+
+    // New column name should have the metadata
+    expect(must(store).getColumn('foo', 'newName')).toEqual({
+      upstreamType: 'text',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    });
+  });
+
+  test('update column (change type) updates metadata', () => {
+    const messages = new ReplicationMessages({foo: 'id'});
+
+    // Create table with initial column
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0d'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.createTable({
+        schema: 'public',
+        name: 'foo',
+        columns: {
+          id: {pos: 0, dataType: 'int8'},
+          value: {pos: 1, dataType: 'text'},
+        },
+        primaryKey: ['id'],
+      }),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0d'},
+    ]);
+
+    // Change column type
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0e'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.updateColumn(
+        'foo',
+        {name: 'value', spec: {pos: 1, dataType: 'text'}},
+        {name: 'value', spec: {pos: 1, dataType: 'int8', notNull: true}},
+      ),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0e'},
+    ]);
+
+    const store = ColumnMetadataStore.getInstance(replica);
+    expect(store).toBeDefined();
+
+    // Metadata should reflect the new type and nullability
+    expect(must(store).getColumn('foo', 'value')).toEqual({
+      upstreamType: 'int8',
+      isNotNull: true,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    });
+  });
+
+  test('drop column deletes metadata', () => {
+    const messages = new ReplicationMessages({foo: 'id'});
+
+    // Create table with columns
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0d'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.createTable({
+        schema: 'public',
+        name: 'foo',
+        columns: {
+          id: {pos: 0, dataType: 'int8'},
+          dropMe: {pos: 1, dataType: 'text'},
+          keepMe: {pos: 2, dataType: 'bool'},
+        },
+        primaryKey: ['id'],
+      }),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0d'},
+    ]);
+
+    // Drop column
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0e'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.dropColumn('foo', 'dropMe'),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0e'},
+    ]);
+
+    const store = ColumnMetadataStore.getInstance(replica);
+    expect(store).toBeDefined();
+
+    // Dropped column metadata should not exist
+    expect(must(store).getColumn('foo', 'dropMe')).toBeUndefined();
+
+    // Other columns should still have metadata
+    expect(must(store).getColumn('foo', 'id')).toBeDefined();
+    expect(must(store).getColumn('foo', 'keepMe')).toBeDefined();
+  });
+
+  test('drop table deletes all metadata', () => {
+    const messages = new ReplicationMessages({foo: 'id'});
+
+    // Create table with columns
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0d'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.createTable({
+        schema: 'public',
+        name: 'foo',
+        columns: {
+          id: {pos: 0, dataType: 'int8'},
+          name: {pos: 1, dataType: 'text'},
+          count: {pos: 2, dataType: 'int4'},
+        },
+        primaryKey: ['id'],
+      }),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0d'},
+    ]);
+
+    // Drop table
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0e'},
+    ]);
+    processor.processMessage(lc, ['data', messages.dropTable('foo')]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0e'},
+    ]);
+
+    const store = ColumnMetadataStore.getInstance(replica);
+    expect(store).toBeDefined();
+
+    // All metadata should be deleted
+    expect(must(store).getColumn('foo', 'id')).toBeUndefined();
+    expect(must(store).getColumn('foo', 'name')).toBeUndefined();
+    expect(must(store).getColumn('foo', 'count')).toBeUndefined();
+
+    // Table should have no metadata entries
+    const tableMetadata = must(store).getTable('foo');
+    expect(tableMetadata.size).toBe(0);
+  });
+
+  test('metadata tracks array and enum types', () => {
+    const messages = new ReplicationMessages({foo: 'id'});
+
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0e'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.createTable({
+        schema: 'public',
+        name: 'foo',
+        columns: {
+          id: {pos: 0, dataType: 'int8'},
+          tags: {
+            pos: 1,
+            dataType: 'text[]',
+            elemPgTypeClass: 'b', // base type for text
+          },
+          status: {
+            pos: 2,
+            dataType: 'user_status',
+            pgTypeClass: 'e', // enum
+          },
+        },
+        primaryKey: ['id'],
+      }),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0e'},
+    ]);
+
+    const store = ColumnMetadataStore.getInstance(replica);
+    expect(store).toBeDefined();
+
+    const tagsMetadata = must(store).getColumn('foo', 'tags');
+    expect(tagsMetadata).toEqual({
+      upstreamType: 'text[]',
+      isNotNull: false,
+      isEnum: false,
+      isArray: true,
+      characterMaxLength: null,
+    });
+
+    const statusMetadata = must(store).getColumn('foo', 'status');
+    expect(statusMetadata).toEqual({
+      upstreamType: 'user_status',
+      isNotNull: false,
+      isEnum: true,
+      isArray: false,
+      characterMaxLength: null,
+    });
+  });
+
+  test('getTable returns all column metadata for a table', () => {
+    const messages = new ReplicationMessages({users: 'id'});
+
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0e'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.createTable({
+        schema: 'public',
+        name: 'users',
+        columns: {
+          id: {pos: 0, dataType: 'int8'},
+          email: {pos: 1, dataType: 'varchar', characterMaximumLength: 255},
+          isActive: {pos: 2, dataType: 'bool', notNull: true},
+        },
+        primaryKey: ['id'],
+      }),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0e'},
+    ]);
+
+    const store = ColumnMetadataStore.getInstance(replica);
+    expect(store).toBeDefined();
+
+    const tableMetadata = must(store).getTable('users');
+    expect(tableMetadata.size).toBe(3);
+
+    expect(tableMetadata.get('id')).toEqual({
+      upstreamType: 'int8',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    });
+
+    expect(tableMetadata.get('email')).toEqual({
+      upstreamType: 'varchar',
+      isNotNull: false,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: 255,
+    });
+
+    expect(tableMetadata.get('isActive')).toEqual({
+      upstreamType: 'bool',
+      isNotNull: true,
+      isEnum: false,
+      isArray: false,
+      characterMaxLength: null,
+    });
   });
 });

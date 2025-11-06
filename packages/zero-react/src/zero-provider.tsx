@@ -11,8 +11,9 @@ import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
+import {stringCompare} from '../../shared/src/string-compare.ts';
 
-const ZeroContext = createContext<unknown | undefined>(undefined);
+export const ZeroContext = createContext<unknown | undefined>(undefined);
 
 export function useZero<
   S extends Schema,
@@ -43,7 +44,7 @@ export type ZeroProviderProps<
   children: ReactNode;
 };
 
-const NO_AUTH_SET = Symbol('NO_AUTH_SET');
+const NO_AUTH_SET = Symbol();
 
 export function ZeroProvider<
   S extends Schema,
@@ -63,7 +64,7 @@ export function ZeroProvider<
     () =>
       Object.entries(props)
         .filter(([key]) => key !== 'auth')
-        .sort(([a], [b]) => a.localeCompare(b))
+        .sort(([a], [b]) => stringCompare(a, b))
         .map(([_, value]) => value),
     [props],
   );

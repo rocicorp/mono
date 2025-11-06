@@ -65,6 +65,12 @@ test('compareValues', () => {
   // number
   fc.assert(
     fc.property(fc.double(), fc.double(), (n1, n2) => {
+      // compareValues uses === so `0` and `-0` are same.
+      // toBe uses Object.is so 0 and -0 are different.
+      // normalize -0 to 0 for this test.
+      if (n1 === 0) n1 = 0;
+      if (n2 === 0) n2 = 0;
+
       expect(compareValues(n1, n2)).toBe(n1 - n2);
     }),
   );

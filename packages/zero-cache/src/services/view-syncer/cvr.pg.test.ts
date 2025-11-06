@@ -35,7 +35,7 @@ import {
   setupCVRTables,
 } from './schema/cvr.ts';
 import type {ClientQueryRecord, CVRVersion, RowID} from './schema/types.ts';
-import {ttlClockFromNumber} from './ttl-clock.ts';
+import {ttlClockAsNumber, ttlClockFromNumber} from './ttl-clock.ts';
 
 const APP_ID = 'dapp';
 const SHARD_NUM = 3;
@@ -73,14 +73,26 @@ describe('view-syncer/cvr', () => {
         };
       }
 
-      // Fixup ttl for desires to use seconds instead of milliseconds.
+      // Fixup ttl and inactivatedAt for desires to write to both old and new columns.
+      // Old columns use seconds, new columns use milliseconds.
       if (desires) {
         state = {
           ...state,
           desires: desires.map(desire => ({
             ...desire,
+            // Old column: INTERVAL in seconds
             ttl:
               typeof desire.ttl === 'number' ? desire.ttl / 1000 : desire.ttl,
+            // New column: DOUBLE PRECISION in milliseconds
+            ttlMs: desire.ttl ?? null,
+            // Old column: TIMESTAMPTZ in seconds
+            inactivatedAt: desire.inactivatedAt
+              ? ttlClockFromNumber(
+                  ttlClockAsNumber(desire.inactivatedAt) / 1000,
+                )
+              : null,
+            // New column: DOUBLE PRECISION in milliseconds
+            inactivatedAtMs: desire.inactivatedAt ?? null,
           })),
         };
       }
@@ -97,9 +109,25 @@ describe('view-syncer/cvr', () => {
 
   async function expectState(db: PostgresDB, state: Partial<DBState>) {
     for (const table of Object.keys(state)) {
-      const res = [
-        ...(await db`SELECT * FROM ${db(`${cvrSchema(SHARD)}.` + table)}`),
-      ];
+      // Special handling for desires table to read inactivatedAtMs
+      let res;
+      if (table === 'desires') {
+        res = [
+          ...(await db`SELECT 
+            "clientGroupID",
+            "clientID",
+            "queryHash",
+            "patchVersion",
+            "deleted",
+            "ttlMs" AS "ttl",
+            "inactivatedAtMs" AS "inactivatedAt"
+            FROM ${db(`${cvrSchema(SHARD)}.` + table)}`),
+        ];
+      } else {
+        res = [
+          ...(await db`SELECT * FROM ${db(`${cvrSchema(SHARD)}.` + table)}`),
+        ];
+      }
       const tableState = [...(state[table as keyof DBState] || [])];
       switch (table) {
         case 'instances': {
@@ -123,8 +151,7 @@ describe('view-syncer/cvr', () => {
             // want it in the js objects.
             delete row.expiresAt;
 
-            // Convert interval to ms.
-            row.ttl = intervalToMilliseconds(row.ttl);
+            // ttl is already converted to ms in the SELECT query above
           });
           (res as DesiresRow[]).sort(compareDesiresRows);
           (tableState as DesiresRow[]).sort(compareDesiresRows);
@@ -148,7 +175,16 @@ describe('view-syncer/cvr', () => {
       db`SELECT * FROM ${db('dapp_3/cvr.instances')} ORDER BY "clientGroupID"`,
       db`SELECT * FROM ${db('dapp_3/cvr.clients')} ORDER BY "clientGroupID", "clientID"`,
       db`SELECT * FROM ${db('dapp_3/cvr.queries')} ORDER BY "clientGroupID", "queryHash"`,
-      db`SELECT * FROM ${db('dapp_3/cvr.desires')} ORDER BY "clientGroupID", "clientID", "queryHash"`,
+      db`SELECT 
+        "clientGroupID",
+        "clientID",
+        "queryHash",
+        "patchVersion",
+        "deleted",
+        "ttlMs" AS "ttl",
+        "inactivatedAtMs" AS "inactivatedAt"
+        FROM ${db('dapp_3/cvr.desires')} 
+        ORDER BY "clientGroupID", "clientID", "queryHash"`,
       db`SELECT * FROM ${db('dapp_3/cvr.rows')} ORDER BY "clientGroupID", "schema", "table", "rowKey"`,
     ]);
 
@@ -6183,7 +6219,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": "00:05:00",
+            "ttl": 300000,
           },
           {
             "clientGroupID": "abc123",
@@ -6192,7 +6228,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": 1709683200000,
             "patchVersion": "1aa:01",
             "queryHash": "oneHash",
-            "ttl": "00:05:00",
+            "ttl": 300000,
           },
           {
             "clientGroupID": "abc123",
@@ -6201,7 +6237,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": "00:05:00",
+            "ttl": 300000,
           },
         ],
         "instances": Result [
@@ -6502,7 +6538,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": "00:05:00",
+            "ttl": 300000,
           },
           {
             "clientGroupID": "abc123",
@@ -6511,7 +6547,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": "00:05:00",
+            "ttl": 300000,
           },
           {
             "clientGroupID": "def456",
@@ -6520,7 +6556,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": "00:05:00",
+            "ttl": 300000,
           },
         ],
         "instances": Result [
@@ -6659,7 +6695,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": "00:05:00",
+            "ttl": 300000,
           },
           {
             "clientGroupID": "abc123",
@@ -6668,7 +6704,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": "00:05:00",
+            "ttl": 300000,
           },
           {
             "clientGroupID": "def456",
@@ -6677,7 +6713,7 @@ describe('view-syncer/cvr', () => {
             "inactivatedAt": null,
             "patchVersion": "1a9:01",
             "queryHash": "oneHash",
-            "ttl": "00:05:00",
+            "ttl": 300000,
           },
         ],
         "instances": Result [
@@ -6980,19 +7016,4 @@ function readMutationResults(
   return upstreamDb`SELECT * FROM ${upstreamDb(
     upstreamSchema(SHARD),
   )}.mutations WHERE "clientGroupID" = ${clientGroupID} AND "clientID" = ${clientID}`;
-}
-
-function intervalToMilliseconds(ttl: string | null): number | null {
-  if (ttl === null) return null;
-
-  const parts = ttl.split(':');
-  if (parts.length !== 3) {
-    throw new Error(
-      `Interval format not supported in this test runner: ${ttl}`,
-    );
-  }
-  const hours = parseInt(parts[0], 10);
-  const minutes = parseInt(parts[1], 10);
-  const seconds = parseInt(parts[2], 10);
-  return (hours * 3600 + minutes * 60 + seconds) * 1000;
 }

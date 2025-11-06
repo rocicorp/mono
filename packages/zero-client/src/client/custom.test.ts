@@ -1,5 +1,6 @@
 import {
   afterEach,
+  assert,
   beforeEach,
   describe,
   expect,
@@ -10,12 +11,15 @@ import {
 import {zeroData} from '../../../replicache/src/transactions.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
+import {promiseUndefined} from '../../../shared/src/resolved-promises.ts';
 import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
 import type {Row} from '../../../zql/src/query/query.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import {bindingsForZero} from './bindings.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {
   TransactionImpl,
@@ -447,6 +451,293 @@ describe('rebasing custom mutators', () => {
   });
 });
 
+describe('error handling', () => {
+  test('client-side errors surface as application errors on the client/server promises', async () => {
+    const onError = vi.fn();
+    const z = zeroForTest({
+      schema,
+      mutators: {
+        issue: {
+          // oxlint-disable-next-line require-await
+          fail: async (_tx: MutatorTx) => {
+            throw new Error('client boom');
+          },
+        },
+      } as const,
+      onError,
+    });
+
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+
+    const result = z.mutate.issue.fail();
+
+    const clientResult = await result.client;
+    assert(clientResult.type === 'error');
+    expect(clientResult.error.type).toBe('app');
+    expect(clientResult.error.details).toBeUndefined();
+    expect(clientResult.error.message).toBe('client boom');
+
+    const serverResult = await result.server;
+    assert(serverResult.type === 'error');
+    expect(serverResult.error.type).toBe('app');
+    expect(serverResult.error.message).toBe('client boom');
+    assert(serverResult.error.type === 'app');
+    expect(serverResult.error.details).toBeUndefined();
+
+    await vi.waitFor(() => {
+      expect(onError).toHaveBeenCalled();
+    });
+    expect(onError.mock.calls[0][0]).toMatchObject({
+      message: 'client boom',
+    });
+
+    await z.close();
+  });
+
+  test('rejects outstanding custom mutation server promises when connection goes offline', async () => {
+    const noop = vi.fn(async (_tx: MutatorTx) => {});
+    const onError = vi.fn();
+    const z = zeroForTest({
+      schema,
+      mutators: {
+        issue: {
+          noop,
+        },
+      } as const,
+      onError,
+    });
+
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+
+    const result = z.mutate.issue.noop();
+    await result.client;
+
+    const offlineError = new ClientError({
+      kind: ClientErrorKind.Offline,
+      message: 'offline',
+    });
+
+    z.connectionManager.disconnected(offlineError);
+
+    const serverResult = await result.server;
+    assert(serverResult.type === 'error');
+    expect(serverResult.error.type).toBe('zero');
+    assert(serverResult.error.type === 'zero');
+    expect(serverResult.error.details).toMatchObject({
+      kind: ClientErrorKind.Offline,
+      origin: ErrorOrigin.Client,
+    });
+    expect(noop).toHaveBeenCalledTimes(1);
+
+    // client promise was already resolved
+    const clientResult = await result.client;
+    assert(clientResult.type === 'success');
+
+    await vi.waitFor(() => {
+      expect(onError).toHaveBeenCalledOnce();
+    });
+    expect(onError.mock.calls[0][0]).toBe(offlineError);
+
+    await z.close();
+  });
+
+  test('custom mutators short-circuit while offline and resume after reconnect', async () => {
+    const topLevel = vi.fn(async (_tx: MutatorTx) => {});
+    const namespaced = vi.fn(async (_tx: MutatorTx, _args: {id: string}) => {});
+    const onError = vi.fn();
+
+    const z = zeroForTest({
+      schema,
+      mutators: {
+        topLevel,
+        issue: {
+          namespaced,
+        },
+      } as const,
+      onError,
+    });
+
+    await z.triggerConnected();
+
+    const offlineError = new ClientError({
+      kind: ClientErrorKind.Offline,
+      message: 'offline',
+    });
+
+    z.connectionManager.disconnected(offlineError);
+    await z.waitForConnectionStatus(ConnectionStatus.Disconnected);
+
+    const offlineTop = z.mutate.topLevel();
+    const offlineNamespaced = z.mutate.issue.namespaced({id: '123'});
+
+    const offlineTopClient = await offlineTop.client;
+    assert(offlineTopClient.type === 'error');
+    expect(offlineTopClient.error.type).toBe('zero');
+    expect(offlineTopClient.error.details).toMatchObject({
+      kind: ClientErrorKind.Offline,
+      origin: ErrorOrigin.Client,
+    });
+
+    const offlineTopServer = await offlineTop.server;
+    assert(offlineTopServer.type === 'error');
+    expect(offlineTopServer.error.type).toBe('zero');
+    expect(offlineTopServer.error.details).toMatchObject({
+      kind: ClientErrorKind.Offline,
+      origin: ErrorOrigin.Client,
+    });
+
+    const offlineNamespacedClient = await offlineNamespaced.client;
+    assert(offlineNamespacedClient.type === 'error');
+    expect(offlineNamespacedClient.error.type).toBe('zero');
+    expect(offlineNamespacedClient.error.details).toMatchObject({
+      kind: ClientErrorKind.Offline,
+      origin: ErrorOrigin.Client,
+    });
+
+    const offlineNamespacedServer = await offlineNamespaced.server;
+    assert(offlineNamespacedServer.type === 'error');
+    expect(offlineNamespacedServer.error.type).toBe('zero');
+    expect(offlineNamespacedServer.error.details).toMatchObject({
+      kind: ClientErrorKind.Offline,
+      origin: ErrorOrigin.Client,
+    });
+
+    expect(topLevel).not.toHaveBeenCalled();
+    expect(namespaced).not.toHaveBeenCalled();
+
+    await vi.waitFor(() => {
+      expect(onError).toHaveBeenCalled();
+    });
+    expect(onError.mock.calls[0][0]).toBe(offlineError);
+
+    z.connectionManager.connected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+
+    // wait one tick
+    await promiseUndefined;
+
+    const resumedTop = z.mutate.topLevel();
+    const resumedNamespaced = z.mutate.issue.namespaced({id: '456'});
+
+    await resumedTop.client;
+    await resumedNamespaced.client;
+    void resumedTop.server;
+    void resumedNamespaced.server;
+
+    expect(topLevel).toHaveBeenCalledTimes(1);
+    expect(namespaced).toHaveBeenCalledTimes(1);
+
+    await z.triggerPushResponse({
+      mutations: [
+        {
+          id: {clientID: z.clientID, id: 1},
+          result: {},
+        },
+        {
+          id: {clientID: z.clientID, id: 2},
+          result: {},
+        },
+      ],
+    });
+
+    expect(onError).toHaveBeenCalledTimes(1);
+
+    await z.close();
+  });
+
+  test('run waiting for complete results throws in custom mutations', async () => {
+    const onErrorSpy = vi.fn();
+
+    const z = zeroForTest({
+      schema,
+      mutators: {
+        issue: {
+          create: async (tx: MutatorTx) => {
+            await tx.run(tx.query.issue, {type: 'complete'});
+          },
+        },
+      } as const,
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+
+    const result = await z.mutate.issue.create().client;
+    assert(result.type === 'error');
+    expect(result.error.type).toBe('app');
+    assert(result.error.type === 'app');
+    expect(result.error.message).toBe(
+      'Cannot wait for complete results in custom mutations',
+    );
+
+    expect(onErrorSpy).toBeCalledTimes(1);
+    const error = onErrorSpy.mock.calls[0][0];
+    expect(error).toBeInstanceOf(ApplicationError);
+    expect(error.message).toBe(
+      'Cannot wait for complete results in custom mutations',
+    );
+
+    await z.close();
+  });
+
+  test('not awaiting the client promise still triggers onError', async () => {
+    const onErrorSpy = vi.fn();
+    const z = zeroForTest({
+      schema,
+      mutators: {
+        issue: {
+          // oxlint-disable-next-line require-await
+          create: async (_tx: MutatorTx) => {
+            throw new Error('test error');
+          },
+        },
+      } as const,
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+
+    // do not await the client promise
+    z.mutate.issue.create();
+
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toBeCalledTimes(1);
+    });
+    const error = onErrorSpy.mock.calls[0][0];
+    expect(error).toBeInstanceOf(ApplicationError);
+    expect(error.message).toBe('test error');
+
+    await z.close();
+  });
+
+  test('cannot await the promise directly', async () => {
+    const z = zeroForTest({
+      schema,
+      logLevel: 'warn',
+      mutators: {
+        issue: {
+          create: async (tx: MutatorTx) => {
+            await tx.query.issue;
+          },
+        },
+      } as const,
+    });
+
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+
+    expect(z.mutate.issue.create()).toBeTypeOf('object');
+    expect(z.mutate.issue.create()).toHaveProperty('client');
+    expect(z.mutate.issue.create()).toHaveProperty('server');
+
+    await z.close();
+  });
+});
+
 describe('server results and keeping read queries', () => {
   beforeEach(() => {
     vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
@@ -498,7 +789,8 @@ describe('server results and keeping read queries', () => {
       ],
     });
 
-    expect(await create.server).toEqual({data: {shortID: '1'}});
+    const createServerResult = await create.server;
+    expect(createServerResult.type).toBe('success');
 
     const close = z.mutate.issue.close({});
     await close.client;
@@ -521,16 +813,11 @@ describe('server results and keeping read queries', () => {
 
     await z.close();
 
-    let caughtError: unknown;
-    try {
-      await close.server;
-    } catch (e) {
-      caughtError = e;
-    }
-
-    expect(caughtError).toBeInstanceOf(ApplicationError);
-    expect((caughtError as ApplicationError).message).toBe('application error');
-    expect((caughtError as ApplicationError).details).toEqual({
+    const closeServerResult = await close.server;
+    assert(closeServerResult.type === 'error');
+    expect(closeServerResult.error.type).toBe('app');
+    expect(closeServerResult.error.message).toBe('application error');
+    expect(closeServerResult.error.details).toEqual({
       code: 'APP_ERROR',
       other: 'some other detail',
     });
@@ -629,7 +916,7 @@ describe('server results and keeping read queries', () => {
     // check the error case
     const q2 = z.materialize(z.query.issue);
     const close = z.mutate.issue.close({});
-    await close;
+    await close.client;
     q2.destroy();
 
     z.queryDelegate.flushQueryChanges();
@@ -669,16 +956,11 @@ describe('server results and keeping read queries', () => {
 
     z.queryDelegate.flushQueryChanges();
 
-    let caughtError: unknown;
-    try {
-      await close.server;
-    } catch (e) {
-      caughtError = e;
-    }
-
-    expect(caughtError).toBeInstanceOf(ApplicationError);
-    expect((caughtError as ApplicationError).message).toBe('womp womp');
-    expect((caughtError as ApplicationError).details).toEqual({
+    const closeServerResult = await close.server;
+    assert(closeServerResult.type === 'error');
+    expect(closeServerResult.error.type).toBe('app');
+    expect(closeServerResult.error.message).toBe('womp womp');
+    expect(closeServerResult.error.details).toEqual({
       issue: 'not found',
     });
 
@@ -780,60 +1062,6 @@ describe('server results and keeping read queries', () => {
 
     await z.close();
   });
-});
-
-test('run waiting for complete results throws in custom mutations', async () => {
-  let err;
-  const z = zeroForTest({
-    schema,
-    mutators: {
-      issue: {
-        create: async (tx: MutatorTx) => {
-          try {
-            await tx.run(tx.query.issue, {type: 'complete'});
-          } catch (e) {
-            err = e;
-          }
-        },
-      },
-    } as const,
-  });
-
-  await z.triggerConnected();
-  await z.waitForConnectionStatus(ConnectionStatus.Connected);
-
-  await z.mutate.issue.create().client;
-
-  expect(err).toMatchInlineSnapshot(
-    `[Error: Cannot wait for complete results in custom mutations]`,
-  );
-
-  await z.close();
-});
-
-test('warns when awaiting the promise directly', async () => {
-  const z = zeroForTest({
-    schema,
-    logLevel: 'warn',
-    mutators: {
-      issue: {
-        create: async (tx: MutatorTx) => {
-          await tx.query.issue;
-        },
-      },
-    } as const,
-  });
-
-  await z.triggerConnected();
-  await z.waitForConnectionStatus(ConnectionStatus.Connected);
-
-  await z.mutate.issue.create();
-
-  expect(z.testLogSink.messages[0][2]).toEqual([
-    'Awaiting the mutator result directly is being deprecated. Please use `await z.mutate[mutatorName].client` or `await result.mutate[mutatorName].server`',
-  ]);
-
-  await z.close();
 });
 
 test('trying to use crud mutators throws if `enableLegacyMutators` is set to false', async () => {

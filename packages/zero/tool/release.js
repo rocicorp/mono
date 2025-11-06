@@ -174,17 +174,15 @@ function parseArgs() {
     },
     {
       name: 'from',
-      alias: 'f',
       type: String,
-      description:
-        'Branch, tag, or commit to build from. For canary: defaults to "main". For stable: defaults to latest canary tag',
+      description: 'Branch, tag, or commit to build from (required)',
     },
     {
-      name: 'canary',
-      alias: 'c',
+      name: 'stable',
+      alias: 's',
       type: Boolean,
       description:
-        'Create a canary release (auto-calculated version). If not provided, creates a stable release using base version',
+        'Create a stable release using base version. If not provided, creates a canary release (auto-calculated version)',
     },
   ];
 
@@ -202,7 +200,14 @@ function parseArgs() {
     process.exit(0);
   }
 
-  const isCanary = Boolean(options.canary);
+  if (!options.from) {
+    console.error('Error: --from is required');
+    console.error('');
+    showHelp(optionDefinitions);
+    process.exit(1);
+  }
+
+  const isCanary = !Boolean(options.stable);
 
   return {
     from: options.from,
@@ -220,9 +225,11 @@ Usage: node release.js [options]
 
 Creates canary or stable release builds for @rocicorp/zero.
 
+Default: Creates a canary release (safer, can be repeated)
+
 Modes:
-  Canary:  Builds from branch/tag/commit, auto-calculates version from git tags
-  Release: Builds from branch/tag/commit using base version from package.json
+  Canary (default):  Builds from branch/tag/commit, auto-calculates version from git tags
+  Stable (--stable): Builds from branch/tag/commit using base version from package.json
 
 Options:`);
 
@@ -233,19 +240,18 @@ Options:`);
 
   console.log(`
 Canary Examples:
-  node release.js --canary                    # Build canary from main
-  node release.js -c -f maint/zero/v0.24      # Build canary from maintenance branch
-  node release.js -c -f zero/v0.24.0          # Build canary from specific tag
+  node release.js --from main                          # Build canary from main
+  node release.js --from maint/zero/v0.24              # Build canary from maintenance branch
+  node release.js --from zero/v0.24.0                  # Build canary from specific tag
 
 Stable Release Examples:
-  node release.js                             # Promote latest canary to stable (auto-detected)
-  node release.js -f zero/v0.24.0-canary.3    # Promote specific canary to stable
+  node release.js --stable --from zero/v0.24.0-canary.3    # Promote specific canary to stable
 
 Maintenance/cherry-pick workflow:
   1. Create a maintenance branch from tag: git checkout -b maint/zero/v0.24 zero/v0.24.0
   2. Cherry-pick commits: git cherry-pick <commit-hash>
   3. Push to origin: git push origin maint/zero/v0.24
-  4. Run: node release.js --canary --from maint/zero/v0.24
+  4. Run: node release.js --from maint/zero/v0.24
 `);
 }
 
@@ -265,48 +271,38 @@ try {
     process.exit(1);
   }
 
-  // For stable releases, read the base version from the current working directory
-  // before we chdir to the temp directory
+  const from = fromArg;
+
+  // For stable releases, we need to know the base version early
+  // Read it from the current working directory before we chdir
   const ZERO_PACKAGE_JSON_PATH = path.join(
     gitRoot,
     'packages',
     'zero',
     'package.json',
   );
-  const baseVersionForStableRelease = isCanary
-    ? null
-    : getPackageData(ZERO_PACKAGE_JSON_PATH).version;
+  const packageData = getPackageData(ZERO_PACKAGE_JSON_PATH);
+  const currentVersion = packageData.version;
 
-  // Determine the source to build from
-  let from;
+  // Calculate what the next version will be
+  let nextVersion;
   if (isCanary) {
-    // Canary: default to main if not specified
-    from = fromArg || 'main';
+    nextVersion = bumpCanaryVersion(currentVersion);
   } else {
-    // Stable release: if --from not specified, find latest canary
-    if (fromArg) {
-      from = fromArg;
-    } else {
-      const latestCanary = findLatestCanaryTag(baseVersionForStableRelease);
-      if (!latestCanary) {
-        console.error(
-          `No canary tags found for base version ${baseVersionForStableRelease}`,
-        );
-        console.error(
-          `Create a canary first: node release.js --canary --from main`,
-        );
-        process.exit(1);
-      }
-      from = latestCanary;
-      console.log(`Auto-detected latest canary: ${latestCanary}`);
-    }
+    nextVersion = currentVersion;
   }
 
+  console.log('');
+  console.log('='.repeat(60));
   if (isCanary) {
-    console.log(`Creating canary from ${from}`);
+    console.log(`Creating canary release from ${from}`);
   } else {
     console.log(`Creating stable release from ${from}`);
   }
+  console.log(`Current version: ${currentVersion}`);
+  console.log(`Target version:  ${nextVersion}`);
+  console.log('='.repeat(60));
+  console.log('');
 
   // Check that the ref we're building from exists both locally and remotely
   // and that they point to the same commit
@@ -384,13 +380,7 @@ try {
   );
   const currentPackageData = getPackageData(ZERO_PACKAGE_JSON_PATH_IN_TEMP);
 
-  const nextVersion = isCanary
-    ? bumpCanaryVersion(currentPackageData.version)
-    : baseVersionForStableRelease;
-
-  console.log(`Package version in ${from}: ${currentPackageData.version}`);
-  console.log(`Next version is ${nextVersion}`);
-
+  // Update the package.json with the new version
   currentPackageData.version = nextVersion;
 
   const tagName = `zero/v${nextVersion}`;
@@ -501,7 +491,7 @@ try {
     console.log(
       `  1. Update base version in package.json if needed: node bump-version.js X.Y.Z`,
     );
-    console.log(`  2. Run: node release.js --from ${tagName}`);
+    console.log(`  2. Run: node release.js --stable --from ${tagName}`);
     console.log(
       `  3. When ready for users: npm dist-tag add @rocicorp/zero@X.Y.Z latest`,
     );

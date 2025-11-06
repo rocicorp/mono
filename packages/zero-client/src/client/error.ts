@@ -1,4 +1,5 @@
 import {unreachable} from '../../../shared/src/asserts.ts';
+import {getErrorMessage} from '../../../shared/src/error.ts';
 import type {Expand} from '../../../shared/src/expand.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
@@ -14,11 +15,16 @@ import {
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
 
-export type ZeroError = ProtocolError<ErrorBody> | ClientError;
-export type ZeroErrorBody = Expand<ErrorBody | ClientErrorBody>;
-export type ZeroErrorKind = Expand<ErrorKind | ClientErrorKind>;
 export type AuthError = ProtocolError<NeedsAuthReason>;
-
+export type ClientErrorBody = {
+  kind: ClientErrorKind;
+  origin: typeof ErrorOrigin.Client;
+  message: string;
+};
+export type ClosedError = ClientError<{
+  kind: ClientErrorKind.ClientClosed;
+  message: string;
+}>;
 export type NeedsAuthReason = Expand<
   | (ErrorBody & {
       kind: ErrorKind.AuthInvalidated | ErrorKind.Unauthorized;
@@ -28,15 +34,18 @@ export type NeedsAuthReason = Expand<
       status: 401 | 403;
     })
 >;
-
-export type ClientErrorBody = {
-  kind: ClientErrorKind;
-  origin: typeof ErrorOrigin.Client;
+export type OfflineError = ClientError<{
+  kind: ClientErrorKind.Offline;
   message: string;
-};
+}>;
+export type ServerError = ProtocolError<ErrorBody>;
+export type ZeroError = ServerError | ClientError;
+export type ZeroErrorBody = Expand<ErrorBody | ClientErrorBody>;
+export type ZeroErrorDetails = Expand<Omit<ZeroErrorBody, 'message'>>;
+export type ZeroErrorKind = Expand<ErrorKind | ClientErrorKind>;
 
 /**
- * Represents an error encountered by the client.
+ * Represents an error encountered by the Zero client.
  */
 export class ClientError<
   const T extends Omit<ClientErrorBody, 'origin'> = Omit<
@@ -57,12 +66,26 @@ export class ClientError<
   }
 }
 
-export function isServerError(ex: unknown): ex is ProtocolError<ErrorBody> {
+export function isZeroError(ex: unknown): ex is ZeroError {
+  return isClientError(ex) || isServerError(ex);
+}
+
+export function isClientError(ex: unknown): ex is ClientError<ClientErrorBody> {
+  return (
+    ex instanceof ClientError && ex.errorBody.origin === ErrorOrigin.Client
+  );
+}
+
+export function isServerError(ex: unknown): ex is ServerError {
   return (
     isProtocolError(ex) &&
     (ex.errorBody.origin === ErrorOrigin.Server ||
       ex.errorBody.origin === ErrorOrigin.ZeroCache)
   );
+}
+
+export function isOfflineError(ex: unknown): ex is OfflineError {
+  return isClientError(ex) && ex.kind === ClientErrorKind.Offline;
 }
 
 export function isAuthError(ex: unknown): ex is AuthError {
@@ -98,19 +121,13 @@ export function getBackoffParams(error: ZeroError): BackoffBody | undefined {
   return undefined;
 }
 
-export function isClientError(ex: unknown): ex is ClientError<ClientErrorBody> {
-  return (
-    ex instanceof ClientError && ex.errorBody.origin === ErrorOrigin.Client
-  );
-}
-
 export const NO_STATUS_TRANSITION = 'NO_STATUS_TRANSITION';
 
 export type ErrorConnectionTransition =
   | {status: typeof NO_STATUS_TRANSITION; reason: ZeroError}
   | {status: ConnectionStatus.NeedsAuth; reason: AuthError}
   | {status: ConnectionStatus.Error; reason: ZeroError}
-  | {status: ConnectionStatus.Disconnected; reason: ZeroError}
+  | {status: ConnectionStatus.Disconnected; reason: OfflineError}
   | {status: ConnectionStatus.Closed; reason: ZeroError};
 
 /**
@@ -148,8 +165,11 @@ export function getErrorConnectionTransition(
         return {status: ConnectionStatus.Error, reason: ex} as const;
 
       // Disconnected error (this should already result in a disconnected state)
-      case ClientErrorKind.DisconnectTimeout:
-        return {status: ConnectionStatus.Disconnected, reason: ex} as const;
+      case ClientErrorKind.Offline:
+        return {
+          status: ConnectionStatus.Disconnected,
+          reason: ex as OfflineError,
+        } as const;
 
       // Closed error (this should already result in a closed state)
       case ClientErrorKind.ClientClosed:
@@ -207,15 +227,12 @@ export function getErrorConnectionTransition(
   // this is a catch-all for unexpected errors
   return {
     status: ConnectionStatus.Error,
-    reason: new ClientError({
-      kind: ClientErrorKind.Internal,
-      message:
-        'Unexpected internal error: ' +
-        (ex instanceof Error
-          ? ex.message
-          : typeof ex === 'string'
-            ? ex
-            : String(ex ?? 'Unknown error')),
-    }),
+    reason: new ClientError(
+      {
+        kind: ClientErrorKind.Internal,
+        message: 'Unexpected internal error: ' + getErrorMessage(ex),
+      },
+      {cause: ex},
+    ),
   } as const;
 }

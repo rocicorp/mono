@@ -52,6 +52,7 @@ import {type Emoji} from '../../emoji-utils.ts';
 import {useCanEdit} from '../../hooks/use-can-edit.ts';
 import {useDocumentHasFocus} from '../../hooks/use-document-has-focus.ts';
 import {useEmojiDataSourcePreload} from '../../hooks/use-emoji-data-source-preload.ts';
+import {useIsOffline} from '../../hooks/use-is-offline.ts';
 import {useIsScrolling} from '../../hooks/use-is-scrolling.ts';
 import {useKeypress} from '../../hooks/use-keypress.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
@@ -87,6 +88,8 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const {idField, id} = getId(params);
   const projectName = must(params.projectName);
   const login = useLogin();
+
+  const isOffline = useIsOffline();
 
   const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
   const listContext = zbugsHistoryState?.zbugsListContext;
@@ -378,9 +381,15 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     return null;
   }
 
-  const remove = () => {
+  const remove = async () => {
     // TODO: Implement undo - https://github.com/rocicorp/undo
-    z.mutate.issue.delete(displayed.id);
+    const result = z.mutate.issue.delete(displayed.id);
+
+    // we wait for the client result to redirect to the list page
+    const clientResult = await result.client;
+    if (clientResult.type === 'error') {
+      return;
+    }
     navigate(listContext?.href ?? links.list({projectName}));
   };
 
@@ -420,6 +429,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               {!editing ? (
                 <>
                   <Button
+                    disabled={isOffline}
                     className="edit-button"
                     eventName="Edit issue"
                     onAction={() => setEditing(displayed)}
@@ -427,6 +437,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                     Edit
                   </Button>
                   <Button
+                    disabled={isOffline}
                     className="delete-button"
                     eventName="Delete issue"
                     onAction={() => setDeleteConfirmationShown(true)}
@@ -466,6 +477,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
             <div className="edit-title-container">
               <p className="issue-detail-label">Edit title</p>
               <TextareaAutosize
+                disabled={isOffline}
                 value={rendering.title}
                 className="edit-title"
                 autoFocus
@@ -499,6 +511,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                 onInsert={onInsert}
               >
                 <TextareaAutosize
+                  disabled={isOffline}
                   className="edit-description"
                   value={rendering.description}
                   onChange={e =>
@@ -519,7 +532,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
             <p className="issue-detail-label">Status</p>
             <Combobox
               editable={false}
-              disabled={!canEdit}
+              disabled={!canEdit || isOffline}
               items={[
                 {
                   text: 'Open',
@@ -547,7 +560,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
             <p className="issue-detail-label">Assignee</p>
             <UserPicker
               projectName={projectName}
-              disabled={!canEdit}
+              disabled={!canEdit || isOffline}
               selected={{login: displayed.assignee?.login}}
               placeholder="Assign to..."
               unselectedLabel="Nobody"
@@ -567,7 +580,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               <p className="issue-detail-label">Visibility</p>
               <Combobox<'public' | 'internal'>
                 editable={false}
-                disabled={!canEdit}
+                disabled={!canEdit || isOffline}
                 items={[
                   {
                     text: 'Public',
@@ -595,7 +608,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
           <div className="sidebar-item">
             <p className="issue-detail-label">Notifications</p>
             <Combobox<NotificationType>
-              disabled={!login.loginState?.decoded?.sub}
+              disabled={!login.loginState?.decoded?.sub || isOffline}
               items={[
                 {
                   text: 'Subscribed',
@@ -641,6 +654,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
             </div>
             <CanEdit ownerID={displayed.creatorID}>
               <LabelPicker
+                disabled={isOffline}
                 selected={labelSet}
                 projectName={projectName}
                 onAssociateLabel={labelID =>
@@ -729,7 +743,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
         okButtonLabel="Delete"
         onClose={b => {
           if (b) {
-            remove();
+            void remove();
           }
           setDeleteConfirmationShown(false);
         }}
