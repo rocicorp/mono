@@ -2,48 +2,71 @@ import {
   createContext,
   useContext,
   useEffect,
+  useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react';
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
+import {stringCompare} from '../../shared/src/string-compare.ts';
 
 export const ZeroContext = createContext<unknown | undefined>(undefined);
 
 export function useZero<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
->(): Zero<S, MD> {
+  Context = unknown,
+>(): Zero<S, MD, Context> {
   const zero = useContext(ZeroContext);
   if (zero === undefined) {
     throw new Error('useZero must be used within a ZeroProvider');
   }
-  return zero as Zero<S, MD>;
+  return zero as Zero<S, MD, Context>;
 }
 
 export function createUseZero<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
+  Context = unknown,
 >() {
-  return () => useZero<S, MD>();
+  return () => useZero<S, MD, Context>();
 }
 
 export type ZeroProviderProps<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
-> = (ZeroOptions<S, MD> | {zero: Zero<S, MD>}) & {
-  init?: (zero: Zero<S, MD>) => void;
+  Context = unknown,
+> = (ZeroOptions<S, MD, Context> | {zero: Zero<S, MD, Context>}) & {
+  init?: (zero: Zero<S, MD, Context>) => void;
   children: ReactNode;
 };
+
+const NO_AUTH_SET = Symbol();
 
 export function ZeroProvider<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
->({children, init, ...props}: ZeroProviderProps<S, MD>) {
-  const [zero, setZero] = useState<Zero<S, MD> | undefined>(
-    'zero' in props ? props.zero : undefined,
+  Context = unknown,
+>({children, init, ...props}: ZeroProviderProps<S, MD, Context>) {
+  const isExternalZero = 'zero' in props;
+
+  const [zero, setZero] = useState<Zero<S, MD, Context> | undefined>(
+    isExternalZero ? props.zero : undefined,
+  );
+
+  const auth = 'auth' in props ? props.auth : NO_AUTH_SET;
+  const prevAuthRef = useRef<typeof auth>(auth);
+
+  const keysWithoutAuth = useMemo(
+    () =>
+      Object.entries(props)
+        .filter(([key]) => key !== 'auth')
+        .sort(([a], [b]) => stringCompare(a, b))
+        .map(([_, value]) => value),
+    [props],
   );
 
   // If Zero is not passed in, we construct it, but only client-side.
@@ -52,7 +75,7 @@ export function ZeroProvider<
   // more likely server support will be opt-in with a new prop on this
   // component.
   useEffect(() => {
-    if ('zero' in props) {
+    if (isExternalZero) {
       setZero(props.zero);
       return;
     }
@@ -65,7 +88,22 @@ export function ZeroProvider<
       void z.close();
       setZero(undefined);
     };
-  }, [init, ...Object.values(props)]);
+    // we intentionally don't include auth in the dependency array
+    // to avoid closing zero when auth changes
+  }, [init, ...keysWithoutAuth]);
+
+  useEffect(() => {
+    if (!zero) return;
+
+    const authChanged = auth !== prevAuthRef.current;
+
+    if (authChanged) {
+      prevAuthRef.current = auth;
+      void zero.connection.connect({
+        auth: auth === NO_AUTH_SET ? undefined : auth,
+      });
+    }
+  }, [auth, zero]);
 
   return (
     zero && <ZeroContext.Provider value={zero}>{children}</ZeroContext.Provider>

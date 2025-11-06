@@ -25,6 +25,7 @@ type AddOrRemoveEmoji = (details: {
 }) => void;
 
 type Props = {
+  disabled: boolean;
   normalizedEmoji: string;
   emojis: Emoji[];
   addOrRemoveEmoji: AddOrRemoveEmoji;
@@ -35,6 +36,7 @@ type Props = {
 
 export const EmojiPill = memo(
   ({
+    disabled,
     normalizedEmoji,
     emojis,
     addOrRemoveEmoji,
@@ -98,6 +100,7 @@ export const EmojiPill = memo(
         <TooltipTrigger>
           <ButtonWithLoginCheck
             ref={ref}
+            disabled={disabled}
             className={classNames('emoji-pill', {
               mine,
               triggered,

@@ -19,7 +19,7 @@ function mb(bytes: number): string {
   return (bytes / MB).toFixed(2);
 }
 
-export class Database {
+export class Database implements Disposable {
   readonly #db: SQLite3Database.Database;
   readonly #threshold: number;
   readonly #lc: LogContext;
@@ -172,6 +172,7 @@ export class Statement {
   readonly #threshold: number;
   readonly #attrs: Attributes;
   readonly scanStatus: SQLite3Statement['scanStatusV2'];
+  readonly scanStatusReset: SQLite3Statement['scanStatusReset'];
 
   constructor(
     lc: LogContext,
@@ -184,6 +185,7 @@ export class Statement {
     this.#stmt = stmt;
     this.#threshold = threshold;
     this.scanStatus = this.#stmt.scanStatusV2.bind(this.#stmt);
+    this.scanStatusReset = this.#stmt.scanStatusReset.bind(this.#stmt);
   }
 
   safeIntegers(useBigInt: boolean): this {

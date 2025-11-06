@@ -27,6 +27,7 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import * as v from '../../../shared/src/valita.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
+import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {upPutOpSchema} from '../../../zero-protocol/src/queries-patch.ts';
 import {
@@ -35,6 +36,8 @@ import {
 } from '../../../zero-protocol/src/query-hash.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import {MAX_TTL_MS, type TTL} from '../../../zql/src/query/ttl.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
+import {ClientError} from './error.ts';
 import {toGotQueriesKey} from './keys.ts';
 import {MutationTracker} from './mutation-tracker.ts';
 import {QueryManager} from './query-manager.ts';
@@ -47,6 +50,7 @@ function createExperimentalWatchMock() {
 
 const ackMutations = () => {};
 const onFatalError = () => {};
+const onApplicationError = () => {};
 
 const queryChangeThrottleMs = 10;
 const lc = createSilentLogContext();
@@ -65,6 +69,7 @@ test('add', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
+    onApplicationError,
   );
   const ast: AST = {
     table: 'issue',
@@ -111,6 +116,7 @@ test('add and remove a custom query', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
+    onApplicationError,
   );
   const ast: AST = {
     table: 'issue',
@@ -206,6 +212,7 @@ test('add renamed fields', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
+    onApplicationError,
   );
   const ast: AST = {
     table: 'issue',
@@ -384,6 +391,7 @@ test('remove, recent queries max size 0', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
+    onApplicationError,
   );
   const ast: AST = {
     table: 'issue',
@@ -453,6 +461,7 @@ test('remove, max recent queries size 2', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
+    onApplicationError,
   );
   const ast1: AST = {
     table: 'issue',
@@ -619,6 +628,7 @@ test('add/remove/add/remove changes lru order max recent queries size 2', () => 
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
+    onApplicationError,
   );
   const ast1: AST = {
     table: 'issue',
@@ -838,6 +848,7 @@ describe('getQueriesPatch', () => {
       queryChangeThrottleMs,
       slowMaterializeThreshold,
       onFatalError,
+      onApplicationError,
     );
     // hash: 12hwg3ihkijhm
     const ast1: AST = {
@@ -906,6 +917,7 @@ describe('getQueriesPatch', () => {
         queryChangeThrottleMs,
         slowMaterializeThreshold,
         onFatalError,
+        onApplicationError,
       );
     });
 
@@ -1109,6 +1121,7 @@ describe('getQueriesPatch', () => {
       queryChangeThrottleMs,
       slowMaterializeThreshold,
       onFatalError,
+      onApplicationError,
     );
     const ast1: AST = {
       table: 'issue',
@@ -1212,6 +1225,57 @@ describe('getQueriesPatch', () => {
   });
 });
 
+test('handleClosed marks queries as errored exactly once', () => {
+  const experimentalWatch = createExperimentalWatchMock();
+  const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+  const maxRecentQueriesSize = 0;
+  const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
+  const queryManager = new QueryManager(
+    lc,
+    mutationTracker,
+    'client1',
+    schema.tables,
+    send,
+    experimentalWatch,
+    maxRecentQueriesSize,
+    queryChangeThrottleMs,
+    slowMaterializeThreshold,
+    onFatalError,
+    onApplicationError,
+  );
+
+  const ast: AST = {table: 'issue'};
+  const queryHash = hashOfAST(ast);
+  const gotCallback = vi.fn<(got: boolean, error?: ErroredQuery) => void>();
+
+  queryManager.addLegacy(ast, 0, gotCallback);
+  queryManager.flushBatch();
+
+  expect(gotCallback).toHaveBeenCalledOnce();
+  expect(gotCallback).toHaveBeenCalledWith(false);
+
+  const reason = new ClientError({
+    kind: ClientErrorKind.ClientClosed,
+    message: 'Zero closed by test',
+  });
+
+  queryManager.handleClosed(reason);
+
+  expect(gotCallback).toHaveBeenCalledTimes(2);
+  const [, closedError] = gotCallback.mock.calls[1];
+  expect(closedError).toEqual({
+    error: 'app',
+    id: queryHash,
+    name: 'legacy',
+    message: 'Zero closed by test',
+    details: {kind: ClientErrorKind.ClientClosed},
+  });
+
+  // invoking again is a no-op
+  queryManager.handleClosed(reason);
+  expect(gotCallback).toHaveBeenCalledTimes(2);
+});
+
 test('gotCallback, query already got', () => {
   const queryHash = '12hwg3ihkijhm';
   const experimentalWatch = createExperimentalWatchMock();
@@ -1230,6 +1294,7 @@ test('gotCallback, query already got', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
+    onApplicationError,
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
@@ -1302,6 +1367,7 @@ test('gotCallback, query got after add', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
+    onApplicationError,
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
@@ -1369,6 +1435,7 @@ test('gotCallback, query got after add then removed', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
+    onApplicationError,
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
@@ -1446,6 +1513,7 @@ test('gotCallback, query got after subscription removed', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
+    onApplicationError,
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
@@ -1527,6 +1595,7 @@ describe('queriesPatch with lastPatch', () => {
       queryChangeThrottleMs,
       slowMaterializeThreshold,
       onFatalError,
+      onApplicationError,
     );
 
     queryManager.addLegacy(
@@ -1568,6 +1637,7 @@ describe('queriesPatch with lastPatch', () => {
       queryChangeThrottleMs,
       slowMaterializeThreshold,
       onFatalError,
+      onApplicationError,
     );
 
     const clean = queryManager.addLegacy(
@@ -1634,6 +1704,7 @@ const stubAst: AST = {
 describe('query transform errors', () => {
   test('got is called with an error when an app error occurs', () => {
     const onFatalErrorMock = vi.fn();
+    const onApplicationErrorMock = vi.fn();
     const nameAndArgs = {name: 'custom1', args: []};
     const nameAndArgs2 = {name: 'custom2', args: []};
 
@@ -1641,7 +1712,11 @@ describe('query transform errors', () => {
     const experimentalWatch = createExperimentalWatchMock();
     const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
     const maxRecentQueriesSize = 0;
-    const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const mutationTracker = new MutationTracker(
+      lc,
+      ackMutations,
+      onFatalErrorMock,
+    );
     const queryManager = new QueryManager(
       lc,
       mutationTracker,
@@ -1653,6 +1728,7 @@ describe('query transform errors', () => {
       queryChangeThrottleMs,
       slowMaterializeThreshold,
       onFatalErrorMock,
+      onApplicationErrorMock,
     );
 
     const gotCallback1 = vi.fn<(got: boolean | Error) => void>();
@@ -1679,6 +1755,7 @@ describe('query transform errors', () => {
       error: 'app',
       id: queryHash,
       name: 'custom1',
+      message: 'failed to transform query',
     } as const;
 
     // set an error
@@ -1694,14 +1771,30 @@ describe('query transform errors', () => {
     // error does not notify unrelated queries
     expect(gotCallback2).toHaveBeenCalledTimes(1);
     expect(onFatalErrorMock).not.toHaveBeenCalled();
+    expect(onApplicationErrorMock).toHaveBeenCalledOnce();
+    expect(onApplicationErrorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'failed to transform query',
+        details: 'injected failure',
+      }),
+    );
   });
 
-  test('calls onFatalError for http errors', () => {
+  test('got is called with an error when a parse error occurs', () => {
     const onFatalErrorMock = vi.fn();
+    const onApplicationErrorMock = vi.fn();
+    const nameAndArgs = {name: 'custom1', args: []};
+    const nameAndArgs2 = {name: 'custom2', args: []};
+
+    const queryHash = hashOfNameAndArgs(nameAndArgs.name, nameAndArgs.args);
     const experimentalWatch = createExperimentalWatchMock();
     const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
     const maxRecentQueriesSize = 0;
-    const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const mutationTracker = new MutationTracker(
+      lc,
+      ackMutations,
+      onFatalErrorMock,
+    );
     const queryManager = new QueryManager(
       lc,
       mutationTracker,
@@ -1713,6 +1806,66 @@ describe('query transform errors', () => {
       queryChangeThrottleMs,
       slowMaterializeThreshold,
       onFatalErrorMock,
+      onApplicationErrorMock,
+    );
+
+    const gotCallback1 = vi.fn<(got: boolean | Error) => void>();
+    const gotCallback2 = vi.fn<(got: boolean | Error) => void>();
+
+    queryManager.addCustom(stubAst, nameAndArgs, 0, gotCallback1);
+    queryManager.addCustom(stubAst, nameAndArgs2, 0, gotCallback2);
+    queryManager.flushBatch();
+
+    expect(gotCallback1).toHaveBeenCalledOnce();
+    expect(gotCallback1).toHaveBeenCalledWith(false);
+    expect(gotCallback2).toHaveBeenCalledOnce();
+    expect(gotCallback2).toHaveBeenCalledWith(false);
+
+    const parseError: ErroredQuery = {
+      error: 'parse',
+      id: queryHash,
+      name: 'custom1',
+      message: 'invalid args',
+    };
+
+    queryManager.handleTransformErrors([parseError]);
+
+    expect(gotCallback1).toHaveBeenCalledTimes(2);
+    expect(gotCallback1).nthCalledWith(2, false, parseError);
+    expect(gotCallback2).toHaveBeenCalledTimes(1);
+    expect(onFatalErrorMock).not.toHaveBeenCalled();
+    expect(onApplicationErrorMock).toHaveBeenCalledOnce();
+    expect(onApplicationErrorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'invalid args',
+        details: undefined,
+      }),
+    );
+  });
+
+  test('calls onFatalError for non-app errors', () => {
+    const onFatalErrorMock = vi.fn();
+    const onApplicationErrorMock = vi.fn();
+    const experimentalWatch = createExperimentalWatchMock();
+    const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+    const maxRecentQueriesSize = 0;
+    const mutationTracker = new MutationTracker(
+      lc,
+      ackMutations,
+      onFatalErrorMock,
+    );
+    const queryManager = new QueryManager(
+      lc,
+      mutationTracker,
+      'client1',
+      schema.tables,
+      send,
+      experimentalWatch,
+      maxRecentQueriesSize,
+      queryChangeThrottleMs,
+      slowMaterializeThreshold,
+      onFatalErrorMock,
+      onApplicationErrorMock,
     );
 
     const ast: AST = {table: 'issue', orderBy: [['id', 'asc']]};
@@ -1725,7 +1878,7 @@ describe('query transform errors', () => {
       name: 'testQuery',
       status: 500,
       details: 'Transform failed',
-    };
+    } as unknown as ErroredQuery;
 
     queryManager.handleTransformErrors([error]);
 
@@ -1735,66 +1888,23 @@ describe('query transform errors', () => {
         name: 'ProtocolError',
         errorBody: expect.objectContaining({
           kind: ErrorKind.TransformFailed,
-          message: 'HTTP 500 transforming queries',
         }),
       }),
     );
-  });
-
-  test('calls onFatalError for zero errors', () => {
-    const onFatalErrorMock = vi.fn();
-    const experimentalWatch = createExperimentalWatchMock();
-    const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
-    const maxRecentQueriesSize = 0;
-    const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
-    const queryManager = new QueryManager(
-      lc,
-      mutationTracker,
-      'client1',
-      schema.tables,
-      send,
-      experimentalWatch,
-      maxRecentQueriesSize,
-      queryChangeThrottleMs,
-      slowMaterializeThreshold,
-      onFatalErrorMock,
-    );
-
-    const ast: AST = {table: 'issue', orderBy: [['id', 'asc']]};
-    const queryHash = hashOfAST(ast);
-    const gotCallback = vi.fn();
-    queryManager.addLegacy(ast, 0, gotCallback);
-
-    const error = {
-      error: 'zero' as const,
-      id: queryHash,
-      name: 'testQuery',
-      details: 'Something went wrong',
-    };
-
-    queryManager.handleTransformErrors([error]);
-
-    expect(gotCallback).toHaveBeenCalledTimes(2);
-    expect(gotCallback).nthCalledWith(1, false);
-    expect(gotCallback).nthCalledWith(2, false, error);
-    expect(onFatalErrorMock).toHaveBeenCalledOnce();
-    expect(onFatalErrorMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        name: 'ProtocolError',
-        errorBody: expect.objectContaining({
-          kind: ErrorKind.TransformFailed,
-          message: 'Unknown error transforming queries',
-        }),
-      }),
-    );
+    expect(onApplicationErrorMock).not.toHaveBeenCalled();
   });
 
   test('calls onFatalError for each non-app error in batch', () => {
     const onFatalErrorMock = vi.fn();
+    const onApplicationErrorMock = vi.fn();
     const experimentalWatch = createExperimentalWatchMock();
     const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
     const maxRecentQueriesSize = 0;
-    const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const mutationTracker = new MutationTracker(
+      lc,
+      ackMutations,
+      onFatalErrorMock,
+    );
     const queryManager = new QueryManager(
       lc,
       mutationTracker,
@@ -1806,6 +1916,7 @@ describe('query transform errors', () => {
       queryChangeThrottleMs,
       slowMaterializeThreshold,
       onFatalErrorMock,
+      onApplicationErrorMock,
     );
 
     const ast1: AST = {table: 'issue', orderBy: [['id', 'asc']]};
@@ -1830,7 +1941,7 @@ describe('query transform errors', () => {
         name: 'query2',
         details: 'App error',
       },
-    ];
+    ] as unknown as ErroredQuery[];
 
     queryManager.handleTransformErrors(errors);
 
@@ -1841,8 +1952,13 @@ describe('query transform errors', () => {
         name: 'ProtocolError',
         errorBody: expect.objectContaining({
           kind: ErrorKind.TransformFailed,
-          message: 'HTTP 500 transforming queries',
         }),
+      }),
+    );
+    expect(onApplicationErrorMock).toHaveBeenCalledOnce();
+    expect(onApplicationErrorMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Unknown application error',
       }),
     );
   });
@@ -1865,6 +1981,7 @@ test('gotCallback, add same got callback twice', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
+    onApplicationError,
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
@@ -1937,6 +2054,7 @@ test('batching multiple operations in same microtask', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
+    onApplicationError,
   );
 
   // Add multiple queries synchronously - should be batched
@@ -1988,6 +2106,7 @@ describe('query manager & mutator interaction', () => {
       queryChangeThrottleMs,
       slowMaterializeThreshold,
       onFatalError,
+      onApplicationError,
     );
   });
 
@@ -2053,11 +2172,15 @@ describe('Adding a query with TTL too large should warn', () => {
   const logSink = {
     log: vi.fn<LogSink['log']>(),
   };
-  const lc = new LogContext('debug', {}, logSink);
+  const lcTest = new LogContext('debug', {}, logSink);
   const maxRecentQueriesSize = 0;
-  const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
+  const mutationTracker = new MutationTracker(
+    lcTest,
+    ackMutations,
+    onFatalError,
+  );
   const queryManager = new QueryManager(
-    lc,
+    lcTest,
     mutationTracker,
     'client1',
     schema.tables,
@@ -2067,6 +2190,7 @@ describe('Adding a query with TTL too large should warn', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
+    onApplicationError,
   );
 
   afterEach(() => {
@@ -2164,6 +2288,7 @@ describe('update clamps TTL correctly', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
+    onApplicationError,
   );
 
   afterEach(() => {
@@ -2317,6 +2442,7 @@ test('Getting the AST of custom query', () => {
     queryChangeThrottleMs,
     slowMaterializeThreshold,
     onFatalError,
+    onApplicationError,
   );
 
   const ast: AST = {

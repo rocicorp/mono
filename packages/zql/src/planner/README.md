@@ -1,383 +1,652 @@
-# Planner
+# Query Planner for WHERE EXISTS
 
-SQLite plans single table queries. Our planner plans the joins.
+This directory contains a cost-based query planner that optimizes `WHERE EXISTS` (correlated subquery) statements by choosing optimal join execution strategies.
 
-Note: It may eventually plan single table queries as it becomes necessary on the frontend and/or we decide to replace SQLite with a different store.
+## Table of Contents
 
-## Architecture: Structure vs. Planning State
+- [Overview](#overview)
+- [Core Concepts](#core-concepts)
+- [Node Types](#node-types)
+- [Planning Algorithm](#planning-algorithm)
+- [Key Flows](#key-flows)
+- [Developer Guide](#developer-guide)
+- [Examples](#examples)
 
-The planner uses a **dual-state design pattern** to separate concerns and enable fast planning:
+## Overview
 
-### Graph Structure (Immutable)
+### Purpose
 
-Built once by `planner-builder.ts` and never modified during planning:
+The planner transforms queries with `EXISTS`/`NOT EXISTS` subqueries into optimized execution plans by deciding:
 
-- **Nodes**: Sources, Connections, Joins, FanOut/FanIn, Terminus
-- **Edges**: How nodes connect to each other (parent/child relationships)
-- **Configuration**: Cost models, filters, orderings, constraints definitions
+1. **Join direction**: Should the parent or child table be scanned first?
+2. **Cost estimation**: What's the expected cost of each plan?
+3. **Constraint propagation**: How do join predicates constrain table scans?
 
-Think of this as the "blueprint" of the query - the structural relationships that don't change.
+### Example Transformation
 
-### Planning State (Mutable)
+```typescript
+// Input query
+builder.users.whereExists('posts', p => p.where('published', true)).limit(10);
 
-Modified during `PlannerGraph.plan()` as we search for the optimal execution plan:
-
-- **Pinned flags**: Which connections have been locked into the plan
-- **Join types**: Whether joins are 'semi' (original) or 'flipped' (reversed)
-- **Accumulated constraints**: What constraints have propagated from parent joins
-
-Think of this as the "current attempt" - the state that changes as we explore different plans.
-
-### Why This Separation?
-
-1. **Performance**: Mutating state in-place is much faster than copying entire graph structures
-2. **Multi-start search**: Can `resetPlanningState()` and try different starting connections
-3. **Backtracking**: Can `capturePlanningSnapshot()` and `restorePlanningSnapshot()` when attempts fail
-4. **Clarity**: Makes it obvious what changes during planning vs. what's fixed structure
-
-This pattern is common in query optimizers (see Postgres, Apache Calcite, etc.) where the search space is large and performance matters.
-
-## Graph
-
-The planner creates a graph that represents the pipeline. This graph consists of nodes that are relevant to planning joins:
-
-1. **Connection** - Represents a table scan with filters and ordering
-2. **Join** - Combines two data streams (parent and child)
-3. **FanOut** - Distributes a single stream to multiple branches (used in OR conditions)
-4. **FanIn** - Merges multiple branches back into a single stream
-5. **Terminus** - The final output node where constraint propagation begins
-
-Note: `PlannerSource` exists as a factory for creating connections but is not itself a graph node.
-
-**Example graph:**
-
-```ts
-issue
-  .where(
-    ({or, exists}) => or(
-      exists('parent_issue', q => q.where('id', ?)),
-      exists('parent_issue', q => q.where('id', ?)),
-    )
-  )
+// Planner decides between:
+// Plan A (semi-join): Scan users → For each user, check if posts exist
+// Plan B (flipped):   Scan posts → For each post, fetch matching user
 ```
 
-```mermaid
-flowchart TD
-    S(["Source"]) --> C1["Connection1"]
-    S-->C2["Conneciton2"]
-    C1-->FO1["Fan Out"]
-    FO1-->J1{"Join"}
-    FO1-->J2{"Join"}
-    C2-->J1
-    C2-->J2
-    J1-->FI1["Fan In"]
-    J2-->FI1
-    C1@{ shape: dbl-circ}
-    C2@{ shape: dbl-circ }
+The planner evaluates both strategies and selects the one with the lowest estimated cost.
+
+## Core Concepts
+
+### 1. Dual-State Pattern
+
+Every planner node separates **immutable structure** from **mutable planning state**:
+
+- **Immutable structure** (set at construction):
+  - Node connections (parent, child, output)
+  - Table names, filters, ordering
+  - Join correlation constraints
+
+- **Mutable planning state** (changes during plan search):
+  - Join type (semi vs flipped)
+  - Fan-out/fan-in type (FO/UFO, FI/UFI)
+  - Accumulated constraints
+  - Limits
+
+The `reset()` method on each node clears mutable state for replanning without rebuilding the graph structure.
+
+### 2. Join Flipping
+
+A join can execute in two directions:
+
+- **Semi-join** (default): Parent is outer loop, child is inner
+
+  ```
+  for each parent row:
+    if EXISTS (matching child row):
+      emit parent row
+  ```
+
+- **Flipped join**: Child is outer loop, parent is inner
+  ```
+  for each child row:
+    fetch matching parent row(s)
+    emit results
+  ```
+
+**Key constraints:**
+
+- `NOT EXISTS` joins cannot be flipped (marked `flippable: false`)
+- Flipping a join makes both parent and child unlimited (removes LIMIT propagation)
+
+### 3. Constraint Propagation
+
+Constraints represent join predicates that narrow table scans:
+
+```typescript
+// Example: posts.userId = users.id
+type PlannerConstraint = Record<string, undefined>;
+// e.g., {userId: undefined} or {id: undefined}
 ```
 
-### FanOut/FanIn Type Conversion
+Constraints flow **backwards** through the graph from terminus to connections:
 
-FanOut and FanIn nodes have two variants that affect how branches are handled:
+- Semi-join: Forwards constraints from output to parent, sends child constraint to child
+- Flipped join: Translates output constraints to child, merges constraints to parent
+- Connection: Applies constraints to cost model for index selection
 
-**FanIn Types:**
+### 4. Cost Estimation
 
-- **FI (Normal FanIn)**: All branches share the same branch pattern `[0, ...]`. Used when branches are correlated (no flipped joins between FO and FI).
-- **UFI (Union FanIn)**: Each branch gets a unique pattern `[0, ...]`, `[1, ...]`, etc. Required when joins are flipped, making branches independent.
+Cost flows **forward** through the graph from connections to terminus:
 
-**FanOut Types:**
-
-- **FO (Normal FanOut)**: Standard distribution to branches.
-- **UFO (Uncorrelated FanOut)**: Marks that downstream branches are independent.
-
-**Conversion Trigger:**
-
-When a join is flipped between a FanOut and its corresponding FanIn, both must convert:
-
-- FO → UFO
-- FI → UFI
-
-This happens automatically during the planning phase via `checkAndConvertFOFI()` after join flipping.
-
-**Why This Matters:**
-
-UFI changes cost semantics. Consider `(A OR B) AND (C OR D)`:
-
-- With FI: Evaluates as a single correlated operation
-- With UFI: Each branch is independent, causing exponential cost growth if chained
-
-The conversion ensures accurate cost modeling when joins are reordered.
-
-## Plan Shape
-
-```ts
-// planner-builder.ts
-export type Plans = {
-  plan: PlannerGraph;
-  subPlans: {[key: string]: Plans};
+```typescript
+type CostEstimate = {
+  startupCost: number; // One-time setup (e.g., sorting)
+  scanEst: number; // Estimated rows scanned
+  cost: number; // Total cumulative cost
+  returnedRows: number; // Rows output
+  selectivity: number; // Fraction of input rows passing filters
+  limit: number | undefined;
 };
 ```
 
-Because a query can be composed of sub-queries, a query plan can be composed of sub-plans. Concretely, `related` calls get their own query plans.
+Cost estimation considers:
 
-```ts
-issue
-  .related('owner', q => ...)
-  .related('comments', q => ...);
+- Number of rows scanned in each table
+- Filter selectivity (fraction of rows passing predicates)
+- Join selectivity (fraction of parent rows with matching children)
+- Limit propagation (early termination)
+
+### 5. Branch Patterns
+
+Branch patterns (`number[]`) uniquely identify paths through OR branches:
+
+```typescript
+// Example: (EXISTS posts) OR (EXISTS comments)
+//
+//      users
+//        |
+//       FO ────────┐
+//      /  \        │
+//     J1  J2       │  Branch patterns:
+//      \  /        │  J1: [0]
+//       FI         │  J2: [1]
+//        |         │
+//     terminus     │
+//                  │
+// Nested ORs:      │
+// ((A OR B) AND (C OR D))
+//                  │
+// Results in patterns like:
+// [0,0], [0,1], [1,0], [1,1]
 ```
 
-The above query would result in a plan that is composed of 3 plans:
+Branch patterns allow connections to maintain separate constraints and costs for each OR path.
 
-- Plan for the top level issue query
-- Plan for the nested owner query
-- Plan for the nested comments query
+## Node Types
 
-If there is more nesting, or more sibling related calls, there are more plans. There is a tree of plans.
+### PlannerSource (`planner-source.ts`)
 
-`exists` calls do not create separate plans. All `exists` are planned together (that's the whole point of the planner!) as `exists` are inner & semi-joins so they are what need planning.
+Factory for creating connections to a table. Each source represents one table in the query.
 
-```ts
-issue
-  .exists('owner', q => ...)
-  .exists('comments', q => ...)
+**Key methods:**
+
+- `connect()`: Creates a PlannerConnection for this table
+
+### PlannerConnection (`planner-connection.ts`)
+
+Represents a table scan with filters and ordering.
+
+**Immutable:**
+
+- Table name, filters, ordering
+- Base constraints (from parent correlation)
+- Base limit (from query structure)
+- Selectivity (fraction of rows passing filters)
+
+**Mutable:**
+
+- Accumulated constraints from joins
+- Current limit (can be cleared by flipped joins)
+
+**Key methods:**
+
+- `propagateConstraints()`: Receives constraints from parent nodes
+- `estimateCost()`: Computes scan cost using cost model
+- `unlimit()`: Removes limit when join is flipped
+- `reset()`: Clears mutable state
+
+**Cost model:**
+
+```typescript
+type ConnectionCostModel = (
+  table: string,
+  sort: Ordering,
+  filters: Condition | undefined,
+  constraint: PlannerConstraint | undefined,
+) => {
+  startupCost: number;
+  rows: number;
+};
 ```
 
-The above query would result in a single plan that is not composed of any other plans. This is also the case if more exists were present.
+### PlannerJoin (`planner-join.ts`)
+
+Represents a join between parent and child data streams, corresponding to an `EXISTS` or `NOT EXISTS` check.
+
+**Immutable:**
+
+- Parent and child nodes
+- Parent/child constraints (correlation predicates)
+- Flippability (`NOT EXISTS` cannot flip)
+- Plan ID (for tracking in AST)
+
+**Mutable:**
+
+- Join type: `'semi'` or `'flipped'`
+
+**Key methods:**
+
+- `flip()`: Converts semi-join to flipped join
+- `propagateUnlimit()`: Removes limits from child when flipped
+- `propagateConstraints()`: Routes constraints based on join type
+- `estimateCost()`: Computes join cost
+
+**Semi-join costing:**
+
+```typescript
+// Parent drives execution
+cost = parent.cost + parent.scanEst * (child.startupCost + child.scanEst);
+returnedRows = parent.returnedRows * child.selectivity;
+```
+
+**Flipped join costing:**
+
+```typescript
+// Child drives execution
+cost = child.cost + child.scanEst * (parent.startupCost + parent.scanEst);
+returnedRows = parent.returnedRows * child.returnedRows * child.selectivity;
+```
+
+### PlannerFanOut (`planner-fan-out.ts`)
+
+Splits execution flow for OR branches.
+
+**Types:**
+
+- `FO` (Fan-Out): All branches share constraints and branch pattern
+- `UFO` (Union Fan-Out): Each branch gets unique branch pattern
+
+**Conversion rule:** FO → UFO when any join between FO and its corresponding FanIn is flipped.
+
+**Behavior:**
+
+- `FO`: Forwards constraints to input with single branch pattern `[0, ...]`
+- `UFO`: Would assign unique patterns, but constraint propagation doesn't differentiate
+
+### PlannerFanIn (`planner-fan-in.ts`)
+
+Merges execution flow from OR branches.
+
+**Types:**
+
+- `FI` (Fan-In): All inputs use same branch pattern (single fetch)
+- `UFI` (Union Fan-In): Each input gets unique branch pattern (multiple fetches)
+
+**Conversion rule:** FI → UFI when any join between FanOut and FanIn is flipped.
+
+**FI cost (max across branches):**
+
+```typescript
+returnedRows = max(input.returnedRows for input in inputs)
+cost = max(input.cost for input in inputs)
+selectivity = 1 - ∏(1 - input.selectivity)  // OR probability
+```
+
+**UFI cost (sum across branches):**
+
+```typescript
+returnedRows = Σ(input.returnedRows for input in inputs)
+cost = Σ(input.cost for input in inputs)
+selectivity = 1 - ∏(1 - input.selectivity)  // OR probability
+```
+
+### PlannerTerminus (`planner-terminus.ts`)
+
+Final output node where planning begins.
+
+**Key methods:**
+
+- `propagateConstraints()`: Initiates backward constraint flow with empty branch pattern
+- `estimateCost()`: Initiates forward cost flow with selectivity = 1
+
+### PlannerGraph (`planner-graph.ts`)
+
+Container managing all nodes and orchestrating the planning process.
+
+**Key collections:**
+
+- `connections[]`: All table scans
+- `joins[]`: All join nodes
+- `fanOuts[]`, `fanIns[]`: All fan nodes
+- `#sources`: Map of table name → PlannerSource
+
+**Key methods:**
+
+- `plan()`: Main planning algorithm (exhaustive enumeration)
+- `propagateConstraints()`: Triggers backward constraint flow
+- `getTotalCost()`: Computes total plan cost
+- `resetPlanningState()`: Resets all nodes for replanning
+- `capturePlanningSnapshot()` / `restorePlanningSnapshot()`: Save/restore plan state
 
 ## Planning Algorithm
 
-The planner uses **exhaustive join flip enumeration** to find the optimal query execution plan.
+The planner uses **exhaustive enumeration** of join flip patterns:
 
-### Approach
+```typescript
+// For n flippable joins, evaluate 2^n plans
+for pattern in 0...(2^n - 1):
+  1. Reset all nodes to initial state
+  2. Apply flip pattern (bit i = flip join i)
+  3. Derive FO/UFO and FI/UFI from flip pattern
+  4. Propagate unlimiting for flipped joins
+  5. Propagate constraints backwards through graph
+  6. Estimate cost forwards through graph
+  7. Track best plan
 
-Given a query with `n` flippable joins (EXISTS checks), the planner:
-
-1. **Enumerates all flip patterns**: Tries all 2^n possible combinations of flipping/not-flipping each join
-2. **Evaluates each pattern**: For each combination, calculates the total query cost
-3. **Selects the best**: Chooses the plan with the lowest cost
-
-### Algorithm Steps
-
-For each flip pattern (0 to 2^n - 1):
-
-1. **Reset planning state** - Clear all mutable state from previous attempt
-2. **Apply flip pattern** - Treat pattern as bitmask; bit `i` = 1 means flip join `i`
-3. **Derive FO/FI states** - Convert FO→UFO and FI→UFI if any join between them is flipped
-4. **Propagate unlimiting** - Remove EXISTS limits from connections in flipped join child subgraphs
-5. **Propagate constraints** - Send constraints up the graph from the terminus
-6. **Evaluate cost** - Calculate total cost for this plan
-7. **Track best** - If this is the lowest cost so far, save the plan state
-
-Finally, restore the best plan found.
-
-### Safety Limits
-
-To prevent excessive planning time, the planner enforces `MAX_FLIPPABLE_JOINS = 13`:
-
-- 10 joins → 1,024 plans (~100-200ms)
-- 12 joins → 4,096 plans (~400ms-1s)
-- 13 joins → 8,192 plans (~1-2s)
-
-Queries exceeding this limit will throw an error suggesting simplification.
-
-### Why Exhaustive?
-
-Unlike greedy approaches that make local decisions, exhaustive enumeration:
-
-- **Guarantees optimal plan**: Explores the entire search space
-- **Handles complex interactions**: Correctly evaluates how join flips affect downstream costs
-- **Practical for most queries**: Most queries have ≤5 EXISTS checks, making 2^5 = 32 evaluations trivial
-
-The trade-off is exponential growth, hence the safety limit.
-
-## Cost Estimation
-
-The cost of a connection is the estimated number of rows that will be scanned by that connections as well as any additional post-processing run against the connection to return those rows.
-
-Examples:
-
-```sql
-SELECT * FROM issue;
+// Restore best plan
 ```
 
-The cost of the above would be the size of the issue table.
+### Complexity Limits
 
-```sql
-SELECT * FROM issue WHERE creator_id = ?;
+- **Max flippable joins**: 13 (configurable via `MAX_FLIPPABLE_JOINS`)
+- At 13 joins: 8,192 plans evaluated
+- Safety check throws error if limit exceeded
+
+### Planning Steps in Detail
+
+1. **Build graph structure** (`planner-builder.ts`):
+
+   ```typescript
+   buildPlanGraph(ast, model, isRoot) → Plans
+   ```
+
+   - Creates sources for each table
+   - Builds connections, joins, fan nodes
+   - Assigns plan IDs to joins
+
+2. **Enumerate flip patterns** (`PlannerGraph.plan()`):
+   - For each pattern (bitmask of which joins are flipped):
+     - Reset planning state
+     - Apply flips
+     - Convert FO/FI to UFO/UFI as needed
+     - Propagate unlimiting
+     - Propagate constraints
+     - Estimate cost
+     - Track best
+
+3. **Restore best plan**:
+   - Apply best flip pattern
+   - Propagate constraints
+   - Ready for execution
+
+4. **Apply to AST** (`applyPlansToAST()`):
+   - Mark flipped joins in AST with `flip: true`
+   - Recurse into related subqueries
+
+## Key Flows
+
+### Constraint Propagation Flow
+
+Constraints flow **backwards** from terminus to connections:
+
+```
+terminus
+   ↓ constraint=undefined, branchPattern=[]
+ join (semi)
+   ↓ forwards output constraint to parent
+   ↓ sends childConstraint to child
+connection
+   ↓ applies constraint to cost model
 ```
 
-The cost of the above would be the average number of rows per creator.
+For flipped joins:
 
-```sql
-SELECT * FROM issue ORDER BY unindexed_column;
+```
+ join (flipped)
+   ↓ translates output constraint to child space
+   ↓ merges output + parentConstraint for parent
 ```
 
-The cost of the above would be the size of the issue table + the cost to create a temp b-tree that contains all rows. This is one of those post processing steps referred to earlier.
+For fan nodes:
 
-`planner-connection.ts` takes a function that can return a cost, allowing different cost models to be applied. E.g., SQLite's or our own.
+```
+FI/UFI
+   ↓ propagates to all inputs
+   ↓ FI: same pattern [0, ...] for all
+   ↓ UFI: unique patterns [i, ...] for each input
 
-Limits are never provided to the cost estimator as we can never know how many rows will be filtered out before fulfilling a limit.
+FO/UFO
+   ↓ forwards to input (single stream)
+```
 
-### Cost Components
+### Cost Estimation Flow
 
-Each node in the planner graph returns a `CostEstimate` object with multiple components:
+Costs flow **forward** from connections to terminus:
 
-```ts
-type CostEstimate = {
-  rows: number; // Estimated number of output rows
-  runningCost: number; // Cost that scales with outer loop iterations
-  startupCost: number; // One-time cost (e.g., sorting, building temp tables)
-  selectivity: number; // Fraction of rows that pass filters (0-1)
-  limit: number | undefined; // Result limit if present
+```
+connection
+   ↑ base cost from cost model
+ join
+   ↑ combines parent + child costs
+   ↑ computes selectivity
+FI/UFI
+   ↑ FI: max of inputs
+   ↑ UFI: sum of inputs
+terminus
+   ↑ final total cost
+```
+
+### Unlimiting Flow
+
+When a join is flipped, limits are removed to allow full scans:
+
+```
+join.flip()
+   ↓ calls propagateUnlimit()
+   ↓
+   ├→ parent.propagateUnlimitFromFlippedJoin()
+   │    ↓ connection: clears limit
+   │    ↓ semi-join: continues to its parent
+   │    ↓ flipped join: stops (already unlimited)
+   │    ↓ fan nodes: propagates to all inputs
+   │
+   └→ child.propagateUnlimitFromFlippedJoin()
+        ↓ (same rules as parent)
+```
+
+**Why unlimit?** In a flipped join, the child becomes the outer loop and must produce all rows, not just enough to satisfy the parent's limit.
+
+## Developer Guide
+
+### Entry Points
+
+**For query execution:**
+
+```typescript
+import {planQuery} from './planner-builder.ts';
+
+const optimizedAST = planQuery(ast, costModel, planDebugger);
+// Returns AST with `flip: true` on flipped joins
+```
+
+**For testing/analysis:**
+
+```typescript
+import {buildPlanGraph} from './planner-builder.ts';
+import {AccumulatorDebugger} from './planner-debug.ts';
+
+const plans = buildPlanGraph(ast, costModel, true);
+const debugger = new AccumulatorDebugger();
+plans.plan.plan(debugger);
+console.log(debugger.format());
+```
+
+### Cost Model Interface
+
+Implement `ConnectionCostModel` to provide cost estimates:
+
+```typescript
+type ConnectionCostModel = (
+  table: string,
+  sort: Ordering,
+  filters: Condition | undefined,
+  constraint: PlannerConstraint | undefined,
+) => {
+  startupCost: number; // One-time cost (e.g., sorting)
+  rows: number; // Estimated rows returned
 };
 ```
 
-**Component Semantics:**
+**Guidelines:**
 
-- **`startupCost`**: One-time initialization costs that don't scale with the number of times a node is executed. Examples:
-  - Building a temporary B-tree for sorting by an unindexed column
-  - Creating hash tables for joins
-  - Reading table statistics
+- Use database statistics (row counts, indexes, selectivity)
+- Account for constraints (join predicates enable index usage)
+- Consider sort order (may require sorting or use index)
+- Return conservative estimates when statistics unavailable
 
-- **`runningCost`**: Costs that scale with how many times the node executes in nested loops. For a connection scanning 100 rows:
-  - Executed once in outer loop: `runningCost = 100`
-  - Executed 1000 times in inner loop: total cost = `1000 × 100 = 100,000`
+**Example (SQLite):**
+See `packages/zqlite/src/sqlite-cost-model.ts` for a production implementation using `sqlite_stat1`.
 
-- **`rows`**: The logical number of output rows. Used by parent joins to estimate their loop counts.
+### Debugging
 
-- **`selectivity`**: The fraction of input rows that survive filters (0.0 to 1.0). Used to estimate how many rows will satisfy a limit clause.
+**Enable debug logging:**
 
-**Total Cost Calculation:**
+```typescript
+import {AccumulatorDebugger} from './planner-debug.ts';
 
-The total cost of a plan is: `startupCost + runningCost`
+const debugger = new AccumulatorDebugger();
+planQuery(ast, costModel, debugger);
 
-Startup costs accumulate additively while running costs multiply through nested loops.
+// Print formatted output
+console.log(debugger.format());
 
-### Semi-Join Overhead
-
-Semi-joins (representing `EXISTS` checks) have inherent execution overhead compared to flipped joins, even when they scan the same number of rows logically. This overhead comes from:
-
-1. **Correlated execution**: Each parent row requires a separate correlation check
-2. **Limited index utilization**: Cannot leverage combined constraint checking as effectively as regular joins
-3. **Query planner limitations**: Database engines may not optimize correlated subqueries as well as regular joins
-
-To account for this, the planner applies a **semi-join overhead multiplier** (currently 1.5×) to `scanEst` for semi-joins. This ensures that when two plans have the same logical row counts but differ in join strategy, the planner correctly prefers flipped joins.
-
-**Example Impact:**
-
-Consider a query where both approaches scan 1 row:
-
-- Semi-join: `{rows: 1.5, runningCost: 1.5}`
-- Flipped join: `{rows: 1.0, runningCost: 1.0}`
-
-The overhead propagates through nested joins, making the difference more significant in complex queries. In production workloads, this correctly models the 1.5-1.7× performance difference observed between semi-joins and flipped joins.
-
-See `planner-join.ts` for the implementation and `SEMI_JOIN_OVERHEAD_MULTIPLIER` constant.
-
-### Cost Estimation with Branch Patterns
-
-The `estimateCost()` method accepts an optional branch pattern parameter:
-
-- **`estimateCost(undefined)`**: Returns the sum of costs across all branches. Used by `getUnpinnedConnectionCosts()` to rank connections for selection.
-- **`estimateCost([0, 1, 2])`**: Returns the cost for a specific branch pattern. Used during constraint propagation when joins estimate their costs.
-
-Branch patterns flow through the graph during both constraint propagation and cost estimation:
-
-- **FanIn (FI)**: Passes `[0, ...]` to all branches (correlated)
-- **Union FanIn (UFI)**: Passes `[i, ...]` with unique index per branch (independent)
-- **Joins**: Pass through the branch pattern unchanged
-
-**Caching Strategy:**
-
-To avoid redundant cost model invocations, connections cache costs at two levels:
-
-1. **Total cost cache**: The sum of all branch costs (when `branchPattern === undefined`)
-2. **Per-constraint cache**: A map from branch pattern key (`"0,1"`) to computed cost
-
-Both caches are invalidated when constraints change during propagation.
-
-## Join Flipping Mechanics
-
-Each join can be in one of two states:
-
-- **Semi-join**: Parent is outer loop, child is inner loop (original query order)
-- **Flipped join**: Child is outer loop, parent is inner loop (reversed)
-
-The exhaustive planner treats each flip pattern as a binary string where bit `i` determines whether join `i` is flipped.
-
-**Example with 3 flippable joins:**
-
-- Pattern `000` (0): All semi-joins (original query order)
-- Pattern `001` (1): Only join 0 flipped
-- Pattern `101` (5): Joins 0 and 2 flipped
-- Pattern `111` (7): All joins flipped
-
-**NOT EXISTS joins** are marked as unflippable and never participate in enumeration.
-
-## Constraint Propagation
-
-After applying a flip pattern, constraints are propagated up the graph from the terminus node to update connection cost estimates.
-
-**Constraint Flow:**
-
-`terminus -> ... -> join -> ... -> join -> connection`
-
-**Join Constraint Rules:**
-
-- **Semi-join** (not flipped):
-  - Sends its `childConstraint` to the child connection
-  - Forwards received constraints to the parent connection
-- **Flipped join**:
-  - Sends `undefined` to the child connection (child is now outer loop, unconstrained)
-  - Merges its `parentConstraint` with received constraints and sends to parent
-
-**Why This Matters:**
-
-Constraints represent which columns are available for index lookups. When a join is flipped, the outer/inner loop relationship changes, altering what constraints are available:
-
-- **Semi-join**: Parent rows drive child lookups → child gets constraining columns
-- **Flipped join**: Child rows drive parent lookups → parent gets constraining columns
-
-See `planner-join.ts` for implementation details.
-
-### Branch Patterns
-
-Branch patterns are arrays of numbers that uniquely identify paths through the query graph, particularly when OR conditions create multiple branches.
-
-**How They Work:**
-
-1. **Terminus starts with `[]`**: The empty pattern at the root
-2. **FanIn adds a prefix**:
-   - **FI**: Adds `[0, ...]` to all branches (correlated access)
-   - **UFI**: Adds `[i, ...]` with unique `i` per branch (independent access)
-3. **Other nodes pass through unchanged**: Joins, FanOuts, Connections preserve the pattern
-
-**Example: OR Query**
-
-```ts
-track.where(({or, exists}) => or(exists('album'), exists('invoiceLines')));
+// Access specific events
+const attempts = debugger.getEvents('attempt-start');
+const costs = debugger.getEvents('node-cost');
 ```
 
-If the FanIn is converted to UFI (because a join flipped), constraint propagation generates two patterns:
+**Debug events:**
 
-- Branch 0 (album path): `[0]`
-- Branch 1 (invoiceLines path): `[1]`
+- `attempt-start`: New flip pattern being evaluated
+- `node-constraint`: Constraint propagated to a node
+- `node-cost`: Cost computed for a node
+- `constraints-propagated`: All constraints set for an attempt
+- `plan-complete`: Plan evaluation succeeded
+- `plan-failed`: Plan evaluation failed
+- `best-plan-selected`: Best plan chosen
 
-**Why Branch Patterns Matter:**
+### Testing Patterns
 
-1. **Constraint Tracking**: Connections map constraints by branch pattern key (`"0"`, `"1"`, `"0,1"`)
-2. **Cost Estimation**: Each branch can have different costs based on its constraints
-3. **Exponential Cost Growth**: Chained UFIs create cartesian products:
-   - `(A OR B)` → 2 branches
-   - `(A OR B) AND (C OR D)` → 4 branches (2×2)
-   - Three ORs → 8 branches (2×2×2)
+**Test graph construction:**
 
-This is why the planner tries to avoid flipping joins in OR regions when possible.
+```typescript
+const plans = buildPlanGraph(ast, simpleCostModel, true);
+expect(plans.plan.connections).toHaveLength(2);
+expect(plans.plan.joins).toHaveLength(1);
+```
 
----
+**Test planning:**
 
-## NOT EXISTS Handling
+```typescript
+plans.plan.plan();
+expect(plans.plan.joins[0].type).toBe('flipped');
+```
 
-`NOT EXISTS` joins cannot be flipped. They are marked as `flippable: false` and are excluded from the enumeration process. Only flippable joins (standard EXISTS checks) participate in the flip pattern enumeration.
+**Test with different costs:**
 
-If a flip pattern would require flipping an unflippable join (which shouldn't happen with proper `isFlippable()` checks), it would throw an `UnflippableJoinError` and that pattern would be skipped.
+```typescript
+const cheapParentModel = (table, sort, filters, constraint) => {
+  if (table === 'parent') return {startupCost: 0, rows: 10};
+  return {startupCost: 0, rows: 1000};
+};
+
+plans.plan.plan();
+// Expect parent chosen first (cheap)
+```
+
+### Common Pitfalls
+
+1. **Forgetting to reset between planning attempts**
+   - The planning loop handles this, but manual testing needs `resetPlanningState()`
+
+2. **Modifying immutable structure during planning**
+   - Graph structure is built once, only mutable state changes
+
+3. **Not handling undefined constraints**
+   - When FO → UFO, non-flipped branches may have `constraint: undefined`
+
+4. **Incorrect constraint translation in flipped joins**
+   - Must translate from parent space to child space using index-based mapping
+
+5. **Forgetting to propagate unlimiting**
+   - Flipped joins must unlimit both parent and child chains
+
+## Examples
+
+### Example 1: Simple EXISTS
+
+```typescript
+// Query
+builder.users.whereExists('posts').limit(10)
+
+// Graph structure
+[users connection] → [join] → [terminus]
+                      ↓
+              [posts connection]
+
+// Semi-join plan:
+// - Scan users (limit 10)
+// - For each user, check if posts exist (limit 1)
+// Cost: 10 users × 1 post check
+
+// Flipped plan:
+// - Scan posts (no limit - unlimited by flip)
+// - For each post, fetch user
+// Cost: 1000 posts × 1 user fetch
+```
+
+### Example 2: AND with Multiple EXISTS
+
+```typescript
+// Query
+builder.users
+  .whereExists('posts', p => p.where('published', true))
+  .whereExists('comments')
+  .limit(10)
+
+// Graph structure
+[users] → [join1] → [join2] → [terminus]
+           ↓         ↓
+         [posts]   [comments]
+
+// Planner considers 4 patterns (2^2 joins):
+// 00: both semi     (scan users first)
+// 01: J1 semi, J2 flipped
+// 10: J1 flipped, J2 semi
+// 11: both flipped  (scan posts or comments first)
+```
+
+### Example 3: OR Creates Fan Nodes
+
+```typescript
+// Query
+builder.users.where(({or, exists}) =>
+  or(
+    exists('posts'),
+    exists('comments')
+  )
+)
+
+// Graph structure
+              FO
+             /  \
+     [posts J] [comments J]
+             \  /
+              FI
+              |
+          [terminus]
+
+// If both joins are semi (not flipped):
+// - FO type: FO (single fetch)
+// - FI type: FI (max cost of branches)
+
+// If any join is flipped:
+// - FO type: UFO (needs unique branch patterns)
+// - FI type: UFI (sum cost of branches)
+```
+
+### Example 4: Nested Subqueries
+
+```typescript
+// Query (ZQL RELATED clause)
+builder.issues.related('assignee', a =>
+  a.whereExists('labels', l => l.where('name', 'urgent')),
+);
+
+// Creates separate plan graphs:
+// - Main plan: issues query
+// - Subplan: assignee query with EXISTS labels
+// Plans are optimized independently, then composed
+```
+
+## Related Files
+
+- `SELECTIVITY_PLAN.md`: Design document for semi-join selectivity improvements
+- `packages/zqlite/src/sqlite-cost-model.ts`: Production cost model for SQLite
+- `packages/zql/src/query/joins/`: Runtime join implementations (SemiJoin, FlippedJoin)
+
+## Further Reading
+
+- PostgreSQL cost model: [compute_semi_anti_join_factors](https://doxygen.postgresql.org/costsize_8c.html)
+- SQLite query planner: [Query Planning](https://sqlite.org/optoverview.html)
+- Classic paper: Selinger et al., "Access Path Selection in a Relational Database" (1979)

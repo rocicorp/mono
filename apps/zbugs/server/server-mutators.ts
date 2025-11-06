@@ -1,18 +1,22 @@
 import {type ServerTransaction, type UpdateValue} from '@rocicorp/zero';
 import type {PostgresJsTransaction} from '@rocicorp/zero/server/adapters/postgresjs';
-import {assert} from '../../../packages/shared/src/asserts.ts';
 import {type AuthData} from '../shared/auth.ts';
+import {MutationError, MutationErrorCode} from '../shared/error.ts';
 import {
   createMutators,
   type AddCommentArgs,
   type AddEmojiArgs,
   type CreateIssueArgs,
 } from '../shared/mutators.ts';
-import {schema, type Schema} from '../shared/schema.ts';
+import {builder, schema, type Schema} from '../shared/schema.ts';
 import {notify} from './notify.ts';
 
 export type PostCommitTask = () => Promise<void>;
-type MutatorTx = ServerTransaction<Schema, PostgresJsTransaction>;
+type MutatorTx = ServerTransaction<
+  Schema,
+  PostgresJsTransaction,
+  AuthData | undefined
+>;
 
 export function createServerMutators(
   authData: AuthData | undefined,
@@ -39,7 +43,6 @@ export function createServerMutators(
           modified: Date.now(),
         });
 
-        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -57,7 +60,6 @@ export function createServerMutators(
           modified: Date.now(),
         });
 
-        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -76,7 +78,6 @@ export function createServerMutators(
       ) {
         await mutators.issue.addLabel(tx, {issueID, labelID});
 
-        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -95,7 +96,6 @@ export function createServerMutators(
       ) {
         await mutators.issue.removeLabel(tx, {issueID, labelID});
 
-        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -118,7 +118,6 @@ export function createServerMutators(
           created: Date.now(),
         });
 
-        assert(tx.location === 'server');
         await notify(
           tx,
           authData,
@@ -137,12 +136,18 @@ export function createServerMutators(
           created: Date.now(),
         });
 
-        const comment = await tx.query.comment
-          .where('id', args.subjectID)
-          .one()
-          .run();
-        assert(comment);
-        assert(tx.location === 'server');
+        const comment = await tx.run(
+          builder.comment.where('id', args.subjectID).one(),
+        );
+
+        if (!comment) {
+          throw new MutationError(
+            `Comment not found`,
+            MutationErrorCode.NOTIFICATION_FAILED,
+            args.subjectID,
+          );
+        }
+
         await notify(
           tx,
           authData,
@@ -167,7 +172,7 @@ export function createServerMutators(
           body,
           created: Date.now(),
         });
-        assert(tx.location === 'server');
+
         await notify(
           tx,
           authData,
@@ -184,10 +189,16 @@ export function createServerMutators(
       async edit(tx: MutatorTx, {id, body}: {id: string; body: string}) {
         await mutators.comment.edit(tx, {id, body});
 
-        const comment = await tx.query.comment.where('id', id).one().run();
-        assert(comment);
+        const comment = await tx.run(builder.comment.where('id', id).one());
 
-        assert(tx.location === 'server');
+        if (!comment) {
+          throw new MutationError(
+            `Comment not found`,
+            MutationErrorCode.NOTIFICATION_FAILED,
+            id,
+          );
+        }
+
         await notify(
           tx,
           authData,

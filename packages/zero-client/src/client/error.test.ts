@@ -15,7 +15,9 @@ import {
   getErrorConnectionTransition,
   isAuthError,
   isClientError,
+  isOfflineError,
   isServerError,
+  isZeroError,
   NO_STATUS_TRANSITION,
 } from './error.ts';
 
@@ -68,6 +70,31 @@ describe('ClientError', () => {
   });
 });
 
+describe('isZeroError', () => {
+  test('returns true for client errors', () => {
+    const error = new ClientError({
+      kind: ClientErrorKind.Hidden,
+      message: 'hidden',
+    });
+
+    expect(isZeroError(error)).toBe(true);
+  });
+
+  test('returns true for server errors', () => {
+    const error = new ProtocolError({
+      kind: ErrorKind.Internal,
+      message: 'internal',
+      origin: ErrorOrigin.Server,
+    });
+
+    expect(isZeroError(error)).toBe(true);
+  });
+
+  test('returns false for non-zero errors', () => {
+    expect(isZeroError(new Error('oops'))).toBe(false);
+  });
+});
+
 describe('ServerError', () => {
   test('exposes error body and metadata', () => {
     const body: ErrorBody = {
@@ -110,6 +137,28 @@ describe('ServerError', () => {
 
     expect(error.stack).toBeDefined();
     expect(error.stack).toContain('ProtocolError');
+  });
+});
+
+describe('isOfflineError', () => {
+  test('returns true for offline client errors', () => {
+    const error = new ClientError({
+      kind: ClientErrorKind.Offline,
+      message: 'offline',
+    });
+
+    expect(isOfflineError(error)).toBe(true);
+  });
+
+  test('returns false for other errors', () => {
+    const clientError = new ClientError({
+      kind: ClientErrorKind.ConnectTimeout,
+      message: 'connect timeout',
+    });
+    const genericError = new Error('boom');
+
+    expect(isOfflineError(clientError)).toBe(false);
+    expect(isOfflineError(genericError)).toBe(false);
   });
 });
 
@@ -261,17 +310,20 @@ describe('getErrorConnectionTransition', () => {
     ClientErrorKind.ConnectTimeout,
     ClientErrorKind.Hidden,
     ClientErrorKind.PingTimeout,
-  ] as const)('returns null status for retryable client error %s', kind => {
-    const error = new ClientError({
-      kind,
-      message: 'retry',
-    });
+  ] as const)(
+    'returns no status transition for retryable client error %s',
+    kind => {
+      const error = new ClientError({
+        kind,
+        message: 'retry',
+      });
 
-    expect(getErrorConnectionTransition(error)).toEqual({
-      status: NO_STATUS_TRANSITION,
-      reason: error,
-    });
-  });
+      expect(getErrorConnectionTransition(error)).toEqual({
+        status: NO_STATUS_TRANSITION,
+        reason: error,
+      });
+    },
+  );
 
   test('returns error status for fatal client errors', () => {
     const error = new ClientError({
@@ -287,7 +339,7 @@ describe('getErrorConnectionTransition', () => {
 
   test('returns disconnected status for disconnect timeout', () => {
     const error = new ClientError({
-      kind: ClientErrorKind.DisconnectTimeout,
+      kind: ClientErrorKind.Offline,
       message: 'disconnect',
     });
 
@@ -326,22 +378,39 @@ describe('getErrorConnectionTransition', () => {
     ErrorKind.Rebalance,
     ErrorKind.Rehome,
     ErrorKind.ServerOverloaded,
-    ErrorKind.AuthInvalidated,
-    ErrorKind.Unauthorized,
     ErrorKind.MutationRateLimited,
     ErrorKind.MutationFailed,
-  ] as const)('returns null status for non-fatal server error %s', kind => {
-    const error = new ProtocolError({
-      kind,
-      message: 'non-fatal',
-      origin: ErrorOrigin.Server,
-    } as ErrorBody);
+  ] as const)(
+    'returns no status transition for non-fatal server error %s',
+    kind => {
+      const error = new ProtocolError({
+        kind,
+        message: 'non-fatal',
+        origin: ErrorOrigin.Server,
+      } as ErrorBody);
 
-    expect(getErrorConnectionTransition(error)).toEqual({
-      status: NO_STATUS_TRANSITION,
-      reason: error,
-    });
-  });
+      expect(getErrorConnectionTransition(error)).toEqual({
+        status: NO_STATUS_TRANSITION,
+        reason: error,
+      });
+    },
+  );
+
+  test.each([ErrorKind.AuthInvalidated, ErrorKind.Unauthorized] as const)(
+    'returns needs auth status for auth error %s',
+    kind => {
+      const error = new ProtocolError({
+        kind,
+        message: 'non-fatal',
+        origin: ErrorOrigin.Server,
+      } as ErrorBody);
+
+      expect(getErrorConnectionTransition(error)).toEqual({
+        status: ConnectionStatus.NeedsAuth,
+        reason: error,
+      });
+    },
+  );
 
   test('wraps unknown errors as internal client error', () => {
     const result = getErrorConnectionTransition(new Error('boom'));
@@ -366,7 +435,7 @@ describe('getErrorConnectionTransition', () => {
     );
   });
 
-  test('returns null status for auth errors via HTTP status codes', () => {
+  test('returns needs auth status for auth errors via HTTP status codes', () => {
     const error = new ProtocolError({
       kind: ErrorKind.PushFailed,
       origin: ErrorOrigin.ZeroCache,
@@ -377,7 +446,55 @@ describe('getErrorConnectionTransition', () => {
     });
 
     expect(getErrorConnectionTransition(error)).toEqual({
-      status: NO_STATUS_TRANSITION,
+      status: ConnectionStatus.NeedsAuth,
+      reason: error,
+    });
+  });
+
+  test('returns needs auth status for TransformFailed with 401 status', () => {
+    const error = new ProtocolError({
+      kind: ErrorKind.TransformFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.HTTP,
+      status: 401,
+      message: 'Unauthorized',
+      queryIDs: ['query1'],
+    });
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: ConnectionStatus.NeedsAuth,
+      reason: error,
+    });
+  });
+
+  test('returns needs auth status for TransformFailed with 403 status', () => {
+    const error = new ProtocolError({
+      kind: ErrorKind.TransformFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.HTTP,
+      status: 403,
+      message: 'Forbidden',
+      queryIDs: ['query1'],
+    });
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: ConnectionStatus.NeedsAuth,
+      reason: error,
+    });
+  });
+
+  test('returns needs auth status for PushFailed with 403 status', () => {
+    const error = new ProtocolError({
+      kind: ErrorKind.PushFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.HTTP,
+      status: 403,
+      message: 'Forbidden',
+      mutationIDs: [],
+    });
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: ConnectionStatus.NeedsAuth,
       reason: error,
     });
   });

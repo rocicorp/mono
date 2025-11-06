@@ -458,7 +458,8 @@ describe('ttl', () => {
     expect(desires).toEqual([
       {
         deleted: true,
-        inactivatedAt: 2_000,
+        // inactivatedAt is stored in DB as seconds (TIMESTAMPTZ), not milliseconds
+        inactivatedAt: 2,
       },
     ]);
 
@@ -845,6 +846,35 @@ describe('ttl', () => {
         value: [], // Should be empty since the query was removed
       }),
     ]);
+
+    await expectNoPokes(client);
+  });
+
+  test('queries with TTL larger than MAX_TTL are clamped to MAX_TTL', async () => {
+    const largeTTL = 24 * 60 * 60 * 1000; // 24 hours = 86400000 ms (larger than MAX_TTL)
+    const MAX_TTL_MS = 10 * 60 * 1000; // 10 minutes
+    vi.setSystemTime(Date.UTC(2025, 6, 1, 12, 0, 0));
+
+    // Connect a client with a large TTL query
+    const {queue: client} = connectWithQueueAndSource(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY, ttl: largeTTL},
+    ]);
+
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client); // config
+    await nextPoke(client); // hydration
+
+    // Mark the query as inactive - this should preserve the clamped TTL
+    await inactivateQuery(vs, SYNC_CONTEXT, 'query-hash1');
+
+    // Advance time by 10 minutes (the MAX_TTL)
+    // The query should expire now, not after 24 hours
+    callNextSetTimeout(MAX_TTL_MS);
+
+    // Verify the query was removed after MAX_TTL, not after 24 hours
+    // If the TTL was not clamped, the query would still be alive
+    await expectDesiredDel(client, 'query-hash1');
+    await expectGotDel(client, 'query-hash1');
 
     await expectNoPokes(client);
   });

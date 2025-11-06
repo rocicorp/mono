@@ -52,6 +52,7 @@ import {type Emoji} from '../../emoji-utils.ts';
 import {useCanEdit} from '../../hooks/use-can-edit.ts';
 import {useDocumentHasFocus} from '../../hooks/use-document-has-focus.ts';
 import {useEmojiDataSourcePreload} from '../../hooks/use-emoji-data-source-preload.ts';
+import {useIsOffline} from '../../hooks/use-is-offline.ts';
 import {useIsScrolling} from '../../hooks/use-is-scrolling.ts';
 import {useKeypress} from '../../hooks/use-keypress.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
@@ -63,8 +64,8 @@ import {
 import {LRUCache} from '../../lru-cache.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {CACHE_NAV} from '../../query-cache-policy.ts';
-import {preload} from '../../zero-preload.ts';
 import {links, useListContext, type ZbugsHistoryState} from '../../routes.tsx';
+import {preload} from '../../zero-preload.ts';
 import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
@@ -88,6 +89,8 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const projectName = must(params.projectName);
   const login = useLogin();
 
+  const isOffline = useIsOffline();
+
   const zbugsHistoryState = useHistoryState<ZbugsHistoryState | undefined>();
   const listContext = zbugsHistoryState?.zbugsListContext;
 
@@ -97,7 +100,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   }, [listContext]);
 
   const [issue, issueResult] = useQuery(
-    issueDetail(login.loginState?.decoded, idField, id, z.userID),
+    issueDetail({idField, id, userID: z.userID}),
     CACHE_NAV,
   );
   useEffect(() => {
@@ -117,7 +120,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   useEffect(() => {
     if (issueResult.type === 'complete') {
       recordPageLoad('issue-page');
-      preload(login.loginState?.decoded, projectName, z);
+      preload(z, projectName);
     }
   }, [issueResult.type, login.loginState?.decoded, z]);
 
@@ -214,14 +217,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   };
 
   const [[next]] = useQuery(
-    issueListV2(
-      login.loginState?.decoded,
-      listContextParams,
-      z.userID,
-      1,
+    issueListV2({
+      listContext: listContextParams,
+      userID: z.userID,
+      limit: 1,
       start,
-      'forward',
-    ),
+      dir: 'forward',
+    }),
     prevNextOptions,
   );
   useKeypress('j', () => {
@@ -234,14 +236,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   });
 
   const [[prev]] = useQuery(
-    issueListV2(
-      login.loginState?.decoded,
-      listContextParams,
-      z.userID,
-      1,
+    issueListV2({
+      listContext: listContextParams,
+      userID: z.userID,
+      limit: 1,
       start,
-      'backward',
-    ),
+      dir: 'backward',
+    }),
     prevNextOptions,
   );
   useKeypress('k', () => {
@@ -380,9 +381,15 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     return null;
   }
 
-  const remove = () => {
+  const remove = async () => {
     // TODO: Implement undo - https://github.com/rocicorp/undo
-    z.mutate.issue.delete(displayed.id);
+    const result = z.mutate.issue.delete(displayed.id);
+
+    // we wait for the client result to redirect to the list page
+    const clientResult = await result.client;
+    if (clientResult.type === 'error') {
+      return;
+    }
     navigate(listContext?.href ?? links.list({projectName}));
   };
 
@@ -422,6 +429,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               {!editing ? (
                 <>
                   <Button
+                    disabled={isOffline}
                     className="edit-button"
                     eventName="Edit issue"
                     onAction={() => setEditing(displayed)}
@@ -429,6 +437,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                     Edit
                   </Button>
                   <Button
+                    disabled={isOffline}
                     className="delete-button"
                     eventName="Delete issue"
                     onAction={() => setDeleteConfirmationShown(true)}
@@ -468,6 +477,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
             <div className="edit-title-container">
               <p className="issue-detail-label">Edit title</p>
               <TextareaAutosize
+                disabled={isOffline}
                 value={rendering.title}
                 className="edit-title"
                 autoFocus
@@ -501,6 +511,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                 onInsert={onInsert}
               >
                 <TextareaAutosize
+                  disabled={isOffline}
                   className="edit-description"
                   value={rendering.description}
                   onChange={e =>
@@ -521,7 +532,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
             <p className="issue-detail-label">Status</p>
             <Combobox
               editable={false}
-              disabled={!canEdit}
+              disabled={!canEdit || isOffline}
               items={[
                 {
                   text: 'Open',
@@ -549,7 +560,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
             <p className="issue-detail-label">Assignee</p>
             <UserPicker
               projectName={projectName}
-              disabled={!canEdit}
+              disabled={!canEdit || isOffline}
               selected={{login: displayed.assignee?.login}}
               placeholder="Assign to..."
               unselectedLabel="Nobody"
@@ -569,7 +580,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               <p className="issue-detail-label">Visibility</p>
               <Combobox<'public' | 'internal'>
                 editable={false}
-                disabled={!canEdit}
+                disabled={!canEdit || isOffline}
                 items={[
                   {
                     text: 'Public',
@@ -597,7 +608,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
           <div className="sidebar-item">
             <p className="issue-detail-label">Notifications</p>
             <Combobox<NotificationType>
-              disabled={!login.loginState?.decoded?.sub}
+              disabled={!login.loginState?.decoded?.sub || isOffline}
               items={[
                 {
                   text: 'Subscribed',
@@ -643,6 +654,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
             </div>
             <CanEdit ownerID={displayed.creatorID}>
               <LabelPicker
+                disabled={isOffline}
                 selected={labelSet}
                 projectName={projectName}
                 onAssociateLabel={labelID =>
@@ -731,7 +743,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
         okButtonLabel="Delete"
         onClose={b => {
           if (b) {
-            remove();
+            void remove();
           }
           setDeleteConfirmationShown(false);
         }}
@@ -1118,12 +1130,11 @@ function useShowToastForNewComment(
 export function IssueRedirect() {
   const z = useZero();
   const params = useParams();
-  const login = useLogin();
 
   const {idField, id} = getId(params);
 
   const [issue, issueResult] = useQuery(
-    issueDetail(login.loginState?.decoded, idField, id, z.userID),
+    issueDetail({idField, id, userID: z.userID}),
     CACHE_NAV,
   );
 

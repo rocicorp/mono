@@ -254,6 +254,7 @@ export interface ReplicacheOptions<MD extends MutatorDefs> {
 export interface ZeroTxData {
   ivmSources: unknown;
   token: string | undefined;
+  context: unknown;
 }
 
 export type ZeroReadOptions = {
@@ -264,9 +265,9 @@ export type ZeroReadOptions = {
 declare const idTag: unique symbol;
 export type EphemeralID = number & {[idTag]: true};
 
-export type MutationTrackingData = {
+export type MutationTrackingData<TResult = unknown> = {
   ephemeralID: EphemeralID;
-  serverPromise: Promise<unknown>;
+  serverPromise: Promise<TResult>;
 };
 
 /**

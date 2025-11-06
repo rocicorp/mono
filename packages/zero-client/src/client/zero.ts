@@ -1,4 +1,4 @@
-import {type LogLevel, type LogSink} from '@rocicorp/logger';
+import {type LogLevel} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import {type DeletedClients} from '../../../replicache/src/deleted-clients.ts';
 import {
@@ -27,14 +27,17 @@ import {
 } from '../../../shared/src/browser-env.ts';
 import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
+import {getErrorMessage} from '../../../shared/src/error.ts';
 import {h64} from '../../../shared/src/hash.ts';
 import {must} from '../../../shared/src/must.ts';
 import {navigator} from '../../../shared/src/navigator.ts';
 import {promiseRace} from '../../../shared/src/promise-race.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
+import {Subscribable} from '../../../shared/src/subscribable.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
+import type {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
@@ -43,8 +46,8 @@ import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {downstreamSchema} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {
-  ProtocolError,
   type ErrorMessage,
+  ProtocolError,
 } from '../../../zero-protocol/src/error.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
 import type {PingMessage} from '../../../zero-protocol/src/ping.ts';
@@ -71,14 +74,12 @@ import type {UpQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts
 import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
 import {nullableVersionSchema} from '../../../zero-protocol/src/version.ts';
-import {
-  type Schema,
-  clientSchemaFrom,
-} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {clientSchemaFrom} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   type NameMapper,
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
 import {
@@ -87,29 +88,27 @@ import {
   isClientMetric,
 } from '../../../zql/src/query/metrics-delegate.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {
-  type AnyQuery,
-  materialize,
-  newQuery,
-} from '../../../zql/src/query/query-impl.ts';
+import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import {
   type HumanReadable,
   type MaterializeOptions,
   type PreloadOptions,
+  type PullRow,
   type Query,
-  type QueryRowType,
-  type QueryTable,
   type RunOptions,
-  delegateSymbol,
 } from '../../../zql/src/query/query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
 import {ActiveClientsManager} from './active-clients-manager.ts';
+import {registerZeroDelegate} from './bindings.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
 import {
   ConnectionManager,
+  type ConnectionState,
   throwIfConnectionError,
 } from './connection-manager.ts';
+import {ConnectionStatus} from './connection-status.ts';
 import {type Connection, ConnectionImpl} from './connection.ts';
 import {ZeroContext} from './context.ts';
 import {
@@ -124,10 +123,21 @@ import type {
   CustomMutatorDefs,
   CustomMutatorImpl,
   MakeCustomMutatorInterfaces,
+  MutatorResult,
 } from './custom.ts';
 import {makeReplicacheMutator} from './custom.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
 import {shouldEnableAnalytics} from './enable-analytics.ts';
+import {
+  ClientError,
+  NO_STATUS_TRANSITION,
+  type ZeroError,
+  getBackoffParams,
+  getErrorConnectionTransition,
+  isAuthError,
+  isClientError,
+  isServerError,
+} from './error.ts';
 import {
   type HTTPString,
   type WSString,
@@ -146,7 +156,7 @@ import {
   shouldReportConnectError,
 } from './metrics.ts';
 import {MutationTracker} from './mutation-tracker.ts';
-import type {OnErrorParameters} from './on-error.ts';
+import {MutatorProxy} from './mutator-proxy.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import {QueryManager} from './query-manager.ts';
 import {
@@ -155,24 +165,15 @@ import {
   reportReloadReason,
   resetBackoff,
 } from './reload-error-handler.ts';
-import {
-  ClientError,
-  getBackoffParams,
-  getErrorConnectionTransition,
-  isAuthError,
-  isClientError,
-  isServerError,
-  NO_STATUS_TRANSITION,
-  type ZeroError,
-} from './error.ts';
 import {getServer} from './server-option.ts';
 import {version} from './version.ts';
 import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
-import {ZeroRep} from './zero-rep.ts';
-import {ConnectionStatus} from './connection-status.ts';
-import {ClientErrorKind} from './client-error-kind.ts';
-import {Subscribable} from '../../../shared/src/subscribable.ts';
+import {
+  ZeroRep,
+  fromReplicacheAuthToken,
+  toReplicacheAuthToken,
+} from './zero-rep.ts';
 
 export type NoRelations = Record<string, never>;
 
@@ -182,7 +183,7 @@ export type MakeEntityQueriesFromSchema<S extends Schema> = {
 
 declare const TESTING: boolean;
 
-export type TestingContext = {
+export type TestingContext<TContext> = {
   puller: Puller;
   pusher: Pusher;
   setReload: (r: () => void) => void;
@@ -190,36 +191,36 @@ export type TestingContext = {
   connectStart: () => number | undefined;
   socketResolver: () => Resolver<WebSocket>;
   connectionManager: () => ConnectionManager;
+  queryDelegate: () => QueryDelegate<TContext>;
 };
 
 export const exposedToTestingSymbol = Symbol();
 export const createLogOptionsSymbol = Symbol();
 
-interface TestZero {
-  [exposedToTestingSymbol]?: TestingContext;
+interface TestZero<TContext> {
+  [exposedToTestingSymbol]?: TestingContext<TContext>;
   [createLogOptionsSymbol]?: (options: {
     consoleLogLevel: LogLevel;
     server: string | null;
   }) => LogOptions;
 }
 
-function asTestZero<S extends Schema, MD extends CustomMutatorDefs | undefined>(
-  z: Zero<S, MD>,
-): TestZero {
-  return z as TestZero;
+function asTestZero<
+  S extends Schema,
+  MD extends CustomMutatorDefs | undefined,
+  Context,
+>(z: Zero<S, MD, Context>): TestZero<Context> {
+  return z as TestZero<Context>;
 }
 
 export const RUN_LOOP_INTERVAL_MS = 5_000;
 
 /**
- * How frequently we should ping the server to keep the connection alive.
+ * Default timeout for ping operations. Controls both:
+ * - How long to wait in idle before sending a ping
+ * - How long to wait for a pong response
  */
-export const PING_INTERVAL_MS = 5_000;
-
-/**
- * The amount of time we wait for a pong before we consider the ping timed out.
- */
-export const PING_TIMEOUT_MS = 5_000;
+export const DEFAULT_PING_TIMEOUT_MS = 5_000;
 
 /**
  * The amount of time we wait for a pull response before we consider a pull
@@ -308,6 +309,7 @@ type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
 export class Zero<
   const S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
+  TContext = unknown,
 > {
   readonly version = version;
 
@@ -352,6 +354,8 @@ export class Zero<
 
   #onPong: () => void = () => undefined;
 
+  #onError: (error: ZeroError | ApplicationError) => void;
+
   readonly #onlineManager: OnlineManager;
 
   readonly #onUpdateNeeded: (reason: UpdateNeededReason) => void;
@@ -371,8 +375,18 @@ export class Zero<
     // intentionally empty
   };
 
-  readonly #zeroContext: ZeroContext;
-  readonly queryDelegate: QueryDelegate;
+  /**
+   * The timeout in milliseconds for ping operations. Controls both:
+   * - How long to wait in idle before sending a ping
+   * - How long to wait for a pong response
+   *
+   * Total time to detect a dead connection is 2 × pingTimeoutMs.
+   *
+   * The new value will take effect on the next ping cycle.
+   */
+  pingTimeoutMs: number;
+
+  readonly #zeroContext: ZeroContext<TContext>;
 
   #pendingPullsByRequestID: Map<string, Resolver<PullResponseBody>> = new Map();
   #lastMutationIDReceived = 0;
@@ -404,7 +418,7 @@ export class Zero<
   // 2. client successfully connects
   #totalToConnectStart: number | undefined = undefined;
 
-  readonly #options: ZeroOptions<S, MD>;
+  readonly #options: ZeroOptions<S, MD, TContext>;
 
   readonly query: MakeEntityQueriesFromSchema<S>;
 
@@ -419,7 +433,7 @@ export class Zero<
   /**
    * Constructs a new Zero client.
    */
-  constructor(options: ZeroOptions<S, MD>) {
+  constructor(options: ZeroOptions<S, MD, TContext>) {
     const {
       userID,
       storageKey,
@@ -427,6 +441,8 @@ export class Zero<
       onUpdateNeeded,
       onClientStateNotFound,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
+      pingTimeoutMs = DEFAULT_PING_TIMEOUT_MS,
+      disconnectTimeout = DEFAULT_DISCONNECT_TIMEOUT_MS,
       schema,
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
       maxRecentQueries = 0,
@@ -462,6 +478,8 @@ export class Zero<
       });
     }
 
+    this.pingTimeoutMs = pingTimeoutMs;
+
     this.#onlineManager = new OnlineManager();
 
     if (onOnlineChange) {
@@ -478,8 +496,26 @@ export class Zero<
     const logOptions = this.#logOptions;
 
     this.#connectionManager = new ConnectionManager({
-      disconnectTimeoutMs: DEFAULT_DISCONNECT_TIMEOUT_MS,
+      disconnectTimeout,
     });
+
+    const syncConnectionState = (state: ConnectionState) => {
+      this.#onlineManager.setOnline(state.name === ConnectionStatus.Connected);
+
+      if (state.name === ConnectionStatus.Closed) {
+        this.#queryManager.handleClosed(state.reason);
+      }
+
+      if (
+        'reason' in state &&
+        state.reason !== undefined &&
+        state.name !== ConnectionStatus.Closed
+      ) {
+        this.#onError(state.reason);
+      }
+    };
+    syncConnectionState(this.#connectionManager.state);
+    this.#connectionManager.subscribe(syncConnectionState);
 
     const {enableLegacyMutators = true, enableLegacyQueries = true} = schema;
 
@@ -505,31 +541,23 @@ export class Zero<
       );
     }
 
-    // We create a special log sink that calls onError if defined instead of
-    // logging error messages.
     const {onError} = options;
-    const sink = logOptions.logSink;
-    const logSink: LogSink<OnErrorParameters> = {
-      log(level, context, ...args) {
-        if (level === 'error' && onError) {
-          onError(...(args as OnErrorParameters));
-        } else {
-          sink.log(level, context, ...args);
-        }
-      },
-      async flush() {
-        await sink.flush?.();
-      },
-    };
 
-    const lc = new ZeroLogContext(logOptions.logLevel, {}, logSink);
+    const sink = logOptions.logSink;
+    const lc = new ZeroLogContext(logOptions.logLevel, {}, sink);
+
+    this.#onError = onError
+      ? error => {
+          void onError(error);
+        }
+      : error => {
+          lc.error?.('An error occurred in Zero', error);
+        };
 
     this.#mutationTracker = new MutationTracker(
       lc,
       (upTo: MutationID) => this.#send(['ackMutationResponses', upTo]),
-      error => {
-        this.#disconnect(lc, error);
-      },
+      error => this.#disconnect(lc, error),
     );
     if (options.mutators) {
       for (const [namespaceOrKey, mutatorOrMutators] of Object.entries(
@@ -601,6 +629,7 @@ export class Zero<
     this.#zeroContext = new ZeroContext(
       lc,
       this.#ivmMain,
+      this.#options.context as TContext,
       (ast, ttl, gotCallback) => {
         if (enableLegacyQueries) {
           return this.#queryManager.addLegacy(ast, ttl, gotCallback);
@@ -622,7 +651,10 @@ export class Zero<
       this.#addMetric,
       assertValidRunOptions,
     );
-    this.queryDelegate = this.#zeroContext;
+
+    // Register the delegate for bindings to access via WeakMap.
+    // This avoids exposing the delegate as a public API on Zero.
+    registerZeroDelegate(this, this.#zeroContext);
 
     const replicacheImplOptions: ReplicacheImplOptions = {
       enableClientGroupForking: false,
@@ -647,7 +679,11 @@ export class Zero<
     this.#server = server;
     this.userID = userID;
     this.#lc = lc.withContext('clientID', rep.clientID);
-    this.#connection = new ConnectionImpl(this.#connectionManager, this.#lc);
+    this.#connection = new ConnectionImpl(
+      this.#connectionManager,
+      this.#lc,
+      auth => this.#setAuth(auth),
+    );
     this.#mutationTracker.setClientIDAndWatch(
       rep.clientID,
       rep.experimentalWatch.bind(rep),
@@ -696,12 +732,23 @@ export class Zero<
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     const {mutate, mutateBatch} = makeCRUDMutate<S>(schema, rep.mutate) as any;
 
+    const mutatorProxy = new MutatorProxy(
+      this.#connectionManager,
+      this.#mutationTracker,
+      // we track app errors here since this wraps both client and server errors
+      applicationError => this.#onError(applicationError),
+    );
+
     if (options.mutators) {
       for (const [namespaceOrKey, mutatorsOrMutator] of Object.entries(
         options.mutators,
       )) {
         if (typeof mutatorsOrMutator === 'function') {
-          mutate[namespaceOrKey] = must(rep.mutate[namespaceOrKey as string]);
+          mutate[namespaceOrKey] = mutatorProxy.wrapCustomMutator(
+            must(rep.mutate[namespaceOrKey as string]) as unknown as (
+              ...args: unknown[]
+            ) => MutatorResult,
+          );
           continue;
         }
 
@@ -712,8 +759,10 @@ export class Zero<
         }
 
         for (const name of Object.keys(mutatorsOrMutator)) {
-          existing[name] = must(
-            rep.mutate[customMutatorKey(namespaceOrKey, name)],
+          existing[name] = mutatorProxy.wrapCustomMutator(
+            must(
+              rep.mutate[customMutatorKey(namespaceOrKey, name)],
+            ) as unknown as (...args: unknown[]) => MutatorResult,
           );
         }
       }
@@ -732,10 +781,14 @@ export class Zero<
       maxRecentQueries,
       options.queryChangeThrottleMs ?? DEFAULT_QUERY_CHANGE_THROTTLE_MS,
       slowMaterializeThreshold,
-      (error: ZeroError) => {
+      error => {
         this.#disconnect(lc, error);
       },
+      error => {
+        void this.#onError(error);
+      },
     );
+
     this.#clientToServer = clientToServer(schema.tables);
 
     this.#deleteClientsManager = new DeleteClientsManager(
@@ -790,6 +843,7 @@ export class Zero<
         connectStart: () => this.#connectStart,
         socketResolver: () => this.#socketResolver,
         connectionManager: () => this.#connectionManager,
+        queryDelegate: () => this.#zeroContext,
       };
     }
   }
@@ -814,9 +868,12 @@ export class Zero<
   #unexpose() {
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     const g = globalThis as any;
-    assert(g.__zero !== undefined);
+    assert(g.__zero !== undefined, 'No global zero instance found');
     if (g.__zero instanceof Zero) {
-      assert(g.__zero === this);
+      assert(
+        g.__zero === this,
+        'Global zero instance does not match this instance',
+      );
       delete g.__zero;
     } else {
       delete g.__zero[this.clientID];
@@ -849,45 +906,110 @@ export class Zero<
     return createLogOptions(options);
   }
 
-  preload(
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    query: Query<S, keyof S['tables'] & string, any>,
-    options?: PreloadOptions,
-  ) {
-    return query[delegateSymbol](this.#zeroContext).preload(options);
+  /**
+   * Preloads data for a query into the cache, without keeping it in memory.
+   *
+   * This function is useful when you want to populate the cache ahead of time,
+   * for example after login, to avoid a flash of loading screen on the next page.
+   *
+   * Returns an object with two properties:
+   * - `complete`: a Promise that resolves when the data is loaded
+   * - `cleanup`: a function that can be called to cancel the preload
+   *
+   * @example
+   * ```ts
+   * const {complete, cleanup} = zero.preload(userQuery);
+   * await complete;
+   * // Now the data is cached and can be used immediately
+   * ```
+   */
+  preload<
+    TTable extends keyof S['tables'] & string,
+    TReturn extends PullRow<TTable, S>,
+  >(query: Query<S, TTable, TReturn, TContext>, options?: PreloadOptions) {
+    return this.#zeroContext.preload(query, options);
   }
 
-  run<Q>(
-    query: Q,
+  /**
+   * Executes a query once and returns the results.
+   *
+   * By default, waits for any pending data to sync before running the query.
+   * This ensures fresh results from the server. Use `{type: 'unknown'}` to
+   * run immediately with whatever data is available locally.
+   *
+   * @param query - The query to execute
+   * @param runOptions - Options controlling query execution
+   * @returns A Promise resolving to the query results
+   *
+   * @example
+   * ```ts
+   * // Wait for server sync
+   * const users = await zero.run(userQuery);
+   *
+   * // Run with local data only
+   * const cachedUsers = await zero.run(userQuery, {type: 'unknown'});
+   * ```
+   */
+  run<TTable extends keyof S['tables'] & string, TReturn>(
+    query: Query<S, TTable, TReturn, TContext>,
     runOptions?: RunOptions,
-  ): Promise<HumanReadable<QueryRowType<Q>>> {
-    return (query as AnyQuery)
-      [delegateSymbol](this.#zeroContext)
-      .run(runOptions) as Promise<HumanReadable<QueryRowType<Q>>>;
+  ): Promise<HumanReadable<TReturn>> {
+    return this.#zeroContext.run(query, runOptions);
   }
 
-  materialize<Q>(
-    query: Q,
+  get context(): TContext {
+    return this.#options.context as TContext;
+  }
+
+  /**
+   * Creates a materialized view of a query that stays synchronized with the database.
+   *
+   * The materialized view automatically updates when the underlying data changes.
+   * When done with the view, call `view.destroy()` to clean up subscriptions.
+   *
+   * Optionally accepts a factory function to create a custom view implementation.
+   *
+   * @param query - The query to materialize
+   * @param factory - Optional factory function to create a custom view
+   * @param options - Options controlling view behavior
+   * @returns A TypedView that stays synchronized with the data
+   *
+   * @example
+   * ```ts
+   * // Create a standard view
+   * const view = zero.materialize(userQuery);
+   * console.log(view.data); // Current query results
+   * view.destroy(); // Clean up when done
+   *
+   * // Create a custom view
+   * const customView = zero.materialize(userQuery, (query) => new MyCustomView(query));
+   * ```
+   */
+  materialize<TTable extends keyof S['tables'] & string, TReturn>(
+    query: Query<S, TTable, TReturn, TContext>,
     options?: MaterializeOptions,
-  ): TypedView<HumanReadable<QueryRowType<Q>>>;
-  materialize<T, Q>(
-    query: Q,
-    factory: ViewFactory<S, QueryTable<Q>, QueryRowType<Q>, T>,
+  ): TypedView<HumanReadable<TReturn>>;
+  materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
+    query: Query<S, TTable, TReturn, TContext>,
+    factory: ViewFactory<S, TTable, TReturn, TContext, T>,
     options?: MaterializeOptions,
   ): T;
-  materialize<T, Q>(
-    query: Q,
+  materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
+    query: Query<S, TTable, TReturn, TContext>,
     factoryOrOptions?:
-      | ViewFactory<S, QueryTable<Q>, QueryRowType<Q>, T>
+      | ViewFactory<S, TTable, TReturn, TContext, T>
       | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
-    return materialize(
-      query,
-      this.#zeroContext,
-      factoryOrOptions,
-      maybeOptions,
-    );
+    let factory;
+    let options;
+    if (typeof factoryOrOptions === 'function') {
+      factory = factoryOrOptions;
+      options = maybeOptions;
+    } else {
+      options = factoryOrOptions;
+    }
+    return this.#zeroContext.materialize(query, factory, options);
   }
 
   /**
@@ -967,8 +1089,8 @@ export class Zero<
    */
   readonly mutate: MD extends CustomMutatorDefs
     ? S['enableLegacyMutators'] extends false
-      ? MakeCustomMutatorInterfaces<S, MD>
-      : DeepMerge<DBMutator<S>, MakeCustomMutatorInterfaces<S, MD>>
+      ? MakeCustomMutatorInterfaces<S, MD, TContext>
+      : DeepMerge<DBMutator<S>, MakeCustomMutatorInterfaces<S, MD, TContext>>
     : DBMutator<S>;
 
   /**
@@ -1080,113 +1202,158 @@ export class Zero<
         'passthrough',
       );
     } catch (e) {
-      const invalidMessageError = new ClientError({
-        kind: ClientErrorKind.InvalidMessage,
-        message: `Invalid message received from server: ${e instanceof Error ? e.message + '. ' : ''}${data}`,
-      });
+      const invalidMessageError = new ClientError(
+        {
+          kind: ClientErrorKind.InvalidMessage,
+          message: `Invalid message received from server: ${getErrorMessage(e)}${data}`,
+        },
+        {cause: e},
+      );
       this.#disconnect(lc, invalidMessageError);
       return;
     }
     this.#messageCount++;
     const msgType = downMessage[0];
-    switch (msgType) {
-      case 'connected':
-        return this.#handleConnectedMessage(lc, downMessage);
+    try {
+      switch (msgType) {
+        case 'connected':
+          return this.#handleConnectedMessage(lc, downMessage);
 
-      case 'error':
-        return this.#handleErrorMessage(lc, downMessage);
+        case 'error':
+          return this.#handleErrorMessage(lc, downMessage);
 
-      case 'pong':
-        // Receiving a pong means that the connection is healthy, as the
-        // initial schema / versioning negotiations would produce an error
-        // before a ping-pong timeout.
-        resetBackoff();
-        return this.#onPong();
-
-      case 'pokeStart':
-        return this.#handlePokeStart(lc, downMessage);
-
-      case 'pokePart':
-        if (downMessage[1].rowsPatch) {
-          // Receiving row data indicates that the client is in a good state
-          // and can reset the reload backoff state.
+        case 'pong':
+          // Receiving a pong means that the connection is healthy, as the
+          // initial schema / versioning negotiations would produce an error
+          // before a ping-pong timeout.
           resetBackoff();
-        }
-        return this.#handlePokePart(lc, downMessage);
+          return this.#onPong();
 
-      case 'pokeEnd':
-        return this.#handlePokeEnd(lc, downMessage);
+        case 'pokeStart':
+          return this.#handlePokeStart(lc, downMessage);
 
-      case 'pull':
-        return this.#handlePullResponse(lc, downMessage);
+        case 'pokePart':
+          if (downMessage[1].rowsPatch) {
+            // Receiving row data indicates that the client is in a good state
+            // and can reset the reload backoff state.
+            resetBackoff();
+          }
+          return this.#handlePokePart(lc, downMessage);
 
-      case 'deleteClients':
-        return this.#deleteClientsManager.clientsDeletedOnServer(
-          downMessage[1],
-        );
+        case 'pokeEnd':
+          return this.#handlePokeEnd(lc, downMessage);
 
-      case 'pushResponse':
-        return this.#mutationTracker.processPushResponse(downMessage[1]);
+        case 'pull':
+          return this.#handlePullResponse(lc, downMessage);
 
-      case 'transformError':
-        this.#queryManager.handleTransformErrors(downMessage[1]);
-        break;
+        case 'deleteClients':
+          return this.#deleteClientsManager.clientsDeletedOnServer(
+            downMessage[1],
+          );
 
-      case 'inspect':
-        // ignore at this layer.
-        break;
+        case 'pushResponse':
+          return this.#mutationTracker.processPushResponse(downMessage[1]);
 
-      default: {
-        const invalidMessageError = new ClientError({
-          kind: ClientErrorKind.InvalidMessage,
-          message: `Invalid message received from server: ${data}`,
-        });
-        this.#disconnect(lc, invalidMessageError);
-        return;
+        case 'transformError':
+          this.#queryManager.handleTransformErrors(downMessage[1]);
+          break;
+
+        case 'inspect':
+          // ignore at this layer.
+          break;
+
+        default:
+          unreachable(msgType);
       }
+    } catch (e) {
+      lc.error?.('Unhandled error in onOpen', e);
+      this.#disconnect(
+        lc,
+        new ClientError(
+          {
+            kind: ClientErrorKind.Internal,
+            message: getErrorMessage(e),
+          },
+          {cause: e},
+        ),
+      );
+      return;
     }
   };
 
   #onOpen = () => {
-    const l = addWebSocketIDFromSocketToLogContext(this.#socket!, this.#lc);
-    if (this.#connectStart === undefined) {
-      l.error?.('Got open event but connect start time is undefined.');
-    } else {
-      const now = Date.now();
-      const timeToOpenMs = now - this.#connectStart;
-      l.info?.('Got socket open event', {
-        navigatorOnline: navigator?.onLine,
-        timeToOpenMs,
-      });
+    let lc = this.#lc;
+    try {
+      assert(this.#socket, 'Socket is not set before onOpen');
+
+      lc = addWebSocketIDFromSocketToLogContext(this.#socket, lc);
+      if (this.#connectStart === undefined) {
+        throw new Error('Got open event but connect start time is undefined.');
+      } else {
+        const now = Date.now();
+        const timeToOpenMs = now - this.#connectStart;
+        lc.info?.('Got socket open event', {
+          navigatorOnline: navigator?.onLine,
+          timeToOpenMs,
+        });
+      }
+    } catch (e) {
+      lc.error?.('Unhandled error in onOpen', e);
+      this.#disconnect(
+        lc,
+        new ClientError(
+          {
+            kind: ClientErrorKind.Internal,
+            message: getErrorMessage(e),
+          },
+          {cause: e},
+        ),
+      );
     }
   };
 
   #onClose = (e: CloseEvent) => {
-    const lc = addWebSocketIDFromSocketToLogContext(this.#socket!, this.#lc);
-    const {code, reason, wasClean} = e;
-    if (code <= 1001) {
-      lc.info?.('Got socket close event', {code, reason, wasClean});
-    } else {
-      lc.error?.('Got unexpected socket close event', {
-        code,
-        reason,
-        wasClean,
-      });
-    }
+    let lc = this.#lc;
+    try {
+      assert(this.#socket, 'Socket is not set before onClose');
 
-    const closeError = new ClientError(
-      wasClean
-        ? {
-            kind: ClientErrorKind.CleanClose,
-            message: 'WebSocket connection closed cleanly',
-          }
-        : {
-            kind: ClientErrorKind.AbruptClose,
-            message: 'WebSocket connection closed abruptly',
-          },
-    );
-    this.#connectResolver.reject(closeError);
-    this.#disconnect(lc, closeError);
+      lc = addWebSocketIDFromSocketToLogContext(this.#socket, lc);
+      const {code, reason, wasClean} = e;
+      if (code <= 1001) {
+        lc.info?.('Got socket close event', {code, reason, wasClean});
+      } else {
+        lc.error?.('Got unexpected socket close event', {
+          code,
+          reason,
+          wasClean,
+        });
+      }
+
+      const closeError = new ClientError(
+        wasClean
+          ? {
+              kind: ClientErrorKind.CleanClose,
+              message: 'WebSocket connection closed cleanly',
+            }
+          : {
+              kind: ClientErrorKind.AbruptClose,
+              message: 'WebSocket connection closed abruptly',
+            },
+      );
+      this.#connectResolver.reject(closeError);
+      this.#disconnect(lc, closeError);
+    } catch (e) {
+      lc.error?.('Unhandled error in onClose', e);
+      const internalError = new ClientError(
+        {
+          kind: ClientErrorKind.Internal,
+          message: getErrorMessage(e),
+        },
+        {cause: e},
+      );
+      this.#connectResolver.reject(internalError);
+      this.#disconnect(lc, internalError);
+    }
   };
 
   // An error on the connection is fatal for the connection.
@@ -1359,13 +1526,19 @@ export class Zero<
     lc: ZeroLogContext,
     additionalConnectParams: Record<string, string> | undefined,
   ): Promise<void> {
-    assert(this.#server);
+    if (this.closed) {
+      return;
+    }
+
+    assert(this.#server, 'No server provided');
 
     // can be called from both disconnected and connecting states.
     // connecting() handles incrementing attempt counter if already connecting.
     assert(
       this.#connectionManager.is(ConnectionStatus.Disconnected) ||
         this.#connectionManager.is(ConnectionStatus.Connecting),
+      'connect() called from invalid state: ' +
+        this.#connectionManager.state.name,
     );
 
     const wsid = nanoid();
@@ -1376,7 +1549,7 @@ export class Zero<
 
     // connect() called but connect start time is defined. This should not
     // happen.
-    assert(this.#connectStart === undefined);
+    assert(this.#connectStart === undefined, 'connect start time is defined');
 
     const now = Date.now();
     this.#connectStart = now;
@@ -1422,7 +1595,7 @@ export class Zero<
       await this.clientGroupID,
       this.#clientSchema,
       this.userID,
-      this.#rep.auth,
+      fromReplicacheAuthToken(this.#rep.auth),
       this.#lastMutationIDReceived,
       wsid,
       this.#options.logLevel === 'debug',
@@ -1510,6 +1683,7 @@ export class Zero<
 
       case ConnectionStatus.Disconnected:
       case ConnectionStatus.Connecting:
+      case ConnectionStatus.NeedsAuth:
       case ConnectionStatus.Error:
         break;
 
@@ -1534,6 +1708,9 @@ export class Zero<
     const transition = getErrorConnectionTransition(reason);
 
     switch (transition.status) {
+      case ConnectionStatus.NeedsAuth:
+        this.#connectionManager.needsAuth(transition.reason);
+        break;
       case ConnectionStatus.Error:
         this.#connectionManager.error(transition.reason);
         break;
@@ -1681,20 +1858,6 @@ export class Zero<
     };
   }
 
-  async #updateAuthToken(
-    lc: ZeroLogContext,
-    error?: 'invalid-token',
-  ): Promise<void> {
-    const {auth: authOption} = this.#options;
-    const auth = await (typeof authOption === 'function'
-      ? authOption(error)
-      : authOption);
-    if (auth) {
-      lc.debug?.('Got auth token');
-      this.#rep.auth = auth;
-    }
-  }
-
   async #runLoop() {
     this.#lc.info?.(`Starting Zero version: ${this.version}`);
 
@@ -1719,10 +1882,10 @@ export class Zero<
       return lc.withContext('runLoopCounter', runLoopCounter);
     };
 
-    await this.#updateAuthToken(bareLogContext);
+    // Set initial auth from options
+    const {auth} = this.#options;
+    this.#setAuth(auth);
 
-    let needsReauth = false;
-    let lastReauthAttemptAt: number | undefined;
     let backoffMs: number | undefined;
     let additionalConnectParams: Record<string, string> | undefined;
 
@@ -1756,12 +1919,6 @@ export class Zero<
               break;
             }
 
-            // If we got an auth error we try to get a new auth token before reconnecting.
-            if (needsReauth) {
-              lastReauthAttemptAt = Date.now();
-              await this.#updateAuthToken(lc, 'invalid-token');
-            }
-
             // If a reload is pending, do not try to reconnect.
             if (reloadScheduled()) {
               break;
@@ -1777,14 +1934,12 @@ export class Zero<
             lc = getLogContext();
 
             lc.debug?.('Connected successfully');
-            needsReauth = false;
-            this.#setOnline(true);
             break;
           }
 
           case ConnectionStatus.Connected: {
             // When connected we wait for whatever happens first out of:
-            // - After PING_INTERVAL_MS we send a ping
+            // - After pingTimeoutMs we send a ping
             // - We get a message
             // - The tab becomes hidden (with a delay)
             // - We get a state change (e.g. an error or disconnect)
@@ -1792,7 +1947,7 @@ export class Zero<
             const controller = new AbortController();
             this.#abortPingTimeout = () => controller.abort();
             const [pingTimeoutPromise, pingTimeoutAborted] = sleepWithAbort(
-              PING_INTERVAL_MS,
+              this.pingTimeoutMs,
               controller.signal,
             );
 
@@ -1818,7 +1973,6 @@ export class Zero<
                   message: 'Connection closed because tab was hidden',
                 });
                 this.#disconnect(lc, hiddenError);
-                this.#setOnline(false);
                 break;
               }
 
@@ -1830,6 +1984,17 @@ export class Zero<
                 unreachable(raceResult);
             }
 
+            break;
+          }
+
+          case ConnectionStatus.NeedsAuth: {
+            // we pause the run loop and wait for connect() to be called with new credentials
+            lc.info?.(
+              `Run loop paused in needs-auth state. Call zero.connection.connect({auth}) to resume.`,
+              currentState.reason,
+            );
+
+            await this.#connectionManager.waitForStateChange();
             break;
           }
 
@@ -1893,25 +2058,6 @@ export class Zero<
               additionalConnectParams = backoffParams.reconnectParams;
             }
 
-            // Only authentication errors are retried immediately the first time they
-            // occur. All other errors wait a few seconds before retrying the first
-            // time. We specifically do not use a backoff for consecutive errors
-            // because it's a bad experience to wait many seconds for reconnection.
-            if (isAuthError(transition.reason)) {
-              const now = Date.now();
-              const msSinceLastReauthAttempt =
-                lastReauthAttemptAt === undefined
-                  ? Number.POSITIVE_INFINITY
-                  : now - lastReauthAttemptAt;
-              needsReauth = true;
-              if (msSinceLastReauthAttempt > RUN_LOOP_INTERVAL_MS) {
-                // First auth error (or first in a while), try right away without waiting.
-                continue;
-              }
-            }
-
-            this.#setOnline(false);
-
             lc.debug?.(
               'Sleeping',
               backoffMs,
@@ -1921,20 +2067,26 @@ export class Zero<
             await sleep(backoffMs);
             break;
           }
+          case ConnectionStatus.NeedsAuth: {
+            lc.debug?.(
+              'Auth error encountered, transitioning to needs-auth state',
+            );
+            this.#connectionManager.needsAuth(transition.reason);
+            // run loop will enter the needs-auth state case and await a state change
+            break;
+          }
           case ConnectionStatus.Error: {
             lc.debug?.('Fatal error encountered, transitioning to error state');
-            this.#setOnline(false);
+
             this.#connectionManager.error(transition.reason);
             // run loop will enter the error state case and await a state change
             break;
           }
           case ConnectionStatus.Disconnected: {
-            this.#setOnline(false);
             this.#connectionManager.disconnected(transition.reason);
             break;
           }
           case ConnectionStatus.Closed: {
-            this.#setOnline(false);
             break;
           }
           default:
@@ -2024,8 +2176,13 @@ export class Zero<
     }
   }
 
-  #setOnline(online: boolean): void {
-    this.#onlineManager.setOnline(online);
+  /**
+   * Sets the authentication token on the replicache instance.
+   *
+   * @param auth - The authentication token to set.
+   */
+  #setAuth(auth: string | undefined | null): void {
+    this.#rep.auth = toReplicacheAuthToken(auth);
   }
 
   /**
@@ -2065,7 +2222,7 @@ export class Zero<
 
     const raceResult = await promiseRace({
       waitForPong: promise,
-      pingTimeout: sleep(PING_TIMEOUT_MS),
+      pingTimeout: sleep(this.pingTimeoutMs),
       stateChange: this.#connectionManager.waitForStateChange(),
     });
 
@@ -2128,7 +2285,7 @@ export class Zero<
   }
 
   #checkConnectivity(reason: string) {
-    void this.#checkConnectivityAsync(reason);
+    this.#checkConnectivityAsync(reason);
   }
 
   #checkConnectivityAsync(_reason: string) {
@@ -2153,10 +2310,9 @@ export class Zero<
 
   #registerQueries(schema: Schema): MakeEntityQueriesFromSchema<S> {
     const rv = {} as Record<string, Query<Schema, string>>;
-    const context = this.#zeroContext;
     // Not using parse yet
     for (const name of Object.keys(schema.tables)) {
-      rv[name] = newQuery(context, schema, name);
+      rv[name] = newQuery(schema, name);
     }
 
     return rv as MakeEntityQueriesFromSchema<S>;
@@ -2176,6 +2332,7 @@ export class Zero<
       return (this.#inspector ??= new Inspector(
         this.#rep,
         this.#queryManager,
+        this.#zeroContext,
         async () => {
           await this.#connectResolver.promise;
           return this.#socket!;

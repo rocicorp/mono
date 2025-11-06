@@ -600,7 +600,7 @@ describe('change-streamer/service', () => {
     `.simple();
 
     // Start two subscribers: one at 06 and one at 04
-    await streamer.subscribe({
+    const sub1 = await streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid1',
@@ -644,6 +644,7 @@ describe('change-streamer/service', () => {
     // And the timer should thus be rescheduled.
     expect(setTimeoutFn).toHaveBeenCalledTimes(3);
 
+    drainToQueue(sub1);
     for await (const msg of sub2) {
       if (msg[0] === 'commit' && msg[2].watermark === '08') {
         // Now that sub2 has consumed past '06',

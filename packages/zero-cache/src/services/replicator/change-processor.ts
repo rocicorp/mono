@@ -21,6 +21,7 @@ import {
 } from '../../db/pg-to-lite.ts';
 import type {LiteTableSpec} from '../../db/specs.ts';
 import type {StatementRunner} from '../../db/statements.ts';
+import {ColumnMetadataStore} from '../change-source/column-metadata.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {
   JSON_PARSED,
@@ -528,6 +529,14 @@ class TransactionProcessor {
     const table = mapPostgresToLite(create.spec);
     this.#db.db.exec(createLiteTableStatement(table));
 
+    // Write to metadata table
+    const store = ColumnMetadataStore.getInstance(this.#db.db);
+    if (store) {
+      for (const [colName, colSpec] of Object.entries(create.spec.columns)) {
+        store.insert(table.name, colName, colSpec);
+      }
+    }
+
     this.#logResetOp(table.name);
     this.#lc.info?.(create.tag, table.name);
   }
@@ -536,6 +545,12 @@ class TransactionProcessor {
     const oldName = liteTableName(rename.old);
     const newName = liteTableName(rename.new);
     this.#db.db.exec(`ALTER TABLE ${id(oldName)} RENAME TO ${id(newName)}`);
+
+    // Rename in metadata table
+    const store = ColumnMetadataStore.getInstance(this.#db.db);
+    if (store) {
+      store.renameTable(oldName, newName);
+    }
 
     this.#bumpVersions(newName);
     this.#logResetOp(oldName);
@@ -549,6 +564,12 @@ class TransactionProcessor {
     this.#db.db.exec(
       `ALTER TABLE ${id(table)} ADD ${id(name)} ${liteColumnDef(spec)}`,
     );
+
+    // Write to metadata table
+    const store = ColumnMetadataStore.getInstance(this.#db.db);
+    if (store) {
+      store.insert(table, name, msg.column.spec);
+    }
 
     this.#bumpVersions(table);
     this.#lc.info?.(msg.tag, table, msg.column);
@@ -605,6 +626,13 @@ class TransactionProcessor {
         `ALTER TABLE ${id(table)} RENAME ${id(oldName)} TO ${id(newName)}`,
       );
     }
+
+    // Update metadata table
+    const store = ColumnMetadataStore.getInstance(this.#db.db);
+    if (store) {
+      store.update(table, msg.old.name, msg.new.name, msg.new.spec);
+    }
+
     this.#bumpVersions(table);
     this.#lc.info?.(msg.tag, table, msg.new);
   }
@@ -614,6 +642,12 @@ class TransactionProcessor {
     const {column} = msg;
     this.#db.db.exec(`ALTER TABLE ${id(table)} DROP ${id(column)}`);
 
+    // Delete from metadata table
+    const store = ColumnMetadataStore.getInstance(this.#db.db);
+    if (store) {
+      store.deleteColumn(table, column);
+    }
+
     this.#bumpVersions(table);
     this.#lc.info?.(msg.tag, table, column);
   }
@@ -621,6 +655,12 @@ class TransactionProcessor {
   processDropTable(drop: TableDrop) {
     const name = liteTableName(drop.id);
     this.#db.db.exec(`DROP TABLE IF EXISTS ${id(name)}`);
+
+    // Delete from metadata table
+    const store = ColumnMetadataStore.getInstance(this.#db.db);
+    if (store) {
+      store.deleteTable(name);
+    }
 
     this.#logResetOp(name);
     this.#lc.info?.(drop.tag, name);

@@ -1,14 +1,25 @@
 import {beforeEach, describe, expect, test, vi} from 'vitest';
+import {assert} from '../../../../shared/src/asserts.ts';
 import {TDigest, type ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
+import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {
   type InspectDownMessage,
   type InspectMetricsDown,
   type InspectQueriesDown,
 } from '../../../../zero-protocol/src/inspect-down.ts';
-import type {Schema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import type {AnalyzeQueryOptions} from '../../../../zero-protocol/src/inspect-up.ts';
+import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
+import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  string,
+  table,
+} from '../../../../zero-schema/src/builder/table-builder.ts';
+import type {Schema} from '../../../../zero-types/src/schema.ts';
+import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {schema} from '../../../../zql/src/query/test/test-schemas.ts';
 import {nanoid} from '../../util/nanoid.ts';
+import {bindingsForZero} from '../bindings.ts';
 import type {CustomMutatorDefs} from '../custom.ts';
 import {MockSocket, TestZero, zeroForTest} from '../test-utils.ts';
 import type {Inspector} from './inspector.ts';
@@ -22,6 +33,19 @@ const emptyMetrics = {
   'query-update-client': new TDigest(),
   'query-update-server': new TDigest(),
 };
+
+async function waitForID(socketP: Promise<MockSocket>, op: string) {
+  const socket = await socketP;
+  return new Promise<string>(resolve => {
+    const cleanup = socket.onUpstream(message => {
+      const data = JSON.parse(message);
+      if (data[0] === 'inspect' && data[1].op === op) {
+        cleanup();
+        resolve(data[1].id);
+      }
+    });
+  });
+}
 
 async function getMetrics<
   S extends Schema,
@@ -320,7 +344,7 @@ describe('query metrics', () => {
     await z.triggerConnected();
 
     const issueQuery = z.query.issue;
-    await issueQuery.run();
+    await z.run(issueQuery);
 
     const metrics = await getMetrics(z.inspector, z);
     expect(metrics['query-materialization-client'].count()).toBe(1);
@@ -335,7 +359,7 @@ describe('query metrics', () => {
     await z.triggerConnected();
 
     const issueQuery = z.query.issue.orderBy('id', 'desc');
-    const view = issueQuery.materialize();
+    const view = z.materialize(issueQuery);
 
     await z.triggerGotQueriesPatch(issueQuery);
 
@@ -352,7 +376,7 @@ describe('query metrics', () => {
         value: [
           {
             clientID: z.clientID,
-            queryID: issueQuery.hash(),
+            queryID: bindingsForZero(z).hash(issueQuery),
             ast: {
               table: 'issue',
               orderBy: [['id', 'desc']],
@@ -372,7 +396,7 @@ describe('query metrics', () => {
 
     const queries = await queriesP;
     expect(queries).toHaveLength(1);
-    expect(issueQuery.hash()).toBe(queries[0].id);
+    expect(bindingsForZero(z).hash(issueQuery)).toBe(queries[0].id);
 
     // We should have metrics for all.. even if empty
     expect(queries[0].metrics).toMatchInlineSnapshot(`
@@ -409,8 +433,8 @@ describe('query metrics', () => {
     const query1 = z.query.issue;
     const query2 = z.query.issue.where('id', '1');
 
-    await query1.run();
-    await query2.run();
+    await z.run(query1);
+    await z.run(query2);
 
     // Check that metrics were actually collected
 
@@ -430,9 +454,9 @@ describe('query metrics', () => {
     await z.triggerConnected();
 
     // Execute queries with different characteristics to test metrics collection
-    await z.query.issue.run(); // Simple table query
-    await z.query.issue.where('id', '1').run(); // Filtered query
-    await z.query.issue.where('id', '2').run(); // Another filtered query
+    await z.run(z.query.issue); // Simple table query
+    await z.run(z.query.issue.where('id', '1')); // Filtered query
+    await z.run(z.query.issue.where('id', '2')); // Another filtered query
 
     // Test that the inspector can access the real metrics
 
@@ -462,7 +486,7 @@ describe('query metrics', () => {
     ensureRealData(globalMetricsQueryMaterializationClient);
 
     const q = z.query.issue;
-    const view = q.materialize();
+    const view = z.materialize(q);
     await z.triggerGotQueriesPatch(q);
 
     {
@@ -487,7 +511,7 @@ describe('query metrics', () => {
 
     // Create a query and materialize a view to set up the query pipeline
     const issueQuery = z.query.issue;
-    const view = issueQuery.materialize();
+    const view = z.materialize(issueQuery);
     await z.triggerGotQueriesPatch(issueQuery);
 
     // Get initial inspector to verify no query-update metrics initially
@@ -546,7 +570,7 @@ describe('query metrics', () => {
     await z.triggerConnected();
 
     const issueQuery = z.query.issue.orderBy('id', 'desc');
-    const view = issueQuery.materialize();
+    const view = z.materialize(issueQuery);
     await z.triggerGotQueriesPatch(issueQuery);
 
     // Trigger row updates to generate query-update metrics for this specific query
@@ -588,7 +612,7 @@ describe('query metrics', () => {
         value: [
           {
             clientID: z.clientID,
-            queryID: issueQuery.hash(),
+            queryID: bindingsForZero(z).hash(issueQuery),
             ast: {
               table: 'issue',
               orderBy: [['id', 'desc']],
@@ -611,7 +635,7 @@ describe('query metrics', () => {
 
     const queries = await queriesP;
     expect(queries).toHaveLength(1);
-    expect(issueQuery.hash()).toBe(queries[0].id);
+    expect(bindingsForZero(z).hash(issueQuery)).toBe(queries[0].id);
 
     const {metrics} = queries[0];
     expect(metrics).toMatchInlineSnapshot(`
@@ -686,7 +710,7 @@ test('clientZQL', async () => {
 
   // Trigger QueryManager.#add by materializing a query and marking it as got
   const issueQuery = z.query.issue.where('ownerId', 'arv');
-  const view = issueQuery.materialize();
+  const view = z.materialize(issueQuery);
   await z.triggerGotQueriesPatch(issueQuery);
 
   // Send fake inspect/queries response for this query
@@ -698,7 +722,7 @@ test('clientZQL', async () => {
       value: [
         {
           clientID: z.clientID,
-          queryID: issueQuery.hash(),
+          queryID: bindingsForZero(z).hash(issueQuery),
           ast: {
             table: 'issues',
             where: {
@@ -724,7 +748,7 @@ test('clientZQL', async () => {
 
   const queries = await queriesP;
   expect(queries).toHaveLength(1);
-  expect(queries[0].id).toBe(issueQuery.hash());
+  expect(queries[0].id).toBe(bindingsForZero(z).hash(issueQuery));
   expect(queries[0].clientZQL).toBe(
     "issue.where('ownerId', 'arv').orderBy('id', 'asc')",
   );
@@ -737,19 +761,6 @@ test('clientZQL', async () => {
 });
 
 describe('query analyze', () => {
-  async function waitForID(socketP: Promise<MockSocket>, op: string) {
-    const socket = await socketP;
-    return new Promise<string>(resolve => {
-      const cleanup = socket.onUpstream(message => {
-        const data = JSON.parse(message);
-        if (data[0] === 'inspect' && data[1].op === op) {
-          cleanup();
-          resolve(data[1].id);
-        }
-      });
-    });
-  }
-
   test('analyze method calls correct protocol', async () => {
     const z = zeroForTest({schema});
     await z.triggerConnected();
@@ -1787,6 +1798,226 @@ describe('authenticate', () => {
 
       await z.close();
     });
+  });
+});
+
+describe('inspector.analyzeQuery name mapping', () => {
+  async function testAnalyzeQuery<S extends Schema>(
+    z: TestZero<S, undefined>,
+    query: AnyQuery,
+    options: AnalyzeQueryOptions | undefined,
+    mockResult: AnalyzeQueryResult,
+  ): Promise<{result: AnalyzeQueryResult; sentAst: AST | undefined}> {
+    const idPromise = waitForID(z.socket, 'analyze-query');
+    const analyzePromise = z.inspector.analyzeQuery(query, options);
+    const id = await idPromise;
+
+    // Capture the AST sent to server
+    const socket = await z.socket;
+    const sentMessages = socket.jsonMessages.filter(msg => {
+      if (!Array.isArray(msg)) return false;
+      const [type, data] = msg;
+      return (
+        type === 'inspect' &&
+        typeof data === 'object' &&
+        data !== null &&
+        'op' in data &&
+        data.op === 'analyze-query'
+      );
+    });
+
+    expect(sentMessages).toHaveLength(1);
+    let sentAst: AST | undefined;
+    const firstMessage = sentMessages[0];
+    if (Array.isArray(firstMessage) && firstMessage.length > 1) {
+      const data = firstMessage[1];
+      if (typeof data === 'object' && data !== null && 'ast' in data) {
+        sentAst = data.ast as AST;
+      }
+    }
+
+    // Send mock response
+    await z.triggerMessage([
+      'inspect',
+      {
+        op: 'analyze-query',
+        id,
+        value: mockResult,
+      },
+    ]);
+
+    const result = await analyzePromise;
+    return {result, sentAst};
+  }
+
+  test('maps client table names to server names', async () => {
+    // Define a schema with mapped table names
+    const issueTable = table('issue')
+      .from('_issues') // Map client name 'issue' to server name '_issues'
+      .columns({
+        id: string(),
+        title: string(),
+      })
+      .primaryKey('id');
+
+    const mappedSchema = createSchema({
+      tables: [issueTable],
+    });
+
+    const z = zeroForTest({schema: mappedSchema});
+    await z.triggerConnected();
+
+    const {result, sentAst} = await testAnalyzeQuery(
+      z,
+      z.query.issue,
+      {syncedRows: true},
+      {
+        syncedRowCount: 5,
+        readRowCountsByQuery: {_issues: {'SELECT * FROM _issues': 5}},
+        warnings: [],
+        start: 0,
+        end: 100,
+        elapsed: 100,
+      },
+    );
+
+    // The AST should have the SERVER table name (_issues), not client name (issue)
+    expect(sentAst?.table).toBe('_issues');
+    expect(result.syncedRowCount).toBe(5);
+    await z.close();
+  });
+
+  test('maps client column names to server names in where clause', async () => {
+    const issueTable = table('issue')
+      .columns({
+        id: string(),
+        creatorID: string()
+          .from('creator_id') // Map client name 'creatorID' to server name 'creator_id'
+          .optional(),
+      })
+      .primaryKey('id');
+
+    const mappedSchema = createSchema({
+      tables: [issueTable],
+    });
+
+    const z = zeroForTest({schema: mappedSchema});
+    await z.triggerConnected();
+
+    const {result, sentAst} = await testAnalyzeQuery(
+      z,
+      z.query.issue.where('creatorID', '=', 'user123'),
+      {syncedRows: true},
+      {
+        syncedRowCount: 1,
+        readRowCountsByQuery: {},
+        warnings: [],
+        start: 1000,
+        end: 1100,
+      },
+    );
+
+    // The AST where clause should reference the server column name
+    expect(sentAst?.where).toBeDefined();
+    expect(sentAst?.where?.type).toBe('simple');
+    // Type narrowing: we know where is defined and is simple from above assertions
+    assert(sentAst?.where?.type === 'simple');
+    expect(sentAst.where.left.type).toBe('column');
+    assert(sentAst.where.left.type === 'column');
+    expect(sentAst.where.left.name).toBe('creator_id');
+    expect(result.syncedRowCount).toBe(1);
+    await z.close();
+  });
+
+  test('handles queries without name mapping (schema has no mapped names)', async () => {
+    const issueTable = table('issue')
+      .columns({
+        id: string(),
+        title: string(),
+      })
+      .primaryKey('id');
+
+    const simpleSchema = createSchema({
+      tables: [issueTable],
+    });
+
+    const z = zeroForTest({schema: simpleSchema});
+    await z.triggerConnected();
+
+    const {result, sentAst} = await testAnalyzeQuery(
+      z,
+      z.query.issue,
+      {syncedRows: true},
+      {
+        syncedRowCount: 3,
+        readRowCountsByQuery: {},
+        warnings: [],
+        start: 2000,
+        end: 2100,
+      },
+    );
+
+    // Table name should remain 'issue' since there's no mapping
+    expect(sentAst?.table).toBe('issue');
+    expect(result.syncedRowCount).toBe(3);
+    await z.close();
+  });
+
+  test('maps names in related queries', async () => {
+    const issueTable = table('issue')
+      .from('_issues')
+      .columns({
+        id: string(),
+        projectID: string().from('project_id').optional(),
+      })
+      .primaryKey('id');
+
+    const projectTable = table('project')
+      .from('_projects')
+      .columns({
+        id: string(),
+        name: string(),
+      })
+      .primaryKey('id');
+
+    const issueRelationships = relationships(issueTable, connect => ({
+      project: connect.one({
+        sourceField: ['projectID'],
+        destField: ['id'],
+        destSchema: projectTable,
+      }),
+    }));
+
+    const mappedSchema = createSchema({
+      tables: [issueTable, projectTable],
+      relationships: [issueRelationships],
+    });
+
+    const z = zeroForTest({schema: mappedSchema});
+    await z.triggerConnected();
+
+    const {result, sentAst} = await testAnalyzeQuery(
+      z,
+      z.query.issue.related('project', q => q.one()),
+      {syncedRows: true},
+      {
+        syncedRowCount: 2,
+        readRowCountsByQuery: {},
+        warnings: [],
+        start: 3000,
+        end: 3100,
+      },
+    );
+
+    // Main table should be mapped
+    expect(sentAst?.table).toBe('_issues');
+
+    // Related query should also be mapped
+    const relatedQuery = sentAst?.related?.[0];
+    expect(relatedQuery?.subquery.table).toBe('_projects');
+    expect(relatedQuery?.correlation.parentField[0]).toBe('project_id');
+    expect(result.syncedRowCount).toBe(2);
+    await z.close();
   });
 });
 

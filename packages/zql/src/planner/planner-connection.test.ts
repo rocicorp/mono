@@ -1,19 +1,15 @@
 import {expect, suite, test} from 'vitest';
-import {
-  BASE_COST,
-  CONSTRAINTS,
-  createConnection,
-  expectedCost,
-} from './test/helpers.ts';
+import {BASE_COST, CONSTRAINTS, createConnection} from './test/helpers.ts';
 
 suite('PlannerConnection', () => {
   test('estimateCost() with no constraints returns base cost', () => {
     const connection = createConnection();
 
-    expect(connection.estimateCost()).toStrictEqual({
-      rows: BASE_COST,
-      runningCost: BASE_COST,
+    expect(connection.estimateCost(1, [])).toStrictEqual({
       startupCost: 0,
+      scanEst: BASE_COST,
+      cost: 0,
+      returnedRows: BASE_COST,
       selectivity: 1.0,
       limit: undefined,
     });
@@ -24,7 +20,14 @@ suite('PlannerConnection', () => {
 
     connection.propagateConstraints([0], CONSTRAINTS.userId);
 
-    expect(connection.estimateCost()).toStrictEqual(expectedCost(1));
+    expect(connection.estimateCost(1, [])).toStrictEqual({
+      startupCost: 0,
+      scanEst: BASE_COST,
+      cost: 0,
+      returnedRows: BASE_COST,
+      selectivity: 1.0,
+      limit: undefined,
+    });
   });
 
   test('multiple constraints reduce cost further', () => {
@@ -35,7 +38,14 @@ suite('PlannerConnection', () => {
       postId: undefined,
     });
 
-    expect(connection.estimateCost()).toStrictEqual(expectedCost(2));
+    expect(connection.estimateCost(1, [])).toStrictEqual({
+      startupCost: 0,
+      scanEst: BASE_COST,
+      cost: 0,
+      returnedRows: BASE_COST,
+      selectivity: 1.0,
+      limit: undefined,
+    });
   });
 
   test('multiple branch patterns sum costs', () => {
@@ -44,11 +54,11 @@ suite('PlannerConnection', () => {
     connection.propagateConstraints([0], CONSTRAINTS.userId);
     connection.propagateConstraints([1], CONSTRAINTS.postId);
 
-    const ec = expectedCost(1);
-    expect(connection.estimateCost()).toStrictEqual({
-      rows: ec.rows * 2,
-      runningCost: ec.runningCost * 2,
+    expect(connection.estimateCost(1, [])).toStrictEqual({
       startupCost: 0,
+      scanEst: BASE_COST,
+      cost: 0,
+      returnedRows: BASE_COST,
       selectivity: 1.0,
       limit: undefined,
     });
@@ -58,14 +68,22 @@ suite('PlannerConnection', () => {
     const connection = createConnection();
 
     connection.propagateConstraints([0], CONSTRAINTS.userId);
-    expect(connection.estimateCost()).toStrictEqual(expectedCost(1));
+    expect(connection.estimateCost(1, [])).toStrictEqual({
+      startupCost: 0,
+      scanEst: BASE_COST,
+      cost: 0,
+      returnedRows: BASE_COST,
+      selectivity: 1.0,
+      limit: undefined,
+    });
 
     connection.reset();
 
-    expect(connection.estimateCost()).toStrictEqual({
-      rows: BASE_COST,
-      runningCost: BASE_COST,
+    expect(connection.estimateCost(1, [])).toStrictEqual({
       startupCost: 0,
+      scanEst: BASE_COST,
+      cost: 0,
+      returnedRows: BASE_COST,
       selectivity: 1.0,
       limit: undefined,
     });

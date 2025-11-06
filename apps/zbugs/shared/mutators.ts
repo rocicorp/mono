@@ -1,5 +1,4 @@
 import type {Transaction, UpdateValue} from '@rocicorp/zero';
-import {assert} from '../../../packages/shared/src/asserts.ts';
 import {
   assertIsCreatorOrAdmin,
   assertIsLoggedIn,
@@ -8,7 +7,8 @@ import {
   isAdmin,
   type AuthData,
 } from './auth.ts';
-import {schema, ZERO_PROJECT_ID} from './schema.ts';
+import {MutationError, MutationErrorCode} from './error.ts';
+import {builder, schema, ZERO_PROJECT_ID} from './schema.ts';
 
 function projectIDWithDefault(projectID: string | undefined): string {
   return projectID ?? ZERO_PROJECT_ID;
@@ -39,6 +39,7 @@ export type AddCommentArgs = {
 };
 
 export type NotificationType = 'subscribe' | 'unsubscribe';
+
 export type MutatorTx = Transaction<typeof schema>;
 
 export function createMutators(authData: AuthData | undefined) {
@@ -75,13 +76,19 @@ export function createMutators(authData: AuthData | undefined) {
         tx: MutatorTx,
         change: UpdateValue<typeof schema.tables.issue> & {modified: number},
       ) {
-        const oldIssue = await tx.query.issue
-          .where('id', change.id)
-          .one()
-          .run();
-        assert(oldIssue);
+        const oldIssue = await tx.run(
+          builder.issue.where('id', change.id).one(),
+        );
 
-        await assertIsCreatorOrAdmin(authData, tx.query.issue, change.id);
+        if (!oldIssue) {
+          throw new MutationError(
+            `Issue not found`,
+            MutationErrorCode.ENTITY_NOT_FOUND,
+            change.id,
+          );
+        }
+
+        await assertIsCreatorOrAdmin(tx, authData, builder.issue, change.id);
         await tx.mutate.issue.update(change);
 
         const isAssigneeChange =
@@ -113,7 +120,7 @@ export function createMutators(authData: AuthData | undefined) {
       },
 
       async delete(tx: MutatorTx, id: string) {
-        await assertIsCreatorOrAdmin(authData, tx.query.issue, id);
+        await assertIsCreatorOrAdmin(tx, authData, builder.issue, id);
         await tx.mutate.issue.delete({id});
       },
 
@@ -125,7 +132,7 @@ export function createMutators(authData: AuthData | undefined) {
           projectID,
         }: {issueID: string; labelID: string; projectID?: string | undefined},
       ) {
-        await assertIsCreatorOrAdmin(authData, tx.query.issue, issueID);
+        await assertIsCreatorOrAdmin(tx, authData, builder.issue, issueID);
         await tx.mutate.issueLabel.insert({
           issueID,
           labelID,
@@ -137,7 +144,7 @@ export function createMutators(authData: AuthData | undefined) {
         tx: MutatorTx,
         {issueID, labelID}: {issueID: string; labelID: string},
       ) {
-        await assertIsCreatorOrAdmin(authData, tx.query.issue, issueID);
+        await assertIsCreatorOrAdmin(tx, authData, builder.issue, issueID);
         await tx.mutate.issueLabel.delete({issueID, labelID});
       },
     },
@@ -173,7 +180,7 @@ export function createMutators(authData: AuthData | undefined) {
       },
 
       async remove(tx: MutatorTx, id: string) {
-        await assertIsCreatorOrAdmin(authData, tx.query.emoji, id);
+        await assertIsCreatorOrAdmin(tx, authData, builder.emoji, id);
         await tx.mutate.emoji.delete({id});
       },
     },
@@ -196,12 +203,12 @@ export function createMutators(authData: AuthData | undefined) {
       },
 
       async edit(tx: MutatorTx, {id, body}: {id: string; body: string}) {
-        await assertIsCreatorOrAdmin(authData, tx.query.comment, id);
+        await assertIsCreatorOrAdmin(tx, authData, builder.comment, id);
         await tx.mutate.comment.update({id, body});
       },
 
       async remove(tx: MutatorTx, id: string) {
-        await assertIsCreatorOrAdmin(authData, tx.query.comment, id);
+        await assertIsCreatorOrAdmin(tx, authData, builder.comment, id);
         await tx.mutate.comment.delete({id});
       },
     },
@@ -215,7 +222,14 @@ export function createMutators(authData: AuthData | undefined) {
           projectID,
         }: {id: string; name: string; projectID?: string | undefined},
       ) {
-        assert(isAdmin(authData), 'Only admins can create labels');
+        if (!isAdmin(authData)) {
+          throw new MutationError(
+            `Only admins can create labels`,
+            MutationErrorCode.NOT_AUTHORIZED,
+            id,
+          );
+        }
+
         await tx.mutate.label.insert({
           id,
           name,
@@ -237,7 +251,14 @@ export function createMutators(authData: AuthData | undefined) {
           projectID?: string | undefined;
         },
       ) {
-        assert(isAdmin(authData), 'Only admins can create labels');
+        if (!isAdmin(authData)) {
+          throw new MutationError(
+            `Only admins can create labels`,
+            MutationErrorCode.NOT_AUTHORIZED,
+            labelID,
+          );
+        }
+
         projectID = projectIDWithDefault(projectID);
         await tx.mutate.label.insert({
           id: labelID,
@@ -320,7 +341,7 @@ export function createMutators(authData: AuthData | undefined) {
   ) {
     await assertUserCanSeeIssue(tx, userID, issueID);
 
-    const existingNotification = await tx.query.issueNotifications
+    const existingNotification = builder.issueNotifications
       .where('userID', userID)
       .where('issueID', issueID)
       .one();

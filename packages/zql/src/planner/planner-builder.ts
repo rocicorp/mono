@@ -41,6 +41,7 @@ export type Plans = {
 export function buildPlanGraph(
   ast: AST,
   model: ConnectionCostModel,
+  isRoot: boolean,
   baseConstraints?: PlannerConstraint,
 ): Plans {
   const graph = new PlannerGraph();
@@ -50,6 +51,7 @@ export function buildPlanGraph(
   const connection = source.connect(
     ast.orderBy ?? [],
     ast.where,
+    isRoot,
     baseConstraints,
     ast.limit,
   );
@@ -82,7 +84,12 @@ export function buildPlanGraph(
         csq.correlation.childField,
         csq.subquery.table,
       );
-      subPlans[alias] = buildPlanGraph(csq.subquery, model, childConstraints);
+      subPlans[alias] = buildPlanGraph(
+        csq.subquery,
+        model,
+        true,
+        childConstraints,
+      );
     }
   }
 
@@ -91,12 +98,12 @@ export function buildPlanGraph(
 
 function processCondition(
   condition: Condition,
-  input: PlannerNode,
+  input: Exclude<PlannerNode, PlannerTerminus>,
   graph: PlannerGraph,
   model: ConnectionCostModel,
   parentTable: string,
   getPlanId: () => number,
-): PlannerNode {
+): Exclude<PlannerNode, PlannerTerminus> {
   switch (condition.type) {
     case 'simple':
       return input;
@@ -118,12 +125,12 @@ function processCondition(
 
 function processAnd(
   condition: Conjunction,
-  input: PlannerNode,
+  input: Exclude<PlannerNode, PlannerTerminus>,
   graph: PlannerGraph,
   model: ConnectionCostModel,
   parentTable: string,
   getPlanId: () => number,
-): PlannerNode {
+): Exclude<PlannerNode, PlannerTerminus> {
   let end = input;
   for (const subCondition of condition.conditions) {
     end = processCondition(
@@ -140,12 +147,12 @@ function processAnd(
 
 function processOr(
   condition: Disjunction,
-  input: PlannerNode,
+  input: Exclude<PlannerNode, PlannerTerminus>,
   graph: PlannerGraph,
   model: ConnectionCostModel,
   parentTable: string,
   getPlanId: () => number,
-): PlannerNode {
+): Exclude<PlannerNode, PlannerTerminus> {
   const subqueryConditions = condition.conditions.filter(
     c => c.type === 'correlatedSubquery' || hasCorrelatedSubquery(c),
   );
@@ -158,7 +165,7 @@ function processOr(
   graph.fanOuts.push(fanOut);
   wireOutput(input, fanOut);
 
-  const branches: PlannerNode[] = [];
+  const branches: Exclude<PlannerNode, PlannerTerminus>[] = [];
   for (const subCondition of subqueryConditions) {
     const branch = processCondition(
       subCondition,
@@ -183,12 +190,12 @@ function processOr(
 
 function processCorrelatedSubquery(
   condition: CorrelatedSubqueryCondition,
-  input: PlannerNode,
+  input: Exclude<PlannerNode, PlannerTerminus>,
   graph: PlannerGraph,
   model: ConnectionCostModel,
   parentTable: string,
   getPlanId: () => number,
-): PlannerNode {
+): Exclude<PlannerNode, PlannerTerminus> {
   const {related} = condition;
   const childTable = related.subquery.table;
 
@@ -199,6 +206,7 @@ function processCorrelatedSubquery(
   const childConnection = childSource.connect(
     related.subquery.orderBy ?? [],
     related.subquery.where,
+    false,
     undefined, // no base constraints for EXISTS/NOT EXISTS
     condition.op === 'EXISTS' ? 1 : undefined,
   );
@@ -228,13 +236,39 @@ function processCorrelatedSubquery(
   const planId = getPlanId();
   condition[planIdSymbol] = planId;
 
+  // Determine flippability and initial type based on flip flag and operator
+  const isNotExists = condition.op === 'NOT EXISTS';
+  const manualFlip = condition.flip;
+
+  let flippable: boolean;
+  let initialType: 'semi' | 'flipped';
+
+  if (isNotExists) {
+    // NOT EXISTS joins can never be flipped
+    flippable = false;
+    initialType = 'semi';
+  } else if (manualFlip === true) {
+    // User explicitly requested flip=true: start flipped, don't allow planner to change
+    flippable = false;
+    initialType = 'flipped';
+  } else if (manualFlip === false) {
+    // User explicitly requested flip=false: start semi, don't allow planner to change
+    flippable = false;
+    initialType = 'semi';
+  } else {
+    // flip is undefined: planner can decide
+    flippable = true;
+    initialType = 'semi';
+  }
+
   const join = new PlannerJoin(
     input,
     childEnd,
     parentConstraint,
     childConstraint,
-    condition.op !== 'NOT EXISTS',
+    flippable,
     planId,
+    initialType,
   );
   graph.joins.push(join);
 
@@ -273,7 +307,7 @@ export function planQuery(
   model: ConnectionCostModel,
   planDebugger?: PlanDebugger,
 ): AST {
-  const plans = buildPlanGraph(ast, model);
+  const plans = buildPlanGraph(ast, model, true);
   planRecursively(plans, planDebugger);
   return applyPlansToAST(ast, plans);
 }
@@ -294,7 +328,7 @@ function applyToCondition(
 
     return {
       ...condition,
-      flip: shouldFlip ? true : condition.flip,
+      flip: shouldFlip,
       related: {
         ...condition.related,
         subquery: {
@@ -313,7 +347,7 @@ function applyToCondition(
   };
 }
 
-function applyPlansToAST(ast: AST, plans: Plans): AST {
+export function applyPlansToAST(ast: AST, plans: Plans): AST {
   const flippedIds = new Set<number>();
   for (const join of plans.plan.joins) {
     if (join.type === 'flipped' && join.planId !== undefined) {

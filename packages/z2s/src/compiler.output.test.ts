@@ -9,7 +9,7 @@ import {
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
-import type {ServerSchema} from '../../zero-schema/src/server-schema.ts';
+import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
 import {
   any,
   compile,

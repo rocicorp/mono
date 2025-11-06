@@ -19,6 +19,7 @@ export class PlannerSource {
   connect(
     sort: Ordering,
     filters: Condition | undefined,
+    isRoot: boolean,
     baseConstraints?: PlannerConstraint,
     limit?: number,
   ): PlannerConnection {
@@ -27,6 +28,7 @@ export class PlannerSource {
       this.#model,
       sort,
       filters,
+      isRoot,
       baseConstraints,
       limit,
     );

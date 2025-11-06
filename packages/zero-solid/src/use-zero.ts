@@ -1,9 +1,11 @@
 import {
   batch,
   createContext,
+  createEffect,
   createMemo,
   onCleanup,
   splitProps,
+  untrack,
   useContext,
   type Accessor,
   type JSX,
@@ -11,16 +13,20 @@ import {
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
 
 // oxlint-disable-next-line no-explicit-any
-const ZeroContext = createContext<Accessor<Zero<any, any>> | undefined>(
+const ZeroContext = createContext<Accessor<Zero<any, any, any>> | undefined>(
   undefined,
 );
 
-export function createZero<S extends Schema, MD extends CustomMutatorDefs>(
-  options: ZeroOptions<S, MD>,
-): Zero<S, MD> {
+const NO_AUTH_SET = Symbol();
+
+export function createZero<
+  S extends Schema,
+  MD extends CustomMutatorDefs,
+  Context,
+>(options: ZeroOptions<S, MD, Context>): Zero<S, MD, Context> {
   const opts = {
     ...options,
     batchViewUpdates: batch,
@@ -31,7 +37,8 @@ export function createZero<S extends Schema, MD extends CustomMutatorDefs>(
 export function useZero<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
->(): () => Zero<S, MD> {
+  Context = unknown,
+>(): () => Zero<S, MD, Context> {
   const zero = useContext(ZeroContext);
 
   if (zero === undefined) {
@@ -43,32 +50,66 @@ export function useZero<
 export function createUseZero<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
+  Context = unknown,
 >() {
-  return () => useZero<S, MD>();
+  return () => useZero<S, MD, Context>();
 }
 
 export function ZeroProvider<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
+  MD extends CustomMutatorDefs | undefined,
+  Context,
 >(
-  props: {children: JSX.Element} & (
+  props: {children: JSX.Element; init?: (zero: Zero<S, MD>) => void} & (
     | {
-        zero: Zero<S, MD>;
+        zero: Zero<S, MD, Context>;
       }
-    | ZeroOptions<S, MD>
+    | ZeroOptions<S, MD, Context>
   ),
 ) {
   const zero = createMemo(() => {
     if ('zero' in props) {
       return props.zero;
     }
-    const [, options] = splitProps(props, ['children']);
+
+    const [, options] = splitProps(props, ['children', 'auth']);
+
+    const authValue = untrack(() => props.auth);
     const createdZero = new Zero({
       ...options,
+      ...(authValue !== undefined ? {auth: authValue} : {}),
       batchViewUpdates: batch,
     });
+    options.init?.(createdZero);
     onCleanup(() => createdZero.close());
     return createdZero;
+  });
+
+  const auth = createMemo<typeof NO_AUTH_SET | ZeroOptions<S, MD>['auth']>(
+    () => ('auth' in props ? props.auth : NO_AUTH_SET),
+  );
+
+  let prevAuth: typeof NO_AUTH_SET | ZeroOptions<S, MD>['auth'] = NO_AUTH_SET;
+
+  createEffect(() => {
+    const currentZero = zero();
+    if (!currentZero) {
+      return;
+    }
+
+    const currentAuth = auth();
+
+    if (prevAuth === NO_AUTH_SET) {
+      prevAuth = currentAuth;
+      return;
+    }
+
+    if (currentAuth !== prevAuth) {
+      prevAuth = currentAuth;
+      void currentZero.connection.connect({
+        auth: currentAuth === NO_AUTH_SET ? undefined : currentAuth,
+      });
+    }
   });
 
   return ZeroContext.Provider({

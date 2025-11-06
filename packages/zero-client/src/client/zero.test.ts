@@ -1,5 +1,13 @@
 import {resolver} from '@rocicorp/resolver';
-import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {
+  afterEach,
+  assert,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from 'vitest';
 import type {Write} from '../../../replicache/src/dag/store.ts';
 import {
   setDeletedClients,
@@ -18,13 +26,16 @@ import type {
 import type {PullRequest} from '../../../replicache/src/sync/pull.ts';
 import type {PushRequest} from '../../../replicache/src/sync/push.ts';
 import {withWrite} from '../../../replicache/src/with-transactions.ts';
-import {assert} from '../../../shared/src/asserts.ts';
 import {
   clearBrowserOverrides,
   overrideBrowserGlobal,
 } from '../../../shared/src/browser-env.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import * as valita from '../../../shared/src/valita.ts';
+import {
+  ApplicationError,
+  isApplicationError,
+} from '../../../zero-protocol/src/application-error.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {changeDesiredQueriesMessageSchema} from '../../../zero-protocol/src/change-desired-queries.ts';
 import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
@@ -33,7 +44,10 @@ import {
   encodeSecProtocols,
   initConnectionMessageSchema,
 } from '../../../zero-protocol/src/connect.ts';
+import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import {
@@ -42,26 +56,27 @@ import {
   type Mutation,
 } from '../../../zero-protocol/src/push.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
-import {
-  createSchema,
-  type Schema,
-} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
   number,
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {nanoid} from '../util/nanoid.ts';
+import {ClientErrorKind} from './client-error-kind.ts';
+import type {ConnectionState} from './connection-manager.ts';
+import {ConnectionStatus} from './connection-status.ts';
 import type {CustomMutatorDefs} from './custom.ts';
-import type {DeleteClientsManager} from './delete-clients-manager.ts';
+import {DeleteClientsManager} from './delete-clients-manager.ts';
+import {ClientError, isServerError} from './error.ts';
 import type {WSString} from './http-string.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import type {QueryManager} from './query-manager.ts';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.ts';
-import {ClientError, isServerError} from './error.ts';
 import {
   MockSocket,
   storageMock,
@@ -76,16 +91,10 @@ import {
   createSocket,
   DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
   DEFAULT_DISCONNECT_TIMEOUT_MS,
-  PING_INTERVAL_MS,
-  PING_TIMEOUT_MS,
+  DEFAULT_PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
 } from './zero.ts';
-import {ConnectionStatus} from './connection-status.ts';
-import type {ConnectionState} from './connection-manager.ts';
-import {ClientErrorKind} from './client-error-kind.ts';
-import {ProtocolError} from '../../../zero-protocol/src/error.ts';
-import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 
 const startTime = 1678829450000;
 
@@ -190,29 +199,24 @@ describe('onOnlineChange callback', () => {
     expect(getOfflineCount()).toBe(0);
     await z.triggerConnected();
     await z.waitForConnectionStatus(ConnectionStatus.Connected);
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     expect(getOnlineCount()).toBe(1);
     expect(getOfflineCount()).toBe(0);
     await z.triggerClose();
     await z.waitForConnectionStatus(ConnectionStatus.Connecting);
-    // Still connected because we haven't yet failed to reconnect.
-    await vi.advanceTimersByTimeAsync(0);
-    expect(z.online).toBe(true);
+    expect(z.online).toBe(false);
     expect(getOnlineCount()).toBe(1);
-    expect(getOfflineCount()).toBe(0);
+    expect(getOfflineCount()).toBe(1);
     await z.triggerConnected();
     await z.waitForConnectionStatus(ConnectionStatus.Connected);
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
-    expect(getOnlineCount()).toBe(1);
-    expect(getOfflineCount()).toBe(0);
+    expect(getOnlineCount()).toBe(2);
+    expect(getOfflineCount()).toBe(1);
   });
 
   test('triggers after fatal error and reconnects', async () => {
     const {z, getOnlineCount, getOfflineCount} = getNewZero();
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     await z.triggerError({
       kind: ErrorKind.InvalidMessage,
@@ -220,7 +224,6 @@ describe('onOnlineChange callback', () => {
       origin: ErrorOrigin.Server,
     });
     await z.waitForConnectionStatus(ConnectionStatus.Error);
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(false);
     // we connected once and then disconnected once
     expect(getOnlineCount()).toBe(1);
@@ -229,7 +232,6 @@ describe('onOnlineChange callback', () => {
     await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
     await z.connection.connect();
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     // we reconnected once more
     expect(getOnlineCount()).toBe(2);
@@ -239,7 +241,6 @@ describe('onOnlineChange callback', () => {
   test('respects large backoff directives', async () => {
     const {z, getOnlineCount, getOfflineCount} = getNewZero();
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(0);
     const BACKOFF_MS = RUN_LOOP_INTERVAL_MS * 10;
     await z.triggerError({
       kind: ErrorKind.ServerOverloaded,
@@ -248,7 +249,6 @@ describe('onOnlineChange callback', () => {
       minBackoffMs: BACKOFF_MS,
     });
     await z.waitForConnectionStatus(ConnectionStatus.Connecting);
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(false);
     // we connected once and then disconnected once
     expect(getOnlineCount()).toBe(1);
@@ -256,7 +256,6 @@ describe('onOnlineChange callback', () => {
     // And followed by a reconnect with the longer BACKOFF_MS.
     await tickAFewTimes(vi, BACKOFF_MS);
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     // we reconnected once more
     expect(getOnlineCount()).toBe(2);
@@ -266,7 +265,6 @@ describe('onOnlineChange callback', () => {
   test('respects short backoff directives with reconnect params', async () => {
     const {z, getOnlineCount, getOfflineCount} = getNewZero();
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     const BACKOFF_MS = 10;
     await z.triggerError({
@@ -280,7 +278,6 @@ describe('onOnlineChange callback', () => {
       },
     });
     await z.waitForConnectionStatus(ConnectionStatus.Connecting);
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(false);
     // we connected once and then disconnected once
     expect(getOnlineCount()).toBe(1);
@@ -295,75 +292,64 @@ describe('onOnlineChange callback', () => {
     expect(connectMsg?.[2][1]).matches(
       /&reason=rehomed&fromServer=foo%2Fbar%2Fbaz/,
     );
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     // we reconnected once more
     expect(getOnlineCount()).toBe(2);
     expect(getOfflineCount()).toBe(1);
   });
 
-  test('does not trigger offline on first unauthorized error', async () => {
+  test('transitions to needs-auth on unauthorized error', async () => {
     const {z, getOnlineCount, getOfflineCount} = getNewZero();
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     await z.triggerError({
       kind: ErrorKind.Unauthorized,
       message: 'bbb',
       origin: ErrorOrigin.ZeroCache,
     });
-    await z.waitForConnectionStatus(ConnectionStatus.Connecting);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(z.online).toBe(true);
+    await z.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+    expect(z.online).toBe(false);
     // we connected once
     expect(getOnlineCount()).toBe(1);
-    // we did not get an offline callback on the first error, as expected
-    expect(getOfflineCount()).toBe(0);
-    // And followed by a reconnect.
-    await z.triggerConnected();
+    // auth error triggered offline callback
+    expect(getOfflineCount()).toBe(1);
     await vi.advanceTimersByTimeAsync(0);
+    // Call connect with new auth to resume
+    await z.connection.connect({auth: 'new-token'});
+    await z.triggerConnected();
     expect(z.online).toBe(true);
-    // online is only called once, since the first auth error
-    // did not trigger an offline callback
-    expect(getOnlineCount()).toBe(1);
-    expect(getOfflineCount()).toBe(0);
+    // online callback triggered again after reconnect
+    expect(getOnlineCount()).toBe(2);
+    expect(getOfflineCount()).toBe(1);
   });
 
-  test('triggers offline on second unauthorized error', async () => {
+  test('stays in needs-auth state until connect is called', async () => {
     const {z, getOnlineCount, getOfflineCount} = getNewZero();
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(0);
     await z.triggerError({
-      kind: ErrorKind.Unauthorized,
+      kind: ErrorKind.PushFailed,
+      reason: 'http',
+      status: 401,
       message: 'ccc',
       origin: ErrorOrigin.ZeroCache,
+      mutationIDs: [],
     });
-    await z.waitForConnectionStatus(ConnectionStatus.Connecting);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(z.online).toBe(true);
+    await z.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+    expect(z.online).toBe(false);
     // we connected once
     expect(getOnlineCount()).toBe(1);
-    // we did not get an offline callback on the first error, as expected
-    expect(getOfflineCount()).toBe(0);
-    const reconnectingSocket = z.socket;
-    await reconnectingSocket;
-    await z.triggerError({
-      kind: ErrorKind.Unauthorized,
-      message: 'ddd',
-      origin: ErrorOrigin.ZeroCache,
-    });
-    await z.waitForConnectionStatus(ConnectionStatus.Connecting);
-    await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(z.online).toBe(false);
-    expect(getOnlineCount()).toBe(1);
-    // on the second error, we got an offline callback
+    // auth error triggered offline callback
     expect(getOfflineCount()).toBe(1);
-    // And followed by a reconnect.
-    const reconnectAfterOffline = z.socket;
-    await reconnectAfterOffline;
+    // Wait a while - should stay in needs-auth state
+    await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS * 10);
+    expect(z.connectionStatus).toBe(ConnectionStatus.NeedsAuth);
+    expect(z.online).toBe(false);
+    // No additional callbacks
+    expect(getOnlineCount()).toBe(1);
+    expect(getOfflineCount()).toBe(1);
+    // Call connect with new auth to resume
+    await z.connection.connect({auth: 'new-token'});
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     expect(getOnlineCount()).toBe(2);
     expect(getOfflineCount()).toBe(1);
@@ -372,7 +358,7 @@ describe('onOnlineChange callback', () => {
   test('triggers offline when ping times out', async () => {
     const {z, getOnlineCount, getOfflineCount} = getNewZero();
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS + PING_TIMEOUT_MS);
+    await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS * 2);
     expect(z.online).toBe(false);
     // we connected once
     expect(getOnlineCount()).toBe(1);
@@ -381,7 +367,6 @@ describe('onOnlineChange callback', () => {
     // and back online
     await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS);
     await z.triggerConnected();
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     expect(getOnlineCount()).toBe(2);
     expect(getOfflineCount()).toBe(1);
@@ -402,7 +387,6 @@ describe('connect error metrics', () => {
         origin: ErrorOrigin.ZeroCache,
       });
       await z.waitForConnectionStatus(ConnectionStatus.Error);
-      await vi.advanceTimersByTimeAsync(0);
 
       const newLogs = z.testLogSink.messages.slice(initialLogCount);
       const disconnectLog = newLogs.find(
@@ -427,7 +411,6 @@ describe('connect error metrics', () => {
       const initialLogCount = z.testLogSink.messages.length;
       await z.triggerClose();
       await z.waitForConnectionStatus(ConnectionStatus.Connecting);
-      await vi.advanceTimersByTimeAsync(0);
 
       const newLogs = z.testLogSink.messages.slice(initialLogCount);
       const disconnectLog = newLogs.find(
@@ -478,7 +461,6 @@ test('onOnline listener', async () => {
   await z.waitForConnectionStatus(ConnectionStatus.Connecting);
   await z.triggerConnected();
   await z.waitForConnectionStatus(ConnectionStatus.Connected);
-  await vi.advanceTimersByTimeAsync(0);
   expect(z.online).toBe(true);
   expect(online1).toBe(1);
   expect(offline1).toBe(0);
@@ -527,9 +509,9 @@ test('transition to connecting state if ping fails', async () => {
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
   (await r.socket).messages.length = 0;
 
-  // Wait PING_INTERVAL_MS which will trigger a ping
-  // Pings timeout after PING_TIMEOUT_MS so reply before that.
-  await tickAFewTimes(vi, PING_INTERVAL_MS);
+  // Wait DEFAULT_PING_TIMEOUT_MS which will trigger a ping
+  // Pings timeout after DEFAULT_PING_TIMEOUT_MS so reply before that.
+  await tickAFewTimes(vi, DEFAULT_PING_TIMEOUT_MS);
   expect((await r.socket).messages).toEqual(['["ping",{}]']);
 
   await r.triggerPong();
@@ -572,7 +554,7 @@ test('does not ping when ping timeout is aborted by inbound message', async () =
   ).length;
   expect(pingCountAfterAbort).toBe(0);
 
-  await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
+  await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
 
   const pingMessages = socket.messages.filter(message =>
     message.startsWith('["ping"'),
@@ -1032,7 +1014,7 @@ describe('initConnection', () => {
       }),
     });
 
-    const view = r.query.e.materialize();
+    const view = r.materialize(r.query.e);
     view.addListener(() => {});
 
     const mockSocket = await r.socket;
@@ -1157,7 +1139,7 @@ describe('initConnection', () => {
       deletedClients: [{clientID: 'a'}],
     });
 
-    const view = r.query.e.materialize();
+    const view = r.materialize(r.query.e);
     view.addListener(() => {});
 
     const mockSocket = await r.socket;
@@ -1272,7 +1254,7 @@ describe('initConnection', () => {
     });
 
     expect(mockSocket.messages.length).toEqual(0);
-    const view = r.query.e.materialize();
+    const view = r.materialize(r.query.e);
     view.addListener(() => {});
     await r.triggerConnected();
     expect(mockSocket.messages.length).toEqual(1);
@@ -1349,7 +1331,7 @@ describe('initConnection', () => {
     });
 
     expect(mockSocket.messages.length).toEqual(0);
-    const view = r.query.e.materialize();
+    const view = r.materialize(r.query.e);
     view.addListener(() => {});
     await r.triggerConnected();
     expect(mockSocket.messages.length).toEqual(1);
@@ -1418,7 +1400,7 @@ describe('initConnection', () => {
 
     expect(mockSocket.messages.length).toEqual(0);
 
-    const view = r.query.e.materialize();
+    const view = r.materialize(r.query.e);
     view.addListener(() => {});
 
     await r.triggerConnected();
@@ -1439,13 +1421,13 @@ describe('initConnection', () => {
       }),
     });
 
-    const view1 = r.query.e.materialize();
+    const view1 = r.materialize(r.query.e);
     view1.addListener(() => {});
 
     const mockSocket = await r.socket;
     expect(mockSocket.messages.length).toEqual(0);
 
-    const view2 = r.query.e.materialize();
+    const view2 = r.materialize(r.query.e);
     view2.addListener(() => {});
     await r.triggerConnected();
     // no `changeDesiredQueries` sent since the query was already included in `initConnection`
@@ -1466,7 +1448,7 @@ describe('initConnection', () => {
       }),
     });
 
-    const view1 = r.query.e.materialize();
+    const view1 = r.materialize(r.query.e);
     const removeListener = view1.addListener(() => {});
 
     const mockSocket = await r.socket;
@@ -2034,7 +2016,7 @@ test('smokeTest', async () => {
     });
 
     const calls: Array<Array<unknown>> = [];
-    const view = r.query.issues.materialize();
+    const view = r.materialize(r.query.issues);
     const unsubscribe = view.addListener(c => {
       calls.push([...c]);
     });
@@ -2100,7 +2082,7 @@ test('passing server null allows queries without WS connection', async () => {
   });
 
   // Queries should still work locally
-  const view = r.query.tasks.materialize();
+  const view = r.materialize(r.query.tasks);
   const calls: Array<Array<unknown>> = [];
   const unsubscribe = view.addListener(c => {
     calls.push([...c]);
@@ -2161,8 +2143,8 @@ test('passing server null allows queries without WS connection', async () => {
 //   await r.triggerConnected();
 //   await r.waitForConnectionStatus(ConnectionStatus.Connected);
 
-//   for (let t = 0; t < REPORT_INTERVAL_MS; t += PING_INTERVAL_MS) {
-//     await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
+//   for (let t = 0; t < REPORT_INTERVAL_MS; t += DEFAULT_PING_TIMEOUT_MS) {
+//     await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
 //     await r.triggerPong();
 //   }
 
@@ -2179,8 +2161,8 @@ test('passing server null allows queries without WS connection', async () => {
 //   await r.triggerConnected();
 //   await r.waitForConnectionStatus(ConnectionStatus.Connected);
 
-//   for (let t = 0; t < REPORT_INTERVAL_MS; t += PING_INTERVAL_MS) {
-//     await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
+//   for (let t = 0; t < REPORT_INTERVAL_MS; t += DEFAULT_PING_TIMEOUT_MS) {
+//     await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
 //     await r.triggerPong();
 //   }
 
@@ -2197,8 +2179,8 @@ test('passing server null allows queries without WS connection', async () => {
 //   await r.triggerConnected();
 //   await r.waitForConnectionStatus(ConnectionStatus.Connected);
 
-//   for (let t = 0; t < REPORT_INTERVAL_MS; t += PING_INTERVAL_MS) {
-//     await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
+//   for (let t = 0; t < REPORT_INTERVAL_MS; t += DEFAULT_PING_TIMEOUT_MS) {
+//     await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
 //     await r.triggerPong();
 //   }
 
@@ -2210,168 +2192,87 @@ test('passing server null allows queries without WS connection', async () => {
 // });
 
 test('Authentication', async () => {
-  const log: number[] = [];
+  const r = zeroForTest({auth: 'initial-token'});
 
-  let authCounter = 0;
-
-  const auth = () => {
-    if (authCounter > 0) {
-      log.push(Date.now());
-    }
-
-    if (authCounter++ > 3) {
-      return `new-auth-token-${authCounter}`;
-    }
-    return 'auth-token';
-  };
-
-  const r = zeroForTest({auth});
+  // Initially connecting with 'initial-token'
   let currentSocket = await r.socket;
-
-  const emulateErrorWhenConnecting = async (
-    tickMS: number,
-    expectedAuthToken: string,
-    expectedTimeOfCall: number,
-  ) => {
-    expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
-      expectedAuthToken,
-    );
-    await r.triggerError({
-      kind: ErrorKind.Unauthorized,
-      message: 'auth error ' + authCounter,
-      origin: ErrorOrigin.ZeroCache,
-    });
-    expect(r.connectionStatus).toBe(ConnectionStatus.Connecting);
-    await vi.advanceTimersByTimeAsync(tickMS);
-    expect(log).length(1);
-    expect(log[0]).toBe(expectedTimeOfCall);
-    log.length = 0;
-    currentSocket = await r.socket;
-    expect(r.connectionStatus).equal(ConnectionStatus.Connecting);
-  };
-
-  await emulateErrorWhenConnecting(0, 'auth-token', startTime);
-  await emulateErrorWhenConnecting(5_000, 'auth-token', startTime + 5_000);
-  await emulateErrorWhenConnecting(5_000, 'auth-token', startTime + 10_000);
-  await emulateErrorWhenConnecting(5_000, 'auth-token', startTime + 15_000);
-  await emulateErrorWhenConnecting(
-    5_000,
-    'new-auth-token-5',
-    startTime + 20_000,
-  );
-  await emulateErrorWhenConnecting(
-    5_000,
-    'new-auth-token-6',
-    startTime + 25_000,
-  );
-  await emulateErrorWhenConnecting(
-    5_000,
-    'new-auth-token-7',
-    startTime + 30_000,
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
+    'initial-token',
   );
 
-  let socket: MockSocket | undefined;
-  {
-    socket = await r.socket;
-    expect(decodeSecProtocols(socket.protocol).authToken).toBe(
-      'new-auth-token-8',
-    );
-    await r.triggerConnected();
-    await r.waitForConnectionStatus(ConnectionStatus.Connected);
-    // getAuth should not be called again.
-    expect(log).toHaveLength(0);
-  }
+  // Trigger auth error - should transition to needs-auth
+  await r.triggerError({
+    kind: ErrorKind.Unauthorized,
+    message: 'auth error',
+    origin: ErrorOrigin.ZeroCache,
+  });
+  await r.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
 
-  {
-    // Ping/pong should happen every 5 seconds.
-    await tickAFewTimes(vi, PING_INTERVAL_MS);
-    const socket = await r.socket;
-    expect(socket.messages[0]).toEqual(JSON.stringify(['ping', {}]));
-    expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
-    await r.triggerPong();
-    expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
-    // getAuth should not be called again.
-    expect(log).toHaveLength(0);
-    // Socket is kept as long as we are connected.
-    expect(await r.socket).toBe(socket);
-  }
+  // Reconnect with new auth token
+  await r.connection.connect({auth: 'new-token-1'});
+  currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
+    'new-token-1',
+  );
+  await r.triggerConnected();
 
-  {
-    await r.triggerError({
-      kind: ErrorKind.Unauthorized,
-      message: 'auth error ' + authCounter,
-      origin: ErrorOrigin.ZeroCache,
-    });
-    currentSocket = await r.socket;
+  // Ping/pong should work normally
+  await tickAFewTimes(vi, DEFAULT_PING_TIMEOUT_MS);
+  const socket = await r.socket;
+  expect(socket.messages[0]).toEqual(JSON.stringify(['ping', {}]));
+  expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
+  await r.triggerPong();
+  expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
+  // Socket is kept as long as we are connected.
+  expect(await r.socket).toBe(socket);
 
-    // wait the full timeout period and we should be disconnected now
-    await vi.advanceTimersByTimeAsync(5 * 60 * 1_000);
-    await r.waitForConnectionStatus(ConnectionStatus.Disconnected);
-  }
+  // Another auth error
+  await r.triggerError({
+    kind: ErrorKind.Unauthorized,
+    message: 'auth error 2',
+    origin: ErrorOrigin.ZeroCache,
+  });
+  await r.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+
+  // Reconnect with another new auth token
+  await r.connection.connect({auth: 'new-token-2'});
+  await r.triggerConnected();
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
+  currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
+    'new-token-2',
+  );
 });
 
-test('throttles reauth on rapid auth errors', async () => {
-  const authCallTimes: number[] = [];
-  let nextToken = 1;
-  const auth = () => {
-    const now = Date.now();
-    authCallTimes.push(now);
-    return `auth-token-${nextToken++}`;
-  };
-
-  const r = zeroForTest({auth});
+test('auth errors do not auto-retry', async () => {
+  const r = zeroForTest({auth: 'initial-token'});
 
   await r.waitForConnectionStatus(ConnectionStatus.Connecting);
   await r.triggerConnected();
-  await r.waitForConnectionStatus(ConnectionStatus.Connected);
 
-  await vi.advanceTimersByTimeAsync(0);
-  expect(authCallTimes).length(1);
-  const initialAuthTime = authCallTimes.shift();
-  expect(initialAuthTime).toBe(startTime);
-
+  // Trigger first auth error
   await r.triggerError({
     kind: ErrorKind.Unauthorized,
     message: 'first auth error',
     origin: ErrorOrigin.ZeroCache,
   });
-  await r.waitForConnectionStatus(ConnectionStatus.Connecting);
-  await vi.advanceTimersByTimeAsync(0);
-  expect(authCallTimes).length(1);
-  expect(authCallTimes[0]).toBe(startTime);
+  await r.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
 
-  const reconnectingSocketAfterFirstError = r.socket;
-  await reconnectingSocketAfterFirstError;
+  // Wait a long time - should stay in needs-auth state without retrying
+  await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS * 100);
+  expect(r.connectionStatus).toBe(ConnectionStatus.NeedsAuth);
+
+  // Only resumes when connect() is called with new auth
+  await r.connection.connect({auth: 'new-token'});
   await r.triggerConnected();
-  await r.waitForConnectionStatus(ConnectionStatus.Connected);
-
-  await r.triggerError({
-    kind: ErrorKind.Unauthorized,
-    message: 'second auth error',
-    origin: ErrorOrigin.ZeroCache,
-  });
-  await r.waitForConnectionStatus(ConnectionStatus.Connecting);
-  await vi.advanceTimersByTimeAsync(0);
-  expect(authCallTimes).length(1);
-  const reconnectingSocketAfterSecondError = r.socket;
-
-  await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS - 1);
-  expect(authCallTimes).length(1);
-
-  await vi.advanceTimersByTimeAsync(1);
-  await reconnectingSocketAfterSecondError;
-  expect(authCallTimes).length(2);
-  expect(authCallTimes[1]).toBe(startTime + RUN_LOOP_INTERVAL_MS);
 });
 
 test(ErrorKind.AuthInvalidated, async () => {
   // In steady state we can get an AuthInvalidated error if the tokens expire on the server.
-  // At this point we should disconnect and reconnect with a new auth token.
-
-  let authCounter = 1;
+  // At this point we should disconnect and transition to needs-auth state.
 
   const r = zeroForTest({
-    auth: () => `auth-token-${authCounter++}`,
+    auth: 'auth-token-1',
   });
 
   await r.triggerConnected();
@@ -2384,11 +2285,174 @@ test(ErrorKind.AuthInvalidated, async () => {
     message: 'auth error',
     origin: ErrorOrigin.ZeroCache,
   });
-  await r.waitForConnectionStatus(ConnectionStatus.Connecting);
+  await r.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+  await vi.advanceTimersByTimeAsync(0);
 
+  // Reconnect with new auth token
+  await r.connection.connect({auth: 'auth-token-2'});
+  await r.triggerConnected();
   const reconnectingSocket = await r.socket;
   expect(decodeSecProtocols(reconnectingSocket.protocol).authToken).toBe(
     'auth-token-2',
+  );
+});
+
+test('connect() with null auth clears authentication', async () => {
+  const r = zeroForTest({auth: 'initial-token'});
+
+  await r.triggerConnected();
+  let currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
+    'initial-token',
+  );
+
+  // Trigger auth error
+  await r.triggerError({
+    kind: ErrorKind.Unauthorized,
+    message: 'auth error',
+    origin: ErrorOrigin.ZeroCache,
+  });
+  await r.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+  await vi.advanceTimersByTimeAsync(0);
+
+  // Reconnect with null auth - should clear auth token (empty string is used for no auth)
+  await r.connection.connect({auth: null});
+  currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(undefined);
+  await r.triggerConnected();
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
+});
+
+test('connect() with undefined auth clears authentication', async () => {
+  const r = zeroForTest({auth: 'initial-token'});
+
+  await r.triggerConnected();
+  let currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
+    'initial-token',
+  );
+
+  // Trigger auth error
+  await r.triggerError({
+    kind: ErrorKind.Unauthorized,
+    message: 'auth error',
+    origin: ErrorOrigin.ZeroCache,
+  });
+  await r.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+  await vi.advanceTimersByTimeAsync(0);
+
+  // Reconnect with undefined auth - should clear auth token (empty string is used for no auth)
+  await r.connection.connect({auth: undefined});
+  currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(undefined);
+  await r.triggerConnected();
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
+});
+
+test('connect() without opts preserves existing auth', async () => {
+  const r = zeroForTest({auth: 'initial-token'});
+
+  await r.triggerConnected();
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
+
+  // Trigger a non-auth error
+  await r.triggerError({
+    kind: ErrorKind.Internal,
+    message: 'internal error',
+    origin: ErrorOrigin.ZeroCache,
+  });
+  await r.waitForConnectionStatus(ConnectionStatus.Error);
+  await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
+
+  // Reconnect without providing auth opts - should keep existing auth
+  await r.connection.connect();
+  const currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
+    'initial-token',
+  );
+  await r.triggerConnected();
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
+});
+
+test('can start with no auth and add it later', async () => {
+  const r = zeroForTest({auth: undefined});
+
+  await r.triggerConnected();
+  let currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(undefined);
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
+
+  // Simulate server requiring auth
+  await r.triggerError({
+    kind: ErrorKind.Unauthorized,
+    message: 'auth required',
+    origin: ErrorOrigin.ZeroCache,
+  });
+  await r.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+  await vi.advanceTimersByTimeAsync(0);
+
+  // Add auth for the first time
+  await r.connection.connect({auth: 'new-auth-token'});
+  currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
+    'new-auth-token',
+  );
+  await r.triggerConnected();
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
+});
+
+test('PushFailed with 401 status transitions to needs-auth', async () => {
+  const r = zeroForTest({auth: 'initial-token'});
+
+  await r.triggerConnected();
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
+
+  // Trigger PushFailed with 401 status
+  await r.triggerError({
+    kind: ErrorKind.PushFailed,
+    message: 'Unauthorized',
+    origin: ErrorOrigin.ZeroCache,
+    reason: ErrorReason.HTTP,
+    status: 401,
+    mutationIDs: [],
+  });
+  await r.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+
+  await vi.advanceTimersByTimeAsync(0);
+
+  // Verify we can reconnect with new auth
+  await r.connection.connect({auth: 'new-token'});
+  await r.triggerConnected();
+
+  const currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
+    'new-token',
+  );
+});
+
+test('TransformFailed with 403 status transitions to needs-auth', async () => {
+  const r = zeroForTest({auth: 'initial-token'});
+
+  await r.triggerConnected();
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
+
+  // Trigger TransformFailed with 403 status
+  await r.triggerError({
+    kind: ErrorKind.TransformFailed,
+    message: 'Forbidden',
+    origin: ErrorOrigin.ZeroCache,
+    reason: ErrorReason.HTTP,
+    status: 403,
+    queryIDs: ['query1'],
+  });
+  await r.waitForConnectionStatus(ConnectionStatus.NeedsAuth);
+  await vi.advanceTimersByTimeAsync(0);
+
+  // Verify we can reconnect with new auth
+  await r.connection.connect({auth: 'new-token'});
+  const currentSocket = await r.socket;
+  expect(decodeSecProtocols(currentSocket.protocol).authToken).toBe(
+    'new-token',
   );
 });
 
@@ -2453,12 +2517,12 @@ test('Ping pong', async () => {
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
   (await r.socket).messages.length = 0;
 
-  await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS - 1);
+  await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS - 1);
   expect((await r.socket).messages).toHaveLength(0);
   await vi.advanceTimersByTimeAsync(1);
 
   expect((await r.socket).messages).toEqual([JSON.stringify(['ping', {}])]);
-  await vi.advanceTimersByTimeAsync(PING_TIMEOUT_MS - 1);
+  await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS - 1);
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
   await vi.advanceTimersByTimeAsync(1);
 
@@ -2471,15 +2535,68 @@ test('Ping timeout', async () => {
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
   (await r.socket).messages.length = 0;
 
-  await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS - 1);
+  await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS - 1);
   expect((await r.socket).messages).toHaveLength(0);
   await vi.advanceTimersByTimeAsync(1);
   expect((await r.socket).messages).toEqual([JSON.stringify(['ping', {}])]);
-  await vi.advanceTimersByTimeAsync(PING_TIMEOUT_MS - 1);
+  await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS - 1);
   await r.triggerPong();
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
   await vi.advanceTimersByTimeAsync(1);
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
+});
+
+test('Custom pingTimeoutMs', async () => {
+  const customTimeout = 1000; // 1 second instead of default 5 seconds
+  const r = zeroForTest({pingTimeoutMs: customTimeout});
+  await r.triggerConnected();
+  expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
+  (await r.socket).messages.length = 0;
+
+  // Should wait customTimeout before sending ping
+  await vi.advanceTimersByTimeAsync(customTimeout - 1);
+  expect((await r.socket).messages).toHaveLength(0);
+  await vi.advanceTimersByTimeAsync(1);
+  expect((await r.socket).messages).toEqual([JSON.stringify(['ping', {}])]);
+
+  // Should timeout after customTimeout if no pong
+  await vi.advanceTimersByTimeAsync(customTimeout - 1);
+  expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(r.connectionStatus).toBe(ConnectionStatus.Connecting);
+});
+
+test('Runtime pingTimeoutMs configuration', async () => {
+  const r = zeroForTest(); // Start with default timeout
+  await r.triggerConnected();
+  expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
+  (await r.socket).messages.length = 0;
+
+  // Verify initial timeout is the default
+  expect(r.pingTimeoutMs).toBe(DEFAULT_PING_TIMEOUT_MS);
+
+  // First ping cycle uses default timeout
+  await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
+  expect((await r.socket).messages).toEqual([JSON.stringify(['ping', {}])]);
+  await r.triggerPong(); // Complete first cycle
+  (await r.socket).messages.length = 0;
+
+  // Change timeout at runtime
+  const newTimeout = 2000;
+  r.pingTimeoutMs = newTimeout;
+  expect(r.pingTimeoutMs).toBe(newTimeout);
+
+  // New timeout should take effect on next ping cycle
+  await vi.advanceTimersByTimeAsync(newTimeout - 1);
+  expect((await r.socket).messages).toHaveLength(0);
+  await vi.advanceTimersByTimeAsync(1);
+  expect((await r.socket).messages).toEqual([JSON.stringify(['ping', {}])]);
+
+  // Should timeout after newTimeout if no pong
+  await vi.advanceTimersByTimeAsync(newTimeout - 1);
+  expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(r.connectionStatus).toBe(ConnectionStatus.Connecting);
 });
 
 const connectTimeoutMessage = 'Rejecting connect resolver due to timeout';
@@ -2496,7 +2613,7 @@ test('Connect timeout', async () => {
   const r = zeroForTest({logLevel: 'debug'});
 
   const connectionStates: ConnectionState[] = [];
-  const connectionStatusCleanup = r.subscribeToConnectionStatus(state => {
+  const connectionStatusCleanup = r.connectionManager.subscribe(state => {
     connectionStates.push(state);
   });
 
@@ -2556,6 +2673,7 @@ test('Connect timeout', async () => {
 
   // And success after this...
   await r.triggerConnected();
+  await r.waitForConnectionStatus(ConnectionStatus.Connected);
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
   expect([...new Set(connectionStates.map(s => s.name))]).toEqual([
     ConnectionStatus.Connecting,
@@ -2599,7 +2717,6 @@ test('Logs errors in connect', async () => {
     origin: ErrorOrigin.ZeroCache,
   });
   expect(r.connectionStatus).toBe(ConnectionStatus.Error);
-  await vi.advanceTimersByTimeAsync(0);
 
   const index = r.testLogSink.messages.findIndex(
     ([level, _context, args]) =>
@@ -2916,16 +3033,16 @@ describe('Disconnect on hide', () => {
     {
       name: 'default delay not during ping',
       test: async (r, changeVisibilityState) => {
-        expect(PING_INTERVAL_MS).lessThanOrEqual(
+        expect(DEFAULT_PING_TIMEOUT_MS).lessThanOrEqual(
           DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
         );
-        expect(PING_INTERVAL_MS * 2).greaterThanOrEqual(
+        expect(DEFAULT_PING_TIMEOUT_MS * 2).greaterThanOrEqual(
           DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
         );
         let timeTillHiddenDisconnect = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS;
         changeVisibilityState('hidden');
-        await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS); // sends ping
-        timeTillHiddenDisconnect -= PING_INTERVAL_MS;
+        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS); // sends ping
+        timeTillHiddenDisconnect -= DEFAULT_PING_TIMEOUT_MS;
         await r.triggerPong();
         await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
       },
@@ -2933,17 +3050,17 @@ describe('Disconnect on hide', () => {
     {
       name: 'default delay during ping',
       test: async (r, changeVisibilityState) => {
-        expect(PING_INTERVAL_MS).lessThanOrEqual(
+        expect(DEFAULT_PING_TIMEOUT_MS).lessThanOrEqual(
           DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
         );
-        expect(PING_INTERVAL_MS + PING_TIMEOUT_MS).greaterThanOrEqual(
+        expect(DEFAULT_PING_TIMEOUT_MS * 2).greaterThanOrEqual(
           DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
         );
-        await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS / 2);
+        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS / 2);
         let timeTillHiddenDisconnect = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS;
         changeVisibilityState('hidden');
-        await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS / 2); // sends ping
-        timeTillHiddenDisconnect -= PING_INTERVAL_MS / 2;
+        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS / 2); // sends ping
+        timeTillHiddenDisconnect -= DEFAULT_PING_TIMEOUT_MS / 2;
         await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
         // Disconnect due to visibility does not happen until pong is received
         // and microtask queue is processed.
@@ -2954,13 +3071,15 @@ describe('Disconnect on hide', () => {
     },
     {
       name: 'custom delay longer than ping interval not during ping',
-      hiddenTabDisconnectDelay: Math.floor(PING_INTERVAL_MS * 6.3),
+      hiddenTabDisconnectDelay: Math.floor(DEFAULT_PING_TIMEOUT_MS * 6.3),
       test: async (r, changeVisibilityState) => {
-        let timeTillHiddenDisconnect = Math.floor(PING_INTERVAL_MS * 6.3);
+        let timeTillHiddenDisconnect = Math.floor(
+          DEFAULT_PING_TIMEOUT_MS * 6.3,
+        );
         changeVisibilityState('hidden');
-        while (timeTillHiddenDisconnect > PING_INTERVAL_MS) {
-          await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS); // sends ping
-          timeTillHiddenDisconnect -= PING_INTERVAL_MS;
+        while (timeTillHiddenDisconnect > DEFAULT_PING_TIMEOUT_MS) {
+          await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS); // sends ping
+          timeTillHiddenDisconnect -= DEFAULT_PING_TIMEOUT_MS;
           await r.triggerPong();
         }
         await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
@@ -2968,22 +3087,22 @@ describe('Disconnect on hide', () => {
     },
     {
       name: 'custom delay longer than ping interval during ping',
-      hiddenTabDisconnectDelay: Math.floor(PING_INTERVAL_MS * 6.3),
+      hiddenTabDisconnectDelay: Math.floor(DEFAULT_PING_TIMEOUT_MS * 6.3),
       test: async (r, changeVisibilityState) => {
-        let timeTillHiddenDisconnect = Math.floor(PING_INTERVAL_MS * 6.3);
-        expect(timeTillHiddenDisconnect > PING_INTERVAL_MS + PING_TIMEOUT_MS);
+        let timeTillHiddenDisconnect = Math.floor(
+          DEFAULT_PING_TIMEOUT_MS * 6.3,
+        );
+        expect(timeTillHiddenDisconnect > DEFAULT_PING_TIMEOUT_MS * 2);
         changeVisibilityState('hidden');
-        while (timeTillHiddenDisconnect > PING_INTERVAL_MS + PING_TIMEOUT_MS) {
-          await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
-          timeTillHiddenDisconnect -= PING_INTERVAL_MS;
+        while (timeTillHiddenDisconnect > DEFAULT_PING_TIMEOUT_MS * 2) {
+          await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
+          timeTillHiddenDisconnect -= DEFAULT_PING_TIMEOUT_MS;
           await r.triggerPong();
         }
-        expect(timeTillHiddenDisconnect).lessThan(
-          PING_INTERVAL_MS + PING_TIMEOUT_MS,
-        );
-        expect(timeTillHiddenDisconnect).greaterThan(PING_INTERVAL_MS);
-        await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS); // sends ping
-        timeTillHiddenDisconnect -= PING_INTERVAL_MS;
+        expect(timeTillHiddenDisconnect).lessThan(DEFAULT_PING_TIMEOUT_MS * 2);
+        expect(timeTillHiddenDisconnect).greaterThan(DEFAULT_PING_TIMEOUT_MS);
+        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS); // sends ping
+        timeTillHiddenDisconnect -= DEFAULT_PING_TIMEOUT_MS;
         await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
         // Disconnect due to visibility does not happen until pong is received
         // and microtask queue is processed.
@@ -2994,21 +3113,25 @@ describe('Disconnect on hide', () => {
     },
     {
       name: 'custom delay shorter than ping interval not during ping',
-      hiddenTabDisconnectDelay: Math.floor(PING_INTERVAL_MS * 0.3),
+      hiddenTabDisconnectDelay: Math.floor(DEFAULT_PING_TIMEOUT_MS * 0.3),
       test: async (r, changeVisibilityState) => {
-        await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
+        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
         await r.triggerPong();
-        const timeTillHiddenDisconnect = Math.floor(PING_INTERVAL_MS * 0.3);
+        const timeTillHiddenDisconnect = Math.floor(
+          DEFAULT_PING_TIMEOUT_MS * 0.3,
+        );
         changeVisibilityState('hidden');
         await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
       },
     },
     {
       name: 'custom delay shorter than ping interval during ping',
-      hiddenTabDisconnectDelay: Math.floor(PING_INTERVAL_MS * 0.3),
+      hiddenTabDisconnectDelay: Math.floor(DEFAULT_PING_TIMEOUT_MS * 0.3),
       test: async (r, changeVisibilityState) => {
-        await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
-        const timeTillHiddenDisconnect = Math.floor(PING_INTERVAL_MS * 0.3);
+        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
+        const timeTillHiddenDisconnect = Math.floor(
+          DEFAULT_PING_TIMEOUT_MS * 0.3,
+        );
         changeVisibilityState('hidden');
         await vi.advanceTimersByTimeAsync(timeTillHiddenDisconnect);
         // Disconnect due to visibility does not happen until pong is received
@@ -3022,7 +3145,7 @@ describe('Disconnect on hide', () => {
       name: 'custom delay 0, not during ping',
       hiddenTabDisconnectDelay: 0,
       test: async (r, changeVisibilityState) => {
-        await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
+        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
         await r.triggerPong();
         changeVisibilityState('hidden');
         await vi.advanceTimersByTimeAsync(0);
@@ -3032,7 +3155,7 @@ describe('Disconnect on hide', () => {
       name: 'custom delay 0, during ping',
       hiddenTabDisconnectDelay: 0,
       test: async (r, changeVisibilityState) => {
-        await vi.advanceTimersByTimeAsync(PING_INTERVAL_MS);
+        await vi.advanceTimersByTimeAsync(DEFAULT_PING_TIMEOUT_MS);
         changeVisibilityState('hidden');
         await vi.advanceTimersByTimeAsync(0);
         // Disconnect due to visibility does not happen until pong is received
@@ -3082,6 +3205,7 @@ describe('Disconnect on hide', () => {
 
     await c.test(z, changeVisibilityState);
 
+    await z.waitForConnectionStatus(ConnectionStatus.Connecting);
     expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
     expect(await onOnlineChangeP).toBe(false);
     expect(z.online).toBe(false);
@@ -3127,14 +3251,13 @@ test(ErrorKind.InvalidConnectionRequest, async () => {
     origin: ErrorOrigin.ZeroCache,
   });
   expect(r.connectionStatus).toBe(ConnectionStatus.Error);
-  await vi.advanceTimersByTimeAsync(0);
   const msg = r.testLogSink.messages.at(-1);
   assert(msg);
 
   expect(msg[0]).toBe('error');
 
   const err = msg[2][1];
-  assert(isServerError(err));
+  assert(isServerError(err), 'error should be a server error');
 
   expect(err.kind).toEqual(ErrorKind.InvalidConnectionRequest);
 });
@@ -3163,11 +3286,6 @@ describe('Invalid Downstream message', () => {
       cookie: '1',
       timestamp: 123456,
     });
-    await vi.advanceTimersByTimeAsync(0);
-
-    // if (c.duringPing) { // TODO(0xcadams): do we need to trigger pong here?
-    //   await r.triggerPong();
-    // }
 
     // Invalid downstream messages trigger error state
     expect(r.online).toEqual(false);
@@ -3193,7 +3311,6 @@ describe('Downstream message with unknown fields', () => {
       cookie: '1',
       timestamp: 123456,
     });
-    await vi.advanceTimersByTimeAsync(0);
 
     expect(r.online).eq(true);
     expect(r.connectionStatus).eq(ConnectionStatus.Connected);
@@ -3207,6 +3324,40 @@ describe('Downstream message with unknown fields', () => {
         ),
       ),
     ).toBe(false);
+  });
+});
+
+describe('Downstream handler errors', () => {
+  test('disconnects with internal error when handler throws', async () => {
+    const spy = vi
+      .spyOn(DeleteClientsManager.prototype, 'clientsDeletedOnServer')
+      .mockImplementation(() => {
+        throw new Error('handler boom');
+      });
+
+    const r = zeroForTest({
+      logLevel: 'debug',
+    });
+
+    await r.triggerConnected();
+
+    await r.triggerMessage([
+      'deleteClients',
+      {clientIDs: ['a-client']},
+    ] as unknown as Downstream);
+
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(r.connectionStatus).toBe(ConnectionStatus.Error);
+
+    assert(r.connectionState.name === ConnectionStatus.Error);
+    const {reason} = r.connectionState;
+    expect(reason).toBeInstanceOf(ClientError);
+    expect(reason.kind).toBe(ClientErrorKind.Internal);
+    expect(reason.message).toBe('handler boom');
+
+    spy.mockRestore();
+
+    await r.close();
   });
 });
 
@@ -3252,7 +3403,7 @@ describe('Mutation responses poked down', () => {
             },
             result: {
               error: 'app',
-              details: '...test ',
+              message: '...test ',
             },
           },
           op: 'put',
@@ -3261,19 +3412,13 @@ describe('Mutation responses poked down', () => {
     });
 
     await vi.advanceTimersByTimeAsync(100);
-    let caught: unknown = undefined;
-    try {
-      await mutation.server;
-    } catch (e) {
-      caught = e;
-    }
+    const result = await mutation.server;
+    expect(result.type).toBe('error');
+    assert(result.type === 'error');
+    assert(result.error.type === 'app');
+    expect(result.error.message).toBe('...test ');
+    expect(result.error.details).toBeUndefined();
 
-    expect(caught).toMatchInlineSnapshot(`
-      {
-        "details": "...test ",
-        "error": "app",
-      }
-    `);
     await r.close();
   });
 });
@@ -3312,8 +3457,8 @@ test('kvStore option', async () => {
     // Use persist as a way to ensure we have read the data out of IDB.
     await r.persist();
 
-    const idIsAView = r.query.e.where('id', '=', 'a').materialize();
-    const allDataView = r.query.e.materialize();
+    const idIsAView = r.materialize(r.query.e.where('id', '=', 'a'));
+    const allDataView = r.materialize(r.query.e);
     expect(allDataView.data).toEqual(expectedValue);
 
     await r.mutate.e.insert({id: 'a', value: 1});
@@ -3347,7 +3492,6 @@ test('Close during connect should sleep', async () => {
   await r.triggerConnected();
 
   await r.waitForConnectionStatus(ConnectionStatus.Connected);
-  await vi.advanceTimersByTimeAsync(0);
   expect(r.online).toBe(true);
 
   (await r.socket).close();
@@ -3357,8 +3501,8 @@ test('Close during connect should sleep', async () => {
 
   (await r.socket).close();
   await r.waitForConnectionStatus(ConnectionStatus.Connecting);
-  await vi.advanceTimersByTimeAsync(0);
   expect(r.online).toBe(false);
+  await vi.advanceTimersByTimeAsync(0);
   const hasSleeping = r.testLogSink.messages.some(m =>
     m[2].some(v => v === 'Sleeping'),
   );
@@ -3370,7 +3514,6 @@ test('Close during connect should sleep', async () => {
   await reconnectAfterSleep;
   await r.triggerConnected();
   await r.waitForConnectionStatus(ConnectionStatus.Connected);
-  await vi.advanceTimersByTimeAsync(0);
   expect(r.online).toBe(true);
 });
 
@@ -3497,7 +3640,7 @@ describe('CRUD', () => {
     const z = makeZero();
 
     const createIssue = z.mutate.issue.insert;
-    const view = z.query.issue.materialize();
+    const view = z.materialize(z.query.issue);
     await createIssue({id: 'a', title: 'A'});
     expect(view.data).toEqual([{id: 'a', title: 'A', [refCountSymbol]: 1}]);
 
@@ -3531,7 +3674,7 @@ describe('CRUD', () => {
   test('set', async () => {
     const z = makeZero();
 
-    const view = z.query.comment.materialize();
+    const view = z.materialize(z.query.comment);
     await z.mutate.comment.insert({id: 'a', issueID: '1', text: 'A text'});
     expect(view.data).toEqual([
       {
@@ -3637,7 +3780,7 @@ describe('CRUD', () => {
 
   test('update', async () => {
     const z = makeZero();
-    const view = z.query.comment.materialize();
+    const view = z.materialize(z.query.comment);
     await z.mutate.comment.insert({id: 'a', issueID: '1', text: 'A text'});
     expect(view.data).toEqual([
       {
@@ -3711,7 +3854,7 @@ describe('CRUD', () => {
 
   test('compoundPK', async () => {
     const z = makeZero();
-    const view = z.query.compoundPKTest.materialize();
+    const view = z.materialize(z.query.compoundPKTest);
     await z.mutate.compoundPKTest.insert({id1: 'a', id2: 'a', text: 'a'});
     expect(view.data).toEqual([
       {id1: 'a', id2: 'a', text: 'a', [refCountSymbol]: 1},
@@ -3792,7 +3935,7 @@ describe('CRUD with compound primary key', () => {
     const z = makeZero();
 
     const createIssue: (issue: Issue) => Promise<void> = z.mutate.issue.insert;
-    const view = z.query.issue.materialize();
+    const view = z.materialize(z.query.issue);
     await createIssue({ids: 'a', idn: 1, title: 'A'});
     expect(view.data).toEqual([
       {ids: 'a', idn: 1, title: 'A', [refCountSymbol]: 1},
@@ -3808,7 +3951,7 @@ describe('CRUD with compound primary key', () => {
   test('set', async () => {
     const z = makeZero();
 
-    const view = z.query.comment.materialize();
+    const view = z.materialize(z.query.comment);
     await z.mutate.comment.insert({
       ids: 'a',
       idn: 1,
@@ -3885,7 +4028,7 @@ describe('CRUD with compound primary key', () => {
 
   test('update', async () => {
     const z = makeZero();
-    const view = z.query.comment.materialize();
+    const view = z.materialize(z.query.comment);
     await z.mutate.comment.insert({
       ids: 'a',
       idn: 1,
@@ -3976,8 +4119,8 @@ test('mutate is a function for batching', async () => {
       ],
     }),
   });
-  const issueView = z.query.issue.materialize();
-  const commentView = z.query.comment.materialize();
+  const issueView = z.materialize(z.query.issue);
+  const commentView = z.materialize(z.query.comment);
 
   const x = await z.mutateBatch(async m => {
     expect(
@@ -4126,7 +4269,7 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
       ],
     }),
   });
-  const issueView = z.query.issue.materialize();
+  const issueView = z.materialize(z.query.issue);
 
   await z.mutateBatch(async m => {
     // This works even with the nested await because what batch is doing is
@@ -4168,6 +4311,60 @@ test('calling mutate on the non batch version should throw inside a batch', asyn
   });
 
   expect(issueView.data).toEqual([{id: 'c', title: 'C', [refCountSymbol]: 1}]);
+});
+
+describe('WebSocket event error handling', () => {
+  test('onOpen catches unexpected errors and transitions to error state', async () => {
+    const z = zeroForTest({logLevel: 'debug'});
+    await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+    const socket = (await z.socket) as unknown as MockSocket;
+
+    (socket as {url: string}).url = 'not a valid url';
+    socket.dispatchEvent(new Event('open'));
+
+    await z.waitForConnectionStatus(ConnectionStatus.Error);
+    expect(z.connectionStatus).toBe(ConnectionStatus.Error);
+    assert(z.connectionState.name === ConnectionStatus.Error);
+    const {reason} = z.connectionState;
+    expect(reason).toBeInstanceOf(ClientError);
+    expect(reason.kind).toBe(ClientErrorKind.Internal);
+    expect(reason.message).toContain('URL');
+    expect(
+      z.testLogSink.messages.some(
+        ([level, _context, args]) =>
+          level === 'error' && args[0] === 'Unhandled error in onOpen',
+      ),
+    ).toBe(true);
+
+    await z.close().catch(() => {});
+  });
+
+  test('onClose catches unexpected errors and transitions to error state', async () => {
+    const z = zeroForTest({logLevel: 'debug'});
+    await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+    const socket = (await z.socket) as unknown as MockSocket;
+
+    (socket as {url: string}).url = 'still not a valid url';
+    socket.dispatchEvent(
+      new CloseEvent('close', {code: 1006, reason: 'test', wasClean: false}),
+    );
+
+    await z.waitForConnectionStatus(ConnectionStatus.Error);
+    expect(z.connectionStatus).toBe(ConnectionStatus.Error);
+    assert(z.connectionState.name === ConnectionStatus.Error);
+    const {reason} = z.connectionState;
+    expect(reason).toBeInstanceOf(ClientError);
+    expect(reason.kind).toBe(ClientErrorKind.Internal);
+    expect(reason.message).toContain('URL');
+    expect(
+      z.testLogSink.messages.some(
+        ([level, _context, args]) =>
+          level === 'error' && args[0] === 'Unhandled error in onClose',
+      ),
+    ).toBe(true);
+
+    await z.close().catch(() => {});
+  });
 });
 
 test('Logging stack on close', async () => {
@@ -4230,7 +4427,6 @@ test('push is called on initial connect and reconnect', async () => {
     expect(z.online).toBe(false);
     await z.triggerConnected();
     await z.waitForConnectionStatus(ConnectionStatus.Connected);
-    await vi.advanceTimersByTimeAsync(0);
     expect(z.online).toBe(true);
     expect(pushSpy).toBeCalledTimes(1);
 
@@ -4239,71 +4435,507 @@ test('push is called on initial connect and reconnect', async () => {
     await z.waitForConnectionStatus(ConnectionStatus.Connecting);
     await z.triggerConnected();
     await z.waitForConnectionStatus(ConnectionStatus.Connected);
-    await vi.advanceTimersByTimeAsync(0);
     expect(pushSpy).toBeCalledTimes(2);
   }
 });
 
-test('onError is called on error', async () => {
-  const onErrorSpy = vi.fn();
-  const z = zeroForTest({
-    logLevel: 'debug',
-    schema: createSchema({
+describe('onError', () => {
+  test('onError is called with a server protocol error', async () => {
+    const onErrorSpy = vi.fn();
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema: createSchema({
+        tables: [
+          table('foo')
+            .columns({
+              id: string(),
+              val: string(),
+            })
+            .primaryKey('id'),
+        ],
+      }),
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    await z.triggerError({
+      kind: ErrorKind.InvalidPush,
+      message: 'Invalid push test',
+      origin: ErrorOrigin.ZeroCache,
+    });
+
+    expect(onErrorSpy).toBeCalledTimes(1);
+
+    const error = onErrorSpy.mock.calls[0][0];
+
+    assert(isServerError(error), 'error is a server error');
+    expect(error.kind).toBe(ErrorKind.InvalidPush);
+    expect(error.message).toBe('Invalid push test');
+
+    await z.close();
+  });
+
+  test('onError is called with a client error', async () => {
+    const onErrorSpy = vi.fn();
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema: createSchema({
+        tables: [
+          table('foo')
+            .columns({
+              id: string(),
+              val: string(),
+            })
+            .primaryKey('id'),
+        ],
+      }),
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    const offlineError = new ClientError({
+      kind: ClientErrorKind.Offline,
+      message: 'Offline for test',
+    });
+
+    z.connectionManager.disconnected(offlineError);
+    await z.waitForConnectionStatus(ConnectionStatus.Disconnected);
+
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalled();
+    });
+
+    const firstCall = onErrorSpy.mock.calls[0];
+    expect(firstCall[0]).toBe(offlineError);
+
+    await z.close();
+  });
+
+  test('onError is called for transform failed errors', async () => {
+    const onErrorSpy = vi.fn();
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema: createSchema({
+        tables: [
+          table('issue')
+            .columns({
+              id: string(),
+              title: string(),
+            })
+            .primaryKey('id'),
+        ],
+      }),
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    // Simulate a TransformFailed server error
+    await z.triggerError({
+      kind: ErrorKind.TransformFailed,
+      message: 'Transform failed for query',
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.HTTP,
+      status: 500,
+      queryIDs: ['query-123'],
+    });
+
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalled();
+    });
+
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    const error = onErrorSpy.mock.calls[0][0];
+    assert(isServerError(error), 'error should be a ServerError');
+    expect(error.kind).toBe(ErrorKind.TransformFailed);
+    expect(error.message).toBe('Transform failed for query');
+
+    await z.close();
+  });
+
+  test('onError is called for custom mutation client errors', async () => {
+    const onErrorSpy = vi.fn();
+    const testSchema = createSchema({
       tables: [
-        table('foo')
+        table('issue')
           .columns({
             id: string(),
-            val: string(),
+            title: string(),
           })
           .primaryKey('id'),
       ],
-    }),
-    onError: onErrorSpy,
+    });
+
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema: testSchema,
+      mutators: {
+        throwingMutator: () => {
+          throw new Error('Custom mutation failed');
+        },
+      },
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    // Call the mutator that throws
+    const result = z.mutate.throwingMutator();
+
+    // Wait for the client promise to resolve with error
+    const clientResult = await result.client;
+
+    expect(clientResult.type).toBe('error');
+    assert(clientResult.type === 'error');
+    expect(clientResult.error.type).toBe('app');
+
+    // onError should have been called
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalled();
+    });
+
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    const error = onErrorSpy.mock.calls[0][0];
+    assert(isApplicationError(error), 'error should be an ApplicationError');
+    expect(error.message).toBe('Custom mutation failed');
+
+    const serverResult = await result.server;
+    expect(serverResult.type).toBe('error');
+
+    await z.close();
   });
 
-  await z.triggerConnected();
-  expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+  test('onError is called when mutation runs while offline', async () => {
+    const onErrorSpy = vi.fn();
+    const testSchema = createSchema({
+      tables: [
+        table('issue')
+          .columns({
+            id: string(),
+            title: string(),
+          })
+          .primaryKey('id'),
+      ],
+    });
 
-  await z.triggerError({
-    kind: ErrorKind.MutationRateLimited,
-    message: 'test',
-    origin: ErrorOrigin.ZeroCache,
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema: testSchema,
+      mutators: {
+        myMutator: async (_tx: Transaction<typeof testSchema>) => {
+          // Do nothing, just a test mutation
+        },
+      },
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    // Go offline
+    const offlineError = new ClientError({
+      kind: ClientErrorKind.Offline,
+      message: 'Connection offline',
+    });
+
+    z.connectionManager.disconnected(offlineError);
+    await z.waitForConnectionStatus(ConnectionStatus.Disconnected);
+
+    // Now try to run a mutation while offline
+    const result = z.mutate.myMutator();
+
+    const clientResult = await result.client;
+    const serverResult = await result.server;
+
+    // Both should be zero errors
+    expect(clientResult.type).toBe('error');
+    expect(serverResult.type).toBe('error');
+    assert(clientResult.type === 'error');
+    assert(serverResult.type === 'error');
+    expect(clientResult.error.type).toBe('zero');
+    expect(serverResult.error.type).toBe('zero');
+
+    // onError should be called once with the offline error
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalled();
+    });
+
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    expect(onErrorSpy.mock.calls[0][0]).toBe(offlineError);
+
+    await z.close();
   });
 
-  expect(onErrorSpy).toBeCalledTimes(1);
-  expect(onErrorSpy.mock.calls).toMatchInlineSnapshot(`
-    [
-      [
-        "MutationRateLimited",
-        "Mutation rate limited",
+  test('onError is called multiple times for different error types', async () => {
+    const onErrorSpy = vi.fn();
+    const testSchema = createSchema({
+      tables: [
+        table('issue')
+          .columns({
+            id: string(),
+            title: string(),
+          })
+          .primaryKey('id'),
+      ],
+    });
+
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema: testSchema,
+      mutators: {
+        throwingMutator: () => {
+          throw new Error('Mutation error');
+        },
+      },
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    // First error: server protocol error
+    await z.triggerError({
+      kind: ErrorKind.InvalidPush,
+      message: 'Invalid push',
+      origin: ErrorOrigin.ZeroCache,
+    });
+
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    });
+
+    // Reconnect
+    await z.waitForConnectionStatus(ConnectionStatus.Error);
+    await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS);
+    await z.connection.connect();
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+
+    // Second error: custom mutation error
+    const result = z.mutate.throwingMutator();
+    await result.client;
+
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalledTimes(2);
+    });
+
+    // Verify we got different types of errors
+    const errors = onErrorSpy.mock.calls.map(call => call[0]);
+    expect(isServerError(errors[0])).toBe(true);
+    expect(isApplicationError(errors[1])).toBe(true);
+
+    await z.close();
+  });
+
+  test('onError is not called on successful operations', async () => {
+    const onErrorSpy = vi.fn();
+    const testSchema = createSchema({
+      tables: [
+        table('issue')
+          .columns({
+            id: string(),
+            title: string(),
+          })
+          .primaryKey('id'),
+      ],
+    });
+
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema: testSchema,
+      mutators: {
+        successMutator: async (_tx: Transaction<typeof testSchema>) => {
+          // Successful mutation
+        },
+      },
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    // Run a successful custom mutation
+    const result = z.mutate.successMutator();
+    await result.client;
+
+    // Wait a bit to ensure no async errors are triggered
+    await vi.advanceTimersByTimeAsync(100);
+
+    // onError should never be called
+    expect(onErrorSpy).not.toHaveBeenCalled();
+
+    await z.close();
+  });
+
+  test('onError receives ApplicationError with details for custom mutations', async () => {
+    const onErrorSpy = vi.fn();
+    const testSchema = createSchema({
+      tables: [
+        table('issue')
+          .columns({
+            id: string(),
+            title: string(),
+          })
+          .primaryKey('id'),
+      ],
+    });
+
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema: testSchema,
+      mutators: {
+        validationMutator: () => {
+          throw new ApplicationError('Validation failed', {
+            details: {
+              field: 'title',
+              reason: 'too_short',
+              minLength: 5,
+            },
+          });
+        },
+      },
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    const result = z.mutate.validationMutator();
+    await result.client;
+
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalled();
+    });
+
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    const error = onErrorSpy.mock.calls[0][0];
+    assert(isApplicationError(error), 'error should be an ApplicationError');
+    expect(error.message).toBe('Validation failed');
+    expect(error.details).toEqual({
+      field: 'title',
+      reason: 'too_short',
+      minLength: 5,
+    });
+
+    await z.close();
+  });
+
+  test('onError includes server error reason', async () => {
+    const onErrorSpy = vi.fn();
+    const z = zeroForTest({
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    const serverMessage = 'table missing on remote';
+    await z.triggerError({
+      kind: ErrorKind.VersionNotSupported,
+      message: serverMessage,
+      origin: ErrorOrigin.ZeroCache,
+    });
+
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalled();
+    });
+
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    const error = onErrorSpy.mock.calls[0][0];
+    assert(isServerError(error), 'error should be a server error');
+    expect(error.kind).toBe(ErrorKind.VersionNotSupported);
+    expect(error.message).toBe(serverMessage);
+  });
+
+  test('onError receives server-side ApplicationError from custom mutations', async () => {
+    const onErrorSpy = vi.fn();
+    const testSchema = createSchema({
+      tables: [
+        table('issue')
+          .columns({
+            id: string(),
+            title: string(),
+          })
+          .primaryKey('id'),
+      ],
+    });
+
+    type MutatorTx = Transaction<typeof testSchema>;
+
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema: testSchema,
+      mutators: {
+        issue: {
+          create: async (tx: MutatorTx, args: {id: string; title: string}) => {
+            await tx.mutate.issue.insert(args);
+          },
+        },
+      },
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    // Trigger a mutation
+    const mutationResult = z.mutate.issue.create({
+      id: '1',
+      title: 'Test Issue',
+    });
+
+    // Wait for the mutation to be tracked and get its ID
+    await vi.advanceTimersByTimeAsync(1);
+
+    // Simulate server response with an application error
+    await z.triggerPushResponse({
+      mutations: [
         {
-          "message": "test",
+          id: {clientID: z.clientID, id: 1},
+          result: {
+            error: 'app',
+            message: 'Server validation failed',
+            details: {
+              field: 'title',
+              reason: 'contains_profanity',
+            },
+          },
         },
       ],
-    ]
-  `);
-});
+    });
 
-test('onError includes server error reason', async () => {
-  const onErrorSpy = vi.fn();
-  const z = zeroForTest({onError: onErrorSpy});
+    // Wait for onError to be called
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalled();
+    });
 
-  await z.triggerConnected();
-  expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    const error = onErrorSpy.mock.calls[0][0];
+    assert(isApplicationError(error), 'error should be an ApplicationError');
+    expect(error.message).toBe('Server validation failed');
+    expect(error.details).toEqual({
+      field: 'title',
+      reason: 'contains_profanity',
+    });
 
-  const serverMessage = 'table missing on remote';
-  await z.triggerError({
-    kind: ErrorKind.VersionNotSupported,
-    message: serverMessage,
-    origin: ErrorOrigin.ZeroCache,
+    // Verify the server promise also rejects with the same error
+    const serverResult = await mutationResult.server;
+    assert(serverResult.type === 'error');
+    assert(serverResult.error.type === 'app');
+    expect(serverResult.error.message).toBe('Server validation failed');
+    expect(serverResult.error.details).toEqual({
+      field: 'title',
+      reason: 'contains_profanity',
+    });
+
+    await z.close();
   });
-
-  expect(onErrorSpy).toBeCalledTimes(1);
-  const [errorMessage, errorObject] = onErrorSpy.mock.calls[0];
-  expect(errorMessage).toContain('VersionNotSupported');
-  expect(errorMessage).toContain(serverMessage);
-  expect(errorObject).toBeInstanceOf(ProtocolError);
-  expect(errorObject.errorBody.origin).toBe(ErrorOrigin.ZeroCache);
 });
 
 test('We should send a deleteClient when a Zero instance is closed', async () => {

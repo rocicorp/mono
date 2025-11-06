@@ -197,7 +197,8 @@ describe('CustomQueryTransformer', () => {
           error: 'app',
           id: 'query2',
           name: 'getPostsByUser',
-          details: 'Query syntax error',
+          message: 'Query syntax error',
+          details: {reason: 'syntax error'},
         },
       ],
     ] satisfies TransformResponseMessage);
@@ -222,7 +223,8 @@ describe('CustomQueryTransformer', () => {
         error: 'app',
         id: 'query2',
         name: 'getPostsByUser',
-        details: 'Query syntax error',
+        message: 'Query syntax error',
+        details: {reason: 'syntax error'},
       },
     ]);
   });
@@ -504,7 +506,8 @@ describe('CustomQueryTransformer', () => {
             error: 'app',
             id: 'query1',
             name: 'getUserById',
-            details: 'Query syntax error',
+            message: 'Query syntax error',
+            details: {reason: 'Query syntax error'},
           },
         ],
       ] satisfies TransformResponseMessage;
@@ -532,7 +535,8 @@ describe('CustomQueryTransformer', () => {
         error: 'app',
         id: 'query1',
         name: 'getUserById',
-        details: 'Query syntax error',
+        message: 'Query syntax error',
+        details: {reason: 'Query syntax error'},
       },
     ]);
 
@@ -685,7 +689,9 @@ describe('CustomQueryTransformer', () => {
       kind: ErrorKind.TransformFailed,
       origin: ErrorOrigin.ZeroCache,
       reason: ErrorReason.Internal,
-      message: `URL "${disallowedUrl}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
+      message: expect.stringContaining(
+        `URL "${disallowedUrl}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
+      ),
       queryIDs: ['query1'],
     });
 
@@ -776,7 +782,7 @@ describe('CustomQueryTransformer', () => {
       kind: ErrorKind.TransformFailed,
       origin: ErrorOrigin.ZeroCache,
       reason: ErrorReason.Internal,
-      message: 'Network timeout',
+      message: expect.stringContaining('Network timeout'),
       queryIDs: ['query1'],
     });
 
@@ -843,8 +849,7 @@ describe('CustomQueryTransformer', () => {
       kind: ErrorKind.TransformFailed,
       origin: ErrorOrigin.ZeroCache,
       reason: ErrorReason.Internal,
-      message:
-        'An unknown error occurred while transforming queries: string error thrown',
+      message: expect.stringContaining('string error thrown'),
       queryIDs: ['query1'],
     });
   });

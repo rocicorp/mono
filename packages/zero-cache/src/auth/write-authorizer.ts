@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pid} from 'node:process';
 import {assert} from '../../../shared/src/asserts.ts';
-import type {JSONValue} from '../../../shared/src/json.ts';
+import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
@@ -22,8 +22,8 @@ import type {
   UpdateOp,
   UpsertOp,
 } from '../../../zero-protocol/src/push.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import type {Policy} from '../../../zero-schema/src/compiled-permissions.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {BuilderDelegate} from '../../../zql/src/builder/builder.ts';
 import {
   bindStaticParameters,
@@ -31,7 +31,10 @@ import {
 } from '../../../zql/src/builder/builder.ts';
 import {simplifyCondition} from '../../../zql/src/query/expression.ts';
 import type {Query} from '../../../zql/src/query/query.ts';
-import {StaticQuery, staticQuery} from '../../../zql/src/query/static-query.ts';
+import {
+  asStaticQuery,
+  staticQuery,
+} from '../../../zql/src/query/static-query.ts';
 import {
   DatabaseStorage,
   type ClientGroupStorage,
@@ -248,6 +251,37 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     return this.#timedCanDo(phase, 'delete', authData, op);
   }
 
+  /**
+   * Gets schema-defined primary key and validates that operation contains required PK values.
+   *
+   * @returns Record where keys are column names and values are client-provided values
+   * @throws Error if operation value is missing required primary key columns
+   */
+  #getPrimaryKey(
+    tableName: string,
+    opValue: Record<string, ReadonlyJSONValue | undefined>,
+  ): Record<string, ReadonlyJSONValue> {
+    const tableSpec = this.#tableSpecs.get(tableName);
+    if (!tableSpec) {
+      throw new Error(`Table ${tableName} not found`);
+    }
+    const columns = tableSpec.tableSpec.primaryKey;
+
+    // Extract primary key values from operation value and validate they exist
+    const values: Record<string, ReadonlyJSONValue> = {};
+    for (const col of columns) {
+      const val = opValue[col];
+      if (val === undefined) {
+        throw new Error(
+          `Primary key column '${col}' is missing from operation value for table ${tableName}`,
+        );
+      }
+      values[col] = val;
+    }
+
+    return values;
+  }
+
   #getSource(tableName: string) {
     let source = this.#tables.get(tableName);
     if (source) {
@@ -323,10 +357,11 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     const rowPolicies = rules?.row;
     let rowQuery = staticQuery(this.#schema, op.tableName);
 
-    op.primaryKey.forEach(pk => {
-      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-      rowQuery = rowQuery.where(pk, '=', op.value[pk] as any);
-    });
+    const primaryKeyValues = this.#getPrimaryKey(op.tableName, op.value);
+
+    for (const pk in primaryKeyValues) {
+      rowQuery = rowQuery.where(pk, '=', primaryKeyValues[pk]);
+    }
 
     let applicableRowPolicy: Policy | undefined;
     switch (action) {
@@ -406,16 +441,19 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
 
   #getPreMutationRow(op: UpsertOp | UpdateOp | DeleteOp) {
     const {value} = op;
-    const conditions: SQLQuery[] = [];
-    const values: PrimaryKeyValue[] = [];
-    for (const pk of op.primaryKey) {
-      conditions.push(sql`${sql.ident(pk)}=?`);
-      values.push(v.parse(value[pk], primaryKeyValueSchema));
-    }
+
+    const primaryKeyValues = this.#getPrimaryKey(op.tableName, value);
 
     const spec = this.#tableSpecs.get(op.tableName);
-    if (spec === undefined) {
+    if (!spec) {
       throw new Error(`Table ${op.tableName} not found`);
+    }
+
+    const conditions: SQLQuery[] = [];
+    const values: PrimaryKeyValue[] = [];
+    for (const pk in primaryKeyValues) {
+      conditions.push(sql`${sql.ident(pk)}=?`);
+      values.push(v.parse(primaryKeyValues[pk], primaryKeyValueSchema));
     }
 
     const ret = this.#statementRunner.get(
@@ -479,7 +517,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     if (policy.length === 0) {
       return false;
     }
-    let rowQueryAst = (rowQuery as StaticQuery<Schema, string>).ast;
+    let rowQueryAst = asStaticQuery(rowQuery).ast;
     rowQueryAst = bindStaticParameters(
       {
         ...rowQueryAst,

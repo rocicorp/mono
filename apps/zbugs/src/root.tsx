@@ -13,6 +13,9 @@ import {
   useProjectName,
 } from './routes.tsx';
 import {ZERO_PROJECT_NAME} from '../shared/schema.ts';
+import {useZeroConnectionState} from '@rocicorp/zero/react';
+import {ConnectionStatus} from '@rocicorp/zero';
+import {useLogin} from './hooks/use-login.tsx';
 
 function OGImageUpdater() {
   const projectName = useProjectName();
@@ -66,6 +69,16 @@ export function Root() {
   const [contentReady, setContentReady] = useState(false);
 
   useSoftNav();
+
+  const login = useLogin();
+  const connectionState = useZeroConnectionState();
+
+  // if we're in needs-auth state, log out the user
+  useEffect(() => {
+    if (connectionState.name === ConnectionStatus.NeedsAuth) {
+      login.logout();
+    }
+  }, [connectionState, login]);
 
   return (
     <ListContextProvider>

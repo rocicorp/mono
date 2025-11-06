@@ -1,13 +1,14 @@
 import {createComputed, createSignal, onCleanup, type Accessor} from 'solid-js';
 import {createStore} from 'solid-js/store';
 import type {ClientID} from '../../replicache/src/sync/ids.ts';
-import type {Schema} from '../../zero-schema/src/builder/schema-builder.ts';
+import {bindingsForZero} from '../../zero-client/src/client/bindings.ts';
+import type {QueryResultDetails} from '../../zero-client/src/types/query-result.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
 import type {HumanReadable, Query} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import {
   createSolidViewFactory,
   UNKNOWN,
-  type QueryResultDetails,
   type SolidView,
   type State,
 } from './solid-view.ts';
@@ -15,7 +16,7 @@ import {useZero} from './use-zero.ts';
 
 export type QueryResult<TReturn> = readonly [
   Accessor<HumanReadable<TReturn>>,
-  Accessor<QueryResultDetails>,
+  Accessor<QueryResultDetails & {}>,
 ];
 
 // Deprecated in 0.22
@@ -49,8 +50,9 @@ export function useQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
+  TContext,
 >(
-  querySignal: Accessor<Query<TSchema, TTable, TReturn>>,
+  querySignal: Accessor<Query<TSchema, TTable, TReturn, TContext>>,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
 ): QueryResult<TReturn> {
   const [state, setState] = createStore<State>([
@@ -73,7 +75,7 @@ export function useQuery<
     [
       SolidView | undefined,
       ClientID | undefined,
-      Query<TSchema, TTable, TReturn> | undefined,
+      Query<TSchema, TTable, TReturn, TContext> | undefined,
       string | undefined,
       TTL | undefined,
       number,
@@ -91,19 +93,20 @@ export function useQuery<
       const currentRefetchKey = refetchKey(); // depend on refetchKey to force re-evaluation
       const {clientID} = zero;
       const query = querySignal();
-      const queryHash = query.hash();
+      const bindings = bindingsForZero(zero);
+      const queryHash = bindings.hash(query);
       const ttl = normalize(options)?.ttl ?? DEFAULT_TTL_MS;
       if (
         !prevView ||
         clientID !== prevClientID ||
         prevRefetchKey !== currentRefetchKey ||
         (query !== prevQuery &&
-          (clientID === undefined || query.hash() !== prevQueryHash))
+          (clientID === undefined || queryHash !== prevQueryHash))
       ) {
         if (prevView) {
           prevView.destroy();
         }
-        view = zero.materialize(
+        view = bindings.materialize(
           query,
           createSolidViewFactory(setState, refetch),
           {ttl},

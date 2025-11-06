@@ -11,6 +11,7 @@ import {
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
+import {getErrorMessage} from '../../../shared/src/error.ts';
 
 const reservedParams = ['schema', 'appID'];
 
@@ -82,13 +83,13 @@ export async function fetchFromAPIServer<TValidator extends Type>(
     'Content-Type': 'application/json',
   };
 
-  if (headerOptions.apiKey !== undefined) {
+  if (headerOptions.apiKey) {
     headers['X-Api-Key'] = headerOptions.apiKey;
   }
-  if (headerOptions.token !== undefined) {
+  if (headerOptions.token) {
     headers['Authorization'] = `Bearer ${headerOptions.token}`;
   }
-  if (headerOptions.cookie !== undefined) {
+  if (headerOptions.cookie) {
     headers['Cookie'] = headerOptions.cookie;
   }
 
@@ -164,14 +165,14 @@ export async function fetchFromAPIServer<TValidator extends Type>(
               kind: ErrorKind.PushFailed,
               origin: ErrorOrigin.ZeroCache,
               reason: ErrorReason.Parse,
-              message: `Failed to parse response from API server: ${error instanceof Error ? error.message : String(error)}`,
+              message: `Failed to parse response from API server: ${getErrorMessage(error)}`,
               mutationIDs: [],
             }
           : {
               kind: ErrorKind.TransformFailed,
               origin: ErrorOrigin.ZeroCache,
               reason: ErrorReason.Parse,
-              message: `Failed to parse response from API server: ${error instanceof Error ? error.message : String(error)}`,
+              message: `Failed to parse response from API server: ${getErrorMessage(error)}`,
               queryIDs: [],
             },
         {cause: error},
@@ -193,14 +194,14 @@ export async function fetchFromAPIServer<TValidator extends Type>(
             kind: ErrorKind.PushFailed,
             origin: ErrorOrigin.ZeroCache,
             reason: ErrorReason.Internal,
-            message: `Fetch from API server failed with unknown error: ${error instanceof Error ? error.message : String(error)}`,
+            message: `Fetch from API server failed with unknown error: ${getErrorMessage(error)}`,
             mutationIDs: [],
           }
         : {
             kind: ErrorKind.TransformFailed,
             origin: ErrorOrigin.ZeroCache,
             reason: ErrorReason.Internal,
-            message: `Fetch from API server failed with unknown error: ${error instanceof Error ? error.message : String(error)}`,
+            message: `Fetch from API server failed with unknown error: ${getErrorMessage(error)}`,
             queryIDs: [],
           },
       {cause: error},

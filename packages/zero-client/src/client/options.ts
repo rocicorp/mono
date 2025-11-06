@@ -2,9 +2,10 @@ import type {LogLevel} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import * as v from '../../../shared/src/valita.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {CustomMutatorDefs} from './custom.ts';
-import type {OnError} from './on-error.ts';
+import type {ZeroError} from './error.ts';
 import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 
 /**
@@ -13,6 +14,7 @@ import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 export interface ZeroOptions<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
+  Context = unknown,
 > {
   /**
    * URL to the zero-cache. This can be a simple hostname, e.g.
@@ -28,27 +30,18 @@ export interface ZeroOptions<
   server?: string | null | undefined;
 
   /**
-   * A JWT to identify and authenticate the user. Can be provided as either:
-   * - A string containing the JWT token
-   * - A function that returns a JWT token
-   * - `undefined` if there is no logged in user
+   * A token to identify and authenticate the user.
    *
-   * Token validation behavior:
-   * 1. **For function providers:**
-   *    When zero-cache reports that a token is invalid (expired, malformed,
-   *    or has an invalid signature), Zero will call the function again with
-   *    `error='invalid-token'` to obtain a new token.
+   * Set `auth` to `null` or `undefined` if there is no logged in user.
    *
-   * 2. **For string tokens:**
-   *    Zero will continue to use the provided token even if zero-cache initially
-   *    reports it as invalid. This is because zero-cache may be able to validate
-   *    the token after fetching new public keys from its configured JWKS URL
-   *    (if `ZERO_AUTH_JWKS_URL` is set).
+   * When a 401 or 403 HTTP status code is received from your server, Zero will
+   * transition to the `needs-auth` connection state. The app should call
+   * `zero.connection.connect({auth: newToken})` with a new token to reconnect.
+   *
+   * The call to `connect` is handled automatically by the ZeroProvider component
+   * for React and SolidJS when the `auth` prop changes.
    */
-  auth?:
-    | string
-    | ((error?: 'invalid-token') => MaybePromise<string | undefined>)
-    | undefined;
+  auth?: string | null | undefined;
 
   /**
    * A unique identifier for the user. Must be non-empty.
@@ -163,11 +156,37 @@ export interface ZeroOptions<
   hiddenTabDisconnectDelay?: number | undefined;
 
   /**
-   * This gets called when the Zero instance encounters an error. The default
-   * behavior is to log the error to the console. Provide your own function to
-   * prevent the default behavior.
+   * The number of milliseconds to wait before disconnecting a Zero
+   * instance when the connection to the server has timed out.
+   *
+   * Default is 5 minutes.
    */
-  onError?: OnError | undefined;
+  disconnectTimeout?: number | undefined;
+
+  /**
+   * The timeout in milliseconds for ping operations. This value is used for:
+   * - How long to wait in idle before sending a ping to the server
+   * - How long to wait for a pong response after sending a ping
+   *
+   * Total time to detect a dead connection is 2 × pingTimeoutMs.
+   *
+   * Default is 5_000.
+   */
+  pingTimeoutMs?: number | undefined;
+
+  /**
+   * Invoked whenever Zero encounters an error.
+   *
+   * The argument is either an error originating from the server/zero-cache,
+   * client error (offline transitions, ping timeouts, websocket errors, etc),
+   * or an application error (e.g. a custom mutator error).
+   *
+   * Use this callback only to surface errors in your metrics/telemetry - use the
+   * `zero.connection` API for handling errors in the UI.
+   *
+   * When `onError` is omitted, Zero logs the error to the browser console.
+   */
+  onError?: (error: ZeroError | ApplicationError) => MaybePromise<void>;
 
   /**
    * Determines what kind of storage implementation to use on the client.
@@ -248,6 +267,12 @@ export interface ZeroOptions<
    * Defaults is 10.
    */
   queryChangeThrottleMs?: number | undefined;
+
+  /**
+   * Context is passed to Synced Queries when they are executed
+   */
+  // TODO(arv): Mutators should also get context.
+  context?: Context | undefined;
 }
 
 /**

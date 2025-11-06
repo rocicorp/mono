@@ -1,10 +1,17 @@
 import type {LogContext} from '@rocicorp/logger';
 import {groupBy} from '../../../../shared/src/arrays.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
+import {getErrorMessage} from '../../../../shared/src/error.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';
+import {
+  isProtocolError,
+  type PushFailedBody,
+} from '../../../../zero-protocol/src/error.ts';
 import {
   pushResponseSchema,
   type MutationID,
@@ -12,22 +19,16 @@ import {
   type PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
-import {fetchFromAPIServer, compileUrlPattern} from '../../custom/fetch.ts';
+import {compileUrlPattern, fetchFromAPIServer} from '../../custom/fetch.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {recordMutation} from '../../server/anonymous-otel-start.ts';
+import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {upstreamSchema} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import type {HandlerResult, StreamResult} from '../../workers/connection.ts';
 import type {RefCountedService, Service} from '../service.ts';
-import {
-  isProtocolError,
-  type PushFailedBody,
-} from '../../../../zero-protocol/src/error.ts';
-import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
-import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';
-import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
 
 export interface Pusher extends RefCountedService {
   readonly pushURL: string | undefined;
@@ -40,7 +41,7 @@ export interface Pusher extends RefCountedService {
   enqueuePush(
     clientID: string,
     push: PushBody,
-    jwt: string | undefined,
+    auth: string | undefined,
     httpCookie: string | undefined,
   ): HandlerResult;
   ackMutationResponses(upToID: MutationID): Promise<void>;
@@ -108,13 +109,13 @@ export class PusherService implements Service, Pusher {
   enqueuePush(
     clientID: string,
     push: PushBody,
-    jwt: string | undefined,
+    auth: string | undefined,
     httpCookie: string | undefined,
   ): Exclude<HandlerResult, StreamResult> {
     if (!this.#pushConfig.forwardCookies) {
       httpCookie = undefined; // remove cookies if not forwarded
     }
-    this.#queue.enqueue({push, jwt, clientID, httpCookie});
+    this.#queue.enqueue({push, auth, clientID, httpCookie});
 
     return {
       type: 'ok',
@@ -166,7 +167,7 @@ export class PusherService implements Service, Pusher {
 
 type PusherEntry = {
   push: PushBody;
-  jwt: string | undefined;
+  auth: string | undefined;
   httpCookie: string | undefined;
   clientID: string;
 };
@@ -452,7 +453,7 @@ class PushWorker {
         },
         {
           apiKey: this.#apiKey,
-          token: entry.jwt,
+          token: entry.auth,
           cookie: entry.httpCookie,
         },
         entry.push,
@@ -471,10 +472,7 @@ class PushWorker {
         kind: ErrorKind.PushFailed,
         origin: ErrorOrigin.ZeroCache,
         reason: ErrorReason.Internal,
-        message:
-          e instanceof Error
-            ? e.message
-            : 'An unknown error occurred while pushing to the API server',
+        message: `Failed to push: ${getErrorMessage(e)}`,
         mutationIDs,
       } as const satisfies PushFailedBody;
     }
@@ -544,8 +542,8 @@ function assertAreCompatiblePushes(left: PusherEntry, right: PusherEntry) {
     'clientID must be the same for all pushes',
   );
   assert(
-    left.jwt === right.jwt,
-    'jwt must be the same for all pushes with the same clientID',
+    left.auth === right.auth,
+    'auth must be the same for all pushes with the same clientID',
   );
   assert(
     left.push.schemaVersion === right.push.schemaVersion,

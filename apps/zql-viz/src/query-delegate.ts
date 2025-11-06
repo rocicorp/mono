@@ -1,18 +1,13 @@
-import type {Schema} from '@rocicorp/zero';
-import {MemorySource} from '../../../packages/zql/src/ivm/memory-source.ts';
-import type {QueryDelegate} from '../../../packages/zql/src/query/query-delegate.ts';
-import type {
-  Input,
-  InputBase,
-  Storage,
-} from '../../../packages/zql/src/ivm/operator.ts';
-import {MemoryStorage} from '../../../packages/zero/out/zql/src/ivm/memory-storage';
-import type {Edge, Graph} from './types.ts';
-import type {SourceInput} from '../../../packages/zql/src/ivm/source.ts';
+import type {Schema} from '../../../packages/zero-types/src/schema.ts';
 import type {FilterInput} from '../../../packages/zql/src/ivm/filter-operators.ts';
+import {MemorySource} from '../../../packages/zql/src/ivm/memory-source.ts';
+import type {Input, InputBase} from '../../../packages/zql/src/ivm/operator.ts';
+import type {SourceInput} from '../../../packages/zql/src/ivm/source.ts';
+import {QueryDelegateBase} from '../../../packages/zql/src/query/query-delegate-base.ts';
+import type {Edge, Graph} from './types.ts';
 
-export class VizDelegate implements QueryDelegate {
-  readonly #sources: Map<string, MemorySource>;
+export class VizDelegate extends QueryDelegateBase<undefined> {
+  readonly #sources: Map<string, MemorySource> = new Map();
   readonly #schema: Schema;
 
   readonly #nodeIds: Map<
@@ -22,18 +17,16 @@ export class VizDelegate implements QueryDelegate {
       type: string;
       name: string;
     }
-  >;
-  readonly #edges: Edge[];
+  > = new Map();
+  readonly #edges: Edge[] = [];
   #nodeIdCounter = 0;
   readonly defaultQueryComplete: boolean = true;
 
   readonly applyFiltersAnyway = true;
 
   constructor(schema: Schema) {
-    this.#sources = new Map();
+    super(undefined);
     this.#schema = schema;
-    this.#nodeIds = new Map();
-    this.#edges = [];
   }
 
   getGraph(): Graph {
@@ -59,10 +52,6 @@ export class VizDelegate implements QueryDelegate {
     return newSource;
   }
 
-  createStorage(): Storage {
-    return new MemoryStorage();
-  }
-
   decorateInput(input: Input, name: string): Input {
     this.#getNode(input, name);
     return input;
@@ -84,24 +73,6 @@ export class VizDelegate implements QueryDelegate {
     this.#getNode(input, name);
     return input;
   }
-
-  addServerQuery() {
-    return () => {};
-  }
-  addCustomQuery() {
-    return () => {};
-  }
-  updateServerQuery() {}
-  updateCustomQuery() {}
-  onTransactionCommit() {
-    return () => {};
-  }
-  batchViewUpdates<T>(applyViewUpdates: () => T): T {
-    return applyViewUpdates();
-  }
-  assertValidRunOptions() {}
-  flushQueryChanges() {}
-  addMetric() {}
 
   #getNode(input: InputBase, name?: string) {
     const existing = this.#nodeIds.get(input);

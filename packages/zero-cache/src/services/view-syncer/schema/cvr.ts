@@ -159,8 +159,10 @@ CREATE TABLE ${schema(shard)}.desires (
   "queryHash"          TEXT,
   "patchVersion"       TEXT NOT NULL,
   "deleted"            BOOL,  -- put vs del "desired" query
-  "ttl"                INTERVAL,  -- Time to live for this client
-  "inactivatedAt"      TIMESTAMPTZ,  -- Time at which this row was inactivated
+  "ttl"                INTERVAL,  -- DEPRECATED: Use ttlMs instead. Time to live for this client
+  "ttlMs"              DOUBLE PRECISION,  -- Time to live in milliseconds
+  "inactivatedAt"      TIMESTAMPTZ,  -- DEPRECATED: Use inactivatedAtMs instead. Time at which this row was inactivated
+  "inactivatedAtMs"    DOUBLE PRECISION,  -- Time at which this row was inactivated (milliseconds since client group start)
 
   PRIMARY KEY ("clientGroupID", "clientID", "queryHash"),
 

@@ -16,7 +16,7 @@
   "scripts": {
     "build": "rm -rf out && npm run build-server && npm run build-client",
     "build-client": "tsc -p tsconfig.client.json && tsx tool/build.js",
-    "build-server": "tsc -p tsconfig.server.json && chmod +x out/zero/src/cli.js out/zero/src/build-schema.js out/zero/src/deploy-permissions.js out/zero/src/zero-cache-dev.js out/zero/src/ast-to-zql.js out/zero/src/analyze-query.js out/zero/src/transform-query.js",
+    "build-server": "tsc -p tsconfig.server.json && chmod +x out/zero/src/cli.js out/zero/src/build-schema.js out/zero/src/deploy-permissions.js out/zero/src/zero-cache-dev.js out/zero/src/ast-to-zql.js out/zero/src/analyze-query.js out/zero/src/transform-query.js out/zero/src/zero-out.js",
     "check-types": "tsc -p tsconfig.client.json && tsc -p tsconfig.server.json",
     "check-types:client:watch": "tsc -p tsconfig.client.json --watch",
     "check-types:server:watch": "tsc -p tsconfig.server.json --watch",
@@ -48,7 +48,7 @@
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.4.0",
     "@rocicorp/resolver": "^1.0.2",
-    "@rocicorp/zero-sqlite3": "^1.0.11",
+    "@rocicorp/zero-sqlite3": "^1.0.12",
     "@types/basic-auth": "^1.1.8",
     "basic-auth": "^2.0.1",
     "chalk": "^5.3.0",
@@ -72,6 +72,7 @@
     "postgres": "^3.4.4",
     "prettier": "^3.5.3",
     "semver": "^7.5.4",
+    "@standard-schema/spec": "^1.0.0",
     "tsx": "^4.19.1",
     "url-pattern": "^1.0.3",
     "urlpattern-polyfill": "^10.1.0",
@@ -178,6 +179,7 @@
     "zero-cache": "./out/zero/src/cli.js",
     "zero-cache-dev": "./out/zero/src/zero-cache-dev.js",
     "zero-deploy-permissions": "./out/zero/src/deploy-permissions.js",
+    "zero-out": "./out/zero/src/zero-out.js",
     "ast-to-zql": "./out/zero/src/ast-to-zql.js",
     "analyze-query": "./out/zero/src/analyze-query.js",
     "transform-query": "./out/zero/src/transform-query.js"

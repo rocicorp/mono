@@ -5,6 +5,7 @@ import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {initialSync} from '../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
+import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
 import type {Query} from '../../zql/src/query/query.ts';
 import {createTableSQL, schema} from '../../zql/src/query/test/test-schemas.ts';
@@ -13,7 +14,6 @@ import {
   mapResultToClientNames,
   newQueryDelegate,
 } from '../../zqlite/src/test/source-factory.ts';
-import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 
 const lc = createSilentLogContext();
 
@@ -21,7 +21,7 @@ let pg: PostgresDB;
 let sqlite: Database;
 type Schema = typeof schema;
 let issueQuery: Query<Schema, 'issue'>;
-let queryDelegate: QueryDelegate;
+let queryDelegate: QueryDelegate<unknown>;
 
 beforeAll(async () => {
   pg = await testDBs.create('discord-repro');
@@ -51,7 +51,7 @@ beforeAll(async () => {
   );
 
   queryDelegate = newQueryDelegate(lc, testLogConfig, sqlite, schema);
-  issueQuery = newQuery(queryDelegate, schema, 'issue');
+  issueQuery = newQuery(schema, 'issue');
 });
 
 test('discord report https://discord.com/channels/830183651022471199/1347550174968287233/1347552521865920616', () => {
@@ -80,7 +80,7 @@ test('discord report https://discord.com/channels/830183651022471199/13475501749
     )
     .related('comments');
 
-  const view = q.materialize();
+  const view = queryDelegate.materialize(q);
 
   expect(mapResultToClientNames(view.data, schema, 'issue'))
     .toMatchInlineSnapshot(`
@@ -124,6 +124,6 @@ test('discord report https://discord.com/channels/830183651022471199/13475501749
   });
 
   expect(mapResultToClientNames(view.data, schema, 'issue')).toEqual(
-    q.materialize().data,
+    queryDelegate.materialize(q).data,
   );
 });

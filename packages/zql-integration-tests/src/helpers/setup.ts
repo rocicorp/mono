@@ -2,8 +2,8 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {initialSync} from '../../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../../zero-cache/src/test/db.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
-import type {Schema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 
 export async function fillPgAndSync(

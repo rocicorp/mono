@@ -1,16 +1,16 @@
 import {beforeAll, describe, expect, test} from 'vitest';
-import {bootstrap} from '../helpers/runner.ts';
-import {getChinook} from './get-deps.ts';
-import {schema} from './schema.ts';
-import {createSQLiteCostModel} from '../../../zqlite/src/sqlite-cost-model.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {computeZqlSpecs} from '../../../zero-cache/src/db/lite-tables.ts';
+import type {LiteAndZqlSpec} from '../../../zero-cache/src/db/specs.ts';
 import {
   clientToServer,
   NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
+import {createSQLiteCostModel} from '../../../zqlite/src/sqlite-cost-model.ts';
 import {makeGetPlanAST, pick} from '../helpers/planner.ts';
-import {computeZqlSpecs} from '../../../zero-cache/src/db/lite-tables.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {LiteAndZqlSpec} from '../../../zero-cache/src/db/specs.ts';
+import {bootstrap} from '../helpers/runner.ts';
+import {getChinook} from './get-deps.ts';
+import {schema} from './schema.ts';
 
 const pgContent = await getChinook();
 
@@ -39,9 +39,7 @@ describe('Chinook planner tests', () => {
 
   test('tracks for a given album', () => {
     const ast = getPlanAST(
-      queries.sqlite.track.whereExists('album', q =>
-        q.where('title', 'Big Ones'),
-      ),
+      queries.track.whereExists('album', q => q.where('title', 'Big Ones')),
     );
 
     expect(pick(ast, ['where', 'flip'])).toBe(true);
@@ -49,7 +47,7 @@ describe('Chinook planner tests', () => {
 
   test('has album and artist', () => {
     const ast = getPlanAST(
-      queries.sqlite.track
+      queries.track
         .whereExists('album', q => q.where('title', 'Big Ones'))
         .whereExists('genre', q => q.where('name', 'Rock')),
     );
@@ -59,7 +57,7 @@ describe('Chinook planner tests', () => {
   });
 
   test('playlist with track', () => {
-    const ast = getPlanAST(queries.sqlite.playlist.whereExists('tracks'));
+    const ast = getPlanAST(queries.playlist.whereExists('tracks'));
     // No flip because:
     // all playlists have a track so we must scan all playlists!
     expect(pick(ast, ['where', 'flip'])).toBe(false);
@@ -69,13 +67,13 @@ describe('Chinook planner tests', () => {
   });
 
   test('tracks with playlist', () => {
-    const ast = getPlanAST(queries.sqlite.track.whereExists('playlists'));
+    const ast = getPlanAST(queries.track.whereExists('playlists'));
     // TODO: will address after we fix the join cost computation
     expect(pick(ast, ['where', 'flip'])).toBe(false);
   });
 
   test('has album a or album b', () => {
-    const query = queries.sqlite.track
+    const query = queries.track
       .where(({or, exists}) =>
         or(
           exists('album', q => q.where('title', 'Big Ones')),

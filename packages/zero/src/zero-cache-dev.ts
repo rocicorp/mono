@@ -7,6 +7,7 @@ import {watch} from 'chokidar';
 import {spawn, type ChildProcess} from 'node:child_process';
 import {createLogContext} from '../../shared/src/logging.ts';
 import {parseOptionsAdvanced} from '../../shared/src/options.ts';
+import * as v from '../../shared/src/valita.ts';
 import {
   ZERO_ENV_VAR_PREFIX,
   zeroOptions,
@@ -31,7 +32,16 @@ function killProcess(childProcess: ChildProcess | undefined) {
 async function main() {
   const {config} = parseOptionsAdvanced(
     {
-      ...deployPermissionsOptions,
+      schema: {
+        path: {
+          type: v.string().optional(),
+          desc: [
+            'Relative path to the file containing the schema definition.',
+            'The file must have a default export of type SchemaConfig.',
+          ],
+          alias: 'p',
+        },
+      },
       ...zeroOptions,
     },
     {
@@ -61,8 +71,6 @@ async function main() {
     envNamePrefix: ZERO_ENV_VAR_PREFIX,
     allowUnknown: true,
   });
-
-  const {path} = config.schema;
 
   let permissionsProcess: ChildProcess | undefined;
   let zeroCacheProcess: ChildProcess | undefined;
@@ -97,60 +105,68 @@ async function main() {
       lc.info?.(`${deployPermissionsScript} completed successfully.`);
       return true;
     }
-    lc.error?.(`Failed to deploy permissions from ${path}.`);
+    lc.error?.(`Failed to deploy permissions from ${config.schema.path}.`);
     return false;
   }
 
-  async function deployPermissionsAndStartZeroCache() {
+  async function startZeroCache() {
     zeroCacheProcess?.removeAllListeners('exit');
     await killProcess(zeroCacheProcess);
     zeroCacheProcess = undefined;
 
+    lc.info?.(
+      `Running ${zeroCacheScript} at\n\n\thttp://localhost:${config.port}\n`,
+    );
+    const env: NodeJS.ProcessEnv = {
+      // Set some low defaults so as to use fewer resources and not trip up,
+      // e.g. developers sharing a database.
+      ['ZERO_NUM_SYNC_WORKERS']: '3',
+      ['ZERO_CVR_MAX_CONNS']: '6',
+      ['ZERO_UPSTREAM_MAX_CONNS']: '6',
+
+      // Default NODE_ENV to development mode.
+      // @ts-ignore NODE_ENV is not always set. Please ignore error.
+      ['NODE_ENV']: 'development',
+
+      // But let the developer override any of these dev defaults.
+      ...process.env,
+      ...zeroCacheEnv,
+    };
+    zeroCacheProcess = spawn(zeroCacheScript, [], {
+      env,
+      stdio: 'inherit',
+      shell: true,
+    });
+    zeroCacheProcess.on('exit', () => {
+      lc.error?.(`${zeroCacheScript} exited. Exiting.`);
+      process.exit(-1);
+    });
+  }
+
+  async function deployPermissionsAndStartZeroCache() {
     if (await deployPermissions()) {
-      lc.info?.(
-        `Running ${zeroCacheScript} at\n\n\thttp://localhost:${config.port}\n`,
-      );
-      const env: NodeJS.ProcessEnv = {
-        // Set some low defaults so as to use fewer resources and not trip up,
-        // e.g. developers sharing a database.
-        ['ZERO_NUM_SYNC_WORKERS']: '3',
-        ['ZERO_CVR_MAX_CONNS']: '6',
-        ['ZERO_UPSTREAM_MAX_CONNS']: '6',
-
-        // Default NODE_ENV to development mode.
-        // @ts-ignore NODE_ENV is not always set. Please ignore error.
-        ['NODE_ENV']: 'development',
-
-        // But let the developer override any of these dev defaults.
-        ...process.env,
-        ...zeroCacheEnv,
-      };
-      zeroCacheProcess = spawn(zeroCacheScript, [], {
-        env,
-        stdio: 'inherit',
-        shell: true,
-      });
-      zeroCacheProcess.on('exit', () => {
-        lc.error?.(`${zeroCacheScript} exited. Exiting.`);
-        process.exit(-1);
-      });
+      await startZeroCache();
     }
   }
 
-  await deployPermissionsAndStartZeroCache();
+  if (config.schema.path) {
+    await deployPermissionsAndStartZeroCache();
 
-  // Watch for file changes
-  const watcher = watch(path, {
-    ignoreInitial: true,
-    awaitWriteFinish: {stabilityThreshold: 500, pollInterval: 100},
-  });
-  const onFileChange = async () => {
-    lc.info?.(`Detected ${path} change.`);
-    await deployPermissions();
-  };
-  watcher.on('add', onFileChange);
-  watcher.on('change', onFileChange);
-  watcher.on('unlink', onFileChange);
+    // Watch for file changes
+    const watcher = watch(config.schema.path, {
+      ignoreInitial: true,
+      awaitWriteFinish: {stabilityThreshold: 500, pollInterval: 100},
+    });
+    const onFileChange = async () => {
+      lc.info?.(`Detected ${config.schema.path} change.`);
+      await deployPermissions();
+    };
+    watcher.on('add', onFileChange);
+    watcher.on('change', onFileChange);
+    watcher.on('unlink', onFileChange);
+  } else {
+    await startZeroCache();
+  }
 }
 
 void main();

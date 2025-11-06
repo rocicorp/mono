@@ -1,8 +1,9 @@
 import type {Query, Transaction} from '@rocicorp/zero';
-import {assert} from '../../../packages/shared/src/asserts.ts';
 import {must} from '../../../packages/shared/src/must.ts';
 import * as v from '../../../packages/shared/src/valita.ts';
-import type {schema} from './schema.ts';
+import {MutationError, MutationErrorCode} from './error.ts';
+import type {MutatorTx} from './mutators.ts';
+import {builder, type schema} from './schema.ts';
 
 /** The contents of the zbugs JWT */
 export const jwtDataSchema = v.object({
@@ -21,7 +22,12 @@ export type Role = AuthData['role'];
 export function assertIsLoggedIn(
   authData: AuthData | undefined,
 ): asserts authData {
-  assert(authData, 'user must be logged in for this operation');
+  if (!authData) {
+    throw new MutationError(
+      'User must be logged in for this operation',
+      MutationErrorCode.NOT_LOGGED_IN,
+    );
+  }
 }
 
 export function isAdmin(token: AuthData | undefined) {
@@ -30,6 +36,7 @@ export function isAdmin(token: AuthData | undefined) {
 }
 
 export async function assertIsCreatorOrAdmin(
+  tx: MutatorTx,
   authData: AuthData | undefined,
   query: Query<typeof schema, 'comment' | 'issue' | 'emoji'>,
   id: string,
@@ -39,13 +46,16 @@ export async function assertIsCreatorOrAdmin(
     return;
   }
   const creatorID = must(
-    await query.where('id', id).one().run(),
+    await tx.run(query.where('id', id).one()),
     `entity ${id} does not exist`,
   ).creatorID;
-  assert(
-    authData.sub === creatorID,
-    `User ${authData.sub} is not an admin or the creator of the target entity`,
-  );
+  if (authData.sub !== creatorID) {
+    throw new MutationError(
+      `User ${authData.sub} is not an admin or the creator of the target entity`,
+      MutationErrorCode.NOT_AUTHORIZED,
+      id,
+    );
+  }
 }
 
 export async function assertUserCanSeeIssue(
@@ -53,15 +63,20 @@ export async function assertUserCanSeeIssue(
   userID: string,
   issueID: string,
 ) {
-  const issue = must(await tx.query.issue.where('id', issueID).one().run());
-  const user = must(await tx.query.user.where('id', userID).one().run());
+  const issue = must(await tx.run(builder.issue.where('id', issueID).one()));
+  const user = must(await tx.run(builder.user.where('id', userID).one()));
 
-  assert(
-    issue.visibility === 'public' ||
-      userID === issue.creatorID ||
-      user.role === 'crew',
-    'User does not have permission to view this issue',
-  );
+  if (
+    issue.visibility !== 'public' &&
+    userID !== issue.creatorID &&
+    user.role !== 'crew'
+  ) {
+    throw new MutationError(
+      'User does not have permission to view this issue',
+      MutationErrorCode.NOT_AUTHORIZED,
+      issueID,
+    );
+  }
 }
 
 export async function assertUserCanSeeComment(
@@ -70,7 +85,7 @@ export async function assertUserCanSeeComment(
   commentID: string,
 ) {
   const comment = must(
-    await tx.query.comment.where('id', commentID).one().run(),
+    await tx.run(builder.comment.where('id', commentID).one()),
   );
 
   await assertUserCanSeeIssue(tx, userID, comment.issueID);

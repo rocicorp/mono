@@ -122,6 +122,46 @@ function bumpCanaryVersion(version) {
 }
 
 /**
+ * Find the latest canary tag for a given base version
+ * @param {string} baseVersion - e.g., "0.24.0"
+ * @returns {string | null} - e.g., "zero/v0.24.0-canary.5" or null if none found
+ */
+function findLatestCanaryTag(baseVersion) {
+  console.log(
+    `Looking for latest canary tag for base version ${baseVersion}...`,
+  );
+  execute('git fetch --tags', {stdio: 'pipe'});
+
+  const tagPattern = `zero/v${baseVersion}-canary.*`;
+  const tagsOutput = execute(`git tag -l "${tagPattern}"`, {stdio: 'pipe'});
+
+  if (!tagsOutput) {
+    return null;
+  }
+
+  const tags = tagsOutput.split('\n').filter(Boolean);
+  const attemptRegex = new RegExp(
+    `^zero/v${baseVersion.replace(/\./g, '\\.')}-canary\\.(\\d+)$`,
+  );
+
+  let maxAttempt = -1;
+  let latestTag = null;
+
+  for (const tag of tags) {
+    const match = tag.match(attemptRegex);
+    if (match) {
+      const attempt = parseInt(match[1]);
+      if (attempt > maxAttempt) {
+        maxAttempt = attempt;
+        latestTag = tag;
+      }
+    }
+  }
+
+  return latestTag;
+}
+
+/**
  * Parse command line arguments
  */
 function parseArgs() {
@@ -133,11 +173,16 @@ function parseArgs() {
       description: 'Display this usage guide',
     },
     {
-      name: 'branch',
-      alias: 'b',
+      name: 'from',
       type: String,
-      defaultValue: 'main',
-      description: 'Branch to release from (default: main)',
+      description: 'Branch, tag, or commit to build from (required)',
+    },
+    {
+      name: 'stable',
+      alias: 's',
+      type: Boolean,
+      description:
+        'Create a stable release using base version. If not provided, creates a canary release (auto-calculated version)',
     },
   ];
 
@@ -155,7 +200,19 @@ function parseArgs() {
     process.exit(0);
   }
 
-  return {buildBranch: options.branch};
+  if (!options.from) {
+    console.error('Error: --from is required');
+    console.error('');
+    showHelp(optionDefinitions);
+    process.exit(1);
+  }
+
+  const isCanary = !Boolean(options.stable);
+
+  return {
+    from: options.from,
+    isCanary,
+  };
 }
 
 /**
@@ -164,35 +221,46 @@ function parseArgs() {
  */
 function showHelp(optionDefinitions) {
   console.log(`
-Usage: node create-canary.js [options]
+Usage: node release.js [options]
 
-Creates a canary release build for @rocicorp/zero.
+Creates canary or stable release builds for @rocicorp/zero.
+
+Default: Creates a canary release (safer, can be repeated)
+
+Modes:
+  Canary (default):  Builds from branch/tag/commit, auto-calculates version from git tags
+  Stable (--stable): Builds from branch/tag/commit using base version from package.json
 
 Options:`);
 
   for (const opt of optionDefinitions) {
     const flags = opt.alias ? `-${opt.alias}, --${opt.name}` : `--${opt.name}`;
-    console.log(`  ${flags.padEnd(20)} ${opt.description}`);
+    console.log(`  ${flags.padEnd(25)} ${opt.description}`);
   }
 
   console.log(`
-Examples:
-  node create-canary.js
-  node create-canary.js --branch main
-  node create-canary.js -b maint/zero/v0.24
+Canary Examples:
+  node release.js --from main                          # Build canary from main
+  node release.js --from maint/zero/v0.24              # Build canary from maintenance branch
+  node release.js --from zero/v0.24.0                  # Build canary from specific tag
 
-Maintenance/cherry-pick releases:
+Stable Release Examples:
+  node release.js --stable --from zero/v0.24.0-canary.3    # Promote specific canary to stable
+
+Maintenance/cherry-pick workflow:
   1. Create a maintenance branch from tag: git checkout -b maint/zero/v0.24 zero/v0.24.0
   2. Cherry-pick commits: git cherry-pick <commit-hash>
   3. Push to origin: git push origin maint/zero/v0.24
-  4. Run: node create-canary.js --branch maint/zero/v0.24
+  4. Run: node release.js --from maint/zero/v0.24
 `);
 }
 
-const {buildBranch} = parseArgs();
-console.log(`Releasing from branch: ${buildBranch}`);
+const {from: fromArg, isCanary} = parseArgs();
 
 try {
+  // Find the git root directory
+  const gitRoot = execute('git rev-parse --show-toplevel', {stdio: 'pipe'});
+
   // Check that there are no uncommitted changes
   const uncommittedChanges = execute('git status --porcelain', {
     stdio: 'pipe',
@@ -203,24 +271,86 @@ try {
     process.exit(1);
   }
 
-  // Check that root hash of working directory is the same as the root hash of the build branch
-  const rootHash = execute('git rev-parse HEAD', {stdio: 'pipe'});
-  const buildBranchRootHash = execute(`git rev-parse origin/${buildBranch}`, {
-    stdio: 'pipe',
-  });
-  if (rootHash !== buildBranchRootHash) {
-    console.error(
-      `Root hash of working directory does not match root hash of build branch`,
-    );
-    console.error(`Root hash: ${rootHash}`);
-    console.error(`Build branch root hash: ${buildBranchRootHash}`);
-    console.error(`Perhaps you need to push your changes to the build branch?`);
+  const from = fromArg;
+
+  // For stable releases, we need to know the base version early
+  // Read it from the current working directory before we chdir
+  const ZERO_PACKAGE_JSON_PATH = path.join(
+    gitRoot,
+    'packages',
+    'zero',
+    'package.json',
+  );
+  const packageData = getPackageData(ZERO_PACKAGE_JSON_PATH);
+  const currentVersion = packageData.version;
+
+  // Calculate what the next version will be
+  let nextVersion;
+  if (isCanary) {
+    nextVersion = bumpCanaryVersion(currentVersion);
+  } else {
+    nextVersion = currentVersion;
+  }
+
+  console.log('');
+  console.log('='.repeat(60));
+  if (isCanary) {
+    console.log(`Creating canary release from ${from}`);
+  } else {
+    console.log(`Creating stable release from ${from}`);
+  }
+  console.log(`Current version: ${currentVersion}`);
+  console.log(`Target version:  ${nextVersion}`);
+  console.log('='.repeat(60));
+  console.log('');
+
+  // Check that the ref we're building from exists both locally and remotely
+  // and that they point to the same commit
+  console.log(
+    `Verifying ref ${from} exists and matches between local and remote...`,
+  );
+
+  let localRefHash;
+  let remoteRefHash;
+
+  // Get local ref hash
+  try {
+    localRefHash = execute(`git rev-parse ${from}`, {stdio: 'pipe'});
+  } catch {
+    console.error(`Could not resolve local ref: ${from}`);
+    console.error(`Make sure the branch/tag exists locally`);
     process.exit(1);
   }
 
+  // Get remote ref hash
+  try {
+    // For branches, check origin/branch
+    // For tags, just check the tag (tags are fetched from remote)
+    remoteRefHash = execute(`git rev-parse origin/${from}`, {stdio: 'pipe'});
+  } catch {
+    // If origin/from doesn't exist, try just the ref (works for tags)
+    try {
+      // For tags, we need to ensure we have the latest from remote
+      execute(`git fetch origin tag ${from}`, {stdio: 'pipe'});
+      remoteRefHash = execute(`git rev-parse ${from}`, {stdio: 'pipe'});
+    } catch {
+      console.error(`Could not resolve remote ref: ${from}`);
+      console.error(`Make sure the branch/tag has been pushed to origin`);
+      process.exit(1);
+    }
+  }
+
+  if (localRefHash !== remoteRefHash) {
+    console.error(`Local and remote versions of ${from} do not match`);
+    console.error(`Local:  ${localRefHash}`);
+    console.error(`Remote: ${remoteRefHash}`);
+    console.error(`Perhaps you need to push your changes?`);
+    process.exit(1);
+  }
+
+  console.log(`✓ Ref ${from} matches between local and remote`);
+
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
-  // Find the git root directory
-  const gitRoot = execute('git rev-parse --show-toplevel', {stdio: 'pipe'});
 
   // Copy the working directory to temp dir (faster than cloning)
   console.log(`Copying repo from ${gitRoot} to ${tempDir}...`);
@@ -229,23 +359,33 @@ try {
   );
   process.chdir(tempDir);
 
-  // Discard any local changes and sync to the correct branch
+  // Discard any local changes and checkout the correct ref
   execute('git reset --hard');
   execute('git fetch origin');
-  execute(`git checkout origin/${buildBranch}`);
+
+  // Try to checkout as origin/branch first, fall back to tag/commit
+  try {
+    execute(`git checkout origin/${from}`);
+  } catch {
+    execute(`git checkout ${from}`);
+  }
 
   //installs turbo and other build dependencies
   execute('npm install');
-  const ZERO_PACKAGE_JSON_PATH = basePath('packages', 'zero', 'package.json');
-  const currentPackageData = getPackageData(ZERO_PACKAGE_JSON_PATH);
-  const nextCanaryVersion = bumpCanaryVersion(currentPackageData.version);
-  console.log(`Current version is ${currentPackageData.version}`);
-  console.log(`Next version is ${nextCanaryVersion}`);
-  currentPackageData.version = nextCanaryVersion;
+  // After chdir, use basePath() which is now relative to temp directory
+  const ZERO_PACKAGE_JSON_PATH_IN_TEMP = basePath(
+    'packages',
+    'zero',
+    'package.json',
+  );
+  const currentPackageData = getPackageData(ZERO_PACKAGE_JSON_PATH_IN_TEMP);
 
-  const tagName = `zero/v${nextCanaryVersion}`;
+  // Update the package.json with the new version
+  currentPackageData.version = nextVersion;
 
-  writePackageData(ZERO_PACKAGE_JSON_PATH, currentPackageData);
+  const tagName = `zero/v${nextVersion}`;
+
+  writePackageData(ZERO_PACKAGE_JSON_PATH_IN_TEMP, currentPackageData);
 
   const dependencyPaths = [
     basePath('apps', 'zbugs', 'package.json'),
@@ -255,7 +395,7 @@ try {
   dependencyPaths.forEach(p => {
     const data = getPackageData(p);
     if (data.dependencies && data.dependencies['@rocicorp/zero']) {
-      data.dependencies['@rocicorp/zero'] = nextCanaryVersion;
+      data.dependencies['@rocicorp/zero'] = nextVersion;
       writePackageData(p, data);
     }
   });
@@ -271,7 +411,7 @@ try {
     await getProtocolVersions();
 
   execute('git status');
-  execute(`git commit -am "Bump version to ${nextCanaryVersion}"`);
+  execute(`git commit -am "Bump version to ${nextVersion}"`);
 
   // Push tag to git before npm so that if npm fails the versioning logic works correctly.
   // Also if npm push succeeds but docker fails we correctly record the tag that the
@@ -281,8 +421,14 @@ try {
   execute(`git tag ${tagName}`);
   execute(`git push origin ${tagName}`);
 
-  execute('npm publish --tag=canary', {cwd: basePath('packages', 'zero')});
-  execute(`npm dist-tag rm @rocicorp/zero@${nextCanaryVersion} canary`);
+  if (isCanary) {
+    execute('npm publish --tag=canary', {cwd: basePath('packages', 'zero')});
+    execute(`npm dist-tag rm @rocicorp/zero@${nextVersion} canary`);
+  } else {
+    // For stable releases, publish without a dist-tag (we'll add 'latest' separately)
+    execute('npm publish --tag=staging', {cwd: basePath('packages', 'zero')});
+    execute(`npm dist-tag rm @rocicorp/zero@${nextVersion} staging`);
+  }
 
   try {
     // Check if our specific multiarch builder exists
@@ -307,10 +453,10 @@ try {
       execute(
         `docker buildx build \
     --platform linux/amd64,linux/arm64 \
-    --build-arg=ZERO_VERSION=${nextCanaryVersion} \
+    --build-arg=ZERO_VERSION=${nextVersion} \
     --build-arg=ZERO_SYNC_PROTOCOL_VERSION=${PROTOCOL_VERSION} \
     --build-arg=ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION=${MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} \
-    -t rocicorp/zero:${nextCanaryVersion} \
+    -t rocicorp/zero:${nextVersion} \
     --push .`,
         {cwd: basePath('packages', 'zero')},
       );
@@ -329,8 +475,8 @@ try {
   console.log(``);
   console.log(`🎉 Success!`);
   console.log(``);
-  console.log(`* Published @rocicorp/zero@${nextCanaryVersion} to npm.`);
-  console.log(`* Created Docker image rocicorp/zero:${nextCanaryVersion}.`);
+  console.log(`* Published @rocicorp/zero@${nextVersion} to npm.`);
+  console.log(`* Created Docker image rocicorp/zero:${nextVersion}.`);
   console.log(`* Pushed Git tag ${tagName} to origin.`);
   console.log(``);
   console.log(``);
@@ -338,11 +484,21 @@ try {
   console.log(``);
   console.log('* Run `git pull --tags` in your checkout to pull the tag.');
   console.log(
-    `* Test apps by installing: npm install @rocicorp/zero@${nextCanaryVersion}`,
+    `* Test apps by installing: npm install @rocicorp/zero@${nextVersion}`,
   );
-  console.log('* When ready to promote to stable:');
-  console.log(`  1. Remove -canary.N from version in package.json`);
-  console.log(`  2. Commit and run standard release process`);
+  if (isCanary) {
+    console.log('* When ready to promote to stable:');
+    console.log(
+      `  1. Update base version in package.json if needed: node bump-version.js X.Y.Z`,
+    );
+    console.log(`  2. Run: node release.js --stable --from ${tagName}`);
+    console.log(
+      `  3. When ready for users: npm dist-tag add @rocicorp/zero@X.Y.Z latest`,
+    );
+  } else {
+    console.log('* When ready for users to install:');
+    console.log(`  npm dist-tag add @rocicorp/zero@${nextVersion} latest`);
+  }
   console.log(``);
 } catch (error) {
   console.error(`Error during execution: ${error}`);
