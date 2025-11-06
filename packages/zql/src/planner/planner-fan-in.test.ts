@@ -2,7 +2,7 @@ import {expect, suite, test} from 'vitest';
 import {CONSTRAINTS, createConnection, createFanIn} from './test/helpers.ts';
 import type {PlannerNode} from './planner-node.ts';
 import {PlannerSource} from './planner-source.ts';
-import type {ConnectionCostModel} from './planner-connection.ts';
+import type {ConnectionCostModel, CostModelCost} from './planner-connection.ts';
 import type {Ordering} from '../../../zero-protocol/src/ast.ts';
 import {PlannerFanIn} from './planner-fan-in.ts';
 
@@ -91,9 +91,13 @@ suite('PlannerFanIn', () => {
         _sort: Ordering,
         filters,
         _constraint,
-      ): {startupCost: number; rows: number} => ({
+      ): CostModelCost => ({
         startupCost: 0,
         rows: filters ? selectivityPercent : 100,
+        fanout: () => ({
+          confidence: 'none',
+          fanout: 1,
+        }),
       });
 
       return new PlannerSource(tableName, costModel).connect(

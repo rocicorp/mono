@@ -204,7 +204,7 @@ export class PlannerConnection {
       this.#baseConstraints,
       constraint,
     );
-    const {startupCost, rows} = this.#model(
+    const {startupCost, fanout, rows} = this.#model(
       this.table,
       this.#sort,
       this.#filters,
@@ -220,6 +220,7 @@ export class PlannerConnection {
       returnedRows: rows,
       selectivity: this.selectivity,
       limit: this.limit,
+      fanout,
     };
     this.#cachedConstraintCosts.set(key, cost);
 
@@ -319,16 +320,19 @@ export class PlannerConnection {
   }
 }
 
+type FanoutEst = {
+  fanout: number;
+  confidence: 'high' | 'med' | 'none';
+};
+export type FanoutCostModel = (
+  tableName: string,
+  columns: string[],
+) => FanoutEst;
+
 export type CostModelCost = {
   startupCost: number;
   rows: number;
-  fanout(
-    tableName: string,
-    columns: string[],
-  ): {
-    fanout: number;
-    confidence: 'high' | 'med' | 'none';
-  };
+  fanout: FanoutCostModel;
 };
 export type ConnectionCostModel = (
   table: string,

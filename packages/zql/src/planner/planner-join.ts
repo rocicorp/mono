@@ -346,6 +346,7 @@ export class PlannerJoin {
         returnedRows: parent.returnedRows * child.selectivity,
         selectivity: child.selectivity * parent.selectivity,
         limit: parent.limit,
+        fanout: parent.fanout,
       };
     } else {
       costEstimate = {
@@ -364,6 +365,9 @@ export class PlannerJoin {
           parent.returnedRows * child.returnedRows * child.selectivity,
         selectivity: parent.selectivity * child.selectivity,
         limit: parent.limit,
+        // It doesn't matter which fanout func we pass.
+        // They all point to the same thing.
+        fanout: parent.fanout,
       };
     }
 
