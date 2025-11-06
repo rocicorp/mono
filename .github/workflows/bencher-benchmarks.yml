@@ -101,6 +101,7 @@ jobs:
           --start-point main \
           --threshold-measure throughput \
           --threshold-test t_test \
-          --threshold-lower-boundary 0.95 \
-          --threshold-max-sample-size 10 \
+          --threshold-lower-boundary 0.90 \
+          --threshold-min-sample-size 20 \
+          --threshold-max-sample-size 60 \
           --err
