@@ -48,7 +48,6 @@ import {
 import type {ConnectionCostModel} from '../../../../zql/src/planner/planner-connection.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {createSQLiteCostModel} from '../../../../zqlite/src/sqlite-cost-model.ts';
-import {ZERO_VERSION_COLUMN_NAME} from '../../services/replicator/schema/constants.ts';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -104,7 +103,6 @@ export class PipelineDriver {
   #streamer: Streamer | null = null;
   #replicaVersion: string | null = null;
   #permissions: LoadedPermissions | null = null;
-  #clientSchema: ClientSchema | null = null;
 
   readonly #advanceTime = getOrCreateHistogram('sync', 'ivm.advance-time', {
     description:
@@ -159,8 +157,6 @@ export class PipelineDriver {
         fullTables,
       );
     }
-
-    this.#clientSchema = clientSchema;
 
     const {replicaVersion} = getSubscriptionState(db);
     this.#replicaVersion = replicaVersion;
@@ -263,9 +259,6 @@ export class PipelineDriver {
         fullTables,
       );
     }
-
-    this.#clientSchema = clientSchema;
-
     const {replicaVersion} = getSubscriptionState(db);
     this.#replicaVersion = replicaVersion;
   }
@@ -577,28 +570,7 @@ export class PipelineDriver {
     }
 
     const tableSpec = mustGetTableSpec(this.#tableSpecs, tableName);
-    const {primaryKey, unionKey} = tableSpec.tableSpec;
-
-    // Filter columns based on client schema - only use columns defined in the Zero schema.
-    // Copy the actual SchemaValue objects from tableSpec.zqlSpec to preserve all properties.
-    const clientCols = this.#clientSchema?.tables[tableName]?.columns;
-    let columns = tableSpec.zqlSpec;
-
-    if (clientCols) {
-      // Only include columns that are in the client schema
-      const filteredCols = Object.fromEntries([
-        ...Object.entries(clientCols).map(([name, col]) => [
-          name,
-          {type: col.type},
-        ]),
-        // Always include unionKey columns (used for row identification in CVR)
-        ...unionKey.map(col => [col, tableSpec.zqlSpec[col]]),
-        // Always include internal replication column (used by PipelineDriver).
-        [ZERO_VERSION_COLUMN_NAME, {type: 'string'}],
-      ]);
-
-      columns = filteredCols;
-    }
+    const {primaryKey} = tableSpec.tableSpec;
 
     const {db} = this.#snapshotter.current();
     source = new TableSource(
@@ -606,7 +578,7 @@ export class PipelineDriver {
       this.#logConfig,
       db.db,
       tableName,
-      columns,
+      tableSpec.zqlSpec,
       primaryKey,
     );
     this.#tables.set(tableName, source);
