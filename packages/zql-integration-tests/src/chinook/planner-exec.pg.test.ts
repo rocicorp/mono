@@ -175,18 +175,17 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('genre', q => q.where('name', 'Rock'))
         .limit(10),
     },
-    // currently fails
-    // {
-    //   name: 'three-level join - track with album, artist, and condition',
-    //   query: queries.track
-    //     .whereExists('album', album =>
-    //       album
-    //         .where('title', '>', 'A')
-    //         .whereExists('artist', artist => artist.where('name', '>', 'A')),
-    //     )
-    //     .where('milliseconds', '>', 200000)
-    //     .limit(10),
-    // },
+    {
+      name: 'three-level join - track with album, artist, and condition',
+      query: queries.track
+        .whereExists('album', album =>
+          album
+            .where('title', '>', 'A')
+            .whereExists('artist', artist => artist.where('name', '>', 'A')),
+        )
+        .where('milliseconds', '>', 200000)
+        .limit(10),
+    },
   ])('$name', ({query}) => {
     // Execute all plan attempts and collect results
     const results = executeAllPlanAttempts(query);
