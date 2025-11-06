@@ -312,7 +312,6 @@ export class PlannerJoin {
     const child = this.#child.estimateCost(1, branchPattern, planDebugger);
 
     const fanoutFactor = child.fanout(Object.keys(this.#childConstraint));
-    console.log('fanout', fanoutFactor, this.#childConstraint);
     // Factor in how many child rows match a parent row.
     // E.g., if an issue has 10 comments on average then we're more
     // likely to hit a comment compared to if an issue has 1 comment on average.
@@ -343,10 +342,6 @@ export class PlannerJoin {
     );
 
     let costEstimate: CostEstimate;
-
-    // We're computing the cost from scan estimates provided by our parent...
-    // Is this right? `childScanEst` comes from child input
-    // so we need to provide it with join keys for fanout information.
 
     if (this.type === 'semi') {
       costEstimate = {
