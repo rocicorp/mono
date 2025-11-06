@@ -1,7 +1,9 @@
+// oxlint-disable no-conditional-expect
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {Database} from '../../../zqlite/src/db.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {SQLiteStatFanout} from './sqlite-stat-fanout.ts';
+import {must} from '../../../shared/src/must.ts';
 
 describe('SQLiteStatFanout', () => {
   let db: Database;
@@ -17,201 +19,293 @@ describe('SQLiteStatFanout', () => {
     db.close();
   });
 
+  // Helper functions to reduce test duplication
+
+  /**
+   * Creates a simple table with an index, inserts data, and runs ANALYZE.
+   */
+  function createTable(options: {
+    name: string;
+    columns: string; // SQL column definitions
+    index: string; // Index column name(s)
+    data: Array<unknown[]>; // Rows to insert
+  }): void {
+    // Clean index name for index creation
+    const indexName = 'idx_' + options.index.replace(/[",\s]/g, '_');
+
+    db.exec(`
+      CREATE TABLE ${options.name} (${options.columns});
+      CREATE INDEX ${indexName} ON ${options.name}(${options.index});
+    `);
+
+    // Only insert data if array is not empty
+    if (options.data.length > 0) {
+      const placeholders = options.data[0]?.map(() => '?').join(', ');
+      const stmt = db.prepare(
+        `INSERT INTO ${options.name} VALUES (${placeholders})`,
+      );
+      for (const row of options.data) {
+        stmt.run(...row);
+      }
+    }
+
+    db.exec('ANALYZE');
+    fanoutCalc = new SQLiteStatFanout(db);
+  }
+
+  /**
+   * Creates parent and child tables with a foreign key relationship.
+   */
+  function createRelationalTables(options: {
+    parent: {name: string; count: number};
+    child: {
+      name: string;
+      count: number;
+      fkColumn: string;
+      /** Number of child rows that have non-NULL FK values */
+      fkCount?: number;
+      /** Distribution function: childId => parentId | null */
+      distribution?: (childId: number) => number | null;
+    };
+  }): void {
+    const {parent, child} = options;
+
+    // Create tables
+    db.exec(`
+      CREATE TABLE ${parent.name} (id INTEGER PRIMARY KEY, name TEXT);
+      CREATE TABLE ${child.name} (
+        id INTEGER PRIMARY KEY,
+        ${child.fkColumn} INTEGER,
+        name TEXT
+      );
+      CREATE INDEX idx_${child.fkColumn} ON ${child.name}(${child.fkColumn});
+    `);
+
+    // Insert parent data
+    const parentStmt = db.prepare(
+      `INSERT INTO ${parent.name} (id, name) VALUES (?, ?)`,
+    );
+    for (let i = 1; i <= parent.count; i++) {
+      parentStmt.run(i, `${parent.name}${i}`);
+    }
+
+    // Insert child data
+    const childStmt = db.prepare(
+      `INSERT INTO ${child.name} (id, ${child.fkColumn}, name) VALUES (?, ?, ?)`,
+    );
+    const fkCount = child.fkCount ?? child.count;
+    const distribution =
+      child.distribution ??
+      ((childId: number) =>
+        childId <= fkCount ? ((childId - 1) % parent.count) + 1 : null);
+
+    for (let i = 1; i <= child.count; i++) {
+      const fkValue = distribution(i);
+      childStmt.run(i, fkValue, `${child.name}${i}`);
+    }
+
+    db.exec('ANALYZE');
+    fanoutCalc = new SQLiteStatFanout(db);
+  }
+
+  /**
+   * Asserts fanout result matches expected values.
+   */
+  function expectFanout(
+    tableName: string,
+    columns: string[],
+    expected: {
+      source?: 'stat4' | 'stat1' | 'default';
+      fanout?: number;
+      fanoutMin?: number;
+      fanoutMax?: number;
+      nullCount?: number;
+      notDefault?: boolean;
+    },
+  ): void {
+    const result = fanoutCalc.getFanout(tableName, columns);
+
+    if (expected.source !== undefined) {
+      expect(result.source).toBe(expected.source);
+    }
+
+    if (expected.notDefault) {
+      expect(result.source).not.toBe('default');
+    }
+
+    if (expected.fanout !== undefined) {
+      expect(result.fanout).toBe(expected.fanout);
+    }
+
+    if (expected.fanoutMin !== undefined) {
+      expect(result.fanout).toBeGreaterThanOrEqual(expected.fanoutMin);
+    }
+
+    if (expected.fanoutMax !== undefined) {
+      expect(result.fanout).toBeLessThanOrEqual(expected.fanoutMax);
+    }
+
+    if (expected.nullCount !== undefined) {
+      expect(result.nullCount).toBe(expected.nullCount);
+    }
+  }
+
+  /**
+   * Creates a table with a compound index and multi-dimensional data.
+   * Useful for testing compound index statistics at various depths.
+   */
+  function createCompoundIndexTable(options: {
+    name: string;
+    columns: string[];
+    dimensions: number[];
+    rowsPerCombination?: number;
+  }): void {
+    const {name, columns, dimensions, rowsPerCombination = 1} = options;
+
+    // Build column definitions
+    const colDefs = [
+      'id INTEGER PRIMARY KEY',
+      ...columns.map(c => `${c} INTEGER`),
+    ].join(', ');
+
+    // Create table and index
+    db.exec(`
+      CREATE TABLE ${name} (${colDefs});
+      CREATE INDEX idx_${columns.join('_')} ON ${name}(${columns.join(', ')});
+    `);
+
+    // Generate multi-dimensional data
+    const stmt = db.prepare(
+      `INSERT INTO ${name} (id, ${columns.join(', ')}) VALUES (${['?', ...columns.map(() => '?')].join(', ')})`,
+    );
+
+    let id = 1;
+    function generateRows(depth: number, values: number[]): void {
+      if (depth === dimensions.length) {
+        // Generate rows for this combination
+        for (let i = 0; i < rowsPerCombination; i++) {
+          stmt.run(id++, ...values);
+        }
+        return;
+      }
+
+      for (let i = 1; i <= dimensions[depth]; i++) {
+        generateRows(depth + 1, [...values, i]);
+      }
+    }
+
+    generateRows(0, []);
+
+    db.exec('ANALYZE');
+    fanoutCalc = new SQLiteStatFanout(db);
+  }
+
   describe('stat4 histogram (accurate, excludes NULLs)', () => {
     test('sparse foreign key with many NULLs', () => {
       // Setup: 5 projects, 100 tasks (20 with project_id, 80 NULL)
-      db.exec(`
-        CREATE TABLE project (id INTEGER PRIMARY KEY, name TEXT);
-        CREATE TABLE task (
-          id INTEGER PRIMARY KEY,
-          project_id INTEGER,
-          title TEXT,
-          FOREIGN KEY (project_id) REFERENCES project(id)
-        );
-        CREATE INDEX idx_project_id ON task(project_id);
-      `);
+      createRelationalTables({
+        parent: {name: 'project', count: 5},
+        child: {name: 'task', count: 100, fkColumn: 'project_id', fkCount: 20},
+      });
 
-      for (let i = 1; i <= 5; i++) {
-        db.prepare('INSERT INTO project (id, name) VALUES (?, ?)').run(
-          i,
-          `Project ${i}`,
-        );
-      }
-
-      for (let i = 1; i <= 100; i++) {
-        const projectId = i <= 20 ? ((i - 1) % 5) + 1 : null;
-        db.prepare(
-          'INSERT INTO task (id, project_id, title) VALUES (?, ?, ?)',
-        ).run(i, projectId, `Task ${i}`);
-      }
-
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
-
-      const result = fanoutCalc.getFanout('task', ['project_id']);
-
-      expect(result.source).toBe('stat4');
-      expect(result.fanout).toBe(4); // 20 tasks / 5 distinct project_ids
-      expect(result.nullCount).toBe(80); // NULL samples tracked
+      expectFanout('task', ['project_id'], {
+        source: 'stat4',
+        fanout: 4, // 20 tasks / 5 distinct project_ids
+        nullCount: 80,
+      });
     });
 
     test('evenly distributed one-to-many', () => {
       // Setup: 3 departments, 30 employees evenly distributed
-      db.exec(`
-        CREATE TABLE department (id INTEGER PRIMARY KEY, name TEXT);
-        CREATE TABLE employee (
-          id INTEGER PRIMARY KEY,
-          dept_id INTEGER NOT NULL,
-          name TEXT,
-          FOREIGN KEY (dept_id) REFERENCES department(id)
-        );
-        CREATE INDEX idx_dept_id ON employee(dept_id);
-      `);
+      createRelationalTables({
+        parent: {name: 'department', count: 3},
+        child: {name: 'employee', count: 30, fkColumn: 'dept_id'},
+      });
 
-      for (let i = 1; i <= 3; i++) {
-        db.prepare('INSERT INTO department (id, name) VALUES (?, ?)').run(
-          i,
-          `Dept ${i}`,
-        );
-      }
-
-      for (let i = 1; i <= 30; i++) {
-        const deptId = ((i - 1) % 3) + 1;
-        db.prepare(
-          'INSERT INTO employee (id, dept_id, name) VALUES (?, ?, ?)',
-        ).run(i, deptId, `Employee ${i}`);
-      }
-
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
-
-      const result = fanoutCalc.getFanout('employee', ['dept_id']);
-
-      expect(result.source).toBe('stat4');
-      expect(result.fanout).toBe(10); // 30 employees / 3 departments
-      expect(result.nullCount).toBe(0); // No NULLs
+      expectFanout('employee', ['dept_id'], {
+        source: 'stat4',
+        fanout: 10, // 30 employees / 3 departments
+        nullCount: 0,
+      });
     });
 
     test('highly sparse index (many distinct values)', () => {
       // Setup: 1000 rows with 900 distinct values
-      db.exec(`
-        CREATE TABLE sparse (
-          id INTEGER PRIMARY KEY,
-          rare_value INTEGER
-        );
-        CREATE INDEX idx_rare ON sparse(rare_value);
-      `);
-
-      for (let i = 1; i <= 1000; i++) {
+      const data = Array.from({length: 1000}, (_, i) => {
+        const id = i + 1;
         // First 900 are unique, then some duplicates
-        const rareValue = i <= 900 ? i : i % 100;
-        db.prepare('INSERT INTO sparse (id, rare_value) VALUES (?, ?)').run(
-          i,
-          rareValue,
-        );
-      }
+        const rareValue = id <= 900 ? id : id % 100;
+        return [id, rareValue];
+      });
 
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
+      createTable({
+        name: 'sparse',
+        columns: 'id INTEGER PRIMARY KEY, rare_value INTEGER',
+        index: 'rare_value',
+        data,
+      });
 
-      const result = fanoutCalc.getFanout('sparse', ['rare_value']);
-
-      expect(result.source).toBe('stat4');
-      // Median of samples should be low (most values appear 1-2 times)
-      expect(result.fanout).toBeGreaterThanOrEqual(1);
-      expect(result.fanout).toBeLessThanOrEqual(3);
+      expectFanout('sparse', ['rare_value'], {
+        source: 'stat4',
+        fanoutMin: 1, // Median should be low (most values appear 1-2 times)
+        fanoutMax: 3,
+      });
     });
 
     test('skewed distribution (hot and cold values)', () => {
       // Setup: 10 customers, customer 1 has 500 orders, others have ~55 each
-      db.exec(`
-        CREATE TABLE customer (id INTEGER PRIMARY KEY, name TEXT);
-        CREATE TABLE orders (
-          id INTEGER PRIMARY KEY,
-          customer_id INTEGER NOT NULL,
-          total REAL,
-          FOREIGN KEY (customer_id) REFERENCES customer(id)
-        );
-        CREATE INDEX idx_customer_id ON orders(customer_id);
-      `);
+      createRelationalTables({
+        parent: {name: 'customer', count: 10},
+        child: {
+          name: 'orders',
+          count: 1000,
+          fkColumn: 'customer_id',
+          distribution: i => (i <= 500 ? 1 : ((i - 501) % 9) + 2),
+        },
+      });
 
-      for (let i = 1; i <= 10; i++) {
-        db.prepare('INSERT INTO customer (id, name) VALUES (?, ?)').run(
-          i,
-          `Customer ${i}`,
-        );
-      }
-
-      for (let i = 1; i <= 1000; i++) {
-        const customerId = i <= 500 ? 1 : ((i - 501) % 9) + 2;
-        db.prepare(
-          'INSERT INTO orders (id, customer_id, total) VALUES (?, ?, ?)',
-        ).run(i, customerId, 100 + i);
-      }
-
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
-
-      const result = fanoutCalc.getFanout('orders', ['customer_id']);
-
-      expect(result.source).toBe('stat4');
-      // Median should be close to ~55, not the average of 100
-      // (stat4 samples distribution, so median is more robust)
-      expect(result.fanout).toBeGreaterThanOrEqual(50);
-      expect(result.fanout).toBeLessThanOrEqual(60);
+      expectFanout('orders', ['customer_id'], {
+        source: 'stat4',
+        fanoutMin: 50, // Median should be close to ~55, not the average of 100
+        fanoutMax: 60,
+      });
     });
 
     test('composite index - leftmost column', () => {
       // Setup: Composite index on (status, priority)
-      db.exec(`
-        CREATE TABLE ticket (
-          id INTEGER PRIMARY KEY,
-          status TEXT,
-          priority INTEGER
-        );
-        CREATE INDEX idx_status_priority ON ticket(status, priority);
-      `);
-
       const statuses = ['open', 'closed', 'pending'];
-      for (let i = 1; i <= 90; i++) {
-        db.prepare(
-          'INSERT INTO ticket (id, status, priority) VALUES (?, ?, ?)',
-        ).run(i, statuses[i % 3], (i % 3) + 1);
-      }
+      const data = Array.from({length: 90}, (_, i) => {
+        const id = i + 1;
+        return [id, statuses[i % 3], (i % 3) + 1];
+      });
 
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
+      createTable({
+        name: 'ticket',
+        columns: 'id INTEGER PRIMARY KEY, status TEXT, priority INTEGER',
+        index: 'status, priority',
+        data,
+      });
 
-      const result = fanoutCalc.getFanout('ticket', ['status']);
-
-      expect(result.source).toBe('stat4');
-      expect(result.fanout).toBe(30); // 90 tickets / 3 statuses
+      expectFanout('ticket', ['status'], {
+        source: 'stat4',
+        fanout: 30, // 90 tickets / 3 statuses
+      });
     });
   });
 
   describe('stat1 fallback (includes NULLs)', () => {
     test('uses stat1 when stat4 unavailable', () => {
       // Note: In practice, stat4 is usually available if ANALYZE is run
-      // This test would require a SQLite build without ENABLE_STAT4,
-      // which is uncommon. We'll test the code path indirectly.
+      const data = Array.from({length: 100}, (_, i) => [i + 1, i % 10]);
 
-      db.exec(`
-        CREATE TABLE simple (id INTEGER PRIMARY KEY, value INTEGER);
-        CREATE INDEX idx_value ON simple(value);
-      `);
-
-      for (let i = 1; i <= 100; i++) {
-        db.prepare('INSERT INTO simple (id, value) VALUES (?, ?)').run(
-          i,
-          i % 10,
-        );
-      }
-
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
+      createTable({
+        name: 'simple',
+        columns: 'id INTEGER PRIMARY KEY, value INTEGER',
+        index: 'value',
+        data,
+      });
 
       const result = fanoutCalc.getFanout('simple', ['value']);
-
       // Should get result from either stat4 or stat1
       expect(['stat4', 'stat1']).toContain(result.source);
       expect(result.fanout).toBeGreaterThan(0);
@@ -220,24 +314,19 @@ describe('SQLiteStatFanout', () => {
 
   describe('default fallback', () => {
     test('uses default when no index exists', () => {
-      db.exec(`
-        CREATE TABLE no_index (id INTEGER PRIMARY KEY, value INTEGER);
-      `);
-
+      // Create table without index
+      db.exec('CREATE TABLE no_index (id INTEGER PRIMARY KEY, value INTEGER)');
+      const stmt = db.prepare('INSERT INTO no_index (id, value) VALUES (?, ?)');
       for (let i = 1; i <= 100; i++) {
-        db.prepare('INSERT INTO no_index (id, value) VALUES (?, ?)').run(
-          i,
-          i % 10,
-        );
+        stmt.run(i, i % 10);
       }
-
       db.exec('ANALYZE');
       fanoutCalc = new SQLiteStatFanout(db);
 
-      const result = fanoutCalc.getFanout('no_index', ['value']);
-
-      expect(result.source).toBe('default');
-      expect(result.fanout).toBe(3); // Default value
+      expectFanout('no_index', ['value'], {
+        source: 'default',
+        fanout: 3,
+      });
     });
 
     test('uses default when ANALYZE not run', () => {
@@ -264,11 +353,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       // Don't run ANALYZE on not_analyzed table
-
-      const result = fanoutCalc.getFanout('not_analyzed', ['value']);
-
-      expect(result.source).toBe('default');
-      expect(result.fanout).toBe(3);
+      expectFanout('not_analyzed', ['value'], {source: 'default', fanout: 3});
     });
 
     test('respects custom default fanout', () => {
@@ -280,13 +365,9 @@ describe('SQLiteStatFanout', () => {
       db.exec('ANALYZE');
 
       const customCalc = new SQLiteStatFanout(db, 10);
-
-      db.exec(`
-        CREATE TABLE no_stats (id INTEGER PRIMARY KEY, value INTEGER);
-      `);
+      db.exec('CREATE TABLE no_stats (id INTEGER PRIMARY KEY, value INTEGER)');
 
       const result = customCalc.getFanout('no_stats', ['value']);
-
       expect(result.source).toBe('default');
       expect(result.fanout).toBe(10);
     });
@@ -294,151 +375,107 @@ describe('SQLiteStatFanout', () => {
 
   describe('caching', () => {
     test('caches results for repeated queries', () => {
-      db.exec(`
-        CREATE TABLE cached (id INTEGER PRIMARY KEY, value INTEGER);
-        CREATE INDEX idx_value ON cached(value);
-      `);
-
-      for (let i = 1; i <= 100; i++) {
-        db.prepare('INSERT INTO cached (id, value) VALUES (?, ?)').run(
-          i,
-          i % 10,
-        );
-      }
-
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
+      const data = Array.from({length: 100}, (_, i) => [i + 1, i % 10]);
+      createTable({
+        name: 'cached',
+        columns: 'id INTEGER PRIMARY KEY, value INTEGER',
+        index: 'value',
+        data,
+      });
 
       const result1 = fanoutCalc.getFanout('cached', ['value']);
       const result2 = fanoutCalc.getFanout('cached', ['value']);
-
       expect(result1).toBe(result2); // Same object reference (cached)
     });
 
     test('clearCache() invalidates cached results', () => {
-      db.exec(`
-        CREATE TABLE clearable (id INTEGER PRIMARY KEY, value INTEGER);
-        CREATE INDEX idx_value ON clearable(value);
-      `);
-
-      for (let i = 1; i <= 100; i++) {
-        db.prepare('INSERT INTO clearable (id, value) VALUES (?, ?)').run(
-          i,
-          i % 10,
-        );
-      }
-
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
+      const data = Array.from({length: 100}, (_, i) => [i + 1, i % 10]);
+      createTable({
+        name: 'clearable',
+        columns: 'id INTEGER PRIMARY KEY, value INTEGER',
+        index: 'value',
+        data,
+      });
 
       const result1 = fanoutCalc.getFanout('clearable', ['value']);
 
       // Insert more data and re-analyze
+      const stmt = db.prepare(
+        'INSERT INTO clearable (id, value) VALUES (?, ?)',
+      );
       for (let i = 101; i <= 200; i++) {
-        db.prepare('INSERT INTO clearable (id, value) VALUES (?, ?)').run(
-          i,
-          i % 10,
-        );
+        stmt.run(i, i % 10);
       }
-
       db.exec('ANALYZE');
       fanoutCalc = new SQLiteStatFanout(db);
-
-      // Without clearing cache, would get stale result
       fanoutCalc.clearCache();
 
       const result2 = fanoutCalc.getFanout('clearable', ['value']);
-
       expect(result2.fanout).toBeGreaterThanOrEqual(result1.fanout);
     });
   });
 
   describe('edge cases', () => {
     test('table with no rows', () => {
-      db.exec(`
-        CREATE TABLE empty (id INTEGER PRIMARY KEY, value INTEGER);
-        CREATE INDEX idx_value ON empty(value);
-      `);
+      createTable({
+        name: 'empty',
+        columns: 'id INTEGER PRIMARY KEY, value INTEGER',
+        index: 'value',
+        data: [],
+      });
 
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
-
-      const result = fanoutCalc.getFanout('empty', ['value']);
-
-      // Should fallback to default (no stats for empty table)
-      expect(result.source).toBe('default');
-      expect(result.fanout).toBe(3);
+      expectFanout('empty', ['value'], {source: 'default', fanout: 3});
     });
 
     test('all NULL values', () => {
-      db.exec(`
-        CREATE TABLE all_null (id INTEGER PRIMARY KEY, value INTEGER);
-        CREATE INDEX idx_value ON all_null(value);
-      `);
+      const data = Array.from({length: 100}, (_, i) => [i + 1, null]);
+      createTable({
+        name: 'all_null',
+        columns: 'id INTEGER PRIMARY KEY, value INTEGER',
+        index: 'value',
+        data,
+      });
 
-      for (let i = 1; i <= 100; i++) {
-        db.prepare('INSERT INTO all_null (id, value) VALUES (?, ?)').run(
-          i,
-          null,
-        );
-      }
-
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
-
-      const result = fanoutCalc.getFanout('all_null', ['value']);
-
-      // When all values are NULL:
-      // - stat4 detects this and returns fanout of 0
-      // - This is correct: NULLs don't match in joins, so join produces 0 rows
-      expect(result.source).toBe('stat4');
-      expect(result.fanout).toBe(0);
-      expect(result.nullCount).toBe(100);
+      expectFanout('all_null', ['value'], {
+        source: 'stat4',
+        fanout: 0, // NULLs don't match in joins
+        nullCount: 100,
+      });
     });
 
     test('case insensitive column names', () => {
-      db.exec(`
-        CREATE TABLE case_test (id INTEGER PRIMARY KEY, "MixedCase" INTEGER);
-        CREATE INDEX idx_mixed ON case_test("MixedCase");
-      `);
-
-      for (let i = 1; i <= 30; i++) {
-        db.prepare('INSERT INTO case_test (id, "MixedCase") VALUES (?, ?)').run(
-          i,
-          i % 3,
-        );
-      }
-
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
+      const data = Array.from({length: 30}, (_, i) => [i + 1, i % 3]);
+      createTable({
+        name: 'case_test',
+        columns: 'id INTEGER PRIMARY KEY, "MixedCase" INTEGER',
+        index: '"MixedCase"',
+        data,
+      });
 
       // Should work with different casing
-      const result1 = fanoutCalc.getFanout('case_test', ['MixedCase']);
-      const result2 = fanoutCalc.getFanout('case_test', ['mixedcase']);
-
-      expect(result1.source).not.toBe('default');
-      expect(result2.source).not.toBe('default');
+      expectFanout('case_test', ['MixedCase'], {notDefault: true});
+      expectFanout('case_test', ['mixedcase'], {notDefault: true});
     });
   });
 
   describe('comparison with stat1', () => {
     test('stat4 excludes NULLs, stat1 includes them', () => {
-      db.exec(`
-        CREATE TABLE compare (id INTEGER PRIMARY KEY, fk INTEGER);
-        CREATE INDEX idx_fk ON compare(fk);
-      `);
-
       // 10 non-NULL (2 per distinct value), 90 NULL
-      for (let i = 1; i <= 100; i++) {
-        const fk = i <= 10 ? ((i - 1) % 5) + 1 : null;
-        db.prepare('INSERT INTO compare (id, fk) VALUES (?, ?)').run(i, fk);
-      }
+      const data = Array.from({length: 100}, (_, i) => {
+        const id = i + 1;
+        const fk = id <= 10 ? ((id - 1) % 5) + 1 : null;
+        return [id, fk];
+      });
 
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
+      createTable({
+        name: 'compare',
+        columns: 'id INTEGER PRIMARY KEY, fk INTEGER',
+        index: 'fk',
+        data,
+      });
 
       // Get stat4 result
-      const stat4Result = fanoutCalc.getFanout('compare', ['fk']);
+      expectFanout('compare', ['fk'], {source: 'stat4', fanout: 2});
 
       // Get stat1 result directly
       const stat1Row = db
@@ -448,294 +485,151 @@ describe('SQLiteStatFanout', () => {
         .get() as {stat: string} | undefined;
 
       expect(stat1Row).toBeDefined();
-      const stat1Fanout = parseInt(
-        (stat1Row as {stat: string}).stat.split(' ')[1],
-        10,
-      );
-
-      expect(stat4Result.source).toBe('stat4');
-      expect(stat4Result.fanout).toBe(2); // 10 rows / 5 distinct values
+      const stat1Fanout = parseInt(must(stat1Row).stat.split(' ')[1], 10);
       expect(stat1Fanout).toBeGreaterThan(10); // 100 rows / 5 distinct = 20
-
-      // stat1 overestimates by 10x!
-      expect(stat1Fanout / stat4Result.fanout).toBeGreaterThanOrEqual(5);
+      expect(stat1Fanout / 2).toBeGreaterThanOrEqual(5); // stat1 overestimates by 10x!
     });
   });
 
   describe('compound index support', () => {
     test('two-column compound index, both constrained', () => {
-      db.exec(`
-        CREATE TABLE orders (
-          id INTEGER PRIMARY KEY,
-          customerId INTEGER,
-          storeId INTEGER
-        );
-        CREATE INDEX idx_customer_store ON orders(customerId, storeId);
-      `);
+      // 100 orders: 10 customers × 5 stores × 2 orders each
+      createCompoundIndexTable({
+        name: 'orders',
+        columns: ['customerId', 'storeId'],
+        dimensions: [10, 5],
+        rowsPerCombination: 2,
+      });
 
-      // 100 orders with proper distribution:
-      // - 10 customers × 5 stores = 50 pairs × 2 orders each = 100 total
-      let orderId = 1;
-      for (let customerId = 1; customerId <= 10; customerId++) {
-        for (let storeId = 1; storeId <= 5; storeId++) {
-          // 2 orders per (customer, store) pair
-          for (let j = 0; j < 2; j++) {
-            db.prepare(
-              'INSERT INTO orders (id, customerId, storeId) VALUES (?, ?, ?)',
-            ).run(orderId++, customerId, storeId);
-          }
-        }
-      }
-
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
-
-      // Test single column (should use depth 1)
-      const single = fanoutCalc.getFanout('orders', ['customerId']);
-      expect(single.source).not.toBe('default');
-      expect(single.fanout).toBe(10); // 100 orders / 10 customers
-
-      // Clear cache to ensure fresh lookup
+      expectFanout('orders', ['customerId'], {notDefault: true, fanout: 10});
       fanoutCalc.clearCache();
-
-      // Test both columns (should use depth 2)
-      const compound = fanoutCalc.getFanout('orders', [
-        'customerId',
-        'storeId',
-      ]);
-      expect(compound.source).not.toBe('default');
-      expect(compound.fanout).toBe(2); // 100 orders / 50 (customer, store) pairs
+      expectFanout('orders', ['customerId', 'storeId'], {
+        notDefault: true,
+        fanout: 2,
+      });
     });
 
     test('three-column compound index, all constrained', () => {
-      db.exec(`
-        CREATE TABLE events (
-          id INTEGER PRIMARY KEY,
-          tenantId INTEGER,
-          userId INTEGER,
-          eventType TEXT
-        );
-        CREATE INDEX idx_tenant_user_type ON events(tenantId, userId, eventType);
-      `);
-
-      // 120 events with predictable distribution:
-      // - 2 tenants × 5 users × 3 event types × 4 events each = 120
+      // 120 events: 2 tenants × 5 users × 3 event types × 4 events each
+      const eventTypes = ['login', 'logout', 'action'];
+      const data = [];
       let id = 1;
       for (let tenant = 1; tenant <= 2; tenant++) {
         for (let user = 1; user <= 5; user++) {
-          for (const eventType of ['login', 'logout', 'action']) {
+          for (const eventType of eventTypes) {
             for (let j = 0; j < 4; j++) {
-              db.prepare(
-                'INSERT INTO events (id, tenantId, userId, eventType) VALUES (?, ?, ?, ?)',
-              ).run(id++, tenant, user, eventType);
+              data.push([id++, tenant, user, eventType]);
             }
           }
         }
       }
 
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
+      createTable({
+        name: 'events',
+        columns:
+          'id INTEGER PRIMARY KEY, tenantId INTEGER, userId INTEGER, eventType TEXT',
+        index: 'tenantId, userId, eventType',
+        data,
+      });
 
-      // Depth 1: tenantId only
-      const depth1 = fanoutCalc.getFanout('events', ['tenantId']);
-      expect(depth1.fanout).toBe(60); // 120 / 2 tenants
-
-      // Depth 2: tenantId + userId
-      const depth2 = fanoutCalc.getFanout('events', ['tenantId', 'userId']);
-      expect(depth2.fanout).toBe(12); // 120 / 10 (tenant, user) pairs
-
-      // Depth 3: all three columns
-      const depth3 = fanoutCalc.getFanout('events', [
-        'tenantId',
-        'userId',
-        'eventType',
-      ]);
-      expect(depth3.fanout).toBe(4); // 120 / 30 (tenant, user, type) tuples
+      expectFanout('events', ['tenantId'], {fanout: 60});
+      expectFanout('events', ['tenantId', 'userId'], {fanout: 12});
+      expectFanout('events', ['tenantId', 'userId', 'eventType'], {fanout: 4});
     });
 
     test('three-column index, only first two constrained', () => {
-      db.exec(`
-        CREATE TABLE logs (
-          id INTEGER PRIMARY KEY,
-          appId INTEGER,
-          level TEXT,
-          timestamp INTEGER
-        );
-        CREATE INDEX idx_app_level_time ON logs(appId, level, timestamp);
-      `);
-
       // 60 logs: 3 apps × 2 levels × 10 timestamps
-      for (let i = 1; i <= 60; i++) {
-        const appId = ((i - 1) % 3) + 1;
-        const level = (i - 1) % 2 === 0 ? 'error' : 'warn';
-        const timestamp = i;
-        db.prepare(
-          'INSERT INTO logs (id, appId, level, timestamp) VALUES (?, ?, ?, ?)',
-        ).run(i, appId, level, timestamp);
-      }
+      const data = Array.from({length: 60}, (_, i) => {
+        const id = i + 1;
+        return [id, (i % 3) + 1, i % 2 === 0 ? 'error' : 'warn', id];
+      });
 
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
+      createTable({
+        name: 'logs',
+        columns:
+          'id INTEGER PRIMARY KEY, appId INTEGER, level TEXT, timestamp INTEGER',
+        index: 'appId, level, timestamp',
+        data,
+      });
 
-      // Should use depth 2 (appId + level)
-      const result = fanoutCalc.getFanout('logs', ['appId', 'level']);
-
-      expect(result.source).not.toBe('default');
-      expect(result.fanout).toBe(10); // 60 / 6 (app, level) pairs
+      expectFanout('logs', ['appId', 'level'], {notDefault: true, fanout: 10});
     });
 
     test('columns in any order match index (flexible matching)', () => {
-      db.exec(`
-        CREATE TABLE flexible_order (
-          id INTEGER PRIMARY KEY,
-          a INTEGER,
-          b INTEGER
-        );
-        CREATE INDEX idx_a_b ON flexible_order(a, b);
-      `);
+      const data = Array.from({length: 30}, (_, i) => [i + 1, i % 3, i % 5]);
 
-      for (let i = 1; i <= 30; i++) {
-        db.prepare(
-          'INSERT INTO flexible_order (id, a, b) VALUES (?, ?, ?)',
-        ).run(i, i % 3, i % 5);
-      }
+      createTable({
+        name: 'flexible_order',
+        columns: 'id INTEGER PRIMARY KEY, a INTEGER, b INTEGER',
+        index: 'a, b',
+        data,
+      });
 
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
-
-      // With flexible matching, both {a, b} and {b, a} should match index (a, b)
-      // Object.keys() returns keys in insertion order: {b, a} → ['b', 'a']
-      // But flexible matching checks if both 'a' and 'b' exist in first 2 positions
+      // Both orders should match and give same fanout (flexible matching)
+      expectFanout('flexible_order', ['b', 'a'], {notDefault: true});
       const result1 = fanoutCalc.getFanout('flexible_order', ['b', 'a']);
-
-      expect(result1.source).not.toBe('default');
-      expect(result1.fanout).toBeGreaterThan(0);
-
-      // Same result for {a, b} order
       const result2 = fanoutCalc.getFanout('flexible_order', ['a', 'b']);
-
-      expect(result2.source).not.toBe('default');
-      expect(result2.fanout).toBeGreaterThan(0);
-
-      // Both should give same fanout (may be cached)
       expect(result1.fanout).toBe(result2.fanout);
     });
 
     test('constraint matches index with different column order', () => {
-      db.exec(`
-        CREATE TABLE reversed_index (
-          id INTEGER PRIMARY KEY,
-          customerId INTEGER,
-          storeId INTEGER
-        );
-        CREATE INDEX idx_store_customer ON reversed_index(storeId, customerId);
-      `);
-
       // 100 rows: 5 stores × 10 customers × 2 rows each
-      let id = 1;
-      for (let storeId = 1; storeId <= 5; storeId++) {
-        for (let customerId = 1; customerId <= 10; customerId++) {
-          for (let j = 0; j < 2; j++) {
-            db.prepare(
-              'INSERT INTO reversed_index (id, customerId, storeId) VALUES (?, ?, ?)',
-            ).run(id++, customerId, storeId);
-          }
-        }
-      }
+      createCompoundIndexTable({
+        name: 'reversed_index',
+        columns: ['storeId', 'customerId'],
+        dimensions: [5, 10],
+        rowsPerCombination: 2,
+      });
 
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
-
-      // Constraint {customerId, storeId} should match index (storeId, customerId)
-      // Even though order differs, both columns are in first 2 positions
-      const result = fanoutCalc.getFanout('reversed_index', [
-        'customerId',
-        'storeId',
-      ]);
-
-      expect(result.source).not.toBe('default');
-      expect(result.fanout).toBe(2); // 100 rows / 50 (store, customer) pairs
+      // Constraint order differs from index, but both columns in first 2 positions
+      expectFanout('reversed_index', ['customerId', 'storeId'], {
+        notDefault: true,
+        fanout: 2,
+      });
     });
 
     test('partial prefix not supported (should fallback)', () => {
-      db.exec(`
-        CREATE TABLE partial (
-          id INTEGER PRIMARY KEY,
-          a INTEGER,
-          b INTEGER,
-          c INTEGER
-        );
-        CREATE INDEX idx_a_b_c ON partial(a, b, c);
-      `);
+      const data = Array.from({length: 30}, (_, i) => {
+        const id = i + 1;
+        return [id, i % 2, i % 3, i % 5];
+      });
 
-      for (let i = 1; i <= 30; i++) {
-        db.prepare('INSERT INTO partial (id, a, b, c) VALUES (?, ?, ?, ?)').run(
-          i,
-          i % 2,
-          i % 3,
-          i % 5,
-        );
-      }
+      createTable({
+        name: 'partial',
+        columns: 'id INTEGER PRIMARY KEY, a INTEGER, b INTEGER, c INTEGER',
+        index: 'a, b, c',
+        data,
+      });
 
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
-
-      // Constraint has a and c, but not b (gap in the middle)
-      // 'c' is not in the first 2 positions, so should not match
-      const result = fanoutCalc.getFanout('partial', ['a', 'c']);
-
-      expect(result.source).toBe('default');
-      expect(result.fanout).toBe(3);
+      // Constraint has a and c, but not b (gap) - should fallback
+      expectFanout('partial', ['a', 'c'], {source: 'default', fanout: 3});
     });
 
     test('caching works with compound constraints', () => {
-      db.exec(`
-        CREATE TABLE cache_compound (
-          id INTEGER PRIMARY KEY,
-          x INTEGER,
-          y INTEGER
-        );
-        CREATE INDEX idx_x_y ON cache_compound(x, y);
-      `);
+      const data = Array.from({length: 40}, (_, i) => [i + 1, i % 4, i % 5]);
 
-      for (let i = 1; i <= 40; i++) {
-        db.prepare(
-          'INSERT INTO cache_compound (id, x, y) VALUES (?, ?, ?)',
-        ).run(i, i % 4, i % 5);
-      }
-
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
+      createTable({
+        name: 'cache_compound',
+        columns: 'id INTEGER PRIMARY KEY, x INTEGER, y INTEGER',
+        index: 'x, y',
+        data,
+      });
 
       const result1 = fanoutCalc.getFanout('cache_compound', ['x', 'y']);
       const result2 = fanoutCalc.getFanout('cache_compound', ['x', 'y']);
-
-      // Should return same cached object
-      expect(result1).toBe(result2);
+      expect(result1).toBe(result2); // Same cached object
     });
 
     test('cache key is order-independent and matching is flexible', () => {
-      db.exec(`
-        CREATE TABLE cache_order (
-          id INTEGER PRIMARY KEY,
-          p INTEGER,
-          q INTEGER
-        );
-        CREATE INDEX idx_p_q ON cache_order(p, q);
-      `);
+      const data = Array.from({length: 20}, (_, i) => [i + 1, i % 2, i % 5]);
 
-      for (let i = 1; i <= 20; i++) {
-        db.prepare('INSERT INTO cache_order (id, p, q) VALUES (?, ?, ?)').run(
-          i,
-          i % 2,
-          i % 5,
-        );
-      }
+      createTable({
+        name: 'cache_order',
+        columns: 'id INTEGER PRIMARY KEY, p INTEGER, q INTEGER',
+        index: 'p, q',
+        data,
+      });
 
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
-
-      // First query: {p, q} matches index (p, q) at depth 2
       const result1 = fanoutCalc.getFanout('cache_order', ['p', 'q']);
 
       expect(result1.source).not.toBe('default');
