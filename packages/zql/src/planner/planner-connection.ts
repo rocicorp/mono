@@ -322,6 +322,13 @@ export class PlannerConnection {
 export type CostModelCost = {
   startupCost: number;
   rows: number;
+  fanout(
+    tableName: string,
+    columns: string[],
+  ): {
+    fanout: number;
+    confidence: 'high' | 'med' | 'none';
+  };
 };
 export type ConnectionCostModel = (
   table: string,
