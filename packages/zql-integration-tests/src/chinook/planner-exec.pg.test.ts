@@ -201,6 +201,73 @@ describe('Chinook planner execution cost validation', () => {
           album.whereExists('tracks', track => track),
         ),
     },
+    {
+      name: 'low fanout chain - invoiceLine to track to album (FK relationships)',
+      query: queries.invoiceLine.whereExists('track', track =>
+        track.whereExists('album', album =>
+          album.where(
+            'title',
+            'The Best of Buddy Guy - The Millennium Collection',
+          ),
+        ),
+      ),
+    },
+    {
+      name: 'extreme selectivity - artist to album to long tracks',
+      query: queries.artist
+        .whereExists('albums', album =>
+          album.whereExists('tracks', track =>
+            track.where('milliseconds', '>', 10_000_000),
+          ),
+        )
+        .limit(5),
+    },
+    {
+      name: 'deep nesting - invoiceLine to invoice to customer to employee',
+      query: queries.invoiceLine
+        .whereExists('invoice', invoice =>
+          invoice.whereExists('customer', customer =>
+            customer.whereExists('supportRep', employee =>
+              employee.where('title', 'Sales Support Agent'),
+            ),
+          ),
+        )
+        .limit(20),
+    },
+    {
+      name: 'asymmetric OR - track with album or invoiceLines',
+      query: queries.track
+        .where(({or, exists}) =>
+          or(
+            exists('album', album => album.where('artistId', 1)),
+            exists('invoiceLines'),
+          ),
+        )
+        .limit(15),
+    },
+    {
+      name: 'junction table - playlist to tracks via playlistTrack',
+      query: queries.playlist
+        .whereExists('tracks', track => track.where('composer', 'Kurt Cobain'))
+        .limit(10),
+    },
+    {
+      name: 'empty result - nonexistent artist',
+      query: queries.track
+        .whereExists('album', album =>
+          album.whereExists('artist', artist =>
+            artist.where('name', 'NonexistentArtistZZZZ'),
+          ),
+        )
+        .limit(10),
+    },
+    {
+      name: 'sparse FK - track to album with NULL handling',
+      query: queries.track
+        .where('albumId', 'IS NOT', null)
+        .whereExists('album', album => album.where('title', '>', 'Z'))
+        .limit(10),
+    },
   ])('$name', ({query}) => {
     // Execute all plan attempts and collect results
     const results = executeAllPlanAttempts(query);
