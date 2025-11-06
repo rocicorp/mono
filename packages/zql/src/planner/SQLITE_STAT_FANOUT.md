@@ -26,38 +26,31 @@ Example: 100 tasks (20 with project_id, 80 NULL)
 
 ## Usage
 
-### Single Column Join
-
 ```typescript
 import {SQLiteStatFanout} from './planner/sqlite-stat-fanout.ts';
+import type {PlannerConstraint} from './planner-constraint.ts';
 
 const calculator = new SQLiteStatFanout(db);
 
-// Get fanout for posts.userId → users.id join
-const result = calculator.getFanout('posts', 'userId');
+// Single column join: posts.userId → users.id
+const singleCol: PlannerConstraint = {userId: undefined};
+const result1 = calculator.getFanout('posts', singleCol);
 
-console.log(`Fanout: ${result.fanout} (source: ${result.source})`);
+console.log(`Fanout: ${result1.fanout} (source: ${result1.source})`);
 // Output: "Fanout: 4 (source: stat4)"
-```
 
-### Compound Index Join
-
-```typescript
-import type {PlannerConstraint} from './planner-constraint.ts';
-
-// For joins on multiple columns, pass a PlannerConstraint
-// Note: Object key order matters for prefix matching!
-const constraint: PlannerConstraint = {
+// Multi-column join: orders.(customerId, storeId)
+const multiCol: PlannerConstraint = {
   customerId: undefined,
   storeId: undefined,
 };
+const result2 = calculator.getFanout('orders', multiCol);
 
-const result = calculator.getFanout('orders', constraint);
-console.log(`Fanout: ${result.fanout} (source: ${result.source})`);
+console.log(`Fanout: ${result2.fanout} (source: ${result2.source})`);
 // Output: "Fanout: 2 (source: stat4)"
 
 // Result includes:
-// - fanout: number (average rows per distinct key combination)
+// - fanout: number (average rows per distinct key/combination)
 // - source: 'stat4' | 'stat1' | 'default'
 // - nullCount?: number (only for stat4)
 ```
@@ -97,7 +90,7 @@ The class uses a three-tier fallback strategy:
 
 ```typescript
 // 100 tasks: 20 with project_id (4 per project), 80 NULL
-const result = calculator.getFanout('task', 'project_id');
+const result = calculator.getFanout('task', {project_id: undefined});
 // { fanout: 4, source: 'stat4', nullCount: 80 }
 ```
 
@@ -105,7 +98,7 @@ const result = calculator.getFanout('task', 'project_id');
 
 ```typescript
 // 30 employees evenly distributed across 3 departments
-const result = calculator.getFanout('employee', 'dept_id');
+const result = calculator.getFanout('employee', {dept_id: undefined});
 // { fanout: 10, source: 'stat4', nullCount: 0 }
 ```
 
@@ -113,7 +106,7 @@ const result = calculator.getFanout('employee', 'dept_id');
 
 ```typescript
 // No index or ANALYZE not run
-const result = calculator.getFanout('table', 'column');
+const result = calculator.getFanout('table', {column: undefined});
 // { fanout: 3, source: 'default' }
 ```
 
@@ -137,7 +130,6 @@ The matching is **order-independent** when all constraint columns are present in
 // Given index: CREATE INDEX idx ON orders(customerId, storeId, date)
 
 // ✅ Matches at depth 1
-calculator.getFanout('orders', 'customerId');
 calculator.getFanout('orders', {customerId: undefined});
 
 // ✅ Matches at depth 2 (both columns in first 2 positions)

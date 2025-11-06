@@ -143,15 +143,12 @@ export class SQLiteStatFanout {
    * you run ANALYZE to update statistics.
    *
    * @param tableName Table containing the join column(s)
-   * @param columnOrConstraint Single column name or PlannerConstraint with multiple columns
+   * @param constraint PlannerConstraint with one or more columns
    * @returns Fanout result with value and source
    */
-  getFanout(
-    tableName: string,
-    columnOrConstraint: string | PlannerConstraint,
-  ): FanoutResult {
-    // Normalize input to array of column names
-    const columns = this.#getConstrainedColumns(columnOrConstraint);
+  getFanout(tableName: string, constraint: PlannerConstraint): FanoutResult {
+    // Extract column names from constraint
+    const columns = this.#getConstrainedColumns(constraint);
 
     // Cache key uses sorted columns for consistency
     const cacheKey = `${tableName}:${[...columns].sort().join(',')}`;
@@ -194,16 +191,13 @@ export class SQLiteStatFanout {
   }
 
   /**
-   * Normalizes input to array of column names.
+   * Extracts column names from constraint.
    *
-   * @param input Single column name or PlannerConstraint object
-   * @returns Array of column names (unsorted for index matching)
+   * @param constraint PlannerConstraint object
+   * @returns Array of column names (unsorted, preserves Object.keys() order)
    */
-  #getConstrainedColumns(input: string | PlannerConstraint): string[] {
-    if (typeof input === 'string') {
-      return [input];
-    }
-    return Object.keys(input);
+  #getConstrainedColumns(constraint: PlannerConstraint): string[] {
+    return Object.keys(constraint);
   }
 
   /**
@@ -449,9 +443,7 @@ export class SQLiteStatFanout {
     const indexPrefix = indexColumns.slice(0, queryColumns.length);
 
     // Normalize to lowercase for case-insensitive comparison
-    const indexPrefixLower = new Set(
-      indexPrefix.map(col => col.toLowerCase()),
-    );
+    const indexPrefixLower = new Set(indexPrefix.map(col => col.toLowerCase()));
     const queryColumnsLower = queryColumns.map(col => col.toLowerCase());
 
     // Check if ALL query columns exist in the index prefix

@@ -46,7 +46,7 @@ describe('SQLiteStatFanout', () => {
 
       db.exec('ANALYZE');
 
-      const result = fanoutCalc.getFanout('task', 'project_id');
+      const result = fanoutCalc.getFanout('task', {project_id: undefined});
 
       expect(result.source).toBe('stat4');
       expect(result.fanout).toBe(4); // 20 tasks / 5 distinct project_ids
@@ -82,7 +82,7 @@ describe('SQLiteStatFanout', () => {
 
       db.exec('ANALYZE');
 
-      const result = fanoutCalc.getFanout('employee', 'dept_id');
+      const result = fanoutCalc.getFanout('employee', {dept_id: undefined});
 
       expect(result.source).toBe('stat4');
       expect(result.fanout).toBe(10); // 30 employees / 3 departments
@@ -110,7 +110,7 @@ describe('SQLiteStatFanout', () => {
 
       db.exec('ANALYZE');
 
-      const result = fanoutCalc.getFanout('sparse', 'rare_value');
+      const result = fanoutCalc.getFanout('sparse', {rare_value: undefined});
 
       expect(result.source).toBe('stat4');
       // Median of samples should be low (most values appear 1-2 times)
@@ -147,7 +147,7 @@ describe('SQLiteStatFanout', () => {
 
       db.exec('ANALYZE');
 
-      const result = fanoutCalc.getFanout('orders', 'customer_id');
+      const result = fanoutCalc.getFanout('orders', {customer_id: undefined});
 
       expect(result.source).toBe('stat4');
       // Median should be close to ~55, not the average of 100
@@ -176,7 +176,7 @@ describe('SQLiteStatFanout', () => {
 
       db.exec('ANALYZE');
 
-      const result = fanoutCalc.getFanout('ticket', 'status');
+      const result = fanoutCalc.getFanout('ticket', {status: undefined});
 
       expect(result.source).toBe('stat4');
       expect(result.fanout).toBe(30); // 90 tickets / 3 statuses
@@ -203,7 +203,7 @@ describe('SQLiteStatFanout', () => {
 
       db.exec('ANALYZE');
 
-      const result = fanoutCalc.getFanout('simple', 'value');
+      const result = fanoutCalc.getFanout('simple', {value: undefined});
 
       // Should get result from either stat4 or stat1
       expect(['stat4', 'stat1']).toContain(result.source);
@@ -226,7 +226,7 @@ describe('SQLiteStatFanout', () => {
 
       db.exec('ANALYZE');
 
-      const result = fanoutCalc.getFanout('no_index', 'value');
+      const result = fanoutCalc.getFanout('no_index', {value: undefined});
 
       expect(result.source).toBe('default');
       expect(result.fanout).toBe(3); // Default value
@@ -247,7 +247,7 @@ describe('SQLiteStatFanout', () => {
 
       // Don't run ANALYZE
 
-      const result = fanoutCalc.getFanout('not_analyzed', 'value');
+      const result = fanoutCalc.getFanout('not_analyzed', {value: undefined});
 
       expect(result.source).toBe('default');
       expect(result.fanout).toBe(3);
@@ -260,7 +260,7 @@ describe('SQLiteStatFanout', () => {
         CREATE TABLE no_stats (id INTEGER PRIMARY KEY, value INTEGER);
       `);
 
-      const result = customCalc.getFanout('no_stats', 'value');
+      const result = customCalc.getFanout('no_stats', {value: undefined});
 
       expect(result.source).toBe('default');
       expect(result.fanout).toBe(10);
@@ -283,8 +283,8 @@ describe('SQLiteStatFanout', () => {
 
       db.exec('ANALYZE');
 
-      const result1 = fanoutCalc.getFanout('cached', 'value');
-      const result2 = fanoutCalc.getFanout('cached', 'value');
+      const result1 = fanoutCalc.getFanout('cached', {value: undefined});
+      const result2 = fanoutCalc.getFanout('cached', {value: undefined});
 
       expect(result1).toBe(result2); // Same object reference (cached)
     });
@@ -304,7 +304,7 @@ describe('SQLiteStatFanout', () => {
 
       db.exec('ANALYZE');
 
-      const result1 = fanoutCalc.getFanout('clearable', 'value');
+      const result1 = fanoutCalc.getFanout('clearable', {value: undefined});
 
       // Insert more data and re-analyze
       for (let i = 101; i <= 200; i++) {
@@ -319,7 +319,7 @@ describe('SQLiteStatFanout', () => {
       // Without clearing cache, would get stale result
       fanoutCalc.clearCache();
 
-      const result2 = fanoutCalc.getFanout('clearable', 'value');
+      const result2 = fanoutCalc.getFanout('clearable', {value: undefined});
 
       expect(result2.fanout).toBeGreaterThanOrEqual(result1.fanout);
     });
@@ -334,7 +334,7 @@ describe('SQLiteStatFanout', () => {
 
       db.exec('ANALYZE');
 
-      const result = fanoutCalc.getFanout('empty', 'value');
+      const result = fanoutCalc.getFanout('empty', {value: undefined});
 
       // Should fallback to default (no stats for empty table)
       expect(result.source).toBe('default');
@@ -356,7 +356,7 @@ describe('SQLiteStatFanout', () => {
 
       db.exec('ANALYZE');
 
-      const result = fanoutCalc.getFanout('all_null', 'value');
+      const result = fanoutCalc.getFanout('all_null', {value: undefined});
 
       // When all values are NULL:
       // - stat4 will have only NULL samples, so we fallback
@@ -382,8 +382,8 @@ describe('SQLiteStatFanout', () => {
       db.exec('ANALYZE');
 
       // Should work with different casing
-      const result1 = fanoutCalc.getFanout('case_test', 'MixedCase');
-      const result2 = fanoutCalc.getFanout('case_test', 'mixedcase');
+      const result1 = fanoutCalc.getFanout('case_test', {MixedCase: undefined});
+      const result2 = fanoutCalc.getFanout('case_test', {mixedcase: undefined});
 
       expect(result1.source).not.toBe('default');
       expect(result2.source).not.toBe('default');
@@ -406,7 +406,7 @@ describe('SQLiteStatFanout', () => {
       db.exec('ANALYZE');
 
       // Get stat4 result
-      const stat4Result = fanoutCalc.getFanout('compare', 'fk');
+      const stat4Result = fanoutCalc.getFanout('compare', {fk: undefined});
 
       // Get stat1 result directly
       const stat1Row = db
@@ -446,8 +446,8 @@ describe('SQLiteStatFanout', () => {
 
       db.exec('ANALYZE');
 
-      // Should work with string argument
-      const result = fanoutCalc.getFanout('compat', 'value');
+      // Should work with single-column constraint
+      const result = fanoutCalc.getFanout('compat', {value: undefined});
 
       expect(result.source).not.toBe('default');
       expect(result.fanout).toBe(10);
