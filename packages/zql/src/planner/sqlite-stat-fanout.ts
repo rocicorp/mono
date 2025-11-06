@@ -137,11 +137,10 @@ export class SQLiteStatFanout {
     `);
 
     this.#indexStmt = this.#db.prepare(`
-      SELECT name, sql
-      FROM sqlite_master
-      WHERE type = 'index'
-        AND tbl_name = ?
-        AND sql IS NOT NULL
+      SELECT il.name as index_name, ii.seqno, ii.name as column_name
+      FROM pragma_index_list(?) il
+      JOIN pragma_index_info(il.name) ii
+      ORDER BY il.seq, ii.seqno
     `);
   }
 
@@ -346,6 +345,10 @@ export class SQLiteStatFanout {
   /**
    * Finds an index that can be used to get statistics for column(s).
    *
+   * Uses pragma_index_list and pragma_index_info to reliably get index
+   * column names, avoiding brittle SQL parsing. Includes all indices:
+   * user-created (CREATE INDEX), PRIMARY KEY, and UNIQUE constraints.
+   *
    * Uses flexible matching: Finds indexes where ALL columns appear in the
    * first N positions, regardless of order. This works because SQLite statistics
    * at depth N represent the fanout for the combination of the first N columns,
@@ -366,21 +369,26 @@ export class SQLiteStatFanout {
     columns: string[],
   ): {indexName: string; depth: number} | undefined {
     try {
-      // Query sqlite_master for indexes on this table (using prepared statement)
-      const indexes = this.#indexStmt.all(tableName) as {
-        name: string;
-        sql: string;
+      // Query returns all columns for all indexes (including PK/UNIQUE) in order
+      const rows = this.#indexStmt.all(tableName) as {
+        index_name: string;
+        seqno: number;
+        column_name: string;
       }[];
 
-      // Extract column list from index SQL
-      for (const {name, sql} of indexes) {
-        const indexColumns = this.#extractIndexColumns(sql);
-        if (!indexColumns) continue;
+      // Group by index name
+      const indexMap = new Map<string, string[]>();
+      for (const row of rows) {
+        const cols = indexMap.get(row.index_name) ?? [];
+        cols.push(row.column_name);
+        indexMap.set(row.index_name, cols);
+      }
 
-        // Check if our columns form a prefix of the index columns
+      // Check each index for prefix match
+      for (const [indexName, indexColumns] of indexMap) {
         if (this.#isPrefixMatch(columns, indexColumns)) {
           return {
-            indexName: name,
+            indexName,
             depth: columns.length,
           };
         }
@@ -390,37 +398,6 @@ export class SQLiteStatFanout {
     } catch {
       return undefined;
     }
-  }
-
-  /**
-   * Extracts column names from an index CREATE INDEX SQL statement.
-   *
-   * Handles various formats:
-   * - CREATE INDEX idx ON table(col1, col2)
-   * - CREATE INDEX idx ON table("col1", 'col2')
-   * - CREATE INDEX idx ON table(`col1`, col2)
-   *
-   * @param sql Index creation SQL
-   * @returns Array of column names in order, or undefined if parse fails
-   */
-  #extractIndexColumns(sql: string): string[] | undefined {
-    // Match pattern: INDEX name ON table(columns)
-    const match = sql.match(/\([^)]+\)/i);
-    if (!match) return undefined;
-
-    // Extract content between parentheses
-    const columnsStr = match[0].slice(1, -1); // Remove ( and )
-
-    // Split by comma and clean up each column name
-    // Remove quotes, backticks, and whitespace
-    const columns = columnsStr.split(',').map(col =>
-      col
-        .trim()
-        .replace(/^["'`]|["'`]$/g, '')
-        .toLowerCase(),
-    );
-
-    return columns.filter(col => col.length > 0);
   }
 
   /**

@@ -22,21 +22,22 @@ describe('SQLiteStatFanout', () => {
   // Helper functions to reduce test duplication
 
   /**
-   * Creates a simple table with an index, inserts data, and runs ANALYZE.
+   * Creates a simple table with an optional index, inserts data, and runs ANALYZE.
    */
   function createTable(options: {
     name: string;
-    columns: string; // SQL column definitions
-    index: string; // Index column name(s)
+    columns: string; // SQL column definitions (may include PRIMARY KEY/UNIQUE)
+    index?: string; // Index column name(s), optional if using PRIMARY KEY/UNIQUE inline
     data: Array<unknown[]>; // Rows to insert
   }): void {
-    // Clean index name for index creation
-    const indexName = 'idx_' + options.index.replace(/[",\s]/g, '_');
+    // Create table
+    db.exec(`CREATE TABLE ${options.name} (${options.columns});`);
 
-    db.exec(`
-      CREATE TABLE ${options.name} (${options.columns});
-      CREATE INDEX ${indexName} ON ${options.name}(${options.index});
-    `);
+    // Create explicit index if specified
+    if (options.index && options.index.length > 0) {
+      const indexName = 'idx_' + options.index.replace(/[",\s]/g, '_');
+      db.exec(`CREATE INDEX ${indexName} ON ${options.name}(${options.index});`);
+    }
 
     // Only insert data if array is not empty
     if (options.data.length > 0) {
@@ -493,19 +494,27 @@ describe('SQLiteStatFanout', () => {
 
   describe('compound index support', () => {
     test('two-column compound index, both constrained', () => {
-      // 100 orders: 10 customers × 5 stores × 2 orders each
-      createCompoundIndexTable({
+      // 50 orders: 10 customers × 5 stores (unique pairs)
+      // Uses PRIMARY KEY instead of explicit index - tests automatic index support
+      const data = [];
+      let id = 1;
+      for (let customerId = 1; customerId <= 10; customerId++) {
+        for (let storeId = 1; storeId <= 5; storeId++) {
+          data.push([id++, customerId, storeId]);
+        }
+      }
+
+      createTable({
         name: 'orders',
-        columns: ['customerId', 'storeId'],
-        dimensions: [10, 5],
-        rowsPerCombination: 2,
+        columns: 'id INTEGER, customerId INTEGER, storeId INTEGER, PRIMARY KEY (customerId, storeId)',
+        data,
       });
 
-      expectFanout('orders', ['customerId'], {notDefault: true, fanout: 10});
+      expectFanout('orders', ['customerId'], {notDefault: true, fanout: 5}); // 50 / 10 customers
       fanoutCalc.clearCache();
       expectFanout('orders', ['customerId', 'storeId'], {
         notDefault: true,
-        fanout: 2,
+        fanout: 1, // 50 / 50 unique pairs
       });
     });
 
