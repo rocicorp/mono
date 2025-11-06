@@ -9,8 +9,9 @@ The `SQLiteStatFanout` class extracts fanout information from `sqlite_stat4` and
 ## Key Features
 
 - **Accurate NULL handling**: Uses `sqlite_stat4` histogram to separate NULL and non-NULL samples
+- **Compound index support**: Handles multi-column joins with strict prefix matching
 - **Automatic fallback**: Falls back to `sqlite_stat1` → default value when better stats unavailable
-- **Caching**: Caches results per (table, column) to avoid redundant queries
+- **Caching**: Caches results per (table, columns) to avoid redundant queries
 - **Median calculation**: Uses median instead of average for skewed distributions
 
 ## Problem Statement
@@ -25,6 +26,8 @@ Example: 100 tasks (20 with project_id, 80 NULL)
 
 ## Usage
 
+### Single Column Join
+
 ```typescript
 import {SQLiteStatFanout} from './planner/sqlite-stat-fanout.ts';
 
@@ -35,9 +38,26 @@ const result = calculator.getFanout('posts', 'userId');
 
 console.log(`Fanout: ${result.fanout} (source: ${result.source})`);
 // Output: "Fanout: 4 (source: stat4)"
+```
+
+### Compound Index Join
+
+```typescript
+import type {PlannerConstraint} from './planner-constraint.ts';
+
+// For joins on multiple columns, pass a PlannerConstraint
+// Note: Object key order matters for prefix matching!
+const constraint: PlannerConstraint = {
+  customerId: undefined,
+  storeId: undefined,
+};
+
+const result = calculator.getFanout('orders', constraint);
+console.log(`Fanout: ${result.fanout} (source: ${result.source})`);
+// Output: "Fanout: 2 (source: stat4)"
 
 // Result includes:
-// - fanout: number (average rows per distinct key)
+// - fanout: number (average rows per distinct key combination)
 // - source: 'stat4' | 'stat1' | 'default'
 // - nullCount?: number (only for stat4)
 ```
@@ -97,6 +117,92 @@ const result = calculator.getFanout('table', 'column');
 // { fanout: 3, source: 'default' }
 ```
 
+## Compound Index Support
+
+The class supports multi-column joins using **strict prefix matching**. Constraint columns must match index columns as an exact prefix in the specified order.
+
+### How It Works
+
+When you provide a `PlannerConstraint`, the class:
+
+1. **Extracts columns** from the constraint object using `Object.keys()`
+2. **Finds matching index** where columns form an exact prefix
+3. **Uses depth-based statistics** from stat1/stat4 at the appropriate column depth
+
+### Index Matching Rules
+
+```typescript
+// Given index: CREATE INDEX idx ON orders(customerId, storeId, date)
+
+// ✅ Matches at depth 1
+calculator.getFanout('orders', 'customerId');
+calculator.getFanout('orders', {customerId: undefined});
+
+// ✅ Matches at depth 2
+calculator.getFanout('orders', {customerId: undefined, storeId: undefined});
+
+// ✅ Matches at depth 3
+calculator.getFanout('orders', {
+  customerId: undefined,
+  storeId: undefined,
+  date: undefined,
+});
+
+// ❌ Does NOT match - wrong order (JavaScript object key insertion order)
+calculator.getFanout('orders', {storeId: undefined, customerId: undefined});
+// Falls back to 'default' source
+
+// ❌ Does NOT match - not a prefix
+calculator.getFanout('orders', {storeId: undefined});
+// Falls back to 'default' source
+```
+
+### Object Key Order
+
+**Important**: JavaScript objects maintain insertion order for keys. The order you specify in the `PlannerConstraint` must match the index column order:
+
+```typescript
+// Correct order for index (customerId, storeId)
+const correct = {customerId: undefined, storeId: undefined};
+// Object.keys(correct) → ['customerId', 'storeId'] ✅
+
+// Wrong order - will not match index
+const wrong = {storeId: undefined, customerId: undefined};
+// Object.keys(wrong) → ['storeId', 'customerId'] ❌
+```
+
+### Stat Format Details
+
+**sqlite_stat1** format: `"totalRows avgCol1 avgCol1+2 avgCol1+2+3..."`
+
+- Uses `parts[depth]` to get fanout at specific depth
+- Example: `"1000 100 10 5"` means depth 2 has fanout of 10
+
+**sqlite_stat4** neq format: `"N1 N2 N3..."` (space-separated)
+
+- Uses `neqParts[depth-1]` to get fanout (depth is 1-based, array is 0-based)
+- Example: `"100 10 5"` means depth 2 has fanout of 10
+
+### Example: Multi-Column Fanout
+
+```typescript
+// Schema: orders table with index (customerId, storeId)
+// Data: 100 orders, 10 customers, 5 stores, 2 orders per (customer, store) pair
+
+// Single column constraint (depth 1)
+const singleCol = calculator.getFanout('orders', {customerId: undefined});
+// Result: { fanout: 10, source: 'stat4' }
+// Interpretation: 100 orders / 10 customers = 10 orders per customer
+
+// Two-column constraint (depth 2)
+const twoCol = calculator.getFanout('orders', {
+  customerId: undefined,
+  storeId: undefined,
+});
+// Result: { fanout: 2, source: 'stat4' }
+// Interpretation: 100 orders / 50 (customer, store) pairs = 2 orders per pair
+```
+
 ## Configuration
 
 ```typescript
@@ -117,13 +223,17 @@ calculator.clearCache();
 ## Testing
 
 The class includes comprehensive tests covering:
+
 - Sparse foreign keys with NULLs
 - Evenly distributed fanout
 - Skewed distributions
-- Composite indexes
+- Single-column indexes
+- Compound indexes (2-column and 3-column)
+- Prefix matching and column order validation
 - Edge cases (empty tables, all NULLs, etc.)
 
 Run tests:
+
 ```bash
 npm -w packages/zql test -- sqlite-stat-fanout.test.ts
 ```

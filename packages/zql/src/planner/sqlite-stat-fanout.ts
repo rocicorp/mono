@@ -1,4 +1,5 @@
 import type {Database} from '../../../zqlite/src/db.ts';
+import type {PlannerConstraint} from './planner-constraint.ts';
 
 /**
  * Result of fanout calculation from SQLite statistics.
@@ -96,8 +97,8 @@ export class SQLiteStatFanout {
   readonly #defaultFanout: number;
 
   /**
-   * Cache of fanout results by table and column name.
-   * Key format: "tableName:columnName"
+   * Cache of fanout results by table and columns.
+   * Key format: "tableName:col1,col2,col3" (sorted alphabetically)
    */
   readonly #cache = new Map<string, FanoutResult>();
 
@@ -116,9 +117,9 @@ export class SQLiteStatFanout {
   }
 
   /**
-   * Gets the fanout factor for a join column.
+   * Gets the fanout factor for join column(s).
    *
-   * Fanout = average number of child rows per distinct parent key value.
+   * Fanout = average number of child rows per distinct parent key value(s).
    *
    * ## Strategy
    *
@@ -126,31 +127,49 @@ export class SQLiteStatFanout {
    * 2. Fallback to sqlite_stat1: Average across all rows (includes NULLs)
    * 3. Fallback to default: When no statistics available
    *
+   * ## Compound Indexes
+   *
+   * For multi-column constraints, finds indexes where ALL columns appear as an
+   * exact prefix (in order). Uses the appropriate depth in stat1/stat4.
+   *
+   * Example:
+   * - Constraint: `{customerId: undefined, storeId: undefined}`
+   * - Matches index: `(customerId, storeId, date)` at depth 2
+   * - Uses stat1 parts[2] or stat4 neq[1] for accurate fanout
+   *
    * ## Caching
    *
-   * Results are cached per (table, column) pair. Clear the cache if you run
-   * ANALYZE to update statistics.
+   * Results are cached per (table, columns) combination. Clear the cache if
+   * you run ANALYZE to update statistics.
    *
-   * @param tableName Table containing the join column
-   * @param columnName Column used in the join
+   * @param tableName Table containing the join column(s)
+   * @param columnOrConstraint Single column name or PlannerConstraint with multiple columns
    * @returns Fanout result with value and source
    */
-  getFanout(tableName: string, columnName: string): FanoutResult {
-    const cacheKey = `${tableName}:${columnName}`;
+  getFanout(
+    tableName: string,
+    columnOrConstraint: string | PlannerConstraint,
+  ): FanoutResult {
+    // Normalize input to array of column names
+    const columns = this.#getConstrainedColumns(columnOrConstraint);
+
+    // Cache key uses sorted columns for consistency
+    const cacheKey = `${tableName}:${[...columns].sort().join(',')}`;
     const cached = this.#cache.get(cacheKey);
     if (cached) {
       return cached;
     }
 
     // Strategy 1: Try stat4 first (most accurate)
-    const stat4Result = this.#getFanoutFromStat4(tableName, columnName);
+    // NOTE: columns are NOT sorted - order matters for prefix matching
+    const stat4Result = this.#getFanoutFromStat4(tableName, columns);
     if (stat4Result) {
       this.#cache.set(cacheKey, stat4Result);
       return stat4Result;
     }
 
     // Strategy 2: Fallback to stat1 (includes NULLs)
-    const stat1Result = this.#getFanoutFromStat1(tableName, columnName);
+    const stat1Result = this.#getFanoutFromStat1(tableName, columns);
     if (stat1Result) {
       this.#cache.set(cacheKey, stat1Result);
       return stat1Result;
@@ -174,21 +193,37 @@ export class SQLiteStatFanout {
   }
 
   /**
+   * Normalizes input to array of column names.
+   *
+   * @param input Single column name or PlannerConstraint object
+   * @returns Array of column names (unsorted for index matching)
+   */
+  #getConstrainedColumns(input: string | PlannerConstraint): string[] {
+    if (typeof input === 'string') {
+      return [input];
+    }
+    return Object.keys(input);
+  }
+
+  /**
    * Gets fanout from sqlite_stat4 histogram.
    *
    * Queries stat4 samples, decodes to identify NULLs, and returns
    * the median fanout of non-NULL samples.
    *
+   * For compound indexes, uses the neq value at the appropriate depth.
+   *
+   * @param columns Array of column names to get fanout for
    * @returns Fanout result or undefined if stat4 unavailable
    */
   #getFanoutFromStat4(
     tableName: string,
-    columnName: string,
+    columns: string[],
   ): FanoutResult | undefined {
     try {
-      // Find index containing the column
-      const indexName = this.#findIndexForColumn(tableName, columnName);
-      if (!indexName) {
+      // Find index containing the columns as a prefix
+      const indexInfo = this.#findIndexForColumns(tableName, columns);
+      if (!indexInfo) {
         return undefined;
       }
 
@@ -200,17 +235,22 @@ export class SQLiteStatFanout {
         ORDER BY nlt
       `);
 
-      const samples = stmt.all(tableName, indexName) as Stat4Sample[];
+      const samples = stmt.all(tableName, indexInfo.indexName) as Stat4Sample[];
 
       if (samples.length === 0) {
         return undefined;
       }
 
       // Decode samples and separate NULL from non-NULL
-      const decodedSamples = samples.map(s => ({
-        fanout: parseInt(s.neq.split(' ')[0], 10),
-        isNull: this.#decodeSampleIsNull(s.sample),
-      }));
+      // Use depth-1 for neq array index (depth is 1-based, array is 0-based)
+      const neqIndex = indexInfo.depth - 1;
+      const decodedSamples = samples.map(s => {
+        const neqParts = s.neq.split(' ');
+        return {
+          fanout: parseInt(neqParts[neqIndex] ?? neqParts[0], 10),
+          isNull: this.#decodeSampleIsNull(s.sample),
+        };
+      });
 
       const nullSamples = decodedSamples.filter(s => s.isNull);
       const nonNullSamples = decodedSamples.filter(s => !s.isNull);
@@ -247,16 +287,19 @@ export class SQLiteStatFanout {
    * Note: This includes NULL rows in the calculation and may overestimate
    * fanout for sparse foreign keys.
    *
+   * For compound indexes, uses the stat value at the appropriate depth.
+   *
+   * @param columns Array of column names to get fanout for
    * @returns Fanout result or undefined if stat1 unavailable
    */
   #getFanoutFromStat1(
     tableName: string,
-    columnName: string,
+    columns: string[],
   ): FanoutResult | undefined {
     try {
-      // Find index containing the column
-      const indexName = this.#findIndexForColumn(tableName, columnName);
-      if (!indexName) {
+      // Find index containing the columns as a prefix
+      const indexInfo = this.#findIndexForColumns(tableName, columns);
+      if (!indexInfo) {
         return undefined;
       }
 
@@ -267,7 +310,7 @@ export class SQLiteStatFanout {
         WHERE tbl = ? AND idx = ?
       `);
 
-      const result = stmt.get(tableName, indexName) as
+      const result = stmt.get(tableName, indexInfo.indexName) as
         | {stat: string}
         | undefined;
 
@@ -276,11 +319,12 @@ export class SQLiteStatFanout {
       }
 
       const parts = result.stat.split(' ');
-      if (parts.length < 2) {
+      // Check if we have enough parts for the requested depth
+      if (parts.length < indexInfo.depth + 1) {
         return undefined;
       }
 
-      const fanout = parseInt(parts[1], 10);
+      const fanout = parseInt(parts[indexInfo.depth], 10);
       if (isNaN(fanout)) {
         return undefined;
       }
@@ -295,17 +339,24 @@ export class SQLiteStatFanout {
   }
 
   /**
-   * Finds an index that can be used to get statistics for a column.
+   * Finds an index that can be used to get statistics for column(s).
    *
-   * Prefers indexes where the column is the leftmost (first) column,
-   * as those have the most accurate statistics.
+   * For strict prefix matching: Finds indexes where ALL columns appear as an
+   * exact prefix in the specified order.
    *
-   * @returns Index name or undefined if no suitable index found
+   * Example:
+   * - columns: ['customerId', 'storeId']
+   * - Matches: (customerId, storeId, date) at depth 2
+   * - Does NOT match: (storeId, customerId, ...) - wrong order
+   * - Does NOT match: (date, customerId, storeId) - not a prefix
+   *
+   * @param columns Array of column names (order matters for prefix matching)
+   * @returns Index info with name and depth, or undefined if no match
    */
-  #findIndexForColumn(
+  #findIndexForColumns(
     tableName: string,
-    columnName: string,
-  ): string | undefined {
+    columns: string[],
+  ): {indexName: string; depth: number} | undefined {
     try {
       // Query sqlite_master for indexes on this table
       const stmt = this.#db.prepare(`
@@ -318,34 +369,79 @@ export class SQLiteStatFanout {
 
       const indexes = stmt.all(tableName) as {name: string; sql: string}[];
 
-      // Find indexes containing the column
-      // Prefer indexes where column is leftmost (most accurate stats)
-      let leftmostIndex: string | undefined;
-      let anyIndex: string | undefined;
-
+      // Extract column list from index SQL
       for (const {name, sql} of indexes) {
-        const sqlLower = sql.toLowerCase();
-        const columnLower = columnName.toLowerCase();
+        const indexColumns = this.#extractIndexColumns(sql);
+        if (!indexColumns) continue;
 
-        if (sqlLower.includes(columnLower)) {
-          anyIndex = name;
-
-          // Check if column is leftmost by looking for pattern: INDEX name ON table(column
-          const pattern = new RegExp(
-            `\\(\\s*["'\`]?${columnLower}["'\`]?\\s*(?:,|\\))`,
-            'i',
-          );
-          if (pattern.test(sql)) {
-            leftmostIndex = name;
-            break; // Found leftmost, no need to continue
-          }
+        // Check if our columns form a prefix of the index columns
+        if (this.#isPrefixMatch(columns, indexColumns)) {
+          return {
+            indexName: name,
+            depth: columns.length,
+          };
         }
       }
 
-      return leftmostIndex ?? anyIndex;
+      return undefined;
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * Extracts column names from an index CREATE INDEX SQL statement.
+   *
+   * Handles various formats:
+   * - CREATE INDEX idx ON table(col1, col2)
+   * - CREATE INDEX idx ON table("col1", 'col2')
+   * - CREATE INDEX idx ON table(`col1`, col2)
+   *
+   * @param sql Index creation SQL
+   * @returns Array of column names in order, or undefined if parse fails
+   */
+  #extractIndexColumns(sql: string): string[] | undefined {
+    // Match pattern: INDEX name ON table(columns)
+    const match = sql.match(/\([^)]+\)/i);
+    if (!match) return undefined;
+
+    // Extract content between parentheses
+    const columnsStr = match[0].slice(1, -1); // Remove ( and )
+
+    // Split by comma and clean up each column name
+    // Remove quotes, backticks, and whitespace
+    const columns = columnsStr
+      .split(',')
+      .map(col =>
+        col
+          .trim()
+          .replace(/^["'`]|["'`]$/g, '')
+          .toLowerCase(),
+      );
+
+    return columns.filter(col => col.length > 0);
+  }
+
+  /**
+   * Checks if queryColumns form an exact prefix of indexColumns.
+   *
+   * @param queryColumns Columns we're looking for (from constraint)
+   * @param indexColumns Columns in the index (in order)
+   * @returns true if queryColumns match the first N columns of indexColumns
+   */
+  #isPrefixMatch(queryColumns: string[], indexColumns: string[]): boolean {
+    if (queryColumns.length > indexColumns.length) {
+      return false;
+    }
+
+    // Case-insensitive comparison
+    for (let i = 0; i < queryColumns.length; i++) {
+      if (queryColumns[i].toLowerCase() !== indexColumns[i].toLowerCase()) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   /**
