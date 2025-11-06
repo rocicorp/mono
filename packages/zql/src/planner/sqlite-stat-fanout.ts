@@ -104,11 +104,11 @@ export class SQLiteStatFanout {
 
   /**
    * Prepared statements for querying SQLite statistics tables.
-   * Lazily initialized on first use for performance.
+   * Prepared once in constructor for performance.
    */
-  #stat4Stmt?: ReturnType<Database['prepare']>;
-  #stat1Stmt?: ReturnType<Database['prepare']>;
-  #indexStmt?: ReturnType<Database['prepare']>;
+  readonly #stat4Stmt: ReturnType<Database['prepare']>;
+  readonly #stat1Stmt: ReturnType<Database['prepare']>;
+  readonly #indexStmt: ReturnType<Database['prepare']>;
 
   /**
    * Creates a new fanout calculator.
@@ -122,6 +122,28 @@ export class SQLiteStatFanout {
   constructor(db: Database, defaultFanout = 3) {
     this.#db = db;
     this.#defaultFanout = defaultFanout;
+
+    // Prepare SQL statements once for reuse across multiple getFanout() calls
+    this.#stat4Stmt = this.#db.prepare(`
+      SELECT neq, nlt, ndlt, sample
+      FROM sqlite_stat4
+      WHERE tbl = ? AND idx = ?
+      ORDER BY nlt
+    `);
+
+    this.#stat1Stmt = this.#db.prepare(`
+      SELECT stat
+      FROM sqlite_stat1
+      WHERE tbl = ? AND idx = ?
+    `);
+
+    this.#indexStmt = this.#db.prepare(`
+      SELECT name, sql
+      FROM sqlite_master
+      WHERE type = 'index'
+        AND tbl_name = ?
+        AND sql IS NOT NULL
+    `);
   }
 
   /**
@@ -199,54 +221,6 @@ export class SQLiteStatFanout {
   }
 
   /**
-   * Lazily initializes and returns the stat4 prepared statement.
-   * Prepared on first use to avoid errors if table doesn't exist yet.
-   */
-  #getStat4Stmt(): ReturnType<Database['prepare']> {
-    if (!this.#stat4Stmt) {
-      this.#stat4Stmt = this.#db.prepare(`
-        SELECT neq, nlt, ndlt, sample
-        FROM sqlite_stat4
-        WHERE tbl = ? AND idx = ?
-        ORDER BY nlt
-      `);
-    }
-    return this.#stat4Stmt;
-  }
-
-  /**
-   * Lazily initializes and returns the stat1 prepared statement.
-   * Prepared on first use to avoid errors if table doesn't exist yet.
-   */
-  #getStat1Stmt(): ReturnType<Database['prepare']> {
-    if (!this.#stat1Stmt) {
-      this.#stat1Stmt = this.#db.prepare(`
-        SELECT stat
-        FROM sqlite_stat1
-        WHERE tbl = ? AND idx = ?
-      `);
-    }
-    return this.#stat1Stmt;
-  }
-
-  /**
-   * Lazily initializes and returns the index stmt prepared statement.
-   * sqlite_master always exists, but we lazy-initialize for consistency.
-   */
-  #getIndexStmt(): ReturnType<Database['prepare']> {
-    if (!this.#indexStmt) {
-      this.#indexStmt = this.#db.prepare(`
-        SELECT name, sql
-        FROM sqlite_master
-        WHERE type = 'index'
-          AND tbl_name = ?
-          AND sql IS NOT NULL
-      `);
-    }
-    return this.#indexStmt;
-  }
-
-  /**
    * Extracts column names from constraint.
    *
    * @param constraint PlannerConstraint object
@@ -279,7 +253,7 @@ export class SQLiteStatFanout {
       }
 
       // Query stat4 samples for this index (using prepared statement)
-      const samples = this.#getStat4Stmt().all(
+      const samples = this.#stat4Stmt.all(
         tableName,
         indexInfo.indexName,
       ) as Stat4Sample[];
@@ -351,7 +325,7 @@ export class SQLiteStatFanout {
       }
 
       // Query stat1 for this index (using prepared statement)
-      const result = this.#getStat1Stmt().get(tableName, indexInfo.indexName) as
+      const result = this.#stat1Stmt.get(tableName, indexInfo.indexName) as
         | {stat: string}
         | undefined;
 
@@ -403,7 +377,7 @@ export class SQLiteStatFanout {
   ): {indexName: string; depth: number} | undefined {
     try {
       // Query sqlite_master for indexes on this table (using prepared statement)
-      const indexes = this.#getIndexStmt().all(tableName) as {
+      const indexes = this.#indexStmt.all(tableName) as {
         name: string;
         sql: string;
       }[];

@@ -9,7 +9,8 @@ describe('SQLiteStatFanout', () => {
 
   beforeEach(() => {
     db = new Database(createSilentLogContext(), ':memory:');
-    fanoutCalc = new SQLiteStatFanout(db);
+    // Note: fanoutCalc is created after ANALYZE in each test
+    // because prepared statements require stat tables to exist
   });
 
   afterEach(() => {
@@ -45,6 +46,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       const result = fanoutCalc.getFanout('task', {project_id: undefined});
 
@@ -81,6 +83,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       const result = fanoutCalc.getFanout('employee', {dept_id: undefined});
 
@@ -109,6 +112,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       const result = fanoutCalc.getFanout('sparse', {rare_value: undefined});
 
@@ -146,6 +150,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       const result = fanoutCalc.getFanout('orders', {customer_id: undefined});
 
@@ -175,6 +180,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       const result = fanoutCalc.getFanout('ticket', {status: undefined});
 
@@ -202,6 +208,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       const result = fanoutCalc.getFanout('simple', {value: undefined});
 
@@ -225,6 +232,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       const result = fanoutCalc.getFanout('no_index', {value: undefined});
 
@@ -233,6 +241,16 @@ describe('SQLiteStatFanout', () => {
     });
 
     test('uses default when ANALYZE not run', () => {
+      // Create a dummy table and run ANALYZE to initialize stat tables
+      // This allows SQLiteStatFanout constructor to prepare statements
+      db.exec(`
+        CREATE TABLE dummy (id INTEGER PRIMARY KEY);
+        INSERT INTO dummy VALUES (1);
+      `);
+      db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
+
+      // Now create the actual test table WITHOUT running ANALYZE on it
       db.exec(`
         CREATE TABLE not_analyzed (id INTEGER PRIMARY KEY, value INTEGER);
         CREATE INDEX idx_value ON not_analyzed(value);
@@ -245,7 +263,7 @@ describe('SQLiteStatFanout', () => {
         );
       }
 
-      // Don't run ANALYZE
+      // Don't run ANALYZE on not_analyzed table
 
       const result = fanoutCalc.getFanout('not_analyzed', {value: undefined});
 
@@ -254,6 +272,13 @@ describe('SQLiteStatFanout', () => {
     });
 
     test('respects custom default fanout', () => {
+      // Create a dummy table and run ANALYZE to initialize stat tables
+      db.exec(`
+        CREATE TABLE dummy2 (id INTEGER PRIMARY KEY);
+        INSERT INTO dummy2 VALUES (1);
+      `);
+      db.exec('ANALYZE');
+
       const customCalc = new SQLiteStatFanout(db, 10);
 
       db.exec(`
@@ -282,6 +307,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       const result1 = fanoutCalc.getFanout('cached', {value: undefined});
       const result2 = fanoutCalc.getFanout('cached', {value: undefined});
@@ -303,6 +329,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       const result1 = fanoutCalc.getFanout('clearable', {value: undefined});
 
@@ -315,6 +342,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       // Without clearing cache, would get stale result
       fanoutCalc.clearCache();
@@ -333,6 +361,7 @@ describe('SQLiteStatFanout', () => {
       `);
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       const result = fanoutCalc.getFanout('empty', {value: undefined});
 
@@ -355,6 +384,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       const result = fanoutCalc.getFanout('all_null', {value: undefined});
 
@@ -380,6 +410,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       // Should work with different casing
       const result1 = fanoutCalc.getFanout('case_test', {MixedCase: undefined});
@@ -404,6 +435,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       // Get stat4 result
       const stat4Result = fanoutCalc.getFanout('compare', {fk: undefined});
@@ -445,6 +477,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       // Should work with single-column constraint
       const result = fanoutCalc.getFanout('compat', {value: undefined});
@@ -467,6 +500,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       // Should work with constraint object
       const result = fanoutCalc.getFanout('compat2', {userId: undefined});
@@ -500,6 +534,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       // Test single column (should use depth 1)
       const single = fanoutCalc.getFanout('orders', {customerId: undefined});
@@ -545,6 +580,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       // Depth 1: tenantId only
       const depth1 = fanoutCalc.getFanout('events', {tenantId: undefined});
@@ -588,6 +624,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       // Should use depth 2 (appId + level)
       const result = fanoutCalc.getFanout('logs', {
@@ -616,6 +653,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       // With flexible matching, both {a, b} and {b, a} should match index (a, b)
       // Object.keys() returns keys in insertion order: {b, a} → ['b', 'a']
@@ -664,6 +702,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       // Constraint {customerId, storeId} should match index (storeId, customerId)
       // Even though order differs, both columns are in first 2 positions
@@ -697,6 +736,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       // Constraint has a and c, but not b (gap in the middle)
       // 'c' is not in the first 2 positions, so should not match
@@ -726,6 +766,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       const result1 = fanoutCalc.getFanout('cache_compound', {
         x: undefined,
@@ -759,6 +800,7 @@ describe('SQLiteStatFanout', () => {
       }
 
       db.exec('ANALYZE');
+      fanoutCalc = new SQLiteStatFanout(db);
 
       // First query: {p, q} matches index (p, q) at depth 2
       const result1 = fanoutCalc.getFanout('cache_order', {
