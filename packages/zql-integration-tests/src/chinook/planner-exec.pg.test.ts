@@ -153,12 +153,14 @@ describe('Chinook planner execution cost validation', () => {
     costModel = createSQLiteCostModel(dbs.sqlite, tableSpecs);
   });
 
-  test('simple query: cost estimates correlate with actual execution cost', () => {
-    // Create a simple query: tracks for a given album
-    const query = queries.track.whereExists('album', q =>
-      q.where('title', 'Big Ones'),
-    );
-
+  test.each([
+    {
+      name: 'simple query',
+      query: queries.track.whereExists('album', q =>
+        q.where('title', 'Big Ones'),
+      ),
+    },
+  ])('$name', ({query}) => {
     // Execute all plan attempts and collect results
     const results = executeAllPlanAttempts(query);
 
