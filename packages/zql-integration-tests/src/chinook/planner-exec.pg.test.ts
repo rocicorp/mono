@@ -198,9 +198,9 @@ describe('Chinook planner execution cost validation', () => {
     const actualCosts = results.map(r => r.actualRowsScanned);
     const correlation = spearmanCorrelation(estimatedCosts, actualCosts);
 
-    // console.log(estimatedCosts);
-    // console.log(actualCosts);
-    // console.log(correlation);
+    console.log(estimatedCosts);
+    console.log(actualCosts);
+    console.log(correlation);
 
     // Assert that correlation is positive and reasonably strong
     // A correlation >= 0.7 indicates the cost model is directionally correct
