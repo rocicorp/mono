@@ -154,27 +154,27 @@ describe('Chinook planner execution cost validation', () => {
   });
 
   test.each([
-    // {
-    //   name: 'simple query - single whereExists',
-    //   query: queries.track.whereExists('album', q =>
-    //     q.where('title', 'Big Ones'),
-    //   ),
-    // },
-    // {
-    //   name: 'two-level join - track with album and artist',
-    //   query: queries.track.whereExists('album', album =>
-    //     album.whereExists('artist', artist =>
-    //       artist.where('name', 'Aerosmith'),
-    //     ),
-    //   ),
-    // },
-    // {
-    //   name: 'parallel joins - track with album and genre',
-    //   query: queries.track
-    //     .whereExists('album', q => q.where('title', 'Big Ones'))
-    //     .whereExists('genre', q => q.where('name', 'Rock'))
-    //     .limit(10),
-    // },
+    {
+      name: 'simple query - single whereExists',
+      query: queries.track.whereExists('album', q =>
+        q.where('title', 'Big Ones'),
+      ),
+    },
+    {
+      name: 'two-level join - track with album and artist',
+      query: queries.track.whereExists('album', album =>
+        album.whereExists('artist', artist =>
+          artist.where('name', 'Aerosmith'),
+        ),
+      ),
+    },
+    {
+      name: 'parallel joins - track with album and genre',
+      query: queries.track
+        .whereExists('album', q => q.where('title', 'Big Ones'))
+        .whereExists('genre', q => q.where('name', 'Rock'))
+        .limit(10),
+    },
     // currently fails
     {
       name: 'three-level join - track with album, artist, and condition',
@@ -199,9 +199,9 @@ describe('Chinook planner execution cost validation', () => {
     const actualCosts = results.map(r => r.actualRowsScanned);
     const correlation = spearmanCorrelation(estimatedCosts, actualCosts);
 
-    console.log(estimatedCosts);
-    console.log(actualCosts);
-    console.log(correlation);
+    // console.log(estimatedCosts);
+    // console.log(actualCosts);
+    // console.log(correlation);
 
     // Assert that correlation is positive and reasonably strong
     // A correlation >= 0.7 indicates the cost model is directionally correct
