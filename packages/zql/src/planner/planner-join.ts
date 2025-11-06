@@ -269,6 +269,9 @@ export class PlannerJoin {
      * Each one will constrain how often a parent row passes all constraints.
      * This means that we have to scan more and more parent rows the more
      * constraints we add.
+     *
+     * DownstreamChildSelectivity factors in fanout factor
+     * from parent -> child
      */
     downstreamChildSelectivity: number,
     /**
@@ -307,6 +310,14 @@ export class PlannerJoin {
      * rows are returned.
      */
     const child = this.#child.estimateCost(1, branchPattern, planDebugger);
+
+    const fanoutFactor = child.fanout(Object.keys(this.#childConstraint));
+    // Factor in how many child rows match a parent row.
+    // E.g., if an issue has 10 comments on average then we're more
+    // likely to hit a comment compared to if an issue has 1 comment on average.
+    const scaledChildSelectivity =
+      1 - Math.pow(1 - child.selectivity, fanoutFactor.fanout);
+
     /**
      * How selective is the graph from this point forward?
      * If we are _very_ selective then we must scan more parent rows
@@ -323,7 +334,7 @@ export class PlannerJoin {
     const parent = this.#parent.estimateCost(
       // Selectivity flows up the graph from child to parent
       // so we can determine the total selectivity of all ANDed exists checks.
-      child.selectivity * downstreamChildSelectivity,
+      scaledChildSelectivity * downstreamChildSelectivity,
       branchPattern,
       planDebugger,
     );
@@ -369,8 +380,6 @@ export class PlannerJoin {
           parent.returnedRows * child.returnedRows * child.selectivity,
         selectivity: parent.selectivity * child.selectivity,
         limit: parent.limit,
-        // It doesn't matter which fanout func we pass.
-        // They all point to the same thing.
         fanout: parent.fanout,
       };
     }
