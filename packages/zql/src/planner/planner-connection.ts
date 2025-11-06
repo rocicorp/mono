@@ -324,10 +324,7 @@ type FanoutEst = {
   fanout: number;
   confidence: 'high' | 'med' | 'none';
 };
-export type FanoutCostModel = (
-  tableName: string,
-  columns: string[],
-) => FanoutEst;
+export type FanoutCostModel = (columns: string[]) => FanoutEst;
 
 export type CostModelCost = {
   startupCost: number;

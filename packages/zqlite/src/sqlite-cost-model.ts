@@ -81,7 +81,9 @@ export function createSQLiteCostModel(
       `Expected scanstatus to return at least one loop for query: ${sql}`,
     );
 
-    return estimateCost(loops, fanoutEstimator);
+    return estimateCost(loops, (columns: string[]) =>
+      fanoutEstimator.getFanout(tableName, columns),
+    );
   };
 }
 
@@ -163,7 +165,7 @@ function getScanstatusLoops(stmt: Statement): ScanstatusLoop[] {
  */
 function estimateCost(
   scanstats: ScanstatusLoop[],
-  fanoutEstimator: SQLiteStatFanout,
+  fanout: CostModelCost['fanout'],
 ): CostModelCost {
   // Sort by selectId to process in execution order
   const sorted = [...scanstats].sort((a, b) => a.selectId - b.selectId);
@@ -195,7 +197,7 @@ function estimateCost(
   return {
     rows: totalRows,
     startupCost: totalCost,
-    fanout: fanoutEstimator.getFanout,
+    fanout,
   };
 }
 
