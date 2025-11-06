@@ -50,7 +50,7 @@ export type StaticQueryParameters = {
  */
 export interface BuilderDelegate {
   readonly applyFiltersAnyway?: boolean | undefined;
-  readonly debug?: DebugDelegate | undefined;
+  debug?: DebugDelegate | undefined;
 
   /**
    * When true, allows NOT EXISTS conditions in queries.
