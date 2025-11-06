@@ -31,5 +31,5 @@ export {
   useZero,
   ZeroContext,
   ZeroProvider,
-  type ZeroProviderProps
+  type ZeroProviderProps,
 } from './zero-provider.tsx';
