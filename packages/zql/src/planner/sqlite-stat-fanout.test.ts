@@ -389,11 +389,11 @@ describe('SQLiteStatFanout', () => {
       const result = fanoutCalc.getFanout('all_null', ['value']);
 
       // When all values are NULL:
-      // - stat4 will have only NULL samples, so we fallback
-      // - stat1 may still report stats (100 rows, but no distinct non-NULL values)
-      // Either stat1 or default is acceptable
-      expect(['stat1', 'default']).toContain(result.source);
-      expect(result.fanout).toBeGreaterThan(0);
+      // - stat4 detects this and returns fanout of 0
+      // - This is correct: NULLs don't match in joins, so join produces 0 rows
+      expect(result.source).toBe('stat4');
+      expect(result.fanout).toBe(0);
+      expect(result.nullCount).toBe(100);
     });
 
     test('case insensitive column names', () => {
@@ -463,52 +463,6 @@ describe('SQLiteStatFanout', () => {
   });
 
   describe('compound index support', () => {
-    test('backward compat: string argument (single column)', () => {
-      db.exec(`
-        CREATE TABLE compat (id INTEGER PRIMARY KEY, value INTEGER);
-        CREATE INDEX idx_value ON compat(value);
-      `);
-
-      for (let i = 1; i <= 30; i++) {
-        db.prepare('INSERT INTO compat (id, value) VALUES (?, ?)').run(
-          i,
-          i % 3,
-        );
-      }
-
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
-
-      // Should work with single-column constraint
-      const result = fanoutCalc.getFanout('compat', ['value']);
-
-      expect(result.source).not.toBe('default');
-      expect(result.fanout).toBe(10);
-    });
-
-    test('backward compat: single-column constraint object', () => {
-      db.exec(`
-        CREATE TABLE compat2 (id INTEGER PRIMARY KEY, userId INTEGER);
-        CREATE INDEX idx_userId ON compat2(userId);
-      `);
-
-      for (let i = 1; i <= 40; i++) {
-        db.prepare('INSERT INTO compat2 (id, userId) VALUES (?, ?)').run(
-          i,
-          i % 4,
-        );
-      }
-
-      db.exec('ANALYZE');
-      fanoutCalc = new SQLiteStatFanout(db);
-
-      // Should work with constraint object
-      const result = fanoutCalc.getFanout('compat2', ['userId']);
-
-      expect(result.source).not.toBe('default');
-      expect(result.fanout).toBe(10);
-    });
-
     test('two-column compound index, both constrained', () => {
       db.exec(`
         CREATE TABLE orders (
@@ -545,7 +499,10 @@ describe('SQLiteStatFanout', () => {
       fanoutCalc.clearCache();
 
       // Test both columns (should use depth 2)
-      const compound = fanoutCalc.getFanout('orders', ['customerId', 'storeId']);
+      const compound = fanoutCalc.getFanout('orders', [
+        'customerId',
+        'storeId',
+      ]);
       expect(compound.source).not.toBe('default');
       expect(compound.fanout).toBe(2); // 100 orders / 50 (customer, store) pairs
     });
@@ -588,7 +545,11 @@ describe('SQLiteStatFanout', () => {
       expect(depth2.fanout).toBe(12); // 120 / 10 (tenant, user) pairs
 
       // Depth 3: all three columns
-      const depth3 = fanoutCalc.getFanout('events', ['tenantId', 'userId', 'eventType']);
+      const depth3 = fanoutCalc.getFanout('events', [
+        'tenantId',
+        'userId',
+        'eventType',
+      ]);
       expect(depth3.fanout).toBe(4); // 120 / 30 (tenant, user, type) tuples
     });
 
@@ -687,7 +648,10 @@ describe('SQLiteStatFanout', () => {
 
       // Constraint {customerId, storeId} should match index (storeId, customerId)
       // Even though order differs, both columns are in first 2 positions
-      const result = fanoutCalc.getFanout('reversed_index', ['customerId', 'storeId']);
+      const result = fanoutCalc.getFanout('reversed_index', [
+        'customerId',
+        'storeId',
+      ]);
 
       expect(result.source).not.toBe('default');
       expect(result.fanout).toBe(2); // 100 rows / 50 (store, customer) pairs

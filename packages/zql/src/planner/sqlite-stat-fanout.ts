@@ -263,8 +263,12 @@ export class SQLiteStatFanout {
       const nonNullSamples = decodedSamples.filter(s => !s.isNull);
 
       if (nonNullSamples.length === 0) {
-        // All samples are NULL - use default
-        return undefined;
+        // All samples are NULL - return fanout of 0 since NULLs don't match in joins
+        return {
+          fanout: 0,
+          source: 'stat4',
+          nullCount: nullSamples.length > 0 ? nullSamples[0].fanout : 0,
+        };
       }
 
       // Use median of non-NULL fanouts (more robust than average)
