@@ -76,9 +76,10 @@ jobs:
           - name: 'zero-client'
             directory: 'packages/zero-client'
             ci_id: 'perf'
-          - name: 'replicache'
-            directory: 'packages/replicache'
-            ci_id: 'replicache-perf'
+          # Replicache has no vitest benchs
+          # - name: 'replicache'
+          #   directory: 'packages/replicache'
+          #   ci_id: 'replicache-perf'
     with:
       package_name: ${{ matrix.package.name }}
       working_directory: ${{ matrix.package.directory }}
