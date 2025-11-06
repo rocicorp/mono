@@ -1,4 +1,4 @@
-import type {Database} from '../../../zqlite/src/db.ts';
+import type {Database} from './db.ts';
 
 /**
  * Result of fanout calculation from SQLite statistics.
@@ -17,12 +17,6 @@ export interface FanoutResult {
    * - 'default': Fallback constant when statistics unavailable
    */
   source: 'stat4' | 'stat1' | 'default';
-
-  /**
-   * If available, the number of NULL rows found in stat4.
-   * Only populated when source is 'stat4'.
-   */
-  nullCount?: number;
 }
 
 /**
@@ -258,7 +252,6 @@ export class SQLiteStatFanout {
         };
       });
 
-      const nullSamples = decodedSamples.filter(s => s.isNull);
       const nonNullSamples = decodedSamples.filter(s => !s.isNull);
 
       if (nonNullSamples.length === 0) {
@@ -266,7 +259,6 @@ export class SQLiteStatFanout {
         return {
           fanout: 0,
           source: 'stat4',
-          nullCount: nullSamples.length > 0 ? nullSamples[0].fanout : 0,
         };
       }
 
@@ -283,7 +275,6 @@ export class SQLiteStatFanout {
       return {
         fanout: medianFanout,
         source: 'stat4',
-        nullCount: nullSamples.length > 0 ? nullSamples[0].fanout : 0,
       };
     } catch {
       // stat4 table may not exist or query may fail

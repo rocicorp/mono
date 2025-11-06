@@ -1,9 +1,9 @@
 // oxlint-disable no-conditional-expect
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {Database} from '../../../zqlite/src/db.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {Database} from './db.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {SQLiteStatFanout} from './sqlite-stat-fanout.ts';
-import {must} from '../../../shared/src/must.ts';
+import {must} from '../../shared/src/must.ts';
 
 describe('SQLiteStatFanout', () => {
   let db: Database;
@@ -36,7 +36,9 @@ describe('SQLiteStatFanout', () => {
     // Create explicit index if specified
     if (options.index && options.index.length > 0) {
       const indexName = 'idx_' + options.index.replace(/[",\s]/g, '_');
-      db.exec(`CREATE INDEX ${indexName} ON ${options.name}(${options.index});`);
+      db.exec(
+        `CREATE INDEX ${indexName} ON ${options.name}(${options.index});`,
+      );
     }
 
     // Only insert data if array is not empty
@@ -120,7 +122,6 @@ describe('SQLiteStatFanout', () => {
       fanout?: number;
       fanoutMin?: number;
       fanoutMax?: number;
-      nullCount?: number;
       notDefault?: boolean;
     },
   ): void {
@@ -144,10 +145,6 @@ describe('SQLiteStatFanout', () => {
 
     if (expected.fanoutMax !== undefined) {
       expect(result.fanout).toBeLessThanOrEqual(expected.fanoutMax);
-    }
-
-    if (expected.nullCount !== undefined) {
-      expect(result.nullCount).toBe(expected.nullCount);
     }
   }
 
@@ -212,7 +209,6 @@ describe('SQLiteStatFanout', () => {
       expectFanout('task', ['project_id'], {
         source: 'stat4',
         fanout: 4, // 20 tasks / 5 distinct project_ids
-        nullCount: 80,
       });
     });
 
@@ -226,7 +222,6 @@ describe('SQLiteStatFanout', () => {
       expectFanout('employee', ['dept_id'], {
         source: 'stat4',
         fanout: 10, // 30 employees / 3 departments
-        nullCount: 0,
       });
     });
 
@@ -440,7 +435,6 @@ describe('SQLiteStatFanout', () => {
       expectFanout('all_null', ['value'], {
         source: 'stat4',
         fanout: 0, // NULLs don't match in joins
-        nullCount: 100,
       });
     });
 
@@ -506,7 +500,8 @@ describe('SQLiteStatFanout', () => {
 
       createTable({
         name: 'orders',
-        columns: 'id INTEGER, customerId INTEGER, storeId INTEGER, PRIMARY KEY (customerId, storeId)',
+        columns:
+          'id INTEGER, customerId INTEGER, storeId INTEGER, PRIMARY KEY (customerId, storeId)',
         data,
       });
 
