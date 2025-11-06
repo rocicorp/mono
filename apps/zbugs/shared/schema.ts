@@ -2,7 +2,6 @@ import {
   boolean,
   createBuilder,
   createSchema,
-  definePermissions,
   enumeration,
   number,
   relationships,
@@ -276,9 +275,6 @@ export type UserRow = Row<typeof schema.tables.user>;
 export type ProjectRow = Row<typeof schema.tables.project>;
 
 export const builder = createBuilder(schema);
-
-export const permissions: ReturnType<typeof definePermissions> =
-  definePermissions<unknown, Schema>(schema, () => ({}));
 
 export const ZERO_PROJECT_ID = 'iCNlS2qEpzYWEes1RTf-D';
 export const ZERO_PROJECT_NAME = 'Zero';
