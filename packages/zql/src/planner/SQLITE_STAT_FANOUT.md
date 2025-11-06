@@ -119,17 +119,19 @@ const result = calculator.getFanout('table', 'column');
 
 ## Compound Index Support
 
-The class supports multi-column joins using **strict prefix matching**. Constraint columns must match index columns as an exact prefix in the specified order.
+The class supports multi-column joins using **flexible prefix matching**. Constraint columns can appear in any order as long as all are present in the first N positions of an index.
 
 ### How It Works
 
 When you provide a `PlannerConstraint`, the class:
 
 1. **Extracts columns** from the constraint object using `Object.keys()`
-2. **Finds matching index** where columns form an exact prefix
-3. **Uses depth-based statistics** from stat1/stat4 at the appropriate column depth
+2. **Finds matching index** where ALL constraint columns exist in the first N positions (order-independent)
+3. **Uses depth-based statistics** from stat1/stat4 at depth N (where N = number of constraint columns)
 
 ### Index Matching Rules
+
+The matching is **order-independent** when all constraint columns are present in the first N positions of an index.
 
 ```typescript
 // Given index: CREATE INDEX idx ON orders(customerId, storeId, date)
@@ -138,8 +140,11 @@ When you provide a `PlannerConstraint`, the class:
 calculator.getFanout('orders', 'customerId');
 calculator.getFanout('orders', {customerId: undefined});
 
-// ✅ Matches at depth 2
+// ✅ Matches at depth 2 (both columns in first 2 positions)
 calculator.getFanout('orders', {customerId: undefined, storeId: undefined});
+
+// ✅ ALSO matches at depth 2 (order doesn't matter!)
+calculator.getFanout('orders', {storeId: undefined, customerId: undefined});
 
 // ✅ Matches at depth 3
 calculator.getFanout('orders', {
@@ -148,27 +153,42 @@ calculator.getFanout('orders', {
   date: undefined,
 });
 
-// ❌ Does NOT match - wrong order (JavaScript object key insertion order)
-calculator.getFanout('orders', {storeId: undefined, customerId: undefined});
+// ❌ Does NOT match - storeId not in first 1 position
+calculator.getFanout('orders', {storeId: undefined});
 // Falls back to 'default' source
 
-// ❌ Does NOT match - not a prefix
-calculator.getFanout('orders', {storeId: undefined});
+// ❌ Does NOT match - date not in first 2 positions (gap)
+calculator.getFanout('orders', {customerId: undefined, date: undefined});
 // Falls back to 'default' source
 ```
 
-### Object Key Order
-
-**Important**: JavaScript objects maintain insertion order for keys. The order you specify in the `PlannerConstraint` must match the index column order:
+### Flexible Matching Examples
 
 ```typescript
-// Correct order for index (customerId, storeId)
-const correct = {customerId: undefined, storeId: undefined};
-// Object.keys(correct) → ['customerId', 'storeId'] ✅
+// Given two indexes:
+// - CREATE INDEX idx1 ON orders(customerId, storeId)
+// - CREATE INDEX idx2 ON orders(storeId, customerId)
 
-// Wrong order - will not match index
-const wrong = {storeId: undefined, customerId: undefined};
-// Object.keys(wrong) → ['storeId', 'customerId'] ❌
+// All of these match BOTH indexes at depth 2:
+calculator.getFanout('orders', {customerId: undefined, storeId: undefined});
+calculator.getFanout('orders', {storeId: undefined, customerId: undefined});
+
+// The class picks the first matching index it finds
+// Both give the same fanout (combination of customerId and storeId)
+```
+
+### No Gaps Allowed
+
+Gaps are **NOT allowed** because SQLite statistics are cumulative from position 0:
+
+```typescript
+// Index: (a, b, c)
+// Depth 1 = stats for 'a'
+// Depth 2 = stats for 'a AND b' (not 'a AND c')
+// Depth 3 = stats for 'a AND b AND c'
+
+// ✅ Constraint {a, b} matches at depth 2
+// ❌ Constraint {a, c} does NOT match (c not in first 2 positions)
 ```
 
 ### Stat Format Details

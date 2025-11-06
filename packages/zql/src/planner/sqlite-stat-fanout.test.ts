@@ -599,56 +599,81 @@ describe('SQLiteStatFanout', () => {
       expect(result.fanout).toBe(10); // 60 / 6 (app, level) pairs
     });
 
-    test('columns in wrong order (object key order matters)', () => {
+    test('columns in any order match index (flexible matching)', () => {
       db.exec(`
-        CREATE TABLE wrong_order (
+        CREATE TABLE flexible_order (
           id INTEGER PRIMARY KEY,
           a INTEGER,
           b INTEGER
         );
-        CREATE INDEX idx_a_b ON wrong_order(a, b);
+        CREATE INDEX idx_a_b ON flexible_order(a, b);
       `);
 
       for (let i = 1; i <= 30; i++) {
-        db.prepare('INSERT INTO wrong_order (id, a, b) VALUES (?, ?, ?)').run(
-          i,
-          i % 3,
-          i % 5,
-        );
+        db.prepare(
+          'INSERT INTO flexible_order (id, a, b) VALUES (?, ?, ?)',
+        ).run(i, i % 3, i % 5);
       }
 
       db.exec('ANALYZE');
 
-      // Object.keys() returns keys in insertion order
-      // {b: ..., a: ...} → Object.keys() → ['b', 'a']
-      // Index is (a, b), so ['b', 'a'] doesn't match
-      // Should fallback to default
-      const wrongOrder = fanoutCalc.getFanout('wrong_order', {
+      // With flexible matching, both {a, b} and {b, a} should match index (a, b)
+      // Object.keys() returns keys in insertion order: {b, a} → ['b', 'a']
+      // But flexible matching checks if both 'a' and 'b' exist in first 2 positions
+      const result1 = fanoutCalc.getFanout('flexible_order', {
         b: undefined,
         a: undefined,
       });
 
-      expect(wrongOrder.source).toBe('default');
-      expect(wrongOrder.fanout).toBe(3);
+      expect(result1.source).not.toBe('default');
+      expect(result1.fanout).toBeGreaterThan(0);
 
-      // Debug: check if index exists
-      const indexes = db
-        .prepare(
-          "SELECT name, sql FROM sqlite_master WHERE type='index' AND tbl_name='wrong_order'",
-        )
-        .all();
-      console.log('DEBUG indexes:', JSON.stringify(indexes));
-
-      // But correct order should work
-      const correctOrder = fanoutCalc.getFanout('wrong_order', {
+      // Same result for {a, b} order
+      const result2 = fanoutCalc.getFanout('flexible_order', {
         a: undefined,
         b: undefined,
       });
 
-      console.log('DEBUG correctOrder result:', correctOrder);
+      expect(result2.source).not.toBe('default');
+      expect(result2.fanout).toBeGreaterThan(0);
 
-      // The index might be auto-created by SQLite, so we just verify we get some result
-      expect(correctOrder.fanout).toBeGreaterThan(0);
+      // Both should give same fanout (may be cached)
+      expect(result1.fanout).toBe(result2.fanout);
+    });
+
+    test('constraint matches index with different column order', () => {
+      db.exec(`
+        CREATE TABLE reversed_index (
+          id INTEGER PRIMARY KEY,
+          customerId INTEGER,
+          storeId INTEGER
+        );
+        CREATE INDEX idx_store_customer ON reversed_index(storeId, customerId);
+      `);
+
+      // 100 rows: 5 stores × 10 customers × 2 rows each
+      let id = 1;
+      for (let storeId = 1; storeId <= 5; storeId++) {
+        for (let customerId = 1; customerId <= 10; customerId++) {
+          for (let j = 0; j < 2; j++) {
+            db.prepare(
+              'INSERT INTO reversed_index (id, customerId, storeId) VALUES (?, ?, ?)',
+            ).run(id++, customerId, storeId);
+          }
+        }
+      }
+
+      db.exec('ANALYZE');
+
+      // Constraint {customerId, storeId} should match index (storeId, customerId)
+      // Even though order differs, both columns are in first 2 positions
+      const result = fanoutCalc.getFanout('reversed_index', {
+        customerId: undefined,
+        storeId: undefined,
+      });
+
+      expect(result.source).not.toBe('default');
+      expect(result.fanout).toBe(2); // 100 rows / 50 (store, customer) pairs
     });
 
     test('partial prefix not supported (should fallback)', () => {
@@ -673,8 +698,8 @@ describe('SQLiteStatFanout', () => {
 
       db.exec('ANALYZE');
 
-      // Constraint has a and c, but not b (not a prefix)
-      // Should not match and fallback
+      // Constraint has a and c, but not b (gap in the middle)
+      // 'c' is not in the first 2 positions, so should not match
       const result = fanoutCalc.getFanout('partial', {
         a: undefined,
         c: undefined,
@@ -715,7 +740,7 @@ describe('SQLiteStatFanout', () => {
       expect(result1).toBe(result2);
     });
 
-    test('cache key is order-independent but matching is not', () => {
+    test('cache key is order-independent and matching is flexible', () => {
       db.exec(`
         CREATE TABLE cache_order (
           id INTEGER PRIMARY KEY,
@@ -735,7 +760,7 @@ describe('SQLiteStatFanout', () => {
 
       db.exec('ANALYZE');
 
-      // First query: {p, q} matches index (p, q) → succeeds
+      // First query: {p, q} matches index (p, q) at depth 2
       const result1 = fanoutCalc.getFanout('cache_order', {
         p: undefined,
         q: undefined,
@@ -743,9 +768,9 @@ describe('SQLiteStatFanout', () => {
 
       expect(result1.source).not.toBe('default');
 
-      // Second query: {q, p} doesn't match index (p, q) → fails
-      // But cache key is the same because we sort columns for cache
-      // So this should return the SAME cached result as result1
+      // Second query: {q, p} also matches index (p, q) at depth 2 (flexible matching)
+      // Cache key is the same because we sort columns for cache
+      // So this returns the SAME cached object as result1
       const result2 = fanoutCalc.getFanout('cache_order', {
         q: undefined,
         p: undefined,

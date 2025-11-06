@@ -161,7 +161,8 @@ export class SQLiteStatFanout {
     }
 
     // Strategy 1: Try stat4 first (most accurate)
-    // NOTE: columns are NOT sorted - order matters for prefix matching
+    // NOTE: columns are NOT sorted - preserves Object.keys() order from constraint
+    // Matching is order-independent (flexible), but we keep original order for consistency
     const stat4Result = this.#getFanoutFromStat4(tableName, columns);
     if (stat4Result) {
       this.#cache.set(cacheKey, stat4Result);
@@ -341,16 +342,19 @@ export class SQLiteStatFanout {
   /**
    * Finds an index that can be used to get statistics for column(s).
    *
-   * For strict prefix matching: Finds indexes where ALL columns appear as an
-   * exact prefix in the specified order.
+   * Uses flexible matching: Finds indexes where ALL columns appear in the
+   * first N positions, regardless of order. This works because SQLite statistics
+   * at depth N represent the fanout for the combination of the first N columns,
+   * and combinations are order-independent.
    *
    * Example:
    * - columns: ['customerId', 'storeId']
-   * - Matches: (customerId, storeId, date) at depth 2
-   * - Does NOT match: (storeId, customerId, ...) - wrong order
-   * - Does NOT match: (date, customerId, storeId) - not a prefix
+   * - Matches: (customerId, storeId, date) at depth 2 ✅
+   * - Matches: (storeId, customerId, date) at depth 2 ✅ (flexible order)
+   * - Does NOT match: (date, customerId, storeId) ❌ (columns not in first 2 positions)
+   * - Does NOT match: (customerId, date, storeId) ❌ (storeId not in first 2 positions)
    *
-   * @param columns Array of column names (order matters for prefix matching)
+   * @param columns Array of column names (order-independent for matching)
    * @returns Index info with name and depth, or undefined if no match
    */
   #findIndexForColumns(
@@ -410,38 +414,48 @@ export class SQLiteStatFanout {
 
     // Split by comma and clean up each column name
     // Remove quotes, backticks, and whitespace
-    const columns = columnsStr
-      .split(',')
-      .map(col =>
-        col
-          .trim()
-          .replace(/^["'`]|["'`]$/g, '')
-          .toLowerCase(),
-      );
+    const columns = columnsStr.split(',').map(col =>
+      col
+        .trim()
+        .replace(/^["'`]|["'`]$/g, '')
+        .toLowerCase(),
+    );
 
     return columns.filter(col => col.length > 0);
   }
 
   /**
-   * Checks if queryColumns form an exact prefix of indexColumns.
+   * Checks if all queryColumns exist in the first N positions of indexColumns,
+   * regardless of order.
+   *
+   * This allows flexible matching: constraint {a, b} matches both index (a, b, c)
+   * and index (b, a, c) at depth 2, since both represent the fanout for the
+   * combination of columns a and b.
+   *
+   * Gaps are NOT allowed: constraint {a, c} does NOT match index (a, b, c)
+   * because no depth represents just (a, c) without b. Statistics are cumulative
+   * from position 0.
    *
    * @param queryColumns Columns we're looking for (from constraint)
    * @param indexColumns Columns in the index (in order)
-   * @returns true if queryColumns match the first N columns of indexColumns
+   * @returns true if all queryColumns exist in indexColumns[0...queryColumns.length-1]
    */
   #isPrefixMatch(queryColumns: string[], indexColumns: string[]): boolean {
     if (queryColumns.length > indexColumns.length) {
       return false;
     }
 
-    // Case-insensitive comparison
-    for (let i = 0; i < queryColumns.length; i++) {
-      if (queryColumns[i].toLowerCase() !== indexColumns[i].toLowerCase()) {
-        return false;
-      }
-    }
+    // Get the prefix of the index that we're checking against
+    const indexPrefix = indexColumns.slice(0, queryColumns.length);
 
-    return true;
+    // Normalize to lowercase for case-insensitive comparison
+    const indexPrefixLower = new Set(
+      indexPrefix.map(col => col.toLowerCase()),
+    );
+    const queryColumnsLower = queryColumns.map(col => col.toLowerCase());
+
+    // Check if ALL query columns exist in the index prefix
+    return queryColumnsLower.every(queryCol => indexPrefixLower.has(queryCol));
   }
 
   /**
