@@ -4,16 +4,19 @@ type IsPlainObject<T> = T extends object
     : true
   : false;
 
-export type DeepMerge<A, B> = {
+// Force TypeScript to evaluate/flatten a type
+type Simplify<T> = {[K in keyof T]: T[K]} & {};
+
+export type DeepMerge<A, B> = Simplify<{
   [K in keyof A | keyof B]: K extends keyof B
     ? K extends keyof A
       ? IsPlainObject<A[K]> extends true
         ? IsPlainObject<B[K]> extends true
-          ? DeepMerge<A[K], B[K]> // Recursively merge objects
+          ? Simplify<DeepMerge<A[K], B[K]>> // Recursively merge objects
           : B[K] // B wins
         : B[K]
       : B[K]
     : K extends keyof A
       ? A[K]
       : never;
-};
+}>;
