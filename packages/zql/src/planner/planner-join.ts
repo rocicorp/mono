@@ -330,6 +330,10 @@ export class PlannerJoin {
 
     let costEstimate: CostEstimate;
 
+    // We're computing the cost from scan estimates provided by our parent...
+    // Is this right? `childScanEst` comes from child input
+    // so we need to provide it with join keys for fanout information.
+
     if (this.type === 'semi') {
       costEstimate = {
         startupCost: parent.startupCost,
