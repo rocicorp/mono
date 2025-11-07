@@ -9,6 +9,7 @@ export interface FanoutResult {
    * For non-NULL joins, this represents how many child rows exist per parent key.
    */
   fanout: number;
+  confidence: 'high' | 'med' | 'none';
 
   /**
    * Source of the fanout calculation.
@@ -195,6 +196,7 @@ export class SQLiteStatFanout {
     // Strategy 3: Use default
     const defaultResult: FanoutResult = {
       fanout: this.#defaultFanout,
+      confidence: 'none',
       source: 'default',
     };
     this.#cache.set(cacheKey, defaultResult);
@@ -259,6 +261,7 @@ export class SQLiteStatFanout {
         return {
           fanout: 0,
           source: 'stat4',
+          confidence: 'high',
         };
       }
 
@@ -275,6 +278,7 @@ export class SQLiteStatFanout {
       return {
         fanout: medianFanout,
         source: 'stat4',
+        confidence: 'high',
       };
     } catch {
       // stat4 table may not exist or query may fail
@@ -327,6 +331,7 @@ export class SQLiteStatFanout {
       return {
         fanout,
         source: 'stat1',
+        confidence: 'med',
       };
     } catch {
       return undefined;

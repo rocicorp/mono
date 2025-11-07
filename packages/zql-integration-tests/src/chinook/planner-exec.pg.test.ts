@@ -65,7 +65,8 @@ function sumRowCounts(
  * Execute all planning attempts for a query and measure estimated vs actual costs
  */
 function executeAllPlanAttempts(
-  query: ReturnType<typeof queries.track.whereExists>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  query: any,
 ): PlanAttemptResult[] {
   // Get the query AST
   const ast = queryWithContext(query, undefined).ast;
@@ -85,16 +86,8 @@ function executeAllPlanAttempts(
     // Rebuild the plan graph for this attempt
     const plans = buildPlanGraph(mappedAST, costModel, true);
 
-    // Reset planning state
-    plans.plan.resetPlanningState();
-
-    // Apply the flip pattern by manually flipping joins
-    const flippableJoins = plans.plan.joins.filter(j => j.isFlippable());
-    for (let i = 0; i < flippableJoins.length; i++) {
-      if (planEvent.flipPattern & (1 << i)) {
-        flippableJoins[i].flip();
-      }
-    }
+    // Restore the exact plan state from the snapshot
+    plans.plan.restorePlanningSnapshot(planEvent.planSnapshot);
 
     // Apply plans to AST to get variant with flip flags set
     const astWithFlips = applyPlansToAST(mappedAST, plans);
@@ -186,6 +179,110 @@ describe('Chinook planner execution cost validation', () => {
         .where('milliseconds', '>', 200000)
         .limit(10),
     },
+    {
+      name: 'fanout test - album to tracks (high fanout)',
+      query: queries.album
+        .where('title', 'Greatest Hits')
+        .whereExists('tracks', t => t),
+    },
+    {
+      name: 'fanout test - artist to album to track (compound fanout)',
+      query: queries.artist
+        .where('name', 'Iron Maiden')
+        .whereExists('albums', album =>
+          album.whereExists('tracks', track => track),
+        ),
+    },
+    {
+      name: 'low fanout chain - invoiceLine to track to album (FK relationships)',
+      query: queries.invoiceLine.whereExists('track', track =>
+        track.whereExists('album', album =>
+          album.where(
+            'title',
+            'The Best of Buddy Guy - The Millennium Collection',
+          ),
+        ),
+      ),
+    },
+    // TODO: why do you fail?
+    // {
+    //   name: 'extreme selectivity - artist to album to long tracks',
+    //   query: queries.artist
+    //     .whereExists('albums', album =>
+    //       album.whereExists('tracks', track =>
+    //         track.where('milliseconds', '>', 10_000_000),
+    //       ),
+    //     )
+    //     .limit(5),
+    // },
+
+    /**
+     * ~~ F1
+     * Currently fails due to bad default assumptions
+     * SQLite assumes `employee.where('title', 'Sales Support Agent')` returns 2 rows
+     * but it really returns 11. This is a 5.5x cost factor skew.
+     * There is no index on title.
+     * We can:
+     * - try to gather stats on all columns
+     * - try to guess at a better sane default for inequality selectivity (e.g., use PG's default)
+     * - workaround! Give the user a util to run all forms of their query and return the optimal query they can ship to prod!
+     */
+    // {
+    //   name: 'F1 deep nesting - invoiceLine to invoice to customer to employee',
+    //   query: queries.invoiceLine
+    //     .whereExists('invoice', invoice =>
+    //       invoice.whereExists('customer', customer =>
+    //         customer.whereExists('supportRep', employee =>
+    //           employee.where('title', 'Sales Support Agent'),
+    //         ),
+    //       ),
+    //     )
+    //     .limit(20),
+    // },
+    // TODO: why do you fail?
+    // {
+    //   name: 'asymmetric OR - track with album or invoiceLines',
+    //   query: queries.track
+    //     .where(({or, exists}) =>
+    //       or(
+    //         exists('album', album => album.where('artistId', 1)),
+    //         exists('invoiceLines'),
+    //       ),
+    //     )
+    //     .limit(15),
+    // },
+    // TODO: why do you fail?
+    // {
+    //   name: 'junction table - playlist to tracks via playlistTrack',
+    //   query: queries.playlist
+    //     .whereExists('tracks', track => track.where('composer', 'Kurt Cobain'))
+    //     .limit(10),
+    // },
+    // TODO: why do you fail?
+    // {
+    //   name: 'empty result - nonexistent artist',
+    //   query: queries.track
+    //     .whereExists('album', album =>
+    //       album.whereExists('artist', artist =>
+    //         artist.where('name', 'NonexistentArtistZZZZ'),
+    //       ),
+    //     )
+    //     .limit(10),
+    // },
+
+    /**
+     * ~~ F2
+     * Currently fails due to SQLite assuming `> Z` has 80% selectivity whereas it really has < 1%.
+     * Not sure what we can do here given there is no index on title or same set of workarounds
+     * proposed in `F1`
+     */
+    // {
+    //   name: 'F2 sparse FK - track to album with NULL handling',
+    //   query: queries.track
+    //     .where('albumId', 'IS NOT', null)
+    //     .whereExists('album', album => album.where('title', '>', 'Z'))
+    //     .limit(10),
+    // },
   ])('$name', ({query}) => {
     // Execute all plan attempts and collect results
     const results = executeAllPlanAttempts(query);
@@ -198,9 +295,18 @@ describe('Chinook planner execution cost validation', () => {
     const actualCosts = results.map(r => r.actualRowsScanned);
     const correlation = spearmanCorrelation(estimatedCosts, actualCosts);
 
-    // console.log(estimatedCosts);
-    // console.log(actualCosts);
-    // console.log(correlation);
+    if (correlation < 0.7) {
+      // console.log('\n=== FAILED TEST:', query);
+      // console.log('Estimated costs:', estimatedCosts);
+      // console.log('Actual costs:', actualCosts);
+      // console.log('Correlation:', correlation);
+      // console.log('Results:');
+      // for (const r of results) {
+      //   console.log(
+      //     `  Attempt ${r.attemptNumber}: est=${r.estimatedCost}, actual=${r.actualRowsScanned}, flip=${r.flipPattern}`,
+      //   );
+      // }
+    }
 
     // Assert that correlation is positive and reasonably strong
     // A correlation >= 0.7 indicates the cost model is directionally correct

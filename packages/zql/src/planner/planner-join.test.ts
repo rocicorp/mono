@@ -67,6 +67,7 @@ suite('PlannerJoin', () => {
       returnedRows: 100,
       selectivity: 1.0,
       limit: undefined,
+      fanout: expect.any(Function),
     });
   });
 
@@ -83,6 +84,7 @@ suite('PlannerJoin', () => {
       returnedRows: 100,
       selectivity: 1.0,
       limit: undefined,
+      fanout: expect.any(Function),
     });
   });
 
@@ -104,6 +106,7 @@ suite('PlannerJoin', () => {
       returnedRows: 100,
       selectivity: 1.0,
       limit: undefined,
+      fanout: expect.any(Function),
     });
   });
 

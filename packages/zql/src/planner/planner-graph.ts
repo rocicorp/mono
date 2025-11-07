@@ -13,7 +13,7 @@ import type {PlanDebugger} from './planner-debug.ts';
 /**
  * Captured state of a plan for comparison and restoration.
  */
-type PlanState = {
+export type PlanState = {
   connections: Array<{limit: number | undefined}>;
   joins: Array<{type: 'semi' | 'flipped'}>;
   fanOuts: Array<{type: 'FO' | 'UFO'}>;
@@ -324,8 +324,7 @@ export class PlannerGraph {
             attemptNumber: pattern,
             totalCost,
             flipPattern: pattern, // Bitmask of which joins are flipped
-            // TODO: we'll need a different way to collect these
-            // nodeCosts: this.#collectNodeCosts(),
+            planSnapshot: this.capturePlanningSnapshot(),
             joinStates: this.joins.map(j => {
               const info = j.getDebugInfo();
               return {
