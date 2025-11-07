@@ -93,24 +93,20 @@ describe('defineQuery', () => {
     });
   });
 
-  test('should work with validator that transforms input', () => {
+  test('should work with validator that uses same type for input and output', () => {
     const query = defineQuery(
       'testWithValidator',
       {
-        validator: makeValidator<string, number>(data => {
-          if (typeof data === 'string') {
-            const parsed = parseInt(data, 10);
-            if (isNaN(parsed)) {
-              throw new Error('Invalid number');
-            }
-            return parsed;
+        validator: makeValidator<number, number>(data => {
+          if (typeof data === 'number') {
+            return data * 2; // Transform but keep same type
           }
-          throw new Error('Expected string');
+          throw new Error('Expected number');
         }),
       },
       ({ctx, args}: {ctx: string; args: number}) => {
         expect(ctx).toBe('validatorContext');
-        expect(args).toBe(123); // Should be converted from string to number
+        expect(args).toBe(246); // Should be doubled from 123
         expect(typeof args).toBe('number');
         return builder.foo.where('val', '=', args);
       },
@@ -118,15 +114,15 @@ describe('defineQuery', () => {
 
     expect(query.queryName).toBe('testWithValidator');
 
-    // Input is string, but should be converted to number by validator
-    const result = queryWithContext(query('123'), 'validatorContext');
+    // Input is number, should be transformed by validator
+    const result = queryWithContext(query(123), 'validatorContext');
     expect(result.ast).toEqual({
       table: 'foo',
       where: {
         type: 'simple',
         left: {type: 'column', name: 'val'},
         op: '=',
-        right: {type: 'literal', value: 123}, // Should be the converted number
+        right: {type: 'literal', value: 246}, // Should be the transformed number
       },
       orderBy: [['id', 'asc']],
     });
@@ -440,29 +436,35 @@ describe('defineQuery types', () => {
   });
 
   test('should reject invalid validator input types', () => {
-    const stringToNumberValidator = makeValidator<string, number>(data => {
-      if (typeof data === 'string') {
-        return parseInt(data, 10);
-      }
-      throw new Error('Expected string');
-    });
+    // Use a validator where input is a subtype of output (satisfies TInput extends TOutput)
+    const literalToStringValidator = makeValidator<'foo' | 'bar', string>(
+      data => {
+        if (data === 'foo' || data === 'bar') {
+          return data;
+        }
+        throw new Error('Expected foo or bar');
+      },
+    );
 
     const validatedQuery = defineQuery(
       'validatedTest',
-      {validator: stringToNumberValidator},
+      {validator: literalToStringValidator},
       ({args}) => {
-        expectTypeOf(args).toEqualTypeOf<number>();
+        expectTypeOf(args).toEqualTypeOf<string>();
         return builder.foo;
       },
     );
 
     // Valid usage
-    expectTypeOf(validatedQuery).toBeCallableWith('123');
+    expectTypeOf(validatedQuery).toBeCallableWith('foo' as const);
 
-    // @ts-expect-error - Type 'number' is not assignable to type 'string' (validator input)
+    // @ts-expect-error - Type 'string' is not assignable to type '"foo" | "bar"' (validator input)
+    expectTypeOf(validatedQuery).toBeCallableWith('baz');
+
+    // @ts-expect-error - Type 'number' is not assignable to type '"foo" | "bar"' (validator input)
     expectTypeOf(validatedQuery).toBeCallableWith(123);
 
-    // @ts-expect-error - Type 'boolean' is not assignable to type 'string' (validator input)
+    // @ts-expect-error - Type 'boolean' is not assignable to type '"foo" | "bar"' (validator input)
     expectTypeOf(validatedQuery).toBeCallableWith(true);
   });
 
@@ -484,6 +486,9 @@ describe('defineQuery types', () => {
     void validThreeArg(undefined);
     // @ts-expect-error - Argument of type '32' is not assignable to parameter of type 'undefined'
     void validThreeArg(32);
+
+    // Add assertion to satisfy test requirements
+    expect(validThreeArg.queryName).toBe('validThreeArg');
   });
 
   test('should reject calling query with wrong argument type', () => {
@@ -494,6 +499,9 @@ describe('defineQuery types', () => {
 
     // @ts-expect-error - Argument of type 'number' is not assignable to parameter of type 'string'
     void queryWithArgs(123);
+
+    // Add assertion to satisfy test requirements
+    expect(queryWithArgs.queryName).toBe('argsTest');
   });
 
   test('should have readonly queryName property', () => {
@@ -520,5 +528,49 @@ describe('defineQuery types', () => {
     // these are OK since they are ReadonlyJSONValue
     expectTypeOf(query).toBeCallableWith(123);
     expectTypeOf(query).toBeCallableWith('test');
+  });
+
+  test('TInput extends TOutput constraint - ensures type safety', () => {
+    // The TInput extends TOutput constraint prevents validators from widening types.
+    // This ensures the validator's input type is compatible with (assignable to) the output type.
+
+    // Valid: TInput === TOutput (same types - most common case)
+    const query1 = defineQuery(
+      'sameTypes',
+      {
+        validator: makeValidator<string, string>(data => {
+          if (typeof data === 'string') return data.toUpperCase();
+          throw new Error('Expected string');
+        }),
+      },
+      ({args}) => {
+        expectTypeOf(args).toEqualTypeOf<string>();
+        return builder.foo.where('id', '=', args);
+      },
+    );
+    expectTypeOf(query1).toBeCallableWith('hello');
+
+    // Valid: Narrow input type extends wide output type (literal to base)
+    const query2 = defineQuery(
+      'narrowToWide',
+      {
+        validator: makeValidator<'foo' | 'bar', string>(data => {
+          if (data === 'foo' || data === 'bar') return data;
+          throw new Error('Expected foo or bar');
+        }),
+      },
+      ({args}) => {
+        expectTypeOf(args).toEqualTypeOf<string>();
+        return builder.foo.where('id', '=', args);
+      },
+    );
+    expectTypeOf(query2).toBeCallableWith('foo' as const);
+    // @ts-expect-error - Type 'string' is not assignable to type '"foo" | "bar"'
+    expectTypeOf(query2).toBeCallableWith('baz');
+
+    // The following patterns are prevented at compile time:
+    // - Wide input to narrow output: DefineQueryOptions<string, 'foo' | 'bar'>
+    // - Unrelated types: DefineQueryOptions<string, number>
+    // - Optional to required: DefineQueryOptions<string | undefined, string>
   });
 });

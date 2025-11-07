@@ -29,7 +29,7 @@ export type NamedQueryFunction<
   TReturn,
   TContext,
   TOutput extends ReadonlyJSONValue | undefined,
-  TInput extends ReadonlyJSONValue | undefined,
+  TInput extends TOutput,
 > = ([TOutput] extends [undefined]
   ? (() => Query<TSchema, TTable, TReturn, TContext>) &
       ((args: undefined) => Query<TSchema, TTable, TReturn, TContext>)
@@ -72,7 +72,7 @@ export function defineQuery<
   TReturn,
   TContext,
   TOutput extends ReadonlyJSONValue | undefined,
-  TInput extends ReadonlyJSONValue | undefined = TOutput,
+  TInput extends TOutput = TOutput,
 >(
   name: TName,
   options: DefineQueryOptions<TInput, TOutput>,
@@ -109,7 +109,7 @@ export function defineQuery<
   TReturn,
   TContext,
   TOutput extends ReadonlyJSONValue | undefined,
-  TInput extends ReadonlyJSONValue | undefined = TOutput,
+  TInput extends TOutput = TOutput,
 >(
   name: TName,
   optionsOrQueryFn:
@@ -199,7 +199,7 @@ export function defineQueryWithContextType<TContext>(): <
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
   TOutput extends ReadonlyJSONValue | undefined,
-  TInput extends ReadonlyJSONValue | undefined = TOutput,
+  TInput extends TOutput = TOutput,
 >(
   name: TName,
   optionsOrQueryFn:
@@ -221,7 +221,7 @@ export function defineQueryWithContextType<TContext>(): <
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
     TOutput extends ReadonlyJSONValue | undefined,
-    TInput extends ReadonlyJSONValue | undefined = TOutput,
+    TInput extends TOutput = TOutput,
   >(
     name: TName,
     optionsOrQueryFn:
