@@ -65,11 +65,11 @@ export type MutatorResultDetails =
           };
     };
 
-export type MutationResultSuccessDetails = Extract<
+export type MutatorResultSuccessDetails = Extract<
   MutatorResultDetails,
   {type: 'success'}
 >;
-export type MutationResultErrorDetails = Extract<
+export type MutatorResultErrorDetails = Extract<
   MutatorResultDetails,
   {type: 'error'}
 >;

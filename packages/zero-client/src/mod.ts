@@ -182,9 +182,9 @@ export type {
   CustomMutatorImpl,
   MakeCustomMutatorInterface,
   MakeCustomMutatorInterfaces,
-  MutationResultErrorDetails,
-  MutationResultSuccessDetails,
   MutatorResultDetails,
+  MutatorResultErrorDetails,
+  MutatorResultSuccessDetails,
   MutatorResult as PromiseWithServerResult,
 } from './client/custom.ts';
 export {isClientError, isServerError, isZeroError} from './client/error.ts';

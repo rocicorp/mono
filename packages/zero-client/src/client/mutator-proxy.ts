@@ -7,21 +7,21 @@ import {
 import type {ConnectionManager, ConnectionState} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import type {
-  MutationResultErrorDetails,
-  MutationResultSuccessDetails,
   MutatorResult,
+  MutatorResultErrorDetails,
+  MutatorResultSuccessDetails,
 } from './custom.ts';
 import {isZeroError, type ZeroError} from './error.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 
 const successResultDetails = {
   type: 'success',
-} as const satisfies MutationResultSuccessDetails;
+} as const satisfies MutatorResultSuccessDetails;
 const successResult = () => successResultDetails;
 
 type CachedMutationRejection = {
   readonly error: ZeroError;
-  readonly promise: Promise<MutationResultErrorDetails>;
+  readonly promise: Promise<MutatorResultErrorDetails>;
 };
 
 export class MutatorProxy {
@@ -100,14 +100,14 @@ export class MutatorProxy {
       };
 
       const cachedMutationPromises: Partial<
-        Record<'client' | 'server', Promise<MutationResultErrorDetails>>
+        Record<'client' | 'server', Promise<MutatorResultErrorDetails>>
       > = {};
 
       let hasNotifiedApplicationError = false;
 
       const wrapErrorFor =
         (origin: 'client' | 'server') =>
-        (error: unknown): Promise<MutationResultErrorDetails> => {
+        (error: unknown): Promise<MutatorResultErrorDetails> => {
           const cachedPromise = cachedMutationPromises[origin];
           if (cachedPromise) {
             return cachedPromise;
@@ -162,12 +162,12 @@ export class MutatorProxy {
 
   #normalizeResultPromise(
     promise: Promise<unknown>,
-    wrapError: (error: unknown) => Promise<MutationResultErrorDetails>,
+    wrapError: (error: unknown) => Promise<MutatorResultErrorDetails>,
   ) {
-    return promise.then<
-      MutationResultSuccessDetails,
-      MutationResultErrorDetails
-    >(successResult, wrapError);
+    return promise.then<MutatorResultSuccessDetails, MutatorResultErrorDetails>(
+      successResult,
+      wrapError,
+    );
   }
 
   #makeZeroErrorResultDetails(zeroError: ZeroError) {
@@ -179,7 +179,7 @@ export class MutatorProxy {
         message,
         details: errorBody,
       },
-    } as const satisfies MutationResultErrorDetails);
+    } as const satisfies MutatorResultErrorDetails);
   }
 
   #makeApplicationErrorResultDetails(applicationError: ApplicationError) {
@@ -190,6 +190,6 @@ export class MutatorProxy {
         message: applicationError.message,
         details: applicationError.details,
       },
-    } as const satisfies MutationResultErrorDetails);
+    } as const satisfies MutatorResultErrorDetails);
   }
 }
