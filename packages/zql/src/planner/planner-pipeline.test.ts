@@ -92,6 +92,7 @@ suite('Planner Pipeline Integration', () => {
       returnedRows: 100,
       selectivity: 1.0,
       limit: undefined,
+      fanout: expect.any(Function),
     });
 
     // Verify fan-out and fan-in are still normal types
@@ -188,6 +189,7 @@ suite('Planner Pipeline Integration', () => {
       returnedRows: 100,
       selectivity: 1.0,
       limit: undefined,
+      fanout: expect.any(Function),
     });
 
     // Verify fan-out and fan-in are union types
@@ -283,6 +285,7 @@ suite('Planner Pipeline Integration', () => {
       returnedRows: 100,
       selectivity: 1.0,
       limit: undefined,
+      fanout: expect.any(Function),
     };
     expect(normalCost).toStrictEqual(baseCost);
     expect(unionCost).toStrictEqual(baseCost);
@@ -505,6 +508,7 @@ suite('Planner Pipeline Integration', () => {
       returnedRows: 100,
       selectivity: 1.0,
       limit: undefined,
+      fanout: expect.any(Function),
     };
     expect(normalCost).toStrictEqual(baseCost);
 
