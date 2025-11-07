@@ -1,4 +1,4 @@
-import {expect, vi} from 'vitest';
+import {expect, vi, type Mock} from 'vitest';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {h128} from '../../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
@@ -49,7 +49,7 @@ import {DrainCoordinator} from './drain-coordinator.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
 import {initViewSyncerSchema} from './schema/init.ts';
 import {Snapshotter} from './snapshotter.ts';
-import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
+import {ViewSyncerService, type SyncContext} from './view-syncer.ts';
 
 export const APP_ID = 'this_app';
 export const SHARD_NUM = 2;
@@ -667,7 +667,7 @@ export async function setup(
   );
   await initViewSyncerSchema(lc, cvrDB, SHARD);
 
-  const setTimeoutFn = vi.fn();
+  const setTimeoutFn: Mock<typeof setTimeout> = vi.fn();
 
   const replicator = fakeReplicator(lc, replica);
   const stateChanges: Subscription<ReplicaState> = Subscription.create();

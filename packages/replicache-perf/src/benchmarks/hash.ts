@@ -4,11 +4,11 @@ import {makeRandomStrings} from '../data.ts';
 
 const encoder = new TextEncoder();
 
-function stringToUint8Array(s: string): Uint8Array {
+function stringToUint8Array(s: string): Uint8Array<ArrayBuffer> {
   return encoder.encode(s);
 }
 
-function stringToUint16Array(s: string): Uint16Array {
+function stringToUint16Array(s: string): Uint16Array<ArrayBuffer> {
   const u = new Uint16Array(s.length);
   for (let i = 0; i < s.length; i++) {
     u[i] = s.charCodeAt(i);
@@ -68,7 +68,7 @@ function sha512({wasm, utf8}: {wasm: boolean; utf8: boolean}): Benchmark {
   let randomStrings: string[];
   const results = [];
   let calculateHash: (
-    sum: Uint8Array | Uint16Array,
+    sum: Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer>,
   ) => Uint8Array | Promise<ArrayBuffer>;
   const toSum = utf8 ? stringToUint8Array : stringToUint16Array;
 

@@ -238,7 +238,7 @@ class NativeClientLockManager implements ClientLockManager {
   request(
     name: string,
     mode: 'exclusive' | 'shared',
-    fn: () => Promise<void>,
+    fn: () => Awaited<void>,
   ): Promise<void> {
     return this.#locks.request(name, {mode, signal: this.#signal}, fn);
   }

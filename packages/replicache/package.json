@@ -50,8 +50,8 @@
     "fetch-mock": "^9.11.0",
     "playwright": "^1.53.2",
     "shared": "0.0.0",
-    "typescript": "~5.8.2",
-    "vitest": "^4.0.4"
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.7"
   },
   "peerDependencies": {
     "@op-engineering/op-sqlite": ">=15",

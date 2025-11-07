@@ -18,7 +18,7 @@
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",
     "shared": "0.0.0",
-    "typescript": "~5.8.2",
+    "typescript": "~5.9.3",
     "zero-types": "0.0.0"
   },
   "prettier": "@rocicorp/prettier-config"

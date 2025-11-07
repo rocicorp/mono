@@ -117,7 +117,7 @@ describe('ZeroProvider', () => {
 
     test('does not recreate zero when only children change', () => {
       const zero = createMockZero();
-      ZeroMock.mockReturnValue(zero);
+      ZeroMock.mockImplementation(() => zero);
 
       const [wrap, setWrap] = createSignal(false);
       const schema = {} as Schema;
@@ -187,7 +187,7 @@ describe('ZeroProvider', () => {
 
     test('calls init callback with constructed zero', () => {
       const zero = createMockZero();
-      ZeroMock.mockReturnValue(zero);
+      ZeroMock.mockImplementation(() => zero);
       const init = vi.fn();
 
       const schema = {} as Schema;
@@ -293,7 +293,7 @@ describe('ZeroProvider', () => {
 
     test('calls connection.connect when auth changes', () => {
       const zero = createMockZero();
-      ZeroMock.mockReturnValue(zero);
+      ZeroMock.mockImplementation(() => zero);
 
       const schema = {} as Schema;
       const [auth, setAuth] = createSignal('token-1');
@@ -333,7 +333,7 @@ describe('ZeroProvider', () => {
 
     test('calls connection.connect when auth changes from undefined to a value', () => {
       const zero = createMockZero();
-      ZeroMock.mockReturnValue(zero);
+      ZeroMock.mockImplementation(() => zero);
 
       const schema = {} as Schema;
       const [auth, setAuth] = createSignal<string | undefined>(undefined);
@@ -365,7 +365,7 @@ describe('ZeroProvider', () => {
 
     test('calls connection.connect with undefined when auth prop is changed to undefined', () => {
       const zero = createMockZero();
-      ZeroMock.mockReturnValue(zero);
+      ZeroMock.mockImplementation(() => zero);
 
       const schema = {} as Schema;
       const [auth, setAuth] = createSignal<string | undefined>('token-initial');

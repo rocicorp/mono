@@ -2,13 +2,8 @@ import {SilentLogger} from '@rocicorp/logger';
 import {stripVTControlCharacters as stripAnsi} from 'node:util';
 import type {PartialDeep} from 'type-fest';
 import {expect, test, vi} from 'vitest';
-import {
-  envSchema,
-  parseOptions,
-  parseOptionsAdvanced,
-  type Config,
-  type Options,
-} from './options.ts';
+import type {Config, Options} from './options-types.ts';
+import {envSchema, parseOptions, parseOptionsAdvanced} from './options.ts';
 import * as v from './valita.ts';
 
 const options = {

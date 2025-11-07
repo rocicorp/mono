@@ -172,7 +172,7 @@ test('source read is not closed when provided', async () => {
     await write.setHead('testHeadLazy', testValue1Hash);
   });
 
-  let releaseSpy: ReturnType<typeof vi.spyOn> | undefined;
+  let releaseSpy;
   await withRead(sourceStore, async sourceRead => {
     releaseSpy = vi.spyOn(sourceRead, 'release');
     await using(lazyStore.read(sourceRead), async read => {
@@ -1442,6 +1442,7 @@ test(
 );
 
 test('[chunk cached via get] the refs of chunks being cached for the first time are counted on commit, even if they were already reachable.', async () => {
+  expect.hasAssertions();
   // Make cache size large enough that eviction does not occur
   // during test
   const {sourceStore, lazyStore} = createLazyStoreForTest({
@@ -1455,6 +1456,7 @@ test('[chunk cached via get] the refs of chunks being cached for the first time 
 });
 
 test('[chunk cached via put] the refs of chunks being cached for the first time are counted on commit, even if they were already reachable.', async () => {
+  expect.hasAssertions();
   // Make cache size large enough that eviction does not occur
   // during test
   const {sourceStore, lazyStore} = createLazyStoreForTest({
@@ -1531,19 +1533,26 @@ async function testChunksCacheForFirstTimeRefsAreCounted(
     [a.hash]: 2,
   });
 
-  if (deleteAllFromLazy) {
-    // delete headLazy
-    await withWrite(lazyStore, async write => {
-      await write.removeHead('headLazy');
-    });
-    // If B's ref to A was not counted despite being previously
-    // reachable, A would now have a negative refCount (as its refCount
-    // would be 1, and then -1 for C's ref to it and -1 for B's ref to it).
-    // Assert that instead everything has a refCount of zero (no entry).
-    expect(lazyStore.getRefCountsSnapshot()).toEqual({});
-    expect(lazyStore.getRefsSnapshot()).toEqual({});
-    expect([...lazyStore.getCachedSourceChunksSnapshot()].sort()).toEqual([]);
+  if (!deleteAllFromLazy) {
+    return {a, b, c};
   }
+
+  // delete headLazy
+  await withWrite(lazyStore, async write => {
+    await write.removeHead('headLazy');
+  });
+  // If B's ref to A was not counted despite being previously
+  // reachable, A would now have a negative refCount (as its refCount
+  // would be 1, and then -1 for C's ref to it and -1 for B's ref to it).
+  // Assert that instead everything has a refCount of zero (no entry).
+  expect(lazyStore.getRefCountsSnapshot()).toEqual({});
+  expect(lazyStore.getRefsSnapshot()).toEqual({});
+  expect(
+    [...lazyStore.getCachedSourceChunksSnapshot()].sort((a, b) =>
+      a.localeCompare(b),
+    ),
+  ).toEqual([]);
+
   return {a, b, c};
 }
 

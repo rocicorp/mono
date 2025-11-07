@@ -4,11 +4,9 @@
 
 import type {LogContext} from '@rocicorp/logger';
 import {logOptions} from '../../../otel/src/log-options.ts';
-import {
-  parseOptions,
-  type Config,
-  type ParseOptions,
-} from '../../../shared/src/options.ts';
+import type {Config} from '../../../shared/src/options-types.ts';
+import {type ParseOptions} from '../../../shared/src/options-types.ts';
+import {parseOptions} from '../../../shared/src/options.ts';
 import * as v from '../../../shared/src/valita.ts';
 // @circular-dep-ignore - importing package.json for version info only
 import packageJson from '../../../zero/package.json' with {type: 'json'};

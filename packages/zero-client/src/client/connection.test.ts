@@ -1,4 +1,4 @@
-import {beforeEach, describe, expect, test, vi} from 'vitest';
+import {beforeEach, describe, expect, test, vi, type Mock} from 'vitest';
 import type {ConnectionManager} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {ConnectionImpl} from './connection.ts';
@@ -7,10 +7,10 @@ import {ZeroLogContext} from './zero-log-context.ts';
 describe('ConnectionImpl', () => {
   let manager: ConnectionManager;
   let lc: ZeroLogContext;
-  let setAuthSpy: ReturnType<typeof vi.fn>;
-  let isInTerminalStateMock: ReturnType<typeof vi.fn>;
-  let connectingMock: ReturnType<typeof vi.fn>;
-  let subscribeMock: ReturnType<typeof vi.fn>;
+  let setAuthSpy: Mock;
+  let isInTerminalStateMock: Mock;
+  let connectingMock: Mock;
+  let subscribeMock: Mock;
 
   beforeEach(() => {
     lc = new ZeroLogContext('debug', {});

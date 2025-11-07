@@ -1,5 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
-import {beforeEach, describe, expect, test, vi} from 'vitest';
+import {beforeEach, describe, expect, test, vi, type Mock} from 'vitest';
 import type {AST, System} from '../../../zero-protocol/src/ast.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
@@ -82,11 +82,11 @@ interface MockView {
 }
 
 describe('query materialization metrics', () => {
-  let addMetricSpy: ReturnType<typeof vi.fn>;
+  let addMetricSpy: Mock;
   let queryDelegate: ZeroContext<unknown>;
   let gotCallback: ((got: boolean) => void) | undefined;
-  let addServerQuerySpy: ReturnType<typeof vi.fn>;
-  let addCustomQuerySpy: ReturnType<typeof vi.fn>;
+  let addServerQuerySpy: Mock;
+  let addCustomQuerySpy: Mock;
 
   beforeEach(() => {
     vi.useFakeTimers();
@@ -563,7 +563,7 @@ describe('query materialization metrics', () => {
   });
 
   describe('edge cases and error scenarios', () => {
-    let addMetricSpy: ReturnType<typeof vi.fn>;
+    let addMetricSpy: Mock;
     let context: ZeroContext<unknown>;
 
     beforeEach(() => {

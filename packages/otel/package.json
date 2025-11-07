@@ -15,6 +15,7 @@
   },
   "prettier": "@rocicorp/prettier-config",
   "devDependencies": {
-    "shared": "0.0.0"
+    "shared": "0.0.0",
+    "typescript": "~5.9.3"
   }
 }

@@ -20,7 +20,8 @@
     "@rocicorp/prettier-config": "^0.4.0",
     "expo-sqlite": ">=15",
     "replicache": "15.2.1",
-    "shared": "0.0.0"
+    "shared": "0.0.0",
+    "typescript": "~5.9.3"
   },
   "peerDependencies": {
     "expo-sqlite": ">=15"

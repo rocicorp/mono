@@ -28,15 +28,18 @@
   },
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",
-    "@vitest/coverage-v8": "^4.0.4",
-    "oxlint": "^1.22.0",
-    "oxlint-tsgolint": "^0.2.0",
-    "prettier": "^3.5.3",
+    "@vitest/coverage-v8": "^4.0.7",
+    "oxlint": "^1.26.0",
+    "oxlint-tsgolint": "^0.5.1",
+    "prettier": "^3.6.2",
     "skott": "^0.35.6",
     "syncpack": "^13.0.4",
-    "tsx": "^4.19.1",
+    "tsx": "^4.20.6",
     "turbo": "^2.4.4",
-    "vitest": "^4.0.4"
+    "vitest": "^4.0.7"
+  },
+  "overrides": {
+    "typescript": "~5.9.3"
   },
   "prettier": "@rocicorp/prettier-config"
 }

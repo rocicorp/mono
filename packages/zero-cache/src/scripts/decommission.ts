@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {logOptions} from '../../../otel/src/log-options.ts';
-import type {Config} from '../../../shared/src/options.ts';
+import type {Config} from '../../../shared/src/options-types.ts';
 import {appOptions, shardOptions, zeroOptions} from '../config/zero-config.ts';
 import {decommissionShard} from '../services/change-source/pg/decommission.ts';
 import {pgClient, type PostgresDB} from '../types/pg.ts';

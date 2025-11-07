@@ -24,9 +24,9 @@
     "playwright": "^1.53.2",
     "replicache": "15.2.1",
     "shared": "0.0.0",
-    "tsx": "^4.19.1",
-    "typescript": "~5.8.2",
-    "vite": "6.2.1",
+    "tsx": "^4.20.6",
+    "typescript": "~5.9.3",
+    "vite": "7.2.2",
     "xbytes": "^1.7.0"
   },
   "prettier": "@rocicorp/prettier-config"

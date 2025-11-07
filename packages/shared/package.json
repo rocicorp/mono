@@ -36,8 +36,8 @@
     "package-up": "^5.0.0",
     "playwright": "^1.53.2",
     "type-fest": "^4.30.0",
-    "typescript": "~5.8.2",
-    "vitest": "^4.0.4"
+    "typescript": "~5.9.3",
+    "vitest": "^4.0.7"
   },
   "prettier": "@rocicorp/prettier-config"
 }

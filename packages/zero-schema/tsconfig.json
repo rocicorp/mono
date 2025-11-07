@@ -1,4 +1,7 @@
 {
   "extends": "../../tsconfig.json",
-  "include": ["src", "../zero-types/src/server-schema.ts"]
+  "include": ["src", "../zero-types/src/server-schema.ts"],
+  "compilerOptions": {
+    "lib": ["DOM", "ES2022"]
+  }
 }

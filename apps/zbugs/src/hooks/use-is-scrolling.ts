@@ -4,7 +4,7 @@ export function useIsScrolling() {
   const [isScrolling, setIsScrolling] = useState(false);
 
   useEffect(() => {
-    let timeout: NodeJS.Timeout | null = null;
+    let timeout: ReturnType<typeof setTimeout> | null = null;
 
     const onScroll = () => {
       setIsScrolling(true);
