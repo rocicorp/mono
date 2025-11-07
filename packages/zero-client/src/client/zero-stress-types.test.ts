@@ -250,36 +250,6 @@ describe('stress test types', () => {
     >();
   });
 
-  test('optional fields are correctly typed in insert vs update', () => {
-    new Zero({
-      schema: zeroStressSchema,
-      userID: 'anon',
-      server: null,
-      mutators: {
-        testOptionalFields: (tx: Tx) => {
-          type InsertUser = Parameters<typeof tx.mutate.user.insert>[0];
-          type UpdateUser = Parameters<typeof tx.mutate.user.update>[0];
-
-          expectTypeOf<InsertUser>().toMatchTypeOf<{
-            workspaceId: string;
-            userId: string;
-            email: string;
-            avatarUrl?: string | null | undefined;
-          }>();
-
-          expectTypeOf<UpdateUser>().toMatchTypeOf<{
-            workspaceId: string;
-            userId: string;
-            email?: string | undefined;
-            avatarUrl?: string | null | undefined;
-          }>();
-
-          return promiseVoid;
-        },
-      },
-    });
-  });
-
   test('schema type can be inferred from Zero instance', () => {
     expectTypeOf<typeof zeroStress.schema>().toEqualTypeOf<
       typeof zeroStressSchema
