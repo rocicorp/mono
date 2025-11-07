@@ -1,0 +1,470 @@
+import {describe, expectTypeOf, test} from 'vitest';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import type {Transaction} from '../../../zql/src/mutate/custom.ts';
+import type {QueryResultType} from '../../../zql/src/query/query.ts';
+import type {MutatorResultDetails} from './custom.ts';
+import {zeroStress} from './zero-stress-client-test.ts';
+import {queryDeep} from './zero-stress-queries-deep-test.ts';
+import {queryWide} from './zero-stress-queries-wide-test.ts';
+import {zeroStressSchema} from './zero-stress-schema-test.ts';
+import {Zero, type MakeEntityQueriesFromSchema} from './zero.ts';
+
+type Schema = typeof zeroStressSchema;
+type Context = {userId: string} | null;
+type Tx = Transaction<Schema, unknown, Context>;
+
+describe('stress test types', () => {
+  test('zero can resolve query return types', async () => {
+    const result = await zeroStress.run(
+      zeroStress.query.abTest.where('endDate', '>', 1726339646439),
+    );
+
+    expectTypeOf(result).toEqualTypeOf<
+      {
+        readonly workspaceId: string;
+        readonly testId: string;
+        readonly testName: string;
+        readonly description: string | null;
+        readonly variants: readonly {
+          readonly variantId: string;
+          readonly name: string;
+          readonly content: {
+            readonly [key: string]: string;
+          };
+          readonly weight: number;
+        }[];
+        readonly trafficSplit: {
+          readonly [variantId: string]: number;
+        };
+        readonly startDate: number;
+        readonly endDate: number | null;
+        readonly metricTracked: string;
+        readonly winningVariant: string | null;
+        readonly statisticalSignificance: number | null;
+        readonly status: 'draft' | 'running' | 'paused' | 'completed';
+        readonly createdById: string;
+        readonly createdAt: number;
+        readonly updatedAt: number;
+      }[]
+    >();
+  });
+
+  test('zero can resolve mutation types', () => {
+    const zero = new Zero({
+      schema: zeroStressSchema,
+      userID: 'anon',
+      server: null,
+      mutators: {
+        updateThing: (tx: Tx, _opts: {}) => {
+          expectTypeOf<
+            Parameters<typeof tx.mutate.vitalSigns.insert>[0]
+          >().toEqualTypeOf<{
+            workspaceId: string;
+            vitalId: string;
+            readonly bloodPressureSystolic?: number | null | undefined;
+            readonly bloodPressureDiastolic?: number | null | undefined;
+            readonly heartRate?: number | null | undefined;
+            readonly temperature?: number | null | undefined;
+            readonly weight?: number | null | undefined;
+            readonly height?: number | null | undefined;
+            readonly oxygenSaturation?: number | null | undefined;
+            readonly patientId: string;
+            readonly recordedAt: string;
+            readonly recordedById: string;
+            readonly createdAt: number;
+          }>();
+
+          return promiseVoid;
+        },
+      },
+    });
+
+    expectTypeOf<
+      Awaited<ReturnType<typeof zero.mutate.updateThing>['client']>
+    >().toEqualTypeOf<MutatorResultDetails>();
+  });
+
+  test('multiple table queries maintain distinct types', async () => {
+    const users = await zeroStress.run(zeroStress.query.user);
+    const products = await zeroStress.run(zeroStress.query.product);
+    const orders = await zeroStress.run(zeroStress.query.order);
+
+    type UserResult = (typeof users)[number];
+    type ProductResult = (typeof products)[number];
+    type OrderResult = (typeof orders)[number];
+
+    expectTypeOf<UserResult>().toHaveProperty('userId');
+    expectTypeOf<ProductResult>().toHaveProperty('productId');
+    expectTypeOf<OrderResult>().toHaveProperty('orderId');
+  });
+
+  test('query chaining maintains type safety', async () => {
+    const results = await zeroStress.run(
+      zeroStress.query.supportTicket
+        .where('status', '=', 'open')
+        .where('priority', '=', 'high')
+        .orderBy('createdAt', 'desc')
+        .limit(10),
+    );
+
+    type Result = (typeof results)[number];
+    expectTypeOf<Result>().toHaveProperty('ticketId');
+    expectTypeOf<Result>().toHaveProperty('status');
+  });
+
+  test('complex nested JSON types are preserved', () => {
+    type UserRow = QueryResultType<
+      MakeEntityQueriesFromSchema<typeof zeroStressSchema>['user']
+    >[number];
+
+    expectTypeOf<UserRow['metadata']>().toEqualTypeOf<{
+      readonly preferences: {
+        readonly theme?: string;
+        readonly notifications?: boolean;
+      };
+      readonly onboarding: {
+        readonly completed: boolean;
+        readonly step: number;
+      };
+    }>();
+  });
+
+  test('all CRUD operations exist on transaction for multiple tables', () => {
+    new Zero({
+      schema: zeroStressSchema,
+      userID: 'anon',
+      server: null,
+      mutators: {
+        testCrudExists: (tx: Tx) => {
+          // Test that insert, update, delete, and upsert all exist
+          // for various tables throughout the giant schema
+          expectTypeOf(tx.mutate.user.insert).toBeFunction();
+          expectTypeOf(tx.mutate.user.update).toBeFunction();
+          expectTypeOf(tx.mutate.user.delete).toBeFunction();
+          expectTypeOf(tx.mutate.user.upsert).toBeFunction();
+
+          expectTypeOf(tx.mutate.emailCampaign.insert).toBeFunction();
+          expectTypeOf(tx.mutate.emailCampaign.update).toBeFunction();
+          expectTypeOf(tx.mutate.emailCampaign.delete).toBeFunction();
+          expectTypeOf(tx.mutate.emailCampaign.upsert).toBeFunction();
+
+          expectTypeOf(tx.mutate.inventoryAdjustment.insert).toBeFunction();
+          expectTypeOf(tx.mutate.inventoryAdjustment.update).toBeFunction();
+          expectTypeOf(tx.mutate.inventoryAdjustment.delete).toBeFunction();
+          expectTypeOf(tx.mutate.inventoryAdjustment.upsert).toBeFunction();
+
+          expectTypeOf(tx.mutate.supportTicket.insert).toBeFunction();
+          expectTypeOf(tx.mutate.supportTicket.update).toBeFunction();
+          expectTypeOf(tx.mutate.supportTicket.delete).toBeFunction();
+          expectTypeOf(tx.mutate.supportTicket.upsert).toBeFunction();
+
+          return promiseVoid;
+        },
+      },
+    });
+  });
+
+  test('composite primary keys are properly typed', () => {
+    new Zero({
+      schema: zeroStressSchema,
+      userID: 'anon',
+      server: null,
+      mutators: {
+        testCompositePKs: (tx: Tx) => {
+          type DeleteUser = Parameters<typeof tx.mutate.user.delete>[0];
+          type DeleteWorkspaceMember = Parameters<
+            typeof tx.mutate.workspaceMember.delete
+          >[0];
+          type DeleteSession = Parameters<typeof tx.mutate.session.delete>[0];
+          type DeleteWorkspace = Parameters<
+            typeof tx.mutate.workspace.delete
+          >[0];
+          expectTypeOf<DeleteUser>().toEqualTypeOf<{
+            workspaceId: string;
+            userId: string;
+          }>();
+          expectTypeOf<DeleteWorkspaceMember>().toEqualTypeOf<{
+            workspaceId: string;
+            memberId: string;
+          }>();
+          expectTypeOf<DeleteSession>().toEqualTypeOf<{
+            workspaceId: string;
+            sessionId: string;
+          }>();
+          expectTypeOf<DeleteWorkspace>().toEqualTypeOf<{
+            workspaceId: string;
+          }>();
+
+          return promiseVoid;
+        },
+      },
+    });
+  });
+
+  test('upsert operations have correct type signatures', () => {
+    new Zero({
+      schema: zeroStressSchema,
+      userID: 'anon',
+      server: null,
+      mutators: {
+        testUpsert: (tx: Tx) => {
+          // Upsert methods should be callable
+          expectTypeOf(tx.mutate.product.upsert).toBeFunction();
+          expectTypeOf(tx.mutate.user.upsert).toBeFunction();
+          expectTypeOf(tx.mutate.workspace.upsert).toBeFunction();
+
+          return promiseVoid;
+        },
+      },
+    });
+  });
+
+  test('enum types are preserved across different tables', () => {
+    type Queries = MakeEntityQueriesFromSchema<typeof zeroStressSchema>;
+
+    type UserRow = QueryResultType<Queries['user']>[number];
+    type WorkspaceRow = QueryResultType<Queries['workspace']>[number];
+    type ProductRow = QueryResultType<Queries['product']>[number];
+    type TicketRow = QueryResultType<Queries['supportTicket']>[number];
+
+    expectTypeOf<UserRow['role']>().toEqualTypeOf<
+      'owner' | 'admin' | 'member' | 'guest'
+    >();
+    expectTypeOf<UserRow['status']>().toEqualTypeOf<
+      'active' | 'suspended' | 'deactivated'
+    >();
+    expectTypeOf<WorkspaceRow['plan']>().toEqualTypeOf<
+      'free' | 'pro' | 'enterprise'
+    >();
+    expectTypeOf<WorkspaceRow['status']>().toEqualTypeOf<
+      'active' | 'suspended' | 'trial'
+    >();
+    expectTypeOf<ProductRow['status']>().toEqualTypeOf<
+      'active' | 'draft' | 'archived'
+    >();
+    expectTypeOf<TicketRow['status']>().toEqualTypeOf<
+      'new' | 'open' | 'pending' | 'solved' | 'closed'
+    >();
+    expectTypeOf<TicketRow['priority']>().toEqualTypeOf<
+      'low' | 'medium' | 'high' | 'urgent'
+    >();
+  });
+
+  test('schema type can be inferred from Zero instance', () => {
+    expectTypeOf<typeof zeroStress.schema>().toEqualTypeOf<
+      typeof zeroStressSchema
+    >();
+  });
+
+  test('query and mutation methods exist for all major tables', () => {
+    expectTypeOf(zeroStress.query.user['where']).toBeFunction();
+    expectTypeOf(zeroStress.query.workspace['where']).toBeFunction();
+    expectTypeOf(zeroStress.query.product['where']).toBeFunction();
+    expectTypeOf(zeroStress.query.order['where']).toBeFunction();
+    expectTypeOf(zeroStress.query.supportTicket['where']).toBeFunction();
+    expectTypeOf(zeroStress.query.emailCampaign['where']).toBeFunction();
+    expectTypeOf(zeroStress.query.inventoryAdjustment['where']).toBeFunction();
+    expectTypeOf(zeroStress.query.patient['where']).toBeFunction();
+    expectTypeOf(zeroStress.query.appointment['where']).toBeFunction();
+    expectTypeOf(zeroStress.query.invoice['where']).toBeFunction();
+  });
+
+  test('single-level relationship queries maintain type safety', async () => {
+    // Query with one-to-many relationship
+    const userQuery = zeroStress.query.user.related('sessions');
+    const users = await zeroStress.run(userQuery);
+
+    type UserResult = (typeof users)[number];
+
+    expectTypeOf<UserResult>().toHaveProperty('userId');
+    expectTypeOf<UserResult>().toHaveProperty('email');
+    expectTypeOf<UserResult['sessions'][number]>().toHaveProperty('sessionId');
+    expectTypeOf<UserResult['sessions'][number]>().toHaveProperty('token');
+  });
+
+  test('relationship queries with filters maintain correct types', async () => {
+    const results = await zeroStress.run(
+      zeroStress.query.user
+        .where('role', '=', 'admin')
+        .related('sessions', q => q.where('ipAddress', '=', '127.0.0.1'))
+        .related('accounts', q =>
+          q.where('provider', '=', 'google').orderBy('createdAt', 'desc'),
+        ),
+    );
+
+    type Result = (typeof results)[number];
+
+    expectTypeOf<Result['role']>().toEqualTypeOf<
+      'owner' | 'admin' | 'member' | 'guest'
+    >();
+    expectTypeOf<Result['sessions'][number]['token']>().toBeString();
+    expectTypeOf<Result['accounts'][number]['provider']>().toEqualTypeOf<
+      'google' | 'github' | 'microsoft' | 'slack'
+    >();
+  });
+
+  test('multiple independent relationship queries on same table', async () => {
+    const query = zeroStress.query.product
+      .related('createdByUser')
+      .related('updatedByUser')
+      .related('workspace');
+
+    const results = await zeroStress.run(query);
+
+    type Result = (typeof results)[number];
+
+    expectTypeOf<NonNullable<Result['createdByUser']>>().toHaveProperty(
+      'userId',
+    );
+    expectTypeOf<NonNullable<Result['updatedByUser']>>().toHaveProperty(
+      'userId',
+    );
+    expectTypeOf<NonNullable<Result['workspace']>>().toHaveProperty(
+      'workspaceId',
+    );
+  });
+
+  test('relationship queries preserve enum types through nesting', async () => {
+    const results = await zeroStress.run(
+      zeroStress.query.product
+        .where('status', '=', 'active')
+        .related('createdByUser', q => q.where('role', '=', 'admin')),
+    );
+
+    type Result = (typeof results)[number];
+
+    expectTypeOf<Result['status']>().toEqualTypeOf<
+      'active' | 'draft' | 'archived'
+    >();
+    expectTypeOf<NonNullable<Result['createdByUser']>['role']>().toEqualTypeOf<
+      'owner' | 'admin' | 'member' | 'guest'
+    >();
+  });
+
+  test('relationship queries with limit and orderBy maintain types', async () => {
+    const query = zeroStress.query.user
+      .where('emailVerified', '=', true)
+      .related('sessions', q =>
+        q
+          .orderBy('lastActivityAt', 'desc')
+          .limit(5)
+          .where('expiresAt', '>', ''),
+      )
+      .related('accounts')
+      .orderBy('createdAt', 'desc')
+      .limit(10);
+
+    const results = await zeroStress.run(query);
+
+    type Result = (typeof results)[number];
+
+    expectTypeOf<Result['sessions'][number]>().toHaveProperty('lastActivityAt');
+    expectTypeOf<Result['accounts'][number]>().toHaveProperty('provider');
+  });
+
+  test('relationship types remain distinct across different parent queries', async () => {
+    const products = await zeroStress.run(
+      zeroStress.query.product.related('workspace'),
+    );
+    const orders = await zeroStress.run(
+      zeroStress.query.order.related('workspace'),
+    );
+
+    type ProductWithWorkspace = (typeof products)[number];
+    type OrderWithWorkspace = (typeof orders)[number];
+
+    expectTypeOf<ProductWithWorkspace['workspace']>().toEqualTypeOf<
+      OrderWithWorkspace['workspace']
+    >();
+  });
+
+  test('relationship queries work across many table types simultaneously', async () => {
+    const [users, products, orders, tickets, campaigns] = await Promise.all([
+      zeroStress.run(
+        zeroStress.query.user.related('sessions').related('accounts'),
+      ),
+      zeroStress.run(
+        zeroStress.query.product.related('workspace').related('createdByUser'),
+      ),
+      zeroStress.run(zeroStress.query.order.related('createdByUser')),
+      zeroStress.run(zeroStress.query.supportTicket.related('workspace')),
+      zeroStress.run(zeroStress.query.emailCampaign.related('workspace')),
+    ]);
+
+    type User = (typeof users)[number];
+    type Product = (typeof products)[number];
+    type Order = (typeof orders)[number];
+    type Ticket = (typeof tickets)[number];
+    type Campaign = (typeof campaigns)[number];
+
+    expectTypeOf<User['sessions'][number]>().toHaveProperty('sessionId');
+    expectTypeOf<NonNullable<Product['workspace']>>().toHaveProperty(
+      'workspaceId',
+    );
+    expectTypeOf<NonNullable<Order['createdByUser']>>().toHaveProperty(
+      'userId',
+    );
+    expectTypeOf<NonNullable<Ticket['workspace']>>().toHaveProperty(
+      'workspaceId',
+    );
+    expectTypeOf<NonNullable<Campaign['workspace']>>().toHaveProperty(
+      'workspaceId',
+    );
+  });
+
+  test('deeply nested relationship chains', async () => {
+    const results = await zeroStress.run(queryDeep);
+
+    type Result = (typeof results)[number];
+    type Creator = NonNullable<Result['createdByUser']>;
+    type Workspace = NonNullable<
+      Creator['workspaceMembers'][number]['workspace']
+    >;
+    type Department = NonNullable<Workspace['budgets'][number]['department']>;
+    type Manager = NonNullable<
+      NonNullable<
+        NonNullable<Department['parentDepartment']>['headOfDepartment']
+      >['manager']
+    >;
+
+    expectTypeOf<Result>().toHaveProperty('orderId');
+    expectTypeOf<Creator>().toHaveProperty('userId');
+    expectTypeOf<Workspace>().toHaveProperty('workspaceId');
+    expectTypeOf<Department>().toHaveProperty('departmentId');
+    expectTypeOf<Manager>().toHaveProperty('email');
+  });
+
+  test('wide parallel relationships maintain distinct types', async () => {
+    const results = await zeroStress.run(queryWide);
+
+    type Result = (typeof results)[number];
+
+    // Verify the root workspace type
+    expectTypeOf<Result>().toHaveProperty('workspaceId');
+    expectTypeOf<Result>().toHaveProperty('name');
+    expectTypeOf<Result>().toHaveProperty('plan');
+
+    // Sample relationships from different business domains
+    expectTypeOf<Result['sessions'][number]>().toHaveProperty('sessionId');
+    expectTypeOf<Result['accounts'][number]>().toHaveProperty('provider');
+    expectTypeOf<Result['emailCampaigns'][number]>().toHaveProperty(
+      'campaignId',
+    );
+    expectTypeOf<Result['subscribers'][number]>().toHaveProperty('email');
+    expectTypeOf<Result['supportTickets'][number]>().toHaveProperty('status');
+    expectTypeOf<Result['knowledgeBaseArticles'][number]>().toHaveProperty(
+      'title',
+    );
+    expectTypeOf<Result['products'][number]>().toHaveProperty('productId');
+    expectTypeOf<Result['orders'][number]>().toHaveProperty('orderId');
+    expectTypeOf<Result['projects'][number]>().toHaveProperty('projectId');
+    expectTypeOf<Result['tasks'][number]>().toHaveProperty('taskId');
+    expectTypeOf<Result['sprints'][number]>().toHaveProperty('sprintId');
+    expectTypeOf<Result['employees'][number]>().toHaveProperty('employeeId');
+    expectTypeOf<Result['payrollRuns'][number]>().toHaveProperty('runId');
+    expectTypeOf<Result['patients'][number]>().toHaveProperty('patientId');
+    expectTypeOf<Result['appointments'][number]>().toHaveProperty(
+      'appointmentId',
+    );
+  });
+});
