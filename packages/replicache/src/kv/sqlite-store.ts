@@ -379,6 +379,8 @@ export function dropStore(
   // Create a temporary delegate to handle database deletion
   const tempDelegate = createDelegate(filename);
   try {
+    // we close the db before destroying it - this
+    // caused an issue with expo-sqlite since it requires this
     tempDelegate.close();
   } catch {
     // Ignore close errors
