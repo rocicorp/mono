@@ -185,7 +185,7 @@ function estimateCost(scanstats: ScanstatusLoop[]): {
       firstLoop = false;
     } else {
       if (op.explain.includes('ORDER BY')) {
-        totalCost += btreeCost(totalRows) / 10;
+        totalCost += btreeCost(totalRows);
       }
     }
   }
