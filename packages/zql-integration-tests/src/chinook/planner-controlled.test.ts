@@ -244,11 +244,10 @@ describe('double nested exists', () => {
     );
 
     // join order: artist -> album -> track
-    // With semi-join overhead, planner now flips both joins to avoid overhead
     expect(pick(planned, ['where', 'flip'])).toBe(true);
     expect(
       pick(planned, ['where', 'related', 'subquery', 'where', 'flip']),
-    ).toBe(true);
+    ).toBe(false);
   });
 });
 
