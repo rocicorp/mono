@@ -157,10 +157,6 @@ export class KeySet<V extends CompoundKey | undefined> {
     this.#storage.del(this.#makeKeySetStorageKey(row));
   }
 
-  /**
-   * Returns an iterable of all members for a set identified by the row data.
-   * The `row` only needs to contain values for the `setKey`.
-   */
   *getValues(row: Row): Iterable<{
     readonly [key: string]: Value;
   }> {
@@ -170,8 +166,6 @@ export class KeySet<V extends CompoundKey | undefined> {
     const prefix = this.#makeKeySetStorageKeyPrefix(row);
     let lastValuesStringified = undefined;
     for (const [key] of this.#storage.scan({prefix})) {
-      // Parse the part of the key *after* the prefix,
-      // which represents the member key values.
       const valuesStringified = JSON.parse(
         '[' + key.substring(prefix.length, key.length - 1) + ']',
       )[0];
@@ -186,16 +180,10 @@ export class KeySet<V extends CompoundKey | undefined> {
     }
   }
 
-  /**
-   * Checks if a set identified by the row data is empty.
-   * The `row` only needs to contain values for the `setKey`.
-   */
   isEmpty(row: Row): boolean {
     const prefix = this.#makeKeySetStorageKeyPrefix(row);
-    // Get the iterator from the scan
     const iterator = this.#storage.scan({prefix})[Symbol.iterator]();
-    // Check the first item. If `done` is true, the iterable is empty.
-    return iterator.next().done === true;
+    return !!iterator.next().done;
   }
 
   #makeKeySetStorageKey(row: Row): string {
@@ -223,23 +211,12 @@ export class KeySet<V extends CompoundKey | undefined> {
     ]);
   }
 
-  /**
-   * Builds the storage key prefix for a specific set.
-   * This is used for scanning all members of a set.
-   * Format: "setName","setValue1",...,
-   */
   #makeKeySetStorageKeyPrefix(row: Row): string {
     return KeySet.#makeKeySetStorageKeyForValues(this.#name, [
       this.#setKey.map(k => row[k]),
     ]);
   }
 
-  /**
-   * The core utility for serializing key parts into the storage format.
-   * Example: (setName: "users", values: [123, "abc"])
-   * Becomes: JSON.stringify(["users", 123, "abc"]) -> '["users",123,"abc"]'
-   * Returns: '"users",123,"abc",'
-   */
   static #makeKeySetStorageKeyForValues(
     setName: string,
     valueArrays: readonly Value[][],
