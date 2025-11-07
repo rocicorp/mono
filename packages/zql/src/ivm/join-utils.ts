@@ -135,6 +135,14 @@ export class KeySet<V extends CompoundKey | undefined> {
   readonly #primaryKey: CompoundKey;
   readonly #valueKey: V;
 
+  /***
+   * @param storage The underlying key-value storage implementation.
+   * @param name A unique name for this set (used as the first part of the key).
+   * @param setKey The row properties that define the "partition" or "set".
+   * @param primaryKey The row properties that uniquely identify an entry *within* the set.
+   * @param valueKey (Optional) The row properties to be stored *in* the key,
+   * which can be retrieved with `getValues`.
+   */
   constructor(
     storage: Storage,
     name: string,
