@@ -368,13 +368,28 @@ export function dropStore(
   const filename = safeFilename(name);
   const entry = stores.get(filename);
   if (entry) {
-    entry.db.close();
+    try {
+      entry.db.close();
+    } catch {
+      // Ignore close errors
+    }
     stores.delete(filename);
   }
 
   // Create a temporary delegate to handle database deletion
   const tempDelegate = createDelegate(filename);
-  tempDelegate.destroy();
+  try {
+    // we close the db before destroying it - this
+    // caused an issue with expo-sqlite since it requires this
+    tempDelegate.close();
+  } catch {
+    // Ignore close errors
+  }
+  try {
+    tempDelegate.destroy();
+  } catch {
+    // Destroy errors shouldn't be fatal; the file may already be gone or locked
+  }
 
   return Promise.resolve();
 }
