@@ -1,6 +1,7 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {hasOwn} from '../../../shared/src/has-own.ts';
 import {must} from '../../../shared/src/must.ts';
+import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import {assertOrderingIncludesPK} from '../builder/builder.ts';
@@ -33,7 +34,7 @@ interface TakeStorage {
   del(key: string): void;
 }
 
-export type PartitionKey = PrimaryKey;
+export type PartitionKey = CompoundKey;
 
 /**
  * The Take operator is for implementing limit queries. It takes the first n

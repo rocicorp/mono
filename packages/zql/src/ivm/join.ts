@@ -1,7 +1,6 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
-import type {Row, Value} from '../../../zero-protocol/src/data.ts';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Change, ChildChange} from './change.ts';
 import type {Node} from './data.ts';
 import {
@@ -9,6 +8,7 @@ import {
   isJoinMatch,
   rowEqualsForCompoundKey,
   type JoinChangeOverlay,
+  KeySet,
 } from './join-utils.ts';
 import {
   throwOutput,
@@ -18,7 +18,7 @@ import {
   type Storage,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
-import {take, type Stream} from './stream.ts';
+import {type Stream} from './stream.ts';
 
 type Args = {
   parent: Input;
@@ -27,6 +27,7 @@ type Args = {
   // The nth key in parentKey corresponds to the nth key in childKey.
   parentKey: CompoundKey;
   childKey: CompoundKey;
+  partitionKey: CompoundKey | undefined;
   relationshipName: string;
   hidden: boolean;
   system: System;
@@ -45,11 +46,12 @@ type Args = {
 export class Join implements Input {
   readonly #parent: Input;
   readonly #child: Input;
-  readonly #storage: Storage;
   readonly #parentKey: CompoundKey;
   readonly #childKey: CompoundKey;
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
+  readonly #primaryKeySet: KeySet<undefined>;
+  readonly #partionKeySet: KeySet<CompoundKey> | undefined;
 
   #output: Output = throwOutput;
 
@@ -61,6 +63,7 @@ export class Join implements Input {
     storage,
     parentKey,
     childKey,
+    partitionKey,
     relationshipName,
     hidden,
     system,
@@ -72,7 +75,6 @@ export class Join implements Input {
     );
     this.#parent = parent;
     this.#child = child;
-    this.#storage = storage;
     this.#parentKey = parentKey;
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
@@ -90,6 +92,23 @@ export class Join implements Input {
         },
       },
     };
+
+    this.#primaryKeySet = new KeySet(
+      storage,
+      'primary',
+      this.#parentKey,
+      parentSchema.primaryKey,
+      undefined,
+    );
+    this.#partionKeySet = partitionKey
+      ? new KeySet(
+          storage,
+          'partition',
+          this.#parentKey,
+          parentSchema.primaryKey,
+          partitionKey,
+        )
+      : undefined;
 
     parent.setOutput({
       push: (change: Change) => this.#pushParent(change),
@@ -214,11 +233,28 @@ export class Join implements Input {
         position: undefined,
       };
       try {
-        const parentNodes = this.#parent.fetch({
-          constraint: Object.fromEntries(
-            this.#parentKey.map((key, i) => [key, childRow[this.#childKey[i]]]),
-          ),
-        });
+        let parentNodes: Stream<Node>;
+        const parentKeyConstraint = Object.fromEntries(
+          this.#parentKey.map((key, i) => [key, childRow[this.#childKey[i]]]),
+        );
+        if (!this.#partionKeySet) {
+          parentNodes = this.#parent.fetch({
+            constraint: parentKeyConstraint,
+          });
+        } else {
+          const partitionKeys =
+            this.#partionKeySet.getValues(parentKeyConstraint);
+          const parent = this.#parent;
+          function* generateParentNodes() {
+            for (const partitionKeyConstraint of partitionKeys) {
+              yield* parent.fetch({
+                ...parentKeyConstraint,
+                ...partitionKeyConstraint,
+              });
+            }
+          }
+          parentNodes = generateParentNodes();
+        }
 
         for (const parentNode of parentNodes) {
           this.#inprogressChildChange.position = parentNode.row;
@@ -276,22 +312,8 @@ export class Join implements Input {
     const childStream = () => {
       if (!storageUpdated) {
         if (mode === 'cleanup') {
-          this.#storage.del(
-            makeStorageKey(
-              this.#parentKey,
-              this.#parent.getSchema().primaryKey,
-              parentNodeRow,
-            ),
-          );
-          const empty =
-            [
-              ...take(
-                this.#storage.scan({
-                  prefix: makeStorageKeyPrefix(parentNodeRow, this.#parentKey),
-                }),
-                1,
-              ),
-            ].length === 0;
+          this.#primaryKeySet.delete(parentNodeRow);
+          const empty = this.#primaryKeySet.isEmpty(parentNodeRow);
           method = empty ? 'cleanup' : 'fetch';
         }
 
@@ -299,14 +321,7 @@ export class Join implements Input {
         // Defer the work to update storage until the child stream
         // is actually accessed
         if (mode === 'fetch') {
-          this.#storage.set(
-            makeStorageKey(
-              this.#parentKey,
-              this.#parent.getSchema().primaryKey,
-              parentNodeRow,
-            ),
-            true,
-          );
+          this.#primaryKeySet.add(parentNodeRow);
         }
       }
 
@@ -342,6 +357,15 @@ export class Join implements Input {
       return stream;
     };
 
+    if (this.#partionKeySet) {
+      if (mode === 'fetch') {
+        this.#partionKeySet.add(parentNodeRow);
+      } else {
+        mode satisfies 'cleanup';
+        this.#partionKeySet.delete(parentNodeRow);
+      }
+    }
+
     return {
       row: parentNodeRow,
       relationships: {
@@ -353,30 +377,3 @@ export class Join implements Input {
 }
 
 type ProcessParentMode = 'fetch' | 'cleanup';
-
-/** Exported for testing. */
-export function makeStorageKeyForValues(values: readonly Value[]): string {
-  const json = JSON.stringify(['pKeySet', ...values]);
-  return json.substring(1, json.length - 1) + ',';
-}
-
-/** Exported for testing. */
-export function makeStorageKeyPrefix(row: Row, key: CompoundKey): string {
-  return makeStorageKeyForValues(key.map(k => row[k]));
-}
-
-/** Exported for testing.
- * This storage key tracks the primary keys seen for each unique
- * value joined on. This is used to know when to cleanup a child's state.
- */
-export function makeStorageKey(
-  key: CompoundKey,
-  primaryKey: PrimaryKey,
-  row: Row,
-): string {
-  const values: Value[] = key.map(k => row[k]);
-  for (const key of primaryKey) {
-    values.push(row[key]);
-  }
-  return makeStorageKeyForValues(values);
-}
