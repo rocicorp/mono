@@ -30,6 +30,13 @@ export const CONSTRAINT_REDUCTION = 10;
  */
 export const DEFAULT_SORT: Ordering = [['id', 'asc']];
 
+function fanout() {
+  return {
+    fanout: 1,
+    confidence: 'none',
+  } as const;
+}
+
 /**
  * Common constraints used in tests.
  */
@@ -57,6 +64,7 @@ export const simpleCostModel: ConnectionCostModel = (
   return {
     startupCost: 0,
     rows: rows,
+    fanout,
   };
 };
 
@@ -72,6 +80,7 @@ export function expectedCost(constraintCount: number): CostEstimate {
     returnedRows: c,
     selectivity: 1.0,
     limit: undefined,
+    fanout,
   };
 }
 
@@ -83,6 +92,7 @@ export function multCost(base: CostEstimate, factor: number): CostEstimate {
     returnedRows: base.returnedRows * factor,
     selectivity: base.selectivity,
     limit: base.limit,
+    fanout,
   };
 }
 

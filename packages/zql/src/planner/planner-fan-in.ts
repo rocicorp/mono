@@ -91,6 +91,9 @@ export class PlannerFanIn {
       startupCost: 0,
       selectivity: 0,
       limit: undefined,
+      fanout: () => {
+        throw new Error('Failed to set fanout model');
+      },
     };
 
     if (this.#type === 'FI') {
@@ -108,6 +111,7 @@ export class PlannerFanIn {
           updatedPattern,
           planDebugger,
         );
+        totalCost.fanout = cost.fanout;
         if (cost.returnedRows > maxrows) {
           maxrows = cost.returnedRows;
         }
@@ -151,6 +155,7 @@ export class PlannerFanIn {
           updatedPattern,
           planDebugger,
         );
+        totalCost.fanout = cost.fanout;
         totalCost.returnedRows += cost.returnedRows;
         totalCost.cost += cost.cost;
         totalCost.scanEst += cost.scanEst;

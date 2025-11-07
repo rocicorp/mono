@@ -1,4 +1,4 @@
-import type {PlannerConnection} from './planner-connection.ts';
+import type {FanoutCostModel, PlannerConnection} from './planner-connection.ts';
 import type {PlannerFanIn} from './planner-fan-in.ts';
 import type {PlannerFanOut} from './planner-fan-out.ts';
 import type {PlannerJoin} from './planner-join.ts';
@@ -51,6 +51,8 @@ export type CostEstimate = {
    */
   selectivity: number;
   limit: number | undefined;
+
+  fanout: FanoutCostModel;
 };
 
 export type NodeType = PlannerNode['kind'];
