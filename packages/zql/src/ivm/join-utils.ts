@@ -5,7 +5,8 @@ import {take, type Stream} from './stream.ts';
 import {compareValues, valuesEqual, type Node} from './data.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
-import {type Storage} from './operator.ts';
+import {type Input, type Storage} from './operator.ts';
+import type {Constraint} from './constraint.ts';
 
 export type JoinChangeOverlay = {
   change: Change;
@@ -99,6 +100,34 @@ export function* generateWithOverlay(
   }
 
   assert(applied);
+}
+
+export function* generateParentNodesForChildRow(
+  parentKey: CompoundKey,
+  childKey: CompoundKey,
+  partitionKeySet: KeySet<CompoundKey> | undefined,
+  parent: Input,
+  childRow: Row,
+): Stream<Node> {
+  const parentKeyConstraint = Object.fromEntries(
+    parentKey.map((key, i) => [key, childRow[childKey[i]]]),
+  );
+  if (!partitionKeySet) {
+    yield* parent.fetch({
+      constraint: parentKeyConstraint,
+    });
+    return;
+  }
+  for (const partitionKeyConstraint of partitionKeySet.getValues(
+    parentKeyConstraint,
+  )) {
+    yield* parent.fetch({
+      constraint: {
+        ...parentKeyConstraint,
+        ...partitionKeyConstraint,
+      },
+    });
+  }
 }
 
 export function rowEqualsForCompoundKey(

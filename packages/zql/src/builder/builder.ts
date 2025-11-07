@@ -318,7 +318,7 @@ function buildPipelineInternal(
   }
 
   if (ast.where && (!fullyAppliedFilters || delegate.applyFiltersAnyway)) {
-    end = applyWhere(end, ast.where, delegate, name);
+    end = applyWhere(end, ast.where, delegate, name, partitionKey);
   }
 
   if (ast.limit !== undefined) {
@@ -355,6 +355,7 @@ function applyWhere(
   condition: Condition,
   delegate: BuilderDelegate,
   name: string,
+  partitionKey: CompoundKey | undefined,
 ): Input {
   if (!conditionIncludesFlippedSubqueryAtAnyLevel(condition)) {
     return buildFilterPipeline(input, delegate, filterInput =>
@@ -362,7 +363,7 @@ function applyWhere(
     );
   }
 
-  return applyFilterWithFlips(input, condition, delegate, name);
+  return applyFilterWithFlips(input, condition, delegate, name, partitionKey);
 }
 
 function applyFilterWithFlips(
@@ -370,6 +371,7 @@ function applyFilterWithFlips(
   condition: Condition,
   delegate: BuilderDelegate,
   name: string,
+  partitionKey: CompoundKey | undefined,
 ): Input {
   let end = input;
   assert(condition.type !== 'simple', 'Simple conditions cannot have flips');
@@ -395,7 +397,7 @@ function applyFilterWithFlips(
       }
       assert(withFlipped.length > 0, 'Impossible to have no flips here');
       for (const cond of withFlipped) {
-        end = applyFilterWithFlips(end, cond, delegate, name);
+        end = applyFilterWithFlips(end, cond, delegate, name, partitionKey);
       }
       break;
     }
@@ -428,7 +430,9 @@ function applyFilterWithFlips(
       }
 
       for (const cond of withFlipped) {
-        branches.push(applyFilterWithFlips(end, cond, delegate, name));
+        branches.push(
+          applyFilterWithFlips(end, cond, delegate, name, partitionKey),
+        );
       }
 
       const ufi = new UnionFanIn(ufo, branches);
@@ -448,11 +452,15 @@ function applyFilterWithFlips(
         `${name}.${sq.subquery.alias}`,
         sq.correlation.childField,
       );
+
+      const flippedJoinName = `${name}:flipped-join(${sq.subquery.alias})`;
       const flippedJoin = new FlippedJoin({
         parent: end,
         child,
+        storage: delegate.createStorage(flippedJoinName),
         parentKey: sq.correlation.parentField,
         childKey: sq.correlation.childField,
+        partitionKey,
         relationshipName: must(
           sq.subquery.alias,
           'Subquery must have an alias',
@@ -462,10 +470,7 @@ function applyFilterWithFlips(
       });
       delegate.addEdge(end, flippedJoin);
       delegate.addEdge(child, flippedJoin);
-      end = delegate.decorateInput(
-        flippedJoin,
-        `${name}:flipped-join(${sq.subquery.alias})`,
-      );
+      end = delegate.decorateInput(flippedJoin, flippedJoinName);
       break;
     }
   }

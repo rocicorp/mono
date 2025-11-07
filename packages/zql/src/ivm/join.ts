@@ -9,6 +9,7 @@ import {
   rowEqualsForCompoundKey,
   type JoinChangeOverlay,
   KeySet,
+  generateParentNodesForChildRow,
 } from './join-utils.ts';
 import {
   throwOutput,
@@ -51,7 +52,7 @@ export class Join implements Input {
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
   readonly #primaryKeySet: KeySet<undefined>;
-  readonly #partionKeySet: KeySet<CompoundKey> | undefined;
+  readonly #partitionKeySet: KeySet<CompoundKey> | undefined;
 
   #output: Output = throwOutput;
 
@@ -100,7 +101,7 @@ export class Join implements Input {
       parentSchema.primaryKey,
       undefined,
     );
-    this.#partionKeySet = partitionKey
+    this.#partitionKeySet = partitionKey
       ? new KeySet(
           storage,
           'partition',
@@ -233,31 +234,13 @@ export class Join implements Input {
         position: undefined,
       };
       try {
-        let parentNodes: Stream<Node>;
-        const parentKeyConstraint = Object.fromEntries(
-          this.#parentKey.map((key, i) => [key, childRow[this.#childKey[i]]]),
+        const parentNodes: Stream<Node> = generateParentNodesForChildRow(
+          this.#parentKey,
+          this.#childKey,
+          this.#partitionKeySet,
+          this.#parent,
+          childRow,
         );
-        if (!this.#partionKeySet) {
-          parentNodes = this.#parent.fetch({
-            constraint: parentKeyConstraint,
-          });
-        } else {
-          const partitionKeys =
-            this.#partionKeySet.getValues(parentKeyConstraint);
-          const parent = this.#parent;
-          function* generateParentNodes() {
-            for (const partitionKeyConstraint of partitionKeys) {
-              yield* parent.fetch({
-                constraint: {
-                  ...parentKeyConstraint,
-                  ...partitionKeyConstraint,
-                },
-              });
-            }
-          }
-          parentNodes = generateParentNodes();
-        }
-
         for (const parentNode of parentNodes) {
           this.#inprogressChildChange.position = parentNode.row;
           const childChange: ChildChange = {
@@ -359,12 +342,12 @@ export class Join implements Input {
       return stream;
     };
 
-    if (this.#partionKeySet) {
+    if (this.#partitionKeySet) {
       if (mode === 'fetch') {
-        this.#partionKeySet.add(parentNodeRow);
+        this.#partitionKeySet.add(parentNodeRow);
       } else {
         mode satisfies 'cleanup';
-        this.#partionKeySet.delete(parentNodeRow);
+        this.#partitionKeySet.delete(parentNodeRow);
       }
     }
 
