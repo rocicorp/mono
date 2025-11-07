@@ -248,8 +248,10 @@ export class Join implements Input {
           function* generateParentNodes() {
             for (const partitionKeyConstraint of partitionKeys) {
               yield* parent.fetch({
-                ...parentKeyConstraint,
-                ...partitionKeyConstraint,
+                constraint: {
+                  ...parentKeyConstraint,
+                  ...partitionKeyConstraint,
+                },
               });
             }
           }
