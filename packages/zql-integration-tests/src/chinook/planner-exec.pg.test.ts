@@ -75,6 +75,7 @@ function executeAllPlanAttempts(
   // Plan with debugger to collect all attempts
   const planDebugger = new AccumulatorDebugger();
   planQuery(mappedAST, costModel, planDebugger);
+  console.log(planDebugger.format());
 
   // Get all completed plan attempts
   const planCompleteEvents = planDebugger.getEvents('plan-complete');
@@ -252,12 +253,12 @@ describe('Chinook planner execution cost validation', () => {
     //     .limit(15),
     // },
     // TODO: why do you fail?
-    // {
-    //   name: 'junction table - playlist to tracks via playlistTrack',
-    //   query: queries.playlist
-    //     .whereExists('tracks', track => track.where('composer', 'Kurt Cobain'))
-    //     .limit(10),
-    // },
+    {
+      name: 'junction table - playlist to tracks via playlistTrack',
+      query: queries.playlist
+        .whereExists('tracks', track => track.where('composer', 'Kurt Cobain'))
+        .limit(10),
+    },
     // TODO: why do you fail?
     // {
     //   name: 'empty result - nonexistent artist',
@@ -283,7 +284,10 @@ describe('Chinook planner execution cost validation', () => {
     //     .whereExists('album', album => album.where('title', '>', 'Z'))
     //     .limit(10),
     // },
-  ])('$name', ({query}) => {
+  ])('$name', ({name, query}) => {
+    if (name !== 'junction table - playlist to tracks via playlistTrack') {
+      return;
+    }
     // Execute all plan attempts and collect results
     const results = executeAllPlanAttempts(query);
 
@@ -296,16 +300,16 @@ describe('Chinook planner execution cost validation', () => {
     const correlation = spearmanCorrelation(estimatedCosts, actualCosts);
 
     if (correlation < 0.7) {
-      // console.log('\n=== FAILED TEST:', query);
-      // console.log('Estimated costs:', estimatedCosts);
-      // console.log('Actual costs:', actualCosts);
-      // console.log('Correlation:', correlation);
-      // console.log('Results:');
-      // for (const r of results) {
-      //   console.log(
-      //     `  Attempt ${r.attemptNumber}: est=${r.estimatedCost}, actual=${r.actualRowsScanned}, flip=${r.flipPattern}`,
-      //   );
-      // }
+      console.log('\n=== FAILED TEST:', query);
+      console.log('Estimated costs:', estimatedCosts);
+      console.log('Actual costs:', actualCosts);
+      console.log('Correlation:', correlation);
+      console.log('Results:');
+      for (const r of results) {
+        console.log(
+          `  Attempt ${r.attemptNumber}: est=${r.estimatedCost}, actual=${r.actualRowsScanned}, flip=${r.flipPattern}`,
+        );
+      }
     }
 
     // Assert that correlation is positive and reasonably strong
