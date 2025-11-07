@@ -1,6 +1,7 @@
 import type {Condition} from '../../../zero-protocol/src/ast.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import type {CostEstimate, JoinType} from './planner-node.ts';
+import type {PlanState} from './planner-graph.ts';
 
 /**
  * Structured debug events emitted during query planning.
@@ -70,7 +71,7 @@ export type PlanCompleteEvent = {
     type: JoinType;
   }>;
   // Planning snapshot that can be restored and applied to AST
-  planSnapshot?: unknown; // PlanState from planner-graph.ts
+  planSnapshot: PlanState;
 };
 
 /**

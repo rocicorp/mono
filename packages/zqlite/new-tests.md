@@ -1,55 +1,142 @@
-Add 7 new test cases to planner-exec.pg.test.ts to validate additional
-cost model scenarios:
+ Recommendation: Use PostgreSQL-style proven defaults:
+     - Equality (=): 0.5% selectivity  
+     - Inequality (<, >): 33% selectivity
+     - Default: 50% selectivity
 
-1.  Low Fanout Chain - Tests FK relationships (1:1) with very selective
-    filter at deepest level
+     ----
 
-- Query: invoiceLine → track → album where album title is very
-  specific
-- Tests: Fanout scaling when f≈1, limit propagation through low-fanout
-  chain
+Perfect! I've identified the root cause of the -1 correlation.
+Here's what I found:
 
-2.  Extreme Selectivity + High Fanout - Tests fanout amplification of
-    rare filters
+Sparse FK Test Investigation - Root Cause Found
 
-- Query: artist → albums → tracks where tracks.milliseconds > 10M
-  (very rare)
-- Tests: 1 - (1-s)^f formula with s<0.01, verifies rare filters become
-  likely with high fanout
+The Problem: SQLite's Catastrophically Wrong Estimate
 
-3.  Deep Nesting (4 levels) - Tests compound selectivity through deep
-    chain
+Query:
+track.where('albumId', 'IS NOT', null)
+.whereExists('album', album => album.where('title', '>', 'Z'))
+.limit(10)
 
-- Query: invoiceLine → invoice → customer → employee with employee
-  filter
-- Tests: Compound downstream selectivity calculation, constraint
-  propagation through 4 levels
+Critical Mismatch:
 
-4.  OR with Asymmetric Fanout - Tests parallel branches with different
-    characteristics
+- SQLite estimates: 288 albums with title > 'Z'
+- Actual reality: 2 albums with title > 'Z'
+- Error magnitude: 144x overestimate!
 
-- Query: track with OR of album (low fanout) vs invoiceLines (high
-  fanout)
-- Tests: Fan-in cost estimation when branches have vastly different
-  fanouts
+Why This Causes Negative Correlation
 
-5.  Many-to-Many Junction - Tests extreme fanout through junction table
+The massive error completely inverts the planner's understanding:
 
-- Query: playlist → playlistTrack → track with selective
-  track.composer filter
-- Tests: Junction table handling, extreme fanout (~484:1), flip
-  decisions with intermediate hop
+| Plan | Flip | Estimated Cost | Actual Rows | What Really
+Happens |
+|------|---------|----------------|-------------|-----------------
+-----------------------------|
+| 0 | Semi | 11.11 | 3,280 | Scan 3,503
+tracks, check each for rare album |
+| 1 | Flipped | 4,263.95 | 381 | Scan 2 albums,
+fetch their 17 tracks |
 
-6.  Empty Result Set - Tests zero-selectivity edge case
+The inversion:
 
-- Query: track → album → artist where artist doesn't exist
-- Tests: Division by zero protection, zero-row handling, early
-  termination
+- Planner thinks: "Semi-join is 400x cheaper" (11 vs 4,264)
+- Reality: "Flipped is 8.6x cheaper" (381 vs 3,280)
+- Result: Perfect negative correlation (-1) because the ranking is
+  completely backwards
 
-7.  Sparse Foreign Key - Tests NULL handling in fanout calculation
+Why SQLite's Estimate Is So Wrong
 
-- Query: track → album with IS NOT NULL check and selective filter
-- Tests: SQLite stat4 NULL exclusion logic, sparse FK cost estimation
+No index on album.title → SQLite uses heuristic estimation:
 
-Each test validates correlation ≥ 0.7 between estimated and actual
-costs.
+1. Without column statistics, SQLite assumes title > 'Z' has
+   "moderate" selectivity (~80%)
+2. Estimated rows: 347 albums × 0.83 ≈ 288 albums
+3. Reality: 'Z' is at the END of the alphabet → almost no titles
+   start with letters after Z → only 2 albums
+
+This is a classic edge case where string comparison selectivity
+without statistics fails catastrophically.
+
+The Domino Effect
+
+Bad SQLite estimate (288 vs 2)
+↓
+Planner thinks album scan is expensive (288 rows)
+↓
+Prefers semi-join (scan tracks, quick lookup on "many" albums)
+↓
+But tracks scan is expensive (3,503 rows) and lookups rarely match
+↓
+Actual performance: Worst possible plan chosen!
+
+Root Causes
+
+1. Missing statistics: No index on album.title means no histogram
+   data
+2. Poor heuristic: SQLite's default selectivity for string >
+   comparison doesn't recognize alphabet boundaries
+3. No confidence scoring: The cost model can't tell this is a
+   low-confidence estimate
+4. Cost model inheritance: Our planner inherits SQLite's bad
+   estimate without validation
+
+Potential Fixes
+
+Short-term (workaround):
+
+1. Add index on album.title to get better statistics
+2. Skip this test (mark as known limitation)
+
+Medium-term (improve cost model):
+
+1. Detect low-confidence estimates (table scans without indexes)
+2. Add safety margins to uncertain estimates
+3. Recognize alphabet boundary patterns ('Z', 'z', '9') in string
+   comparisons
+
+Long-term (dynamic adaptation):
+
+1. Track actual vs estimated during execution
+2. Switch plans mid-flight if estimates are way off (295x in this
+   case!)
+3. Learn from historical query execution
+
+Recommendation
+
+This test is working perfectly - it exposed a real weakness in how
+the cost model handles string comparisons without statistics. I
+suggest:
+
+1. Keep the test to track this known limitation
+2. Mark it with .skip or lower the correlation threshold for this
+   specific test
+3. Add a comment explaining the SQLite selectivity estimation
+   issue
+4. Consider it a valuable regression test for future improvements
+
+Would you like me to update the test to document this as a known
+limitation, or investigate any of the other failing tests?
+
+---
+
+1. Extreme selectivity (correlation: 0.2) - Very rare filters with
+   high fanout
+2. Deep nesting (correlation: 0.31) - 4-level join chain compounds
+   errors
+3. Asymmetric OR (correlation: 0) - OR branches not handled
+   correctly!
+4. Junction table (correlation: 0.4) - Many-to-many through
+   junction
+5. Empty result (correlation: 0.4) - Zero-match queries
+6. Sparse FK (correlation: -1) - Negative correlation = estimates
+   are backwards!
+
+
+
+
+  1. OR branches (correlation = 0) suggests the fan-in/fan-out cost
+  logic may not be working
+  2. Sparse FK (correlation = -1) indicates a critical bug -
+  estimates are inversely correlated with reality
+  3. Deep nesting shows errors compound through multiple levels
+  4. Junction tables and extreme selectivity indicate fanout scaling
+   needs refinement

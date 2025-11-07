@@ -13,7 +13,7 @@ import type {PlanDebugger} from './planner-debug.ts';
 /**
  * Captured state of a plan for comparison and restoration.
  */
-type PlanState = {
+export type PlanState = {
   connections: Array<{limit: number | undefined}>;
   joins: Array<{type: 'semi' | 'flipped'}>;
   fanOuts: Array<{type: 'FO' | 'UFO'}>;
@@ -98,6 +98,18 @@ export class PlannerGraph {
    */
   setTerminus(terminus: PlannerTerminus): void {
     this.#terminus = terminus;
+  }
+
+  /**
+   * Convert FO/FI to UFO/UFI if any downstream joins are flipped.
+   * This changes cost calculation from MAX (parallel) to SUM (sequential).
+   *
+   * Must be called after manually flipping joins but before propagateConstraints.
+   * The normal planning flow calls this automatically.
+   */
+  convertFOFIIfFlipped(): void {
+    const fofiCache = buildFOFICache(this);
+    checkAndConvertFOFI(fofiCache);
   }
 
   /**
@@ -324,8 +336,7 @@ export class PlannerGraph {
             attemptNumber: pattern,
             totalCost,
             flipPattern: pattern, // Bitmask of which joins are flipped
-            // TODO: we'll need a different way to collect these
-            // nodeCosts: this.#collectNodeCosts(),
+            planSnapshot: this.capturePlanningSnapshot(),
             joinStates: this.joins.map(j => {
               const info = j.getDebugInfo();
               return {
