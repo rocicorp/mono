@@ -52,8 +52,8 @@ describe('Chinook planner tests', () => {
         .whereExists('genre', q => q.where('name', 'Rock')),
     );
 
-    expect(pick(ast, ['where', 'conditions', 0, 'flip'])).toBe(true);
-    expect(pick(ast, ['where', 'conditions', 1, 'flip'])).toBe(false);
+    expect(pick(ast, ['where', 'conditions', 0, 'flip'])).toBe(false);
+    expect(pick(ast, ['where', 'conditions', 1, 'flip'])).toBe(true);
   });
 
   test('playlist with track', () => {
