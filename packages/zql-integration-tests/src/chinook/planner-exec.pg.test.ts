@@ -86,16 +86,8 @@ function executeAllPlanAttempts(
     // Rebuild the plan graph for this attempt
     const plans = buildPlanGraph(mappedAST, costModel, true);
 
-    // Reset planning state
-    plans.plan.resetPlanningState();
-
-    // Apply the flip pattern by manually flipping joins
-    const flippableJoins = plans.plan.joins.filter(j => j.isFlippable());
-    for (let i = 0; i < flippableJoins.length; i++) {
-      if (planEvent.flipPattern & (1 << i)) {
-        flippableJoins[i].flip();
-      }
-    }
+    // Restore the exact plan state from the snapshot
+    plans.plan.restorePlanningSnapshot(planEvent.planSnapshot);
 
     // Apply plans to AST to get variant with flip flags set
     const astWithFlips = applyPlansToAST(mappedAST, plans);
@@ -280,9 +272,18 @@ describe('Chinook planner execution cost validation', () => {
     const actualCosts = results.map(r => r.actualRowsScanned);
     const correlation = spearmanCorrelation(estimatedCosts, actualCosts);
 
-    // console.log(estimatedCosts);
-    // console.log(actualCosts);
-    // console.log(correlation);
+    if (correlation < 0.7) {
+      console.log('\n=== FAILED TEST:', query);
+      console.log('Estimated costs:', estimatedCosts);
+      console.log('Actual costs:', actualCosts);
+      console.log('Correlation:', correlation);
+      console.log('Results:');
+      for (const r of results) {
+        console.log(
+          `  Attempt ${r.attemptNumber}: est=${r.estimatedCost}, actual=${r.actualRowsScanned}, flip=${r.flipPattern}`,
+        );
+      }
+    }
 
     // Assert that correlation is positive and reasonably strong
     // A correlation >= 0.7 indicates the cost model is directionally correct
