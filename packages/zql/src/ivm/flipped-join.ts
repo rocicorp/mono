@@ -10,6 +10,7 @@ import type {Node} from './data.ts';
 import {
   generateWithOverlay,
   isJoinMatch,
+  KeySet,
   rowEqualsForCompoundKey,
   type JoinChangeOverlay,
 } from './join-utils.ts';
@@ -18,6 +19,7 @@ import {
   type FetchRequest,
   type Input,
   type Output,
+  type Storage,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {first, type Stream} from './stream.ts';
@@ -25,10 +27,11 @@ import {first, type Stream} from './stream.ts';
 type Args = {
   parent: Input;
   child: Input;
+  storage: Storage;
   // The nth key in childKey corresponds to the nth key in parentKey.
   parentKey: CompoundKey;
   childKey: CompoundKey;
-
+  partitionKey: CompoundKey | undefined;
   relationshipName: string;
   hidden: boolean;
   system: System;
@@ -49,6 +52,7 @@ export class FlippedJoin implements Input {
   readonly #childKey: CompoundKey;
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
+  readonly #partionKeySet: KeySet<CompoundKey> | undefined;
 
   #output: Output = throwOutput;
 
@@ -57,8 +61,10 @@ export class FlippedJoin implements Input {
   constructor({
     parent,
     child,
+    storage,
     parentKey,
     childKey,
+    partitionKey,
     relationshipName,
     hidden,
     system,
@@ -87,6 +93,16 @@ export class FlippedJoin implements Input {
         },
       },
     };
+
+    this.#partionKeySet = partitionKey
+      ? new KeySet(
+          storage,
+          'partition',
+          this.#parentKey,
+          parentSchema.primaryKey,
+          partitionKey,
+        )
+      : undefined;
 
     parent.setOutput({
       push: (change: Change) => this.#pushParent(change),
