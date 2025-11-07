@@ -352,7 +352,7 @@ export class PlannerJoin {
         startupCost: child.startupCost,
         scanEst:
           parent.limit === undefined
-            ? parent.returnedRows
+            ? parent.returnedRows * child.returnedRows
             : Math.min(
                 parent.returnedRows * child.returnedRows,
                 parent.limit / downstreamChildSelectivity,
