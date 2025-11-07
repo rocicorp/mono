@@ -81,9 +81,11 @@ export function createSQLiteCostModel(
       `Expected scanstatus to return at least one loop for query: ${sql}`,
     );
 
-    return estimateCost(loops, (columns: string[]) =>
+    const ret = estimateCost(loops, (columns: string[]) =>
       fanoutEstimator.getFanout(tableName, columns),
     );
+
+    return ret;
   };
 }
 

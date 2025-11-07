@@ -101,18 +101,6 @@ export class PlannerGraph {
   }
 
   /**
-   * Convert FO/FI to UFO/UFI if any downstream joins are flipped.
-   * This changes cost calculation from MAX (parallel) to SUM (sequential).
-   *
-   * Must be called after manually flipping joins but before propagateConstraints.
-   * The normal planning flow calls this automatically.
-   */
-  convertFOFIIfFlipped(): void {
-    const fofiCache = buildFOFICache(this);
-    checkAndConvertFOFI(fofiCache);
-  }
-
-  /**
    * Initiate constraint propagation from the terminus node.
    * This sends constraints up through the graph to update
    * connection cost estimates.

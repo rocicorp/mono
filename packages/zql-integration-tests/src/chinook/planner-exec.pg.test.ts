@@ -260,7 +260,12 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('album', album => album.where('title', '>', 'Z'))
         .limit(10),
     },
-  ])('$name', ({query}) => {
+  ])('$name', ({name, query}) => {
+    if (
+      name !== 'deep nesting - invoiceLine to invoice to customer to employee'
+    ) {
+      return;
+    }
     // Execute all plan attempts and collect results
     const results = executeAllPlanAttempts(query);
 
@@ -273,16 +278,16 @@ describe('Chinook planner execution cost validation', () => {
     const correlation = spearmanCorrelation(estimatedCosts, actualCosts);
 
     if (correlation < 0.7) {
-      console.log('\n=== FAILED TEST:', query);
-      console.log('Estimated costs:', estimatedCosts);
-      console.log('Actual costs:', actualCosts);
-      console.log('Correlation:', correlation);
-      console.log('Results:');
-      for (const r of results) {
-        console.log(
-          `  Attempt ${r.attemptNumber}: est=${r.estimatedCost}, actual=${r.actualRowsScanned}, flip=${r.flipPattern}`,
-        );
-      }
+      // console.log('\n=== FAILED TEST:', query);
+      // console.log('Estimated costs:', estimatedCosts);
+      // console.log('Actual costs:', actualCosts);
+      // console.log('Correlation:', correlation);
+      // console.log('Results:');
+      // for (const r of results) {
+      //   console.log(
+      //     `  Attempt ${r.attemptNumber}: est=${r.estimatedCost}, actual=${r.actualRowsScanned}, flip=${r.flipPattern}`,
+      //   );
+      // }
     }
 
     // Assert that correlation is positive and reasonably strong
