@@ -1,8 +1,8 @@
 import {unreachable} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {
-  ApplicationError,
   wrapWithApplicationError,
+  type ApplicationError,
 } from '../../../zero-protocol/src/application-error.ts';
 import type {ConnectionManager, ConnectionState} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
@@ -29,16 +29,12 @@ export class MutatorProxy {
   readonly #mutationTracker: MutationTracker;
   #mutationRejection: CachedMutationRejection | undefined;
 
-  readonly #onApplicationError: (error: ApplicationError) => void;
-
   constructor(
     connectionManager: ConnectionManager,
     mutationTracker: MutationTracker,
-    onApplicationError: (error: ApplicationError) => void,
   ) {
     this.#connectionManager = connectionManager;
     this.#mutationTracker = mutationTracker;
-    this.#onApplicationError = onApplicationError;
 
     this.#connectionManager.subscribe(state =>
       this.#onConnectionStateChange(state),
@@ -103,8 +99,6 @@ export class MutatorProxy {
         Record<'client' | 'server', Promise<MutatorResultErrorDetails>>
       > = {};
 
-      let hasNotifiedApplicationError = false;
-
       const wrapErrorFor =
         (origin: 'client' | 'server') =>
         (error: unknown): Promise<MutatorResultErrorDetails> => {
@@ -120,12 +114,6 @@ export class MutatorProxy {
           }
 
           const applicationError = wrapWithApplicationError(error);
-
-          if (!hasNotifiedApplicationError) {
-            this.#onApplicationError(applicationError);
-            hasNotifiedApplicationError = true;
-          }
-
           const applicationErrorPromise =
             this.#makeApplicationErrorResultDetails(applicationError);
           cachedMutationPromises[origin] = applicationErrorPromise;
