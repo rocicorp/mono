@@ -27,16 +27,12 @@ export class MutatorProxy {
   readonly #mutationTracker: MutationTracker;
   #mutationRejection: CachedMutationRejection | undefined;
 
-  readonly #onApplicationError: (error: ApplicationError) => void;
-
   constructor(
     connectionManager: ConnectionManager,
     mutationTracker: MutationTracker,
-    onApplicationError: (error: ApplicationError) => void,
   ) {
     this.#connectionManager = connectionManager;
     this.#mutationTracker = mutationTracker;
-    this.#onApplicationError = onApplicationError;
 
     this.#connectionManager.subscribe(state =>
       this.#onConnectionStateChange(state),
@@ -101,8 +97,6 @@ export class MutatorProxy {
         Record<'client' | 'server', Promise<MutatorResultErrorDetails>>
       > = {};
 
-      let hasNotifiedApplicationError = false;
-
       const wrapErrorFor =
         (origin: 'client' | 'server') =>
         (error: unknown): Promise<MutatorResultErrorDetails> => {
@@ -118,12 +112,6 @@ export class MutatorProxy {
           }
 
           const applicationError = wrapWithApplicationError(error);
-
-          if (!hasNotifiedApplicationError) {
-            this.#onApplicationError(applicationError);
-            hasNotifiedApplicationError = true;
-          }
-
           const applicationErrorPromise =
             this.#makeApplicationErrorResultDetails(applicationError);
           cachedMutationPromises[origin] = applicationErrorPromise;
