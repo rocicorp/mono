@@ -12,7 +12,6 @@ import {zeroData} from '../../../replicache/src/transactions.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
 import {promiseUndefined} from '../../../shared/src/resolved-promises.ts';
-import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
@@ -453,7 +452,6 @@ describe('rebasing custom mutators', () => {
 
 describe('error handling', () => {
   test('client-side errors surface as application errors on the client/server promises', async () => {
-    const onError = vi.fn();
     const z = zeroForTest({
       schema,
       mutators: {
@@ -464,7 +462,6 @@ describe('error handling', () => {
           },
         },
       } as const,
-      onError,
     });
 
     await z.triggerConnected();
@@ -485,19 +482,11 @@ describe('error handling', () => {
     assert(serverResult.error.type === 'app');
     expect(serverResult.error.details).toBeUndefined();
 
-    await vi.waitFor(() => {
-      expect(onError).toHaveBeenCalled();
-    });
-    expect(onError.mock.calls[0][0]).toMatchObject({
-      message: 'client boom',
-    });
-
     await z.close();
   });
 
   test('rejects outstanding custom mutation server promises when connection goes offline', async () => {
     const noop = vi.fn(async (_tx: MutatorTx) => {});
-    const onError = vi.fn();
     const z = zeroForTest({
       schema,
       mutators: {
@@ -505,7 +494,6 @@ describe('error handling', () => {
           noop,
         },
       } as const,
-      onError,
     });
 
     await z.triggerConnected();
@@ -535,18 +523,12 @@ describe('error handling', () => {
     const clientResult = await result.client;
     assert(clientResult.type === 'success');
 
-    await vi.waitFor(() => {
-      expect(onError).toHaveBeenCalledOnce();
-    });
-    expect(onError.mock.calls[0][0]).toBe(offlineError);
-
     await z.close();
   });
 
   test('custom mutators short-circuit while offline and resume after reconnect', async () => {
     const topLevel = vi.fn(async (_tx: MutatorTx) => {});
     const namespaced = vi.fn(async (_tx: MutatorTx, _args: {id: string}) => {});
-    const onError = vi.fn();
 
     const z = zeroForTest({
       schema,
@@ -556,7 +538,6 @@ describe('error handling', () => {
           namespaced,
         },
       } as const,
-      onError,
     });
 
     await z.triggerConnected();
@@ -607,11 +588,6 @@ describe('error handling', () => {
     expect(topLevel).not.toHaveBeenCalled();
     expect(namespaced).not.toHaveBeenCalled();
 
-    await vi.waitFor(() => {
-      expect(onError).toHaveBeenCalled();
-    });
-    expect(onError.mock.calls[0][0]).toBe(offlineError);
-
     z.connectionManager.connected();
     await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
@@ -642,14 +618,10 @@ describe('error handling', () => {
       ],
     });
 
-    expect(onError).toHaveBeenCalledTimes(1);
-
     await z.close();
   });
 
   test('run waiting for complete results throws in custom mutations', async () => {
-    const onErrorSpy = vi.fn();
-
     const z = zeroForTest({
       schema,
       mutators: {
@@ -659,7 +631,6 @@ describe('error handling', () => {
           },
         },
       } as const,
-      onError: onErrorSpy,
     });
 
     await z.triggerConnected();
@@ -672,44 +643,6 @@ describe('error handling', () => {
     expect(result.error.message).toBe(
       'Cannot wait for complete results in custom mutations',
     );
-
-    expect(onErrorSpy).toBeCalledTimes(1);
-    const error = onErrorSpy.mock.calls[0][0];
-    expect(error).toBeInstanceOf(ApplicationError);
-    expect(error.message).toBe(
-      'Cannot wait for complete results in custom mutations',
-    );
-
-    await z.close();
-  });
-
-  test('not awaiting the client promise still triggers onError', async () => {
-    const onErrorSpy = vi.fn();
-    const z = zeroForTest({
-      schema,
-      mutators: {
-        issue: {
-          // oxlint-disable-next-line require-await
-          create: async (_tx: MutatorTx) => {
-            throw new Error('test error');
-          },
-        },
-      } as const,
-      onError: onErrorSpy,
-    });
-
-    await z.triggerConnected();
-    await z.waitForConnectionStatus(ConnectionStatus.Connected);
-
-    // do not await the client promise
-    z.mutate.issue.create();
-
-    await vi.waitFor(() => {
-      expect(onErrorSpy).toBeCalledTimes(1);
-    });
-    const error = onErrorSpy.mock.calls[0][0];
-    expect(error).toBeInstanceOf(ApplicationError);
-    expect(error.message).toBe('test error');
 
     await z.close();
   });

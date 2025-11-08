@@ -37,7 +37,6 @@ import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import {Subscribable} from '../../../shared/src/subscribable.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
-import type {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
@@ -353,8 +352,6 @@ export class Zero<
 
   #onPong: () => void = () => undefined;
 
-  #onError: (error: ZeroError | ApplicationError) => void;
-
   readonly #onlineManager: OnlineManager;
 
   readonly #onUpdateNeeded: (reason: UpdateNeededReason) => void;
@@ -504,14 +501,6 @@ export class Zero<
       if (state.name === ConnectionStatus.Closed) {
         this.#queryManager.handleClosed(state.reason);
       }
-
-      if (
-        'reason' in state &&
-        state.reason !== undefined &&
-        state.name !== ConnectionStatus.Closed
-      ) {
-        this.#onError(state.reason);
-      }
     };
     syncConnectionState(this.#connectionManager.state);
     this.#connectionManager.subscribe(syncConnectionState);
@@ -540,18 +529,8 @@ export class Zero<
       );
     }
 
-    const {onError} = options;
-
     const sink = logOptions.logSink;
     const lc = new LogContext(logOptions.logLevel, {}, sink);
-
-    this.#onError = onError
-      ? error => {
-          void onError(error);
-        }
-      : error => {
-          lc.error?.('An error occurred in Zero', error);
-        };
 
     this.#mutationTracker = new MutationTracker(
       lc,
@@ -734,8 +713,6 @@ export class Zero<
     const mutatorProxy = new MutatorProxy(
       this.#connectionManager,
       this.#mutationTracker,
-      // we track app errors here since this wraps both client and server errors
-      applicationError => this.#onError(applicationError),
     );
 
     if (options.mutators) {
@@ -782,9 +759,6 @@ export class Zero<
       slowMaterializeThreshold,
       error => {
         this.#disconnect(lc, error);
-      },
-      error => {
-        void this.#onError(error);
       },
     );
 

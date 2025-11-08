@@ -5,7 +5,6 @@ import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {TDigest} from '../../../shared/src/tdigest.ts';
-import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {
   mapAST,
   normalizeAST,
@@ -66,7 +65,6 @@ export class QueryManager implements InspectorDelegate {
   readonly #serverToClient: NameMapper;
   readonly #send: (change: ChangeDesiredQueriesMessage) => void;
   readonly #onFatalError: (error: ZeroError) => void;
-  readonly #onApplicationError: (error: ApplicationError) => void;
   readonly #queries: Map<QueryHash, Entry> = new Map();
   readonly #recentQueriesMaxSize: number;
   readonly #recentQueries: Set<string> = new Set();
@@ -93,7 +91,6 @@ export class QueryManager implements InspectorDelegate {
     queryChangeThrottleMs: number,
     slowMaterializeThreshold: number,
     onFatalError: (error: ZeroError) => void,
-    onApplicationError: (error: ApplicationError) => void,
   ) {
     this.#lc = lc.withContext('QueryManager');
     this.#clientID = clientID;
@@ -105,7 +102,6 @@ export class QueryManager implements InspectorDelegate {
     this.#queryChangeThrottleMs = queryChangeThrottleMs;
     this.#slowMaterializeThreshold = slowMaterializeThreshold;
     this.#onFatalError = onFatalError;
-    this.#onApplicationError = onApplicationError;
     this.#mutationTracker.onAllMutationsApplied(() => {
       if (this.#pendingRemovals.length === 0) {
         return;
@@ -234,12 +230,6 @@ export class QueryManager implements InspectorDelegate {
 
       if (error.error === 'app' || error.error === 'parse') {
         entry.gotCallbacks.forEach(callback => callback(false, error));
-
-        this.#onApplicationError(
-          new ApplicationError(error.message ?? 'Unknown application error', {
-            details: error.details,
-          }),
-        );
       }
       // this code path is not possible technically since errors were never implemented in the legacy query transform error
       // but is included for backwards compatibility and we have a test case for it
