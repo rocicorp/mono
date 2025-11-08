@@ -79,7 +79,7 @@ export function createSQLiteCostModel(
       `Expected scanstatus to return at least one loop for query: ${sql}`,
     );
 
-    return estimateCost(loops);
+    return estimateCost(loops, db, tableName, filters);
   };
 }
 
@@ -157,9 +157,91 @@ function getScanstatusLoops(stmt: Statement): ScanstatusLoop[] {
 }
 
 /**
- * Estimates the cost of a query based on scanstats from sqlite3_stmt_scanstatus_v2
+ * Extracts column names that have equality filters applied to them.
+ * Only returns columns filtered with '=' or 'IS' operators (positive equality).
+ * Skips '!=' and 'IS NOT' as they have inverse selectivity characteristics.
  */
-function estimateCost(scanstats: ScanstatusLoop[]): {
+function extractEqualityFilteredColumns(
+  condition: Condition | undefined,
+): Set<string> {
+  const columns = new Set<string>();
+
+  if (!condition) {
+    return columns;
+  }
+
+  const visit = (cond: Condition) => {
+    switch (cond.type) {
+      case 'simple':
+        // Only track positive equality operations
+        if (
+          (cond.op === '=' || cond.op === 'IS') &&
+          cond.left.type === 'column'
+        ) {
+          columns.add(cond.left.name);
+        }
+        break;
+      case 'and':
+      case 'or':
+        for (const c of cond.conditions) {
+          visit(c);
+        }
+        break;
+      case 'correlatedSubquery':
+        // Skip correlated subqueries - they're not in our scanstatus anyway
+        break;
+    }
+  };
+
+  visit(condition);
+  return columns;
+}
+
+/**
+ * Gets all indexed column names for a table (first column of each index).
+ * This includes primary keys, unique constraints, and regular indexes.
+ * Only the first column is tracked because equality lookups can only use
+ * the leading column of an index.
+ */
+function getIndexedColumns(db: Database, tableName: string): Set<string> {
+  const indexed = new Set<string>();
+
+  try {
+    // Query all indexes for this table
+    const indexList = db.pragma<{name: string}>(`index_list('${tableName}')`);
+
+    for (const {name: indexName} of indexList) {
+      // Get the first column of each index
+      const indexInfo = db.pragma<{seqno: number; name: string}>(
+        `index_info('${indexName}')`,
+      );
+
+      if (indexInfo.length > 0) {
+        // Add the first column of the index (case-insensitive)
+        indexed.add(indexInfo[0].name.toLowerCase());
+      }
+    }
+  } catch {
+    // If pragma fails, return empty set (conservative: no corrections)
+  }
+
+  return indexed;
+}
+
+/**
+ * Estimates the cost of a query based on scanstats from sqlite3_stmt_scanstatus_v2
+ *
+ * Applies corrections for SQLite's poor selectivity estimates on unindexed equality filters.
+ * SQLite assumes 25% selectivity for equality on unindexed columns, while PostgreSQL
+ * assumes 0.5% (50x more selective). This function applies a 50x correction per
+ * unindexed equality filter.
+ */
+function estimateCost(
+  scanstats: ScanstatusLoop[],
+  db: Database,
+  tableName: string,
+  filters: Condition | undefined,
+): {
   rows: number;
   startupCost: number;
 } {
@@ -188,6 +270,26 @@ function estimateCost(scanstats: ScanstatusLoop[]): {
         totalCost += btreeCost(totalRows);
       }
     }
+  }
+
+  // Apply correction for unindexed equality filters
+  // SQLite assumes 25% selectivity (1/4) for equality on unindexed columns
+  // PostgreSQL assumes 0.5% selectivity (1/200)
+  // We apply a 50x correction factor per unindexed equality filter
+  const equalityColumns = extractEqualityFilteredColumns(filters);
+  const indexedColumns = getIndexedColumns(db, tableName);
+
+  let unindexedEqualityCount = 0;
+  for (const col of equalityColumns) {
+    if (!indexedColumns.has(col.toLowerCase())) {
+      unindexedEqualityCount++;
+    }
+  }
+
+  // Apply compound correction: divide by 50^count
+  if (unindexedEqualityCount > 0) {
+    const correctionFactor = Math.pow(50, unindexedEqualityCount);
+    totalRows = Math.max(1, Math.floor(totalRows / correctionFactor));
   }
 
   return {rows: totalRows, startupCost: totalCost};

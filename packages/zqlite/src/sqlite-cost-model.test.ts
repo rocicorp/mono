@@ -140,10 +140,42 @@ describe('SQLite cost model', () => {
       },
       undefined,
     );
-    // Full table scan with some filtering selectivity factored in
-    // much higher cost the PK lookup which is what we expect.
-    // not quite as high as a full table scan. Why?
-    expect(rows).toBe(480);
+    // SQLite estimates 480 rows (25% selectivity)
+    // With 50x correction for unindexed equality: 480 / 50 = 9.6 → 9 rows
+    // This matches PostgreSQL's 0.5% selectivity assumption
+    expect(rows).toBe(9);
+    expect(startupCost).toBe(0);
+  });
+
+  test('multiple equality checks on non-indexed columns', () => {
+    // SELECT * FROM foo WHERE b = 2 AND c = 3 ORDER BY a
+    // Both b and c are unindexed - compound correction should apply
+    const {rows, startupCost} = costModel(
+      'foo',
+      [['a', 'asc']],
+      {
+        type: 'and',
+        conditions: [
+          {
+            type: 'simple',
+            left: {type: 'column', name: 'b'},
+            op: '=',
+            right: {type: 'literal', value: 2},
+          },
+          {
+            type: 'simple',
+            left: {type: 'column', name: 'c'},
+            op: '=',
+            right: {type: 'literal', value: 3},
+          },
+        ],
+      },
+      undefined,
+    );
+    // SQLite estimates 120 rows (25% * 25% selectivity)
+    // With 50^2 correction for 2 unindexed equalities: 120 / 2500 = 0.048 → 1 row
+    // This matches PostgreSQL's compound selectivity (0.5% * 0.5% = 0.0025%)
+    expect(rows).toBe(1);
     expect(startupCost).toBe(0);
   });
 
