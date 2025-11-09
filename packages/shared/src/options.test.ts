@@ -902,6 +902,34 @@ test('deprecation warning (env)', () => {
   `);
 });
 
+test('includeDefaults: false excludes defaults from env and config', () => {
+  const parsed = parseOptionsAdvanced(options, {
+    argv: ['--replica-db-file', '/tmp/replica.db', '--log-level', 'info'],
+    envNamePrefix: 'Z_',
+    env: {},
+    includeDefaults: false,
+  });
+
+  // Config should not include defaults
+  expect(parsed.config.port).toBeUndefined();
+  expect(parsed.config.log.format).toBeUndefined();
+  expect(parsed.config.shard).toEqual({});
+  expect(parsed.config.tuple).toBeUndefined();
+
+  // Config should include explicitly set values
+  expect(parsed.config.replicaDBFile).toBe('/tmp/replica.db');
+  expect(parsed.config.log.level).toBe('info');
+
+  // Env should not include defaults
+  expect(parsed.env.Z_PORT).toBeUndefined();
+  expect(parsed.env.Z_LOG_FORMAT).toBeUndefined();
+  expect(parsed.env.Z_SHARD_ID).toBeUndefined();
+
+  // Env should include explicitly set values
+  expect(parsed.env.Z_REPLICA_DB_FILE).toBe('/tmp/replica.db');
+  expect(parsed.env.Z_LOG_LEVEL).toBe('info');
+});
+
 test('--help', () => {
   const logger = {info: vi.fn()};
   expect(() =>
