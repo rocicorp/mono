@@ -302,6 +302,9 @@ export type ParseOptions = {
   /** Defaults to `true`. */
   emitDeprecationWarnings?: boolean;
 
+  /** Defaults to `true`. When false, excludes default values from both config and env return values. */
+  includeDefaults?: boolean;
+
   /** Defaults to `console` */
   logger?: OptionalLogger;
 
@@ -328,6 +331,7 @@ export function parseOptionsAdvanced<T extends Options>(
     allowPartial = false,
     env: processEnv = process.env,
     emitDeprecationWarnings = true,
+    includeDefaults = true,
     logger = console,
     exit = process.exit,
   } = opts;
@@ -466,11 +470,15 @@ export function parseOptionsAdvanced<T extends Options>(
         break;
     }
 
-    const parsedArgs = defu(withoutDefaults, fromEnv, defaults);
-    const env = {...env1, ...env2, ...env3};
+    const parsedArgs = includeDefaults
+      ? defu(withoutDefaults, fromEnv, defaults)
+      : defu(withoutDefaults, fromEnv);
+    const env = includeDefaults
+      ? {...env1, ...env2, ...env3}
+      : {...env2, ...env3};
 
     let schema = configSchema(appOptions, envNamePrefix);
-    if (allowPartial) {
+    if (allowPartial || !includeDefaults) {
       // TODO: Type configSchema() to return a v.ObjectType<...>
       schema = v.deepPartial(schema as v.ObjectType) as v.Type<Config<T>>;
     }
