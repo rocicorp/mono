@@ -706,6 +706,66 @@ export const zeroOptions = {
     ],
   },
 
+  streamingStatistics: {
+    enabled: {
+      type: v.boolean().default(false),
+      desc: [
+        `Enable streaming statistics collection for query planning.`,
+        ``,
+        `When enabled, tracks HyperLogLog sketches for distinct value counting,`,
+        `min/max values, and NULL counts for all columns during change replication.`,
+        `This enables accurate query planning for non-indexed columns.`,
+        ``,
+        `Memory overhead: ~2-16 KB per column depending on configuration.`,
+        `For 500 columns: ~6-8 MB with default settings.`,
+      ],
+    },
+
+    flushIntervalMs: {
+      type: v.number().default(60_000),
+      desc: [
+        `How often to persist statistics to disk (milliseconds).`,
+        ``,
+        `Lower values = more durability but higher I/O overhead.`,
+        `Higher values = less I/O but more data loss on crash.`,
+        ``,
+        `Default: 60000 (1 minute)`,
+      ],
+    },
+
+    trackRanges: {
+      type: v.boolean().default(false),
+      desc: [
+        `Enable T-Digest for range query selectivity estimation on numeric columns.`,
+        ``,
+        `Adds ~5 KB per numeric/timestamp column.`,
+        `Useful for queries with inequality predicates (WHERE date > X).`,
+      ],
+    },
+
+    trackFrequencies: {
+      type: v.boolean().default(false),
+      desc: [
+        `Enable Count-Min Sketch for value frequency estimation.`,
+        ``,
+        `Adds ~50-100 KB per tracked column. Use selectively for high-cardinality`,
+        `columns where frequency information is valuable (e.g., hot key detection).`,
+      ],
+    },
+
+    hllPrecision: {
+      type: v.number().default(14),
+      desc: [
+        `HyperLogLog precision parameter (4-16).`,
+        ``,
+        `Controls memory vs accuracy trade-off:`,
+        `  p=12: 4 KB/column,  ~1.6% error`,
+        `  p=14: 16 KB/column, ~0.8% error (default)`,
+        `  p=16: 64 KB/column, ~0.4% error`,
+      ],
+    },
+  },
+
   cloudEvent: {
     sinkEnv: {
       type: v.string().optional(),

@@ -17,6 +17,7 @@ import {
   ColumnMetadataStore,
   CREATE_COLUMN_METADATA_TABLE,
 } from './column-metadata.ts';
+import {CREATE_COLUMN_STATISTICS_TABLE} from '../change-streamer/statistics/statistics-store.ts';
 
 export async function initReplica(
   log: LogContext,
@@ -92,6 +93,12 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
       const store = ColumnMetadataStore.getInstance(db);
       const tables = listTables(db);
       must(store).populateFromExistingTables(tables);
+    },
+  },
+
+  7: {
+    migrateSchema: (_, db) => {
+      db.exec(CREATE_COLUMN_STATISTICS_TABLE);
     },
   },
 };
