@@ -65,11 +65,13 @@ async function main() {
     {
       envNamePrefix: ZERO_ENV_VAR_PREFIX,
       allowUnknown: true,
+      includeDefaults: false,
     },
   );
   const {env: zeroCacheEnv} = parseOptionsAdvanced(zeroOptions, {
     envNamePrefix: ZERO_ENV_VAR_PREFIX,
     allowUnknown: true,
+    includeDefaults: false,
   });
 
   let permissionsProcess: ChildProcess | undefined;
