@@ -461,6 +461,186 @@ describe('Chinook planner execution cost validation', () => {
       validations: ['cost-tolerance', 'better-than-baseline'],
       toleranceFactor: 8.75,
     },
+
+    // === NEW TEST CASES ===
+
+    {
+      name: 'small dimension table join - genre to tracks',
+      query: queries.genre
+        .where('name', 'Rock')
+        .whereExists('tracks', t => t.where('milliseconds', '>', 200000)),
+      validations: ['cost-tolerance'],
+      toleranceFactor: 1,
+    },
+
+    {
+      name: 'filter pushdown - filters at each nesting level',
+      query: queries.track
+        .where('milliseconds', '>', 300000)
+        .whereExists('album', album =>
+          album
+            .where('title', 'LIKE', 'A%')
+            .whereExists('artist', artist =>
+              artist.where('name', 'LIKE', 'A%'),
+            ),
+        ),
+      validations: ['cost-tolerance'],
+      toleranceFactor: 1,
+    },
+
+    {
+      name: 'limit(1) with expensive joins',
+      query: queries.artist
+        .whereExists('albums', album => album.whereExists('tracks'))
+        .limit(1),
+      validations: ['cost-tolerance'],
+      toleranceFactor: 1,
+    },
+
+    {
+      name: 'OR with very selective and non-selective branches',
+      query: queries.track.where(({or, cmp}) =>
+        or(
+          cmp('name', 'For Those About To Rock (We Salute You)'),
+          cmp('milliseconds', '>', 100000),
+        ),
+      ),
+      validations: ['cost-tolerance'],
+      toleranceFactor: 1,
+    },
+
+    {
+      name: 'self-join - employees and their managers',
+      query: queries.employee.whereExists('reportsToEmployee', manager =>
+        manager.where('title', 'General Manager'),
+      ),
+      validations: ['cost-tolerance'],
+      toleranceFactor: 1,
+    },
+
+    {
+      name: 'empty result - selective filter on large table',
+      query: queries.track.where('name', 'NonexistentTrackXYZ'),
+      validations: ['cost-tolerance'],
+      toleranceFactor: 1,
+    },
+
+    {
+      name: 'empty result - filter after expensive join',
+      query: queries.track
+        .whereExists('album', a => a.whereExists('artist'))
+        .where('name', 'NonexistentTrackXYZ'),
+      validations: ['cost-tolerance'],
+      toleranceFactor: 1,
+    },
+
+    {
+      name: 'star schema - invoice with customer and lines',
+      query: queries.invoice
+        .whereExists('customer', c => c.where('country', 'USA'))
+        .whereExists('lines', i => i.where('quantity', '>', 1)),
+      validations: ['cost-tolerance'],
+      toleranceFactor: 1,
+    },
+
+    {
+      name: 'junction with filters on both entities',
+      query: queries.playlist
+        .where('name', 'LIKE', 'Music%')
+        .whereExists('tracks', t => t.where('name', 'LIKE', 'A%')),
+      validations: ['cost-tolerance'],
+      toleranceFactor: 1,
+    },
+
+    {
+      name: 'range query on numeric column',
+      query: queries.track
+        .where('milliseconds', '>', 200000)
+        .where('milliseconds', '<', 300000),
+      validations: ['cost-tolerance'],
+      toleranceFactor: 1,
+    },
+
+    {
+      name: 'deep nesting with very selective top filter',
+      query: queries.invoiceLine
+        .where('quantity', '>', 5)
+        .whereExists('invoice', i =>
+          i.whereExists('customer', c => c.whereExists('supportRep', e => e)),
+        ),
+      validations: ['cost-tolerance'],
+      toleranceFactor: 1,
+    },
+
+    {
+      name: 'OR with 4+ branches',
+      query: queries.album.where(({or, cmp}) =>
+        or(
+          cmp('title', 'Big Ones'),
+          cmp('title', 'Jagged Little Pill'),
+          cmp('title', 'Facelift'),
+          cmp('title', 'Warner 25 Anos'),
+        ),
+      ),
+      validations: ['cost-tolerance'],
+      toleranceFactor: 1,
+    },
+
+    {
+      name: 'sort without index support',
+      query: queries.track
+        .whereExists('album', a => a.where('artistId', 1))
+        .orderBy('milliseconds', 'desc')
+        .limit(10),
+      validations: ['cost-tolerance'],
+      toleranceFactor: 1,
+    },
+
+    {
+      name: 'dense junction - popular playlist with many tracks',
+      query: queries.playlist.where('id', 1).whereExists('tracks'),
+      validations: ['cost-tolerance'],
+      toleranceFactor: 1,
+    },
+
+    {
+      name: 'varying limit - limit 5',
+      query: queries.track
+        .whereExists('album', album =>
+          album.whereExists('artist', artist =>
+            artist.where('name', 'Aerosmith'),
+          ),
+        )
+        .limit(5),
+      validations: ['cost-tolerance'],
+      toleranceFactor: 1,
+    },
+
+    {
+      name: 'varying limit - limit 50',
+      query: queries.track
+        .whereExists('album', album =>
+          album.whereExists('artist', artist =>
+            artist.where('name', 'Iron Maiden'),
+          ),
+        )
+        .limit(50),
+      validations: ['cost-tolerance'],
+      toleranceFactor: 1,
+    },
+
+    {
+      name: 'varying limit - limit 100',
+      query: queries.track
+        .whereExists('album', album =>
+          album.whereExists('artist', artist =>
+            artist.where('name', 'Iron Maiden'),
+          ),
+        )
+        .limit(100),
+      validations: ['cost-tolerance'],
+      toleranceFactor: 1,
+    },
   ])('$name', ({query, validations, toleranceFactor}) => {
     // Execute all plan attempts and collect results
     const results = executeAllPlanAttempts(query);
