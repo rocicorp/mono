@@ -18,6 +18,7 @@ import {
   HLLStatsManager,
   type Row,
 } from '../../zql/src/planner/stats/hll-stats-manager.ts';
+import {calculateSelectivity} from './selectivity-calculator.ts';
 
 /**
  * Build HyperLogLog statistics by scanning all tables in the database.
@@ -62,30 +63,62 @@ export function buildHLLStats(db: Database): HLLStatsManager {
 /**
  * Create a SQLite cost model augmented with HyperLogLog statistics.
  *
- * This cost model wraps the standard SQLite cost model and holds a reference
- * to the HLLStatsManager for future integration with cost estimation.
+ * This cost model wraps the standard SQLite cost model and uses HLL-based
+ * selectivity estimation to calculate row counts, following PostgreSQL patterns.
  *
- * Fallback hierarchy:
- * 1. stat4 (histogram from ANALYZE) - highest accuracy
- * 2. stat1 (averages from ANALYZE) - medium accuracy
- * 3. HLL stats (cardinality estimates) - better than defaults
- * 4. Default assumptions (fanout=3) - last resort
+ * Row estimation:
+ * 1. Get base table row count from HLLStatsManager
+ * 2. Calculate selectivity from filter conditions using HLL cardinality
+ * 3. Estimate rows: baseRowCount * selectivity
  *
- * For now, this is a simple wrapper that will be extended to incorporate
- * HLL-based estimates in the cost calculation logic.
+ * This approach provides better estimates for non-indexed columns where
+ * SQLite's scanstatus has no statistical information.
+ *
+ * @param db SQLite database instance
+ * @param tableSpecs Table specifications with ZQL schemas
+ * @param hllManager HyperLogLog statistics manager
+ * @returns ConnectionCostModel function with HLL-based row estimation
  */
 export function createSQLiteHLLCostModel(
   db: Database,
   tableSpecs: Map<string, {zqlSpec: Record<string, SchemaValue>}>,
   hllManager: HLLStatsManager,
 ): ConnectionCostModel {
-  // Create the standard SQLite cost model
+  // Create the standard SQLite cost model (still used for sort costs)
   const baseCostModel = createSQLiteCostModel(db, tableSpecs);
 
-  // For now, just return the base model
-  // Future: Augment with HLL stats in the fanout calculation
-  // TODO: Integrate hllManager into cost estimation
-  void hllManager; // Suppress unused variable warning
+  // Return augmented cost model with HLL-based row estimation
+  return (tableName, sort, filters, constraint) => {
+    // Get base cost estimate from SQLite (includes sort costs)
+    const baseCost = baseCostModel(tableName, sort, filters, constraint);
 
-  return baseCostModel;
+    // If no filters, return base cost as-is
+    if (!filters) {
+      return baseCost;
+    }
+
+    // Calculate HLL-based row estimate
+    const baseRowCount = hllManager.getRowCount(tableName);
+
+    // If table has no rows, return zero rows
+    if (baseRowCount === 0) {
+      return {
+        ...baseCost,
+        rows: 0,
+      };
+    }
+
+    // Calculate selectivity using HLL cardinality estimates
+    const selectivity = calculateSelectivity(filters, tableName, hllManager);
+
+    // Apply selectivity to base row count
+    const estimatedRows = Math.max(1, Math.round(baseRowCount * selectivity));
+
+    // Return cost with HLL-based row estimate
+    // Preserve startupCost and fanout from base model
+    return {
+      ...baseCost,
+      rows: estimatedRows,
+    };
+  };
 }
