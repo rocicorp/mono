@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1762356933245,
+  "lastUpdate": 1762799149557,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54597,6 +54597,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/20bf268673ecbc43d3dda5bd21374097af3d4cd0"
         },
         "date": 1762356918421,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 301987,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54431,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111258,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31825,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "c@cadams.io",
+            "name": "Chase Adams",
+            "username": "0xcadams"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "06ebcd8ce8eaaa17e41e21c411b3f12da5b852fd",
+          "message": "fix(replicache): fixed closing expo-sqlite DB before deleting (#5149)\n\nWe're seeing a crash with zslack when it's deployed via TestFlight. It\noccurs regularly at 06:17am on my phone (I love waking up to app\ncrashes!).\n\nI did some spelunking and think it's related to Replicache clearing\nstorage every 12 hours. It happens regularly at the same minute of the\nday.\n\n\n[crashlog.crash.log](https://github.com/user-attachments/files/23404883/crashlog.crash.log)\n\n[crashlog.crash-2.log](https://github.com/user-attachments/files/23404890/crashlog.crash-2.log)\n\nMy hunch is that `expo-sqlite` is throwing a DeleteDatabaseException\nfrom here:\n\nhttps://github.com/expo/expo/blob/d0ce3b5621aed60f4915d4be6a22881e363779e9/packages/expo-sqlite/ios/SQLiteModule.swift#L510-L518\n\nSince the delegate is just opened and then immediately deleted, this\nthrows an exception.\n\nI also added some error black-holing around this deletion, so it doesn't\ncrash apps if it fails for other reasons on mobile devices.",
+          "timestamp": "2025-11-10T18:15:50Z",
+          "tree_id": "677a4dae5a66c8aee17b9d2ad67469a0820ae562",
+          "url": "https://github.com/rocicorp/mono/commit/06ebcd8ce8eaaa17e41e21c411b3f12da5b852fd"
+        },
+        "date": 1762799137179,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
