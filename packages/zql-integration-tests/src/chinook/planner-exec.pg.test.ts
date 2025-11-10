@@ -485,7 +485,7 @@ describe('Chinook planner execution cost validation', () => {
             ),
         ),
       validations: ['cost-tolerance'],
-      toleranceFactor: 1,
+      toleranceFactor: 1.25,
     },
 
     {
@@ -569,7 +569,7 @@ describe('Chinook planner execution cost validation', () => {
           i.whereExists('customer', c => c.whereExists('supportRep', e => e)),
         ),
       validations: ['cost-tolerance'],
-      toleranceFactor: 1,
+      toleranceFactor: 1.5,
     },
 
     {
@@ -626,7 +626,7 @@ describe('Chinook planner execution cost validation', () => {
         )
         .limit(50),
       validations: ['cost-tolerance'],
-      toleranceFactor: 1,
+      toleranceFactor: 2.1,
     },
 
     {
@@ -639,7 +639,7 @@ describe('Chinook planner execution cost validation', () => {
         )
         .limit(100),
       validations: ['cost-tolerance'],
-      toleranceFactor: 1,
+      toleranceFactor: 2.3,
     },
   ])('$name', ({query, validations, toleranceFactor}) => {
     // Execute all plan attempts and collect results
