@@ -1,8 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
 import React, {useSyncExternalStore} from 'react';
-import {deepClone} from '../../shared/src/deep-clone.ts';
 import type {Immutable} from '../../shared/src/immutable.ts';
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {
   bindingsForZero,
   type BindingsForZero,
@@ -423,10 +421,10 @@ class ViewWrapper<
     resultType: ResultType,
     error?: ErroredQuery,
   ) => {
-    const data =
-      snap === undefined
-        ? snap
-        : (deepClone(snap as ReadonlyJSONValue) as HumanReadable<TReturn>);
+    // No deep clone needed! ArrayView now creates new object/array references
+    // via shallow copying in flush(), which is much more efficient while still
+    // maintaining React immutability guarantees.
+    const data = snap as HumanReadable<TReturn>;
     this.#snapshot = getSnapshot(
       this.#format.singular,
       data,

@@ -1,5 +1,6 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Immutable} from '../../../shared/src/immutable.ts';
+import type {Writable} from '../../../shared/src/writable.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {TTL} from '../query/ttl.ts';
 import type {Listener, ResultType, TypedView} from '../query/typed-view.ts';
@@ -8,6 +9,80 @@ import type {Input, Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {applyChange} from './view-apply-change.ts';
 import type {Entry, Format, View} from './view.ts';
+
+/**
+ * Shallow copy a View tree for React immutability.
+ * Creates new object and array references but reuses primitive values.
+ * This is much more efficient than deep cloning for large result sets.
+ */
+function shallowCopyView(value: View): View {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    // Map creates a new array, and we shallow copy each entry
+    return value.map(shallowCopyEntry);
+  }
+  // Singular entry
+  return shallowCopyEntry(value as Entry);
+}
+
+/**
+ * Shallow copy an Entry, recursively copying nested Views.
+ * Preserves symbol properties (refCount, id) and creates new object
+ * references for React's reference equality checks.
+ */
+function shallowCopyEntry(entry: Entry): Entry {
+  // Use object spread to shallow copy enumerable properties
+  const newEntry: Record<string, unknown> = {...entry};
+
+  // Copy symbol properties (refCountSymbol, idSymbol)
+  for (const sym of Object.getOwnPropertySymbols(entry)) {
+    newEntry[sym as unknown as string] = (entry as Record<symbol, unknown>)[
+      sym
+    ];
+  }
+
+  // Recursively shallow copy nested views (relationships)
+  for (const key of Object.keys(newEntry)) {
+    const value = newEntry[key];
+    if (Array.isArray(value)) {
+      // Check if this is a View (array of Entry objects with symbols)
+      // or just a plain array (e.g., JSON column data)
+      if (
+        value.length > 0 &&
+        typeof value[0] === 'object' &&
+        value[0] !== null &&
+        Object.getOwnPropertySymbols(value[0]).length > 0
+      ) {
+        // Array of Entry objects (one-to-many relationship)
+        newEntry[key] = value.map(shallowCopyEntry);
+      } else {
+        // Plain array (JSON data) - shallow copy the array itself
+        newEntry[key] = [...value];
+      }
+    } else if (
+      value !== null &&
+      value !== undefined &&
+      typeof value === 'object' &&
+      Object.getOwnPropertySymbols(value).length > 0
+    ) {
+      // Nested Entry object (one-to-one relationship)
+      // Only shallow copy if it has symbols (indicating it's an Entry)
+      newEntry[key] = shallowCopyEntry(value as Entry);
+    } else if (
+      value !== null &&
+      value !== undefined &&
+      typeof value === 'object'
+    ) {
+      // Plain object (JSON data) - shallow copy it
+      newEntry[key] = Array.isArray(value) ? [...value] : {...value};
+    }
+    // Primitives are already copied by spread operator
+  }
+
+  return newEntry as Entry;
+}
 
 /**
  * Implements a materialized view of the output of an operator.
@@ -123,6 +198,14 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
       return;
     }
     this.#dirty = false;
+
+    // Create new object/array references for React's immutability.
+    // This shallow copy is much cheaper than deep cloning while still
+    // ensuring React detects changes via reference equality.
+    (this.#root as Writable<Entry>)[''] = shallowCopyView(
+      this.#root[''] as View,
+    );
+
     this.#fireListeners();
   }
 
