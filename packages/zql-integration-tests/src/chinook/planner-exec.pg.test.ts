@@ -483,6 +483,116 @@ describe('Chinook planner execution cost validation', () => {
         ['within-baseline', 1],
       ],
     },
+
+    // === RLS (ROW-LEVEL SECURITY) TEST CASES ===
+
+    {
+      name: 'rls-basic: invoices filtered by support rep (simulated user scope)',
+      query: queries.invoice.whereExists('customer', c =>
+        c.whereExists('supportRep', e => e.where('id', 3)),
+      ),
+      validations: [
+        ['correlation', 0.94],
+        ['within-optimal', 1],
+        ['within-baseline', 0.44],
+      ],
+    },
+
+    {
+      name: 'rls-deep-chain: invoice lines filtered through customer-supportRep hierarchy',
+      query: queries.invoiceLine.whereExists('invoice', inv =>
+        inv.whereExists('customer', c =>
+          c.whereExists('supportRep', e => e.where('id', 3)),
+        ),
+      ),
+      validations: [
+        ['correlation', 0.98],
+        ['within-optimal', 1],
+        ['within-baseline', 0.38],
+      ],
+    },
+
+    {
+      name: 'rls-hierarchical: manager viewing reports customers (employees and their direct reports customers)',
+      query: queries.customer.whereExists('supportRep', emp =>
+        emp.whereExists('reportsToEmployee', mgr => mgr.where('id', 1)),
+      ),
+      validations: [
+        ['within-optimal', 1],
+        ['within-baseline', 0.09],
+      ],
+    },
+
+    {
+      name: 'rls-multi-path: customers via direct assignment OR manager hierarchy',
+      query: queries.customer.where(({or, exists}) =>
+        or(
+          exists('supportRep', e => e.where('id', 3)),
+          exists('supportRep', e =>
+            e.whereExists('reportsToEmployee', m => m.where('id', 2)),
+          ),
+        ),
+      ),
+      validations: [
+        ['correlation', 0.91],
+        ['within-optimal', 1],
+        ['within-baseline', 0.84],
+      ],
+    },
+
+    {
+      name: 'rls-combined: my customers USA invoices over $5 (RLS + business logic)',
+      query: queries.invoice
+        .whereExists('customer', c =>
+          c.whereExists('supportRep', e => e.where('id', 3)),
+        )
+        .whereExists('customer', c => c.where('country', 'USA'))
+        .where('total', '>', 5),
+      validations: [
+        ['correlation', 0.9],
+        ['within-optimal', 1],
+        ['within-baseline', 0.22],
+      ],
+    },
+
+    {
+      name: 'rls-fanout: one support reps invoices with expensive lines (selective permission with fanout)',
+      query: queries.invoice
+        .whereExists('customer', c =>
+          c.whereExists('supportRep', e => e.where('id', 3)),
+        )
+        .whereExists('lines', l => l.where('quantity', '>', 1))
+        .limit(10),
+      validations: [
+        ['correlation', 0.73],
+        ['within-optimal', 1.13],
+        ['within-baseline', 1],
+      ],
+    },
+
+    {
+      name: 'rls-large-table: tracks by artist owner (simulated user-created content)',
+      query: queries.track.whereExists('album', a =>
+        a.whereExists('artist', ar => ar.where('id', 1)),
+      ),
+      validations: [
+        ['correlation', 0.94],
+        ['within-optimal', 1],
+        ['within-baseline', 0.02],
+      ],
+    },
+
+    {
+      name: 'rls-cross-cutting: invoice lines for one customer (direct ownership)',
+      query: queries.invoiceLine.whereExists('invoice', inv =>
+        inv.whereExists('customer', c => c.where('id', 1)),
+      ),
+      validations: [
+        ['correlation', 0.94],
+        ['within-optimal', 1],
+        ['within-baseline', 0.04],
+      ],
+    },
   ])('$name', ({query, validations}) => {
     // Execute all plan attempts and collect results
     const results = executeAllPlanAttempts(query);
