@@ -469,7 +469,7 @@ describe('Chinook planner execution cost validation', () => {
       query: queries.genre
         .where('name', 'Rock')
         .whereExists('tracks', t => t.where('milliseconds', '>', 200000)),
-      validations: ['cost-tolerance'],
+      validations: ['correlation', 'cost-tolerance'],
       toleranceFactor: 1,
     },
 
@@ -539,7 +539,7 @@ describe('Chinook planner execution cost validation', () => {
       query: queries.invoice
         .whereExists('customer', c => c.where('country', 'USA'))
         .whereExists('lines', i => i.where('quantity', '>', 1)),
-      validations: ['cost-tolerance'],
+      validations: ['correlation', 'cost-tolerance'],
       toleranceFactor: 1,
     },
 
@@ -548,7 +548,7 @@ describe('Chinook planner execution cost validation', () => {
       query: queries.playlist
         .where('name', 'LIKE', 'Music%')
         .whereExists('tracks', t => t.where('name', 'LIKE', 'A%')),
-      validations: ['cost-tolerance'],
+      validations: ['correlation', 'cost-tolerance'],
       toleranceFactor: 1,
     },
 
@@ -592,14 +592,14 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('album', a => a.where('artistId', 1))
         .orderBy('milliseconds', 'desc')
         .limit(10),
-      validations: ['cost-tolerance'],
+      validations: ['correlation', 'cost-tolerance'],
       toleranceFactor: 1,
     },
 
     {
       name: 'dense junction - popular playlist with many tracks',
       query: queries.playlist.where('id', 1).whereExists('tracks'),
-      validations: ['cost-tolerance'],
+      validations: ['correlation', 'cost-tolerance'],
       toleranceFactor: 1,
     },
 
@@ -612,7 +612,7 @@ describe('Chinook planner execution cost validation', () => {
           ),
         )
         .limit(5),
-      validations: ['cost-tolerance'],
+      validations: ['correlation', 'cost-tolerance'],
       toleranceFactor: 1,
     },
 
