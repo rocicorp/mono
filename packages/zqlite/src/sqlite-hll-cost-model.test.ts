@@ -1,6 +1,8 @@
 import {describe, expect, test, vi} from 'vitest';
 import {HLLStatsManager} from '../../zql/src/planner/stats/hll-stats-manager.ts';
 import type {Condition} from '../../zero-protocol/src/ast.ts';
+import type {PlannerConstraint} from '../../zql/src/planner/planner-constraint.ts';
+import {calculateConstraintSelectivity} from './selectivity-calculator.ts';
 
 /**
  * Helper to create a simple condition for testing
@@ -354,6 +356,215 @@ describe('SQLite HLL Cost Model', () => {
       const selectivity = (1 / 10) * (1 / 5) * (1 / 3);
       const expectedRows = Math.round(1000 * selectivity);
       expect(expectedRows).toBe(7);
+    });
+  });
+
+  describe('constraint selectivity integration', () => {
+    test('applies constraint selectivity with no filters', () => {
+      const hllManager = new HLLStatsManager();
+
+      // 100 posts by 10 users
+      for (let i = 0; i < 100; i++) {
+        hllManager.onAdd('posts', {id: i, userId: i % 10});
+      }
+
+      const mockBaseCost = {
+        rows: 100,
+        startupCost: 0,
+        fanout: vi.fn(() => ({fanout: 1, confidence: 'high' as const})),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const costModel = (
+        tableName: string,
+        _sort: unknown,
+        _filters: unknown,
+        constraint: unknown,
+      ) => {
+        const baseRowCount = hllManager.getRowCount(tableName);
+
+        // Use actual calculateConstraintSelectivity function
+        const constraintSel = calculateConstraintSelectivity(
+          constraint as PlannerConstraint | undefined,
+          tableName,
+          hllManager,
+        );
+
+        // Constraint: userId (10 distinct values)
+        // Selectivity: 1/10 = 0.1
+        // Expected rows: 100 * 0.1 = 10
+        const estimatedRows = Math.max(
+          1,
+          Math.round(baseRowCount * constraintSel),
+        );
+
+        return {
+          ...mockBaseCost,
+          rows: estimatedRows,
+        };
+      };
+
+      const cost = costModel('posts', [], undefined, {userId: undefined});
+
+      expect(cost.rows).toBe(10);
+    });
+
+    test('combines filter and constraint selectivity', () => {
+      const hllManager = new HLLStatsManager();
+
+      // 1000 posts by 50 users with 5 status values
+      for (let i = 0; i < 1000; i++) {
+        hllManager.onAdd('posts', {
+          id: i,
+          userId: i % 50,
+          status: `status-${i % 5}`,
+        });
+      }
+
+      const mockBaseCost = {
+        rows: 1000,
+        startupCost: 0,
+        fanout: vi.fn(() => ({fanout: 1, confidence: 'high' as const})),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const costModel = (
+        tableName: string,
+        _sort: unknown,
+        filters: unknown,
+        constraint: unknown,
+      ) => {
+        const baseRowCount = hllManager.getRowCount(tableName);
+
+        // Filter: status = 'status-1' (selectivity = 1/5 = 0.2)
+        // Constraint: userId (selectivity = 1/50 = 0.02)
+        // Combined: 0.2 * 0.02 = 0.004
+        // Expected rows: 1000 * 0.004 = 4
+        const filterSel = filters ? 0.2 : 1.0;
+        const constraintSel = constraint ? 0.02 : 1.0;
+        const totalSel = filterSel * constraintSel;
+        const estimatedRows = Math.max(1, Math.round(baseRowCount * totalSel));
+
+        return {
+          ...mockBaseCost,
+          rows: estimatedRows,
+        };
+      };
+
+      const cost = costModel(
+        'posts',
+        [],
+        simpleCondition('=', 'status', 'status-1'),
+        {userId: undefined},
+      );
+
+      expect(cost.rows).toBe(4);
+    });
+
+    test('handles junction table with constraint', () => {
+      const hllManager = new HLLStatsManager();
+
+      // 200 issue-label pairs
+      // - 20 issues
+      // - 10 labels
+      for (let i = 0; i < 200; i++) {
+        hllManager.onAdd('issueLabel', {
+          issueId: i % 20,
+          labelId: i % 10,
+        });
+      }
+
+      const mockBaseCost = {
+        rows: 200,
+        startupCost: 0,
+        fanout: vi.fn(() => ({fanout: 1, confidence: 'high' as const})),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const costModel = (
+        tableName: string,
+        _sort: unknown,
+        _filters: unknown,
+        constraint: unknown,
+      ) => {
+        const baseRowCount = hllManager.getRowCount(tableName);
+
+        // Use actual calculateConstraintSelectivity function
+        const constraintSel = calculateConstraintSelectivity(
+          constraint as PlannerConstraint | undefined,
+          tableName,
+          hllManager,
+        );
+
+        // Constraint: issueId (20 distinct values)
+        // Selectivity: 1/20 = 0.05
+        // Expected rows: 200 * 0.05 = 10
+        const estimatedRows = Math.max(
+          1,
+          Math.round(baseRowCount * constraintSel),
+        );
+
+        return {
+          ...mockBaseCost,
+          rows: estimatedRows,
+        };
+      };
+
+      const cost = costModel('issueLabel', [], undefined, {issueId: undefined});
+
+      expect(cost.rows).toBe(10);
+    });
+
+    test('handles compound constraint', () => {
+      const hllManager = new HLLStatsManager();
+
+      // 10000 events with compound key (tenantId, userId)
+      // - 10 tenants
+      // - 100 users
+      for (let i = 0; i < 10000; i++) {
+        hllManager.onAdd('events', {
+          id: i,
+          tenantId: Math.floor(i / 1000),
+          userId: i % 100,
+        });
+      }
+
+      const mockBaseCost = {
+        rows: 10000,
+        startupCost: 0,
+        fanout: vi.fn(() => ({fanout: 1, confidence: 'high' as const})),
+      };
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const costModel = (
+        tableName: string,
+        _sort: unknown,
+        _filters: unknown,
+        constraint: unknown,
+      ) => {
+        const baseRowCount = hllManager.getRowCount(tableName);
+
+        // Constraint: tenantId (10 distinct) AND userId (100 distinct)
+        // Selectivity: (1/10) * (1/100) = 0.001
+        // Expected rows: 10000 * 0.001 = 10
+        const constraintSel = constraint ? 0.001 : 1.0;
+        const estimatedRows = Math.max(
+          1,
+          Math.round(baseRowCount * constraintSel),
+        );
+
+        return {
+          ...mockBaseCost,
+          rows: estimatedRows,
+        };
+      };
+
+      const cost = costModel('events', [], undefined, {
+        tenantId: undefined,
+        userId: undefined,
+      });
+
+      expect(cost.rows).toBe(10);
     });
   });
 });

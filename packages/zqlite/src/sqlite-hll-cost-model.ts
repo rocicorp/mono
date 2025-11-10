@@ -18,7 +18,10 @@ import {
   HLLStatsManager,
   type Row,
 } from '../../zql/src/planner/stats/hll-stats-manager.ts';
-import {calculateSelectivity} from './selectivity-calculator.ts';
+import {
+  calculateSelectivity,
+  calculateConstraintSelectivity,
+} from './selectivity-calculator.ts';
 
 /**
  * Build HyperLogLog statistics by scanning all tables in the database.
@@ -92,11 +95,6 @@ export function createSQLiteHLLCostModel(
     // Get base cost estimate from SQLite (includes sort costs)
     const baseCost = baseCostModel(tableName, sort, filters, constraint);
 
-    // If no filters, return base cost as-is
-    if (!filters) {
-      return baseCost;
-    }
-
     // Calculate HLL-based row estimate
     const baseRowCount = hllManager.getRowCount(tableName);
 
@@ -108,11 +106,27 @@ export function createSQLiteHLLCostModel(
       };
     }
 
-    // Calculate selectivity using HLL cardinality estimates
-    const selectivity = calculateSelectivity(filters, tableName, hllManager);
+    // Calculate selectivity from both filters and constraints
+    // Filter selectivity: WHERE clause conditions
+    const filterSelectivity = filters
+      ? calculateSelectivity(filters, tableName, hllManager)
+      : 1.0;
 
-    // Apply selectivity to base row count
-    const estimatedRows = Math.max(1, Math.round(baseRowCount * selectivity));
+    // Constraint selectivity: JOIN predicates (foreign key relationships)
+    const constraintSelectivity = calculateConstraintSelectivity(
+      constraint,
+      tableName,
+      hllManager,
+    );
+
+    // Combine selectivities (multiply assuming independence)
+    const totalSelectivity = filterSelectivity * constraintSelectivity;
+
+    // Apply combined selectivity to base row count
+    const estimatedRows = Math.max(
+      1,
+      Math.round(baseRowCount * totalSelectivity),
+    );
 
     // Return cost with HLL-based row estimate
     // Preserve startupCost and fanout from base model

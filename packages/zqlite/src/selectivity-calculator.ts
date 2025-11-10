@@ -18,6 +18,7 @@ import type {
   SimpleOperator,
 } from '../../zero-protocol/src/ast.ts';
 import type {HLLStatsManager} from '../../zql/src/planner/stats/hll-stats-manager.ts';
+import type {PlannerConstraint} from '../../zql/src/planner/planner-constraint.ts';
 
 /**
  * PostgreSQL default selectivity constants from selfuncs.c
@@ -27,6 +28,7 @@ const DEFAULT_INEQ_SEL = 0.3333; // 33.3% for inequalities when no stats
 const DEFAULT_IN_SEL = 0.1; // 10% for IN operator when no stats
 const DEFAULT_LIKE_SEL = 0.1; // 10% for LIKE pattern matching
 const DEFAULT_NOT_LIKE_SEL = 0.9; // 90% for NOT LIKE
+const DEFAULT_CONSTRAINT_SEL = 0.01; // 1% for constraints when no stats
 
 /**
  * Calculate selectivity for a condition tree using HyperLogLog statistics.
@@ -178,6 +180,64 @@ function calculateSimpleSelectivity(
       return 1.0;
     }
   }
+}
+
+/**
+ * Calculate selectivity for constraint columns (join predicates).
+ *
+ * Constraints represent foreign key relationships in joins, where we know
+ * certain columns will be constrained at runtime but don't know the values.
+ * We estimate selectivity based on column cardinality.
+ *
+ * Formula: For constraint on column C, selectivity = 1 / cardinality(C)
+ * Example: If userId has 1000 distinct values, constraining on userId
+ *          reduces rows by factor of 1000, so selectivity = 0.001
+ *
+ * For multiple columns, we assume independence and multiply selectivities.
+ *
+ * @param constraint Map of column names to undefined (indicates constrained)
+ * @param tableName Table being queried
+ * @param hllManager HLL statistics manager
+ * @returns Selectivity value between 0.0 and 1.0
+ */
+export function calculateConstraintSelectivity(
+  constraint: PlannerConstraint | undefined,
+  tableName: string,
+  hllManager: HLLStatsManager,
+): number {
+  if (!constraint) {
+    return 1.0; // No constraint = all rows
+  }
+
+  const columns = Object.keys(constraint);
+  if (columns.length === 0) {
+    return 1.0;
+  }
+
+  // For single column: selectivity = 1 / cardinality
+  if (columns.length === 1) {
+    const {cardinality} = hllManager.getCardinality(tableName, columns[0]);
+    if (cardinality === 0) {
+      return DEFAULT_CONSTRAINT_SEL; // No stats available
+    }
+    return 1.0 / cardinality;
+  }
+
+  // For multiple columns: multiply individual selectivities (assumes independence)
+  // Example: constraint on (userId, projectId)
+  //   userId has 100 distinct → sel = 0.01
+  //   projectId has 50 distinct → sel = 0.02
+  //   Combined: 0.01 * 0.02 = 0.0002
+  let selectivity = 1.0;
+  for (const column of columns) {
+    const {cardinality} = hllManager.getCardinality(tableName, column);
+    if (cardinality === 0) {
+      selectivity *= DEFAULT_CONSTRAINT_SEL;
+    } else {
+      selectivity *= 1.0 / cardinality;
+    }
+  }
+  return selectivity;
 }
 
 /**

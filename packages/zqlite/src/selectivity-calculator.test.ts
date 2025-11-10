@@ -1,7 +1,11 @@
 import {describe, expect, test} from 'vitest';
-import {calculateSelectivity} from './selectivity-calculator.ts';
+import {
+  calculateSelectivity,
+  calculateConstraintSelectivity,
+} from './selectivity-calculator.ts';
 import {HLLStatsManager} from '../../zql/src/planner/stats/hll-stats-manager.ts';
 import type {Condition, SimpleCondition} from '../../zero-protocol/src/ast.ts';
+import type {PlannerConstraint} from '../../zql/src/planner/planner-constraint.ts';
 
 /**
  * Helper to create a mock HLLStatsManager with predefined cardinalities
@@ -528,8 +532,242 @@ describe('Selectivity Calculator', () => {
 
       const selectivity = calculateSelectivity(condition, 'users', manager);
 
-      // Single value: 1/10 = 0.1
-      expect(selectivity).toBe(0.1);
+      // Single value: 1/10 = 0.1 (use toBeCloseTo for HLL precision)
+      expect(selectivity).toBeCloseTo(0.1, 1);
+    });
+  });
+});
+
+describe('calculateConstraintSelectivity', () => {
+  describe('no constraints', () => {
+    test('returns 1.0 for undefined constraint', () => {
+      const manager = new HLLStatsManager();
+      const selectivity = calculateConstraintSelectivity(
+        undefined,
+        'users',
+        manager,
+      );
+      expect(selectivity).toBe(1.0);
+    });
+
+    test('returns 1.0 for empty constraint', () => {
+      const manager = new HLLStatsManager();
+      const constraint: PlannerConstraint = {};
+      const selectivity = calculateConstraintSelectivity(
+        constraint,
+        'users',
+        manager,
+      );
+      expect(selectivity).toBe(1.0);
+    });
+  });
+
+  describe('single column constraints', () => {
+    test('calculates selectivity from single column cardinality', () => {
+      const manager = new HLLStatsManager();
+
+      // Add 100 rows with 10 distinct userIds
+      for (let i = 0; i < 100; i++) {
+        manager.onAdd('posts', {id: i, userId: i % 10});
+      }
+
+      const constraint: PlannerConstraint = {userId: undefined};
+      const selectivity = calculateConstraintSelectivity(
+        constraint,
+        'posts',
+        manager,
+      );
+
+      // 10 distinct userIds → selectivity = 1/10 = 0.1
+      expect(selectivity).toBeCloseTo(0.1, 1);
+    });
+
+    test('uses default selectivity when no stats available', () => {
+      const manager = new HLLStatsManager();
+
+      // Empty table, no stats
+      const constraint: PlannerConstraint = {userId: undefined};
+      const selectivity = calculateConstraintSelectivity(
+        constraint,
+        'posts',
+        manager,
+      );
+
+      // No stats → default = 0.01 (1%)
+      expect(selectivity).toBe(0.01);
+    });
+
+    test('handles high cardinality columns', () => {
+      const manager = new HLLStatsManager();
+
+      // 1000 rows with 1000 distinct IDs (unique column)
+      for (let i = 0; i < 1000; i++) {
+        manager.onAdd('users', {id: i});
+      }
+
+      const constraint: PlannerConstraint = {id: undefined};
+      const selectivity = calculateConstraintSelectivity(
+        constraint,
+        'users',
+        manager,
+      );
+
+      // 1000 distinct IDs → selectivity = 1/1000 = 0.001
+      expect(selectivity).toBeCloseTo(0.001, 3);
+    });
+
+    test('handles low cardinality columns', () => {
+      const manager = new HLLStatsManager();
+
+      // 1000 rows with 2 distinct statuses
+      for (let i = 0; i < 1000; i++) {
+        manager.onAdd('users', {status: i % 2 === 0 ? 'active' : 'inactive'});
+      }
+
+      const constraint: PlannerConstraint = {status: undefined};
+      const selectivity = calculateConstraintSelectivity(
+        constraint,
+        'users',
+        manager,
+      );
+
+      // 2 distinct statuses → selectivity = 1/2 = 0.5
+      expect(selectivity).toBeCloseTo(0.5, 1);
+    });
+  });
+
+  describe('multiple column constraints', () => {
+    test('multiplies selectivities for multiple columns', () => {
+      const manager = new HLLStatsManager();
+
+      // 1000 rows with:
+      // - 10 distinct userIds
+      // - 5 distinct projectIds
+      for (let i = 0; i < 1000; i++) {
+        manager.onAdd('tasks', {
+          id: i,
+          userId: i % 10,
+          projectId: i % 5,
+        });
+      }
+
+      const constraint: PlannerConstraint = {
+        userId: undefined,
+        projectId: undefined,
+      };
+      const selectivity = calculateConstraintSelectivity(
+        constraint,
+        'tasks',
+        manager,
+      );
+
+      // userId: 10 distinct → 1/10 = 0.1
+      // projectId: 5 distinct → 1/5 = 0.2
+      // Combined: 0.1 * 0.2 = 0.02
+      expect(selectivity).toBeCloseTo(0.02, 2);
+    });
+
+    test('handles missing stats on some columns', () => {
+      const manager = new HLLStatsManager();
+
+      // Add data with only userId populated
+      for (let i = 0; i < 100; i++) {
+        manager.onAdd('tasks', {userId: i % 10});
+      }
+
+      const constraint: PlannerConstraint = {
+        userId: undefined,
+        projectId: undefined, // No data for this column
+      };
+      const selectivity = calculateConstraintSelectivity(
+        constraint,
+        'tasks',
+        manager,
+      );
+
+      // userId: 10 distinct → 1/10 = 0.1
+      // projectId: no stats → 0.01 (default)
+      // Combined: 0.1 * 0.01 = 0.001
+      expect(selectivity).toBeCloseTo(0.001, 3);
+    });
+
+    test('handles compound foreign key constraints', () => {
+      const manager = new HLLStatsManager();
+
+      // 10000 rows with compound key (tenantId, userId)
+      // - 10 tenants
+      // - 100 users per tenant
+      for (let i = 0; i < 10000; i++) {
+        const tenantId = Math.floor(i / 1000);
+        const userId = i % 100;
+        manager.onAdd('events', {
+          id: i,
+          tenantId,
+          userId,
+        });
+      }
+
+      const constraint: PlannerConstraint = {
+        tenantId: undefined,
+        userId: undefined,
+      };
+      const selectivity = calculateConstraintSelectivity(
+        constraint,
+        'events',
+        manager,
+      );
+
+      // tenantId: 10 distinct → 1/10 = 0.1
+      // userId: 100 distinct → 1/100 = 0.01
+      // Combined: 0.1 * 0.01 = 0.001
+      expect(selectivity).toBeCloseTo(0.001, 3);
+    });
+  });
+
+  describe('realistic scenarios', () => {
+    test('foreign key join - posts to users', () => {
+      const manager = new HLLStatsManager();
+
+      // 1000 posts by 50 users
+      for (let i = 0; i < 1000; i++) {
+        manager.onAdd('posts', {id: i, userId: i % 50});
+      }
+
+      const constraint: PlannerConstraint = {userId: undefined};
+      const selectivity = calculateConstraintSelectivity(
+        constraint,
+        'posts',
+        manager,
+      );
+
+      // 50 distinct userIds → selectivity = 1/50 = 0.02
+      expect(selectivity).toBeCloseTo(0.02, 2);
+    });
+
+    test('junction table - issueLabel', () => {
+      const manager = new HLLStatsManager();
+
+      // 100 issue-label pairs
+      // - 20 issues
+      // - 10 labels
+      for (let i = 0; i < 100; i++) {
+        manager.onAdd('issueLabel', {
+          issueId: i % 20,
+          labelId: i % 10,
+        });
+      }
+
+      const constraint: PlannerConstraint = {
+        issueId: undefined,
+      };
+      const selectivity = calculateConstraintSelectivity(
+        constraint,
+        'issueLabel',
+        manager,
+      );
+
+      // 20 distinct issueIds → selectivity = 1/20 = 0.05
+      expect(selectivity).toBeCloseTo(0.05, 2);
     });
   });
 });
