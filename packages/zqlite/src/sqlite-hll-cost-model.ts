@@ -106,30 +106,33 @@ export function createSQLiteHLLCostModel(
       };
     }
 
-    // Calculate selectivity from both filters and constraints
-    // Filter selectivity: WHERE clause conditions
+    // Calculate HLL-based selectivity
     const filterSelectivity = filters
       ? calculateSelectivity(filters, tableName, hllManager)
       : 1.0;
 
-    // Constraint selectivity: JOIN predicates (foreign key relationships)
     const constraintSelectivity = calculateConstraintSelectivity(
       constraint,
       tableName,
       hllManager,
     );
 
-    // Combine selectivities (multiply assuming independence)
-    const totalSelectivity = filterSelectivity * constraintSelectivity;
-
-    // Apply combined selectivity to base row count
-    const estimatedRows = Math.max(
+    const hllSelectivity = filterSelectivity * constraintSelectivity;
+    const hllEstimatedRows = Math.max(
       1,
-      Math.round(baseRowCount * totalSelectivity),
+      Math.round(baseRowCount * hllSelectivity),
     );
 
-    // Return cost with HLL-based row estimate
-    // Preserve startupCost and fanout from base model
+    // Hybrid approach: Use SQLite's estimate if it shows good selectivity,
+    // otherwise use HLL estimate
+    const sqliteSelectivity = baseCost.rows / baseRowCount;
+
+    // If SQLite has good selectivity info (< 90% of rows), use it
+    // Otherwise, use HLL estimate
+    const estimatedRows =
+      sqliteSelectivity < 0.9 ? baseCost.rows : hllEstimatedRows;
+
+    // Return cost with chosen row estimate
     return {
       ...baseCost,
       rows: estimatedRows,

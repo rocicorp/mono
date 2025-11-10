@@ -74,9 +74,10 @@ export function calculateSelectivity(
     }
 
     case 'correlatedSubquery':
-      // Cannot estimate correlated subqueries with HLL alone
-      // Use conservative 50% selectivity
-      return 0.5;
+      // Correlated subqueries (EXISTS/NOT EXISTS) are join predicates handled by
+      // the query planner, not filters that reduce row counts. Treat as non-filtering.
+      // This matches the base SQLite cost model's removeCorrelatedSubqueries() behavior.
+      return 1.0;
   }
 }
 
