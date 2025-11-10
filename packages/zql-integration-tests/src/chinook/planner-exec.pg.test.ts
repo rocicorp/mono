@@ -128,6 +128,7 @@ describe('Chinook planner execution cost validation', () => {
         )
         .limit(5),
       validations: [
+        ['correlation', 0.0],
         ['within-optimal', 1.28],
         ['within-baseline', 1],
       ],
@@ -157,6 +158,7 @@ describe('Chinook planner execution cost validation', () => {
         )
         .limit(20),
       validations: [
+        ['correlation', 0.0],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -165,6 +167,7 @@ describe('Chinook planner execution cost validation', () => {
     /**
      * Fails correlation due to..?
      * Within 1.7x of optimal plan, however.
+     * within-baseline is 1.69x (picked plan worse than as-written).
      */
     {
       name: 'asymmetric OR - track with album or invoiceLines',
@@ -176,7 +179,10 @@ describe('Chinook planner execution cost validation', () => {
           ),
         )
         .limit(15),
-      validations: [['within-optimal', 1.7]],
+      validations: [
+        ['within-optimal', 1.7],
+        ['within-baseline', 1.7],
+      ],
     },
 
     /**
@@ -212,6 +218,7 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('tracks', track => track.where('composer', 'Kurt Cobain'))
         .limit(10),
       validations: [
+        ['correlation', 0.0],
         ['within-optimal', 3.37],
         ['within-baseline', 1],
       ],
@@ -232,6 +239,7 @@ describe('Chinook planner execution cost validation', () => {
         )
         .limit(10),
       validations: [
+        ['correlation', 0.0],
         ['within-optimal', 14.75],
         ['within-baseline', 1],
       ],
@@ -241,6 +249,8 @@ describe('Chinook planner execution cost validation', () => {
      * Currently fails due to SQLite assuming `> Z` has 80% selectivity whereas it really has < 1%.
      * Not sure what we can do here given there is no index on title or same set of workarounds
      * proposed in `F1`
+     *
+     * Correlation is -1.0 (planner estimates inversely correlated with actual), so we don't check it.
      */
     {
       name: 'F2 sparse FK - track to album with NULL handling',
@@ -264,6 +274,7 @@ describe('Chinook planner execution cost validation', () => {
       validations: [
         ['correlation', 0.95],
         ['within-optimal', 1],
+        ['within-baseline', 1],
       ],
     },
 
@@ -278,7 +289,10 @@ describe('Chinook planner execution cost validation', () => {
               artist.where('name', 'LIKE', 'A%'),
             ),
         ),
-      validations: [['within-optimal', 1.22]],
+      validations: [
+        ['within-optimal', 1.22],
+        ['within-baseline', 0.11],
+      ],
     },
 
     {
@@ -286,7 +300,10 @@ describe('Chinook planner execution cost validation', () => {
       query: queries.artist
         .whereExists('albums', album => album.whereExists('tracks'))
         .limit(1),
-      validations: [['within-optimal', 1]],
+      validations: [
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
     },
 
     {
@@ -297,7 +314,10 @@ describe('Chinook planner execution cost validation', () => {
           cmp('milliseconds', '>', 100000),
         ),
       ),
-      validations: [['within-optimal', 1]],
+      validations: [
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
     },
 
     {
@@ -305,13 +325,19 @@ describe('Chinook planner execution cost validation', () => {
       query: queries.employee.whereExists('reportsToEmployee', manager =>
         manager.where('title', 'General Manager'),
       ),
-      validations: [['within-optimal', 1]],
+      validations: [
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
     },
 
     {
       name: 'empty result - selective filter on large table',
       query: queries.track.where('name', 'NonexistentTrackXYZ'),
-      validations: [['within-optimal', 1]],
+      validations: [
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
     },
 
     {
@@ -319,7 +345,10 @@ describe('Chinook planner execution cost validation', () => {
       query: queries.track
         .whereExists('album', a => a.whereExists('artist'))
         .where('name', 'NonexistentTrackXYZ'),
-      validations: [['within-optimal', 1]],
+      validations: [
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
     },
 
     {
@@ -330,6 +359,7 @@ describe('Chinook planner execution cost validation', () => {
       validations: [
         ['correlation', 0.94],
         ['within-optimal', 1],
+        ['within-baseline', 0.77],
       ],
     },
 
@@ -341,6 +371,7 @@ describe('Chinook planner execution cost validation', () => {
       validations: [
         ['correlation', 0.8],
         ['within-optimal', 1],
+        ['within-baseline', 1],
       ],
     },
 
@@ -349,7 +380,10 @@ describe('Chinook planner execution cost validation', () => {
       query: queries.track
         .where('milliseconds', '>', 200000)
         .where('milliseconds', '<', 300000),
-      validations: [['within-optimal', 1]],
+      validations: [
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
     },
 
     {
@@ -359,7 +393,10 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('invoice', i =>
           i.whereExists('customer', c => c.whereExists('supportRep', e => e)),
         ),
-      validations: [['within-optimal', 1.4]],
+      validations: [
+        ['within-optimal', 1.4],
+        ['within-baseline', 1.4],
+      ],
     },
 
     {
@@ -372,7 +409,10 @@ describe('Chinook planner execution cost validation', () => {
           cmp('title', 'Warner 25 Anos'),
         ),
       ),
-      validations: [['within-optimal', 1]],
+      validations: [
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
     },
 
     {
@@ -384,6 +424,7 @@ describe('Chinook planner execution cost validation', () => {
       validations: [
         ['correlation', 0.95],
         ['within-optimal', 1],
+        ['within-baseline', 0.01],
       ],
     },
 
@@ -393,6 +434,7 @@ describe('Chinook planner execution cost validation', () => {
       validations: [
         ['correlation', 0.95],
         ['within-optimal', 1],
+        ['within-baseline', 1],
       ],
     },
 
@@ -408,6 +450,7 @@ describe('Chinook planner execution cost validation', () => {
       validations: [
         ['correlation', 0.8],
         ['within-optimal', 1],
+        ['within-baseline', 1],
       ],
     },
 
@@ -420,7 +463,10 @@ describe('Chinook planner execution cost validation', () => {
           ),
         )
         .limit(50),
-      validations: [['within-optimal', 2.03]],
+      validations: [
+        ['within-optimal', 2.03],
+        ['within-baseline', 1],
+      ],
     },
 
     {
@@ -432,7 +478,10 @@ describe('Chinook planner execution cost validation', () => {
           ),
         )
         .limit(100),
-      validations: [['within-optimal', 2.24]],
+      validations: [
+        ['within-optimal', 2.24],
+        ['within-baseline', 1],
+      ],
     },
   ])('$name', ({query, validations}) => {
     // Execute all plan attempts and collect results
