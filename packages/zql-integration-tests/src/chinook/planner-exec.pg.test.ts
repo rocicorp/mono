@@ -4,8 +4,8 @@ import {
   initializePlannerInfrastructure,
   executeAllPlanAttempts,
   validateCorrelation,
-  validatePickedVsOptimal,
-  validateBetterThanBaseline,
+  validateWithinOptimal,
+  validateWithinBaseline,
   type ValidationResult,
 } from './planner-exec-helpers.ts';
 
@@ -20,8 +20,11 @@ describe('Chinook planner execution cost validation', () => {
       query: queries.track.whereExists('album', q =>
         q.where('title', 'Big Ones'),
       ),
-      validations: ['correlation', 'cost-tolerance', 'better-than-baseline'],
-      toleranceFactor: 1,
+      validations: [
+        ['correlation', 0.7],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
     },
 
     {
@@ -31,8 +34,11 @@ describe('Chinook planner execution cost validation', () => {
           artist.where('name', 'Aerosmith'),
         ),
       ),
-      validations: ['correlation', 'cost-tolerance', 'better-than-baseline'],
-      toleranceFactor: 1,
+      validations: [
+        ['correlation', 0.7],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
     },
 
     {
@@ -41,8 +47,11 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('album', q => q.where('title', 'Big Ones'))
         .whereExists('genre', q => q.where('name', 'Rock'))
         .limit(10),
-      validations: ['correlation', 'cost-tolerance', 'better-than-baseline'],
-      toleranceFactor: 1,
+      validations: [
+        ['correlation', 0.7],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
     },
 
     {
@@ -55,8 +64,11 @@ describe('Chinook planner execution cost validation', () => {
         )
         .where('milliseconds', '>', 200000)
         .limit(10),
-      validations: ['correlation', 'cost-tolerance', 'better-than-baseline'],
-      toleranceFactor: 1,
+      validations: [
+        ['correlation', 0.7],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
     },
 
     {
@@ -64,8 +76,11 @@ describe('Chinook planner execution cost validation', () => {
       query: queries.album
         .where('title', 'Greatest Hits')
         .whereExists('tracks', t => t),
-      validations: ['correlation', 'cost-tolerance', 'better-than-baseline'],
-      toleranceFactor: 1,
+      validations: [
+        ['correlation', 0.7],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
     },
 
     {
@@ -75,8 +90,11 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('albums', album =>
           album.whereExists('tracks', track => track),
         ),
-      validations: ['correlation', 'cost-tolerance', 'better-than-baseline'],
-      toleranceFactor: 1,
+      validations: [
+        ['correlation', 0.7],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
     },
 
     {
@@ -89,8 +107,11 @@ describe('Chinook planner execution cost validation', () => {
           ),
         ),
       ),
-      validations: ['correlation', 'cost-tolerance', 'better-than-baseline'],
-      toleranceFactor: 1,
+      validations: [
+        ['correlation', 0.7],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
     },
 
     // Correlation fails because SQLite does not have stats on the milliseconds column.
@@ -106,8 +127,10 @@ describe('Chinook planner execution cost validation', () => {
           ),
         )
         .limit(5),
-      validations: ['cost-tolerance', 'better-than-baseline'],
-      toleranceFactor: 1.3,
+      validations: [
+        ['within-optimal', 1.3],
+        ['within-baseline', 1],
+      ],
     },
 
     /**
@@ -133,8 +156,10 @@ describe('Chinook planner execution cost validation', () => {
           ),
         )
         .limit(20),
-      validations: ['cost-tolerance', 'better-than-baseline'],
-      toleranceFactor: 1,
+      validations: [
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
     },
 
     /**
@@ -151,8 +176,7 @@ describe('Chinook planner execution cost validation', () => {
           ),
         )
         .limit(15),
-      validations: ['cost-tolerance'],
-      toleranceFactor: 1.7,
+      validations: [['within-optimal', 1.7]],
     },
 
     /**
@@ -161,7 +185,7 @@ describe('Chinook planner execution cost validation', () => {
     2. sqlite returns 0.25 selectivity for `where composer = 'Kurt Cobain'
 
     The actual selectivity is 0.007.
-    
+
     The estimated 25% selectivity compounds problems when we get to join fanout.
 
     It says "with 484 tracks per playlist and 25% global match rate,
@@ -175,7 +199,7 @@ describe('Chinook planner execution cost validation', () => {
 
     The other problem is that we assume we only need to scan 4 tracks in each
     playlist to find a Kurt Cobain track (because of the 25% selectivity).
-    If Kurt Cobain is only in 1 playlist we actually must scan all tracks for all playlists 
+    If Kurt Cobain is only in 1 playlist we actually must scan all tracks for all playlists
     until we hit that final playlist.
 
     >> Sticking an index on `composer` fixes this query.
@@ -187,8 +211,10 @@ describe('Chinook planner execution cost validation', () => {
       query: queries.playlist
         .whereExists('tracks', track => track.where('composer', 'Kurt Cobain'))
         .limit(10),
-      validations: ['cost-tolerance', 'better-than-baseline'],
-      toleranceFactor: 3.5,
+      validations: [
+        ['within-optimal', 3.5],
+        ['within-baseline', 1],
+      ],
     },
 
     /**
@@ -205,8 +231,10 @@ describe('Chinook planner execution cost validation', () => {
           ),
         )
         .limit(10),
-      validations: ['cost-tolerance', 'better-than-baseline'],
-      toleranceFactor: 15,
+      validations: [
+        ['within-optimal', 15],
+        ['within-baseline', 1],
+      ],
     },
 
     /**
@@ -220,8 +248,10 @@ describe('Chinook planner execution cost validation', () => {
         .where('albumId', 'IS NOT', null)
         .whereExists('album', album => album.where('title', '>', 'Z'))
         .limit(10),
-      validations: ['cost-tolerance', 'better-than-baseline'],
-      toleranceFactor: 8.75,
+      validations: [
+        ['within-optimal', 8.75],
+        ['within-baseline', 1],
+      ],
     },
 
     // === NEW TEST CASES ===
@@ -231,8 +261,10 @@ describe('Chinook planner execution cost validation', () => {
       query: queries.genre
         .where('name', 'Rock')
         .whereExists('tracks', t => t.where('milliseconds', '>', 200000)),
-      validations: ['correlation', 'cost-tolerance'],
-      toleranceFactor: 1,
+      validations: [
+        ['correlation', 0.7],
+        ['within-optimal', 1],
+      ],
     },
 
     {
@@ -246,8 +278,7 @@ describe('Chinook planner execution cost validation', () => {
               artist.where('name', 'LIKE', 'A%'),
             ),
         ),
-      validations: ['cost-tolerance'],
-      toleranceFactor: 1.25,
+      validations: [['within-optimal', 1.25]],
     },
 
     {
@@ -255,8 +286,7 @@ describe('Chinook planner execution cost validation', () => {
       query: queries.artist
         .whereExists('albums', album => album.whereExists('tracks'))
         .limit(1),
-      validations: ['cost-tolerance'],
-      toleranceFactor: 1,
+      validations: [['within-optimal', 1]],
     },
 
     {
@@ -267,8 +297,7 @@ describe('Chinook planner execution cost validation', () => {
           cmp('milliseconds', '>', 100000),
         ),
       ),
-      validations: ['cost-tolerance'],
-      toleranceFactor: 1,
+      validations: [['within-optimal', 1]],
     },
 
     {
@@ -276,15 +305,13 @@ describe('Chinook planner execution cost validation', () => {
       query: queries.employee.whereExists('reportsToEmployee', manager =>
         manager.where('title', 'General Manager'),
       ),
-      validations: ['cost-tolerance'],
-      toleranceFactor: 1,
+      validations: [['within-optimal', 1]],
     },
 
     {
       name: 'empty result - selective filter on large table',
       query: queries.track.where('name', 'NonexistentTrackXYZ'),
-      validations: ['cost-tolerance'],
-      toleranceFactor: 1,
+      validations: [['within-optimal', 1]],
     },
 
     {
@@ -292,8 +319,7 @@ describe('Chinook planner execution cost validation', () => {
       query: queries.track
         .whereExists('album', a => a.whereExists('artist'))
         .where('name', 'NonexistentTrackXYZ'),
-      validations: ['cost-tolerance'],
-      toleranceFactor: 1,
+      validations: [['within-optimal', 1]],
     },
 
     {
@@ -301,8 +327,10 @@ describe('Chinook planner execution cost validation', () => {
       query: queries.invoice
         .whereExists('customer', c => c.where('country', 'USA'))
         .whereExists('lines', i => i.where('quantity', '>', 1)),
-      validations: ['correlation', 'cost-tolerance'],
-      toleranceFactor: 1,
+      validations: [
+        ['correlation', 0.7],
+        ['within-optimal', 1],
+      ],
     },
 
     {
@@ -310,8 +338,10 @@ describe('Chinook planner execution cost validation', () => {
       query: queries.playlist
         .where('name', 'LIKE', 'Music%')
         .whereExists('tracks', t => t.where('name', 'LIKE', 'A%')),
-      validations: ['correlation', 'cost-tolerance'],
-      toleranceFactor: 1,
+      validations: [
+        ['correlation', 0.7],
+        ['within-optimal', 1],
+      ],
     },
 
     {
@@ -319,8 +349,7 @@ describe('Chinook planner execution cost validation', () => {
       query: queries.track
         .where('milliseconds', '>', 200000)
         .where('milliseconds', '<', 300000),
-      validations: ['cost-tolerance'],
-      toleranceFactor: 1,
+      validations: [['within-optimal', 1]],
     },
 
     {
@@ -330,8 +359,7 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('invoice', i =>
           i.whereExists('customer', c => c.whereExists('supportRep', e => e)),
         ),
-      validations: ['cost-tolerance'],
-      toleranceFactor: 1.5,
+      validations: [['within-optimal', 1.5]],
     },
 
     {
@@ -344,8 +372,7 @@ describe('Chinook planner execution cost validation', () => {
           cmp('title', 'Warner 25 Anos'),
         ),
       ),
-      validations: ['cost-tolerance'],
-      toleranceFactor: 1,
+      validations: [['within-optimal', 1]],
     },
 
     {
@@ -354,15 +381,19 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('album', a => a.where('artistId', 1))
         .orderBy('milliseconds', 'desc')
         .limit(10),
-      validations: ['correlation', 'cost-tolerance'],
-      toleranceFactor: 1,
+      validations: [
+        ['correlation', 0.7],
+        ['within-optimal', 1],
+      ],
     },
 
     {
       name: 'dense junction - popular playlist with many tracks',
       query: queries.playlist.where('id', 1).whereExists('tracks'),
-      validations: ['correlation', 'cost-tolerance'],
-      toleranceFactor: 1,
+      validations: [
+        ['correlation', 0.7],
+        ['within-optimal', 1],
+      ],
     },
 
     {
@@ -374,8 +405,10 @@ describe('Chinook planner execution cost validation', () => {
           ),
         )
         .limit(5),
-      validations: ['correlation', 'cost-tolerance'],
-      toleranceFactor: 1,
+      validations: [
+        ['correlation', 0.7],
+        ['within-optimal', 1],
+      ],
     },
 
     {
@@ -387,8 +420,7 @@ describe('Chinook planner execution cost validation', () => {
           ),
         )
         .limit(50),
-      validations: ['cost-tolerance'],
-      toleranceFactor: 2.1,
+      validations: [['within-optimal', 2.1]],
     },
 
     {
@@ -400,10 +432,9 @@ describe('Chinook planner execution cost validation', () => {
           ),
         )
         .limit(100),
-      validations: ['cost-tolerance'],
-      toleranceFactor: 2.3,
+      validations: [['within-optimal', 2.3]],
     },
-  ])('$name', ({query, validations, toleranceFactor}) => {
+  ])('$name', ({query, validations}) => {
     // Execute all plan attempts and collect results
     const results = executeAllPlanAttempts(query);
 
@@ -414,19 +445,14 @@ describe('Chinook planner execution cost validation', () => {
     const validationResults: ValidationResult[] = [];
 
     for (const validation of validations) {
-      if (validation === 'correlation') {
-        validationResults.push(validateCorrelation(results));
-      } else if (validation === 'cost-tolerance') {
-        if (toleranceFactor === undefined) {
-          throw new Error(
-            'toleranceFactor must be specified when using cost-tolerance validation',
-          );
-        }
-        validationResults.push(
-          validatePickedVsOptimal(results, toleranceFactor),
-        );
-      } else if (validation === 'better-than-baseline') {
-        validationResults.push(validateBetterThanBaseline(results));
+      const [validationType, threshold] = validation as [string, number];
+
+      if (validationType === 'correlation') {
+        validationResults.push(validateCorrelation(results, threshold));
+      } else if (validationType === 'within-optimal') {
+        validationResults.push(validateWithinOptimal(results, threshold));
+      } else if (validationType === 'within-baseline') {
+        validationResults.push(validateWithinBaseline(results, threshold));
       }
     }
 

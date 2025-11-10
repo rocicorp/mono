@@ -64,12 +64,12 @@ export type PlanAttemptResult = {
 };
 
 export type PlanValidation =
-  | 'correlation'
-  | 'cost-tolerance'
-  | 'better-than-baseline';
+  | ['correlation', number]
+  | ['within-optimal', number]
+  | ['within-baseline', number];
 
 export type ValidationResult = {
-  type: PlanValidation;
+  type: 'correlation' | 'within-optimal' | 'within-baseline';
   passed: boolean;
   details: string;
 };
@@ -96,15 +96,16 @@ function sumRowCounts(
  */
 export function validateCorrelation(
   results: PlanAttemptResult[],
+  threshold: number,
 ): ValidationResult {
   const estimatedCosts = results.map(r => r.estimatedCost);
   const actualCosts = results.map(r => r.actualRowsScanned);
   const correlation = spearmanCorrelation(estimatedCosts, actualCosts);
-  const passed = correlation >= 0.7;
+  const passed = correlation >= threshold;
 
   const details = passed
-    ? `Spearman correlation ${correlation.toFixed(3)} >= 0.7 threshold`
-    : `Spearman correlation ${correlation.toFixed(3)} < 0.7 threshold`;
+    ? `Spearman correlation ${correlation.toFixed(3)} >= ${threshold} threshold`
+    : `Spearman correlation ${correlation.toFixed(3)} < ${threshold} threshold`;
 
   return {
     type: 'correlation',
@@ -117,7 +118,7 @@ export function validateCorrelation(
  * Validate that the picked plan (lowest estimated cost) is within tolerance
  * of the optimal plan (lowest actual rows scanned)
  */
-export function validatePickedVsOptimal(
+export function validateWithinOptimal(
   results: PlanAttemptResult[],
   toleranceFactor: number,
 ): ValidationResult {
@@ -140,18 +141,23 @@ export function validatePickedVsOptimal(
     : `Picked plan (attempt ${pickedPlan.attemptNumber}) cost ${pickedPlan.actualRowsScanned} exceeds ${toleranceFactor}x tolerance of optimal (attempt ${optimalPlan.attemptNumber}) cost ${optimalPlan.actualRowsScanned} (ratio: ${ratio.toFixed(2)}x)`;
 
   return {
-    type: 'cost-tolerance',
+    type: 'within-optimal',
     passed,
     details,
   };
 }
 
 /**
- * Validate that the picked plan (lowest estimated cost) performs better than
- * the baseline query-as-written (attempt 0)
+ * Validate that the picked plan (lowest estimated cost) is within tolerance
+ * of the baseline query-as-written (attempt 0)
+ * Formula: picked <= baseline × toleranceFactor
+ * - toleranceFactor < 1.0: picked must be better (e.g., 0.5 = picked must be ≤50% of baseline)
+ * - toleranceFactor = 1.0: picked must be as good or better than baseline
+ * - toleranceFactor > 1.0: picked can be worse (e.g., 1.5 = picked can be ≤150% of baseline)
  */
-export function validateBetterThanBaseline(
+export function validateWithinBaseline(
   results: PlanAttemptResult[],
+  toleranceFactor: number,
 ): ValidationResult {
   // Find the baseline plan (attempt 0 - query as written)
   const baselinePlan = results.find(r => r.attemptNumber === 0);
@@ -164,28 +170,20 @@ export function validateBetterThanBaseline(
     current.estimatedCost < best.estimatedCost ? current : best,
   );
 
-  // If the picked plan IS the baseline, that's OK - the planner didn't make it worse
-  if (pickedPlan.attemptNumber === baselinePlan.attemptNumber) {
-    return {
-      type: 'better-than-baseline',
-      passed: true,
-      details: `Picked plan is the baseline (attempt ${baselinePlan.attemptNumber}) - no optimization applied`,
-    };
-  }
-
-  // Check if picked plan is better than baseline
-  const passed = pickedPlan.actualRowsScanned <= baselinePlan.actualRowsScanned;
+  // Check if picked plan is within tolerance of baseline
+  const maxAllowedCost = baselinePlan.actualRowsScanned * toleranceFactor;
+  const passed = pickedPlan.actualRowsScanned <= maxAllowedCost;
   const ratio =
     baselinePlan.actualRowsScanned > 0
       ? pickedPlan.actualRowsScanned / baselinePlan.actualRowsScanned
       : 1;
 
   const details = passed
-    ? `Picked plan (attempt ${pickedPlan.attemptNumber}) cost ${pickedPlan.actualRowsScanned} is better than baseline (attempt ${baselinePlan.attemptNumber}) cost ${baselinePlan.actualRowsScanned} (ratio: ${ratio.toFixed(2)}x)`
-    : `Picked plan (attempt ${pickedPlan.attemptNumber}) cost ${pickedPlan.actualRowsScanned} is worse than baseline (attempt ${baselinePlan.attemptNumber}) cost ${baselinePlan.actualRowsScanned} (ratio: ${ratio.toFixed(2)}x)`;
+    ? `Picked plan (attempt ${pickedPlan.attemptNumber}) cost ${pickedPlan.actualRowsScanned} is within ${toleranceFactor}x of baseline (attempt ${baselinePlan.attemptNumber}) cost ${baselinePlan.actualRowsScanned} (ratio: ${ratio.toFixed(2)}x)`
+    : `Picked plan (attempt ${pickedPlan.attemptNumber}) cost ${pickedPlan.actualRowsScanned} exceeds ${toleranceFactor}x tolerance of baseline (attempt ${baselinePlan.attemptNumber}) cost ${baselinePlan.actualRowsScanned} (ratio: ${ratio.toFixed(2)}x)`;
 
   return {
-    type: 'better-than-baseline',
+    type: 'within-baseline',
     passed,
     details,
   };
