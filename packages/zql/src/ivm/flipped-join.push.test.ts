@@ -3071,7 +3071,7 @@ suite('push one:many:many', () => {
     },
   } as const;
 
-  test('fetch one parent, one child, add grandchild', () => {
+  test.only('fetch one parent, one child, add grandchild', () => {
     const {log, data, actualStorage, pushes} = runPushTest({
       sources,
       sourceContents: {
@@ -3099,14 +3099,62 @@ suite('push one:many:many', () => {
         ],
       ]
     `);
-    expect(data).toMatchInlineSnapshot(`[]`);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".comments:flipped-join(revisions)": {},
-        ":flipped-join(comments)": {},
-      }
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "comments": [
+            {
+              "id": "c1",
+              "issueID": "i1",
+              "revisions": [
+                {
+                  "commentID": "c1",
+                  "id": "r1",
+                  Symbol(rc): 1,
+                },
+              ],
+              Symbol(rc): 1,
+            },
+          ],
+          "id": "i1",
+          Symbol(rc): 1,
+        },
+      ]
     `);
-    expect(pushes).toMatchInlineSnapshot(`[]`);
+    expect(actualStorage).toMatchInlineSnapshot();
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "node": {
+            "relationships": {
+              "comments": [
+                {
+                  "relationships": {
+                    "revisions": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "commentID": "c1",
+                          "id": "r1",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "id": "c1",
+                    "issueID": "i1",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "id": "i1",
+            },
+          },
+          "type": "add",
+        },
+      ]
+    `);
   });
 
   test('fetch one parent, one grandchild, add child', () => {
@@ -3652,16 +3700,132 @@ suite('push one:many:one', () => {
             "type": "add",
           },
         ],
+        [
+          ".issueLabels:source(issueLabel)",
+          "fetch",
+          {
+            "constraint": {
+              "labelID": "l1",
+            },
+          },
+        ],
+        [
+          ".issueLabels.labels:source(label)",
+          "fetch",
+          {
+            "constraint": {
+              "id": "l1",
+            },
+          },
+        ],
+        [
+          ".issueLabels:flipped-join(labels)",
+          "push",
+          {
+            "row": {
+              "issueID": "i1",
+              "labelID": "l1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          ":source(issue)",
+          "fetch",
+          {
+            "constraint": {
+              "id": "i1",
+            },
+          },
+        ],
+        [
+          ".issueLabels:flipped-join(labels)",
+          "fetch",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
+          },
+        ],
+        [
+          ".issueLabels.labels:source(label)",
+          "fetch",
+          {},
+        ],
+        [
+          ".issueLabels:source(issueLabel)",
+          "fetch",
+          {
+            "constraint": {
+              "issueID": "i1",
+              "labelID": "l1",
+            },
+          },
+        ],
+        [
+          ":flipped-join(issueLabels)",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "add",
+          },
+        ],
       ]
     `);
-    expect(data).toMatchInlineSnapshot(`[]`);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".issueLabels:flipped-join(labels)": {},
-        ":flipped-join(issueLabels)": {},
-      }
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "i1",
+          "issueLabels": [
+            {
+              "issueID": "i1",
+              "labelID": "l1",
+              "labels": {
+                "id": "l1",
+                Symbol(rc): 1,
+              },
+              Symbol(rc): 1,
+            },
+          ],
+          Symbol(rc): 1,
+        },
+      ]
     `);
-    expect(pushes).toMatchInlineSnapshot(`[]`);
+    expect(actualStorage).toMatchInlineSnapshot();
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "node": {
+            "relationships": {
+              "issueLabels": [
+                {
+                  "relationships": {
+                    "labels": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "id": "l1",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "issueID": "i1",
+                    "labelID": "l1",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "id": "i1",
+            },
+          },
+          "type": "add",
+        },
+      ]
+    `);
   });
 
   test('fetch one parent, one grandchild, add child', () => {
@@ -3855,16 +4019,238 @@ suite('push one:many:one', () => {
             "type": "add",
           },
         ],
+        [
+          ".issueLabels:source(issueLabel)",
+          "fetch",
+          {
+            "constraint": {
+              "labelID": "l1",
+            },
+          },
+        ],
+        [
+          ".issueLabels.labels:source(label)",
+          "fetch",
+          {
+            "constraint": {
+              "id": "l1",
+            },
+          },
+        ],
+        [
+          ".issueLabels:flipped-join(labels)",
+          "push",
+          {
+            "row": {
+              "issueID": "i1",
+              "labelID": "l1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          ":source(issue)",
+          "fetch",
+          {
+            "constraint": {
+              "id": "i1",
+            },
+          },
+        ],
+        [
+          ".issueLabels:flipped-join(labels)",
+          "fetch",
+          {
+            "constraint": {
+              "issueID": "i1",
+            },
+          },
+        ],
+        [
+          ".issueLabels.labels:source(label)",
+          "fetch",
+          {},
+        ],
+        [
+          ".issueLabels:source(issueLabel)",
+          "fetch",
+          {
+            "constraint": {
+              "issueID": "i1",
+              "labelID": "l1",
+            },
+          },
+        ],
+        [
+          ":flipped-join(issueLabels)",
+          "push",
+          {
+            "row": {
+              "id": "i1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          ".issueLabels.labels:source(label)",
+          "fetch",
+          {
+            "constraint": {
+              "id": "l1",
+            },
+          },
+        ],
+        [
+          ".issueLabels:flipped-join(labels)",
+          "push",
+          {
+            "row": {
+              "issueID": "i2",
+              "labelID": "l1",
+            },
+            "type": "add",
+          },
+        ],
+        [
+          ":source(issue)",
+          "fetch",
+          {
+            "constraint": {
+              "id": "i2",
+            },
+          },
+        ],
+        [
+          ".issueLabels:flipped-join(labels)",
+          "fetch",
+          {
+            "constraint": {
+              "issueID": "i2",
+            },
+          },
+        ],
+        [
+          ".issueLabels.labels:source(label)",
+          "fetch",
+          {},
+        ],
+        [
+          ".issueLabels:source(issueLabel)",
+          "fetch",
+          {
+            "constraint": {
+              "issueID": "i2",
+              "labelID": "l1",
+            },
+          },
+        ],
+        [
+          ":flipped-join(issueLabels)",
+          "push",
+          {
+            "row": {
+              "id": "i2",
+            },
+            "type": "add",
+          },
+        ],
       ]
     `);
-    expect(data).toMatchInlineSnapshot(`[]`);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".issueLabels:flipped-join(labels)": {},
-        ":flipped-join(issueLabels)": {},
-      }
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "id": "i1",
+          "issueLabels": [
+            {
+              "issueID": "i1",
+              "labelID": "l1",
+              "labels": {
+                "id": "l1",
+                Symbol(rc): 1,
+              },
+              Symbol(rc): 1,
+            },
+          ],
+          Symbol(rc): 1,
+        },
+        {
+          "id": "i2",
+          "issueLabels": [
+            {
+              "issueID": "i2",
+              "labelID": "l1",
+              "labels": {
+                "id": "l1",
+                Symbol(rc): 1,
+              },
+              Symbol(rc): 1,
+            },
+          ],
+          Symbol(rc): 1,
+        },
+      ]
     `);
-    expect(pushes).toMatchInlineSnapshot(`[]`);
+    expect(actualStorage).toMatchInlineSnapshot();
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "node": {
+            "relationships": {
+              "issueLabels": [
+                {
+                  "relationships": {
+                    "labels": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "id": "l1",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "issueID": "i1",
+                    "labelID": "l1",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "id": "i1",
+            },
+          },
+          "type": "add",
+        },
+        {
+          "node": {
+            "relationships": {
+              "issueLabels": [
+                {
+                  "relationships": {
+                    "labels": [
+                      {
+                        "relationships": {},
+                        "row": {
+                          "id": "l1",
+                        },
+                      },
+                    ],
+                  },
+                  "row": {
+                    "issueID": "i2",
+                    "labelID": "l1",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "id": "i2",
+            },
+          },
+          "type": "add",
+        },
+      ]
+    `);
   });
 });
 
@@ -6581,9 +6967,70 @@ suite('test overlay on many:one pushes', () => {
           "fetch",
           {
             "constraint": {
-              "id": "u1",
               "stateID": "s0",
             },
+          },
+        ],
+        [
+          ".owner:flipped-join(state)",
+          "push",
+          {
+            "child": {
+              "oldRow": {
+                "id": "s0",
+                "name": "Hawaii",
+              },
+              "row": {
+                "id": "s0",
+                "name": "HI",
+              },
+              "type": "edit",
+            },
+            "row": {
+              "id": "u0",
+              "name": "Fritz",
+              "stateID": "s0",
+            },
+            "type": "child",
+          },
+        ],
+        [
+          ":source(issue)",
+          "fetch",
+          {
+            "constraint": {
+              "ownerID": "u0",
+            },
+          },
+        ],
+        [
+          ":flipped-join(owner)",
+          "push",
+          {
+            "child": {
+              "child": {
+                "oldRow": {
+                  "id": "s0",
+                  "name": "Hawaii",
+                },
+                "row": {
+                  "id": "s0",
+                  "name": "HI",
+                },
+                "type": "edit",
+              },
+              "row": {
+                "id": "u0",
+                "name": "Fritz",
+                "stateID": "s0",
+              },
+              "type": "child",
+            },
+            "row": {
+              "id": "i0",
+              "ownerID": "u0",
+            },
+            "type": "child",
           },
         ],
         [
@@ -6689,7 +7136,7 @@ suite('test overlay on many:one pushes', () => {
             "name": "Fritz",
             "state": {
               "id": "s0",
-              "name": "Hawaii",
+              "name": "HI",
               Symbol(rc): 1,
             },
             "stateID": "s0",
@@ -6748,16 +7195,157 @@ suite('test overlay on many:one pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".owner:flipped-join(state)": {
-          ""partition","[\\"s0\\"]","[\\"u1\\"]","[\\"u1\\"]",": true,
-        },
-        ":flipped-join(owner)": {},
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot();
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
+        {
+          "change": {
+            "child": {
+              "change": {
+                "child": {
+                  "change": {
+                    "oldRow": {
+                      "id": "s0",
+                      "name": "Hawaii",
+                    },
+                    "row": {
+                      "id": "s0",
+                      "name": "HI",
+                    },
+                    "type": "edit",
+                  },
+                  "relationshipName": "state",
+                },
+                "row": {
+                  "id": "u0",
+                  "name": "Fritz",
+                  "stateID": "s0",
+                },
+                "type": "child",
+              },
+              "relationshipName": "owner",
+            },
+            "row": {
+              "id": "i0",
+              "ownerID": "u0",
+            },
+            "type": "child",
+          },
+          "fetch": [
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "HI",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u0",
+                      "name": "Fritz",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i0",
+                "ownerID": "u0",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "Hawaii",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i1",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s0",
+                            "name": "Hawaii",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u1",
+                      "name": "Aaron",
+                      "stateID": "s0",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i2",
+                "ownerID": "u1",
+              },
+            },
+            {
+              "relationships": {
+                "owner": [
+                  {
+                    "relationships": {
+                      "state": [
+                        {
+                          "relationships": {},
+                          "row": {
+                            "id": "s1",
+                            "name": "CA",
+                          },
+                        },
+                      ],
+                    },
+                    "row": {
+                      "id": "u2",
+                      "name": "Arv",
+                      "stateID": "s1",
+                    },
+                  },
+                ],
+              },
+              "row": {
+                "id": "i3",
+                "ownerID": "u2",
+              },
+            },
+          ],
+        },
         {
           "change": {
             "child": {
@@ -8553,7 +9141,6 @@ suite('test overlay on many:many (no junction) pushes', () => {
           "fetch",
           {
             "constraint": {
-              "name": "Aaron",
               "stateID": "s0",
             },
           },
@@ -8864,16 +9451,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
         },
       ]
     `);
-    expect(actualStorage).toMatchInlineSnapshot(`
-      {
-        ".ownerByName:flipped-join(state)": {
-          ""partition","[\\"s0\\"]","[\\"Aaron\\"]","[\\"u3\\"]",": true,
-          ""partition","[\\"s1\\"]","[\\"Aaron\\"]","[\\"u1\\"]",": true,
-          ""partition","[\\"s1\\"]","[\\"Arv\\"]","[\\"u4\\"]",": true,
-        },
-        ":flipped-join(ownerByName)": {},
-      }
-    `);
+    expect(actualStorage).toMatchInlineSnapshot();
     expect(pushesWithFetch).toMatchInlineSnapshot(`
       [
         {
