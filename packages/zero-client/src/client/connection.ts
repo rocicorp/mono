@@ -1,5 +1,5 @@
+import type {LogContext} from '@rocicorp/logger';
 import type {ConnectionManager, ConnectionState} from './connection-manager.ts';
-import type {ZeroLogContext} from './zero-log-context.ts';
 
 export interface Source<T> {
   /**
@@ -41,13 +41,13 @@ export interface Connection {
 
 export class ConnectionImpl implements Connection {
   readonly #connectionManager: ConnectionManager;
-  readonly #lc: ZeroLogContext;
+  readonly #lc: LogContext;
   readonly #source: ConnectionSource;
   readonly #setAuth: (auth: string | null | undefined) => void;
 
   constructor(
     connectionManager: ConnectionManager,
-    lc: ZeroLogContext,
+    lc: LogContext,
     setAuth: (auth: string | null | undefined) => void,
   ) {
     this.#connectionManager = connectionManager;

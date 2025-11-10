@@ -1,3 +1,4 @@
+import type {LogContext} from '@rocicorp/logger';
 import {
   WriteTransactionImpl,
   zeroData,
@@ -31,7 +32,6 @@ import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
 import type {ZeroErrorDetails} from './error.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
 import type {WriteTransaction} from './replicache-types.ts';
-import type {ZeroLogContext} from './zero-log-context.ts';
 
 /**
  * The shape which a user's custom mutator definitions must conform to.
@@ -137,7 +137,7 @@ export class TransactionImpl<TSchema extends Schema, TContext>
   readonly #repTx: WriteTransaction;
   readonly #zeroContext: ZeroContext<TContext>;
 
-  constructor(lc: ZeroLogContext, repTx: WriteTransaction, schema: TSchema) {
+  constructor(lc: LogContext, repTx: WriteTransaction, schema: TSchema) {
     must(repTx.reason === 'initial' || repTx.reason === 'rebase');
     const txData = must(
       (repTx as WriteTransactionImpl)[zeroData],
@@ -184,7 +184,7 @@ export class TransactionImpl<TSchema extends Schema, TContext>
 }
 
 export function makeReplicacheMutator<S extends Schema, TWrappedTransaction>(
-  lc: ZeroLogContext,
+  lc: LogContext,
   mutator: CustomMutatorImpl<S, TWrappedTransaction>,
   schema: S,
 ) {
@@ -228,7 +228,7 @@ function assertValidRunOptions(options: RunOptions | undefined): void {
 }
 
 function newZeroContext<TContext>(
-  lc: ZeroLogContext,
+  lc: LogContext,
   ivmBranch: IVMSourceBranch,
   context: TContext,
 ) {

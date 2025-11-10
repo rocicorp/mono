@@ -1,4 +1,5 @@
 import {Lock} from '@rocicorp/lock';
+import type {LogContext} from '@rocicorp/logger';
 import type {
   PatchOperationInternal,
   PokeInternal,
@@ -28,7 +29,6 @@ import {
   toPrimaryKeyString,
 } from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
-import type {ZeroLogContext} from './zero-log-context.ts';
 
 type PokeAccumulator = {
   readonly pokeStart: PokeStartBody;
@@ -49,7 +49,7 @@ export class PokeHandler {
   readonly #replicachePoke: (poke: PokeInternal) => Promise<void>;
   readonly #onPokeError: () => void;
   readonly #clientID: ClientID;
-  readonly #lc: ZeroLogContext;
+  readonly #lc: LogContext;
   #receivingPoke: Omit<PokeAccumulator, 'pokeEnd'> | undefined = undefined;
   readonly #pokeBuffer: PokeAccumulator[] = [];
   #pokePlaybackLoopRunning = false;
@@ -69,7 +69,7 @@ export class PokeHandler {
     onPokeError: () => void,
     clientID: ClientID,
     schema: Schema,
-    lc: ZeroLogContext,
+    lc: LogContext,
     mutationTracker: MutationTracker,
   ) {
     this.#replicachePoke = replicachePoke;
@@ -160,7 +160,7 @@ export class PokeHandler {
     rafLC.debug?.('processing pokes took', performance.now() - start);
   };
 
-  #processPokesForFrame(lc: ZeroLogContext): Promise<void> {
+  #processPokesForFrame(lc: LogContext): Promise<void> {
     return this.#pokeLock.withLock(async () => {
       const now = Date.now();
       lc.debug?.('got poke lock at', now);
