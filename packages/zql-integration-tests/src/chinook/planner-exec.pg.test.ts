@@ -6,7 +6,11 @@ import {
   clientToServer,
   type NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
-import {createSQLiteCostModel} from '../../../zqlite/src/sqlite-cost-model.ts';
+import {
+  buildHLLStats,
+  createSQLiteHLLCostModel,
+} from '../../../zqlite/src/sqlite-hll-cost-model.ts';
+import {HLLStatsManager} from '../../../zql/src/planner/stats/hll-stats-manager.ts';
 import {AccumulatorDebugger} from '../../../zql/src/planner/planner-debug.ts';
 import {
   buildPlanGraph,
@@ -35,7 +39,8 @@ const {dbs, queries, delegates} = await bootstrap({
   zqlSchema: schema,
 });
 
-let costModel: ReturnType<typeof createSQLiteCostModel>;
+let costModel: ReturnType<typeof createSQLiteHLLCostModel>;
+let hllManager: HLLStatsManager;
 let mapper: NameMapper;
 let tableSpecs: Map<string, LiteAndZqlSpec>;
 
@@ -143,7 +148,11 @@ describe('Chinook planner execution cost validation', () => {
     tableSpecs = new Map<string, LiteAndZqlSpec>();
     computeZqlSpecs(createSilentLogContext(), dbs.sqlite, tableSpecs);
 
-    costModel = createSQLiteCostModel(dbs.sqlite, tableSpecs);
+    // Build HyperLogLog statistics for all columns
+    hllManager = buildHLLStats(dbs.sqlite);
+
+    // Create augmented cost model with HLL stats
+    costModel = createSQLiteHLLCostModel(dbs.sqlite, tableSpecs, hllManager);
   });
 
   test.each([
@@ -251,7 +260,33 @@ describe('Chinook planner execution cost validation', () => {
     //     )
     //     .limit(15),
     // },
-    // TODO: why do you fail?
+    /**
+     * ~~ F3
+     
+    Problems:
+    1. track.composer is not indexed
+    2. sqlite returns 0.25 selectivity for `where composer = 'Kurt Cobain'
+
+    The actual selectivity is 0.007.
+    
+    The estimated 25% selectivity compounds problems when we get to join fanout.
+
+    It says "with 484 tracks per playlist and 25% global match rate,
+    virtually EVERY playlist will have a match." This inflates
+    scaledChildSelectivity to 1.0, which then tells the parent "you'll
+    find matches in the first 10 playlists you scan."
+
+    Reality: The 26 Kurt Cobain tracks are concentrated in maybe just
+    1-2 playlists out of 18. So you need to scan ALL 18 playlists
+    (not just 10) to find matches.
+
+    The other problem is that we assume we only need to scan 4 tracks in each
+    playlist to find a Kurt Cobain track (because of the 25% selectivity).
+    If Kurt Cobain is only in 1 playlist we actually must scan all tracks for all playlists 
+    until we hit that final playlist.
+
+    >> Sticking an index on `composer` fixes this query.
+     */
     // {
     //   name: 'junction table - playlist to tracks via playlistTrack',
     //   query: queries.playlist
