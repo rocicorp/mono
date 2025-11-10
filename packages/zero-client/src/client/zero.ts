@@ -1,4 +1,4 @@
-import {type LogLevel} from '@rocicorp/logger';
+import {LogContext, type LogLevel} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import {type DeletedClients} from '../../../replicache/src/deleted-clients.ts';
 import {
@@ -167,7 +167,6 @@ import {
 } from './reload-error-handler.ts';
 import {getServer} from './server-option.ts';
 import {version} from './version.ts';
-import {ZeroLogContext} from './zero-log-context.ts';
 import {PokeHandler} from './zero-poke-handler.ts';
 import {
   ZeroRep,
@@ -318,7 +317,7 @@ export class Zero<
   readonly userID: string;
   readonly storageKey: string;
 
-  readonly #lc: ZeroLogContext;
+  readonly #lc: LogContext;
   readonly #logOptions: LogOptions;
   readonly #enableAnalytics: boolean;
   readonly #clientSchema: ClientSchema;
@@ -544,7 +543,7 @@ export class Zero<
     const {onError} = options;
 
     const sink = logOptions.logSink;
-    const lc = new ZeroLogContext(logOptions.logLevel, {}, sink);
+    const lc = new LogContext(logOptions.logLevel, {}, sink);
 
     this.#onError = onError
       ? error => {
@@ -1358,7 +1357,7 @@ export class Zero<
 
   // An error on the connection is fatal for the connection.
   async #handleErrorMessage(
-    lc: ZeroLogContext,
+    lc: LogContext,
     downMessage: ErrorMessage,
   ): Promise<void> {
     const [, {kind, message}] = downMessage;
@@ -1401,7 +1400,7 @@ export class Zero<
   }
 
   async #handleConnectedMessage(
-    lc: ZeroLogContext,
+    lc: LogContext,
     connectedMessage: ConnectedMessage,
   ): Promise<void> {
     const now = Date.now();
@@ -1523,7 +1522,7 @@ export class Zero<
    * attempt times out.
    */
   async #connect(
-    lc: ZeroLogContext,
+    lc: LogContext,
     additionalConnectParams: Record<string, string> | undefined,
   ): Promise<void> {
     if (this.closed) {
@@ -1634,11 +1633,7 @@ export class Zero<
     }
   }
 
-  #disconnect(
-    lc: ZeroLogContext,
-    reason: ZeroError,
-    closeCode?: CloseCode,
-  ): void {
+  #disconnect(lc: LogContext, reason: ZeroError, closeCode?: CloseCode): void {
     if (shouldReportConnectError(reason)) {
       this.#connectErrorCount++;
       this.#metrics.lastConnectError.set(getLastConnectErrorValue(reason));
@@ -1728,12 +1723,12 @@ export class Zero<
     }
   }
 
-  #handlePokeStart(_lc: ZeroLogContext, pokeMessage: PokeStartMessage): void {
+  #handlePokeStart(_lc: LogContext, pokeMessage: PokeStartMessage): void {
     this.#abortPingTimeout();
     this.#pokeHandler.handlePokeStart(pokeMessage[1]);
   }
 
-  #handlePokePart(_lc: ZeroLogContext, pokeMessage: PokePartMessage): void {
+  #handlePokePart(_lc: LogContext, pokeMessage: PokePartMessage): void {
     this.#abortPingTimeout();
     const lastMutationIDChangeForSelf = this.#pokeHandler.handlePokePart(
       pokeMessage[1],
@@ -1743,7 +1738,7 @@ export class Zero<
     }
   }
 
-  #handlePokeEnd(_lc: ZeroLogContext, pokeMessage: PokeEndMessage): void {
+  #handlePokeEnd(_lc: LogContext, pokeMessage: PokeEndMessage): void {
     this.#abortPingTimeout();
     this.#pokeHandler.handlePokeEnd(pokeMessage[1]);
   }
@@ -1770,7 +1765,7 @@ export class Zero<
   }
 
   #handlePullResponse(
-    lc: ZeroLogContext,
+    lc: LogContext,
     pullResponseMessage: PullResponseMessage,
   ): void {
     this.#abortPingTimeout();
@@ -2211,7 +2206,7 @@ export class Zero<
   /**
    * Starts a ping and waits for a pong.
    */
-  async #ping(lc: ZeroLogContext): Promise<void> {
+  async #ping(lc: LogContext): Promise<void> {
     lc.debug?.('pinging');
     const {promise, resolve} = resolver();
     this.#onPong = resolve;
@@ -2385,7 +2380,7 @@ export async function createSocket(
   lmid: number,
   wsid: string,
   debugPerf: boolean,
-  lc: ZeroLogContext,
+  lc: LogContext,
   userPushURL: string | undefined,
   userQueryURL: string | undefined,
   additionalConnectParams: Record<string, string> | undefined,
@@ -2528,16 +2523,13 @@ function convertDeletedClientsToBody(
  */
 function addWebSocketIDFromSocketToLogContext(
   {url}: {url: string},
-  lc: ZeroLogContext,
-): ZeroLogContext {
+  lc: LogContext,
+): LogContext {
   const wsid = new URL(url).searchParams.get('wsid') ?? nanoid();
   return addWebSocketIDToLogContext(wsid, lc);
 }
 
-function addWebSocketIDToLogContext(
-  wsid: string,
-  lc: ZeroLogContext,
-): ZeroLogContext {
+function addWebSocketIDToLogContext(wsid: string, lc: LogContext): LogContext {
   return lc.withContext('wsid', wsid);
 }
 

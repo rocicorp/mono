@@ -1,3 +1,4 @@
+import type {LogContext} from '@rocicorp/logger';
 import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
 import {assert} from '../../../shared/src/asserts.ts';
@@ -19,7 +20,6 @@ import type {
 } from '../../../zql/src/query/query.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
 import type {QueryManager} from './query-manager.ts';
-import type {ZeroLogContext} from './zero-log-context.ts';
 
 export type AddQuery = QueryManager['addLegacy'];
 export type AddCustomQuery = QueryManager['addCustom'];
@@ -34,7 +34,7 @@ export type FlushQueryChanges = QueryManager['flushBatch'];
  * queries.
  */
 export class ZeroContext<TContext> extends QueryDelegateBase<TContext> {
-  readonly #lc: ZeroLogContext;
+  readonly #lc: LogContext;
 
   // It is a bummer to have to maintain separate MemorySources here and copy the
   // data in from the Replicache db. But we want the data to be accessible via
@@ -63,7 +63,7 @@ export class ZeroContext<TContext> extends QueryDelegateBase<TContext> {
   readonly #queryInternals = new WeakMap<AnyQuery, AnyQueryInternals>();
 
   constructor(
-    lc: ZeroLogContext,
+    lc: LogContext,
     mainSources: IVMSourceBranch,
     context: TContext,
     addQuery: AddQuery,
