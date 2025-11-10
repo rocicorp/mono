@@ -72,6 +72,8 @@ export type ValidationResult = {
   type: 'correlation' | 'within-optimal' | 'within-baseline';
   passed: boolean;
   details: string;
+  actualValue: number;
+  threshold: number;
 };
 
 // Validation functions
@@ -111,6 +113,8 @@ export function validateCorrelation(
     type: 'correlation',
     passed,
     details,
+    actualValue: correlation,
+    threshold,
   };
 }
 
@@ -144,6 +148,8 @@ export function validateWithinOptimal(
     type: 'within-optimal',
     passed,
     details,
+    actualValue: ratio,
+    threshold: toleranceFactor,
   };
 }
 
@@ -186,6 +192,8 @@ export function validateWithinBaseline(
     type: 'within-baseline',
     passed,
     details,
+    actualValue: ratio,
+    threshold: toleranceFactor,
   };
 }
 
