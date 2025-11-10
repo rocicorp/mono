@@ -69,7 +69,10 @@ export function createWebSocketHandoffHandler<P>(
         'handoff',
         {
           message: serializableSubset(message),
-          head: head.buffer as ArrayBuffer,
+          head: head.buffer.slice(
+            head.byteOffset,
+            head.byteOffset + head.byteLength,
+          ) as ArrayBuffer,
           payload,
         },
       ] satisfies Handoff<P>;
