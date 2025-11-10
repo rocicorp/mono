@@ -1,3 +1,4 @@
+import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {
   afterEach,
@@ -85,7 +86,6 @@ import {
   waitForUpstreamMessage,
   zeroForTest,
 } from './test-utils.ts'; // Why use fakes when we can use the real thing!
-import {ZeroLogContext} from './zero-log-context.ts';
 import {
   CONNECT_TIMEOUT_MS,
   createSocket,
@@ -626,7 +626,7 @@ describe('createSocket', () => {
         lmid,
         'wsidx',
         debugPerf,
-        new ZeroLogContext('error', undefined, new TestLogSink()),
+        new LogContext('error', undefined, new TestLogSink()),
         undefined,
         undefined,
         additionalConnectParams,
@@ -665,7 +665,7 @@ describe('createSocket', () => {
         lmid,
         'wsidx',
         debugPerf,
-        new ZeroLogContext('error', undefined, new TestLogSink()),
+        new LogContext('error', undefined, new TestLogSink()),
         undefined,
         undefined,
         additionalConnectParams,

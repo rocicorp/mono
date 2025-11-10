@@ -1,3 +1,4 @@
+import type {LogContext} from '@rocicorp/logger';
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {assert} from '../../../shared/src/asserts.ts';
@@ -37,7 +38,6 @@ import type {InspectorDelegate} from './inspector/inspector.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 import type {ReadTransaction} from './replicache-types.ts';
-import type {ZeroLogContext} from './zero-log-context.ts';
 
 type QueryHash = string;
 
@@ -76,14 +76,14 @@ export class QueryManager implements InspectorDelegate {
   readonly #queryChangeThrottleMs: number;
   #pendingRemovals: Array<() => void> = [];
   #batchTimer: ReturnType<typeof setTimeout> | undefined;
-  readonly #lc: ZeroLogContext;
+  readonly #lc: LogContext;
   readonly #metrics: ClientMetric = newMetrics();
   readonly #queryMetrics: Map<string, ClientMetric> = new Map();
   readonly #slowMaterializeThreshold: number;
   #closedError: ZeroError | undefined;
 
   constructor(
-    lc: ZeroLogContext,
+    lc: LogContext,
     mutationTracker: MutationTracker,
     clientID: ClientID,
     tables: Record<string, TableSchema>,
