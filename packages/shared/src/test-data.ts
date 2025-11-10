@@ -27,7 +27,7 @@ function randomDatum(type: RandomDataType, len: number): RandomDatum {
     case 'object':
       return randomObject(len);
     case 'arraybuffer':
-      return randomUint8Array(len).buffer;
+      return randomUint8Array(len).buffer as ArrayBuffer;
     case 'blob':
       return randomBlob(len);
     default:
@@ -95,7 +95,7 @@ export function makeRandomASCIIStrings(
 }
 
 function randomBlob(len: number): Blob {
-  return new Blob([randomUint8Array(len)]);
+  return new Blob([randomUint8Array(len) as Uint8Array<ArrayBuffer>]);
 }
 
 function randomUint8Array(len: number): Uint8Array {

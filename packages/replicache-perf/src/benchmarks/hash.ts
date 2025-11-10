@@ -83,7 +83,11 @@ function sha512({wasm, utf8}: {wasm: boolean; utf8: boolean}): Benchmark {
         const hasher = await createSHA512();
         calculateHash = sum => hasher.init().update(sum).digest('binary');
       } else {
-        calculateHash = sum => crypto.subtle.digest('SHA-512', sum);
+        calculateHash = sum =>
+          crypto.subtle.digest(
+            'SHA-512',
+            sum as Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer>,
+          );
       }
     },
     async run() {
