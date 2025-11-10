@@ -69,10 +69,7 @@ export function createWebSocketHandoffHandler<P>(
         'handoff',
         {
           message: serializableSubset(message),
-          head: head.buffer.slice(
-            head.byteOffset,
-            head.byteOffset + head.byteLength,
-          ) as ArrayBuffer,
+          head,
           payload,
         },
       ] satisfies Handoff<P>;
@@ -122,7 +119,7 @@ export function installWebSocketHandoff<P>(
     // handoff messages from this worker's parent.
     source.onMessageType<Handoff<P>>('handoff', (msg, socket) => {
       const {message, head} = msg;
-      handle(message, socket as Socket, Buffer.from(head));
+      handle(message, socket as Socket, head);
     });
   }
 }
@@ -147,7 +144,7 @@ export function installWebSocketReceiver<P>(
     server.handleUpgrade(
       message as IncomingMessage,
       socket as Socket,
-      Buffer.from(head),
+      head,
       ws => receive(ws, payload, message),
     );
   });
@@ -157,7 +154,7 @@ export type Handoff<P> = [
   typeof MESSAGE_TYPES.handoff,
   {
     message: IncomingMessageSubset;
-    head: ArrayBuffer;
+    head: Buffer;
     payload: P;
   },
 ];
