@@ -438,7 +438,7 @@ export class Zero<
       onClientStateNotFound,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
       pingTimeoutMs = DEFAULT_PING_TIMEOUT_MS,
-      disconnectTimeout = DEFAULT_DISCONNECT_TIMEOUT_MS,
+      disconnectTimeoutMs = DEFAULT_DISCONNECT_TIMEOUT_MS,
       schema,
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
       maxRecentQueries = 0,
@@ -492,7 +492,7 @@ export class Zero<
     const logOptions = this.#logOptions;
 
     this.#connectionManager = new ConnectionManager({
-      disconnectTimeout,
+      disconnectTimeout: disconnectTimeoutMs,
     });
 
     const syncConnectionState = (state: ConnectionManagerState) => {
