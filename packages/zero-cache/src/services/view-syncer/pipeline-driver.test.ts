@@ -23,6 +23,8 @@ import {PipelineDriver} from './pipeline-driver.ts';
 import {ResetPipelinesSignal, Snapshotter} from './snapshotter.ts';
 import {TimeSliceTimer} from './view-syncer.ts';
 
+const NO_TIME_ADVANCEMENT_TIMER = {totalElapsed: () => 0};
+
 describe('view-syncer/pipeline-driver', () => {
   let dbFile: DbFile;
   let db: DB;
@@ -320,8 +322,10 @@ describe('view-syncer/pipeline-driver', () => {
     return new TimeSliceTimer().startWithoutYielding();
   }
 
-  function changes() {
-    return [...pipelines.advance(startTimer()).changes];
+  function changes(
+    timer: {totalElapsed: () => number} = NO_TIME_ADVANCEMENT_TIMER,
+  ) {
+    return [...pipelines.advance(timer).changes];
   }
 
   test('replica version', () => {
@@ -472,7 +476,7 @@ describe('view-syncer/pipeline-driver', () => {
       messages.insert('issues', {id: '4', closed: 0}),
     );
 
-    expect(changes()).toMatchInlineSnapshot(`
+    expect(changes(NO_TIME_ADVANCEMENT_TIMER)).toMatchInlineSnapshot(`
       [
         {
           "queryHash": "hash1",
@@ -536,7 +540,7 @@ describe('view-syncer/pipeline-driver', () => {
       messages.delete('comments', {id: '21'}),
     );
 
-    expect(changes()).toMatchInlineSnapshot(`
+    expect(changes(NO_TIME_ADVANCEMENT_TIMER)).toMatchInlineSnapshot(`
       [
         {
           "queryHash": "hash1",
@@ -601,7 +605,7 @@ describe('view-syncer/pipeline-driver', () => {
       messages.update('comments', {id: '22', issueID: '3', upvotes: 20000}),
     );
 
-    expect(changes()).toMatchInlineSnapshot(`
+    expect(changes(NO_TIME_ADVANCEMENT_TIMER)).toMatchInlineSnapshot(`
       [
         {
           "queryHash": "hash1",
@@ -634,7 +638,7 @@ describe('view-syncer/pipeline-driver', () => {
       messages.update('comments', {id: '22', issueID: '3', upvotes: 10}),
     );
 
-    expect(changes()).toMatchInlineSnapshot(`
+    expect(changes(NO_TIME_ADVANCEMENT_TIMER)).toMatchInlineSnapshot(`
       [
         {
           "queryHash": "hash1",
