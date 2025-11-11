@@ -1,5 +1,5 @@
 // oxlint-disable no-console
-import {bench, run, summary} from 'mitata';
+import {run} from 'mitata';
 import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
 import {
   clientToServer,
@@ -26,7 +26,7 @@ import {AccumulatorDebugger} from '../../zql/src/planner/planner-debug.ts';
 // Open the zbugs SQLite database
 const db = new Database(
   createSilentLogContext(),
-  '/Users/mlaw/workspace/mono/apps/zbugs/zbugs-replica.db',
+  '/Users/mlaw/workspace/mono/apps/zbugs/zbugs-replica-2.db',
 );
 const lc = createSilentLogContext();
 
@@ -92,13 +92,23 @@ function createQuery<TTable extends keyof typeof schema.tables & string>(
   >;
 }
 
+let which = 3;
+let count = 0;
+
 // Helper to benchmark planned vs unplanned
-function benchmarkQuery<TTable extends keyof typeof schema.tables & string>(
+async function benchmarkQuery<
+  TTable extends keyof typeof schema.tables & string,
+>(
   name: string,
   // oxlint-disable-next-line no-explicit-any
   query: Query<typeof schema, TTable, any>,
 ) {
+  // if (count++ !== which) {
+  //   return;
+  // }
+  console.log('\n\n----------------------------------------');
   console.log('RUNNING!', name);
+  console.log('----------------------------------------');
   const unplannedAST = queryWithContext(query, undefined).ast;
 
   // Map to server names, plan, then map back to client names
@@ -114,43 +124,59 @@ function benchmarkQuery<TTable extends keyof typeof schema.tables & string>(
   const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
 
   // console.log('Planned ast', JSON.stringify(plannedClientAST, null, 2));
-  console.log('Planning debug info:');
-  console.log(dbg.format());
+  // console.log('Planning debug info:');
+  // console.log(dbg.format());
 
   const tableName = unplannedAST.table as TTable;
   const unplannedQuery = createQuery(tableName, unplannedAST);
   const plannedQuery = createQuery(tableName, plannedClientAST);
 
-  summary(() => {
-    bench(`unplanned: ${name}`, async () => {
-      await delegate.run(unplannedQuery);
-    });
+  let start = performance.now();
+  await delegate.run(plannedQuery);
+  const plannedDuration = performance.now() - start;
+  console.log(`Planned query took ${plannedDuration.toFixed(2)} ms`);
 
-    bench(`planned: ${name}`, async () => {
-      await delegate.run(plannedQuery);
-    });
-  });
+  start = performance.now();
+  await delegate.run(unplannedQuery);
+  const unplannedDuration = performance.now() - start;
+  console.log(`Unplanned query took ${unplannedDuration.toFixed(2)} ms`);
+
+  const speedup = unplannedDuration / plannedDuration;
+  console.log(`Speedup: ${speedup.toFixed(2)}x`);
+  const slowdown = plannedDuration / unplannedDuration;
+  console.log(`Slowdown: ${slowdown.toFixed(2)}x`);
+
+  if (speedup < 1) {
+    console.log('!!!!!!!!!!!!');
+    console.warn(
+      `Warning: Planned query was slower than unplanned by a factor of ${slowdown.toFixed(
+        2,
+      )}x`,
+    );
+    console.log('!!!!!!!!!!!!');
+  }
+
+  // summary(() => {
+  //   bench(`unplanned: ${name}`, async () => {
+  //     await delegate.run(unplannedQuery);
+  //   });
+
+  //   bench(`planned: ${name}`, async () => {
+  //     await delegate.run(plannedQuery);
+  //   });
+  // });
 }
 
 // Benchmark queries from apps/zbugs/shared/queries.ts
 
-// allLabels query
-benchmarkQuery('allLabels', builder.label);
-
-// allUsers query
-benchmarkQuery('allUsers', builder.user);
-
-// allProjects query
-benchmarkQuery('allProjects', builder.project);
-
 // labelsForProject query
-benchmarkQuery(
+await benchmarkQuery(
   'labelsForProject - roci',
   builder.label.whereExists('project', q => q.where('lowerCaseName', 'roci')),
 );
 
 // issuePreloadV2 query - simplified version
-benchmarkQuery(
+await benchmarkQuery(
   'issuePreloadV2 - roci project',
   builder.issue
     .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
@@ -173,13 +199,485 @@ benchmarkQuery(
     .limit(1000),
 );
 
-benchmarkQuery(
-  'usersForProject - assignee filter',
+// userPickerV2 query - assignees filter
+// await benchmarkQuery(
+//   'userPickerV2 - roci, assignees filter',
+//   builder.user.whereExists(
+//     'assignedIssues',
+//     i => i.whereExists('project', p => p.where('lowerCaseName', 'roci')),
+//     {flip: true},
+//   ),
+// );
+
+await benchmarkQuery(
+  'userPickerV2 - zero, assignees filter',
   builder.user.whereExists(
     'assignedIssues',
-    i => i.whereExists('project', p => p.where('lowerCaseName', 'roci')),
+    i => i.whereExists('project', p => p.where('lowerCaseName', 'zero')),
     {flip: true},
   ),
+);
+
+await benchmarkQuery(
+  'userPickerV2 - roci, crew filter',
+  builder.user.where(({cmp, not, and}) =>
+    and(cmp('role', 'crew'), not(cmp('login', 'LIKE', 'rocibot%'))),
+  ),
+);
+
+await benchmarkQuery(
+  'userPickerV2 - zero, crew filter',
+  builder.user.where(({cmp, not, and}) =>
+    and(cmp('role', 'crew'), not(cmp('login', 'LIKE', 'rocibot%'))),
+  ),
+);
+
+await benchmarkQuery(
+  'userPickerV2 - roci, creators filter',
+  builder.user.whereExists('createdIssues', i =>
+    i.whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    }),
+  ),
+);
+
+await benchmarkQuery(
+  'userPickerV2 - zero, creators filter',
+  builder.user.whereExists('createdIssues', i =>
+    i.whereExists('project', p => p.where('lowerCaseName', 'zero'), {
+      flip: true,
+    }),
+  ),
+);
+
+await benchmarkQuery(
+  'userPickerV2 - disabled, login=clarissa',
+  builder.user.where('login', 'clarissa'),
+);
+
+// issueDetail query
+await benchmarkQuery(
+  'issueDetail - roci, by id',
+  builder.issue
+    .where('id', 'QKAaVd6nYi_dup1')
+    .related('project')
+    .related('emoji', emoji => emoji.related('creator'))
+    .related('creator')
+    .related('assignee')
+    .related('labels')
+    .related('notificationState', q => q.where('userID', 'test-user'))
+    .related('viewState', viewState =>
+      viewState.where('userID', 'test-user').one(),
+    )
+    .related('comments', comments =>
+      comments
+        .related('creator')
+        .related('emoji', emoji => emoji.related('creator'))
+        .limit(11)
+        .orderBy('created', 'desc')
+        .orderBy('id', 'desc'),
+    )
+    .one(),
+);
+
+await benchmarkQuery(
+  'issueDetail - roci, by shortID',
+  builder.issue
+    .where('shortID', 777312)
+    .related('project')
+    .related('emoji', emoji => emoji.related('creator'))
+    .related('creator')
+    .related('assignee')
+    .related('labels')
+    .related('notificationState', q => q.where('userID', 'test-user'))
+    .related('viewState', viewState =>
+      viewState.where('userID', 'test-user').one(),
+    )
+    .related('comments', comments =>
+      comments
+        .related('creator')
+        .related('emoji', emoji => emoji.related('creator'))
+        .limit(11)
+        .orderBy('created', 'desc')
+        .orderBy('id', 'desc'),
+    )
+    .one(),
+);
+
+await benchmarkQuery(
+  'issueDetail - zero, by id',
+  builder.issue
+    .where('id', 'HVuvDEdnK0TqWF')
+    .related('project')
+    .related('emoji', emoji => emoji.related('creator'))
+    .related('creator')
+    .related('assignee')
+    .related('labels')
+    .related('notificationState', q => q.where('userID', 'test-user'))
+    .related('viewState', viewState =>
+      viewState.where('userID', 'test-user').one(),
+    )
+    .related('comments', comments =>
+      comments
+        .related('creator')
+        .related('emoji', emoji => emoji.related('creator'))
+        .limit(11)
+        .orderBy('created', 'desc')
+        .orderBy('id', 'desc'),
+    )
+    .one(),
+);
+
+await benchmarkQuery(
+  'issueDetail - zero, by shortID',
+  builder.issue
+    .where('shortID', 972602)
+    .related('project')
+    .related('emoji', emoji => emoji.related('creator'))
+    .related('creator')
+    .related('assignee')
+    .related('labels')
+    .related('notificationState', q => q.where('userID', 'test-user'))
+    .related('viewState', viewState =>
+      viewState.where('userID', 'test-user').one(),
+    )
+    .related('comments', comments =>
+      comments
+        .related('creator')
+        .related('emoji', emoji => emoji.related('creator'))
+        .limit(11)
+        .orderBy('created', 'desc')
+        .orderBy('id', 'desc'),
+    )
+    .one(),
+);
+
+// issueListV2 query - base cases (no filters except project)
+await benchmarkQuery(
+  'issueListV2 - roci, no filters',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    })
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc'),
+);
+
+await benchmarkQuery(
+  'issueListV2 - zero, no filters',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'zero'), {
+      flip: true,
+    })
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc'),
+);
+
+// issueListV2 - creator filters
+await benchmarkQuery(
+  'issueListV2 - roci, creator=clarissa',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    })
+    .where(({exists}) =>
+      exists('creator', q => q.where('login', 'clarissa'), {flip: true}),
+    )
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc'),
+);
+
+await benchmarkQuery(
+  'issueListV2 - roci, creator=naomi',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    })
+    .where(({exists}) =>
+      exists('creator', q => q.where('login', 'naomi'), {flip: true}),
+    )
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc'),
+);
+
+await benchmarkQuery(
+  'issueListV2 - zero, creator=clarissa',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'zero'), {
+      flip: true,
+    })
+    .where(({exists}) =>
+      exists('creator', q => q.where('login', 'clarissa'), {flip: true}),
+    )
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc'),
+);
+
+// issueListV2 - assignee filters
+await benchmarkQuery(
+  'issueListV2 - roci, assignee=holden',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    })
+    .where(({exists}) =>
+      exists('assignee', q => q.where('login', 'holden'), {flip: true}),
+    )
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc'),
+);
+
+await benchmarkQuery(
+  'issueListV2 - roci, assignee=alex',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    })
+    .where(({exists}) =>
+      exists('assignee', q => q.where('login', 'alex'), {flip: true}),
+    )
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc'),
+);
+
+await benchmarkQuery(
+  'issueListV2 - roci, assignee=amos',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    })
+    .where(({exists}) =>
+      exists('assignee', q => q.where('login', 'amos'), {flip: true}),
+    )
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc'),
+);
+
+// issueListV2 - label filters
+await benchmarkQuery(
+  'issueListV2 - roci, label=bug',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    })
+    .where(({exists}) =>
+      exists('labels', q => q.where('name', 'bug'), {flip: true}),
+    )
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc'),
+);
+
+await benchmarkQuery(
+  'issueListV2 - roci, label=urgent',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    })
+    .where(({exists}) =>
+      exists('labels', q => q.where('name', 'urgent'), {flip: true}),
+    )
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc'),
+);
+
+await benchmarkQuery(
+  'issueListV2 - roci, label=cleanup',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    })
+    .where(({exists}) =>
+      exists('labels', q => q.where('name', 'cleanup'), {flip: true}),
+    )
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc'),
+);
+
+await benchmarkQuery(
+  'issueListV2 - roci, labels=[bug, urgent]',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    })
+    .where(({exists, and}) =>
+      and(
+        exists('labels', q => q.where('name', 'bug'), {flip: true}),
+        exists('labels', q => q.where('name', 'urgent'), {flip: true}),
+      ),
+    )
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc'),
+);
+
+await benchmarkQuery(
+  'issueListV2 - roci, labels=[perf, engineering, maintenance]',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    })
+    .where(({exists, and}) =>
+      and(
+        exists('labels', q => q.where('name', 'perf'), {flip: true}),
+        exists('labels', q => q.where('name', 'engineering'), {flip: true}),
+        exists('labels', q => q.where('name', 'maintenance'), {flip: true}),
+      ),
+    )
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc'),
+);
+
+await benchmarkQuery(
+  'issueListV2 - zero, label=bug',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'zero'), {
+      flip: true,
+    })
+    .where(({exists}) =>
+      exists('labels', q => q.where('name', 'bug'), {flip: true}),
+    )
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc'),
+);
+
+// issueListV2 - sorting variations
+await benchmarkQuery(
+  'issueListV2 - roci, sort by created asc',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    })
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('created', 'asc')
+    .orderBy('id', 'asc'),
+);
+
+await benchmarkQuery(
+  'issueListV2 - roci, sort by created desc',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    })
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('created', 'desc')
+    .orderBy('id', 'desc'),
+);
+
+// issueListV2 - complex filter combinations
+await benchmarkQuery(
+  'issueListV2 - roci, creator=clarissa + assignee=holden',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    })
+    .where(({exists, and}) =>
+      and(
+        exists('creator', q => q.where('login', 'clarissa'), {flip: true}),
+        exists('assignee', q => q.where('login', 'holden'), {flip: true}),
+      ),
+    )
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc'),
+);
+
+await benchmarkQuery(
+  'issueListV2 - roci, assignee=alex + labels=[bug, urgent]',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    })
+    .where(({exists, and}) =>
+      and(
+        exists('assignee', q => q.where('login', 'alex'), {flip: true}),
+        exists('labels', q => q.where('name', 'bug'), {flip: true}),
+        exists('labels', q => q.where('name', 'urgent'), {flip: true}),
+      ),
+    )
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc'),
+);
+
+await benchmarkQuery(
+  'issueListV2 - zero, creator=clarissa + label=bug',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'zero'), {
+      flip: true,
+    })
+    .where(({exists, and}) =>
+      and(
+        exists('creator', q => q.where('login', 'clarissa'), {flip: true}),
+        exists('labels', q => q.where('name', 'bug'), {flip: true}),
+      ),
+    )
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc'),
+);
+
+// issueListV2 - pagination
+await benchmarkQuery(
+  'issueListV2 - roci, limit=50 (first page)',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    })
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc')
+    .limit(50),
+);
+
+await benchmarkQuery(
+  'issueListV2 - roci, limit=50, start (second page)',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    })
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc')
+    .start({
+      id: 'QKAaVd6nYi_dup1',
+      created: 1591810204485.0,
+      modified: 1582471103189.0,
+    })
+    .limit(50),
 );
 
 // Check if JSON output is requested via environment variable
