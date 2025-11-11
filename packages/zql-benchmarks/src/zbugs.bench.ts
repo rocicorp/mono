@@ -175,8 +175,10 @@ benchmarkQuery(
 
 benchmarkQuery(
   'usersForProject - assignee filter',
-  builder.user.whereExists('assignedIssues', i =>
-    i.whereExists('project', p => p.where('lowerCaseName', 'roci')),
+  builder.user.whereExists(
+    'assignedIssues',
+    i => i.whereExists('project', p => p.where('lowerCaseName', 'roci')),
+    {flip: true},
   ),
 );
 
