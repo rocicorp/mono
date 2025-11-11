@@ -159,4 +159,52 @@ describe('SQLite cost model', () => {
     expect(startupCost).toBe(0);
     expect(rows).toBe(1920);
   });
+
+  test('NULL-aware cost estimation adjusts for sparse foreign keys', () => {
+    const lc = createSilentLogContext();
+    const testDb = new Database(lc, ':memory:');
+
+    // Create table simulating sparse foreign key similar to zbugs assigneeID
+    // 75% NULL, 25% non-NULL values
+    testDb.exec(`
+      CREATE TABLE issue (
+        id TEXT PRIMARY KEY,
+        assigneeID TEXT,
+        projectID TEXT NOT NULL
+      );
+      CREATE INDEX issue_assigneeID_idx ON issue(assigneeID, id);
+    `);
+
+    // Insert 1000 rows: 750 with NULL assigneeID, 250 with non-NULL
+    const stmt = testDb.prepare(
+      'INSERT INTO issue (id, assigneeID, projectID) VALUES (?, ?, ?)',
+    );
+    for (let i = 0; i < 1000; i++) {
+      const assigneeID = i < 750 ? null : `user${i % 5}`; // 75% NULL
+      stmt.run(`issue${i}`, assigneeID, 'proj1');
+    }
+
+    testDb.exec('ANALYZE');
+
+    // Get table specs
+    const tableSpecs = new Map<string, LiteAndZqlSpec>();
+    computeZqlSpecs(lc, testDb, tableSpecs);
+
+    const testCostModel = createSQLiteCostModel(testDb, tableSpecs);
+
+    // Query: SELECT * FROM issue WHERE assigneeID = 'user1' AND projectID = 'proj1'
+    // Without NULL adjustment, SQLite might estimate ~40% of rows (like the zbugs case)
+    // With NULL adjustment, should estimate ~25% (excluding the 75% NULLs)
+    const {rows} = testCostModel(
+      'issue',
+      [['id', 'asc']],
+      undefined,
+      {assigneeID: undefined, projectID: undefined},
+    );
+
+    // Should estimate significantly less than without NULL awareness
+    // Original would be ~400-500, NULL-aware should be ~100-150 (25% of 1000)
+    expect(rows).toBeLessThan(300);
+    expect(rows).toBeGreaterThan(0);
+  });
 });

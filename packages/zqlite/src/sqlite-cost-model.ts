@@ -25,6 +25,8 @@ interface ScanstatusLoop {
   est: number;
   /** EXPLAIN text for this loop to determine: b-tree vs list subquery */
   explain: string;
+  /** Index name if this loop uses an index, undefined otherwise */
+  indexName?: string;
 }
 
 /**
@@ -81,11 +83,13 @@ export function createSQLiteCostModel(
       `Expected scanstatus to return at least one loop for query: ${sql}`,
     );
 
-    const ret = estimateCost(loops, (columns: string[]) =>
-      fanoutEstimator.getFanout(tableName, columns),
+    return estimateCost(
+      loops,
+      (columns: string[]) => fanoutEstimator.getFanout(tableName, columns),
+      tableName,
+      constraint,
+      fanoutEstimator,
     );
-
-    return ret;
   };
 }
 
@@ -147,7 +151,14 @@ function getScanstatusLoops(stmt: Statement): ScanstatusLoop[] {
       break;
     }
 
-    loops.push({
+    const name = stmt.scanStatus(
+      idx,
+      SQLite3Database.SQLITE_SCANSTAT_NAME,
+      1,
+    ) as string | undefined;
+
+    const parsedIndexName = parseIndexName(name);
+    const loop: ScanstatusLoop = {
       selectId: must(selectId),
       parentId: must(
         stmt.scanStatus(idx, SQLite3Database.SQLITE_SCANSTAT_PARENTID, 1),
@@ -156,10 +167,64 @@ function getScanstatusLoops(stmt: Statement): ScanstatusLoop[] {
         stmt.scanStatus(idx, SQLite3Database.SQLITE_SCANSTAT_EXPLAIN, 1),
       ),
       est: must(stmt.scanStatus(idx, SQLite3Database.SQLITE_SCANSTAT_EST, 1)),
-    });
+    };
+    if (parsedIndexName !== undefined) {
+      loop.indexName = parsedIndexName;
+    }
+    loops.push(loop);
   }
 
   return loops.sort((a, b) => a.selectId - b.selectId);
+}
+
+/**
+ * Parses index name from scanstatus NAME field.
+ * Examples:
+ * - "SEARCH TABLE foo USING INDEX bar" -> "bar"
+ * - "SEARCH foo USING INDEX bar" -> "bar"
+ * - "SCAN TABLE foo" -> undefined
+ */
+function parseIndexName(name: string | undefined): string | undefined {
+  if (!name) return undefined;
+
+  // Match patterns like "USING INDEX index_name" or "USING COVERING INDEX index_name"
+  const match = name.match(/USING (?:COVERING )?INDEX (\S+)/i);
+  return match ? match[1] : undefined;
+}
+
+/**
+ * Gets the NULL ratio for constraint columns that appear in an index's prefix.
+ *
+ * This is used to adjust SQLite's row estimates when NULL values skew the data.
+ * We only adjust for equality filters since those exclude NULLs by definition.
+ *
+ * @param tableName Table being queried
+ * @param indexName Index chosen by SQLite
+ * @param constraint Constraint with equality filters
+ * @param fanoutEstimator Estimator to query stat4
+ * @returns NULL ratio (0.0 to 1.0) for the constrained leading columns
+ */
+function getNullRatioForConstraint(
+  tableName: string,
+  indexName: string,
+  constraint: PlannerConstraint,
+  fanoutEstimator: SQLiteStatFanout,
+): number {
+  // Count how many constraint columns we're filtering on
+  // We assume these are the leading columns of the index (since SQLite chose it)
+  const constraintColumns = Object.keys(constraint);
+
+  if (constraintColumns.length === 0) {
+    return 0;
+  }
+
+  // Query NULL ratio for the leading N columns of the index
+  // where N = number of equality filters in the constraint
+  return fanoutEstimator.getNullRatioForIndex(
+    tableName,
+    indexName,
+    constraintColumns.length,
+  );
 }
 
 /**
@@ -168,6 +233,9 @@ function getScanstatusLoops(stmt: Statement): ScanstatusLoop[] {
 function estimateCost(
   scanstats: ScanstatusLoop[],
   fanout: CostModelCost['fanout'],
+  tableName: string,
+  constraint: PlannerConstraint | undefined,
+  fanoutEstimator: SQLiteStatFanout,
 ): CostModelCost {
   // Sort by selectId to process in execution order
   const sorted = [...scanstats].sort((a, b) => a.selectId - b.selectId);
@@ -188,6 +256,22 @@ function estimateCost(
       // First top-level op is the main scan
       // and determines the total number of rows output.
       totalRows = op.est;
+
+      // Apply NULL-aware adjustment if we have an index and equality constraints
+      if (op.indexName && constraint) {
+        const nullRatio = getNullRatioForConstraint(
+          tableName,
+          op.indexName,
+          constraint,
+          fanoutEstimator,
+        );
+        if (nullRatio > 0) {
+          // Adjust estimate by excluding NULL rows
+          // If 75% of rows are NULL, only 25% can match a non-NULL equality filter
+          totalRows = Math.ceil(totalRows * (1 - nullRatio));
+        }
+      }
+
       firstLoop = false;
     } else {
       if (op.explain.includes('ORDER BY')) {
