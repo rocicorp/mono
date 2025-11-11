@@ -127,6 +127,7 @@ export class CVRStore {
   readonly #schema: string;
   readonly #taskID: string;
   readonly #id: string;
+  readonly #failService: (e: unknown) => void;
   readonly #db: PostgresDB;
   readonly #upstreamDb: PostgresDB | undefined;
   readonly #writes: Set<{
@@ -166,6 +167,7 @@ export class CVRStore {
     deferredRowFlushThreshold = 100, // somewhat arbitrary
     setTimeoutFn = setTimeout,
   ) {
+    this.#failService = failService;
     this.#db = cvrDb;
     this.#upstreamDb = upstreamDb;
     this.#schema = cvrSchema(shard);
@@ -301,7 +303,9 @@ export class CVRStore {
               WHERE "clientGroupID" = ${this.#id} AND
                     ("grantedAt" IS NULL OR
                      "grantedAt" <= to_timestamp(${lastConnectTime / 1000}))
-        `.execute();
+        `
+            .execute()
+            .catch(this.#failService);
         }
       }
 
