@@ -120,18 +120,20 @@ export class CVRPurger implements Service {
         // prefix of the primary key (e.g. the "desires" foreign key reference
         // to the "queries" table is not a prefix of the "desires" primary
         // key).
-        for (const table of [
-          'desires',
-          'queries',
-          'clients',
-          'instances',
-          'rows',
-          'rowsVersion',
-        ]) {
-          void sql`
+        await Promise.all(
+          [
+            'desires',
+            'queries',
+            'clients',
+            'instances',
+            'rows',
+            'rowsVersion',
+          ].map(table =>
+            sql`
             DELETE FROM ${sql(this.#schema)}.${sql(table)} 
-              WHERE "clientGroupID" IN ${sql(ids)}`.execute();
-        }
+              WHERE "clientGroupID" IN ${sql(ids)}`.execute(),
+          ),
+        );
       }
 
       const [{remaining}] = await sql<[{remaining: bigint}]>`
