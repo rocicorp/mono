@@ -4,7 +4,10 @@ import {
   wrapWithApplicationError,
   type ApplicationError,
 } from '../../../zero-protocol/src/application-error.ts';
-import type {ConnectionManager, ConnectionState} from './connection-manager.ts';
+import type {
+  ConnectionManager,
+  ConnectionManagerState,
+} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import type {
   MutatorResult,
@@ -53,7 +56,7 @@ export class MutatorProxy {
    * mutation rejection error is set and all outstanding `.server` promises in
    * the mutation tracker are rejected with the error.
    */
-  #onConnectionStateChange(state: ConnectionState) {
+  #onConnectionStateChange(state: ConnectionManagerState) {
     switch (state.name) {
       case ConnectionStatus.Disconnected:
       case ConnectionStatus.Error:

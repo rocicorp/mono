@@ -104,7 +104,7 @@ import {registerZeroDelegate} from './bindings.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {
   ConnectionManager,
-  type ConnectionState,
+  type ConnectionManagerState,
   throwIfConnectionError,
 } from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
@@ -438,7 +438,6 @@ export class Zero<
       onClientStateNotFound,
       hiddenTabDisconnectDelay = DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
       pingTimeoutMs = DEFAULT_PING_TIMEOUT_MS,
-      disconnectTimeout = DEFAULT_DISCONNECT_TIMEOUT_MS,
       schema,
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
       maxRecentQueries = 0,
@@ -492,10 +491,10 @@ export class Zero<
     const logOptions = this.#logOptions;
 
     this.#connectionManager = new ConnectionManager({
-      disconnectTimeout,
+      disconnectTimeout: DEFAULT_DISCONNECT_TIMEOUT_MS,
     });
 
-    const syncConnectionState = (state: ConnectionState) => {
+    const syncConnectionState = (state: ConnectionManagerState) => {
       this.#onlineManager.setOnline(state.name === ConnectionStatus.Connected);
 
       if (state.name === ConnectionStatus.Closed) {
@@ -1483,8 +1482,8 @@ export class Zero<
    * request to the server.
    *
    * {@link #connect} will throw an assertion error if the
-   * {@link #connectionManager} status is not {@link ConnectionState.Disconnected}
-   * or {@link ConnectionState.Connecting}.
+   * {@link #connectionManager} status is not {@link ConnectionManagerState.Disconnected}
+   * or {@link ConnectionManagerState.Connecting}.
    * Callers MUST check the connection status before calling this method and log
    * an error as needed.
    *

@@ -5,7 +5,10 @@ import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
-import type {ConnectionManager, ConnectionState} from './connection-manager.ts';
+import type {
+  ConnectionManager,
+  ConnectionManagerState,
+} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {ClientError} from './error.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
@@ -15,18 +18,18 @@ function createMockConnectionManager(): {
   manager: ConnectionManager;
   mutationTracker: MutationTracker;
   rejectAllOutstandingMutations: ReturnType<typeof vi.fn>;
-  stateCallback: (state: ConnectionState) => void;
+  stateCallback: (state: ConnectionManagerState) => void;
 } {
-  let stateCallback: ((state: ConnectionState) => void) | undefined;
+  let stateCallback: ((state: ConnectionManagerState) => void) | undefined;
 
   const manager = {
-    subscribe: vi.fn((cb: (state: ConnectionState) => void) => {
+    subscribe: vi.fn((cb: (state: ConnectionManagerState) => void) => {
       stateCallback = cb;
       return () => {};
     }),
     state: {
       name: ConnectionStatus.Connected,
-    } as ConnectionState,
+    } as ConnectionManagerState,
   } as unknown as ConnectionManager;
 
   const rejectAllOutstandingMutations = vi.fn();
@@ -38,7 +41,7 @@ function createMockConnectionManager(): {
     manager,
     mutationTracker,
     rejectAllOutstandingMutations,
-    stateCallback: (state: ConnectionState) => {
+    stateCallback: (state: ConnectionManagerState) => {
       if (stateCallback) {
         stateCallback(state);
       }
@@ -77,7 +80,7 @@ describe('MutatorProxy', () => {
         kind: ClientErrorKind.Offline,
         message: 'offline',
       });
-      const state: ConnectionState = {
+      const state: ConnectionManagerState = {
         name: ConnectionStatus.Disconnected,
         reason: error,
       };
@@ -102,7 +105,7 @@ describe('MutatorProxy', () => {
         kind: ClientErrorKind.Internal,
         message: 'internal error',
       });
-      const state: ConnectionState = {
+      const state: ConnectionManagerState = {
         name: ConnectionStatus.Error,
         reason: error,
       };
@@ -127,7 +130,7 @@ describe('MutatorProxy', () => {
         kind: ClientErrorKind.ClientClosed,
         message: 'client closed',
       });
-      const state: ConnectionState = {
+      const state: ConnectionManagerState = {
         name: ConnectionStatus.Closed,
         reason: error,
       };
