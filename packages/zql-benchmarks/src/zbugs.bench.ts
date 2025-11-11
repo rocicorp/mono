@@ -1,5 +1,5 @@
 // oxlint-disable no-console
-import {run} from 'mitata';
+import {bench, run, summary} from 'mitata';
 import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
 import {
   clientToServer,
@@ -95,6 +95,11 @@ function createQuery<TTable extends keyof typeof schema.tables & string>(
 let which = 3;
 let count = 0;
 
+// fix:
+// userPickerV2 - zero, creators filter
+// userPickerV2 - roci, crew filter
+// issueDetail - roci, by id
+
 // Helper to benchmark planned vs unplanned
 async function benchmarkQuery<
   TTable extends keyof typeof schema.tables & string,
@@ -106,6 +111,9 @@ async function benchmarkQuery<
   // if (count++ !== which) {
   //   return;
   // }
+  if (name !== 'issueDetail - roci, by id') {
+    return;
+  }
   console.log('\n\n----------------------------------------');
   console.log('RUNNING!', name);
   console.log('----------------------------------------');
@@ -115,12 +123,12 @@ async function benchmarkQuery<
   const mappedAST = mapAST(unplannedAST, clientToServerMapper);
 
   // Deep copy mappedAST and set flip to false for all correlated subqueries
-  // const mappedASTCopy = setFlipToUndefinedInAST(mappedAST);
+  const mappedASTCopy = setFlipToUndefinedInAST(mappedAST);
 
   const dbg = new AccumulatorDebugger();
   console.log('Planning query:', name);
 
-  const plannedServerAST = planQuery(mappedAST, costModel, dbg);
+  const plannedServerAST = planQuery(mappedASTCopy, costModel, dbg);
   const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
 
   // console.log('Planned ast', JSON.stringify(plannedClientAST, null, 2));
@@ -130,6 +138,9 @@ async function benchmarkQuery<
   const tableName = unplannedAST.table as TTable;
   const unplannedQuery = createQuery(tableName, unplannedAST);
   const plannedQuery = createQuery(tableName, plannedClientAST);
+
+  // console.log('unplanned asst:', JSON.stringify(unplannedAST, null, 2));
+  // console.log('planned ast:', JSON.stringify(plannedClientAST, null, 2));
 
   let start = performance.now();
   await delegate.run(plannedQuery);
@@ -156,15 +167,15 @@ async function benchmarkQuery<
     console.log('!!!!!!!!!!!!');
   }
 
-  // summary(() => {
-  //   bench(`unplanned: ${name}`, async () => {
-  //     await delegate.run(unplannedQuery);
-  //   });
+  summary(() => {
+    bench(`unplanned: ${name}`, async () => {
+      await delegate.run(unplannedQuery);
+    });
 
-  //   bench(`planned: ${name}`, async () => {
-  //     await delegate.run(plannedQuery);
-  //   });
-  // });
+    bench(`planned: ${name}`, async () => {
+      await delegate.run(plannedQuery);
+    });
+  });
 }
 
 // Benchmark queries from apps/zbugs/shared/queries.ts
