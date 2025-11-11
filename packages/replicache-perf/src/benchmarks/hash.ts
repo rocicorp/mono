@@ -5,7 +5,7 @@ import {makeRandomStrings} from '../data.ts';
 const encoder = new TextEncoder();
 
 function stringToUint8Array(s: string): Uint8Array<ArrayBuffer> {
-  return encoder.encode(s) as Uint8Array<ArrayBuffer>;
+  return encoder.encode(s);
 }
 
 function stringToUint16Array(s: string): Uint16Array<ArrayBuffer> {
