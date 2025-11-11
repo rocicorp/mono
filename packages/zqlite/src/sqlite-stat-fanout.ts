@@ -212,53 +212,6 @@ export class SQLiteStatFanout {
   }
 
   /**
-   * Gets the NULL ratio for an index's leading columns.
-   *
-   * This is used to adjust row estimates when SQLite's scanstatus overestimates
-   * due to NULL skew in the data.
-   *
-   * Example: If 75% of rows have NULL in `assigneeID`, and SQLite estimates
-   * 40k rows for `assigneeID = 'value'`, we can adjust to ~10k (25% of 40k).
-   *
-   * @param tableName Table containing the index
-   * @param indexName Name of the index (from scanstatus NAME field)
-   * @param numLeadingColumns Number of leading columns to check for NULLs (default: 1)
-   * @returns Ratio of NULL samples (0.0 to 1.0), or 0 if stat4 unavailable
-   */
-  getNullRatioForIndex(
-    tableName: string,
-    indexName: string,
-    numLeadingColumns = 1,
-  ): number {
-    try {
-      // Query stat4 samples for this index
-      const samples = this.#stat4Stmt.all(
-        tableName,
-        indexName,
-      ) as Stat4Sample[];
-
-      if (samples.length === 0) {
-        return 0; // No statistics available, assume no NULLs
-      }
-
-      // Count samples where any of the leading columns is NULL
-      let nullCount = 0;
-      for (const sample of samples) {
-        if (
-          this.#decodeSampleHasLeadingNull(sample.sample, numLeadingColumns)
-        ) {
-          nullCount++;
-        }
-      }
-
-      return nullCount / samples.length;
-    } catch {
-      // stat4 table may not exist or query may fail
-      return 0;
-    }
-  }
-
-  /**
    * Gets fanout from sqlite_stat4 histogram.
    *
    * Queries stat4 samples, decodes to identify NULLs, and returns
@@ -511,40 +464,5 @@ export class SQLiteStatFanout {
 
     // Serial type 0 = NULL
     return serialType === 0;
-  }
-
-  /**
-   * Checks if any of the leading N columns in a stat4 sample are NULL.
-   *
-   * This extends #decodeSampleIsNull to handle compound indexes.
-   * For equality filters on compound index columns, we want to know if
-   * any of the filtered columns have NULL values.
-   *
-   * @param sample Binary-encoded sample from stat4
-   * @param numColumns Number of leading columns to check (default: 1)
-   * @returns true if any of the leading columns is NULL
-   */
-  #decodeSampleHasLeadingNull(sample: Buffer, numColumns = 1): boolean {
-    if (sample.length === 0) {
-      return true;
-    }
-
-    // Read header size (varint - simplified: assume single byte)
-    const headerSize = sample[0];
-
-    if (headerSize === 0 || headerSize >= sample.length) {
-      return true;
-    }
-
-    // Check serial types for leading columns (starting at position 1)
-    for (let i = 0; i < numColumns && i + 1 < headerSize; i++) {
-      const serialType = sample[1 + i];
-      if (serialType === 0) {
-        // Serial type 0 = NULL
-        return true;
-      }
-    }
-
-    return false;
   }
 }

@@ -71,10 +71,6 @@ export function constraintsToSQL(
 }
 
 export function orderByToSQL(order: Ordering, reverse: boolean): SQLQuery {
-  if (order.length === 0) {
-    return sql``;
-  }
-
   if (reverse) {
     return sql`ORDER BY ${sql.join(
       order.map(
