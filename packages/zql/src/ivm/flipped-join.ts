@@ -8,8 +8,10 @@ import type {Change} from './change.ts';
 import {constraintsAreCompatible, type Constraint} from './constraint.ts';
 import type {Node} from './data.ts';
 import {
+  generateParentNodesForChildRow,
   generateWithOverlay,
   isJoinMatch,
+  KeySet,
   rowEqualsForCompoundKey,
   type JoinChangeOverlay,
 } from './join-utils.ts';
@@ -18,6 +20,7 @@ import {
   type FetchRequest,
   type Input,
   type Output,
+  type Storage,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {first, type Stream} from './stream.ts';
@@ -25,10 +28,11 @@ import {first, type Stream} from './stream.ts';
 type Args = {
   parent: Input;
   child: Input;
+  storage: Storage;
   // The nth key in childKey corresponds to the nth key in parentKey.
   parentKey: CompoundKey;
   childKey: CompoundKey;
-
+  partitionKey: CompoundKey | undefined;
   relationshipName: string;
   hidden: boolean;
   system: System;
@@ -49,6 +53,7 @@ export class FlippedJoin implements Input {
   readonly #childKey: CompoundKey;
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
+  readonly #partitionKeySet: KeySet<CompoundKey> | undefined;
 
   #output: Output = throwOutput;
 
@@ -57,8 +62,10 @@ export class FlippedJoin implements Input {
   constructor({
     parent,
     child,
+    storage,
     parentKey,
     childKey,
+    partitionKey,
     relationshipName,
     hidden,
     system,
@@ -87,6 +94,16 @@ export class FlippedJoin implements Input {
         },
       },
     };
+
+    this.#partitionKeySet = partitionKey
+      ? new KeySet(
+          storage,
+          'partition',
+          this.#parentKey,
+          parentSchema.primaryKey,
+          partitionKey,
+        )
+      : undefined;
 
     parent.setOutput({
       push: (change: Change) => this.#pushParent(change),
@@ -214,9 +231,13 @@ export class FlippedJoin implements Input {
           relatedChildNodes.push(childNodes[minParentNodeChildIndex]);
           const iter = parentIterators[minParentNodeChildIndex];
           const result = iter.next();
-          nextParentNodes[minParentNodeChildIndex] = result.done
-            ? null
-            : result.value;
+          if (result.done) {
+            nextParentNodes[minParentNodeChildIndex] = null;
+          } else {
+            const node: Node = result.value;
+            nextParentNodes[minParentNodeChildIndex] = node;
+            this.#partitionKeySet?.add(node.row);
+          }
         }
         let overlaidRelatedChildNodes = relatedChildNodes;
         if (
@@ -300,15 +321,14 @@ export class FlippedJoin implements Input {
         position: undefined,
       };
       try {
-        const parentNodeStream = this.#parent.fetch({
-          constraint: Object.fromEntries(
-            this.#parentKey.map((key, i) => [
-              key,
-              change.node.row[this.#childKey[i]],
-            ]),
-          ),
-        });
-        for (const parentNode of parentNodeStream) {
+        const parentNodes: Stream<Node> = generateParentNodesForChildRow(
+          this.#parentKey,
+          this.#childKey,
+          this.#partitionKeySet,
+          this.#parent,
+          change.node.row,
+        );
+        for (const parentNode of parentNodes) {
           this.#inprogressChildChange = {
             change,
             position: parentNode.row,
@@ -411,6 +431,13 @@ export class FlippedJoin implements Input {
         [this.#relationshipName]: childNodeStream(node),
       },
     });
+
+    if (change.type === 'add') {
+      this.#partitionKeySet?.add(change.node.row);
+    }
+    if (change.type === 'remove') {
+      this.#partitionKeySet?.delete(change.node.row);
+    }
 
     // If no related child don't push as this is an inner join.
     if (first(childNodeStream(change.node)()) === undefined) {

@@ -1,8 +1,8 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {hasOwn} from '../../../shared/src/has-own.ts';
 import {must} from '../../../shared/src/must.ts';
+import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import {assertOrderingIncludesPK} from '../builder/builder.ts';
 import {type Change, type EditChange, type RemoveChange} from './change.ts';
 import type {Constraint} from './constraint.ts';
@@ -33,7 +33,7 @@ interface TakeStorage {
   del(key: string): void;
 }
 
-export type PartitionKey = PrimaryKey;
+export type PartitionKey = CompoundKey;
 
 /**
  * The Take operator is for implementing limit queries. It takes the first n
@@ -116,6 +116,9 @@ export class Take implements Operator {
         yield inputNode;
       }
       return;
+    }
+    if (this.#partitionKey) {
+      throw new Error('no partition!!!!!!!!' + JSON.stringify(req));
     }
     // There is a partition key, but the fetch is not constrained or constrained
     // on a different key.  Thus we don't have a single take state to bound by.

@@ -113,14 +113,14 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     expect(storage).toMatchInlineSnapshot(`
       [
         {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
-          ""pKeySet","i3","i3",": true,
+          ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"i2\\"]","[\\"i2\\"]",": true,
+          ""primary","[\\"i3\\"]","[\\"i3\\"]",": true,
         },
         {
-          ""pKeySet","o1","i1",": true,
-          ""pKeySet","o2","i2",": true,
-          ""pKeySet","o2","i3",": true,
+          ""primary","[\\"o1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"o2\\"]","[\\"i2\\"]",": true,
+          ""primary","[\\"o2\\"]","[\\"i3\\"]",": true,
         },
       ]
     `);
@@ -204,12 +204,12 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     expect(storage).toMatchInlineSnapshot(`
       [
         {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
+          ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"i2\\"]","[\\"i2\\"]",": true,
         },
         {
-          ""pKeySet","o1","i1",": true,
-          ""pKeySet","o2","i2",": true,
+          ""primary","[\\"o1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"o2\\"]","[\\"i2\\"]",": true,
         },
       ]
     `);
@@ -293,12 +293,12 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     expect(storage).toMatchInlineSnapshot(`
       [
         {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
+          ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"i2\\"]","[\\"i2\\"]",": true,
         },
         {
-          ""pKeySet","o1","i1",": true,
-          ""pKeySet","o2","i2",": true,
+          ""primary","[\\"o1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"o2\\"]","[\\"i2\\"]",": true,
         },
       ]
     `);
@@ -382,12 +382,12 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     expect(storage).toMatchInlineSnapshot(`
       [
         {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
+          ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"i2\\"]","[\\"i2\\"]",": true,
         },
         {
-          ""pKeySet","o1","i1",": true,
-          ""pKeySet","o2","i2",": true,
+          ""primary","[\\"o1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"o2\\"]","[\\"i2\\"]",": true,
         },
       ]
     `);
@@ -471,12 +471,12 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     expect(storage).toMatchInlineSnapshot(`
       [
         {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
+          ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"i2\\"]","[\\"i2\\"]",": true,
         },
         {
-          ""pKeySet","o1","i1",": true,
-          ""pKeySet","o2","i2",": true,
+          ""primary","[\\"o1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"o2\\"]","[\\"i2\\"]",": true,
         },
       ]
     `);
@@ -580,12 +580,12 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
       expect(storage).toMatchInlineSnapshot(`
         [
           {
-            ""pKeySet","i1","i1",": true,
-            ""pKeySet","i2","i2",": true,
+            ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
+            ""primary","[\\"i2\\"]","[\\"i2\\"]",": true,
           },
           {
-            ""pKeySet","o1","i1",": true,
-            ""pKeySet","o2","i2",": true,
+            ""primary","[\\"o1\\"]","[\\"i1\\"]",": true,
+            ""primary","[\\"o2\\"]","[\\"i2\\"]",": true,
           },
         ]
       `);
@@ -665,12 +665,12 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
       expect(storage).toMatchInlineSnapshot(`
         [
           {
-            ""pKeySet","i1","i1",": true,
-            ""pKeySet","i2","i2",": true,
+            ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
+            ""primary","[\\"i2\\"]","[\\"i2\\"]",": true,
           },
           {
-            ""pKeySet","o1","i1",": true,
-            ""pKeySet","o2","i2",": true,
+            ""primary","[\\"o1\\"]","[\\"i1\\"]",": true,
+            ""primary","[\\"o2\\"]","[\\"i2\\"]",": true,
           },
         ]
       `);
@@ -759,12 +759,12 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
       expect(storage).toMatchInlineSnapshot(`
         [
           {
-            ""pKeySet","i1","i1",": true,
-            ""pKeySet","i2","i2",": true,
+            ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
+            ""primary","[\\"i2\\"]","[\\"i2\\"]",": true,
           },
           {
-            ""pKeySet","o1","i1",": true,
-            ""pKeySet","o2","i2",": true,
+            ""primary","[\\"o1\\"]","[\\"i1\\"]",": true,
+            ""primary","[\\"o2\\"]","[\\"i2\\"]",": true,
           },
         ]
       `);

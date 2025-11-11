@@ -226,7 +226,7 @@ suite('push one:many', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
+          ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
         },
       }
     `);
@@ -326,7 +326,7 @@ suite('push one:many', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
+          ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
         },
       }
     `);
@@ -419,7 +419,7 @@ suite('push one:many', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(comments)": {
-          ""pKeySet","i2","i2",": true,
+          ""primary","[\\"i2\\"]","[\\"i2\\"]",": true,
         },
       }
     `);
@@ -511,7 +511,7 @@ suite('push one:many', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
+          ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
         },
       }
     `);
@@ -588,7 +588,7 @@ suite('push one:many', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
+          ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
         },
       }
     `);
@@ -1150,7 +1150,7 @@ suite('push one:many', () => {
       expect(actualStorage).toMatchInlineSnapshot(`
         {
           ":join(comments)": {
-            ""pKeySet","i1","i1",": true,
+            ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
           },
         }
       `);
@@ -1275,7 +1275,7 @@ suite('push one:many', () => {
       expect(actualStorage).toMatchInlineSnapshot(`
         {
           ":join(comments)": {
-            ""pKeySet","i1","i1",": true,
+            ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
           },
         }
       `);
@@ -1452,8 +1452,8 @@ suite('push one:many', () => {
       expect(actualStorage).toMatchInlineSnapshot(`
         {
           ":join(comments)": {
-            ""pKeySet","i1","i1",": true,
-            ""pKeySet","i2","i2",": true,
+            ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
+            ""primary","[\\"i2\\"]","[\\"i2\\"]",": true,
           },
         }
       `);
@@ -1632,8 +1632,8 @@ suite('push one:many', () => {
       expect(actualStorage).toMatchInlineSnapshot(`
         {
           ":join(comments)": {
-            ""pKeySet","i2","i2",": true,
-            ""pKeySet","i3","i3",": true,
+            ""primary","[\\"i2\\"]","[\\"i2\\"]",": true,
+            ""primary","[\\"i3\\"]","[\\"i3\\"]",": true,
           },
         }
       `);
@@ -1793,7 +1793,7 @@ suite('push many:one', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(owner)": {
-          ""pKeySet","u1","i1",": true,
+          ""primary","[\\"u1\\"]","[\\"i1\\"]",": true,
         },
       }
     `);
@@ -1882,7 +1882,7 @@ suite('push many:one', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(owner)": {
-          ""pKeySet","u2","i1",": true,
+          ""primary","[\\"u2\\"]","[\\"i1\\"]",": true,
         },
       }
     `);
@@ -1972,7 +1972,7 @@ suite('push many:one', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(owner)": {
-          ""pKeySet","u1","i1",": true,
+          ""primary","[\\"u1\\"]","[\\"i1\\"]",": true,
         },
       }
     `);
@@ -2098,8 +2098,8 @@ suite('push many:one', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(owner)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
+          ""primary","[\\"u1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"u1\\"]","[\\"i2\\"]",": true,
         },
       }
     `);
@@ -2300,8 +2300,8 @@ suite('push many:one', () => {
       expect(actualStorage).toMatchInlineSnapshot(`
         {
           ":join(owner)": {
-            ""pKeySet","u1","i1",": true,
-            ""pKeySet","u1","i2",": true,
+            ""primary","[\\"u1\\"]","[\\"i1\\"]",": true,
+            ""primary","[\\"u1\\"]","[\\"i2\\"]",": true,
           },
         }
       `);
@@ -2617,12 +2617,14 @@ suite('push many:one', () => {
       expect(actualStorage).toMatchInlineSnapshot(`
         {
           ".issues:join(comments)": {
-            ""pKeySet","i1","i1",": true,
-            ""pKeySet","i2","i2",": true,
+            ""partition","[\\"i1\\"]","[\\"u1\\"]","[\\"i1\\"]",": true,
+            ""partition","[\\"i2\\"]","[\\"u1\\"]","[\\"i2\\"]",": true,
+            ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
+            ""primary","[\\"i2\\"]","[\\"i2\\"]",": true,
           },
           ":join(issues)": {
-            ""pKeySet","u1","u1",": true,
-            ""pKeySet","u2","u2",": true,
+            ""primary","[\\"u1\\"]","[\\"u1\\"]",": true,
+            ""primary","[\\"u2\\"]","[\\"u2\\"]",": true,
           },
         }
       `);
@@ -2768,8 +2770,8 @@ suite('push many:one', () => {
       expect(actualStorage).toMatchInlineSnapshot(`
         {
           ":join(owner)": {
-            ""pKeySet","u1","i1",": true,
-            ""pKeySet","u1","i2",": true,
+            ""primary","[\\"u1\\"]","[\\"i1\\"]",": true,
+            ""primary","[\\"u1\\"]","[\\"i2\\"]",": true,
           },
         }
       `);
@@ -2903,8 +2905,8 @@ suite('push many:one', () => {
       expect(actualStorage).toMatchInlineSnapshot(`
         {
           ":join(owner)": {
-            ""pKeySet","u1","i1",": true,
-            ""pKeySet","u1","i2",": true,
+            ""primary","[\\"u1\\"]","[\\"i1\\"]",": true,
+            ""primary","[\\"u1\\"]","[\\"i2\\"]",": true,
           },
         }
       `);
@@ -3058,6 +3060,7 @@ suite('push one:many:many', () => {
           {
             "constraint": {
               "id": "c1",
+              "issueID": "i1",
             },
           },
         ],
@@ -3139,10 +3142,11 @@ suite('push one:many:many', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ".comments:join(revisions)": {
-          ""pKeySet","c1","c1",": true,
+          ""partition","[\\"c1\\"]","[\\"i1\\"]","[\\"c1\\"]",": true,
+          ""primary","[\\"c1\\"]","[\\"c1\\"]",": true,
         },
         ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
+          ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
         },
       }
     `);
@@ -3280,10 +3284,11 @@ suite('push one:many:many', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ".comments:join(revisions)": {
-          ""pKeySet","c1","c1",": true,
+          ""partition","[\\"c1\\"]","[\\"i1\\"]","[\\"c1\\"]",": true,
+          ""primary","[\\"c1\\"]","[\\"c1\\"]",": true,
         },
         ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
+          ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
         },
       }
     `);
@@ -3411,10 +3416,11 @@ suite('push one:many:many', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ".comments:join(revisions)": {
-          ""pKeySet","c1","c1",": true,
+          ""partition","[\\"c1\\"]","[\\"i1\\"]","[\\"c1\\"]",": true,
+          ""primary","[\\"c1\\"]","[\\"c1\\"]",": true,
         },
         ":join(comments)": {
-          ""pKeySet","i1","i1",": true,
+          ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
         },
       }
     `);
@@ -3661,6 +3667,7 @@ suite('push one:many:one', () => {
           "fetch",
           {
             "constraint": {
+              "issueID": "i1",
               "labelID": "l1",
             },
           },
@@ -3738,10 +3745,11 @@ suite('push one:many:one', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ".issueLabels:join(labels)": {
-          ""pKeySet","l1","i1","l1",": true,
+          ""partition","[\\"l1\\"]","[\\"i1\\"]","[\\"i1\\",\\"l1\\"]",": true,
+          ""primary","[\\"l1\\"]","[\\"i1\\",\\"l1\\"]",": true,
         },
         ":join(issueLabels)": {
-          ""pKeySet","i1","i1",": true,
+          ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
         },
       }
     `);
@@ -3877,10 +3885,11 @@ suite('push one:many:one', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ".issueLabels:join(labels)": {
-          ""pKeySet","l1","i1","l1",": true,
+          ""partition","[\\"l1\\"]","[\\"i1\\"]","[\\"i1\\",\\"l1\\"]",": true,
+          ""primary","[\\"l1\\"]","[\\"i1\\",\\"l1\\"]",": true,
         },
         ":join(issueLabels)": {
-          ""pKeySet","i1","i1",": true,
+          ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
         },
       }
     `);
@@ -3951,6 +3960,7 @@ suite('push one:many:one', () => {
           "fetch",
           {
             "constraint": {
+              "issueID": "i1",
               "labelID": "l1",
             },
           },
@@ -4002,6 +4012,16 @@ suite('push one:many:one', () => {
               "id": "i1",
             },
             "type": "child",
+          },
+        ],
+        [
+          ".issueLabels:source(issueLabel)",
+          "fetch",
+          {
+            "constraint": {
+              "issueID": "i2",
+              "labelID": "l1",
+            },
           },
         ],
         [
@@ -4092,12 +4112,14 @@ suite('push one:many:one', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ".issueLabels:join(labels)": {
-          ""pKeySet","l1","i1","l1",": true,
-          ""pKeySet","l1","i2","l1",": true,
+          ""partition","[\\"l1\\"]","[\\"i1\\"]","[\\"i1\\",\\"l1\\"]",": true,
+          ""partition","[\\"l1\\"]","[\\"i2\\"]","[\\"i2\\",\\"l1\\"]",": true,
+          ""primary","[\\"l1\\"]","[\\"i1\\",\\"l1\\"]",": true,
+          ""primary","[\\"l1\\"]","[\\"i2\\",\\"l1\\"]",": true,
         },
         ":join(issueLabels)": {
-          ""pKeySet","i1","i1",": true,
-          ""pKeySet","i2","i2",": true,
+          ""primary","[\\"i1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"i2\\"]","[\\"i2\\"]",": true,
         },
       }
     `);
@@ -4503,12 +4525,12 @@ describe('edit assignee', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(assignee)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
+          ""primary","[\\"u1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"u2\\"]","[\\"i2\\"]",": true,
         },
         ":join(creator)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
+          ""primary","[\\"u1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"u2\\"]","[\\"i2\\"]",": true,
         },
       }
     `);
@@ -4868,12 +4890,12 @@ describe('edit assignee', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(assignee)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
+          ""primary","[\\"u1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"u2\\"]","[\\"i2\\"]",": true,
         },
         ":join(creator)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
+          ""primary","[\\"u1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"u2\\"]","[\\"i2\\"]",": true,
         },
       }
     `);
@@ -5135,12 +5157,12 @@ describe('edit assignee', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(assignee)": {
-          ""pKeySet","u2","i2",": true,
-          ""pKeySet",null,"i1",": true,
+          ""primary","[\\"u2\\"]","[\\"i2\\"]",": true,
+          ""primary","[null]","[\\"i1\\"]",": true,
         },
         ":join(creator)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
+          ""primary","[\\"u1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"u2\\"]","[\\"i2\\"]",": true,
         },
       }
     `);
@@ -5488,12 +5510,12 @@ describe('edit assignee', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(assignee)": {
-          ""pKeySet","u2","i2",": true,
-          ""pKeySet",null,"i1",": true,
+          ""primary","[\\"u2\\"]","[\\"i2\\"]",": true,
+          ""primary","[null]","[\\"i1\\"]",": true,
         },
         ":join(creator)": {
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u2","i2",": true,
+          ""primary","[\\"u1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"u2\\"]","[\\"i2\\"]",": true,
         },
       }
     `);
@@ -5768,9 +5790,9 @@ describe('joins with compound join keys', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(ab)": {
-          ""pKeySet",1,2,0,": true,
-          ""pKeySet",4,5,1,": true,
-          ""pKeySet",7,8,2,": true,
+          ""primary","[1,2]","[0]",": true,
+          ""primary","[4,5]","[1]",": true,
+          ""primary","[7,8]","[2]",": true,
         },
       }
     `);
@@ -5897,8 +5919,8 @@ describe('joins with compound join keys', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(ab)": {
-          ""pKeySet",1,2,0,": true,
-          ""pKeySet",4,5,1,": true,
+          ""primary","[1,2]","[0]",": true,
+          ""primary","[4,5]","[1]",": true,
         },
       }
     `);
@@ -6077,10 +6099,10 @@ suite('test overlay on many:one pushes', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(owner)": {
-          ""pKeySet","u0","i0",": true,
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
-          ""pKeySet","u2","i3",": true,
+          ""primary","[\\"u0\\"]","[\\"i0\\"]",": true,
+          ""primary","[\\"u1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"u1\\"]","[\\"i2\\"]",": true,
+          ""primary","[\\"u2\\"]","[\\"i3\\"]",": true,
         },
       }
     `);
@@ -6387,10 +6409,10 @@ suite('test overlay on many:one pushes', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(owner)": {
-          ""pKeySet","u0","i0",": true,
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
-          ""pKeySet","u2","i3",": true,
+          ""primary","[\\"u0\\"]","[\\"i0\\"]",": true,
+          ""primary","[\\"u1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"u1\\"]","[\\"i2\\"]",": true,
+          ""primary","[\\"u2\\"]","[\\"i3\\"]",": true,
         },
       }
     `);
@@ -6710,10 +6732,10 @@ suite('test overlay on many:one pushes', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(owner)": {
-          ""pKeySet","u0","i0",": true,
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
-          ""pKeySet","u2","i3",": true,
+          ""primary","[\\"u0\\"]","[\\"i0\\"]",": true,
+          ""primary","[\\"u1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"u1\\"]","[\\"i2\\"]",": true,
+          ""primary","[\\"u2\\"]","[\\"i3\\"]",": true,
         },
       }
     `);
@@ -7032,6 +7054,7 @@ suite('test overlay on many:one pushes', () => {
           "fetch",
           {
             "constraint": {
+              "id": "u0",
               "stateID": "s0",
             },
           },
@@ -7096,6 +7119,16 @@ suite('test overlay on many:one pushes', () => {
               "ownerID": "u0",
             },
             "type": "child",
+          },
+        ],
+        [
+          ".owner:source(user)",
+          "fetch",
+          {
+            "constraint": {
+              "id": "u1",
+              "stateID": "s0",
+            },
           },
         ],
         [
@@ -7263,15 +7296,18 @@ suite('test overlay on many:one pushes', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ".owner:join(state)": {
-          ""pKeySet","s0","u0",": true,
-          ""pKeySet","s0","u1",": true,
-          ""pKeySet","s1","u2",": true,
+          ""partition","[\\"s0\\"]","[\\"u0\\"]","[\\"u0\\"]",": true,
+          ""partition","[\\"s0\\"]","[\\"u1\\"]","[\\"u1\\"]",": true,
+          ""partition","[\\"s1\\"]","[\\"u2\\"]","[\\"u2\\"]",": true,
+          ""primary","[\\"s0\\"]","[\\"u0\\"]",": true,
+          ""primary","[\\"s0\\"]","[\\"u1\\"]",": true,
+          ""primary","[\\"s1\\"]","[\\"u2\\"]",": true,
         },
         ":join(owner)": {
-          ""pKeySet","u0","i0",": true,
-          ""pKeySet","u1","i1",": true,
-          ""pKeySet","u1","i2",": true,
-          ""pKeySet","u2","i3",": true,
+          ""primary","[\\"u0\\"]","[\\"i0\\"]",": true,
+          ""primary","[\\"u1\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"u1\\"]","[\\"i2\\"]",": true,
+          ""primary","[\\"u2\\"]","[\\"i3\\"]",": true,
         },
       }
     `);
@@ -7943,10 +7979,10 @@ suite('test overlay on many:many (no junction) pushes', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(ownerByName)": {
-          ""pKeySet","Aaron","i1",": true,
-          ""pKeySet","Aaron","i2",": true,
-          ""pKeySet","Arv","i3",": true,
-          ""pKeySet","Fritz","i0",": true,
+          ""primary","[\\"Aaron\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"Aaron\\"]","[\\"i2\\"]",": true,
+          ""primary","[\\"Arv\\"]","[\\"i3\\"]",": true,
+          ""primary","[\\"Fritz\\"]","[\\"i0\\"]",": true,
         },
       }
     `);
@@ -8366,10 +8402,10 @@ suite('test overlay on many:many (no junction) pushes', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(ownerByName)": {
-          ""pKeySet","Aaron","i1",": true,
-          ""pKeySet","Aaron","i2",": true,
-          ""pKeySet","Arv","i3",": true,
-          ""pKeySet","Fritz","i0",": true,
+          ""primary","[\\"Aaron\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"Aaron\\"]","[\\"i2\\"]",": true,
+          ""primary","[\\"Arv\\"]","[\\"i3\\"]",": true,
+          ""primary","[\\"Fritz\\"]","[\\"i0\\"]",": true,
         },
       }
     `);
@@ -8807,10 +8843,10 @@ suite('test overlay on many:many (no junction) pushes', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ":join(ownerByName)": {
-          ""pKeySet","Aaron","i1",": true,
-          ""pKeySet","Aaron","i2",": true,
-          ""pKeySet","Arv","i3",": true,
-          ""pKeySet","Fritz","i0",": true,
+          ""primary","[\\"Aaron\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"Aaron\\"]","[\\"i2\\"]",": true,
+          ""primary","[\\"Arv\\"]","[\\"i3\\"]",": true,
+          ""primary","[\\"Fritz\\"]","[\\"i0\\"]",": true,
         },
       }
     `);
@@ -9207,6 +9243,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
           "fetch",
           {
             "constraint": {
+              "name": "Aaron",
               "stateID": "s0",
             },
           },
@@ -9520,17 +9557,22 @@ suite('test overlay on many:many (no junction) pushes', () => {
     expect(actualStorage).toMatchInlineSnapshot(`
       {
         ".ownerByName:join(state)": {
-          ""pKeySet","s0","u2",": true,
-          ""pKeySet","s0","u3",": true,
-          ""pKeySet","s1","u0",": true,
-          ""pKeySet","s1","u1",": true,
-          ""pKeySet","s1","u4",": true,
+          ""partition","[\\"s0\\"]","[\\"Aaron\\"]","[\\"u2\\"]",": true,
+          ""partition","[\\"s0\\"]","[\\"Aaron\\"]","[\\"u3\\"]",": true,
+          ""partition","[\\"s1\\"]","[\\"Aaron\\"]","[\\"u1\\"]",": true,
+          ""partition","[\\"s1\\"]","[\\"Arv\\"]","[\\"u4\\"]",": true,
+          ""partition","[\\"s1\\"]","[\\"Fritz\\"]","[\\"u0\\"]",": true,
+          ""primary","[\\"s0\\"]","[\\"u2\\"]",": true,
+          ""primary","[\\"s0\\"]","[\\"u3\\"]",": true,
+          ""primary","[\\"s1\\"]","[\\"u0\\"]",": true,
+          ""primary","[\\"s1\\"]","[\\"u1\\"]",": true,
+          ""primary","[\\"s1\\"]","[\\"u4\\"]",": true,
         },
         ":join(ownerByName)": {
-          ""pKeySet","Aaron","i1",": true,
-          ""pKeySet","Aaron","i2",": true,
-          ""pKeySet","Arv","i3",": true,
-          ""pKeySet","Fritz","i0",": true,
+          ""primary","[\\"Aaron\\"]","[\\"i1\\"]",": true,
+          ""primary","[\\"Aaron\\"]","[\\"i2\\"]",": true,
+          ""primary","[\\"Arv\\"]","[\\"i3\\"]",": true,
+          ""primary","[\\"Fritz\\"]","[\\"i0\\"]",": true,
         },
       }
     `);

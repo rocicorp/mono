@@ -169,7 +169,14 @@ suite('one:many:one', () => {
       ]
     `);
 
-    expect(actualStorage).toMatchInlineSnapshot(`{}`);
+    expect(actualStorage).toMatchInlineSnapshot(`
+      {
+        ".issueLabels_1_0:flipped-join(labels_1)": {},
+        ".issueLabels_2_1:flipped-join(labels_2)": {},
+        ":flipped-join(issueLabels_1_0)": {},
+        ":flipped-join(issueLabels_2_1)": {},
+      }
+    `);
 
     expect(log).toMatchInlineSnapshot(`
       [
