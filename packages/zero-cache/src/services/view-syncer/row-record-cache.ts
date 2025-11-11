@@ -229,23 +229,26 @@ export class RowRecordCache {
       while (this.#pendingRowsVersion !== this.#flushedRowsVersion) {
         const start = performance.now();
 
-        const {rows, rowsVersion} = await this.#db.begin(tx => {
-          disableStatementTimeout(tx);
+        const {rows, rowsVersion} = await this.#db.begin(
+          Mode.READ_COMMITTED,
+          tx => {
+            disableStatementTimeout(tx);
 
-          // Note: This code block is synchronous, guaranteeing that the
-          // #pendingRowsVersion is consistent with the #pending rows.
-          const rows = this.#pending.size;
-          const rowsVersion = must(this.#pendingRowsVersion);
-          // Awaiting all of the individual statements incurs too much
-          // overhead. Instead, just catch and log exception(s); the outer
-          // transaction will properly fail.
-          void Promise.all(
-            this.executeRowUpdates(tx, rowsVersion, this.#pending, 'force'),
-          ).catch(e => this.#lc.error?.(`error flushing cvr rows`, e));
+            // Note: This code block is synchronous, guaranteeing that the
+            // #pendingRowsVersion is consistent with the #pending rows.
+            const rows = this.#pending.size;
+            const rowsVersion = must(this.#pendingRowsVersion);
+            // Awaiting all of the individual statements incurs too much
+            // overhead. Instead, just catch and log exception(s); the outer
+            // transaction will properly fail.
+            void Promise.all(
+              this.executeRowUpdates(tx, rowsVersion, this.#pending, 'force'),
+            ).catch(e => this.#lc.error?.(`error flushing cvr rows`, e));
 
-          this.#pending.clear();
-          return {rows, rowsVersion};
-        });
+            this.#pending.clear();
+            return {rows, rowsVersion};
+          },
+        );
         const elapsed = performance.now() - start;
         this.#lc.debug?.(
           `flushed ${rows} rows@${versionString(rowsVersion)} (${elapsed} ms)`,
