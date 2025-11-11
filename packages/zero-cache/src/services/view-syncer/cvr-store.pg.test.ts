@@ -695,9 +695,11 @@ describe('view-syncer/cvr-store', () => {
           `);
 
     // 12 + (30 * 10)
-    expect(await db`SELECT COUNT(*) FROM "roze_1/cvr".rows`).toEqual([
-      {count: 312n},
-    ]);
+    await vi.waitFor(async () =>
+      expect(await db`SELECT COUNT(*) FROM "roze_1/cvr".rows`).toEqual([
+        {count: 312n},
+      ]),
+    );
   });
 
   test('deferred row stress test with empty updates', async () => {
@@ -786,9 +788,11 @@ describe('view-syncer/cvr-store', () => {
           `);
 
     // 12 + (30 * 10)
-    expect(await db`SELECT COUNT(*) FROM "roze_1/cvr".rows`).toEqual([
-      {count: 312n},
-    ]);
+    await vi.waitFor(async () =>
+      expect(await db`SELECT COUNT(*) FROM "roze_1/cvr".rows`).toEqual([
+        {count: 312n},
+      ]),
+    );
   });
 
   test('large batch row updates', async () => {
