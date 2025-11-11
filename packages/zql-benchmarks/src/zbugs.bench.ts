@@ -47,33 +47,33 @@ const serverToClientMapper = serverToClient(schema.tables);
 // Create SQLite delegate
 const delegate = newQueryDelegate(lc, testLogConfig, db, schema);
 
-// Helper to set flip to false in all correlated subquery conditions
-function setFlipToFalse(condition: Condition): Condition {
+// Helper to set flip to undefined in all correlated subquery conditions
+function setFlipToUndefined(condition: Condition): Condition {
   if (condition.type === 'correlatedSubquery') {
     return {
       ...condition,
-      flip: false,
+      flip: undefined,
       related: {
         ...condition.related,
-        subquery: setFlipToFalseInAST(condition.related.subquery),
+        subquery: setFlipToUndefinedInAST(condition.related.subquery),
       },
     };
   } else if (condition.type === 'and' || condition.type === 'or') {
     return {
       ...condition,
-      conditions: condition.conditions.map(setFlipToFalse),
+      conditions: condition.conditions.map(setFlipToUndefined),
     };
   }
   return condition;
 }
 
-function setFlipToFalseInAST(ast: AST): AST {
+function setFlipToUndefinedInAST(ast: AST): AST {
   return {
     ...ast,
-    where: ast.where ? setFlipToFalse(ast.where) : undefined,
+    where: ast.where ? setFlipToUndefined(ast.where) : undefined,
     related: ast.related?.map(r => ({
       ...r,
-      subquery: setFlipToFalseInAST(r.subquery),
+      subquery: setFlipToUndefinedInAST(r.subquery),
     })),
   };
 }
@@ -98,9 +98,6 @@ function benchmarkQuery<TTable extends keyof typeof schema.tables & string>(
   // oxlint-disable-next-line no-explicit-any
   query: Query<typeof schema, TTable, any>,
 ) {
-  if (name !== 'usersForProject - assignee filter') {
-    return;
-  }
   console.log('RUNNING!', name);
   const unplannedAST = queryWithContext(query, undefined).ast;
 
@@ -108,7 +105,7 @@ function benchmarkQuery<TTable extends keyof typeof schema.tables & string>(
   const mappedAST = mapAST(unplannedAST, clientToServerMapper);
 
   // Deep copy mappedAST and set flip to false for all correlated subqueries
-  // const mappedASTCopy = setFlipToFalseInAST(mappedAST);
+  // const mappedASTCopy = setFlipToUndefinedInAST(mappedAST);
 
   const dbg = new AccumulatorDebugger();
   console.log('Planning query:', name);
@@ -176,206 +173,11 @@ benchmarkQuery(
     .limit(1000),
 );
 
-// userPickerV2 query - crew filter
-benchmarkQuery(
-  'userPickerV2 - crew filter',
-  builder.user.where(({cmp, not, and}) =>
-    and(cmp('role', 'crew'), not(cmp('login', 'LIKE', 'rocibot%'))),
-  ),
-);
-
-// userPickerV2 query - creators filter
-benchmarkQuery(
-  'userPickerV2 - creators filter',
-  builder.user.whereExists('createdIssues', i =>
-    i.whereExists('project', p => p.where('lowerCaseName', 'roci'), {
-      flip: true,
-    }),
-  ),
-);
-
-// userPickerV2 query - assignees filter
-benchmarkQuery(
-  'userPickerV2 - assignees filter',
-  builder.user.whereExists('assignedIssues', i =>
-    i.whereExists('project', p => p.where('lowerCaseName', 'roci'), {
-      flip: true,
-    }),
-  ),
-);
-
-// issueDetail query - simplified version
-benchmarkQuery(
-  'issueDetail - by id',
-  builder.issue
-    .where('id', 'test-issue-id')
-    .related('project')
-    .related('emoji', emoji => emoji.related('creator'))
-    .related('creator')
-    .related('assignee')
-    .related('labels')
-    .related('viewState', viewState =>
-      viewState.where('userID', 'test-user').one(),
-    )
-    .related('comments', comments =>
-      comments
-        .related('creator')
-        .related('emoji', emoji => emoji.related('creator'))
-        .limit(11)
-        .orderBy('created', 'desc')
-        .orderBy('id', 'desc'),
-    )
-    .one(),
-);
-
-// emojiChange query
-benchmarkQuery(
-  'emojiChange',
-  builder.emoji
-    .where('subjectID', 'test-subject-id')
-    .related('creator', creator => creator.one()),
-);
-
-// issueList queries with various filters
-
-// issueList - basic list with project filter
-benchmarkQuery(
-  'issueList - roci project, no filters',
-  builder.issue
-    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {flip: true})
-    .related('viewState', q => q.where('userID', 'test-user'))
-    .related('labels')
-    .orderBy('modified', 'desc')
-    .orderBy('id', 'desc')
-    .limit(50),
-);
-
-// issueList - with open filter
-benchmarkQuery(
-  'issueList - roci project, open only',
-  builder.issue
-    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {flip: true})
-    .where('open', true)
-    .related('viewState', q => q.where('userID', 'test-user'))
-    .related('labels')
-    .orderBy('modified', 'desc')
-    .orderBy('id', 'desc')
-    .limit(50),
-);
-
-// issueList - with creator filter
-// ok... so and should not add
-// it should just take parent cardinality?
-// since that's the cost to probe with _both_ constraints
-// we do not probe twice in and
-benchmarkQuery(
-  'issueList - roci project, creator filter',
-  builder.issue
-    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {flip: true})
-    .whereExists('creator', q => q.where('login', 'arv'), {flip: true})
-    .related('viewState', q => q.where('userID', 'test-user'))
-    .related('labels')
-    .orderBy('modified', 'desc')
-    .orderBy('id', 'desc')
-    .limit(50),
-);
-
-// issueList - with assignee filter
-benchmarkQuery(
-  'issueList - roci project, assignee filter',
-  builder.issue
-    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {flip: true})
-    .whereExists('assignee', q => q.where('login', 'arv'), {flip: true})
-    .related('viewState', q => q.where('userID', 'test-user'))
-    .related('labels')
-    .orderBy('modified', 'desc')
-    .orderBy('id', 'desc')
-    .limit(50),
-);
-
-// issueList - with single label filter
-benchmarkQuery(
-  'issueList - roci project, single label',
-  builder.issue
-    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {flip: true})
-    .whereExists('labels', q => q.where('name', 'bug'), {flip: true})
-    // .related('viewState', q => q.where('userID', 'test-user'))
-    // .related('labels')
-    .orderBy('modified', 'desc')
-    .orderBy('id', 'desc')
-    .limit(50),
-);
-
-// issueList - with multiple label filters
-// 00111
-benchmarkQuery(
-  'issueList - roci project, multiple labels',
-  builder.issue
-    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {flip: true})
-    .whereExists('labels', q => q.where('name', 'dooo'), {flip: true})
-    .whereExists('labels', q => q.where('name', 'bug'), {flip: true})
-    // .related('viewState', q => q.where('userID', 'test-user'))
-    // .related('labels')
-    .orderBy('modified', 'desc')
-    .orderBy('id', 'desc')
-    .limit(50),
-);
-
 benchmarkQuery(
   'usersForProject - assignee filter',
   builder.user.whereExists('assignedIssues', i =>
     i.whereExists('project', p => p.where('lowerCaseName', 'roci')),
   ),
-);
-
-// // issueList - with text filter (title search)
-// // benchmarkQuery(
-// //   'issueList - roci project, text filter',
-// //   builder.issue
-// //     .whereExists(
-// //       'project',
-// //       p => p.where('lowerCaseName', 'roci'),
-// //       {flip: true},
-// //     )
-// //     .where(({or, cmp, exists}) =>
-// //       or(
-// //         cmp('title', 'ILIKE', '%sync%'),
-// //         cmp('description', 'ILIKE', '%sync%'),
-// //         exists('comments', q => q.where('body', 'ILIKE', '%sync%')),
-// //       ),
-// //     )
-// //     .related('viewState', q => q.where('userID', 'test-user'))
-// //     .related('labels')
-// //     .orderBy('modified', 'desc')
-// //     .orderBy('id', 'desc')
-// //     .limit(50),
-// // );
-
-// issueList - complex filter combination (open + creator + label)
-benchmarkQuery(
-  'issueList - roci project, complex filters',
-  builder.issue
-    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {flip: true})
-    .where('open', true)
-    .whereExists('creator', q => q.where('login', 'arv'), {flip: true})
-    .whereExists('labels', q => q.where('name', 'bug'), {flip: true})
-    .related('viewState', q => q.where('userID', 'test-user'))
-    .related('labels')
-    .orderBy('modified', 'desc')
-    .orderBy('id', 'desc')
-    .limit(50),
-);
-
-// issueList - sorted by created instead of modified
-benchmarkQuery(
-  'issueList - roci project, sorted by created',
-  builder.issue
-    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {flip: true})
-    .related('viewState', q => q.where('userID', 'test-user'))
-    .related('labels')
-    .orderBy('created', 'desc')
-    .orderBy('id', 'desc')
-    .limit(50),
 );
 
 // Check if JSON output is requested via environment variable
