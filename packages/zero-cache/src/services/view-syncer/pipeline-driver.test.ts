@@ -476,7 +476,7 @@ describe('view-syncer/pipeline-driver', () => {
       messages.insert('issues', {id: '4', closed: 0}),
     );
 
-    expect(changes(NO_TIME_ADVANCEMENT_TIMER)).toMatchInlineSnapshot(`
+    expect(changes()).toMatchInlineSnapshot(`
       [
         {
           "queryHash": "hash1",
@@ -540,7 +540,7 @@ describe('view-syncer/pipeline-driver', () => {
       messages.delete('comments', {id: '21'}),
     );
 
-    expect(changes(NO_TIME_ADVANCEMENT_TIMER)).toMatchInlineSnapshot(`
+    expect(changes()).toMatchInlineSnapshot(`
       [
         {
           "queryHash": "hash1",
@@ -605,7 +605,7 @@ describe('view-syncer/pipeline-driver', () => {
       messages.update('comments', {id: '22', issueID: '3', upvotes: 20000}),
     );
 
-    expect(changes(NO_TIME_ADVANCEMENT_TIMER)).toMatchInlineSnapshot(`
+    expect(changes()).toMatchInlineSnapshot(`
       [
         {
           "queryHash": "hash1",
@@ -638,7 +638,7 @@ describe('view-syncer/pipeline-driver', () => {
       messages.update('comments', {id: '22', issueID: '3', upvotes: 10}),
     );
 
-    expect(changes(NO_TIME_ADVANCEMENT_TIMER)).toMatchInlineSnapshot(`
+    expect(changes()).toMatchInlineSnapshot(`
       [
         {
           "queryHash": "hash1",
