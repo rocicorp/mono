@@ -68,7 +68,7 @@ const FLUSH_TYPE_ATTRIBUTE = 'flush.type';
  * whether the data in the store is consistent, or whether it is awaiting a
  * pending update.
  *
- * The logic in {@link CVRStore.load()} takes this into account by loading both
+ * The logic in {@link CVRStore#load()} takes this into account by loading both
  * the `cvr.instances` version and the `cvr.rowsVersion` version and checking
  * if they are in sync, waiting for a configurable delay until they are.
  *
@@ -236,7 +236,13 @@ export class RowRecordCache {
           // #pendingRowsVersion is consistent with the #pending rows.
           const rows = this.#pending.size;
           const rowsVersion = must(this.#pendingRowsVersion);
-          void this.executeRowUpdates(tx, rowsVersion, this.#pending, 'force');
+          // Awaiting all of the individual statements incurs too much
+          // overhead. Instead, just catch and log exception(s); the outer
+          // transaction will properly fail.
+          void Promise.all(
+            this.executeRowUpdates(tx, rowsVersion, this.#pending, 'force'),
+          ).catch(e => this.#lc.error?.(`error flushing cvr rows`, e));
+
           this.#pending.clear();
           return {rows, rowsVersion};
         });
