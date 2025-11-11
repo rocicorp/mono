@@ -124,7 +124,6 @@ function benchmarkQuery<TTable extends keyof typeof schema.tables & string>(
   const unplannedQuery = createQuery(tableName, unplannedAST);
   const plannedQuery = createQuery(tableName, plannedClientAST);
 
-  return;
   summary(() => {
     bench(`unplanned: ${name}`, async () => {
       await delegate.run(unplannedQuery);
@@ -325,9 +324,7 @@ benchmarkQuery(
 benchmarkQuery(
   'usersForProject - assignee filter',
   builder.user.whereExists('assignedIssues', i =>
-    i.whereExists('project', p => p.where('lowerCaseName', 'roci'), {
-      flip: true,
-    }),
+    i.whereExists('project', p => p.where('lowerCaseName', 'roci')),
   ),
 );
 
