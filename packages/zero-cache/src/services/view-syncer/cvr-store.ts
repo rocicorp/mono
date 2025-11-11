@@ -234,7 +234,7 @@ export class CVRStore {
     };
 
     const [instance, clientsRows, queryRows, desiresRows] =
-      await this.#db.begin(tx => [
+      await this.#db.begin(Mode.READONLY, tx => [
         tx<
           (Omit<InstancesRow, 'clientGroupID'> & {rowsVersion: string | null})[]
         >`SELECT cvr."version", 
@@ -785,7 +785,7 @@ export class CVRStore {
     // changes (i.e. changes to the CVR contents) to flush.
     this.putInstance(cvr);
 
-    const rowsFlushed = await this.#db.begin(async tx => {
+    const rowsFlushed = await this.#db.begin(Mode.READ_COMMITTED, async tx => {
       const pipelined: Promise<unknown>[] = [
         // #checkVersionAndOwnership() executes a `SELECT ... FOR UPDATE`
         // query to acquire a row-level lock so that version-updating
@@ -841,7 +841,7 @@ export class CVRStore {
     recordRowsSynced(this.#rowCount);
 
     if (this.#upstreamDb) {
-      await this.#upstreamDb.begin(async tx => {
+      await this.#upstreamDb.begin(Mode.READ_COMMITTED, async tx => {
         await Promise.all(this.#upstreamWrites.map(write => write(tx)));
       });
     }
