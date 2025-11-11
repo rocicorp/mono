@@ -111,7 +111,7 @@ async function benchmarkQuery<
   // if (count++ !== which) {
   //   return;
   // }
-  if (name !== 'issueDetail - roci, by id') {
+  if (name !== 'issueListV2 - roci, assignee=holden, label=[armor]') {
     return;
   }
   console.log('\n\n----------------------------------------');
@@ -132,8 +132,8 @@ async function benchmarkQuery<
   const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
 
   // console.log('Planned ast', JSON.stringify(plannedClientAST, null, 2));
-  // console.log('Planning debug info:');
-  // console.log(dbg.format());
+  console.log('Planning debug info:');
+  console.log(dbg.format());
 
   const tableName = unplannedAST.table as TTable;
   const unplannedQuery = createQuery(tableName, unplannedAST);
@@ -167,15 +167,15 @@ async function benchmarkQuery<
     console.log('!!!!!!!!!!!!');
   }
 
-  summary(() => {
-    bench(`unplanned: ${name}`, async () => {
-      await delegate.run(unplannedQuery);
-    });
+  // summary(() => {
+  //   bench(`unplanned: ${name}`, async () => {
+  //     await delegate.run(unplannedQuery);
+  //   });
 
-    bench(`planned: ${name}`, async () => {
-      await delegate.run(plannedQuery);
-    });
-  });
+  //   bench(`planned: ${name}`, async () => {
+  //     await delegate.run(plannedQuery);
+  //   });
+  // });
 }
 
 // Benchmark queries from apps/zbugs/shared/queries.ts
@@ -620,6 +620,23 @@ await benchmarkQuery(
     .related('labels')
     .orderBy('modified', 'desc')
     .orderBy('id', 'desc'),
+);
+
+await benchmarkQuery(
+  'issueListV2 - roci, assignee=holden, label=[armor]',
+  builder.issue
+    .whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    })
+    .where(({exists}) =>
+      exists('assignee', q => q.where('login', 'holden'), {flip: true}),
+    )
+    .whereExists('labels', q => q.where('name', 'armor'), {flip: true})
+    .related('viewState', q => q.where('userID', 'test-user').one())
+    .related('labels')
+    .orderBy('modified', 'desc')
+    .orderBy('id', 'desc')
+    .limit(100),
 );
 
 await benchmarkQuery(
