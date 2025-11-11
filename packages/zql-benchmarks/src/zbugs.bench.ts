@@ -10,7 +10,8 @@ import {mapAST} from '../../zero-protocol/src/ast.ts';
 import type {AST, Condition} from '../../zero-protocol/src/ast.ts';
 import {QueryImpl} from '../../zql/src/query/query-impl.ts';
 import {defaultFormat} from '../../zql/src/ivm/default-format.ts';
-import type {Query} from '../../zql/src/query/query.ts';
+import type {PullRow, Query} from '../../zql/src/query/query.ts';
+import {queryWithContext} from '../../zql/src/query/query-internals.ts';
 import {expect, test} from 'vitest';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
@@ -82,14 +83,13 @@ function createQuery<TTable extends keyof typeof schema.tables & string>(
   tableName: TTable,
   queryAST: AST,
 ) {
-  return new QueryImpl(
-    delegate,
-    schema,
-    tableName,
-    queryAST,
-    defaultFormat,
-    'test',
-  );
+  const q = new QueryImpl(schema, tableName, queryAST, defaultFormat, 'test');
+  return q as Query<
+    typeof schema,
+    TTable,
+    PullRow<TTable, typeof schema>,
+    unknown
+  >;
 }
 
 // Helper to benchmark planned vs unplanned
@@ -98,39 +98,40 @@ function benchmarkQuery<TTable extends keyof typeof schema.tables & string>(
   // oxlint-disable-next-line no-explicit-any
   query: Query<typeof schema, TTable, any>,
 ) {
-  if (name !== 'issueList - roci project, multiple labels') {
+  if (name !== 'usersForProject - assignee filter') {
     return;
   }
-  // if (name !== 'issueList - roci project, single label') {
-  //   return;
-  // }
-  const unplannedAST = query.ast;
+  console.log('RUNNING!', name);
+  const unplannedAST = queryWithContext(query, undefined).ast;
 
   // Map to server names, plan, then map back to client names
   const mappedAST = mapAST(unplannedAST, clientToServerMapper);
 
   // Deep copy mappedAST and set flip to false for all correlated subqueries
-  const mappedASTCopy = setFlipToFalseInAST(mappedAST);
+  // const mappedASTCopy = setFlipToFalseInAST(mappedAST);
 
   const dbg = new AccumulatorDebugger();
+  console.log('Planning query:', name);
 
-  const plannedServerAST = planQuery(mappedASTCopy, costModel, dbg);
+  const plannedServerAST = planQuery(mappedAST, costModel, dbg);
   const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
 
   // console.log('Planned ast', JSON.stringify(plannedClientAST, null, 2));
+  console.log('Planning debug info:');
   console.log(dbg.format());
 
   const tableName = unplannedAST.table as TTable;
   const unplannedQuery = createQuery(tableName, unplannedAST);
   const plannedQuery = createQuery(tableName, plannedClientAST);
 
+  return;
   summary(() => {
     bench(`unplanned: ${name}`, async () => {
-      await unplannedQuery.run();
+      await delegate.run(unplannedQuery);
     });
 
     bench(`planned: ${name}`, async () => {
-      await plannedQuery.run();
+      await delegate.run(plannedQuery);
     });
   });
 }
@@ -319,6 +320,15 @@ benchmarkQuery(
     .orderBy('modified', 'desc')
     .orderBy('id', 'desc')
     .limit(50),
+);
+
+benchmarkQuery(
+  'usersForProject - assignee filter',
+  builder.user.whereExists('assignedIssues', i =>
+    i.whereExists('project', p => p.where('lowerCaseName', 'roci'), {
+      flip: true,
+    }),
+  ),
 );
 
 // // issueList - with text filter (title search)
