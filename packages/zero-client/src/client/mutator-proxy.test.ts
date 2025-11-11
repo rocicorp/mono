@@ -277,10 +277,6 @@ describe('MutatorProxy', () => {
         error: {
           type: 'zero',
           message: 'offline',
-          details: {
-            kind: ClientErrorKind.Offline,
-            origin: ErrorOrigin.Client,
-          },
         },
       });
 
@@ -289,10 +285,6 @@ describe('MutatorProxy', () => {
         error: {
           type: 'zero',
           message: 'offline',
-          details: {
-            kind: ClientErrorKind.Offline,
-            origin: ErrorOrigin.Client,
-          },
         },
       });
     });

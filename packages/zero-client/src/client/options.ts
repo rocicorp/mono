@@ -153,6 +153,14 @@ export interface ZeroOptions<
   hiddenTabDisconnectDelay?: number | undefined;
 
   /**
+   * The number of milliseconds to wait before disconnecting a Zero
+   * instance when the connection to the server has timed out.
+   *
+   * Default is 5 minutes.
+   */
+  disconnectTimeout?: number | undefined;
+
+  /**
    * The timeout in milliseconds for ping operations. This value is used for:
    * - How long to wait in idle before sending a ping to the server
    * - How long to wait for a pong response after sending a ping

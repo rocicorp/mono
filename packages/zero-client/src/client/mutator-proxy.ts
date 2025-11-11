@@ -162,13 +162,11 @@ export class MutatorProxy {
   }
 
   #makeZeroErrorResultDetails(zeroError: ZeroError) {
-    const {message, ...errorBody} = zeroError.errorBody;
     return Promise.resolve({
       type: 'error',
       error: {
         type: 'zero',
-        message,
-        details: errorBody,
+        message: zeroError.message,
       },
     } as const satisfies MutatorResultErrorDetails);
   }

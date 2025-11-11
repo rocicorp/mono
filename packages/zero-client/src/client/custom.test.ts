@@ -12,7 +12,6 @@ import {zeroData} from '../../../replicache/src/transactions.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
 import {promiseUndefined} from '../../../shared/src/resolved-promises.ts';
-import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
 import type {Row} from '../../../zql/src/query/query.ts';
@@ -472,6 +471,7 @@ describe('error handling', () => {
     const clientResult = await result.client;
     assert(clientResult.type === 'error');
     expect(clientResult.error.type).toBe('app');
+    assert(clientResult.error.type === 'app');
     expect(clientResult.error.details).toBeUndefined();
     expect(clientResult.error.message).toBe('client boom');
 
@@ -512,11 +512,7 @@ describe('error handling', () => {
     const serverResult = await result.server;
     assert(serverResult.type === 'error');
     expect(serverResult.error.type).toBe('zero');
-    assert(serverResult.error.type === 'zero');
-    expect(serverResult.error.details).toMatchObject({
-      kind: ClientErrorKind.Offline,
-      origin: ErrorOrigin.Client,
-    });
+    expect(serverResult.error.message).toBe('offline');
     expect(noop).toHaveBeenCalledTimes(1);
 
     // client promise was already resolved
@@ -556,34 +552,20 @@ describe('error handling', () => {
     const offlineTopClient = await offlineTop.client;
     assert(offlineTopClient.type === 'error');
     expect(offlineTopClient.error.type).toBe('zero');
-    expect(offlineTopClient.error.details).toMatchObject({
-      kind: ClientErrorKind.Offline,
-      origin: ErrorOrigin.Client,
-    });
+    expect(offlineTopClient.error.message).toBe('offline');
 
     const offlineTopServer = await offlineTop.server;
     assert(offlineTopServer.type === 'error');
     expect(offlineTopServer.error.type).toBe('zero');
-    expect(offlineTopServer.error.details).toMatchObject({
-      kind: ClientErrorKind.Offline,
-      origin: ErrorOrigin.Client,
-    });
+    expect(offlineTopServer.error.message).toBe('offline');
 
     const offlineNamespacedClient = await offlineNamespaced.client;
     assert(offlineNamespacedClient.type === 'error');
     expect(offlineNamespacedClient.error.type).toBe('zero');
-    expect(offlineNamespacedClient.error.details).toMatchObject({
-      kind: ClientErrorKind.Offline,
-      origin: ErrorOrigin.Client,
-    });
 
     const offlineNamespacedServer = await offlineNamespaced.server;
     assert(offlineNamespacedServer.type === 'error');
     expect(offlineNamespacedServer.error.type).toBe('zero');
-    expect(offlineNamespacedServer.error.details).toMatchObject({
-      kind: ClientErrorKind.Offline,
-      origin: ErrorOrigin.Client,
-    });
 
     expect(topLevel).not.toHaveBeenCalled();
     expect(namespaced).not.toHaveBeenCalled();
@@ -750,6 +732,7 @@ describe('server results and keeping read queries', () => {
     assert(closeServerResult.type === 'error');
     expect(closeServerResult.error.type).toBe('app');
     expect(closeServerResult.error.message).toBe('application error');
+    assert(closeServerResult.error.type === 'app');
     expect(closeServerResult.error.details).toEqual({
       code: 'APP_ERROR',
       other: 'some other detail',
@@ -893,6 +876,7 @@ describe('server results and keeping read queries', () => {
     assert(closeServerResult.type === 'error');
     expect(closeServerResult.error.type).toBe('app');
     expect(closeServerResult.error.message).toBe('womp womp');
+    assert(closeServerResult.error.type === 'app');
     expect(closeServerResult.error.details).toEqual({
       issue: 'not found',
     });
