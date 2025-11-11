@@ -150,7 +150,7 @@ export class PlannerJoin {
   }
 
   flip(): void {
-    assert(this.#type === 'semi', 'Can only flip a semi-join');
+    assert(this.#type === 'semi', 'Can only flip a semi-join ');
     if (!this.#flippable) {
       throw new UnflippableJoinError(
         'Cannot flip a non-flippable join (e.g., NOT EXISTS)',
