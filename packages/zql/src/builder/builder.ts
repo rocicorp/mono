@@ -1,5 +1,4 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
-import {deepClone} from '../../../shared/src/deep-clone.ts';
 import type {JSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {
@@ -127,13 +126,10 @@ export function buildPipeline(
   costModel?: ConnectionCostModel,
 ): Input {
   ast = delegate.mapAst ? delegate.mapAst(ast) : ast;
-  const origAst = structuredClone(ast);
   if (costModel) {
     ast = planQuery(ast, costModel);
-    console.log('ZZ Orig AST', JSON.stringify(origAst, null, 2));
-    console.log('ZZ Planned AST', JSON.stringify(ast, null, 2));
   }
-  return buildPipelineInternal(origAst, delegate, queryID, '');
+  return buildPipelineInternal(ast, delegate, queryID, '');
 }
 
 export function bindStaticParameters(
