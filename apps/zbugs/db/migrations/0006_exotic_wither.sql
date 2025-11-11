@@ -1,0 +1,1 @@
+CREATE INDEX "label_name_idx" ON "label" USING btree ("name");
