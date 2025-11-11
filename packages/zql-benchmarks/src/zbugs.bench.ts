@@ -96,9 +96,10 @@ let which = 3;
 let count = 0;
 
 // fix:
-// userPickerV2 - zero, creators filter
-// userPickerV2 - roci, crew filter
-// issueDetail - roci, by id
+// fml bad stats. not flipping user filter.... why....!!
+// issueListV2 - roci, assignee=amos
+// issueListV2 - roci, assignee=alex
+// issueListV2 - roci, creator=clarissa + assignee=holden
 
 // Helper to benchmark planned vs unplanned
 async function benchmarkQuery<
@@ -111,7 +112,10 @@ async function benchmarkQuery<
   // if (count++ !== which) {
   //   return;
   // }
-  if (name !== 'issueListV2 - roci, assignee=holden, label=[armor]') {
+  // if (name !== 'issueListV2 - roci, creator=clarissa + assignee=holden') {
+  //   return;
+  // }
+  if (name !== 'issueListV2 - roci, creator=clarissa') {
     return;
   }
   console.log('\n\n----------------------------------------');
@@ -373,7 +377,8 @@ await benchmarkQuery(
     .related('viewState', q => q.where('userID', 'test-user').one())
     .related('labels')
     .orderBy('modified', 'desc')
-    .orderBy('id', 'desc'),
+    .orderBy('id', 'desc')
+    .limit(100),
 );
 
 await benchmarkQuery(
@@ -385,7 +390,8 @@ await benchmarkQuery(
     .related('viewState', q => q.where('userID', 'test-user').one())
     .related('labels')
     .orderBy('modified', 'desc')
-    .orderBy('id', 'desc'),
+    .orderBy('id', 'desc')
+    .limit(100),
 );
 
 // issueListV2 - creator filters
@@ -401,7 +407,8 @@ await benchmarkQuery(
     .related('viewState', q => q.where('userID', 'test-user').one())
     .related('labels')
     .orderBy('modified', 'desc')
-    .orderBy('id', 'desc'),
+    .orderBy('id', 'desc')
+    .limit(100),
 );
 
 await benchmarkQuery(
@@ -416,22 +423,8 @@ await benchmarkQuery(
     .related('viewState', q => q.where('userID', 'test-user').one())
     .related('labels')
     .orderBy('modified', 'desc')
-    .orderBy('id', 'desc'),
-);
-
-await benchmarkQuery(
-  'issueListV2 - zero, creator=clarissa',
-  builder.issue
-    .whereExists('project', p => p.where('lowerCaseName', 'zero'), {
-      flip: true,
-    })
-    .where(({exists}) =>
-      exists('creator', q => q.where('login', 'clarissa'), {flip: true}),
-    )
-    .related('viewState', q => q.where('userID', 'test-user').one())
-    .related('labels')
-    .orderBy('modified', 'desc')
-    .orderBy('id', 'desc'),
+    .orderBy('id', 'desc')
+    .limit(100),
 );
 
 // issueListV2 - assignee filters
@@ -447,7 +440,8 @@ await benchmarkQuery(
     .related('viewState', q => q.where('userID', 'test-user').one())
     .related('labels')
     .orderBy('modified', 'desc')
-    .orderBy('id', 'desc'),
+    .orderBy('id', 'desc')
+    .limit(100),
 );
 
 await benchmarkQuery(
@@ -462,7 +456,8 @@ await benchmarkQuery(
     .related('viewState', q => q.where('userID', 'test-user').one())
     .related('labels')
     .orderBy('modified', 'desc')
-    .orderBy('id', 'desc'),
+    .orderBy('id', 'desc')
+    .limit(100),
 );
 
 await benchmarkQuery(
@@ -477,7 +472,8 @@ await benchmarkQuery(
     .related('viewState', q => q.where('userID', 'test-user').one())
     .related('labels')
     .orderBy('modified', 'desc')
-    .orderBy('id', 'desc'),
+    .orderBy('id', 'desc')
+    .limit(100),
 );
 
 // issueListV2 - label filters
@@ -493,7 +489,8 @@ await benchmarkQuery(
     .related('viewState', q => q.where('userID', 'test-user').one())
     .related('labels')
     .orderBy('modified', 'desc')
-    .orderBy('id', 'desc'),
+    .orderBy('id', 'desc')
+    .limit(100),
 );
 
 await benchmarkQuery(
@@ -508,7 +505,8 @@ await benchmarkQuery(
     .related('viewState', q => q.where('userID', 'test-user').one())
     .related('labels')
     .orderBy('modified', 'desc')
-    .orderBy('id', 'desc'),
+    .orderBy('id', 'desc')
+    .limit(100),
 );
 
 await benchmarkQuery(
@@ -523,7 +521,8 @@ await benchmarkQuery(
     .related('viewState', q => q.where('userID', 'test-user').one())
     .related('labels')
     .orderBy('modified', 'desc')
-    .orderBy('id', 'desc'),
+    .orderBy('id', 'desc')
+    .limit(100),
 );
 
 await benchmarkQuery(
@@ -541,7 +540,8 @@ await benchmarkQuery(
     .related('viewState', q => q.where('userID', 'test-user').one())
     .related('labels')
     .orderBy('modified', 'desc')
-    .orderBy('id', 'desc'),
+    .orderBy('id', 'desc')
+    .limit(100),
 );
 
 await benchmarkQuery(
@@ -560,7 +560,8 @@ await benchmarkQuery(
     .related('viewState', q => q.where('userID', 'test-user').one())
     .related('labels')
     .orderBy('modified', 'desc')
-    .orderBy('id', 'desc'),
+    .orderBy('id', 'desc')
+    .limit(100),
 );
 
 await benchmarkQuery(
@@ -575,7 +576,8 @@ await benchmarkQuery(
     .related('viewState', q => q.where('userID', 'test-user').one())
     .related('labels')
     .orderBy('modified', 'desc')
-    .orderBy('id', 'desc'),
+    .orderBy('id', 'desc')
+    .limit(100),
 );
 
 // issueListV2 - sorting variations
@@ -588,7 +590,8 @@ await benchmarkQuery(
     .related('viewState', q => q.where('userID', 'test-user').one())
     .related('labels')
     .orderBy('created', 'asc')
-    .orderBy('id', 'asc'),
+    .orderBy('id', 'asc')
+    .limit(100),
 );
 
 await benchmarkQuery(
@@ -600,7 +603,8 @@ await benchmarkQuery(
     .related('viewState', q => q.where('userID', 'test-user').one())
     .related('labels')
     .orderBy('created', 'desc')
-    .orderBy('id', 'desc'),
+    .orderBy('id', 'desc')
+    .limit(100),
 );
 
 // issueListV2 - complex filter combinations
@@ -619,7 +623,8 @@ await benchmarkQuery(
     .related('viewState', q => q.where('userID', 'test-user').one())
     .related('labels')
     .orderBy('modified', 'desc')
-    .orderBy('id', 'desc'),
+    .orderBy('id', 'desc')
+    .limit(100),
 );
 
 await benchmarkQuery(
@@ -655,7 +660,8 @@ await benchmarkQuery(
     .related('viewState', q => q.where('userID', 'test-user').one())
     .related('labels')
     .orderBy('modified', 'desc')
-    .orderBy('id', 'desc'),
+    .orderBy('id', 'desc')
+    .limit(100),
 );
 
 await benchmarkQuery(
@@ -673,7 +679,8 @@ await benchmarkQuery(
     .related('viewState', q => q.where('userID', 'test-user').one())
     .related('labels')
     .orderBy('modified', 'desc')
-    .orderBy('id', 'desc'),
+    .orderBy('id', 'desc')
+    .limit(100),
 );
 
 // issueListV2 - pagination

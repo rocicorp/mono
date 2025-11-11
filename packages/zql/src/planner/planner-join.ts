@@ -311,6 +311,8 @@ export class PlannerJoin {
      */
     const child = this.#child.estimateCost(1, branchPattern, planDebugger);
 
+    // TODO: is there not a parent fanout factor too? If the parent key has many nulls..
+    // Or should we adjust selectivity in the connection if we find a constraint has nulls?
     const fanoutFactor = child.fanout(Object.keys(this.#childConstraint));
     // Factor in how many child rows match a parent row.
     // E.g., if an issue has 10 comments on average then we're more
