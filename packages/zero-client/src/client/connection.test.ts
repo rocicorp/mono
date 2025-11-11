@@ -2,7 +2,7 @@ import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import type {ConnectionManager} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
-import {ConnectionImpl} from './connection.ts';
+import {ConnectionImpl, ConnectionSource} from './connection.ts';
 
 describe('ConnectionImpl', () => {
   let manager: ConnectionManager;
@@ -29,23 +29,6 @@ describe('ConnectionImpl', () => {
       connecting: connectingMock,
       subscribe: subscribeMock,
     } as unknown as ConnectionManager;
-  });
-
-  describe('state', () => {
-    test('returns current manager state', () => {
-      const connection = new ConnectionImpl(manager, lc, setAuthSpy);
-
-      expect(connection.state.current).toBe(manager.state);
-    });
-
-    test('subscribe delegates to manager', () => {
-      const connection = new ConnectionImpl(manager, lc, setAuthSpy);
-      const listener = vi.fn();
-
-      connection.state.subscribe(listener);
-
-      expect(subscribeMock).toHaveBeenCalledWith(listener);
-    });
   });
 
   describe('connect', () => {
@@ -128,5 +111,56 @@ describe('ConnectionImpl', () => {
       expect(setAuthSpy).toHaveBeenCalledTimes(1);
       expect(connectingMock).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('ConnectionSource', () => {
+  let manager: ConnectionManager;
+  let subscribeMock: ReturnType<typeof vi.fn>;
+  let listeners: Array<(state: unknown) => void>;
+
+  beforeEach(() => {
+    listeners = [];
+    const unsubscribe = vi.fn();
+    subscribeMock = vi.fn((listener: (state: unknown) => void) => {
+      listeners.push(listener);
+      return unsubscribe;
+    });
+
+    manager = {
+      state: {name: ConnectionStatus.Connecting},
+      subscribe: subscribeMock,
+    } as unknown as ConnectionManager;
+  });
+
+  test('returns cached state initialized from manager state', () => {
+    const source = new ConnectionSource(manager);
+
+    const state1 = source.current;
+    const state2 = source.current;
+
+    expect(state1).toStrictEqual({name: 'connecting'});
+
+    // returns the same (cached) object
+    expect(state1).toBe(state2);
+  });
+
+  test('listener receives same state object as cached state', () => {
+    const source = new ConnectionSource(manager);
+
+    let receivedState;
+    source.subscribe(state => {
+      receivedState = state;
+    });
+
+    const newState = {
+      name: ConnectionStatus.Connected,
+    };
+    for (const l of listeners) {
+      l(newState);
+    }
+
+    // this must be the exact same object
+    expect(receivedState).toBe(source.current);
   });
 });

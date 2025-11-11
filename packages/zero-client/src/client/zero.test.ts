@@ -65,8 +65,8 @@ import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
-import type {ConnectionState} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
+import type {ConnectionState} from './connection.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
 import {ClientError, isServerError} from './error.ts';
@@ -86,7 +86,6 @@ import {
   CONNECT_TIMEOUT_MS,
   createSocket,
   DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
-  DEFAULT_DISCONNECT_TIMEOUT_MS,
   DEFAULT_PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
@@ -2609,7 +2608,7 @@ test('Connect timeout', async () => {
   const r = zeroForTest({logLevel: 'debug'});
 
   const connectionStates: ConnectionState[] = [];
-  const connectionStatusCleanup = r.connectionManager.subscribe(state => {
+  const connectionStatusCleanup = r.connection.state.subscribe(state => {
     connectionStates.push(state);
   });
 
@@ -2618,10 +2617,7 @@ test('Connect timeout', async () => {
 
   expect(connectionStates).toEqual([
     {
-      name: ConnectionStatus.Connecting,
-      attempt: 1,
-      disconnectAt: DEFAULT_DISCONNECT_TIMEOUT_MS + startTime,
-      reason: undefined,
+      name: 'connecting',
     },
   ]);
 
@@ -2664,7 +2660,7 @@ test('Connect timeout', async () => {
 
   expect(connectionStates.length).toEqual(1 + 4 * 2);
   expect([...new Set(connectionStates.map(s => s.name))]).toEqual([
-    ConnectionStatus.Connecting,
+    'connecting',
   ]);
 
   // And success after this...
@@ -2672,8 +2668,8 @@ test('Connect timeout', async () => {
   await r.waitForConnectionStatus(ConnectionStatus.Connected);
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
   expect([...new Set(connectionStates.map(s => s.name))]).toEqual([
-    ConnectionStatus.Connecting,
-    ConnectionStatus.Connected,
+    'connecting',
+    'connected',
   ]);
 
   connectionStatusCleanup();

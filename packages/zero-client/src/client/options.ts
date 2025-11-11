@@ -158,7 +158,7 @@ export interface ZeroOptions<
    *
    * Default is 5 minutes.
    */
-  disconnectTimeout?: number | undefined;
+  disconnectTimeoutMs?: number | undefined;
 
   /**
    * The timeout in milliseconds for ping operations. This value is used for:

@@ -1,6 +1,9 @@
+import {useZeroConnectionState} from '@rocicorp/zero/react';
 import {useEffect, useState} from 'react';
 import {Redirect, Route, Switch} from 'wouter';
+import {ZERO_PROJECT_NAME} from '../shared/schema.ts';
 import {Nav} from './components/nav.tsx';
+import {useLogin} from './hooks/use-login.tsx';
 import {useSoftNav} from './hooks/use-softnav.ts';
 import {ErrorPage} from './pages/error/error-page.tsx';
 import {IssuePage, IssueRedirect} from './pages/issue/issue-page.tsx';
@@ -12,10 +15,6 @@ import {
   routes,
   useProjectName,
 } from './routes.tsx';
-import {ZERO_PROJECT_NAME} from '../shared/schema.ts';
-import {useZeroConnectionState} from '@rocicorp/zero/react';
-import {ConnectionStatus} from '@rocicorp/zero';
-import {useLogin} from './hooks/use-login.tsx';
 
 function OGImageUpdater() {
   const projectName = useProjectName();
@@ -75,7 +74,7 @@ export function Root() {
 
   // if we're in needs-auth state, log out the user
   useEffect(() => {
-    if (connectionState.name === ConnectionStatus.NeedsAuth) {
+    if (connectionState.name === 'needs-auth') {
       login.logout();
     }
   }, [connectionState, login]);

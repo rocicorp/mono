@@ -2,7 +2,10 @@ import {unreachable} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {wrapWithApplicationError} from '../../../zero-protocol/src/application-error.ts';
-import type {ConnectionManager, ConnectionState} from './connection-manager.ts';
+import type {
+  ConnectionManager,
+  ConnectionManagerState,
+} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import type {
   MutatorResult,
@@ -51,7 +54,7 @@ export class MutatorProxy {
    * mutation rejection error is set and all outstanding `.server` promises in
    * the mutation tracker are rejected with the error.
    */
-  #onConnectionStateChange(state: ConnectionState) {
+  #onConnectionStateChange(state: ConnectionManagerState) {
     switch (state.name) {
       case ConnectionStatus.Disconnected:
       case ConnectionStatus.Error:
@@ -111,9 +114,10 @@ export class MutatorProxy {
             return zeroErrorPromise;
           }
 
-          const applicationError = wrapWithApplicationError(error);
           const applicationErrorPromise =
-            this.#makeApplicationErrorResultDetails(applicationError);
+            this.#makeApplicationErrorResultDetails(
+              wrapWithApplicationError(error),
+            );
           cachedMutationPromises[origin] = applicationErrorPromise;
           return applicationErrorPromise;
         };
@@ -157,13 +161,11 @@ export class MutatorProxy {
   }
 
   #makeZeroErrorResultDetails(zeroError: ZeroError) {
-    const {message, ...errorBody} = zeroError.errorBody;
     return Promise.resolve({
       type: 'error',
       error: {
         type: 'zero',
-        message,
-        details: errorBody,
+        message: zeroError.message,
       },
     } as const satisfies MutatorResultErrorDetails);
   }
