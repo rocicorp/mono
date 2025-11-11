@@ -482,72 +482,76 @@ export class PipelineDriver {
       numChanges,
       pos: 0,
     };
-    for (const {table, prevValues, nextValue} of diff) {
-      this.#checkAdvanceProgress();
-      const start = performance.now();
-      let type;
-      try {
-        const tableSpec = mustGetTableSpec(this.#tableSpecs, table).tableSpec;
-        const tableSource = this.#tables.get(table);
-        if (!tableSource) {
-          // no pipelines read from this table, so no need to process the change
-          continue;
-        }
-        let editOldRow: Row | undefined = undefined;
-        for (const prevValue of prevValues) {
-          // Rows are ultimately referred to by the union key (in #streamNodes())
-          // so an update is represented as an `edit` if and only if the
-          // unionKey-based row keys are the same in prevValue and nextValue.
-          if (
-            nextValue &&
-            deepEqual(
-              getRowKey(tableSpec.unionKey, prevValue as Row) as JSONValue,
-              getRowKey(tableSpec.unionKey, nextValue as Row) as JSONValue,
-            )
-          ) {
-            editOldRow = prevValue;
-          } else {
-            if (nextValue) {
-              this.#conflictRowsDeleted.add(1);
+    try {
+      for (const {table, prevValues, nextValue} of diff) {
+        this.#checkAdvanceProgress();
+        const start = performance.now();
+        let type;
+        try {
+          const tableSpec = mustGetTableSpec(this.#tableSpecs, table).tableSpec;
+          const tableSource = this.#tables.get(table);
+          if (!tableSource) {
+            // no pipelines read from this table, so no need to process the change
+            continue;
+          }
+          let editOldRow: Row | undefined = undefined;
+          for (const prevValue of prevValues) {
+            // Rows are ultimately referred to by the union key (in #streamNodes())
+            // so an update is represented as an `edit` if and only if the
+            // unionKey-based row keys are the same in prevValue and nextValue.
+            if (
+              nextValue &&
+              deepEqual(
+                getRowKey(tableSpec.unionKey, prevValue as Row) as JSONValue,
+                getRowKey(tableSpec.unionKey, nextValue as Row) as JSONValue,
+              )
+            ) {
+              editOldRow = prevValue;
+            } else {
+              if (nextValue) {
+                this.#conflictRowsDeleted.add(1);
+              }
+              yield* this.#push(tableSource, {
+                type: 'remove',
+                row: prevValue,
+              });
             }
-            yield* this.#push(tableSource, {
-              type: 'remove',
-              row: prevValue,
-            });
           }
-        }
-        if (nextValue) {
-          if (editOldRow) {
-            yield* this.#push(tableSource, {
-              type: 'edit',
-              row: nextValue,
-              oldRow: editOldRow,
-            });
-          } else {
-            yield* this.#push(tableSource, {
-              type: 'add',
-              row: nextValue,
-            });
+          if (nextValue) {
+            if (editOldRow) {
+              yield* this.#push(tableSource, {
+                type: 'edit',
+                row: nextValue,
+                oldRow: editOldRow,
+              });
+            } else {
+              yield* this.#push(tableSource, {
+                type: 'add',
+                row: nextValue,
+              });
+            }
           }
+        } finally {
+          this.#advanceContext.pos++;
         }
-      } finally {
-        this.#advanceContext.pos++;
+
+        const elapsed = performance.now() - start;
+        this.#advanceTime.record(elapsed / 1000, {
+          table,
+          type,
+        });
       }
 
-      const elapsed = performance.now() - start;
-      this.#advanceTime.record(elapsed / 1000, {
-        table,
-        type,
-      });
+      // Set the new snapshot on all TableSources.
+      const {curr} = diff;
+      for (const table of this.#tables.values()) {
+        table.setDB(curr.db.db);
+      }
+      this.#ensureCostModelExistsIfEnabled(curr.db.db);
+      this.#lc.debug?.(`Advanced to ${curr.version}`);
+    } finally {
+      this.#advanceContext = null;
     }
-
-    // Set the new snapshot on all TableSources.
-    const {curr} = diff;
-    for (const table of this.#tables.values()) {
-      table.setDB(curr.db.db);
-    }
-    this.#ensureCostModelExistsIfEnabled(curr.db.db);
-    this.#lc.debug?.(`Advanced to ${curr.version}`);
   }
 
   #checkAdvanceProgress() {
@@ -571,9 +575,6 @@ export class PipelineDriver {
       elapsed > totalHydrationTimeMs ||
       (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2)
     ) {
-      this.#lc.warn?.(
-        `advancement exceeded timeout at ${pos} of ${numChanges} changes (${elapsed} ms). Total hydration time ${totalHydrationTimeMs} ms.`,
-      );
       throw new ResetPipelinesSignal(
         `advancement exceeded timeout at ${pos} of ${numChanges} changes (${elapsed} ms). Total hydration time ${totalHydrationTimeMs} ms.`,
       );
