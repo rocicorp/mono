@@ -1,4 +1,4 @@
-import type {LogContext} from '@rocicorp/logger';
+import type {LogContext, LogLevel} from '@rocicorp/logger';
 import {pipeline, Readable, Writable} from 'node:stream';
 import type {CloseEvent, Data, ErrorEvent} from 'ws';
 import WebSocket, {createWebSocketStream} from 'ws';
@@ -372,7 +372,23 @@ export function sendError(
   thrown?: unknown,
 ) {
   lc = lc.withContext('errorKind', errorBody.kind);
-  const logLevel = thrown ? getLogLevel(thrown) : 'info';
+  let logLevel: LogLevel = thrown ? getLogLevel(thrown) : 'info';
+  // ClientNotFound errors should be warnings, not errors
+  if (errorBody.kind === ErrorKind.ClientNotFound) {
+    logLevel = 'warn';
+  }
+  // TransformFailed errors are configuration/validation issues that should be warnings
+  if (String(errorBody.kind) === 'TransformFailed') {
+    logLevel = 'warn';
+  }
+  // Errors with errno are low-level, transient I/O issues (e.g., EPIPE, ECONNRESET)
+  // and should be warnings, not errors
+  if (
+    (thrown && typeof thrown === 'object' && 'errno' in thrown) ||
+    (errorBody.message && errorBody.message.includes('EPIPE'))
+  ) {
+    logLevel = 'warn';
+  }
   lc[logLevel]?.('Sending error on WebSocket', errorBody, thrown ?? '');
   send(lc, ws, ['error', errorBody], 'ignore-backpressure');
 }
