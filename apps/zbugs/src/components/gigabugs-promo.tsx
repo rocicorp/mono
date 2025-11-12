@@ -23,7 +23,7 @@ export function GigabugsPromo({onNavigate}: GigabugsPromoProps) {
           navigate('/p/roci');
         }}
       >
-        Gigabugs
+        Megabugs
       </a>{' '}
       instead.
       <br />
