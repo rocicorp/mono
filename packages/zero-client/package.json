@@ -30,7 +30,7 @@
     "playwright": "^1.53.2",
     "replicache": "15.2.1",
     "shared": "0.0.0",
-    "typescript": "~5.8.2",
+    "typescript": "~5.9.3",
     "zero-protocol": "0.0.0",
     "zero-schema": "0.0.0",
     "zero-types": "0.0.0",

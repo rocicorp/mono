@@ -90,7 +90,7 @@
     "shared": "0.0.0",
     "typedoc": "^0.28.2",
     "typedoc-plugin-markdown": "^4.6.1",
-    "typescript": "~5.8.2",
+    "typescript": "~5.9.3",
     "vitest": "3.2.4",
     "zero-cache": "0.0.0",
     "zero-client": "0.0.0",
