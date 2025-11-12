@@ -158,18 +158,14 @@ export const queries = {
           );
         } else if (filter === 'creators') {
           q = q.whereExists('createdIssues', i =>
-            i.whereExists(
-              'project',
-              p => p.where('lowerCaseName', projectName.toLocaleLowerCase()),
-              {flip: true},
+            i.whereExists('project', p =>
+              p.where('lowerCaseName', projectName.toLocaleLowerCase()),
             ),
           );
         } else if (filter === 'assignees') {
           q = q.whereExists('assignedIssues', i =>
-            i.whereExists(
-              'project',
-              p => p.where('lowerCaseName', projectName.toLocaleLowerCase()),
-              {flip: true},
+            i.whereExists('project', p =>
+              p.where('lowerCaseName', projectName.toLocaleLowerCase()),
             ),
           );
         } else {
