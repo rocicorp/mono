@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1762799149557,
+  "lastUpdate": 1762948346520,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54641,6 +54641,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/06ebcd8ce8eaaa17e41e21c411b3f12da5b852fd"
         },
         "date": 1762799137179,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 301987,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54431,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111258,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31825,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "198982749+Copilot@users.noreply.github.com",
+            "name": "Copilot",
+            "username": "Copilot"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "389dd5016eba7376968df8b6f56fc3730a3b0a2b",
+          "message": "Upgrade TypeScript to 5.9.3 (#5157)\n\nUpgrade TypeScript to latest version (5.9.3) and ensure npm run\ncheck-types passes\n\nPlan:\n- [x] Upgrade TypeScript from 5.8.2 to 5.9.3 across all 20 packages\n- [x] Run npm install to update lockfile\n- [x] Fix ArrayBuffer type errors in shared/test-data.ts (improve return\ntype instead of casts)\n- [x] Fix ArrayBuffer type errors in zero-cache/websocket-handoff.ts\n(use ArrayBuffer in type, convert to Buffer only when needed)\n- [x] Fix ArrayBuffer type errors in replicache-perf/hash.ts (improve\nhelper function return types, remove unnecessary cast)\n- [x] Fix LockManager.request return type in\nzero-client/active-clients-manager.ts (use async/await)\n- [x] Run npm run check-types to verify no type errors - ALL PASSING ✅\n- [x] Run npm run lint to ensure code quality - PASSED ✅\n- [x] Run websocket-handoff tests - ALL PASSING ✅\n- [x] Address code review feedback - simplify type casts and use\nArrayBuffer instead of Buffer for platform compatibility\n\n<!-- START COPILOT CODING AGENT SUFFIX -->\n\n\n\n<details>\n\n<summary>Original prompt</summary>\n\n> Upgrade typescript to latest and make sure npm run check-types pass\n\n\n</details>\n\n\n\n<!-- START COPILOT CODING AGENT TIPS -->\n---\n\n💡 You can make Copilot smarter by setting up custom instructions,\ncustomizing its development environment and configuring Model Context\nProtocol (MCP) servers. Learn more [Copilot coding agent\ntips](https://gh.io/copilot-coding-agent-tips) in the docs.\n\n---------\n\nCo-authored-by: copilot-swe-agent[bot] <198982749+Copilot@users.noreply.github.com>\nCo-authored-by: arv <45845+arv@users.noreply.github.com>\nCo-authored-by: Erik Arvidsson <arv@roci.dev>",
+          "timestamp": "2025-11-12T11:44:22Z",
+          "tree_id": "6c2f14d77dc1525d3591ba59b4a7448fecf062ae",
+          "url": "https://github.com/rocicorp/mono/commit/389dd5016eba7376968df8b6f56fc3730a3b0a2b"
+        },
+        "date": 1762948334789,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
