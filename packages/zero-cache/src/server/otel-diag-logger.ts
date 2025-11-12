@@ -56,7 +56,7 @@ export function setupOtelDiagnosticLogger(
       info: (msg: string, ...args: unknown[]) => log.info?.(msg, ...args),
       warn: (msg: string, ...args: unknown[]) => log.warn?.(msg, ...args),
       error: (msg: string, ...args: unknown[]) => {
-        if (shouldWarnForOtelError(msg, args)) {
+        if (shouldWarnForOtelError(msg)) {
           log.warn?.(msg, ...args);
         } else {
           log.error?.(msg, ...args);
@@ -91,31 +91,7 @@ const NON_CRITICAL_OTEL_ERRORS = [
   'socket hang up',
 ];
 
-function shouldWarnForOtelError(msg: unknown, args: unknown[]): boolean {
-  const haystacks = [msg, ...args]
-    .map(extractDiagnosticString)
-    .filter((value): value is string => Boolean(value));
-  return haystacks.some(haystack =>
-    NON_CRITICAL_OTEL_ERRORS.some(pattern => haystack.includes(pattern)),
-  );
-}
-
-function extractDiagnosticString(value: unknown): string | undefined {
-  if (!value) {
-    return undefined;
-  }
-  if (typeof value === 'string') {
-    return value.toLowerCase();
-  }
-  if (value instanceof Error) {
-    return value.message?.toLowerCase();
-  }
-  if (typeof value === 'object') {
-    try {
-      return JSON.stringify(value).toLowerCase();
-    } catch {
-      return undefined;
-    }
-  }
-  return String(value).toLowerCase();
+function shouldWarnForOtelError(msg: unknown): boolean {
+  const haystack = String(msg ?? '').toLowerCase();
+  return NON_CRITICAL_OTEL_ERRORS.some(pattern => haystack.includes(pattern));
 }
