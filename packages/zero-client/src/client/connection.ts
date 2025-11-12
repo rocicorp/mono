@@ -155,17 +155,15 @@ export class ConnectionSource implements Source<ConnectionState> {
   }
 
   get current(): ConnectionState {
-    return this.#mapConnectionManagerState(this.#connectionManager.state);
+    return this.mapConnectionManagerState(this.#connectionManager.state);
   }
 
   subscribe = (listener: (obj: ConnectionState) => void): (() => void) =>
     this.#connectionManager.subscribe(state =>
-      listener(this.#mapConnectionManagerState(state)),
+      listener(this.mapConnectionManagerState(state)),
     );
 
-  #mapConnectionManagerState = (
-    state: ConnectionManagerState,
-  ): ConnectionState => {
+  mapConnectionManagerState(state: ConnectionManagerState): ConnectionState {
     switch (state.name) {
       case ConnectionStatus.Closed:
         return {
@@ -220,5 +218,5 @@ export class ConnectionSource implements Source<ConnectionState> {
       default:
         unreachable(state);
     }
-  };
+  }
 }
