@@ -336,7 +336,9 @@ export class PlannerJoin {
     const parent = this.#parent.estimateCost(
       // Selectivity flows up the graph from child to parent
       // so we can determine the total selectivity of all ANDed exists checks.
-      scaledChildSelectivity * downstreamChildSelectivity,
+      this.#type === 'flipped'
+        ? 1 * downstreamChildSelectivity
+        : scaledChildSelectivity * downstreamChildSelectivity,
       branchPattern,
       planDebugger,
     );
