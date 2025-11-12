@@ -235,12 +235,12 @@ class NativeClientLockManager implements ClientLockManager {
     this.#signal = signal;
   }
 
-  request(
+  async request(
     name: string,
     mode: 'exclusive' | 'shared',
     fn: () => Promise<void>,
   ): Promise<void> {
-    return this.#locks.request(name, {mode, signal: this.#signal}, fn);
+    await this.#locks.request(name, {mode, signal: this.#signal}, fn);
   }
 
   release(_name: string, fn: () => void): void {
