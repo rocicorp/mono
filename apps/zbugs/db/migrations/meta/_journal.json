@@ -43,6 +43,13 @@
       "when": 1761322242588,
       "tag": "0005_project_config_options",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1762890350511,
+      "tag": "0006_exotic_wither",
+      "breakpoints": true
     }
   ]
 }
