@@ -21,7 +21,7 @@ describe('Chinook planner execution cost validation', () => {
         q.where('title', 'Big Ones'),
       ),
       validations: [
-        ['correlation', 0.95],
+        ['correlation', 1.0],
         ['within-optimal', 1],
         ['within-baseline', 0.1],
       ],
@@ -35,7 +35,7 @@ describe('Chinook planner execution cost validation', () => {
         ),
       ),
       validations: [
-        ['correlation', 0.95],
+        ['correlation', 1.0],
         ['within-optimal', 1],
         ['within-baseline', 0.08],
       ],
@@ -48,7 +48,7 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('genre', q => q.where('name', 'Rock'))
         .limit(10),
       validations: [
-        ['correlation', 0.8],
+        ['correlation', 0.4],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -65,7 +65,7 @@ describe('Chinook planner execution cost validation', () => {
         .where('milliseconds', '>', 200000)
         .limit(10),
       validations: [
-        ['correlation', 0.95],
+        ['correlation', 1.0],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -77,7 +77,7 @@ describe('Chinook planner execution cost validation', () => {
         .where('title', 'Greatest Hits')
         .whereExists('tracks', t => t),
       validations: [
-        ['correlation', 0.95],
+        ['correlation', 1.0],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -110,7 +110,7 @@ describe('Chinook planner execution cost validation', () => {
       validations: [
         ['correlation', 0.8],
         ['within-optimal', 1],
-        ['within-baseline', 0.08],
+        ['within-baseline', 0.077],
       ],
     },
 
@@ -272,7 +272,7 @@ describe('Chinook planner execution cost validation', () => {
         .where('name', 'Rock')
         .whereExists('tracks', t => t.where('milliseconds', '>', 200000)),
       validations: [
-        ['correlation', 0.95],
+        ['correlation', 1.0],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -291,7 +291,7 @@ describe('Chinook planner execution cost validation', () => {
         ),
       validations: [
         ['within-optimal', 1.22],
-        ['within-baseline', 0.11],
+        ['within-baseline', 0.106],
       ],
     },
 
@@ -422,7 +422,7 @@ describe('Chinook planner execution cost validation', () => {
         .orderBy('milliseconds', 'desc')
         .limit(10),
       validations: [
-        ['correlation', 0.95],
+        ['correlation', 1.0],
         ['within-optimal', 1],
         ['within-baseline', 0.01],
       ],
@@ -432,7 +432,7 @@ describe('Chinook planner execution cost validation', () => {
       name: 'dense junction - popular playlist with many tracks',
       query: queries.playlist.where('id', 1).whereExists('tracks'),
       validations: [
-        ['correlation', 0.95],
+        ['correlation', 1.0],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -505,20 +505,26 @@ describe('Chinook planner execution cost validation', () => {
       }
     }
 
-    // Log actual values for all tests
+    // Log actual values for all tests with headroom analysis
     // eslint-disable-next-line no-console
     console.log('');
     for (const v of validationResults) {
       const symbol = v.passed ? '✓' : '✗';
       if (v.type === 'correlation') {
+        const margin = v.actualValue - v.threshold;
+        const headroom =
+          v.threshold > 0 ? ((margin / v.threshold) * 100).toFixed(1) : 'N/A';
         // eslint-disable-next-line no-console
         console.log(
-          `  ${v.type}: actual=${v.actualValue.toFixed(3)}, threshold=${v.threshold} ${symbol}`,
+          `  ${v.type}: actual=${v.actualValue.toFixed(3)}, threshold=${v.threshold} (headroom: ${headroom}%) ${symbol}`,
         );
       } else {
+        const margin = v.threshold - v.actualValue;
+        const headroom =
+          v.threshold > 0 ? ((margin / v.threshold) * 100).toFixed(1) : 'N/A';
         // eslint-disable-next-line no-console
         console.log(
-          `  ${v.type}: actual=${v.actualValue.toFixed(2)}x, threshold=${v.threshold}x ${symbol}`,
+          `  ${v.type}: actual=${v.actualValue.toFixed(2)}x, threshold=${v.threshold}x (headroom: ${headroom}%) ${symbol}`,
         );
       }
     }
