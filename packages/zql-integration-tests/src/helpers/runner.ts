@@ -1025,7 +1025,7 @@ class TestPGQueryDelegate extends QueryDelegateBase<undefined> {
       query: (query: string, args: unknown[]) =>
         pg.unsafe(query, args as JSONValue[]),
       wrappedTransaction: pg,
-      executeQuery<TReturn>(
+      runQuery<TReturn>(
         ast: AST,
         format: Format,
         schema: Schema,

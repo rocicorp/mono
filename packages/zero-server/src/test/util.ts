@@ -13,7 +13,7 @@ export class Transaction implements DBTransaction<PostgresTransaction> {
   constructor(pgTx: PostgresTransaction) {
     this.wrappedTransaction = pgTx;
   }
-  executeQuery<TReturn>(
+  runQuery<TReturn>(
     ast: AST,
     format: Format,
     schema: Schema,

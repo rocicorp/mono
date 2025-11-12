@@ -80,7 +80,7 @@ export interface DBConnection<TWrappedTransaction> {
 
 export interface DBTransaction<T> extends Queryable {
   readonly wrappedTransaction: T;
-  executeQuery<TReturn>(
+  runQuery<TReturn>(
     ast: AST,
     format: Format,
     schema: Schema,
