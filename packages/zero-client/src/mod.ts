@@ -23,6 +23,7 @@ export type {
 } from '../../shared/src/json.ts';
 export type {MaybePromise} from '../../shared/src/types.ts';
 export {ApplicationError} from '../../zero-protocol/src/application-error.ts';
+export type {ApplicationErrorOptions} from '../../zero-protocol/src/application-error.ts';
 export type {
   AST,
   Bound,

@@ -116,9 +116,10 @@ export class MutatorProxy {
             return zeroErrorPromise;
           }
 
-          const applicationError = wrapWithApplicationError(error);
           const applicationErrorPromise =
-            this.#makeApplicationErrorResultDetails(applicationError);
+            this.#makeApplicationErrorResultDetails(
+              wrapWithApplicationError(error),
+            );
           cachedMutationPromises[origin] = applicationErrorPromise;
           return applicationErrorPromise;
         };
