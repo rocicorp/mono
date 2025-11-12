@@ -62,7 +62,7 @@ export class NodePgTransactionInternal
     this.wrappedTransaction = client;
   }
 
-  executeQuery<TReturn>(
+  runQuery<TReturn>(
     ast: AST,
     format: Format,
     schema: Schema,

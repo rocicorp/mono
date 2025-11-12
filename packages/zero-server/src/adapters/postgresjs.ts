@@ -54,7 +54,7 @@ export class PostgresJsTransactionInternal<T extends Record<string, unknown>>
     return this.wrappedTransaction.unsafe(sql, params as JSONValue[]);
   }
 
-  executeQuery<TReturn>(
+  runQuery<TReturn>(
     ast: AST,
     format: Format,
     schema: Schema,

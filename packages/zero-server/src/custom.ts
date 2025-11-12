@@ -94,7 +94,7 @@ export class TransactionImpl<
     const queryInternals = queryWithContext(query, this.#context as TContext);
 
     // Execute the query using the database-specific executor
-    return this.dbTransaction.executeQuery<TReturn>(
+    return this.dbTransaction.runQuery<TReturn>(
       queryInternals.ast,
       queryInternals.format,
       this.#schema,

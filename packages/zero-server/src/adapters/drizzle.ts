@@ -79,7 +79,7 @@ class DrizzleInternalTransaction<
     this.wrappedTransaction = drizzleTx;
   }
 
-  executeQuery<TReturn>(
+  runQuery<TReturn>(
     ast: AST,
     format: Format,
     schema: Schema,
