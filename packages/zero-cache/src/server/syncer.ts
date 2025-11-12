@@ -90,7 +90,9 @@ export default function runWorker(
       .withContext('component', 'view-syncer')
       .withContext('clientGroupID', id)
       .withContext('instance', randomID());
-    lc.debug?.(`creating view syncer`);
+    lc.debug?.(
+      `creating view syncer. Query Planner Enabled: ${config.enableQueryPlanner}`,
+    );
 
     // Create the custom query transformer if configured
     const {getQueries} = config;
