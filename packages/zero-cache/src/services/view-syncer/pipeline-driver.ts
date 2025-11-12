@@ -87,6 +87,7 @@ type AdvanceContext = {
   readonly timer: {totalElapsed: () => number};
   readonly totalHydrationTimeMs: number;
   readonly numChanges: number;
+  advanceCheckCount: number;
   pos: number;
 };
 
@@ -480,6 +481,7 @@ export class PipelineDriver {
       timer,
       totalHydrationTimeMs: this.totalHydrationTimeMs(),
       numChanges,
+      advanceCheckCount: 0,
       pos: 0,
     };
     try {
@@ -564,6 +566,12 @@ export class PipelineDriver {
     // free WAL when the current one is over the size limit, which can make
     // the WAL grow continuously and compound slowness).
     assert(this.#advanceContext !== null);
+    // Reduce the overhead of checking the timer by only
+    // actually checking on the first and then every 10th call to
+    // checkAdvanceProgress
+    if (this.#advanceContext.advanceCheckCount++ % 10 === 0) {
+      return;
+    }
     const {
       pos,
       numChanges,
@@ -576,7 +584,7 @@ export class PipelineDriver {
       (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2)
     ) {
       throw new ResetPipelinesSignal(
-        `advancement exceeded timeout at ${pos} of ${numChanges} changes (${elapsed} ms). Total hydration time ${totalHydrationTimeMs} ms.`,
+        `Advancement exceeded timeout at ${pos} of ${numChanges} changes after ${elapsed} ms. Advancement time limited base on total hydration time of ${totalHydrationTimeMs} ms.`,
       );
     }
   }

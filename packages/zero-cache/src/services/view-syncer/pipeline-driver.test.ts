@@ -672,7 +672,9 @@ describe('view-syncer/pipeline-driver', () => {
     // 6ms is larger than half of the hydration time.
     expect(() => [
       ...pipelines.advance({totalElapsed: () => 6}).changes,
-    ]).toThrow(ResetPipelinesSignal);
+    ]).toThrowErrorMatchingInlineSnapshot(
+      `[ResetPipelinesSignal: Advancement exceeded timeout at 0 of 1 changes after 6 ms. Advancement time limited base on total hydration time of 10 ms.]`,
+    );
   });
 
   test('reset', () => {
