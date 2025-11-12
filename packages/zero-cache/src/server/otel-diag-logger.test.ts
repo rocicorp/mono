@@ -143,6 +143,23 @@ describe('otel-diag-logger', () => {
     });
   });
 
+  test('diagnostic logger downgrades metrics export failures regardless of formatting', () => {
+    setupOtelDiagnosticLogger(mockLogContext);
+
+    const [logger] = mockSetLogger.mock.calls[0] as [DiagLogger, unknown];
+
+    logger.error(
+      'PeriodicExportingMetricReader: metrics export failed (error OTLPExporterError: Internal Server Error)',
+    );
+    logger.error(
+      '{"stack":"Error: PeriodicExportingMetricReader: metrics export failed (error OTLPExporterError: Internal Server Error)"}',
+      {extra: 'context'},
+    );
+
+    expect(mockLog.warn).toHaveBeenCalledTimes(2);
+    expect(mockLog.error).not.toHaveBeenCalled();
+  });
+
   test('diagnostic logger keeps real errors as errors', () => {
     setupOtelDiagnosticLogger(mockLogContext);
 

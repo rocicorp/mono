@@ -56,15 +56,7 @@ export function setupOtelDiagnosticLogger(
       info: (msg: string, ...args: unknown[]) => log.info?.(msg, ...args),
       warn: (msg: string, ...args: unknown[]) => log.warn?.(msg, ...args),
       error: (msg: string, ...args: unknown[]) => {
-        // Check if this is a known non-critical error that should be a warning
-        if (
-          msg.includes('Request Timeout') ||
-          msg.includes('Unexpected server response: 502') ||
-          msg.includes('Export failed with retryable status') ||
-          msg.includes('metrics export failed') ||
-          msg.includes('Method Not Allowed') ||
-          msg.includes('socket hang up')
-        ) {
+        if (shouldWarnForOtelError(msg, args)) {
           log.warn?.(msg, ...args);
         } else {
           log.error?.(msg, ...args);
@@ -88,4 +80,42 @@ export function setupOtelDiagnosticLogger(
  */
 export function resetOtelDiagnosticLogger(): void {
   diagLoggerConfigured = false;
+}
+
+const NON_CRITICAL_OTEL_ERRORS = [
+  'request timeout',
+  'unexpected server response: 502',
+  'export failed with retryable status',
+  'metrics export failed',
+  'method not allowed',
+  'socket hang up',
+];
+
+function shouldWarnForOtelError(msg: unknown, args: unknown[]): boolean {
+  const haystacks = [msg, ...args]
+    .map(extractDiagnosticString)
+    .filter((value): value is string => Boolean(value));
+  return haystacks.some(haystack =>
+    NON_CRITICAL_OTEL_ERRORS.some(pattern => haystack.includes(pattern)),
+  );
+}
+
+function extractDiagnosticString(value: unknown): string | undefined {
+  if (!value) {
+    return undefined;
+  }
+  if (typeof value === 'string') {
+    return value.toLowerCase();
+  }
+  if (value instanceof Error) {
+    return value.message?.toLowerCase();
+  }
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value).toLowerCase();
+    } catch {
+      return undefined;
+    }
+  }
+  return String(value).toLowerCase();
 }

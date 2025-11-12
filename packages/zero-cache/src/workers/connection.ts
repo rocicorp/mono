@@ -384,8 +384,9 @@ export function sendError(
   // Errors with errno are low-level, transient I/O issues (e.g., EPIPE, ECONNRESET)
   // and should be warnings, not errors
   if (
-    (thrown && typeof thrown === 'object' && 'errno' in thrown) ||
-    (errorBody.message && errorBody.message.includes('EPIPE'))
+    hasErrno(thrown) ||
+    containsTransientSocketCode(errorBody.message) ||
+    hasTransientSocketCode(thrown)
   ) {
     logLevel = 'warn';
   }
@@ -401,4 +402,44 @@ export function findProtocolError(error: unknown): ProtocolError | undefined {
     return findProtocolError(error.cause);
   }
   return undefined;
+}
+
+function hasErrno(error: unknown): boolean {
+  return Boolean(
+    error &&
+      typeof error === 'object' &&
+      'errno' in error &&
+      typeof (error as {errno: unknown}).errno !== 'undefined',
+  );
+}
+
+const TRANSIENT_SOCKET_ERROR_CODES = ['EPIPE', 'ECONNRESET', 'ECANCELED'];
+
+function containsTransientSocketCode(message: string | undefined): boolean {
+  if (!message) {
+    return false;
+  }
+  const upper = message.toUpperCase();
+  return TRANSIENT_SOCKET_ERROR_CODES.some(code => upper.includes(code));
+}
+
+function hasTransientSocketCode(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  const maybeCode =
+    'code' in error ? String((error as {code?: unknown}).code) : undefined;
+  if (
+    maybeCode &&
+    TRANSIENT_SOCKET_ERROR_CODES.includes(maybeCode.toUpperCase())
+  ) {
+    return true;
+  }
+  if (
+    'message' in error &&
+    typeof (error as {message?: unknown}).message === 'string'
+  ) {
+    return containsTransientSocketCode((error as {message?: string}).message);
+  }
+  return false;
 }
