@@ -115,9 +115,9 @@ async function benchmarkQuery<
   // if (name !== 'issueListV2 - roci, creator=clarissa + assignee=holden') {
   //   return;
   // }
-  if (name !== 'issueListV2 - roci, creator=clarissa') {
-    return;
-  }
+  // if (name !== 'issueListV2 - roci, creator=clarissa') {
+  //   return;
+  // }
   console.log('\n\n----------------------------------------');
   console.log('RUNNING!', name);
   console.log('----------------------------------------');
@@ -136,8 +136,8 @@ async function benchmarkQuery<
   const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
 
   // console.log('Planned ast', JSON.stringify(plannedClientAST, null, 2));
-  console.log('Planning debug info:');
-  console.log(dbg.format());
+  // console.log('Planning debug info:');
+  // console.log(dbg.format());
 
   const tableName = unplannedAST.table as TTable;
   const unplannedQuery = createQuery(tableName, unplannedAST);

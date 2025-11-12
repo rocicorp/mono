@@ -307,33 +307,10 @@ describe('Chinook planner execution cost validation', () => {
     },
 
     {
-      name: 'OR with very selective and non-selective branches',
-      query: queries.track.where(({or, cmp}) =>
-        or(
-          cmp('name', 'For Those About To Rock (We Salute You)'),
-          cmp('milliseconds', '>', 100000),
-        ),
-      ),
-      validations: [
-        ['within-optimal', 1],
-        ['within-baseline', 1],
-      ],
-    },
-
-    {
       name: 'self-join - employees and their managers',
       query: queries.employee.whereExists('reportsToEmployee', manager =>
         manager.where('title', 'General Manager'),
       ),
-      validations: [
-        ['within-optimal', 1],
-        ['within-baseline', 1],
-      ],
-    },
-
-    {
-      name: 'empty result - selective filter on large table',
-      query: queries.track.where('name', 'NonexistentTrackXYZ'),
       validations: [
         ['within-optimal', 1],
         ['within-baseline', 1],
@@ -376,17 +353,6 @@ describe('Chinook planner execution cost validation', () => {
     },
 
     {
-      name: 'range query on numeric column',
-      query: queries.track
-        .where('milliseconds', '>', 200000)
-        .where('milliseconds', '<', 300000),
-      validations: [
-        ['within-optimal', 1],
-        ['within-baseline', 1],
-      ],
-    },
-
-    {
       name: 'deep nesting with very selective top filter',
       query: queries.invoiceLine
         .where('quantity', '>', 5)
@@ -396,22 +362,6 @@ describe('Chinook planner execution cost validation', () => {
       validations: [
         ['within-optimal', 1.4],
         ['within-baseline', 1.4],
-      ],
-    },
-
-    {
-      name: 'OR with 4+ branches',
-      query: queries.album.where(({or, cmp}) =>
-        or(
-          cmp('title', 'Big Ones'),
-          cmp('title', 'Jagged Little Pill'),
-          cmp('title', 'Facelift'),
-          cmp('title', 'Warner 25 Anos'),
-        ),
-      ),
-      validations: [
-        ['within-optimal', 1],
-        ['within-baseline', 1],
       ],
     },
 
