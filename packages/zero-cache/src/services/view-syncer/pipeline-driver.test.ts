@@ -662,17 +662,12 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines.init(null);
     [
       ...pipelines.addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, {
+        // hydration time
         totalElapsed: () => 10,
       }),
     ];
 
-    replicator.processTransaction(
-      '134',
-      // Timeout only kicks in at 20 changes.
-      ...Array.from({length: 20}, (_, i) =>
-        messages.insert('issues', {id: String(30 + i)}),
-      ),
-    );
+    replicator.processTransaction('134', messages.insert('issues', {id: 'i1'}));
 
     // 6ms is larger than half of the hydration time.
     expect(() => [
