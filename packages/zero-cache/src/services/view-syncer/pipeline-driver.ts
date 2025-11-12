@@ -83,6 +83,14 @@ type Pipeline = {
   readonly transformationHash: string; // The hash of the transformed AST
 };
 
+type AdvanceContext = {
+  readonly timer: {totalElapsed: () => number};
+  readonly totalHydrationTimeMs: number;
+  readonly numChanges: number;
+  advanceCheckCount: number;
+  pos: number;
+};
+
 /**
  * Manages the state of IVM pipelines for a given ViewSyncer (i.e. client group).
  */
@@ -101,6 +109,7 @@ export class PipelineDriver {
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
   readonly #costModels: WeakMap<Database, ConnectionCostModel> | undefined;
   #streamer: Streamer | null = null;
+  #advanceContext: AdvanceContext | null = null;
   #replicaVersion: string | null = null;
   #permissions: LoadedPermissions | null = null;
 
@@ -370,6 +379,7 @@ export class PipelineDriver {
       push: change => {
         const streamer = this.#streamer;
         assert(streamer, 'must #startAccumulating() before pushing changes');
+        this.#checkAdvanceProgress();
         streamer.accumulate(transformationHash, schema, [change]);
       },
     });
@@ -454,112 +464,129 @@ export class PipelineDriver {
     const {prev, curr, changes} = diff;
     this.#lc.debug?.(`${prev.version} => ${curr.version}: ${changes} changes`);
 
-    const totalHydrationTimeMs = this.totalHydrationTimeMs();
-
-    // Cancel the advancement processing if it takes longer than half the
-    // total hydration time to make it through half of the advancement.
-    // This serves as both a circuit breaker for very large transactions,
-    // as well as a bound on the amount of time the previous connection locks
-    // the inactive WAL file (as the lock prevents WAL2 from switching to the
-    // free WAL when the current one is over the size limit, which can make
-    // the WAL grow continuously and compound slowness).
-    //
-    // Note: 1/2 is a conservative estimate policy. A lower proportion would
-    // flag slowness sooner, at the expense of larger estimation error.
-    function checkProgress(pos: number) {
-      // Check every 10 changes
-      if (pos % 10 === 0) {
-        const elapsed = timer.totalElapsed();
-        if (elapsed > totalHydrationTimeMs / 2 && pos <= changes / 2) {
-          throw new ResetPipelinesSignal(
-            `advancement exceeded timeout at ${pos} of ${changes} changes (${elapsed} ms)`,
-          );
-        }
-      }
-    }
-
     return {
       version: curr.version,
       numChanges: changes,
-      changes: this.#advance(
-        diff,
-        // Somewhat arbitrary: only check progress if there are at least 20
-        // changes (Note that the first check doesn't happen until 10 changes).
-        changes >= 20 ? checkProgress : () => {},
-      ),
+      changes: this.#advance(diff, timer, changes),
     };
   }
 
   *#advance(
     diff: SnapshotDiff,
-    onChange: (pos: number) => void,
+    timer: {totalElapsed: () => number},
+    numChanges: number,
   ): Iterable<RowChange> {
-    let pos = 0;
-    for (const {table, prevValues, nextValue} of diff) {
-      const start = performance.now();
-      let type;
-      try {
-        const tableSpec = mustGetTableSpec(this.#tableSpecs, table).tableSpec;
-        const tableSource = this.#tables.get(table);
-        if (!tableSource) {
-          // no pipelines read from this table, so no need to process the change
-          continue;
-        }
-        let editOldRow: Row | undefined = undefined;
-        for (const prevValue of prevValues) {
-          // Rows are ultimately referred to by the union key (in #streamNodes())
-          // so an update is represented as an `edit` if and only if the
-          // unionKey-based row keys are the same in prevValue and nextValue.
-          if (
-            nextValue &&
-            deepEqual(
-              getRowKey(tableSpec.unionKey, prevValue as Row) as JSONValue,
-              getRowKey(tableSpec.unionKey, nextValue as Row) as JSONValue,
-            )
-          ) {
-            editOldRow = prevValue;
-          } else {
-            if (nextValue) {
-              this.#conflictRowsDeleted.add(1);
+    this.#lc.warn?.('advance');
+    this.#advanceContext = {
+      timer,
+      totalHydrationTimeMs: this.totalHydrationTimeMs(),
+      numChanges,
+      advanceCheckCount: 0,
+      pos: 0,
+    };
+    try {
+      for (const {table, prevValues, nextValue} of diff) {
+        this.#checkAdvanceProgress();
+        const start = performance.now();
+        let type;
+        try {
+          const tableSpec = mustGetTableSpec(this.#tableSpecs, table).tableSpec;
+          const tableSource = this.#tables.get(table);
+          if (!tableSource) {
+            // no pipelines read from this table, so no need to process the change
+            continue;
+          }
+          let editOldRow: Row | undefined = undefined;
+          for (const prevValue of prevValues) {
+            // Rows are ultimately referred to by the union key (in #streamNodes())
+            // so an update is represented as an `edit` if and only if the
+            // unionKey-based row keys are the same in prevValue and nextValue.
+            if (
+              nextValue &&
+              deepEqual(
+                getRowKey(tableSpec.unionKey, prevValue as Row) as JSONValue,
+                getRowKey(tableSpec.unionKey, nextValue as Row) as JSONValue,
+              )
+            ) {
+              editOldRow = prevValue;
+            } else {
+              if (nextValue) {
+                this.#conflictRowsDeleted.add(1);
+              }
+              yield* this.#push(tableSource, {
+                type: 'remove',
+                row: prevValue,
+              });
             }
-            yield* this.#push(tableSource, {
-              type: 'remove',
-              row: prevValue,
-            });
           }
-        }
-        if (nextValue) {
-          if (editOldRow) {
-            yield* this.#push(tableSource, {
-              type: 'edit',
-              row: nextValue,
-              oldRow: editOldRow,
-            });
-          } else {
-            yield* this.#push(tableSource, {
-              type: 'add',
-              row: nextValue,
-            });
+          if (nextValue) {
+            if (editOldRow) {
+              yield* this.#push(tableSource, {
+                type: 'edit',
+                row: nextValue,
+                oldRow: editOldRow,
+              });
+            } else {
+              yield* this.#push(tableSource, {
+                type: 'add',
+                row: nextValue,
+              });
+            }
           }
+        } finally {
+          this.#advanceContext.pos++;
         }
-      } finally {
-        onChange(++pos);
+
+        const elapsed = performance.now() - start;
+        this.#advanceTime.record(elapsed / 1000, {
+          table,
+          type,
+        });
       }
 
-      const elapsed = performance.now() - start;
-      this.#advanceTime.record(elapsed / 1000, {
-        table,
-        type,
-      });
+      // Set the new snapshot on all TableSources.
+      const {curr} = diff;
+      for (const table of this.#tables.values()) {
+        table.setDB(curr.db.db);
+      }
+      this.#ensureCostModelExistsIfEnabled(curr.db.db);
+      this.#lc.debug?.(`Advanced to ${curr.version}`);
+    } finally {
+      this.#advanceContext = null;
     }
+  }
 
-    // Set the new snapshot on all TableSources.
-    const {curr} = diff;
-    for (const table of this.#tables.values()) {
-      table.setDB(curr.db.db);
+  #checkAdvanceProgress() {
+    // Cancel the advancement processing if it takes longer than half the
+    // total hydration time to make it through half of the advancement, or
+    // if processing time exceeds total hydration time.
+    // This serves as both a circuit breaker for very large transactions,
+    // as well as a bound on the amount of time the previous connection locks
+    // the inactive WAL file (as the lock prevents WAL2 from switching to the
+    // free WAL when the current one is over the size limit, which can make
+    // the WAL grow continuously and compound slowness).
+    assert(this.#advanceContext !== null);
+    // Reduce the overhead of checking the timer by only
+    // actually checking on the first and then every 10th call to
+    // checkAdvanceProgress
+    if (this.#advanceContext.advanceCheckCount++ % 10 === 0) {
+      return;
     }
-    this.#ensureCostModelExistsIfEnabled(curr.db.db);
-    this.#lc.debug?.(`Advanced to ${curr.version}`);
+    const {
+      pos,
+      numChanges,
+      timer: advanceTimer,
+      totalHydrationTimeMs,
+    } = this.#advanceContext;
+    const elapsed = advanceTimer.totalElapsed();
+    if (
+      elapsed > totalHydrationTimeMs ||
+      (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2)
+    ) {
+      throw new ResetPipelinesSignal(
+        `Advancement exceeded timeout at ${pos} of ${numChanges} changes after ${elapsed} ms. Advancement time limited base on total hydration time of ${totalHydrationTimeMs} ms.`,
+      );
+    }
   }
 
   /** Implements `BuilderDelegate.getSource()` */
