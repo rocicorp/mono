@@ -91,7 +91,9 @@ const NON_CRITICAL_OTEL_ERRORS = [
   'socket hang up',
 ];
 
-function shouldWarnForOtelError(msg: unknown): boolean {
-  const haystack = String(msg ?? '').toLowerCase();
-  return NON_CRITICAL_OTEL_ERRORS.some(pattern => haystack.includes(pattern));
+function shouldWarnForOtelError(msg: string): boolean {
+  const errorMessage = String(msg ?? '').toLowerCase();
+  return NON_CRITICAL_OTEL_ERRORS.some(pattern =>
+    errorMessage.includes(pattern),
+  );
 }
