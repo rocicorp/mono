@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import {READ_COMMITTED} from '../../db/mode-enum.ts';
 import {disableStatementTimeout, type PostgresDB} from '../../types/pg.ts';
 import {cvrSchema, type ShardID} from '../../types/shards.ts';
 import {RunningState} from '../running-state.ts';
@@ -90,7 +91,7 @@ export class CVRPurger implements Service {
   purgeInactiveCVRs(
     maxCVRs: number,
   ): Promise<{purged: number; remaining: number}> {
-    return this.#db.begin(async sql => {
+    return this.#db.begin(READ_COMMITTED, async sql => {
       disableStatementTimeout(sql);
 
       const threshold = Date.now() - this.#inactivityThresholdMs;
@@ -120,18 +121,20 @@ export class CVRPurger implements Service {
         // prefix of the primary key (e.g. the "desires" foreign key reference
         // to the "queries" table is not a prefix of the "desires" primary
         // key).
-        for (const table of [
-          'desires',
-          'queries',
-          'clients',
-          'instances',
-          'rows',
-          'rowsVersion',
-        ]) {
-          void sql`
+        await Promise.all(
+          [
+            'desires',
+            'queries',
+            'clients',
+            'instances',
+            'rows',
+            'rowsVersion',
+          ].map(table =>
+            sql`
             DELETE FROM ${sql(this.#schema)}.${sql(table)} 
-              WHERE "clientGroupID" IN ${sql(ids)}`.execute();
-        }
+              WHERE "clientGroupID" IN ${sql(ids)}`.execute(),
+          ),
+        );
       }
 
       const [{remaining}] = await sql<[{remaining: bigint}]>`

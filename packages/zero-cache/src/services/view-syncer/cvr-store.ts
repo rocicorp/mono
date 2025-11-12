@@ -127,6 +127,7 @@ export class CVRStore {
   readonly #schema: string;
   readonly #taskID: string;
   readonly #id: string;
+  readonly #failService: (e: unknown) => void;
   readonly #db: PostgresDB;
   readonly #upstreamDb: PostgresDB | undefined;
   readonly #writes: Set<{
@@ -166,6 +167,7 @@ export class CVRStore {
     deferredRowFlushThreshold = 100, // somewhat arbitrary
     setTimeoutFn = setTimeout,
   ) {
+    this.#failService = failService;
     this.#db = cvrDb;
     this.#upstreamDb = upstreamDb;
     this.#schema = cvrSchema(shard);
@@ -232,7 +234,7 @@ export class CVRStore {
     };
 
     const [instance, clientsRows, queryRows, desiresRows] =
-      await this.#db.begin(tx => [
+      await this.#db.begin(Mode.READONLY, tx => [
         tx<
           (Omit<InstancesRow, 'clientGroupID'> & {rowsVersion: string | null})[]
         >`SELECT cvr."version", 
@@ -301,7 +303,9 @@ export class CVRStore {
               WHERE "clientGroupID" = ${this.#id} AND
                     ("grantedAt" IS NULL OR
                      "grantedAt" <= to_timestamp(${lastConnectTime / 1000}))
-        `.execute();
+        `
+            .execute()
+            .catch(this.#failService);
         }
       }
 
@@ -781,7 +785,7 @@ export class CVRStore {
     // changes (i.e. changes to the CVR contents) to flush.
     this.putInstance(cvr);
 
-    const rowsFlushed = await this.#db.begin(async tx => {
+    const rowsFlushed = await this.#db.begin(Mode.READ_COMMITTED, async tx => {
       const pipelined: Promise<unknown>[] = [
         // #checkVersionAndOwnership() executes a `SELECT ... FOR UPDATE`
         // query to acquire a row-level lock so that version-updating
@@ -837,7 +841,7 @@ export class CVRStore {
     recordRowsSynced(this.#rowCount);
 
     if (this.#upstreamDb) {
-      await this.#upstreamDb.begin(async tx => {
+      await this.#upstreamDb.begin(Mode.READ_COMMITTED, async tx => {
         await Promise.all(this.#upstreamWrites.map(write => write(tx)));
       });
     }
