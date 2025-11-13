@@ -183,7 +183,8 @@ export class PlannerJoin {
    */
   propagateUnlimit(): void {
     assert(this.#type === 'flipped', 'Can only unlimit a flipped join');
-    this.#parent.propagateUnlimitFromFlippedJoin();
+    // Parent stays limited; child becomes unlimited
+    // this.#parent.propagateUnlimitFromFlippedJoin();
     this.#child.propagateUnlimitFromFlippedJoin(); // Up the child chain
   }
 
