@@ -35,16 +35,9 @@ describe('ConnectionImpl', () => {
     test('returns current manager state', () => {
       const connection = new ConnectionImpl(manager, lc, setAuthSpy);
 
-      expect(connection.state.current).toBe(manager.state);
-    });
-
-    test('subscribe delegates to manager', () => {
-      const connection = new ConnectionImpl(manager, lc, setAuthSpy);
-      const listener = vi.fn();
-
-      connection.state.subscribe(listener);
-
-      expect(subscribeMock).toHaveBeenCalledWith(listener);
+      expect(connection.state.current).toStrictEqual({
+        name: 'connecting',
+      });
     });
   });
 

@@ -115,11 +115,7 @@ export class MetricManager {
   // - If disconnect() is called with a defined #connectStart then we record
   //   DID_NOT_CONNECT_VALUE and set #connectStart to undefined.
   //
-  // TODO It's clear after playing with the connection code we should encapsulate
-  // the ConnectionState along with its state transitions and possibly behavior.
-  // In that world the metric gauge(s) and bookkeeping like #connectStart would
-  // be encapsulated with the ConnectionState. This will probably happen as part
-  // of https://github.com/rocicorp/reflect-server/issues/255.
+  // TODO: this should be folded into the ConnectionManager.
   readonly timeToConnectMs = this.#register(
     new Gauge(MetricName.TimeToConnectMs),
   );

@@ -29,7 +29,6 @@ import {
 import type {ClientID} from '../types/client-state.ts';
 import {ZeroContext} from './context.ts';
 import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
-import type {ZeroErrorDetails} from './error.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 
@@ -61,7 +60,6 @@ export type MutatorResultDetails =
         | {
             readonly type: 'zero';
             readonly message: string;
-            readonly details: ZeroErrorDetails;
           };
     };
 
