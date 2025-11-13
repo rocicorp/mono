@@ -116,7 +116,7 @@ export class ChangeStreamerHttpServer extends HttpService {
     }
   };
 
-  readonly #reserveSnapshot = (ws: WebSocket, req: RequestHeaders) => {
+  readonly #reserveSnapshot = async (ws: WebSocket, req: RequestHeaders) => {
     try {
       const url = new URL(
         req.url ?? '',
@@ -128,7 +128,7 @@ export class ChangeStreamerHttpServer extends HttpService {
         throw new Error('Missing taskID in snapshot request');
       }
       const downstream =
-        this.#getBackupMonitor().startSnapshotReservation(taskID);
+        await this.#getBackupMonitor().startSnapshotReservation(taskID);
       void streamOut(this._lc, downstream, ws);
     } catch (err) {
       closeWithError(this._lc, ws, err, PROTOCOL_ERROR);

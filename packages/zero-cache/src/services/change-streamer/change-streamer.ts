@@ -54,8 +54,12 @@ export interface ChangeStreamer {
 //     Introduced in 0.19.
 // v3: Adds the "taskID" to the subscription context, and support for
 //     the BackupMonitor-mediated "/snapshot" request.
+// v4: Adds the "replicaVersion" and "minWatermark" fields to the "/snapshot"
+//     status request so that a subscriber can verify whether its replica,
+//     whether it be restored or existing in a permanent volume, is compatible
+//     with the change-streamer.
 
-export const PROTOCOL_VERSION = 3;
+export const PROTOCOL_VERSION = 4;
 
 export type SubscriberContext = {
   /**
@@ -169,4 +173,9 @@ export interface ChangeStreamerService extends ChangeStreamer, Service {
    * subscribers have progressed beyond the watermark.
    */
   scheduleCleanup(watermark: string): void;
+
+  getChangeLogState(): Promise<{
+    replicaVersion: string;
+    minWatermark: string;
+  }>;
 }

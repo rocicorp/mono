@@ -114,6 +114,13 @@ describe('change-streamer/service', () => {
 
   const messages = new ReplicationMessages({foo: 'id'});
 
+  test('get empty changelog state', async () => {
+    expect(await streamer.getChangeLogState()).toEqual({
+      minWatermark: '01',
+      replicaVersion: '01',
+    });
+  });
+
   test('immediate forwarding, transaction storage', async () => {
     const sub = await streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
@@ -599,6 +606,11 @@ describe('change-streamer/service', () => {
       UPDATE "zoro_3/cdc"."replicationState" SET "lastWatermark" = '08';
     `.simple();
 
+    expect(await streamer.getChangeLogState()).toEqual({
+      replicaVersion: '01',
+      minWatermark: '03',
+    });
+
     // Start two subscribers: one at 06 and one at 04
     const sub1 = await streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
@@ -666,6 +678,11 @@ describe('change-streamer/service', () => {
           lastWatermark: '08',
         },
       ],
+    });
+
+    expect(await streamer.getChangeLogState()).toEqual({
+      replicaVersion: '01',
+      minWatermark: '06',
     });
 
     // No more timeouts should have been scheduled because both initialWatermarks

@@ -175,13 +175,13 @@ describe('change-streamer/http', () => {
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v4. Supported protocols: [v1 ... v3]`,
+        `Cannot service client at protocol v5. Supported protocols: [v1 ... v4]`,
         `/replication/v${PROTOCOL_VERSION + 1}/changes` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v4. Supported protocols: [v1 ... v3]`,
+        `Cannot service client at protocol v5. Supported protocols: [v1 ... v4]`,
         `/replication/v${PROTOCOL_VERSION + 1}/snapshot` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
@@ -220,7 +220,12 @@ describe('change-streamer/http', () => {
 
       const status = [
         'status',
-        {tag: 'status', backupURL: 's3://foo/bar'},
+        {
+          tag: 'status',
+          backupURL: 's3://foo/bar',
+          replicaVersion: '148',
+          minWatermark: '188',
+        },
       ] satisfies SnapshotMessage;
 
       snapshotStream.push(status);

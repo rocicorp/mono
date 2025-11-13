@@ -94,7 +94,9 @@ export class BackupMonitor implements Service {
     return this.#state.stopped();
   }
 
-  startSnapshotReservation(taskID: string): Subscription<SnapshotMessage> {
+  async startSnapshotReservation(
+    taskID: string,
+  ): Promise<Subscription<SnapshotMessage>> {
     this.#lc.info?.(`pausing change-log cleanup while ${taskID} snapshots`);
     // In the case of retries, only track the last reservation.
     this.#reservations.get(taskID)?.sub.cancel();
@@ -106,7 +108,11 @@ export class BackupMonitor implements Service {
       cleanup: () => this.endReservation(taskID, false),
     });
     this.#reservations.set(taskID, {start: new Date(), sub});
-    sub.push(['status', {tag: 'status', backupURL: this.#backupURL}]);
+    const changeLogState = await this.#changeStreamer.getChangeLogState();
+    sub.push([
+      'status',
+      {tag: 'status', backupURL: this.#backupURL, ...changeLogState},
+    ]);
     return sub;
   }
 
