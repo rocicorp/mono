@@ -102,12 +102,8 @@ export const queries = {
     ({ctx: auth, args: {userID, projectName}}) =>
       applyIssuePermissions(
         builder.issue
-          .whereExists(
-            'project',
-            p => p.where('lowerCaseName', projectName.toLocaleLowerCase()),
-            {
-              flip: true,
-            },
+          .whereExists('project', p =>
+            p.where('lowerCaseName', projectName.toLocaleLowerCase()),
           )
           .related('labels')
           .related('viewState', q => q.where('userID', userID))
@@ -158,18 +154,14 @@ export const queries = {
           );
         } else if (filter === 'creators') {
           q = q.whereExists('createdIssues', i =>
-            i.whereExists(
-              'project',
-              p => p.where('lowerCaseName', projectName.toLocaleLowerCase()),
-              {flip: true},
+            i.whereExists('project', p =>
+              p.where('lowerCaseName', projectName.toLocaleLowerCase()),
             ),
           );
         } else if (filter === 'assignees') {
           q = q.whereExists('assignedIssues', i =>
-            i.whereExists(
-              'project',
-              p => p.where('lowerCaseName', projectName.toLocaleLowerCase()),
-              {flip: true},
+            i.whereExists('project', p =>
+              p.where('lowerCaseName', projectName.toLocaleLowerCase()),
             ),
           );
         } else {
@@ -394,12 +386,8 @@ export function buildListQuery(args: ListQueryArgs) {
   }
   const {projectName = ZERO_PROJECT_NAME} = listContext;
 
-  q = q.whereExists(
-    'project',
-    q => q.where('lowerCaseName', projectName.toLocaleLowerCase()),
-    {
-      flip: true,
-    },
+  q = q.whereExists('project', q =>
+    q.where('lowerCaseName', projectName.toLocaleLowerCase()),
   );
 
   const {sortField, sortDirection} = listContext;
@@ -423,11 +411,9 @@ export function buildListQuery(args: ListQueryArgs) {
     and(
       // oxlint-disable-next-line eqeqeq
       open != null ? cmp('open', open) : undefined,
-      creator
-        ? exists('creator', q => q.where('login', creator), {flip: true})
-        : undefined,
+      creator ? exists('creator', q => q.where('login', creator)) : undefined,
       assignee
-        ? exists('assignee', q => q.where('login', assignee), {flip: true})
+        ? exists('assignee', q => q.where('login', assignee))
         : undefined,
       textFilter
         ? or(
@@ -439,7 +425,7 @@ export function buildListQuery(args: ListQueryArgs) {
           )
         : undefined,
       ...(labels ?? []).map(label =>
-        exists('labels', q => q.where('name', label), {flip: true}),
+        exists('labels', q => q.where('name', label)),
       ),
     ),
   );
