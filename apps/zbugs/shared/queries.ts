@@ -102,10 +102,8 @@ export const queries = {
     ({ctx: auth, args: {userID, projectName}}) =>
       applyIssuePermissions(
         builder.issue
-          .whereExists(
-            'project',
-            p => p.where('lowerCaseName', projectName.toLocaleLowerCase()),
-            {flip: true},
+          .whereExists('project', p =>
+            p.where('lowerCaseName', projectName.toLocaleLowerCase()),
           )
           .related('labels')
           .related('viewState', q => q.where('userID', userID))
@@ -155,26 +153,16 @@ export const queries = {
             and(cmp('role', 'crew'), not(cmp('login', 'LIKE', 'rocibot%'))),
           );
         } else if (filter === 'creators') {
-          q = q.whereExists(
-            'createdIssues',
-            i =>
-              i.whereExists(
-                'project',
-                p => p.where('lowerCaseName', projectName.toLocaleLowerCase()),
-                {flip: true},
-              ),
-            {flip: false},
+          q = q.whereExists('createdIssues', i =>
+            i.whereExists('project', p =>
+              p.where('lowerCaseName', projectName.toLocaleLowerCase()),
+            ),
           );
         } else if (filter === 'assignees') {
-          q = q.whereExists(
-            'assignedIssues',
-            i =>
-              i.whereExists(
-                'project',
-                p => p.where('lowerCaseName', projectName.toLocaleLowerCase()),
-                {flip: true},
-              ),
-            {flip: false},
+          q = q.whereExists('assignedIssues', i =>
+            i.whereExists('project', p =>
+              p.where('lowerCaseName', projectName.toLocaleLowerCase()),
+            ),
           );
         } else {
           throw new QueryError(
@@ -398,10 +386,8 @@ export function buildListQuery(args: ListQueryArgs) {
   }
   const {projectName = ZERO_PROJECT_NAME} = listContext;
 
-  q = q.whereExists(
-    'project',
-    q => q.where('lowerCaseName', projectName.toLocaleLowerCase()),
-    {flip: true},
+  q = q.whereExists('project', q =>
+    q.where('lowerCaseName', projectName.toLocaleLowerCase()),
   );
 
   const {sortField, sortDirection} = listContext;

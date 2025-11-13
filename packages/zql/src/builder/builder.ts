@@ -129,6 +129,7 @@ export function buildPipeline(
   if (costModel) {
     ast = planQuery(ast, costModel);
   }
+  // console.log('Planned AST:', JSON.stringify(ast, null, 2));
   return buildPipelineInternal(ast, delegate, queryID, '');
 }
 
