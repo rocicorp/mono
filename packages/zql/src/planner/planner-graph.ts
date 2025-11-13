@@ -207,9 +207,13 @@ export class PlannerGraph {
       join.reset();
 
       // Apply target state
-      if (targetState.type === 'flipped') {
+      if (targetState.type === 'flipped' && join.type !== 'flipped') {
         join.flip();
       }
+      assert(
+        targetState.type === join.type,
+        'join is not in the correct state after reset',
+      );
     }
   }
 
@@ -262,18 +266,14 @@ export class PlannerGraph {
     // Build FO→FI cache once to avoid redundant BFS traversals in each iteration
     const fofiCache = buildFOFICache(this);
 
-    const numPatterns = 2 ** flippableJoins.length;
+    const numPatterns =
+      flippableJoins.length === 0 ? 0 : 2 ** flippableJoins.length;
     let bestCost = Infinity;
     let bestPlan: PlanState | undefined = undefined;
     let bestAttemptNumber = -1;
 
     // Enumerate all flip patterns
-    // try 7 and 32 (6 and 31)
-    const forcePattern = undefined; // 11 14
     for (let pattern = 0; pattern < numPatterns; pattern++) {
-      if (forcePattern !== undefined && pattern !== forcePattern) {
-        continue;
-      }
       // Reset to initial state
       this.resetPlanningState();
 
@@ -285,72 +285,60 @@ export class PlannerGraph {
         });
       }
 
-      try {
-        // Apply flip pattern (treat pattern as bitmask)
-        // Bit i set to 1 means flip join i
-        for (let i = 0; i < flippableJoins.length; i++) {
-          if (pattern & (1 << i)) {
-            flippableJoins[i].flip();
-          }
+      // Apply flip pattern (treat pattern as bitmask)
+      // Bit i set to 1 means flip join i
+      for (let i = 0; i < flippableJoins.length; i++) {
+        if (pattern & (1 << i)) {
+          flippableJoins[i].flip();
         }
+      }
 
-        // Derive FO/UFO and FI/UFI states from join flip states
-        checkAndConvertFOFI(fofiCache);
+      // Derive FO/UFO and FI/UFI states from join flip states
+      checkAndConvertFOFI(fofiCache);
 
-        // Propagate unlimiting for flipped joins
-        propagateUnlimitForFlippedJoins(this);
+      // Propagate unlimiting for flipped joins
+      propagateUnlimitForFlippedJoins(this);
 
-        // Propagate constraints through the graph
-        this.propagateConstraints(planDebugger);
+      // Propagate constraints through the graph
+      this.propagateConstraints(planDebugger);
 
-        if (planDebugger) {
-          planDebugger.log({
-            type: 'constraints-propagated',
-            attemptNumber: pattern,
-            connectionConstraints: this.connections.map(c => ({
-              connection: c.name,
-              constraints: c.getConstraintsForDebug(),
-              constraintCosts: c.getConstraintCostsForDebug(),
-            })),
-          });
-        }
+      if (planDebugger) {
+        planDebugger.log({
+          type: 'constraints-propagated',
+          attemptNumber: pattern,
+          connectionConstraints: this.connections.map(c => ({
+            connection: c.name,
+            constraints: c.getConstraintsForDebug(),
+            constraintCosts: c.getConstraintCostsForDebug(),
+          })),
+        });
+      }
 
-        // Evaluate this plan
-        const totalCost = this.getTotalCost(planDebugger);
+      // Evaluate this plan
+      const totalCost = this.getTotalCost(planDebugger);
 
-        if (planDebugger) {
-          planDebugger.log({
-            type: 'plan-complete',
-            attemptNumber: pattern,
-            totalCost,
-            flipPattern: pattern, // Bitmask of which joins are flipped
-            planSnapshot: this.capturePlanningSnapshot(),
-            joinStates: this.joins.map(j => {
-              const info = j.getDebugInfo();
-              return {
-                join: info.name,
-                type: info.type,
-              };
-            }),
-          });
-        }
+      if (planDebugger) {
+        planDebugger.log({
+          type: 'plan-complete',
+          attemptNumber: pattern,
+          totalCost,
+          flipPattern: pattern, // Bitmask of which joins are flipped
+          planSnapshot: this.capturePlanningSnapshot(),
+          joinStates: this.joins.map(j => {
+            const info = j.getDebugInfo();
+            return {
+              join: info.name,
+              type: info.type,
+            };
+          }),
+        });
+      }
 
-        // Track best plan
-        if (totalCost < bestCost) {
-          bestCost = totalCost;
-          bestPlan = this.capturePlanningSnapshot();
-          bestAttemptNumber = pattern;
-        }
-      } catch (e) {
-        // This flip pattern is invalid (shouldn't happen with proper isFlippable() checks)
-        if (planDebugger) {
-          planDebugger.log({
-            type: 'plan-failed',
-            attemptNumber: pattern,
-            reason: `Flip pattern ${pattern.toString(2)} failed: ${e instanceof Error ? e.message : String(e)}`,
-          });
-        }
-        continue;
+      // Track best plan
+      if (totalCost < bestCost) {
+        bestCost = totalCost;
+        bestPlan = this.capturePlanningSnapshot();
+        bestAttemptNumber = pattern;
       }
     }
 
@@ -373,9 +361,9 @@ export class PlannerGraph {
         });
       }
     } else {
-      // No valid plan found (all patterns failed)
-      throw new Error(
-        'No valid query plan found. This should not happen - check query structure.',
+      assert(
+        numPatterns === 0,
+        'no plan was found but flippable joins did exist!',
       );
     }
   }
