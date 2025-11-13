@@ -1,14 +1,15 @@
-import {useZeroConnectionState} from '@rocicorp/zero/react';
 import {useCallback} from 'react';
-import {useZero} from '../hooks/use-zero.ts';
-import {Button} from './button.tsx';
 import {Modal, ModalActions, ModalText} from './modal.tsx';
+import {Button} from './button.tsx';
+import {useZero} from '../hooks/use-zero.ts';
+import {ConnectionStatus} from '@rocicorp/zero';
+import {useZeroConnectionState} from '@rocicorp/zero/react';
 
 export function ErrorModal() {
   const zero = useZero();
   const connectionState = useZeroConnectionState();
-  const isError = connectionState.name === 'error';
-  const isClosed = connectionState.name === 'closed';
+  const isError = connectionState.name === ConnectionStatus.Error;
+  const isClosed = connectionState.name === ConnectionStatus.Closed;
   const handleAction = useCallback(() => {
     if (isClosed) {
       window.location.reload();

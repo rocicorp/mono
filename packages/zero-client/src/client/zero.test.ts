@@ -33,6 +33,10 @@ import {
 } from '../../../shared/src/browser-env.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import * as valita from '../../../shared/src/valita.ts';
+import {
+  ApplicationError,
+  isApplicationError,
+} from '../../../zero-protocol/src/application-error.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {changeDesiredQueriesMessageSchema} from '../../../zero-protocol/src/change-desired-queries.ts';
 import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
@@ -65,8 +69,8 @@ import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
+import type {ConnectionState} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
-import type {ConnectionState} from './connection.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
 import {ClientError, isServerError} from './error.ts';
@@ -86,6 +90,7 @@ import {
   CONNECT_TIMEOUT_MS,
   createSocket,
   DEFAULT_DISCONNECT_HIDDEN_DELAY_MS,
+  DEFAULT_DISCONNECT_TIMEOUT_MS,
   DEFAULT_PING_TIMEOUT_MS,
   PULL_TIMEOUT_MS,
   RUN_LOOP_INTERVAL_MS,
@@ -2608,7 +2613,7 @@ test('Connect timeout', async () => {
   const r = zeroForTest({logLevel: 'debug'});
 
   const connectionStates: ConnectionState[] = [];
-  const connectionStatusCleanup = r.connection.state.subscribe(state => {
+  const connectionStatusCleanup = r.connectionManager.subscribe(state => {
     connectionStates.push(state);
   });
 
@@ -2617,7 +2622,10 @@ test('Connect timeout', async () => {
 
   expect(connectionStates).toEqual([
     {
-      name: 'connecting',
+      name: ConnectionStatus.Connecting,
+      attempt: 1,
+      disconnectAt: DEFAULT_DISCONNECT_TIMEOUT_MS + startTime,
+      reason: undefined,
     },
   ]);
 
@@ -2660,7 +2668,7 @@ test('Connect timeout', async () => {
 
   expect(connectionStates.length).toEqual(1 + 4 * 2);
   expect([...new Set(connectionStates.map(s => s.name))]).toEqual([
-    'connecting',
+    ConnectionStatus.Connecting,
   ]);
 
   // And success after this...
@@ -2668,8 +2676,8 @@ test('Connect timeout', async () => {
   await r.waitForConnectionStatus(ConnectionStatus.Connected);
   expect(r.connectionStatus).toBe(ConnectionStatus.Connected);
   expect([...new Set(connectionStates.map(s => s.name))]).toEqual([
-    'connecting',
-    'connected',
+    ConnectionStatus.Connecting,
+    ConnectionStatus.Connected,
   ]);
 
   connectionStatusCleanup();
@@ -4429,6 +4437,505 @@ test('push is called on initial connect and reconnect', async () => {
     await z.waitForConnectionStatus(ConnectionStatus.Connected);
     expect(pushSpy).toBeCalledTimes(2);
   }
+});
+
+describe('onError', () => {
+  test('onError is called with a server protocol error', async () => {
+    const onErrorSpy = vi.fn();
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema: createSchema({
+        tables: [
+          table('foo')
+            .columns({
+              id: string(),
+              val: string(),
+            })
+            .primaryKey('id'),
+        ],
+      }),
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    await z.triggerError({
+      kind: ErrorKind.InvalidPush,
+      message: 'Invalid push test',
+      origin: ErrorOrigin.ZeroCache,
+    });
+
+    expect(onErrorSpy).toBeCalledTimes(1);
+
+    const error = onErrorSpy.mock.calls[0][0];
+
+    assert(isServerError(error), 'error is a server error');
+    expect(error.kind).toBe(ErrorKind.InvalidPush);
+    expect(error.message).toBe('Invalid push test');
+
+    await z.close();
+  });
+
+  test('onError is called with a client error', async () => {
+    const onErrorSpy = vi.fn();
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema: createSchema({
+        tables: [
+          table('foo')
+            .columns({
+              id: string(),
+              val: string(),
+            })
+            .primaryKey('id'),
+        ],
+      }),
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    const offlineError = new ClientError({
+      kind: ClientErrorKind.Offline,
+      message: 'Offline for test',
+    });
+
+    z.connectionManager.disconnected(offlineError);
+    await z.waitForConnectionStatus(ConnectionStatus.Disconnected);
+
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalled();
+    });
+
+    const firstCall = onErrorSpy.mock.calls[0];
+    expect(firstCall[0]).toBe(offlineError);
+
+    await z.close();
+  });
+
+  test('onError is called for transform failed errors', async () => {
+    const onErrorSpy = vi.fn();
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema: createSchema({
+        tables: [
+          table('issue')
+            .columns({
+              id: string(),
+              title: string(),
+            })
+            .primaryKey('id'),
+        ],
+      }),
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    // Simulate a TransformFailed server error
+    await z.triggerError({
+      kind: ErrorKind.TransformFailed,
+      message: 'Transform failed for query',
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.HTTP,
+      status: 500,
+      queryIDs: ['query-123'],
+    });
+
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalled();
+    });
+
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    const error = onErrorSpy.mock.calls[0][0];
+    assert(isServerError(error), 'error should be a ServerError');
+    expect(error.kind).toBe(ErrorKind.TransformFailed);
+    expect(error.message).toBe('Transform failed for query');
+
+    await z.close();
+  });
+
+  test('onError is called for custom mutation client errors', async () => {
+    const onErrorSpy = vi.fn();
+    const testSchema = createSchema({
+      tables: [
+        table('issue')
+          .columns({
+            id: string(),
+            title: string(),
+          })
+          .primaryKey('id'),
+      ],
+    });
+
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema: testSchema,
+      mutators: {
+        throwingMutator: () => {
+          throw new Error('Custom mutation failed');
+        },
+      },
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    // Call the mutator that throws
+    const result = z.mutate.throwingMutator();
+
+    // Wait for the client promise to resolve with error
+    const clientResult = await result.client;
+
+    expect(clientResult.type).toBe('error');
+    assert(clientResult.type === 'error');
+    expect(clientResult.error.type).toBe('app');
+
+    // onError should have been called
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalled();
+    });
+
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    const error = onErrorSpy.mock.calls[0][0];
+    assert(isApplicationError(error), 'error should be an ApplicationError');
+    expect(error.message).toBe('Custom mutation failed');
+
+    const serverResult = await result.server;
+    expect(serverResult.type).toBe('error');
+
+    await z.close();
+  });
+
+  test('onError is called when mutation runs while offline', async () => {
+    const onErrorSpy = vi.fn();
+    const testSchema = createSchema({
+      tables: [
+        table('issue')
+          .columns({
+            id: string(),
+            title: string(),
+          })
+          .primaryKey('id'),
+      ],
+    });
+
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema: testSchema,
+      mutators: {
+        myMutator: async (_tx: Transaction<typeof testSchema>) => {
+          // Do nothing, just a test mutation
+        },
+      },
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    // Go offline
+    const offlineError = new ClientError({
+      kind: ClientErrorKind.Offline,
+      message: 'Connection offline',
+    });
+
+    z.connectionManager.disconnected(offlineError);
+    await z.waitForConnectionStatus(ConnectionStatus.Disconnected);
+
+    // Now try to run a mutation while offline
+    const result = z.mutate.myMutator();
+
+    const clientResult = await result.client;
+    const serverResult = await result.server;
+
+    // Both should be zero errors
+    expect(clientResult.type).toBe('error');
+    expect(serverResult.type).toBe('error');
+    assert(clientResult.type === 'error');
+    assert(serverResult.type === 'error');
+    expect(clientResult.error.type).toBe('zero');
+    expect(serverResult.error.type).toBe('zero');
+
+    // onError should be called once with the offline error
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalled();
+    });
+
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    expect(onErrorSpy.mock.calls[0][0]).toBe(offlineError);
+
+    await z.close();
+  });
+
+  test('onError is called multiple times for different error types', async () => {
+    const onErrorSpy = vi.fn();
+    const testSchema = createSchema({
+      tables: [
+        table('issue')
+          .columns({
+            id: string(),
+            title: string(),
+          })
+          .primaryKey('id'),
+      ],
+    });
+
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema: testSchema,
+      mutators: {
+        throwingMutator: () => {
+          throw new Error('Mutation error');
+        },
+      },
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    // First error: server protocol error
+    await z.triggerError({
+      kind: ErrorKind.InvalidPush,
+      message: 'Invalid push',
+      origin: ErrorOrigin.ZeroCache,
+    });
+
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    });
+
+    // Reconnect
+    await z.waitForConnectionStatus(ConnectionStatus.Error);
+    await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS);
+    await z.connection.connect();
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
+
+    // Second error: custom mutation error
+    const result = z.mutate.throwingMutator();
+    await result.client;
+
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalledTimes(2);
+    });
+
+    // Verify we got different types of errors
+    const errors = onErrorSpy.mock.calls.map(call => call[0]);
+    expect(isServerError(errors[0])).toBe(true);
+    expect(isApplicationError(errors[1])).toBe(true);
+
+    await z.close();
+  });
+
+  test('onError is not called on successful operations', async () => {
+    const onErrorSpy = vi.fn();
+    const testSchema = createSchema({
+      tables: [
+        table('issue')
+          .columns({
+            id: string(),
+            title: string(),
+          })
+          .primaryKey('id'),
+      ],
+    });
+
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema: testSchema,
+      mutators: {
+        successMutator: async (_tx: Transaction<typeof testSchema>) => {
+          // Successful mutation
+        },
+      },
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    // Run a successful custom mutation
+    const result = z.mutate.successMutator();
+    await result.client;
+
+    // Wait a bit to ensure no async errors are triggered
+    await vi.advanceTimersByTimeAsync(100);
+
+    // onError should never be called
+    expect(onErrorSpy).not.toHaveBeenCalled();
+
+    await z.close();
+  });
+
+  test('onError receives ApplicationError with details for custom mutations', async () => {
+    const onErrorSpy = vi.fn();
+    const testSchema = createSchema({
+      tables: [
+        table('issue')
+          .columns({
+            id: string(),
+            title: string(),
+          })
+          .primaryKey('id'),
+      ],
+    });
+
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema: testSchema,
+      mutators: {
+        validationMutator: () => {
+          throw new ApplicationError('Validation failed', {
+            details: {
+              field: 'title',
+              reason: 'too_short',
+              minLength: 5,
+            },
+          });
+        },
+      },
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    const result = z.mutate.validationMutator();
+    await result.client;
+
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalled();
+    });
+
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    const error = onErrorSpy.mock.calls[0][0];
+    assert(isApplicationError(error), 'error should be an ApplicationError');
+    expect(error.message).toBe('Validation failed');
+    expect(error.details).toEqual({
+      field: 'title',
+      reason: 'too_short',
+      minLength: 5,
+    });
+
+    await z.close();
+  });
+
+  test('onError includes server error reason', async () => {
+    const onErrorSpy = vi.fn();
+    const z = zeroForTest({
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    const serverMessage = 'table missing on remote';
+    await z.triggerError({
+      kind: ErrorKind.VersionNotSupported,
+      message: serverMessage,
+      origin: ErrorOrigin.ZeroCache,
+    });
+
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalled();
+    });
+
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    const error = onErrorSpy.mock.calls[0][0];
+    assert(isServerError(error), 'error should be a server error');
+    expect(error.kind).toBe(ErrorKind.VersionNotSupported);
+    expect(error.message).toBe(serverMessage);
+  });
+
+  test('onError receives server-side ApplicationError from custom mutations', async () => {
+    const onErrorSpy = vi.fn();
+    const testSchema = createSchema({
+      tables: [
+        table('issue')
+          .columns({
+            id: string(),
+            title: string(),
+          })
+          .primaryKey('id'),
+      ],
+    });
+
+    type MutatorTx = Transaction<typeof testSchema>;
+
+    const z = zeroForTest({
+      logLevel: 'debug',
+      schema: testSchema,
+      mutators: {
+        issue: {
+          create: async (tx: MutatorTx, args: {id: string; title: string}) => {
+            await tx.mutate.issue.insert(args);
+          },
+        },
+      },
+      onError: onErrorSpy,
+    });
+
+    await z.triggerConnected();
+    expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+
+    // Trigger a mutation
+    const mutationResult = z.mutate.issue.create({
+      id: '1',
+      title: 'Test Issue',
+    });
+
+    // Wait for the mutation to be tracked and get its ID
+    await vi.advanceTimersByTimeAsync(1);
+
+    // Simulate server response with an application error
+    await z.triggerPushResponse({
+      mutations: [
+        {
+          id: {clientID: z.clientID, id: 1},
+          result: {
+            error: 'app',
+            message: 'Server validation failed',
+            details: {
+              field: 'title',
+              reason: 'contains_profanity',
+            },
+          },
+        },
+      ],
+    });
+
+    // Wait for onError to be called
+    await vi.waitFor(() => {
+      expect(onErrorSpy).toHaveBeenCalled();
+    });
+
+    expect(onErrorSpy).toHaveBeenCalledTimes(1);
+    const error = onErrorSpy.mock.calls[0][0];
+    assert(isApplicationError(error), 'error should be an ApplicationError');
+    expect(error.message).toBe('Server validation failed');
+    expect(error.details).toEqual({
+      field: 'title',
+      reason: 'contains_profanity',
+    });
+
+    // Verify the server promise also rejects with the same error
+    const serverResult = await mutationResult.server;
+    assert(serverResult.type === 'error');
+    assert(serverResult.error.type === 'app');
+    expect(serverResult.error.message).toBe('Server validation failed');
+    expect(serverResult.error.details).toEqual({
+      field: 'title',
+      reason: 'contains_profanity',
+    });
+
+    await z.close();
+  });
 });
 
 test('We should send a deleteClient when a Zero instance is closed', async () => {

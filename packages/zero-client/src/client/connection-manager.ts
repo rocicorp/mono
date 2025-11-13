@@ -13,7 +13,26 @@ import {
 
 const DEFAULT_TIMEOUT_CHECK_INTERVAL_MS = 1_000;
 
-export type ConnectionManagerState =
+/**
+ * The current connection state of the Zero instance. It can be one of the following states:
+ *
+ * - `connecting`: The client is actively trying to connect every 5 seconds.
+ *   - `attempt` counts the number of retries within the current retry window,
+ *   - `disconnectAt` is the epoch timestamp when the client will transition to `disconnected` state
+ *   - `reason` is the optional error associated with the connection attempt.
+ * - `disconnected`: The client is now in an "offline" state. It will continue
+ *   to try to connect every 5 seconds.
+ * - `connected`: The client has opened a successful connection to the server.
+ * - `needs-auth`: Authentication is invalid or expired. No connection retries will be made
+ *   until the host application calls `connect({auth: token})`.
+ *   - `reason` is the `ZeroError` associated with the error state.
+ * - `error`: A fatal error occurred. No connection retries will be made until the host
+ *   application calls `connect()` again.
+ *   - `reason` is the `ZeroError` associated with the error state.
+ * - `closed`: The client was shut down (for example via `zero.close()`). This is
+ *   a terminal state, and a new Zero instance must be created to reconnect.
+ */
+export type ConnectionState =
   | {
       name: ConnectionStatus.Disconnected;
       reason: OfflineError;
@@ -59,13 +78,13 @@ const TERMINAL_STATES = [
 ] as const satisfies ConnectionStatus[];
 
 type TerminalConnectionStatus = (typeof TERMINAL_STATES)[number];
-type TerminalConnectionManagerState = Extract<
-  ConnectionManagerState,
+type TerminalConnectionState = Extract<
+  ConnectionState,
   {name: TerminalConnectionStatus}
 >;
 
-export class ConnectionManager extends Subscribable<ConnectionManagerState> {
-  #state: ConnectionManagerState;
+export class ConnectionManager extends Subscribable<ConnectionState> {
+  #state: ConnectionState;
 
   /**
    * The timestamp when we first started trying to connect.
@@ -94,7 +113,7 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
   /**
    * Resolver used to signal waiting callers when the state changes.
    */
-  #stateChangeResolver: Resolver<ConnectionManagerState> = resolver();
+  #stateChangeResolver: Resolver<ConnectionState> = resolver();
 
   constructor(options: ConnectionManagerOptions) {
     super();
@@ -113,7 +132,7 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
     this.#maybeStartTimeoutInterval();
   }
 
-  get state(): ConnectionManagerState {
+  get state(): ConnectionState {
     return this.#state;
   }
 
@@ -137,8 +156,8 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
    * that can be recovered from by calling connect().
    */
   static isTerminalState(
-    state: ConnectionManagerState,
-  ): state is TerminalConnectionManagerState {
+    state: ConnectionState,
+  ): state is TerminalConnectionState {
     return (TERMINAL_STATES as readonly ConnectionStatus[]).includes(
       state.name,
     );
@@ -157,7 +176,7 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
    * Waits for the next state change.
    * @returns A promise that resolves when the next state change occurs.
    */
-  waitForStateChange(): Promise<ConnectionManagerState> {
+  waitForStateChange(): Promise<ConnectionState> {
     return this.#nextStatePromise();
   }
 
@@ -170,7 +189,7 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
    * @returns An object containing a promise that resolves on the next state change.
    */
   connecting(reason?: ZeroError): {
-    nextStatePromise: Promise<ConnectionManagerState>;
+    nextStatePromise: Promise<ConnectionState>;
   } {
     // cannot transition from closed to any other status
     if (this.#state.name === ConnectionStatus.Closed) {
@@ -224,7 +243,7 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
    *
    * @returns An object containing a promise that resolves on the next state change.
    */
-  connected(): {nextStatePromise: Promise<ConnectionManagerState>} {
+  connected(): {nextStatePromise: Promise<ConnectionState>} {
     // cannot transition from closed to any other status
     if (this.#state.name === ConnectionStatus.Closed) {
       return {nextStatePromise: this.#nextStatePromise()};
@@ -254,7 +273,7 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
    * @returns An object containing a promise that resolves on the next state change.
    */
   disconnected(reason: OfflineError): {
-    nextStatePromise: Promise<ConnectionManagerState>;
+    nextStatePromise: Promise<ConnectionState>;
   } {
     // cannot transition from closed to any other status
     if (this.#state.name === ConnectionStatus.Closed) {
@@ -292,7 +311,7 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
    * @returns An object containing a promise that resolves on the next state change.
    */
   needsAuth(reason: AuthError): {
-    nextStatePromise: Promise<ConnectionManagerState>;
+    nextStatePromise: Promise<ConnectionState>;
   } {
     // cannot transition from closed to any other status
     if (this.#state.name === ConnectionStatus.Closed) {
@@ -323,9 +342,7 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
    *
    * @returns An object containing a promise that resolves on the next state change.
    */
-  error(reason: ZeroError): {
-    nextStatePromise: Promise<ConnectionManagerState>;
-  } {
+  error(reason: ZeroError): {nextStatePromise: Promise<ConnectionState>} {
     // cannot transition from closed to any other status
     if (this.#state.name === ConnectionStatus.Closed) {
       return {nextStatePromise: this.#nextStatePromise()};
@@ -388,11 +405,11 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
     this.#resolveNextStateWaiters();
   }
 
-  #nextStatePromise(): Promise<ConnectionManagerState> {
+  #nextStatePromise(): Promise<ConnectionState> {
     return this.#stateChangeResolver.promise;
   }
 
-  #publishStateAndGetPromise(): Promise<ConnectionManagerState> {
+  #publishStateAndGetPromise(): Promise<ConnectionState> {
     this.#publishState();
     return this.#nextStatePromise();
   }
@@ -443,7 +460,7 @@ export class ConnectionManager extends Subscribable<ConnectionManagerState> {
  *
  * @param state - The current connection state.
  */
-export const throwIfConnectionError = (state: ConnectionManagerState) => {
+export const throwIfConnectionError = (state: ConnectionState) => {
   if (
     ConnectionManager.isTerminalState(state) ||
     state.name === ConnectionStatus.Closed ||

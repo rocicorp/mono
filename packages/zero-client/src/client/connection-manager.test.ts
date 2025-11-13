@@ -4,10 +4,10 @@ import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
+import type {ConnectionState} from './connection-manager.ts';
 import {
   ConnectionManager,
   throwIfConnectionError,
-  type ConnectionManagerState,
 } from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {ClientError, type AuthError} from './error.ts';
@@ -30,7 +30,7 @@ describe('ConnectionManager', () => {
   });
 
   const subscribe = (manager: ConnectionManager) => {
-    const listener = vi.fn<(state: ConnectionManagerState) => void>();
+    const listener = vi.fn<(state: ConnectionState) => void>();
     manager.subscribe(listener);
     return listener;
   };
@@ -895,7 +895,7 @@ describe('ConnectionManager', () => {
 
   describe('throwIfConnectionError', () => {
     test('does nothing when state is connecting without reason', () => {
-      const state: ConnectionManagerState = {
+      const state: ConnectionState = {
         name: ConnectionStatus.Connecting,
         attempt: 1,
         disconnectAt: 1_000,
@@ -909,7 +909,7 @@ describe('ConnectionManager', () => {
         kind: ClientErrorKind.ClientClosed,
         message: 'internal failure',
       });
-      const state: ConnectionManagerState = {
+      const state: ConnectionState = {
         name: ConnectionStatus.Closed,
         reason,
       };
@@ -922,7 +922,7 @@ describe('ConnectionManager', () => {
         kind: ClientErrorKind.ConnectTimeout,
         message: 'connect timeout',
       });
-      const state: ConnectionManagerState = {
+      const state: ConnectionState = {
         name: ConnectionStatus.Connecting,
         attempt: 2,
         disconnectAt: 2_000,
@@ -937,7 +937,7 @@ describe('ConnectionManager', () => {
         kind: ClientErrorKind.CleanClose,
         message: 'clean close',
       });
-      const state: ConnectionManagerState = {
+      const state: ConnectionState = {
         name: ConnectionStatus.Error,
         reason,
       };
@@ -950,7 +950,7 @@ describe('ConnectionManager', () => {
         kind: ClientErrorKind.Internal,
         message: 'disconnect internal',
       });
-      const state: ConnectionManagerState = {
+      const state: ConnectionState = {
         name: ConnectionStatus.Error,
         reason,
       };
@@ -964,7 +964,7 @@ describe('ConnectionManager', () => {
         message: 'unauthorized',
         origin: ErrorOrigin.ZeroCache,
       }) as AuthError;
-      const state: ConnectionManagerState = {
+      const state: ConnectionState = {
         name: ConnectionStatus.NeedsAuth,
         reason,
       };

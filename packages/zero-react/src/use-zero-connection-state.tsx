@@ -1,5 +1,5 @@
 import {useSyncExternalStore} from 'react';
-import type {ConnectionState} from '../../zero-client/src/client/connection.ts';
+import type {ConnectionState} from '../../zero-client/src/client/connection-manager.ts';
 import {useZero} from './zero-provider.tsx';
 
 /**

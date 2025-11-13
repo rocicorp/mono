@@ -1,14 +1,16 @@
 import {renderHook} from '@solidjs/testing-library';
 import {afterEach, describe, expect, test, vi, type Mock} from 'vitest';
+import type {ConnectionState} from '../../zero-client/src/client/connection-manager.ts';
 import {ConnectionStatus} from '../../zero-client/src/client/connection-status.ts';
-import type {ConnectionState} from '../../zero-client/src/client/connection.ts';
+import {ClientError} from '../../zero-client/src/client/error.ts';
 
 vi.mock('./use-zero.ts', () => ({
   useZero: vi.fn(),
 }));
 
-import {useZeroConnectionState} from './use-zero-connection-state.ts';
 import {useZero} from './use-zero.ts';
+import {useZeroConnectionState} from './use-zero-connection-state.ts';
+import {ClientErrorKind} from '../../zero-client/src/client/client-error-kind.ts';
 
 type ZeroLike = {
   connection: {
@@ -59,7 +61,9 @@ function mockZero(initialState: ConnectionState) {
 describe('useZeroConnectionState (Solid)', () => {
   test('returns the current connection state and updates on changes', () => {
     const initialState: ConnectionState = {
-      name: 'connecting',
+      name: ConnectionStatus.Connecting,
+      attempt: 0,
+      disconnectAt: Date.now() + 5000,
     };
     const {stateStore, listeners, subscribeMock} = mockZero(initialState);
 
@@ -70,7 +74,10 @@ describe('useZeroConnectionState (Solid)', () => {
 
     const nextState: ConnectionState = {
       name: ConnectionStatus.Disconnected,
-      reason: 'disconnected error',
+      reason: new ClientError({
+        kind: ClientErrorKind.Offline,
+        message: 'disconnected',
+      }),
     };
 
     stateStore.current = nextState;

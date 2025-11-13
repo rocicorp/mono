@@ -1,64 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {unreachable} from '../../../shared/src/asserts.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import type {
-  ConnectionManager,
-  ConnectionManagerState,
-} from './connection-manager.ts';
-import {ConnectionStatus} from './connection-status.ts';
-
-/**
- * The current connection state of the Zero instance. One of the following states:
- *
- * - `connecting`: The client is actively trying to connect every 5 seconds.
- * - `disconnected`: The client is now in an "offline" state. It will continue
- *   to try to connect every 5 seconds.
- * - `connected`: The client has opened a successful connection to the server.
- * - `needs-auth`: Authentication is invalid or expired. No connection retries will be made
- *   until the host application calls `connect()`.
- * - `error`: A fatal error occurred. No connection retries will be made until the host
- *   application calls `connect()` again.
- * - `closed`: The client was shut down (for example via `zero.close()`). This is
- *   a terminal state, and a new Zero instance must be created to reconnect.
- */
-export type ConnectionState =
-  | {
-      name: 'disconnected';
-      reason: string;
-    }
-  | {
-      name: 'connecting';
-      reason?: string;
-    }
-  | {
-      name: 'connected';
-    }
-  | {
-      name: 'needs-auth';
-      reason:
-        | {
-            type: 'mutate';
-            status: 401 | 403;
-            body?: string;
-          }
-        | {
-            type: 'get-queries';
-            status: 401 | 403;
-            body?: string;
-          }
-        | {
-            type: 'zero-cache';
-            reason: string;
-          };
-    }
-  | {
-      name: 'error';
-      reason: string;
-    }
-  | {
-      name: 'closed';
-      reason: string;
-    };
+import type {ConnectionManager, ConnectionState} from './connection-manager.ts';
 
 export interface Source<T> {
   /**
@@ -155,68 +96,10 @@ export class ConnectionSource implements Source<ConnectionState> {
   }
 
   get current(): ConnectionState {
-    return this.mapConnectionManagerState(this.#connectionManager.state);
+    return this.#connectionManager.state;
   }
 
-  subscribe = (listener: (obj: ConnectionState) => void): (() => void) =>
-    this.#connectionManager.subscribe(state =>
-      listener(this.mapConnectionManagerState(state)),
-    );
-
-  mapConnectionManagerState(state: ConnectionManagerState): ConnectionState {
-    switch (state.name) {
-      case ConnectionStatus.Closed:
-        return {
-          name: 'closed',
-          reason: state.reason.message,
-        };
-      case ConnectionStatus.Connected:
-        return {
-          name: 'connected',
-        };
-      case ConnectionStatus.Connecting:
-        return {
-          name: 'connecting',
-          ...(state.reason?.message ? {reason: state.reason.message} : {}),
-        };
-      case ConnectionStatus.Disconnected:
-        return {
-          name: 'disconnected',
-          reason: state.reason.message,
-        };
-      case ConnectionStatus.Error:
-        return {
-          name: 'error',
-          reason: state.reason.message,
-        };
-      case ConnectionStatus.NeedsAuth:
-        return {
-          name: 'needs-auth',
-          reason:
-            state.reason.errorBody.kind === ErrorKind.PushFailed
-              ? {
-                  type: 'mutate',
-                  status: state.reason.errorBody.status,
-                  ...(state.reason.errorBody.bodyPreview
-                    ? {body: state.reason.errorBody.bodyPreview}
-                    : {}),
-                }
-              : state.reason.errorBody.kind === ErrorKind.TransformFailed
-                ? {
-                    type: 'get-queries',
-                    status: state.reason.errorBody.status,
-                    ...(state.reason.errorBody.bodyPreview
-                      ? {body: state.reason.errorBody.bodyPreview}
-                      : {}),
-                  }
-                : {
-                    type: 'zero-cache',
-                    reason: state.reason.message,
-                  },
-        };
-
-      default:
-        unreachable(state);
-    }
+  get subscribe() {
+    return this.#connectionManager.subscribe;
   }
 }
