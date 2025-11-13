@@ -86,10 +86,8 @@ export const queries = {
       }),
     },
     ({args: {projectName}}) =>
-      builder.label.whereExists(
-        'project',
-        q => q.where('lowerCaseName', projectName.toLocaleLowerCase()),
-        {flip: true},
+      builder.label.whereExists('project', q =>
+        q.where('lowerCaseName', projectName.toLocaleLowerCase()),
       ),
   ),
 
