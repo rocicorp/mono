@@ -190,14 +190,12 @@ export class PlannerJoin {
 
   /**
    * Called when a parent join is flipped and this join is part of its child subgraph.
-   * - Semi-join: continue propagation to parent (the outer loop)
-   * - Flipped join: stop propagation (already unlimited when it was flipped)
+   * Continue propagation to parent (the outer loop).
+   * If we are hitting a semi-join, the parent drives.
+   * If we are hitting a flip-join, well now we have unlimited its parent too!
    */
   propagateUnlimitFromFlippedJoin(): void {
-    if (this.#type === 'semi') {
-      this.#parent.propagateUnlimitFromFlippedJoin();
-    }
-    // For flipped joins, stop propagation
+    this.#parent.propagateUnlimitFromFlippedJoin();
   }
 
   propagateConstraints(
