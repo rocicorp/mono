@@ -25,14 +25,16 @@ const statusSchema = v.object({
   /**
    * The `replicaVersion` of the backup. If a subscriber's restored or
    * existing replica is of a different version, it should delete it and
-   * retry the restore from litestream.
+   * retry the restore from litestream (i.e. equivalent to a
+   * `WrongReplicaVersion` response from a `/changes` subscription).
    */
   replicaVersion: v.string(),
 
   /**
    * The earliest watermark from which catchup is possible. If the
    * subscriber's replica is older that this watermark, it should delete it
-   * and (retry the) restore from litestream.
+   * and (retry the) restore from litestream (i.e. equivalent to a
+   * `WatermarkTooOld` response from a `/changes` subscription).
    */
   minWatermark: v.string(),
 });
