@@ -1,3 +1,4 @@
+import {ConnectionStatus} from '@rocicorp/zero';
 import {useQuery, useZeroConnectionState} from '@rocicorp/zero/react';
 import {FPSMeter} from '@schickling/fps-meter';
 import classNames from 'classnames';
@@ -220,8 +221,8 @@ const ConnectionStatusPill = () => {
   });
 
   return shouldShowConnecting &&
-    (connectionState.name === 'connecting' ||
-      connectionState.name === 'disconnected') ? (
+    (connectionState.name === ConnectionStatus.Connecting ||
+      connectionState.name === ConnectionStatus.Disconnected) ? (
     <div className="connection-status-container">
       <div className="connection-status-pill">
         <svg
@@ -243,7 +244,9 @@ const ConnectionStatusPill = () => {
           <path d="m12 6 6 6 2.3-2.3a2.4 2.4 0 0 0 0-3.4l-2.6-2.6a2.4 2.4 0 0 0-3.4 0Z" />
         </svg>
         <span>
-          {connectionState.name === 'disconnected' ? 'Offline' : 'Connecting'}
+          {connectionState.name === ConnectionStatus.Disconnected
+            ? 'Offline'
+            : 'Connecting'}
         </span>
       </div>
     </div>
