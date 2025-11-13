@@ -86,7 +86,6 @@ jobs:
           ZERO_CHANGE_DB: ${{ secrets.PROD_ZERO_CHANGE_DB }}
           ZERO_AUTH_JWK: ${{ secrets.PROD_ZERO_AUTH_JWK }}
           ZERO_APP_PUBLICATIONS: ${{ vars.PROD_ZERO_APP_PUBLICATIONS }}
-          ZERO_ENABLE_QUERY_PLANNER: 'true'
           AWS_REGION: ${{ vars.AWS_DEFAULT_REGION }}
           ZERO_IMAGE_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_DEFAULT_REGION }}.amazonaws.com/${{ env.ECR_IMAGE_ZERO_CACHE }}:${{ env.SHA }}
           DOMAIN_NAME: 'zbugs-sync.rocicorp.dev'
