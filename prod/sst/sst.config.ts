@@ -61,6 +61,8 @@ export default $config({
       ZERO_CHANGE_DB: process.env.ZERO_CHANGE_DB!,
       ZERO_AUTH_JWK: process.env.ZERO_AUTH_JWK!,
       ZERO_LOG_FORMAT: 'json',
+      ZERO_ENABLE_QUERY_PLANNER:
+        process.env.ZERO_ENABLE_QUERY_PLANNER || 'true',
       ZERO_REPLICA_FILE: IS_EBS_STAGE
         ? '/data/sync-replica.db'
         : 'sync-replica.db',
