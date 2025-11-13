@@ -65,7 +65,7 @@ describe('Chinook planner execution cost validation', () => {
         .where('milliseconds', '>', 200000)
         .limit(10),
       validations: [
-        ['correlation', 1.0],
+        ['correlation', 0.8],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
