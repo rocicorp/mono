@@ -5,6 +5,9 @@
 
 # sqlite dbs
 *.db
+*.db-shm
+*.db-wal
+*.db-wal2
 
 # turbo
 .turbo
