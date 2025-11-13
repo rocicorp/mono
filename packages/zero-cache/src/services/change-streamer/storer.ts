@@ -158,6 +158,14 @@ export class Storer implements Service {
     return lastWatermark;
   }
 
+  async getMinWatermarkForCatchup(): Promise<string | null> {
+    const [{minWatermark}] = await this.#db<
+      {minWatermark: string | null}[]
+    > /*sql*/ `
+      SELECT min(watermark) as "minWatermark" FROM ${this.#cdc('changeLog')}`;
+    return minWatermark;
+  }
+
   purgeRecordsBefore(watermark: string): Promise<number> {
     return this.#db.begin(Mode.SERIALIZABLE, async sql => {
       disableStatementTimeout(sql);

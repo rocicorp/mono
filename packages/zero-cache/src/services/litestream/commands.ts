@@ -4,12 +4,19 @@ import {ChildProcess, spawn} from 'node:child_process';
 import {existsSync} from 'node:fs';
 import {must} from '../../../../shared/src/must.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
 import {assertNormalized} from '../../config/normalize.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
+import {deleteLiteDB} from '../../db/delete-lite-db.ts';
+import {StatementRunner} from '../../db/statements.ts';
 import {getShardConfig} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
 import {ChangeStreamerHttpClient} from '../change-streamer/change-streamer-http.ts';
-import type {SnapshotMessage} from '../change-streamer/snapshot.ts';
+import type {
+  SnapshotMessage,
+  SnapshotStatus,
+} from '../change-streamer/snapshot.ts';
+import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 
 // Retry for up to 3 minutes (60 times with 3 second delay).
 // Beyond that, let the container runner restart the task.
@@ -112,24 +119,24 @@ async function tryRestore(lc: LogContext, config: ZeroConfig) {
 
   // Fire off a snapshot reservation to the current replication-manager
   // (if there is one).
-  const backupURL = reserveAndGetSnapshotLocation(lc, config, isViewSyncer);
-  let backupURLOverride: string | undefined;
+  const firstMessage = reserveAndGetSnapshotStatus(lc, config, isViewSyncer);
+  let snapshotStatus: SnapshotStatus | undefined;
   if (isViewSyncer) {
     // The return value is required by view-syncers ...
-    backupURLOverride = await backupURL;
-    lc.info?.(`restoring backup from ${backupURLOverride}`);
+    snapshotStatus = await firstMessage;
+    lc.info?.(`restoring backup from ${snapshotStatus.backupURL}`);
   } else {
     // but it is also useful to pause change-log cleanup when a new
     // replication-manager is starting up. In this case, the request is
     // best-effort. In particular, there may not be a previous
     // replication-manager running at all.
-    void backupURL.catch(e => lc.debug?.(e));
+    void firstMessage.catch(e => lc.debug?.(e));
   }
 
   const {litestream, env} = getLitestream(
     config,
     'debug', // Include all output from `litestream restore`, as it's minimal.
-    backupURLOverride,
+    snapshotStatus?.backupURL,
   );
   const {restoreParallelism: parallelism} = config.litestream;
   const proc = spawn(
@@ -156,7 +163,51 @@ async function tryRestore(lc: LogContext, config: ZeroConfig) {
     }
   });
   await promise;
-  return existsSync(config.replica.file);
+  if (!existsSync(config.replica.file)) {
+    return false;
+  }
+  if (
+    snapshotStatus &&
+    !replicaIsValid(lc, config.replica.file, snapshotStatus)
+  ) {
+    lc.info?.(`Deleting local replica and retrying restore`);
+    deleteLiteDB(config.replica.file);
+    return false;
+  }
+  return true;
+}
+
+function replicaIsValid(
+  lc: LogContext,
+  replica: string,
+  snapshot: SnapshotStatus,
+) {
+  const db = new Database(lc, replica);
+  try {
+    const {replicaVersion, watermark} = getSubscriptionState(
+      new StatementRunner(db),
+    );
+    if (replicaVersion !== snapshot.replicaVersion) {
+      lc.warn?.(
+        `Local replica version ${replicaVersion} does not match change-streamer replicaVersion ${snapshot.replicaVersion}`,
+        snapshot,
+      );
+      return false;
+    }
+    if (watermark < snapshot.minWatermark) {
+      lc.warn?.(
+        `Local replica watermark ${watermark} is earlier than change-streamer minWatermark ${snapshot.minWatermark}`,
+      );
+      return false;
+    }
+    lc.info?.(
+      `Local replica at version ${replicaVersion} and watermark ${watermark} is compatible with change-streamer`,
+      snapshot,
+    );
+    return true;
+  } finally {
+    db.close();
+  }
 }
 
 export function startReplicaBackupProcess(config: ZeroConfig): ChildProcess {
@@ -168,12 +219,12 @@ export function startReplicaBackupProcess(config: ZeroConfig): ChildProcess {
   });
 }
 
-function reserveAndGetSnapshotLocation(
+function reserveAndGetSnapshotStatus(
   lc: LogContext,
   config: ZeroConfig,
   isViewSyncer: boolean,
-): Promise<string> {
-  const {promise: backupURL, resolve, reject} = resolver<string>();
+): Promise<SnapshotStatus> {
+  const {promise: status, resolve, reject} = resolver<SnapshotStatus>();
 
   void (async function () {
     const abort = new AbortController();
@@ -189,7 +240,7 @@ function reserveAndGetSnapshotLocation(
           // Capture the value of the status message that the change-streamer
           // (i.e. BackupMonitor) returns, and hold the connection open to
           // "reserve" the snapshot and prevent change log cleanup.
-          resolve(msg[1].backupURL);
+          resolve(msg[1]);
           resolved = true;
         }
         // The change-streamer itself closes the connection when the
@@ -223,7 +274,7 @@ function reserveAndGetSnapshotLocation(
     }
   })();
 
-  return backupURL;
+  return status;
 }
 
 function reserveSnapshot(

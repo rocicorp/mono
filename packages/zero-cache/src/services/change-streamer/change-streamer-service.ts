@@ -459,6 +459,17 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     }
   }
 
+  async getChangeLogState(): Promise<{
+    replicaVersion: string;
+    minWatermark: string;
+  }> {
+    const minWatermark = await this.#storer.getMinWatermarkForCatchup();
+    return {
+      replicaVersion: this.#replicaVersion,
+      minWatermark: minWatermark ?? this.#replicaVersion,
+    };
+  }
+
   async #purgeOldChanges(): Promise<void> {
     const initial = [...this.#initialWatermarks];
     if (initial.length === 0) {
