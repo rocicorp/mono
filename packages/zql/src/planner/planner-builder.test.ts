@@ -511,22 +511,32 @@ suite('buildPlanGraph', () => {
       expect(join.type).toBe('flipped');
     });
 
-    test('flip: true throws error - manual flips are not supported', () => {
+    test('flip: true forces join to be flipped and not flippable', () => {
       const ast = getAST(builder.users.whereExists('posts', {flip: true}));
+      const plans = buildPlanGraph(ast, simpleCostModel, true);
 
-      // Should throw ManuallyPlannedError when trying to build plan graph
-      expect(() => buildPlanGraph(ast, simpleCostModel, true)).toThrow(
-        'Manually planned queries (with flip set) cannot be processed by the automatic planner',
-      );
+      expect(plans.plan.joins).toHaveLength(1);
+      const join = plans.plan.joins[0];
+
+      // Join should NOT be flippable (user specified flip: true)
+      expect(join.isFlippable()).toBe(false);
+      // Should start in flipped state
+      expect(join.type).toBe('flipped');
     });
 
-    test('flip: false throws error - manual flips are not supported', () => {
+    test('flip: false forces join to stay semi and not be flippable', () => {
       const ast = getAST(builder.users.whereExists('posts', {flip: false}));
+      const plans = buildPlanGraph(ast, simpleCostModel, true);
 
-      // Should throw ManuallyPlannedError when trying to build plan graph
-      expect(() => buildPlanGraph(ast, simpleCostModel, true)).toThrow(
-        'Manually planned queries (with flip set) cannot be processed by the automatic planner',
-      );
+      expect(plans.plan.joins).toHaveLength(1);
+      const join = plans.plan.joins[0];
+
+      // Join should NOT be flippable (user specified flip: false)
+      expect(join.isFlippable()).toBe(false);
+      // Should start in semi-join state
+      expect(join.type).toBe('semi');
+      // Should not be able to flip
+      expect(() => join.flip()).toThrow('Cannot flip a non-flippable join');
     });
 
     test('NOT EXISTS is never flippable, regardless of flip flag', () => {
@@ -558,32 +568,40 @@ suite('buildPlanGraph', () => {
       expect(() => join.flip()).toThrow('Cannot flip a non-flippable join');
     });
 
-    test('any manual flip in query throws error - even with multiple joins', () => {
-      // If any join has a manual flip, the planner refuses to plan the entire query
-      const astWithOneFlip = getAST(
+    test('multiple joins with mixed flip settings', () => {
+      const ast = getAST(
         builder.users
-          .whereExists('posts', {flip: true}) // Manual flip
-          .whereExists('comments'), // Auto
-      );
+          .whereExists('posts', {flip: true}) // Force flip
+          .whereExists('comments', {flip: false}) // Force semi
+          .whereExists('likes'),
+      ); // Let planner decide (flip: undefined)
+      const plans = buildPlanGraph(ast, simpleCostModel, true);
 
-      expect(() =>
-        buildPlanGraph(astWithOneFlip, simpleCostModel, true),
-      ).toThrow(
-        'Manually planned queries (with flip set) cannot be processed by the automatic planner',
-      );
+      expect(plans.plan.joins).toHaveLength(3);
 
-      // Same with flip: false
-      const astWithFalseFlip = getAST(
-        builder.users
-          .whereExists('posts') // Auto
-          .whereExists('comments', {flip: false}), // Manual flip
-      );
+      // First join (flip: true) should be flipped and not flippable
+      expect(plans.plan.joins[0].type).toBe('flipped');
+      expect(plans.plan.joins[0].isFlippable()).toBe(false);
 
-      expect(() =>
-        buildPlanGraph(astWithFalseFlip, simpleCostModel, true),
-      ).toThrow(
-        'Manually planned queries (with flip set) cannot be processed by the automatic planner',
-      );
+      // Second join (flip: false) should be semi and not flippable
+      expect(plans.plan.joins[1].type).toBe('semi');
+      expect(plans.plan.joins[1].isFlippable()).toBe(false);
+
+      // Third join (flip: undefined) should be semi and flippable
+      expect(plans.plan.joins[2].type).toBe('semi');
+      expect(plans.plan.joins[2].isFlippable()).toBe(true);
+    });
+
+    test('reset() restores join to initial type', () => {
+      const ast = getAST(builder.users.whereExists('posts', {flip: true}));
+      const plans = buildPlanGraph(ast, simpleCostModel, true);
+
+      const join = plans.plan.joins[0];
+      expect(join.type).toBe('flipped');
+
+      // Reset should restore to initial type (flipped)
+      join.reset();
+      expect(join.type).toBe('flipped');
     });
   });
 });

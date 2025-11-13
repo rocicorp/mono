@@ -240,14 +240,6 @@ function processCorrelatedSubquery(
   const isNotExists = condition.op === 'NOT EXISTS';
   const manualFlip = condition.flip;
 
-  if (manualFlip !== undefined) {
-    // Not sure of the better dx here yet.
-    // A. let a user specify a few flips and the planner do the rest. Can be confusing but also can be simpler.
-    // B. if the user specifies any flip, they have to specify all flips. More work but more explicit.
-    // For now going with B.
-    throw new ManuallyPlannedError();
-  }
-
   let flippable: boolean;
   let initialType: 'semi' | 'flipped';
 
@@ -315,16 +307,9 @@ export function planQuery(
   model: ConnectionCostModel,
   planDebugger?: PlanDebugger,
 ): AST {
-  try {
-    const plans = buildPlanGraph(ast, model, true);
-    planRecursively(plans, planDebugger);
-    return applyPlansToAST(ast, plans);
-  } catch (e) {
-    if (e instanceof ManuallyPlannedError) {
-      return ast;
-    }
-    throw e;
-  }
+  const plans = buildPlanGraph(ast, model, true);
+  planRecursively(plans, planDebugger);
+  return applyPlansToAST(ast, plans);
 }
 
 function applyToCondition(
@@ -387,12 +372,4 @@ export function applyPlansToAST(ast: AST, plans: Plans): AST {
       };
     }),
   };
-}
-
-class ManuallyPlannedError extends Error {
-  constructor() {
-    super(
-      'Manually planned queries (with flip set) cannot be processed by the automatic planner',
-    );
-  }
 }
