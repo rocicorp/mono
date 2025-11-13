@@ -88,6 +88,8 @@ describe('sendError', () => {
         kind: ErrorKind.TransformFailed,
         message: 'bad transform config',
         origin: ErrorOrigin.ZeroCache,
+        queryIDs: ['query1'],
+        reason: 'internal',
       },
       undefined,
     );
