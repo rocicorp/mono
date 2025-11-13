@@ -1,8 +1,11 @@
 import type {LogLevel} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
+import type {MaybePromise} from '../../../shared/src/types.ts';
 import * as v from '../../../shared/src/valita.ts';
+import type {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {CustomMutatorDefs} from './custom.ts';
+import type {ZeroError} from './error.ts';
 import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 
 /**
@@ -158,7 +161,7 @@ export interface ZeroOptions<
    *
    * Default is 5 minutes.
    */
-  disconnectTimeoutMs?: number | undefined;
+  disconnectTimeout?: number | undefined;
 
   /**
    * The timeout in milliseconds for ping operations. This value is used for:
@@ -170,6 +173,20 @@ export interface ZeroOptions<
    * Default is 5_000.
    */
   pingTimeoutMs?: number | undefined;
+
+  /**
+   * Invoked whenever Zero encounters an error.
+   *
+   * The argument is either an error originating from the server/zero-cache,
+   * client error (offline transitions, ping timeouts, websocket errors, etc),
+   * or an application error (e.g. a custom mutator error).
+   *
+   * Use this callback only to surface errors in your metrics/telemetry - use the
+   * `zero.connection` API for handling errors in the UI.
+   *
+   * When `onError` is omitted, Zero logs the error to the browser console.
+   */
+  onError?: (error: ZeroError | ApplicationError) => MaybePromise<void>;
 
   /**
    * Determines what kind of storage implementation to use on the client.
