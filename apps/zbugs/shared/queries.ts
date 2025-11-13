@@ -155,16 +155,26 @@ export const queries = {
             and(cmp('role', 'crew'), not(cmp('login', 'LIKE', 'rocibot%'))),
           );
         } else if (filter === 'creators') {
-          q = q.whereExists('createdIssues', i =>
-            i.whereExists('project', p =>
-              p.where('lowerCaseName', projectName.toLocaleLowerCase()),
-            ),
+          q = q.whereExists(
+            'createdIssues',
+            i =>
+              i.whereExists(
+                'project',
+                p => p.where('lowerCaseName', projectName.toLocaleLowerCase()),
+                {flip: true},
+              ),
+            {flip: false},
           );
         } else if (filter === 'assignees') {
-          q = q.whereExists('assignedIssues', i =>
-            i.whereExists('project', p =>
-              p.where('lowerCaseName', projectName.toLocaleLowerCase()),
-            ),
+          q = q.whereExists(
+            'assignedIssues',
+            i =>
+              i.whereExists(
+                'project',
+                p => p.where('lowerCaseName', projectName.toLocaleLowerCase()),
+                {flip: true},
+              ),
+            {flip: false},
           );
         } else {
           throw new QueryError(
