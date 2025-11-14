@@ -1362,7 +1362,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           customQueries,
         );
 
-        // Reconcile pipelines: replace queries whose transformation hash changed.
+        // Check for queries whose transformation hash changed and log for debugging.
+        // The old pipelines will be automatically removed via unhydrateQueries,
+        // and new pipelines will be added via addQueries.
         for (const [queryID, newTransform] of successfullyTransformed) {
           const existingTransforms = byOriginalHash.get(queryID);
           if (existingTransforms && existingTransforms.length > 0) {
@@ -1370,32 +1372,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             const newHash = newTransform.transformationHash;
 
             if (oldHash !== newHash) {
-              // Transformation changed - remove old pipeline, new one will be added.
+              // Transformation changed - log and check for thrashing.
+              // The unhydrateQueries mechanism below will remove the old pipeline,
+              // and addQueries will add the new one.
               lc.info?.(
                 `Query ${queryID} transformation changed: ${oldHash} -> ${newHash}`,
               );
-              this.#pipelines.removeQuery(oldHash);
               this.#checkForThrashing(queryID);
             }
             // else: hash is the same, addQuery will no-op (no re-hydration needed)
           }
           // else: new query, will be added normally
-        }
-
-        // Dematerialize queries that failed transformation (auth errors).
-        // These queries are no longer authorized and should be removed.
-        if (erroredQueryIDs) {
-          for (const queryID of erroredQueryIDs) {
-            const existingTransforms = byOriginalHash.get(queryID);
-            if (existingTransforms && existingTransforms.length > 0) {
-              for (const {transformationHash} of existingTransforms) {
-                lc.info?.(
-                  `Removing pipeline for query ${queryID} (hash: ${transformationHash}) due to transformation failure`,
-                );
-                this.#pipelines.removeQuery(transformationHash);
-              }
-            }
-          }
         }
       }
 
