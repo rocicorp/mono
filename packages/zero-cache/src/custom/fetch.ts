@@ -12,9 +12,19 @@ import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {getErrorMessage} from '../../../shared/src/error.ts';
-import {UrlConfigurationError} from '../types/error-with-level.ts';
+import {ErrorWithLevel} from '../types/error-with-level.ts';
 
 const reservedParams = ['schema', 'appID'];
+
+class UrlConfigurationError extends ErrorWithLevel {
+  constructor(url: string, options?: ErrorOptions) {
+    super(
+      `URL "${url}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
+      'warn',
+      options,
+    );
+  }
+}
 
 /**
  * Compiles and validates a URLPattern from configuration.

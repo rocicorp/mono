@@ -34,16 +34,6 @@ export class ProtocolErrorWithLevel extends ProtocolError {
   }
 }
 
-export class UrlConfigurationError extends ErrorWithLevel {
-  constructor(url: string, options?: ErrorOptions) {
-    super(
-      `URL "${url}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
-      'warn',
-      options,
-    );
-  }
-}
-
 export function getLogLevel(error: unknown): LogLevel {
   if (error instanceof ErrorWithLevel) {
     return error.logLevel;

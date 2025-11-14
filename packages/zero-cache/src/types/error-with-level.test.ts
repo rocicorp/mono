@@ -9,7 +9,6 @@ import {
   getLogLevel,
   logError,
   ProtocolErrorWithLevel,
-  UrlConfigurationError,
 } from './error-with-level.ts';
 
 describe('ErrorWithLevel', () => {
@@ -22,17 +21,6 @@ describe('ErrorWithLevel', () => {
   test('defaults to error log level', () => {
     const error = new ErrorWithLevel('test message');
     expect(error.logLevel).toBe('error');
-  });
-});
-
-describe('UrlConfigurationError', () => {
-  test('creates error with warn log level', () => {
-    const error = new UrlConfigurationError('https://example.com');
-    expect(error.message).toContain('https://example.com');
-    expect(error.message).toContain(
-      'not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration',
-    );
-    expect(error.logLevel).toBe('warn');
   });
 });
 

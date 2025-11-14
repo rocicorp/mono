@@ -22,7 +22,7 @@ import {
   fetchFromAPIServer,
   type HeaderOptions,
 } from '../custom/fetch.ts';
-import {UrlConfigurationError} from '../types/error-with-level.ts';
+import {logError} from '../types/error-with-level.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
 import type {ShardID} from '../types/shards.ts';
 
@@ -150,11 +150,7 @@ export class CustomQueryTransformer {
 
       return newResponses.concat(cachedResponses);
     } catch (e) {
-      if (e instanceof UrlConfigurationError) {
-        this.#lc.warn?.('failed to transform queries', e);
-      } else {
-        this.#lc.error?.('failed to transform queries', e);
-      }
+      logError(this.#lc, e, 'failed to transform queries');
 
       if (
         isProtocolError(e) &&
