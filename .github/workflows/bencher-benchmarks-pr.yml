@@ -36,7 +36,7 @@ jobs:
 
       - name: Build zero client single file package
         working-directory: packages/zero
-        run: npx tsx tool/build.ts --bundle-sizes --minify
+        run: npx tsx tool/build.ts --bundle-sizes
 
       - name: Compress
         working-directory: packages/zero

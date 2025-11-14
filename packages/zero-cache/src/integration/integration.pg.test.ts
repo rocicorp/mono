@@ -527,7 +527,10 @@ describe('integration', {timeout: 30000}, () => {
 
       zerosExited.push(done);
 
-      const zero = childWorker('./server/runner/main.ts', env);
+      const zero = childWorker(
+        new URL('../server/runner/main.ts', import.meta.url),
+        env,
+      );
       zero.onMessageType('ready', onReady);
       zero.on('close', onClose);
       zeros.push(zero);
