@@ -1334,7 +1334,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
         // Check if transform failed entirely (HTTP error or server-side failure).
         // This should disconnect the client and keep existing pipelines intact.
-        if ('kind' in transformedCustomQueries) {
+        if (
+          !Array.isArray(transformedCustomQueries) &&
+          transformedCustomQueries.kind === ErrorKind.TransformFailed
+        ) {
           // TransformFailedBody indicates an HTTP or infrastructure error.
           // Throw to disconnect the client without modifying pipelines.
           throw new ProtocolErrorWithLevel(
@@ -1377,6 +1380,22 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             // else: hash is the same, addQuery will no-op (no re-hydration needed)
           }
           // else: new query, will be added normally
+        }
+
+        // Dematerialize queries that failed transformation (auth errors).
+        // These queries are no longer authorized and should be removed.
+        if (erroredQueryIDs) {
+          for (const queryID of erroredQueryIDs) {
+            const existingTransforms = byOriginalHash.get(queryID);
+            if (existingTransforms && existingTransforms.length > 0) {
+              for (const {transformationHash} of existingTransforms) {
+                lc.info?.(
+                  `Removing pipeline for query ${queryID} (hash: ${transformationHash}) due to transformation failure`,
+                );
+                this.#pipelines.removeQuery(transformationHash);
+              }
+            }
+          }
         }
       }
 
