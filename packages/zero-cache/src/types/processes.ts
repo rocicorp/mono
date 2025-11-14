@@ -1,8 +1,11 @@
-import type {ChildProcess} from 'node:child_process';
-import {fork, type SendHandle, type Serializable} from 'node:child_process';
+import {
+  type ChildProcess,
+  fork,
+  type SendHandle,
+  type Serializable,
+} from 'node:child_process';
 import EventEmitter from 'node:events';
 import {platform} from 'node:os';
-import path from 'node:path';
 import {pid} from 'node:process';
 
 /**
@@ -152,18 +155,13 @@ export function setSingleProcessMode(enabled: boolean = true): void {
 
 /**
  *
- * @param modulePath Path to the module file, relative to zero-cache/src/
+ * @param modulePath Path to the module file, relative to zero-cache/src/, or an absolute file:// URL
  */
 export function childWorker(
-  modulePath: string,
+  moduleUrl: URL,
   env?: NodeJS.ProcessEnv,
   ...args: string[]
 ): Worker {
-  const ext = path.extname(import.meta.url);
-  // modulePath is .ts. If we have been compiled, it should be changed to .js
-  modulePath = modulePath.replace(/\.ts$/, ext);
-  const moduleUrl = new URL(`../${modulePath}`, import.meta.url);
-
   args.push(...process.argv.slice(2));
 
   if (singleProcessMode()) {
