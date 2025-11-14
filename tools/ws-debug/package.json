@@ -1,0 +1,23 @@
+{
+  "name": "ws-debug",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "debug": "tsx src/main.ts",
+    "check-types": "tsc",
+    "format": "prettier --write .",
+    "check-format": "prettier --check .",
+    "lint": "oxlint --type-aware src/"
+  },
+  "dependencies": {
+    "@rocicorp/logger": "^5.4.0",
+    "ws": "^8.18.1"
+  },
+  "devDependencies": {
+    "@rocicorp/prettier-config": "^0.4.0",
+    "@types/node": "^22.10.1",
+    "@types/ws": "^8.5.13"
+  },
+  "prettier": "@rocicorp/prettier-config"
+}
