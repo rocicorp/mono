@@ -263,6 +263,29 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       unit: 's',
     },
   );
+  readonly #queryTransformations = getOrCreateCounter(
+    'sync',
+    'query.transformations',
+    'Number of query transformations performed',
+  );
+  readonly #queryTransformationTime = getOrCreateHistogram(
+    'sync',
+    'query.transformation-time',
+    {
+      description: 'Time to transform custom queries via API server',
+      unit: 's',
+    },
+  );
+  readonly #queryTransformationHashChanges = getOrCreateCounter(
+    'sync',
+    'query.transformation-hash-changes',
+    'Number of times query transformation hash changed',
+  );
+  readonly #queryTransformationNoOps = getOrCreateCounter(
+    'sync',
+    'query.transformation-no-ops',
+    'Number of times query transformation resulted in no-op (hash unchanged)',
+  );
 
   readonly #inspectorDelegate: InspectorDelegate;
 
@@ -1319,12 +1342,23 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // Always re-transform custom queries on client connection for security.
         // This ensures the user's API server validates authorization with the
         // current auth context.
-        const transformedCustomQueries =
-          await this.#customQueryTransformer.transform(
-            this.#getHeaderOptions(true),
-            customQueries.values(),
-            this.userQueryURL,
-          );
+        const transformStart = performance.now();
+        let transformedCustomQueries;
+        try {
+          transformedCustomQueries =
+            await this.#customQueryTransformer.transform(
+              this.#getHeaderOptions(true),
+              customQueries.values(),
+              this.userQueryURL,
+            );
+          this.#queryTransformations.add(1, {result: 'success'});
+        } catch (e) {
+          this.#queryTransformations.add(1, {result: 'error'});
+          throw e;
+        } finally {
+          const transformDuration = (performance.now() - transformStart) / 1000;
+          this.#queryTransformationTime.record(transformDuration);
+        }
 
         // Check if transform failed entirely (HTTP error or server-side failure).
         // This should disconnect the client and keep existing pipelines intact.
@@ -1373,8 +1407,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
                 `Query ${queryID} transformation changed: ${oldHash} -> ${newHash}`,
               );
               this.#checkForThrashing(queryID);
+              this.#queryTransformationHashChanges.add(1);
+            } else {
+              // hash is the same, addQuery will no-op (no re-hydration needed)
+              this.#queryTransformationNoOps.add(1);
             }
-            // else: hash is the same, addQuery will no-op (no re-hydration needed)
           }
           // else: new query, will be added normally
         }
