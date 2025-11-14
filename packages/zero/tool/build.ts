@@ -31,8 +31,10 @@ async function copyStaticFiles() {
 }
 
 async function build() {
-  // Clean output directory
-  await rm('out', {recursive: true, force: true});
+  // Clean output directory (but not for bundle sizes build which adds to existing out/)
+  if (!forBundleSizeDashboard) {
+    await rm('out', {recursive: true, force: true});
+  }
 
   // Run vite build and tsc in parallel
   const startTime = performance.now();
