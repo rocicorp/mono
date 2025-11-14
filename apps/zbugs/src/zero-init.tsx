@@ -21,6 +21,7 @@ export function ZeroInit({children}: {children: ReactNode}) {
         auth: login.loginState?.encoded,
         mutateURL: `${window.location.origin}/api/mutate`,
         getQueriesURL: `${window.location.origin}/api/get-queries`,
+        context: login.loginState?.decoded,
       }) satisfies ZeroOptions<Schema, CustomMutatorDefs, AuthData | undefined>,
     [login],
   );
