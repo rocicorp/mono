@@ -1,5 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import {TimedCache} from '../../../shared/src/cache.ts';
 import {getErrorMessage} from '../../../shared/src/error.ts';
 import {must} from '../../../shared/src/must.ts';
 import {
@@ -27,21 +26,10 @@ import type {ShardID} from '../types/shards.ts';
 
 /**
  * Transforms a custom query by calling the user's API server.
- * Caches the transformed queries for 5 seconds to avoid unnecessary API calls.
- *
- * Error responses are not cached as the user may want to retry the query
- * and the error may be transient.
- *
- * The TTL was chosen to be 5 seconds since custom query requests come with
- * a token which itself may have a short TTL (e.g., 10 seconds).
- *
- * Token expiration isn't expected to be exact so this 5 second
- * caching shouldn't cause unexpected behavior. E.g., many JWT libraries
- * implement leeway for expiration checks: https://github.com/panva/jose/blob/main/docs/jwt/verify/interfaces/JWTVerifyOptions.md#clocktolerance
+ * Always calls the API server to ensure proper authorization validation.
  */
 export class CustomQueryTransformer {
   readonly #shard: ShardID;
-  readonly #cache: TimedCache<TransformedAndHashed>;
   readonly #config: {
     url: string[];
     forwardCookies: boolean;
@@ -61,7 +49,6 @@ export class CustomQueryTransformer {
     this.#shard = shard;
     this.#lc = lc;
     this.#urlPatterns = config.url.map(compileUrlPattern);
-    this.#cache = new TimedCache(5000); // 5 seconds cache TTL
   }
 
   async transform(
@@ -69,9 +56,6 @@ export class CustomQueryTransformer {
     queries: Iterable<CustomQueryRecord>,
     userQueryURL: string | undefined,
   ): Promise<(TransformedAndHashed | ErroredQuery)[] | TransformFailedBody> {
-    const request: TransformRequestBody = [];
-    const cachedResponses: TransformedAndHashed[] = [];
-
     if (!this.#config.forwardCookies && headerOptions.cookie) {
       headerOptions = {
         ...headerOptions,
@@ -79,23 +63,13 @@ export class CustomQueryTransformer {
       };
     }
 
-    // split queries into cached and uncached
+    const request: TransformRequestBody = [];
     for (const query of queries) {
-      const cacheKey = getCacheKey(headerOptions, query.id);
-      const cached = this.#cache.get(cacheKey);
-      if (cached) {
-        cachedResponses.push(cached);
-      } else {
-        request.push({
-          id: query.id,
-          name: query.name,
-          args: query.args,
-        });
-      }
-    }
-
-    if (request.length === 0) {
-      return cachedResponses;
+      request.push({
+        id: query.id,
+        name: query.name,
+        args: query.args,
+      });
     }
 
     const queryIDs = request.map(r => r.id);
@@ -120,7 +94,7 @@ export class CustomQueryTransformer {
         return transformResponse[1];
       }
 
-      const newResponses = transformResponse[1].map(transformed => {
+      return transformResponse[1].map(transformed => {
         if ('error' in transformed) {
           return transformed;
         }
@@ -130,17 +104,6 @@ export class CustomQueryTransformer {
           transformationHash: hashOfAST(transformed.ast),
         } satisfies TransformedAndHashed;
       });
-
-      for (const transformed of newResponses) {
-        if ('error' in transformed) {
-          // do not cache error responses
-          continue;
-        }
-        const cacheKey = getCacheKey(headerOptions, transformed.id);
-        this.#cache.set(cacheKey, transformed);
-      }
-
-      return newResponses.concat(cachedResponses);
     } catch (e) {
       this.#lc.error?.('failed to transform queries', e);
 
@@ -163,11 +126,4 @@ export class CustomQueryTransformer {
       } as const satisfies TransformFailedBody;
     }
   }
-}
-
-function getCacheKey(headerOptions: HeaderOptions, queryID: string) {
-  // For custom queries, queryID is a hash of the name + args.
-  // the APIKey from headerOptions is static. Not needed for the cache key.
-  // The token is used to identify the user and should be included in the cache key.
-  return `${headerOptions.token}:${headerOptions.cookie}:${queryID}`;
 }

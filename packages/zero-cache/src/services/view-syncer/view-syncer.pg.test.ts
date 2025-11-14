@@ -938,7 +938,7 @@ describe('view-syncer/service', () => {
       `);
     });
 
-    test('does not re-transform the same custom query if it was already registered and transformed', async () => {
+    test('always transforms custom queries to validate authorization', async () => {
       let callCount = 0;
       mockFetchImpl(() => {
         callCount++;
@@ -1099,7 +1099,10 @@ describe('view-syncer/service', () => {
           ],
         ]
       `);
-      expect(callCount).toBe(1);
+      // Transform is called twice for security:
+      // 1. During #hydrateUnchangedQueries (initialization)
+      // 2. During #syncQueryPipelineSet (client connection)
+      expect(callCount).toBe(2);
     });
 
     // test cases where custom query transforms fail

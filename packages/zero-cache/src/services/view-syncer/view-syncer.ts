@@ -13,7 +13,6 @@ import {version} from '../../../../otel/src/version.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
-import {wrapIterable} from '../../../../shared/src/iterables.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
@@ -1075,18 +1074,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'Custom/named queries were requested but no `ZERO_GET_QUERIES_URL` is configured for Zero Cache.',
       );
     }
-    const [_, byOriginalHash] = this.#pipelines.addedQueries();
     if (this.#customQueryTransformer && customQueries.size > 0) {
-      const filteredCustomQueries = this.#filterCustomQueries(
-        customQueries.values(),
-        byOriginalHash,
-        undefined,
-      );
-
+      // Always transform custom queries, even during initialization,
+      // to ensure authorization validation with current auth context.
       const transformedCustomQueries =
         await this.#customQueryTransformer.transform(
           this.#getHeaderOptions(this.#queryConfig.forwardCookies),
-          filteredCustomQueries,
+          customQueries.values(),
           this.userQueryURL,
         );
 
@@ -1453,41 +1447,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       } else {
         await this.#catchupClients(lc, cvr);
       }
-    });
-  }
-
-  // Removes queries from `customQueries` that are already
-  // transformed and in the pipelines. We do not want to re-transform
-  // a query that has already been transformed. The reason is that
-  // we do not want a query that is already running to suddenly flip
-  // to error due to re-calling transform.
-  #filterCustomQueries(
-    customQueries: Iterable<CustomQueryRecord>,
-    byOriginalHash: Map<
-      string,
-      {
-        transformationHash: string;
-        transformedAst: AST;
-      }[]
-    >,
-    onExisting:
-      | ((
-          origQuery: CustomQueryRecord,
-          existing: {
-            transformationHash: string;
-            transformedAst: AST;
-          }[],
-        ) => void)
-      | undefined,
-  ) {
-    return wrapIterable(customQueries).filter(origQuery => {
-      const existing = byOriginalHash.get(origQuery.id);
-      if (existing) {
-        onExisting?.(origQuery, existing);
-        return false;
-      }
-
-      return true;
     });
   }
 
