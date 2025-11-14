@@ -8,8 +8,11 @@ import {
   type ErrorBody,
 } from '../../../zero-protocol/src/error.ts';
 
+const IS_ERROR_WITH_LEVEL = Symbol('isErrorWithLevel');
+
 export class ErrorWithLevel extends Error {
   readonly logLevel: LogLevel;
+  readonly [IS_ERROR_WITH_LEVEL] = true;
 
   constructor(
     message: string,
@@ -19,10 +22,23 @@ export class ErrorWithLevel extends Error {
     super(message, options);
     this.logLevel = logLevel;
   }
+
+  // Use duck-typing for instanceof since it would otherwise require
+  // multiple inheritance for ProtocolErrorWithLevel to be instanceof
+  // ErrorWithLevel.
+  static [Symbol.hasInstance](instance: unknown): boolean {
+    return (
+      instance !== null &&
+      typeof instance === 'object' &&
+      IS_ERROR_WITH_LEVEL in instance &&
+      (instance as Record<symbol, unknown>)[IS_ERROR_WITH_LEVEL] === true
+    );
+  }
 }
 
 export class ProtocolErrorWithLevel extends ProtocolError {
   readonly logLevel: LogLevel;
+  readonly [IS_ERROR_WITH_LEVEL] = true;
 
   constructor(
     errorBody: ErrorBody,
@@ -34,11 +50,12 @@ export class ProtocolErrorWithLevel extends ProtocolError {
   }
 }
 
+export function isErrorWithLevel(error: unknown): error is ErrorWithLevel {
+  return error instanceof ErrorWithLevel;
+}
+
 export function getLogLevel(error: unknown): LogLevel {
-  if (error instanceof ErrorWithLevel) {
-    return error.logLevel;
-  }
-  if (error instanceof ProtocolErrorWithLevel) {
+  if (isErrorWithLevel(error)) {
     return error.logLevel;
   }
   return isProtocolError(error) ? 'warn' : 'error';
@@ -50,12 +67,11 @@ export function logError(
   msg?: string,
   classify?: (e: unknown) => LogLevel,
 ): void {
-  const level =
-    e instanceof ErrorWithLevel || e instanceof ProtocolErrorWithLevel
-      ? e.logLevel
-      : classify
-        ? classify(e)
-        : 'error';
+  const level = isErrorWithLevel(e)
+    ? e.logLevel
+    : classify
+      ? classify(e)
+      : 'error';
   msg ??= e instanceof Error ? e.message : String(e);
   lc[level]?.(msg, e);
 }
