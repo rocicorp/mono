@@ -235,6 +235,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #setTimeout: SetTimeout;
   readonly #customQueryTransformer: CustomQueryTransformer | undefined;
 
+  // Track query replacements for thrashing detection
+  readonly #queryReplacements = new Map<
+    string,
+    {count: number; windowStart: number}
+  >();
+
   readonly #activeClients = getOrCreateUpDownCounter(
     'sync',
     'active-clients',
@@ -1316,42 +1322,62 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       let erroredQueryIDs: string[] | undefined;
       if (this.#customQueryTransformer && customQueries.size > 0) {
-        const filteredCustomQueries = this.#filterCustomQueries(
-          customQueries.values(),
-          byOriginalHash,
-          (origQuery, existing) => {
-            for (const transformed of existing) {
-              transformedQueries.push({
-                id: origQuery.id,
-                origQuery,
-                transformed: {
-                  id: origQuery.id,
-                  transformationHash: transformed.transformationHash,
-                  transformedAst: transformed.transformedAst,
-                },
-              });
-            }
-          },
-        );
-
+        // Always re-transform custom queries on client connection for security.
+        // This ensures the user's API server validates authorization with the
+        // current auth context.
         const transformedCustomQueries =
           await this.#customQueryTransformer.transform(
             this.#getHeaderOptions(true),
-            filteredCustomQueries,
+            customQueries.values(),
             this.userQueryURL,
           );
 
+        // Check if transform failed entirely (HTTP error or server-side failure).
+        // This should disconnect the client and keep existing pipelines intact.
+        if ('kind' in transformedCustomQueries) {
+          // TransformFailedBody indicates an HTTP or infrastructure error.
+          // Throw to disconnect the client without modifying pipelines.
+          throw new ProtocolErrorWithLevel(
+            transformedCustomQueries,
+            getLogLevel(transformedCustomQueries.kind),
+          );
+        }
+
+        // Process the transformed queries and track which ones succeeded.
+        const successfullyTransformed = new Map<string, TransformedAndHashed>();
         erroredQueryIDs = this.#processTransformedCustomQueries(
           lc,
           transformedCustomQueries,
-          (q: TransformedAndHashed) =>
+          (q: TransformedAndHashed) => {
+            successfullyTransformed.set(q.id, q);
             transformedQueries.push({
               id: q.id,
               origQuery: must(customQueries.get(q.id)),
               transformed: q,
-            }),
+            });
+          },
           customQueries,
         );
+
+        // Reconcile pipelines: replace queries whose transformation hash changed.
+        for (const [queryID, newTransform] of successfullyTransformed) {
+          const existingTransforms = byOriginalHash.get(queryID);
+          if (existingTransforms && existingTransforms.length > 0) {
+            const oldHash = existingTransforms[0].transformationHash;
+            const newHash = newTransform.transformationHash;
+
+            if (oldHash !== newHash) {
+              // Transformation changed - remove old pipeline, new one will be added.
+              lc.info?.(
+                `Query ${queryID} transformation changed: ${oldHash} -> ${newHash}`,
+              );
+              this.#pipelines.removeQuery(oldHash);
+              this.#checkForThrashing(queryID);
+            }
+            // else: hash is the same, addQuery will no-op (no re-hydration needed)
+          }
+          // else: new query, will be added normally
+        }
       }
 
       const serverQueries = transformedQueries.map(
@@ -1457,6 +1483,39 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       return true;
     });
+  }
+
+  /**
+   * Check if a query is being replaced too frequently (thrashing).
+   * Logs a warning if the query has been replaced more than 3 times in 60 seconds.
+   */
+  #checkForThrashing(queryID: string) {
+    const THRASH_WINDOW_MS = 60_000; // 60 seconds
+    const THRASH_THRESHOLD = 3;
+    const now = Date.now();
+
+    let record = this.#queryReplacements.get(queryID);
+    if (!record) {
+      record = {count: 1, windowStart: now};
+      this.#queryReplacements.set(queryID, record);
+      return;
+    }
+
+    // Reset window if outside the time window
+    if (now - record.windowStart > THRASH_WINDOW_MS) {
+      record.count = 1;
+      record.windowStart = now;
+      return;
+    }
+
+    // Increment count within the window
+    record.count++;
+
+    if (record.count >= THRASH_THRESHOLD) {
+      this.#lc.warn?.(
+        `Query thrashing detected for query ${queryID}. ${record.count} replacements in 60s. This may indicate clients with different auth contexts connecting to the same client group.`,
+      );
+    }
   }
 
   // This must be called from within the #lock.
