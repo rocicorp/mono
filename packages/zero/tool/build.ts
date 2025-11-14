@@ -1,6 +1,6 @@
 // Build script for @rocicorp/zero package
 import {spawn} from 'node:child_process';
-import {chmod, readFile, rm} from 'node:fs/promises';
+import {chmod, copyFile, mkdir, readFile, rm} from 'node:fs/promises';
 import {resolve} from 'node:path';
 
 const forBundleSizeDashboard = process.argv.includes('--bundle-sizes');
@@ -19,6 +19,14 @@ async function makeBinFilesExecutable() {
       await chmod(fullPath, 0o755);
     }
   }
+}
+
+async function copyStaticFiles() {
+  // Copy litestream config.yml to output directory
+  const parts = 'zero-cache/src/services/litestream/config.yml'.split('/');
+  const destDir = resolve('out', ...parts.slice(0, -1));
+  await mkdir(destDir, {recursive: true});
+  await copyFile(resolve('..', ...parts), resolve('out', ...parts));
 }
 
 async function build() {
@@ -61,6 +69,7 @@ async function build() {
     ]);
 
     await makeBinFilesExecutable();
+    await copyStaticFiles();
   }
 
   const totalDuration = ((performance.now() - startTime) / 1000).toFixed(2);
