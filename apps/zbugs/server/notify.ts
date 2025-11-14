@@ -2,7 +2,7 @@ import {type ServerTransaction, type UpdateValue} from '@rocicorp/zero';
 import type {TransactionSql} from 'postgres';
 import {assertIsLoggedIn, type AuthData} from '../shared/auth.ts';
 import {MutationError, MutationErrorCode} from '../shared/error.ts';
-import {builder, schema, type Schema} from '../shared/schema.ts';
+import {builder, type schema, type Schema} from '../shared/schema.ts';
 import {postToDiscord} from './discord.ts';
 import {sendEmail} from './email.ts';
 import type {PostCommitTask} from './server-mutators.ts';

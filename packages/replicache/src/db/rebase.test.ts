@@ -11,7 +11,7 @@ import {SYNC_HEAD_NAME} from '../sync/sync-head-name.ts';
 import type {WriteTransaction} from '../transactions.ts';
 import {withRead, withWriteNoImplicitCommit} from '../with-transactions.ts';
 import {
-  Commit,
+  type Commit,
   type LocalMeta,
   type LocalMetaDD31,
   type Meta,

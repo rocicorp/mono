@@ -1,5 +1,6 @@
 import {Lock} from '@rocicorp/lock';
-import {consoleLogSink, LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
+import {consoleLogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {AbortError} from '../../shared/src/abort-error.ts';
 import {assert} from '../../shared/src/asserts.ts';

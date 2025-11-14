@@ -17,7 +17,7 @@ import {
   NOBODY_CAN,
 } from '../../../../zero-schema/src/permissions.ts';
 import type {Schema as ZeroSchema} from '../../../../zero-types/src/schema.ts';
-import {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
+import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
 import type {Row} from '../../../../zql/src/query/query.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {WriteAuthorizerImpl} from '../../auth/write-authorizer.ts';

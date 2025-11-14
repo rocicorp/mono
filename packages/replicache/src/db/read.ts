@@ -1,11 +1,11 @@
 import type {Enum} from '../../../shared/src/enum.ts';
 import {BTreeRead} from '../btree/read.ts';
 import type {Read as DagRead} from '../dag/store.ts';
-import * as FormatVersion from '../format-version-enum.ts';
+import type * as FormatVersion from '../format-version-enum.ts';
 import type {FrozenJSONValue} from '../frozen-json.ts';
 import type {Hash} from '../hash.ts';
+import type {Commit} from './commit.ts';
 import {
-  Commit,
   DEFAULT_HEAD_NAME,
   type Meta,
   commitFromHash,

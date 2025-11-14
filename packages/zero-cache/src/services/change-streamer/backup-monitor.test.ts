@@ -2,7 +2,7 @@ import {resolver} from '@rocicorp/resolver';
 import nock from 'nock';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {Subscription} from '../../types/subscription.ts';
+import type {Subscription} from '../../types/subscription.ts';
 import {BackupMonitor} from './backup-monitor.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
 import type {SnapshotMessage} from './snapshot.ts';

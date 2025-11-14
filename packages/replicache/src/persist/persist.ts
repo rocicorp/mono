@@ -4,8 +4,8 @@ import type {Enum} from '../../../shared/src/enum.ts';
 import type {Chunk} from '../dag/chunk.ts';
 import type {LazyStore} from '../dag/lazy-store.ts';
 import type {Read, Store, Write} from '../dag/store.ts';
+import type {Commit} from '../db/commit.ts';
 import {
-  Commit,
   DEFAULT_HEAD_NAME,
   type LocalMetaDD31,
   type Meta,
@@ -18,8 +18,9 @@ import {
   localMutationsGreaterThan,
 } from '../db/commit.ts';
 import {rebaseMutationAndPutCommit} from '../db/rebase.ts';
-import * as FormatVersion from '../format-version-enum.ts';
+import type * as FormatVersion from '../format-version-enum.ts';
 import type {Hash} from '../hash.ts';
+import type {ZeroOption, ZeroTxData} from '../replicache-options.ts';
 import type {ClientGroupID, ClientID} from '../sync/ids.ts';
 import type {MutatorDefs} from '../types.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
@@ -36,7 +37,6 @@ import {
   setClient,
 } from './clients.ts';
 import {GatherMemoryOnlyVisitor} from './gather-mem-only-visitor.ts';
-import type {ZeroOption, ZeroTxData} from '../replicache-options.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

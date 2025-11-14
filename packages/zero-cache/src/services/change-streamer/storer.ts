@@ -1,5 +1,5 @@
 import {PG_SERIALIZATION_FAILURE} from '@drdgvhbh/postgres-error-codes';
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import postgres from 'postgres';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
@@ -23,7 +23,7 @@ import {
   markResetRequired,
   type ReplicationState,
 } from './schema/tables.ts';
-import {Subscriber} from './subscriber.ts';
+import type {Subscriber} from './subscriber.ts';
 
 type SubscriberAndMode = {
   subscriber: Subscriber;

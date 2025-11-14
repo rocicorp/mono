@@ -1,9 +1,7 @@
 import {unreachable} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {
-  ApplicationError,
-  wrapWithApplicationError,
-} from '../../../zero-protocol/src/application-error.ts';
+import type {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
+import {wrapWithApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import type {ConnectionManager, ConnectionState} from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import type {

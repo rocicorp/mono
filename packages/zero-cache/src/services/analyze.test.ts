@@ -453,9 +453,11 @@ describe('analyzeQuery', () => {
   test('real integration: explainQueries produces actual plans from readRowCountsByQuery', async () => {
     // This test bypasses the mock for explainQueries to verify real plan generation
     const {explainQueries: realExplainQueries} = await vi.importActual<
+      // oxlint-disable-next-line consistent-type-imports
       typeof import('../../../zqlite/src/explain-queries.ts')
     >('../../../zqlite/src/explain-queries.ts');
     const {Database: RealDatabase} = await vi.importActual<
+      // oxlint-disable-next-line consistent-type-imports
       typeof import('../../../zqlite/src/db.ts')
     >('../../../zqlite/src/db.ts');
 

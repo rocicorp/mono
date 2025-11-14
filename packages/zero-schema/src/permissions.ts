@@ -14,7 +14,8 @@ import type {
   AssetPermissions as CompiledAssetPermissions,
   PermissionsConfig as CompiledPermissionsConfig,
 } from './compiled-permissions.ts';
-import {clientToServer, NameMapper} from './name-mapper.ts';
+import type {NameMapper} from './name-mapper.ts';
+import {clientToServer} from './name-mapper.ts';
 
 export const ANYONE_CAN = [
   (_: unknown, eb: ExpressionBuilder<Schema, never>) => eb.and(),

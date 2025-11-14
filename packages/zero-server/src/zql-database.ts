@@ -14,11 +14,8 @@ import type {
   Query,
   RunOptions,
 } from '../../zql/src/query/query.ts';
-import {
-  makeSchemaCRUD,
-  makeServerTransaction,
-  TransactionImpl,
-} from './custom.ts';
+import type {TransactionImpl} from './custom.ts';
+import {makeSchemaCRUD, makeServerTransaction} from './custom.ts';
 import type {
   Database,
   TransactionProviderHooks,

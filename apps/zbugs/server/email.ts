@@ -1,6 +1,6 @@
 import {type Row, type Transaction} from '@rocicorp/zero';
-import {schema, type Schema} from '../shared/schema.ts';
 import {MutationError, MutationErrorCode} from '../shared/error.ts';
+import type {Schema, schema} from '../shared/schema.ts';
 
 export async function sendEmail({
   tx,

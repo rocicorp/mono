@@ -8,7 +8,8 @@ import {
   type AddEmojiArgs,
   type CreateIssueArgs,
 } from '../shared/mutators.ts';
-import {builder, schema, type Schema} from '../shared/schema.ts';
+import type {schema, Schema} from '../shared/schema.ts';
+import {builder} from '../shared/schema.ts';
 import {notify} from './notify.ts';
 
 export type PostCommitTask = () => Promise<void>;

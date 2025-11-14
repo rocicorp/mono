@@ -35,6 +35,7 @@
     "typescript/no-explicit-any": "error",
     "typescript/no-floating-promises": "error",
     "typescript/no-non-null-assertion": "warn",
+    "typescript/consistent-type-imports": "error",
     "typescript/no-unused-vars": [
       "error",
       {

@@ -1,6 +1,6 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
-import {Database} from '../../../../zqlite/src/db.ts';
+import type {Database} from '../../../../zqlite/src/db.ts';
 import type {ColumnSpec, IndexSpec, TableSpec} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import type {RowKey, RowValue} from '../../types/row-key.ts';

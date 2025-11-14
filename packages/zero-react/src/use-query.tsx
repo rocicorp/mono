@@ -8,7 +8,7 @@ import {
   type BindingsForZero,
 } from '../../zero-client/src/client/bindings.ts';
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
-import {Zero} from '../../zero-client/src/client/zero.ts';
+import type {Zero} from '../../zero-client/src/client/zero.ts';
 import type {
   QueryErrorDetails,
   QueryResultDetails,

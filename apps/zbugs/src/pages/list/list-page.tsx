@@ -515,7 +515,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     }
   });
   useClickOutside([searchBox, startSearchButton], () => {
-    if (Boolean(textFilter)) {
+    if (textFilter) {
       setForceSearchMode(false);
     } else {
       clearAndHideSearch();

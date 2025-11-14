@@ -4,11 +4,11 @@ import type {Expand} from '../../../shared/src/expand.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
+import type {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import {
   type BackoffBody,
   type ErrorBody,
   isProtocolError,
-  ProtocolError,
   type PushFailedBody,
   type TransformFailedBody,
 } from '../../../zero-protocol/src/error.ts';

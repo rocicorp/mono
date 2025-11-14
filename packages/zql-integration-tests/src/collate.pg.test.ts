@@ -20,7 +20,7 @@ import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {queryWithContext} from '../../zql/src/query/query-internals.ts';
 import {type Query} from '../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../zql/src/query/test/query-delegate.ts';
-import {Database} from '../../zqlite/src/db.ts';
+import type {Database} from '../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../zqlite/src/table-source.ts';
 import {
   mapResultToClientNames,

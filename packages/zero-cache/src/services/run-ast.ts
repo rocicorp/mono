@@ -1,4 +1,4 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 // @circular-dep-ignore
 import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 // @circular-dep-ignore

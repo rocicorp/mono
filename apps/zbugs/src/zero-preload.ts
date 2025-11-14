@@ -1,4 +1,4 @@
-import {Zero} from '@rocicorp/zero';
+import type {Zero} from '@rocicorp/zero';
 import type {AuthData} from '../shared/auth.ts';
 import {type Mutators} from '../shared/mutators.ts';
 import {queries} from '../shared/queries.ts';

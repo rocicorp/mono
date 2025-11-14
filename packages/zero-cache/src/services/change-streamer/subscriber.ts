@@ -1,7 +1,8 @@
 import {assert} from '../../../../shared/src/asserts.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
 import {max} from '../../types/lexi-version.ts';
-import {Subscription, type PendingResult} from '../../types/subscription.ts';
+import type {Subscription} from '../../types/subscription.ts';
+import {type PendingResult} from '../../types/subscription.ts';
 import type {WatermarkedChange} from './change-streamer-service.ts';
 import {type Downstream} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';

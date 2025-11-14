@@ -8,7 +8,7 @@ import {
   vi,
 } from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {Queue} from '../../../../shared/src/queue.ts';
+import type {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {
@@ -30,20 +30,20 @@ import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.t
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {type ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
-import {Database} from '../../../../zqlite/src/db.ts';
+import type {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {type PgTest, test} from '../../test/db.ts';
-import {DbFile} from '../../test/lite.ts';
+import type {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {cvrSchema} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
-import {Subscription} from '../../types/subscription.ts';
+import type {Subscription} from '../../types/subscription.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import {updateReplicationWatermark} from '../replicator/schema/replication-state.ts';
 import {type FakeReplicator} from '../replicator/test-utils.ts';
 import {CVRStore} from './cvr-store.ts';
 import {CVRQueryDrivenUpdater} from './cvr.ts';
-import {DrainCoordinator} from './drain-coordinator.ts';
+import type {DrainCoordinator} from './drain-coordinator.ts';
 import {ttlClockFromNumber} from './ttl-clock.ts';
 import {
   app2Messages,
@@ -69,7 +69,8 @@ import {
   TASK_ID,
   USERS_QUERY,
 } from './view-syncer-test-util.ts';
-import {type SyncContext, ViewSyncerService} from './view-syncer.ts';
+import type {ViewSyncerService} from './view-syncer.ts';
+import {type SyncContext} from './view-syncer.ts';
 
 describe('view-syncer/service', () => {
   let storageDB: Database;

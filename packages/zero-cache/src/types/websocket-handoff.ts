@@ -1,15 +1,12 @@
 import type {LogContext} from '@rocicorp/logger';
-import {IncomingMessage, Server} from 'node:http';
-import {Socket} from 'node:net';
+import type {IncomingMessage} from 'node:http';
+import {Server} from 'node:http';
+import type {Socket} from 'node:net';
 import {WebSocketServer, type ServerOptions, type WebSocket} from 'ws';
 import {assert} from '../../../shared/src/asserts.ts';
 import {serializableSubset, type IncomingMessageSubset} from './http.ts';
-import {
-  MESSAGE_TYPES,
-  type Receiver,
-  type Sender,
-  type Worker,
-} from './processes.ts';
+import type {MESSAGE_TYPES} from './processes.ts';
+import {type Receiver, type Sender, type Worker} from './processes.ts';
 import {closeWithError, PROTOCOL_ERROR} from './ws.ts';
 
 export type HandoffSpec<P> = {

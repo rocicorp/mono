@@ -1,6 +1,7 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {ident} from 'pg-format';
-import postgres, {type PendingQuery, type Row} from 'postgres';
+import type postgres from 'postgres';
+import {type PendingQuery, type Row} from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {equals} from '../../../../../shared/src/set-utils.ts';
 import {disableStatementTimeout, type PostgresDB} from '../../../types/pg.ts';

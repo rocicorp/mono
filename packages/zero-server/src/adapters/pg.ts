@@ -1,4 +1,5 @@
-import {Client, Pool, type PoolClient} from 'pg';
+import type {Client} from 'pg';
+import {Pool, type PoolClient} from 'pg';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Format} from '../../../zero-types/src/format.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
