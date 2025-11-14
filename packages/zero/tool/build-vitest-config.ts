@@ -1,10 +1,10 @@
 import {existsSync, readFileSync} from 'node:fs';
 import * as path from 'node:path';
 import {resolve} from 'node:path';
-import {mergeConfig, type UserConfig} from 'vite';
+import {type UserConfig} from 'vite';
 import {assert} from '../../shared/src/asserts.ts';
 import * as workerUrls from '../../zero-cache/src/server/worker-urls.ts';
-import {baseConfig} from './build-base-config.ts';
+import {define, external} from './build-common.ts';
 
 function getPackageJSON() {
   const content = readFileSync(resolve('package.json'), 'utf-8');
@@ -82,15 +82,29 @@ function getAllEntryPoints(): Record<string, string> {
   };
 }
 
-export const config: UserConfig = mergeConfig(baseConfig, {
+export const config: UserConfig = {
+  logLevel: 'warn',
   build: {
+    outDir: 'out',
+    emptyOutDir: false,
+    sourcemap: true,
+    target: 'es2022',
+    ssr: true,
+    reportCompressedSize: false,
     minify: false,
     rollupOptions: {
+      external,
       input: getAllEntryPoints(),
       output: {
+        format: 'es',
+        entryFileNames: '[name].js',
         chunkFileNames: 'chunks/[name]-[hash].js',
         preserveModules: true,
       },
     },
   },
-});
+  define,
+  resolve: {
+    conditions: ['import', 'module', 'default'],
+  },
+};

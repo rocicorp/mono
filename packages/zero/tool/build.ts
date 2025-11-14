@@ -2,6 +2,7 @@
 import {spawn} from 'node:child_process';
 import {chmod, copyFile, mkdir, readFile, rm} from 'node:fs/promises';
 import {resolve} from 'node:path';
+import {build as viteBuild} from 'vite';
 
 const forBundleSizeDashboard = process.argv.includes('--bundle-sizes');
 
@@ -54,16 +55,28 @@ async function build() {
     console.log(`✓ ${name} completed in ${((end - start) / 1000).toFixed(2)}s`);
   }
 
+  async function runViteBuild(configPath: string, label: string) {
+    const start = performance.now();
+    const {default: config} = await import(
+      resolve(import.meta.dirname, configPath)
+    );
+    await viteBuild({...config, configFile: false});
+    const end = performance.now();
+    console.log(
+      `✓ ${label} completed in ${((end - start) / 1000).toFixed(2)}s`,
+    );
+  }
+
   if (forBundleSizeDashboard) {
     // For bundle size dashboard, build a single minified bundle
-    await exec(
-      'vite build --config tool/build-bundle-sizes-config.ts',
+    await runViteBuild(
+      'build-bundle-sizes-config.ts',
       'vite build (bundle sizes)',
     );
   } else {
     // Normal build: vite build + type declarations
     await Promise.all([
-      exec('vite build', 'vite build'),
+      runViteBuild('../vite.config.ts', 'vite build'),
       exec('tsc -p tsconfig.client.json', 'client dts'),
       exec('tsc -p tsconfig.server.json', 'server dts'),
     ]);
