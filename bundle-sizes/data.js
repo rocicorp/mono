@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1762948346520,
+  "lastUpdate": 1763123091998,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54705,6 +54705,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 31825,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5dda8ab1866ee33f54d7eb49ae795cb403f1602c",
+          "message": "chore: Enable lint warning for import missing type (#5186)\n\nIf an import is only used as a type, it should be marked with the `type`\nmodifier.\n\nrun lint --fix to fix automatically.",
+          "timestamp": "2025-11-14T12:17:52Z",
+          "tree_id": "f70aa80bbe9d8fbc4bdcec3fa12d3cf25ba2c2d2",
+          "url": "https://github.com/rocicorp/mono/commit/5dda8ab1866ee33f54d7eb49ae795cb403f1602c"
+        },
+        "date": 1763123080338,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 301987,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54431,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111258,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31798,
             "unit": "bytes"
           }
         ]
