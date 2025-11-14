@@ -1,4 +1,4 @@
-import type {LogLevel} from '@rocicorp/logger';
+import type {LogContext, LogLevel} from '@rocicorp/logger';
 import {getErrorMessage} from '../../../shared/src/error.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
@@ -7,6 +7,19 @@ import {
   ProtocolError,
   type ErrorBody,
 } from '../../../zero-protocol/src/error.ts';
+
+export class ErrorWithLevel extends Error {
+  readonly logLevel: LogLevel;
+
+  constructor(
+    message: string,
+    logLevel: LogLevel = 'error',
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.logLevel = logLevel;
+  }
+}
 
 export class ProtocolErrorWithLevel extends ProtocolError {
   readonly logLevel: LogLevel;
@@ -21,12 +34,40 @@ export class ProtocolErrorWithLevel extends ProtocolError {
   }
 }
 
+export class UrlConfigurationError extends ErrorWithLevel {
+  constructor(url: string, options?: ErrorOptions) {
+    super(
+      `URL "${url}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
+      'warn',
+      options,
+    );
+  }
+}
+
 export function getLogLevel(error: unknown): LogLevel {
-  return error instanceof ProtocolErrorWithLevel
-    ? error.logLevel
-    : isProtocolError(error)
-      ? 'warn'
-      : 'error';
+  if (error instanceof ErrorWithLevel) {
+    return error.logLevel;
+  }
+  if (error instanceof ProtocolErrorWithLevel) {
+    return error.logLevel;
+  }
+  return isProtocolError(error) ? 'warn' : 'error';
+}
+
+export function logError(
+  lc: LogContext,
+  e: unknown,
+  msg?: string,
+  classify?: (e: unknown) => LogLevel,
+): void {
+  const level =
+    e instanceof ErrorWithLevel || e instanceof ProtocolErrorWithLevel
+      ? e.logLevel
+      : classify
+        ? classify(e)
+        : 'error';
+  msg ??= e instanceof Error ? e.message : String(e);
+  lc[level]?.(msg, e);
 }
 
 export function wrapWithProtocolError(error: unknown): ProtocolError {

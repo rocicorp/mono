@@ -31,7 +31,6 @@ export class RunningState {
   readonly #maxRetryDelay: number;
   readonly #pendingTimeouts = new Set<NodeJS.Timeout>();
   #retryDelay: number;
-  #consecutive502Errors = 0;
 
   constructor(
     serviceName: string,
@@ -146,22 +145,9 @@ export class RunningState {
     if (err instanceof AbortError || err instanceof UnrecoverableError) {
       this.stop(lc, err);
     } else if (this.shouldRun()) {
-      // Check if this is a 502 error
-      const is502Error =
-        err instanceof Error &&
-        err.message.includes('Unexpected server response: 502');
-
-      let log: 'info' | 'warn' | 'error';
-      if (is502Error) {
-        this.#consecutive502Errors++;
-        // First 3 occurrences are warnings, after that errors
-        log = this.#consecutive502Errors <= 3 ? 'warn' : 'error';
-      } else {
-        // Reset counter for non-502 errors
-        this.#consecutive502Errors = 0;
-        // Use delay-based log level for other errors
-        log = delay < 1000 ? 'info' : delay < 5000 ? 'warn' : 'error';
-      }
+      // Use delay-based log level: higher delay means more retries
+      const log: 'info' | 'warn' | 'error' =
+        delay < 1000 ? 'info' : delay < 6500 ? 'warn' : 'error';
 
       lc[log]?.(`retrying ${this.#serviceName} in ${delay} ms`, err);
       await this.sleep(delay);
@@ -171,12 +157,10 @@ export class RunningState {
   /**
    * When using {@link backoff()}, this method should be called when the
    * implementation receives a healthy signal (e.g. a successful
-   * response). This resets the delay used in {@link backoff()} and
-   * resets the consecutive 502 error counter.
+   * response). This resets the delay used in {@link backoff()}.
    */
   resetBackoff() {
     this.#retryDelay = this.#initialRetryDelay;
-    this.#consecutive502Errors = 0;
   }
 }
 

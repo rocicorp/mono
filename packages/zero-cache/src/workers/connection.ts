@@ -16,6 +16,7 @@ import {upstreamSchema, type Upstream} from '../../../zero-protocol/src/up.ts';
 import {
   ProtocolErrorWithLevel,
   getLogLevel,
+  logError,
   wrapWithProtocolError,
 } from '../types/error-with-level.ts';
 import type {Source} from '../types/streams.ts';
@@ -372,25 +373,27 @@ export function sendError(
   thrown?: unknown,
 ) {
   lc = lc.withContext('errorKind', errorBody.kind);
-  let logLevel: LogLevel = thrown ? getLogLevel(thrown) : 'info';
-  // ClientNotFound errors should be warnings, not errors
-  if (errorBody.kind === ErrorKind.ClientNotFound) {
-    logLevel = 'warn';
-  }
-  // TransformFailed errors are configuration/validation issues that should be warnings
-  if (String(errorBody.kind) === 'TransformFailed') {
-    logLevel = 'warn';
-  }
-  // Errors with errno are low-level, transient I/O issues (e.g., EPIPE, ECONNRESET)
-  // and should be warnings, not errors
-  if (
-    hasErrno(thrown) ||
-    containsTransientSocketCode(errorBody.message) ||
-    hasTransientSocketCode(thrown)
-  ) {
-    logLevel = 'warn';
-  }
-  lc[logLevel]?.('Sending error on WebSocket', errorBody, thrown ?? '');
+  const classify = (e: unknown): LogLevel => {
+    // ClientNotFound errors should be warnings, not errors
+    if (errorBody.kind === ErrorKind.ClientNotFound) {
+      return 'warn';
+    }
+    // TransformFailed errors are configuration/validation issues that should be warnings
+    if (String(errorBody.kind) === 'TransformFailed') {
+      return 'warn';
+    }
+    // Errors with errno are low-level, transient I/O issues (e.g., EPIPE, ECONNRESET)
+    // and should be warnings, not errors
+    if (
+      hasErrno(e) ||
+      containsTransientSocketCode(errorBody.message) ||
+      hasTransientSocketCode(e)
+    ) {
+      return 'warn';
+    }
+    return e ? getLogLevel(e) : 'info';
+  };
+  logError(lc, thrown, 'Sending error on WebSocket', classify);
   send(lc, ws, ['error', errorBody], 'ignore-backpressure');
 }
 

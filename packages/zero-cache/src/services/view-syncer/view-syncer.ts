@@ -1,6 +1,6 @@
 import {trace} from '@opentelemetry/api';
 import {Lock} from '@rocicorp/lock';
-import type {LogContext} from '@rocicorp/logger';
+import type {LogContext, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type {JWTPayload} from 'jose';
 import type {Row} from 'postgres';
@@ -51,6 +51,7 @@ import {
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {
   getLogLevel,
+  logError,
   ProtocolErrorWithLevel,
 } from '../../types/error-with-level.ts';
 import type {PostgresDB} from '../../types/pg.ts';
@@ -1190,17 +1191,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     for (const q of transformedCustomQueries) {
       if ('error' in q) {
         const errorMessage = `Error transforming custom query ${q.name}: ${q.error}${q.details ? ` ${JSON.stringify(q.details)}` : ''}`;
-        // URL configuration errors should be warnings, not errors
-        const isUrlConfigError =
+        // URL configuration errors should be warnings
+        const classify = (_e: unknown): LogLevel =>
           typeof q.details === 'string' &&
           q.details.includes(
             'not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration',
-          );
-        if (isUrlConfigError) {
-          lc.warn?.(errorMessage);
-        } else {
-          lc.error?.(errorMessage);
-        }
+          )
+            ? 'warn'
+            : 'error';
+        logError(lc, q, errorMessage, classify);
         appQueryErrors.push(q);
         continue;
       }

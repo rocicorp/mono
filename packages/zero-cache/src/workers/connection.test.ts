@@ -8,7 +8,10 @@ import {
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
-import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
+import {
+  ErrorWithLevel,
+  ProtocolErrorWithLevel,
+} from '../types/error-with-level.ts';
 import {send, sendError, type WebSocketLike} from './connection.ts';
 
 class MockSocket implements WebSocketLike {
@@ -140,5 +143,76 @@ describe('sendError', () => {
       undefined,
     );
     expect(lastLogLevel()).toBe('info');
+  });
+
+  test('ErrorWithLevel uses its logLevel', () => {
+    const err = new ErrorWithLevel('custom error', 'warn');
+    sendError(
+      lc,
+      ws,
+      {
+        kind: ErrorKind.Internal,
+        message: 'wrapper message',
+        origin: ErrorOrigin.ZeroCache,
+      },
+      err,
+    );
+    expect(lastLogLevel()).toBe('warn');
+  });
+
+  test('ProtocolErrorWithLevel uses its logLevel', () => {
+    const err = new ProtocolErrorWithLevel(
+      {
+        kind: ErrorKind.Internal,
+        message: 'protocol error',
+        origin: ErrorOrigin.ZeroCache,
+      },
+      'debug',
+    );
+    sendError(
+      lc,
+      ws,
+      {
+        kind: ErrorKind.Internal,
+        message: 'wrapper message',
+        origin: ErrorOrigin.ZeroCache,
+      },
+      err,
+    );
+    expect(lastLogLevel()).toBe('debug');
+  });
+
+  test('ErrorWithLevel logLevel takes precedence over classify function', () => {
+    // ErrorWithLevel's logLevel takes precedence, even if errorBody.kind would classify it differently
+    const err = new ErrorWithLevel('custom error', 'error');
+    sendError(
+      lc,
+      ws,
+      {
+        kind: ErrorKind.ClientNotFound,
+        message: 'client not found',
+        origin: ErrorOrigin.ZeroCache,
+      },
+      err,
+    );
+    // ErrorWithLevel specifies 'error', so that takes precedence over the classify function
+    expect(lastLogLevel()).toBe('error');
+  });
+
+  test('ECONNRESET error code is logged as warning', () => {
+    const err = Object.assign(new Error('read ECONNRESET'), {
+      code: 'ECONNRESET',
+    });
+    sendError(
+      lc,
+      ws,
+      {
+        kind: ErrorKind.Internal,
+        message: 'read ECONNRESET',
+        origin: ErrorOrigin.ZeroCache,
+      },
+      err,
+    );
+    expect(lastLogLevel()).toBe('warn');
   });
 });

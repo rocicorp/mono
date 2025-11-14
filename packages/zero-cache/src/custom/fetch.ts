@@ -12,6 +12,7 @@ import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {getErrorMessage} from '../../../shared/src/error.ts';
+import {UrlConfigurationError} from '../types/error-with-level.ts';
 
 const reservedParams = ['schema', 'appID'];
 
@@ -75,9 +76,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
   });
 
   if (!urlMatch(url, allowedUrlPatterns)) {
-    throw new Error(
-      `URL "${url}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
-    );
+    throw new UrlConfigurationError(url);
   }
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
