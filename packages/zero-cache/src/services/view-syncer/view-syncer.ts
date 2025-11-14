@@ -1507,10 +1507,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       return;
     }
 
-    // Reset window if outside the time window
+    // If outside the time window, delete the old entry and create a new one
     if (now - record.windowStart > THRASH_WINDOW_MS) {
-      record.count = 1;
-      record.windowStart = now;
+      this.#queryReplacements.delete(queryID);
+      this.#queryReplacements.set(queryID, {count: 1, windowStart: now});
       return;
     }
 
@@ -1579,6 +1579,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
         // Remove per-query server metrics when query is deleted
         this.#inspectorDelegate.removeQuery(q.id);
+
+        // Clean up thrashing detection for removed queries
+        this.#queryReplacements.delete(q.id);
       }
       for (const hash of unhydrateQueries) {
         this.#pipelines.removeQuery(hash);
@@ -1587,6 +1590,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         if (ids) {
           for (const id of ids) {
             this.#inspectorDelegate.removeQuery(id);
+            // Clean up thrashing detection for unhydrated queries
+            this.#queryReplacements.delete(id);
           }
         }
       }
