@@ -1,17 +1,15 @@
-import {useEffect, act, type ReactNode} from 'react';
+import {act, useEffect, type ReactNode} from 'react';
 import {createRoot, type Root} from 'react-dom/client';
-import {afterEach, expect, test, vi, describe, type Mock} from 'vitest';
-import type {ConnectionState} from '../../zero-client/src/client/connection-manager.ts';
+import {afterEach, describe, expect, test, vi, type Mock} from 'vitest';
 import {ConnectionStatus} from '../../zero-client/src/client/connection-status.ts';
-import {ClientError} from '../../zero-client/src/client/error.ts';
 
 vi.mock('./zero-provider.tsx', () => ({
   useZero: vi.fn(),
 }));
 
-import {useZero} from './zero-provider.tsx';
+import type {ConnectionState} from '../../zero-client/src/client/connection.ts';
 import {useZeroConnectionState} from './use-zero-connection-state.tsx';
-import {ClientErrorKind} from '../../zero-client/src/client/client-error-kind.ts';
+import {useZero} from './zero-provider.tsx';
 
 type ZeroLike = {
   connection: {
@@ -71,9 +69,7 @@ function renderWithRoot(children: ReactNode): Root {
 describe('useZeroConnectionState (React)', () => {
   test('returns the current connection state and updates on changes', () => {
     const initialState: ConnectionState = {
-      name: ConnectionStatus.Connecting,
-      attempt: 0,
-      disconnectAt: Date.now() + 5000,
+      name: 'connecting',
     };
     const {stateStore, listeners, subscribeMock} = mockZero(initialState);
     const observedStates: ConnectionState[] = [];
@@ -101,10 +97,7 @@ describe('useZeroConnectionState (React)', () => {
 
     const nextState: ConnectionState = {
       name: ConnectionStatus.Disconnected,
-      reason: new ClientError({
-        kind: ClientErrorKind.Offline,
-        message: 'disconnected',
-      }),
+      reason: 'disconnected error',
     };
 
     act(() => {
