@@ -10,13 +10,13 @@ import {afterEach, expect, test, vi} from 'vitest';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import {registerZeroDelegate} from '../../zero-client/src/client/bindings.ts';
+import type {Zero} from '../../zero/src/zero.ts';
 import {
   createSchema,
   number,
   relationships,
   string,
   table,
-  Zero,
   type CustomMutatorDefs,
   type Query,
   type Schema,

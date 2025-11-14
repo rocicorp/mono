@@ -3,8 +3,8 @@ import type {Enum} from '../../../shared/src/enum.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import type {LazyStore} from '../dag/lazy-store.ts';
 import type {Store} from '../dag/store.ts';
+import type {Commit} from '../db/commit.ts';
 import {
-  Commit,
   DEFAULT_HEAD_NAME,
   type SnapshotMetaDD31,
   assertSnapshotCommitDD31,
@@ -17,13 +17,11 @@ import {
   localMutationsGreaterThan,
 } from '../db/commit.ts';
 import {rebaseMutationAndPutCommit} from '../db/rebase.ts';
-import * as FormatVersion from '../format-version-enum.ts';
+import type * as FormatVersion from '../format-version-enum.ts';
 import type {Hash} from '../hash.ts';
-import {
-  type DiffComputationConfig,
-  DiffsMap,
-  diffCommits,
-} from '../sync/diff.ts';
+import type {ZeroOption} from '../replicache-options.ts';
+import type {DiffsMap} from '../sync/diff.ts';
+import {type DiffComputationConfig, diffCommits} from '../sync/diff.ts';
 import type {ClientID} from '../sync/ids.ts';
 import type {MutatorDefs} from '../types.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
@@ -39,7 +37,6 @@ import {
   type ChunkWithSize,
   GatherNotCachedVisitor,
 } from './gather-not-cached-visitor.ts';
-import type {ZeroOption} from '../replicache-options.ts';
 
 type FormatVersion = Enum<typeof FormatVersion>;
 

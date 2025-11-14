@@ -1,5 +1,5 @@
 import {diag, DiagLogLevel} from '@opentelemetry/api';
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 
 function getOtelLogLevel(level: string | undefined): DiagLogLevel | undefined {
   if (!level) return undefined;

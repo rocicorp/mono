@@ -1,4 +1,4 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import * as v from '../../../shared/src/valita.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {ReplicaOptions} from '../config/zero-config.ts';

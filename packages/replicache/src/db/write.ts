@@ -14,8 +14,8 @@ import {lazy} from '../lazy.ts';
 import type {DiffComputationConfig} from '../sync/diff.ts';
 import {DiffsMap} from '../sync/diff.ts';
 import type {ClientID} from '../sync/ids.ts';
+import type {Commit} from './commit.ts';
 import {
-  Commit,
   type Meta as CommitMeta,
   type IndexRecord,
   type Meta,
@@ -26,7 +26,8 @@ import {
   getMutationID,
 } from './commit.ts';
 import * as IndexOperation from './index-operation-enum.ts';
-import {IndexRead, IndexWrite, indexValue} from './index.ts';
+import type {IndexRead} from './index.ts';
+import {IndexWrite, indexValue} from './index.ts';
 import * as MetaType from './meta-type-enum.ts';
 import {Read, readIndexesForRead} from './read.ts';
 

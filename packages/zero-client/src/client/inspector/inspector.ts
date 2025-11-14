@@ -13,6 +13,7 @@ import type {
 
 export type {InspectorDelegate};
 
+// oxlint-disable-next-line consistent-type-imports
 export type Lazy = typeof import('./lazy-inspector.ts');
 
 export class Inspector {

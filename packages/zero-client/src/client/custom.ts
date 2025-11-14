@@ -1,8 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import {
-  WriteTransactionImpl,
-  zeroData,
-} from '../../../replicache/src/transactions.ts';
+import type {WriteTransactionImpl} from '../../../replicache/src/transactions.ts';
+import {zeroData} from '../../../replicache/src/transactions.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';

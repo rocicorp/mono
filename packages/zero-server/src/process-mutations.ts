@@ -5,8 +5,8 @@ import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {MaybePromise} from '../../shared/src/types.ts';
 import * as v from '../../shared/src/valita.ts';
 import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
+import type {ApplicationError} from '../../zero-protocol/src/application-error.ts';
 import {
-  ApplicationError,
   isApplicationError,
   wrapWithApplicationError,
 } from '../../zero-protocol/src/application-error.ts';

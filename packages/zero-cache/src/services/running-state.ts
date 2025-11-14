@@ -1,4 +1,4 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {AbortError} from '../../../shared/src/abort-error.ts';
 import {sleepWithAbort} from '../../../shared/src/sleep.ts';

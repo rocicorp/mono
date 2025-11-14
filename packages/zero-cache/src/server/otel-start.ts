@@ -4,14 +4,14 @@ import type {Instrumentation} from '@opentelemetry/instrumentation';
 import {resourceFromAttributes} from '@opentelemetry/resources';
 import {NodeSDK} from '@opentelemetry/sdk-node';
 import {ATTR_SERVICE_VERSION} from '@opentelemetry/semantic-conventions';
-import {LogContext} from '@rocicorp/logger';
-import {setupOtelDiagnosticLogger} from './otel-diag-logger.js';
+import type {LogContext} from '@rocicorp/logger';
 import {
   otelEnabled,
   otelLogsEnabled,
   otelMetricsEnabled,
   otelTracesEnabled,
 } from '../../../otel/src/enabled.ts';
+import {setupOtelDiagnosticLogger} from './otel-diag-logger.js';
 
 class OtelManager {
   static #instance: OtelManager;

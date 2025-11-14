@@ -1,4 +1,4 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {deepEqual, type JSONValue} from '../../../../shared/src/json.ts';
 import {must} from '../../../../shared/src/must.ts';
@@ -20,7 +20,11 @@ import type {
   SourceChange,
   SourceInput,
 } from '../../../../zql/src/ivm/source.ts';
+import type {ConnectionCostModel} from '../../../../zql/src/planner/planner-connection.ts';
 import {MeasurePushOperator} from '../../../../zql/src/query/measure-push-operator.ts';
+import type {ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
+import type {Database} from '../../../../zqlite/src/db.ts';
+import {createSQLiteCostModel} from '../../../../zqlite/src/sqlite-cost-model.ts';
 import {TableSource} from '../../../../zqlite/src/table-source.ts';
 import {
   reloadPermissionsIfChanged,
@@ -39,15 +43,8 @@ import type {SchemaVersions} from '../../types/schema-versions.ts';
 import type {ShardID} from '../../types/shards.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
-import type {ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
-import {
-  ResetPipelinesSignal,
-  Snapshotter,
-  type SnapshotDiff,
-} from './snapshotter.ts';
-import type {ConnectionCostModel} from '../../../../zql/src/planner/planner-connection.ts';
-import type {Database} from '../../../../zqlite/src/db.ts';
-import {createSQLiteCostModel} from '../../../../zqlite/src/sqlite-cost-model.ts';
+import type {Snapshotter} from './snapshotter.ts';
+import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
 
 export type RowAdd = {
   readonly type: 'add';

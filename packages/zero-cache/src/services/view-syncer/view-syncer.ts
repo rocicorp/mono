@@ -42,14 +42,14 @@ import {
 } from '../../auth/read-authorizer.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
-import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
+import type {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import type {HeaderOptions} from '../../custom/fetch.ts';
 import {
   getOrCreateCounter,
   getOrCreateHistogram,
   getOrCreateUpDownCounter,
 } from '../../observability/metrics.ts';
-import {InspectorDelegate} from '../../server/inspector-delegate.ts';
+import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {
   getLogLevel,
   ProtocolErrorWithLevel,
@@ -70,17 +70,18 @@ import {
   type RowPatch,
 } from './client-handler.ts';
 import {CVRStore} from './cvr-store.ts';
+import type {CVRUpdater} from './cvr.ts';
 import {
   CVRConfigDrivenUpdater,
   CVRQueryDrivenUpdater,
-  CVRUpdater,
   nextEvictionTime,
   type CVRSnapshot,
   type RowUpdate,
 } from './cvr.ts';
 import type {DrainCoordinator} from './drain-coordinator.ts';
 import {handleInspect} from './inspect-handler.ts';
-import {PipelineDriver, type RowChange} from './pipeline-driver.ts';
+import type {PipelineDriver} from './pipeline-driver.ts';
+import {type RowChange} from './pipeline-driver.ts';
 import {
   cmpVersions,
   EMPTY_CVR_VERSION,

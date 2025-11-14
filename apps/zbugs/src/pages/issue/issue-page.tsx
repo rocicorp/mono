@@ -1,5 +1,6 @@
 import {useQuery} from '@rocicorp/zero/react';
-import {useWindowVirtualizer, Virtualizer} from '@tanstack/react-virtual';
+import type {Virtualizer} from '@tanstack/react-virtual';
+import {useWindowVirtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
 import {
   memo,

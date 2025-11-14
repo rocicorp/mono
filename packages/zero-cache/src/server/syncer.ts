@@ -14,7 +14,7 @@ import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {MutagenService} from '../services/mutagen/mutagen.ts';
 import {PusherService} from '../services/mutagen/pusher.ts';
 import type {ReplicaState} from '../services/replicator/replicator.ts';
-import {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
+import type {DrainCoordinator} from '../services/view-syncer/drain-coordinator.ts';
 import {PipelineDriver} from '../services/view-syncer/pipeline-driver.ts';
 import {Snapshotter} from '../services/view-syncer/snapshotter.ts';
 import {ViewSyncerService} from '../services/view-syncer/view-syncer.ts';
@@ -25,7 +25,7 @@ import {
   type Worker,
 } from '../types/processes.ts';
 import {getShardID} from '../types/shards.ts';
-import {Subscription} from '../types/subscription.ts';
+import type {Subscription} from '../types/subscription.ts';
 import {replicaFileModeSchema, replicaFileName} from '../workers/replicator.ts';
 import {Syncer} from '../workers/syncer.ts';
 import {startAnonymousTelemetry} from './anonymous-otel-start.ts';

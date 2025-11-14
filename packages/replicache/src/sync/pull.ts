@@ -5,10 +5,10 @@ import {diff} from '../btree/diff.ts';
 import {BTreeRead} from '../btree/read.ts';
 import {compareCookies, type Cookie} from '../cookies.ts';
 import type {Store} from '../dag/store.ts';
+import type {Commit} from '../db/commit.ts';
 import {
   assertSnapshotMetaDD31,
   baseSnapshotFromHash,
-  Commit,
   commitFromHash,
   commitIsLocalDD31,
   DEFAULT_HEAD_NAME,
@@ -18,7 +18,7 @@ import {
 } from '../db/commit.ts';
 import {newWriteSnapshotDD31} from '../db/write.ts';
 import {isErrorResponse} from '../error-responses.ts';
-import * as FormatVersion from '../format-version-enum.ts';
+import type * as FormatVersion from '../format-version-enum.ts';
 import {deepFreeze, type FrozenJSONValue} from '../frozen-json.ts';
 import {assertPullerResultV1} from '../get-default-puller.ts';
 import {emptyHash, type Hash} from '../hash.ts';

@@ -1,4 +1,4 @@
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {WebSocket} from 'ws';
 import {assert, unreachable} from '../../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../../shared/src/bigint-json.ts';

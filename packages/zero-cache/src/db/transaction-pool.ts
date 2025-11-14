@@ -11,7 +11,7 @@ import {
   type PostgresDB,
   type PostgresTransaction,
 } from '../types/pg.ts';
-import * as Mode from './mode-enum.ts';
+import type * as Mode from './mode-enum.ts';
 
 type Mode = Enum<typeof Mode>;
 

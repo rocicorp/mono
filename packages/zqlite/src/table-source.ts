@@ -1,5 +1,6 @@
 import type {SQLQuery} from '@databases/sql';
 import type {LogContext} from '@rocicorp/logger';
+import SQLite3Database from '@rocicorp/zero-sqlite3';
 import type {LogConfig} from '../../otel/src/log-options.ts';
 import {timeSampled} from '../../otel/src/maybe-time.ts';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
@@ -20,11 +21,6 @@ import {
 } from '../../zql/src/builder/filter.ts';
 import {makeComparator, type Node} from '../../zql/src/ivm/data.ts';
 import {
-  buildSelectQuery,
-  toSQLiteType,
-  type NoSubqueryCondition,
-} from './query-builder.ts';
-import {
   generateWithOverlay,
   generateWithStart,
   genPushAndWriteWithSplitEdit,
@@ -39,10 +35,14 @@ import type {
   SourceInput,
 } from '../../zql/src/ivm/source.ts';
 import type {Stream} from '../../zql/src/ivm/stream.ts';
-import {Database, Statement} from './db.ts';
+import type {Database, Statement} from './db.ts';
 import {compile, format, sql} from './internal/sql.ts';
 import {StatementCache} from './internal/statement-cache.ts';
-import SQLite3Database from '@rocicorp/zero-sqlite3';
+import {
+  buildSelectQuery,
+  toSQLiteType,
+  type NoSubqueryCondition,
+} from './query-builder.ts';
 
 type Statements = {
   readonly cache: StatementCache;

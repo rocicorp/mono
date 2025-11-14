@@ -1,4 +1,5 @@
 import {afterEach, describe, expect, test, vi} from 'vitest';
+import type {ReplicacheTest} from './test-util.ts';
 import {
   addData,
   disableAllBackgroundProcesses,
@@ -6,7 +7,6 @@ import {
   initReplicacheTesting,
   makePullResponseV1,
   replicacheForTesting,
-  ReplicacheTest,
   tickAFewTimes,
 } from './test-util.ts';
 

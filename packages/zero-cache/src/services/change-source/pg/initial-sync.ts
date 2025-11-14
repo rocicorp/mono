@@ -7,7 +7,7 @@ import {platform} from 'node:os';
 import {Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import postgres from 'postgres';
-import {Database} from '../../../../../zqlite/src/db.ts';
+import type {Database} from '../../../../../zqlite/src/db.ts';
 import {
   createLiteIndexStatement,
   createLiteTableStatement,

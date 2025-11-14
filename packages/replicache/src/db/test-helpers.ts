@@ -24,8 +24,8 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from '../with-transactions.ts';
+import type {Commit} from './commit.ts';
 import {
-  Commit,
   DEFAULT_HEAD_NAME,
   type IndexRecord,
   type LocalMeta,

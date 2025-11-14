@@ -1,6 +1,6 @@
 import type {SQLQuery} from '@databases/sql';
 import type {MaybePromise} from '@opentelemetry/resources';
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import type {JWTPayload} from 'jose';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
@@ -39,7 +39,7 @@ import {
   DatabaseStorage,
   type ClientGroupStorage,
 } from '../../../zqlite/src/database-storage.ts';
-import {Database} from '../../../zqlite/src/db.ts';
+import type {Database} from '../../../zqlite/src/db.ts';
 import {compile, sql} from '../../../zqlite/src/internal/sql.ts';
 import {
   fromSQLiteTypes,

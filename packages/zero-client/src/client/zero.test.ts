@@ -78,10 +78,10 @@ import type {WSString} from './http-string.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import type {QueryManager} from './query-manager.ts';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.ts';
+import type {TestZero} from './test-utils.ts';
 import {
   MockSocket,
   storageMock,
-  TestZero,
   tickAFewTimes,
   waitForUpstreamMessage,
   zeroForTest,

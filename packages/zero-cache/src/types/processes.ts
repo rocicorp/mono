@@ -1,9 +1,5 @@
-import {
-  ChildProcess,
-  fork,
-  type SendHandle,
-  type Serializable,
-} from 'node:child_process';
+import type {ChildProcess} from 'node:child_process';
+import {fork, type SendHandle, type Serializable} from 'node:child_process';
 import EventEmitter from 'node:events';
 import {platform} from 'node:os';
 import path from 'node:path';

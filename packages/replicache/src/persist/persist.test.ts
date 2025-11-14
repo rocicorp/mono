@@ -11,8 +11,8 @@ import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {BTreeRead} from '../btree/read.ts';
 import {LazyStore, LazyWrite} from '../dag/lazy-store.ts';
 import {TestStore} from '../dag/test-store.ts';
+import type {Commit} from '../db/commit.ts';
 import {
-  Commit,
   DEFAULT_HEAD_NAME,
   type Meta,
   assertLocalMetaDD31,

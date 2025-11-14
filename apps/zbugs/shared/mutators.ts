@@ -8,7 +8,7 @@ import {
   type AuthData,
 } from './auth.ts';
 import {MutationError, MutationErrorCode} from './error.ts';
-import {builder, schema, ZERO_PROJECT_ID} from './schema.ts';
+import {builder, ZERO_PROJECT_ID, type schema} from './schema.ts';
 
 function projectIDWithDefault(projectID: string | undefined): string {
   return projectID ?? ZERO_PROJECT_ID;

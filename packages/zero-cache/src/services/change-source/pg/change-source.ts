@@ -2,7 +2,7 @@ import {
   PG_ADMIN_SHUTDOWN,
   PG_OBJECT_IN_USE,
 } from '@drdgvhbh/postgres-error-codes';
-import {LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {AbortError} from '../../../../../shared/src/abort-error.ts';
 import {stringify} from '../../../../../shared/src/bigint-json.ts';

@@ -48,6 +48,7 @@ import {
 
 // Do not use an import statement here because vitest will then load that file
 // which does not work in a worker context.
+// oxlint-disable-next-line consistent-type-imports
 type VitestUtils = import('vitest').VitestUtils;
 
 export async function tickAFewTimes(vi: VitestUtils, duration = 100) {

@@ -3,7 +3,7 @@ import {beforeEach, describe, expect, test, vi} from 'vitest';
 import type {AST, System} from '../../../zero-protocol/src/ast.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
-import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
+import type {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import type {MetricMap} from '../../../zql/src/query/metrics-delegate.ts';
 import type {CustomQueryID} from '../../../zql/src/query/named.ts';
 import {QueryImpl} from '../../../zql/src/query/query-impl.ts';

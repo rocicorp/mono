@@ -6,8 +6,8 @@
  */
 
 import * as v from '../../../../../shared/src/valita.ts';
-import {Database} from '../../../../../zqlite/src/db.ts';
-import {StatementRunner} from '../../../db/statements.ts';
+import type {Database} from '../../../../../zqlite/src/db.ts';
+import type {StatementRunner} from '../../../db/statements.ts';
 import {ZERO_VERSION_COLUMN_NAME} from './constants.ts';
 
 export {ZERO_VERSION_COLUMN_NAME};

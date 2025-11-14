@@ -8,8 +8,8 @@ import type {Cookie} from '../cookies.ts';
 import {LazyStore} from '../dag/lazy-store.ts';
 import type {Store} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';
+import type {Commit} from '../db/commit.ts';
 import {
-  Commit,
   DEFAULT_HEAD_NAME,
   type IndexRecord,
   type LocalMetaDD31,
