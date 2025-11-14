@@ -47,6 +47,93 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+test('includes datadog sink even when custom log sink provided', () => {
+  const customSink = new TestLogSink();
+  const {logLevel, logSink} = createLogOptions(
+    {
+      consoleLogLevel: 'debug',
+      logSinks: [customSink],
+      server: 'https://example.com',
+      enableAnalytics: true,
+    },
+    fakeCreateDatadogLogSink,
+  );
+  expect(fakeCreateDatadogLogSink).toHaveBeenCalledOnce();
+  expect(logLevel).toBe('debug');
+
+  logSink.log('info', undefined, 'hello');
+
+  expect(customSink.messages).toEqual([['info', undefined, ['hello']]]);
+  expect(datadogLogSinkSpy.log).toHaveBeenCalledTimes(1);
+  expect(datadogLogSinkSpy.log.mock.calls[0]).toEqual([
+    'info',
+    undefined,
+    'hello',
+  ]);
+});
+
+test('tees provided log sinks when more than one supplied', () => {
+  const sinkA = new TestLogSink();
+  const sinkB = new TestLogSink();
+  const {logSink} = createLogOptions(
+    {
+      consoleLogLevel: 'info',
+      logSinks: [sinkA, sinkB],
+      server: 'https://example.com',
+      enableAnalytics: true,
+    },
+    fakeCreateDatadogLogSink,
+  );
+  expect(fakeCreateDatadogLogSink).toHaveBeenCalledOnce();
+  expect(logSink).not.toBe(sinkA);
+  expect(logSink).not.toBe(sinkB);
+
+  logSink.log('info', undefined, 'hello');
+
+  expect(sinkA.messages).toEqual([['info', undefined, ['hello']]]);
+  expect(sinkB.messages).toEqual(sinkA.messages);
+  expect(datadogLogSinkSpy.log).toHaveBeenCalledTimes(1);
+  expect(datadogLogSinkSpy.log.mock.calls[0]).toEqual([
+    'info',
+    undefined,
+    'hello',
+  ]);
+});
+
+test('uses only datadog sink when custom sinks empty and analytics enabled', () => {
+  const {logSink} = createLogOptions(
+    {
+      consoleLogLevel: 'info',
+      logSinks: [],
+      server: 'https://example.com',
+      enableAnalytics: true,
+    },
+    fakeCreateDatadogLogSink,
+  );
+  expect(fakeCreateDatadogLogSink).toHaveBeenCalledOnce();
+
+  logSink.log('info', undefined, 'hello');
+
+  expect(datadogLogSinkSpy.log).toHaveBeenCalledTimes(1);
+});
+
+test('flush flushes wrapped datadog sink when analytics enabled', async () => {
+  const {logSink} = createLogOptions(
+    {
+      consoleLogLevel: 'info',
+      server: 'https://example.com',
+      enableAnalytics: true,
+    },
+    fakeCreateDatadogLogSink,
+  );
+  expect(fakeCreateDatadogLogSink).toHaveBeenCalledOnce();
+  expect(datadogLogSinkSpy.flush).toBeDefined();
+
+  await logSink.flush?.();
+
+  expect(datadogLogSinkSpy.flush).toHaveBeenCalledTimes(1);
+});
+
 function testEnableAnalyticsFalse(server: HTTPString | null) {
   test(`server ${server}, enableAnalytics false`, () => {
     const {logLevel, logSink} = createLogOptions(

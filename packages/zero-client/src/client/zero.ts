@@ -1,4 +1,4 @@
-import {LogContext, type LogLevel} from '@rocicorp/logger';
+import {LogContext, type LogLevel, type LogSink} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import {type DeletedClients} from '../../../replicache/src/deleted-clients.ts';
 import {
@@ -199,7 +199,9 @@ interface TestZero<TContext> {
   [exposedToTestingSymbol]?: TestingContext<TContext>;
   [createLogOptionsSymbol]?: (options: {
     consoleLogLevel: LogLevel;
-    server: string | null;
+    logSinks?: LogSink[] | undefined;
+    server: HTTPString | null;
+    enableAnalytics: boolean;
   }) => LogOptions;
 }
 
@@ -486,6 +488,7 @@ export class Zero<
 
     this.#logOptions = this.#createLogOptions({
       consoleLogLevel: options.logLevel ?? 'warn',
+      logSinks: options.logSinks,
       server: null, //server, // Reenable remote logging
       enableAnalytics: this.#enableAnalytics,
     });
@@ -859,6 +862,7 @@ export class Zero<
 
   #createLogOptions(options: {
     consoleLogLevel: LogLevel;
+    logSinks?: LogSink[] | undefined;
     server: HTTPString | null;
     enableAnalytics: boolean;
   }): LogOptions {

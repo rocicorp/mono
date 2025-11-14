@@ -1,4 +1,4 @@
-import type {LogLevel} from '@rocicorp/logger';
+import {TeeLogSink, type LogLevel, type LogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {nanoid} from '../util/nanoid.ts';
 // import {type VitestUtils} from 'vitest';
@@ -144,8 +144,22 @@ export class TestZero<
     });
   }
 
-  [createLogOptionsSymbol](options: {consoleLogLevel: LogLevel}): LogOptions {
+  [createLogOptionsSymbol](options: {
+    consoleLogLevel: LogLevel;
+    logSinks?: LogSink[] | undefined;
+    server: string | null;
+    enableAnalytics: boolean;
+  }): LogOptions {
     assert(TESTING);
+    if (options.logSinks !== undefined) {
+      return {
+        logLevel: options.consoleLogLevel,
+        logSink:
+          options.logSinks.length === 1
+            ? options.logSinks[0]
+            : new TeeLogSink(options.logSinks),
+      };
+    }
     return {
       logLevel: options.consoleLogLevel,
       logSink: new TestLogSink(),

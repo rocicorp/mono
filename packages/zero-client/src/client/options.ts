@@ -1,4 +1,4 @@
-import type {LogLevel} from '@rocicorp/logger';
+import type {LogLevel, LogSink} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
@@ -71,6 +71,20 @@ export interface ZeroOptions<
    * Default is `'error'`.
    */
   logLevel?: LogLevel | undefined;
+
+  /**
+   * Enables custom handling of logs.
+   *
+   * By default logs go to the console (and DataDog when analytics are enabled
+   * for Zero). Provide an array of {@link LogSink}s to send logs somewhere
+   * else. If you still want logs to go to the console, include
+   * {@link consoleLogSink} in the array.
+   *
+   * ```ts
+   * logSinks: [consoleLogSink, myCloudLogSink],
+   * ```
+   */
+  logSinks?: LogSink[] | undefined;
 
   /**
    * This defines the schema of the tables used in Zero and their relationships

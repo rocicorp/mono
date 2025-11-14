@@ -32,7 +32,7 @@ class LevelFilterLogSink implements LogSink {
   }
 
   async flush() {
-    await consoleLogSink.flush?.();
+    await this.#wrappedLogSink.flush?.();
   }
 }
 
@@ -47,6 +47,7 @@ export type LogOptions = {
 export function createLogOptions(
   options: {
     consoleLogLevel: LogLevel;
+    logSinks?: LogSink[] | undefined;
     server: HTTPString | null;
     enableAnalytics: boolean;
   },
@@ -54,9 +55,17 @@ export function createLogOptions(
     options: DatadogLogSinkOptions,
   ) => new DatadogLogSink(options),
 ): LogOptions {
-  const {consoleLogLevel, server, enableAnalytics} = options;
+  const {consoleLogLevel, server, enableAnalytics, logSinks} = options;
 
   if (!enableAnalytics || server === null) {
+    if (logSinks !== undefined) {
+      const sink =
+        logSinks.length === 1 ? logSinks[0] : new TeeLogSink(logSinks);
+      return {
+        logLevel: consoleLogLevel,
+        logSink: sink,
+      };
+    }
     return {
       logLevel: consoleLogLevel,
       logSink: consoleLogSink,
@@ -72,18 +81,21 @@ export function createLogOptions(
     : hostname;
   const baseURL = new URL(appendPath(server, '/logs/v0/log'));
   const logLevel = consoleLogLevel === 'debug' ? 'debug' : 'info';
-  const logSink = new TeeLogSink([
-    new LevelFilterLogSink(consoleLogSink, consoleLogLevel),
-    new LevelFilterLogSink(
-      createDatadogLogSink({
-        service: datadogServiceLabel,
-        host: location.host,
-        version,
-        baseURL,
-      }),
-      DATADOG_LOG_LEVEL,
-    ),
-  ]);
+  const sinks: LogSink[] =
+    logSinks !== undefined
+      ? [...logSinks]
+      : [new LevelFilterLogSink(consoleLogSink, consoleLogLevel)];
+  const datadogSink = new LevelFilterLogSink(
+    createDatadogLogSink({
+      service: datadogServiceLabel,
+      host: location.host,
+      version,
+      baseURL,
+    }),
+    DATADOG_LOG_LEVEL,
+  );
+  sinks.push(datadogSink);
+  const logSink = sinks.length === 1 ? sinks[0] : new TeeLogSink(sinks);
   return {
     logLevel,
     logSink,

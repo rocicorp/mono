@@ -149,6 +149,17 @@ test('expose and unexpose', async () => {
   expect(g.__zero).toBeUndefined();
 });
 
+test('uses provided log sink option', async () => {
+  const customSink = new TestLogSink();
+  const z = zeroForTest({
+    logSinks: [customSink],
+  });
+
+  expect(z.testLogSink).toBe(customSink);
+
+  await z.close();
+});
+
 describe('onOnlineChange callback', () => {
   const getNewZero = () => {
     let onlineCount = 0;
