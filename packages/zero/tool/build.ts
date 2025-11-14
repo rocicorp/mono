@@ -40,15 +40,11 @@ async function build() {
   async function exec(cmd: string, name: string) {
     const start = performance.now();
     const [command, ...args] = cmd.split(' ');
+    const proc = spawn(command, args, {stdio: 'inherit'});
     await new Promise<void>((resolve, reject) => {
-      const proc = spawn(command, args, {stdio: 'inherit', shell: false});
-      proc.on('exit', code => {
-        if (code === 0) {
-          resolve();
-        } else {
-          reject(new Error(`${name} failed with code ${code}`));
-        }
-      });
+      proc.on('exit', code =>
+        code === 0 ? resolve() : reject(new Error(`${name} failed`)),
+      );
       proc.on('error', reject);
     });
     const end = performance.now();
