@@ -84,7 +84,6 @@ function getAllEntryPoints(): Record<string, string> {
 
 export const config: UserConfig = mergeConfig(baseConfig, {
   build: {
-    emptyOutDir: false, // Don't clear - rm -rf runs first, then vite & tsc run in parallel
     minify: false,
     rollupOptions: {
       input: getAllEntryPoints(),
