@@ -22,7 +22,7 @@ import {
   fetchFromAPIServer,
   type HeaderOptions,
 } from '../custom/fetch.ts';
-import {logError} from '../types/error-with-level.ts';
+import {getLogLevel} from '../types/error-with-level.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
 import type {ShardID} from '../types/shards.ts';
 
@@ -150,7 +150,8 @@ export class CustomQueryTransformer {
 
       return newResponses.concat(cachedResponses);
     } catch (e) {
-      logError(this.#lc, e, 'failed to transform queries');
+      const level = getLogLevel(e);
+      this.#lc[level]?.('failed to transform queries', e);
 
       if (
         isProtocolError(e) &&

@@ -1,6 +1,6 @@
 import {trace} from '@opentelemetry/api';
 import {Lock} from '@rocicorp/lock';
-import type {LogContext, LogLevel} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type {JWTPayload} from 'jose';
 import type {Row} from 'postgres';
@@ -51,7 +51,6 @@ import {
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {
   getLogLevel,
-  logError,
   ProtocolErrorWithLevel,
 } from '../../types/error-with-level.ts';
 import type {PostgresDB} from '../../types/pg.ts';
@@ -437,11 +436,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               cvr.replicaVersion
             }, DB=${this.#pipelines.replicaVersion}`;
             lc.info?.(`resetting CVR: ${message}`);
-            throw new ProtocolError({
-              kind: ErrorKind.ClientNotFound,
-              message,
-              origin: ErrorOrigin.ZeroCache,
-            });
+            throw new ProtocolErrorWithLevel(
+              {
+                kind: ErrorKind.ClientNotFound,
+                message,
+                origin: ErrorOrigin.ZeroCache,
+              },
+              'warn',
+            );
           }
 
           if (this.#pipelinesSynced) {
@@ -1192,14 +1194,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       if ('error' in q) {
         const errorMessage = `Error transforming custom query ${q.name}: ${q.error}${q.details ? ` ${JSON.stringify(q.details)}` : ''}`;
         // URL configuration errors should be warnings
-        const classify = (_e: unknown): LogLevel =>
+        const logLevel =
           typeof q.details === 'string' &&
           q.details.includes(
             'not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration',
           )
             ? 'warn'
             : 'error';
-        logError(lc, q, errorMessage, classify);
+        lc[logLevel]?.(errorMessage, q);
         appQueryErrors.push(q);
         continue;
       }
@@ -2067,11 +2069,14 @@ function checkClientAndCVRVersions(
     cmpVersions(client, NEW_CVR_VERSION) > 0
   ) {
     // CVR is empty but client is not.
-    throw new ProtocolError({
-      kind: ErrorKind.ClientNotFound,
-      message: 'Client not found',
-      origin: ErrorOrigin.ZeroCache,
-    });
+    throw new ProtocolErrorWithLevel(
+      {
+        kind: ErrorKind.ClientNotFound,
+        message: 'Client not found',
+        origin: ErrorOrigin.ZeroCache,
+      },
+      'warn',
+    );
   }
 
   if (cmpVersions(client, cvr) > 0) {

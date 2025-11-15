@@ -16,7 +16,6 @@ import {upstreamSchema, type Upstream} from '../../../zero-protocol/src/up.ts';
 import {
   ProtocolErrorWithLevel,
   getLogLevel,
-  logError,
   wrapWithProtocolError,
 } from '../types/error-with-level.ts';
 import type {Source} from '../types/streams.ts';
@@ -373,27 +372,33 @@ export function sendError(
   thrown?: unknown,
 ) {
   lc = lc.withContext('errorKind', errorBody.kind);
-  const classify = (e: unknown): LogLevel => {
-    // ClientNotFound errors should be warnings, not errors
-    if (errorBody.kind === ErrorKind.ClientNotFound) {
-      return 'warn';
-    }
-    // TransformFailed errors are configuration/validation issues that should be warnings
-    if (String(errorBody.kind) === 'TransformFailed') {
-      return 'warn';
-    }
-    // Errors with errno are low-level, transient I/O issues (e.g., EPIPE, ECONNRESET)
-    // and should be warnings, not errors
-    if (
-      hasErrno(e) ||
-      containsTransientSocketCode(errorBody.message) ||
-      hasTransientSocketCode(e)
-    ) {
-      return 'warn';
-    }
-    return e ? getLogLevel(e) : 'info';
-  };
-  logError(lc, thrown, 'Sending error on WebSocket', classify);
+
+  let logLevel: LogLevel;
+
+  // If the thrown error is a ProtocolErrorWithLevel, its explicit logLevel takes precedence
+  if (thrown instanceof ProtocolErrorWithLevel) {
+    logLevel = thrown.logLevel;
+  }
+  // Errors with errno are low-level, transient I/O issues (e.g., EPIPE, ECONNRESET)
+  // and should be warnings, not errors
+  else if (
+    hasErrno(thrown) ||
+    containsTransientSocketCode(errorBody.message) ||
+    hasTransientSocketCode(thrown)
+  ) {
+    logLevel = 'warn';
+  }
+  // Fallback: check errorBody.kind for errors that weren't thrown as ProtocolErrorWithLevel
+  else if (
+    errorBody.kind === ErrorKind.ClientNotFound ||
+    errorBody.kind === ErrorKind.TransformFailed
+  ) {
+    logLevel = 'warn';
+  } else {
+    logLevel = thrown ? getLogLevel(thrown) : 'info';
+  }
+
+  lc[logLevel]?.('Sending error on WebSocket', errorBody, thrown ?? '');
   send(lc, ws, ['error', errorBody], 'ignore-backpressure');
 }
 

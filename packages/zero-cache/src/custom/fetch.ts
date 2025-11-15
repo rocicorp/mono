@@ -4,27 +4,14 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {upstreamSchema, type ShardID} from '../types/shards.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {Type} from '../../../shared/src/valita.ts';
-import {
-  isProtocolError,
-  ProtocolError,
-} from '../../../zero-protocol/src/error.ts';
+import {isProtocolError} from '../../../zero-protocol/src/error.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {getErrorMessage} from '../../../shared/src/error.ts';
-import {ErrorWithLevel} from '../types/error-with-level.ts';
+import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 
 const reservedParams = ['schema', 'appID'];
-
-class UrlConfigurationError extends ErrorWithLevel {
-  constructor(url: string, options?: ErrorOptions) {
-    super(
-      `URL "${url}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
-      'warn',
-      options,
-    );
-  }
-}
 
 /**
  * Compiles and validates a URLPattern from configuration.
@@ -86,7 +73,16 @@ export async function fetchFromAPIServer<TValidator extends Type>(
   });
 
   if (!urlMatch(url, allowedUrlPatterns)) {
-    throw new UrlConfigurationError(url);
+    throw new ProtocolErrorWithLevel(
+      {
+        kind: ErrorKind.TransformFailed,
+        origin: ErrorOrigin.ZeroCache,
+        reason: ErrorReason.Internal,
+        message: `URL "${url}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
+        queryIDs: [],
+      },
+      'warn',
+    );
   }
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -135,7 +131,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
         bodyPreview,
       });
 
-      throw new ProtocolError(
+      throw new ProtocolErrorWithLevel(
         source === 'push'
           ? {
               kind: ErrorKind.PushFailed,
@@ -155,6 +151,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
               message: `Fetch from API server returned non-OK status ${response.status}`,
               queryIDs: [],
             },
+        'warn',
       );
     }
 
@@ -168,7 +165,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
         error,
       });
 
-      throw new ProtocolError(
+      throw new ProtocolErrorWithLevel(
         source === 'push'
           ? {
               kind: ErrorKind.PushFailed,
@@ -184,6 +181,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
               message: `Failed to parse response from API server: ${getErrorMessage(error)}`,
               queryIDs: [],
             },
+        'warn',
         {cause: error},
       );
     }
@@ -197,7 +195,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
       error,
     });
 
-    throw new ProtocolError(
+    throw new ProtocolErrorWithLevel(
       source === 'push'
         ? {
             kind: ErrorKind.PushFailed,
@@ -213,6 +211,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
             message: `Fetch from API server failed with unknown error: ${getErrorMessage(error)}`,
             queryIDs: [],
           },
+      'warn',
       {cause: error},
     );
   }

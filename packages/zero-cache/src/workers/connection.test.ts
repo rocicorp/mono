@@ -8,10 +8,7 @@ import {
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
-import {
-  ErrorWithLevel,
-  ProtocolErrorWithLevel,
-} from '../types/error-with-level.ts';
+import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 import {send, sendError, type WebSocketLike} from './connection.ts';
 
 class MockSocket implements WebSocketLike {
@@ -145,21 +142,6 @@ describe('sendError', () => {
     expect(lastLogLevel()).toBe('info');
   });
 
-  test('ErrorWithLevel uses its logLevel', () => {
-    const err = new ErrorWithLevel('custom error', 'warn');
-    sendError(
-      lc,
-      ws,
-      {
-        kind: ErrorKind.Internal,
-        message: 'wrapper message',
-        origin: ErrorOrigin.ZeroCache,
-      },
-      err,
-    );
-    expect(lastLogLevel()).toBe('warn');
-  });
-
   test('ProtocolErrorWithLevel uses its logLevel', () => {
     const err = new ProtocolErrorWithLevel(
       {
@@ -182,9 +164,16 @@ describe('sendError', () => {
     expect(lastLogLevel()).toBe('debug');
   });
 
-  test('ErrorWithLevel logLevel takes precedence over classify function', () => {
-    // ErrorWithLevel's logLevel takes precedence, even if errorBody.kind would classify it differently
-    const err = new ErrorWithLevel('custom error', 'error');
+  test('ProtocolErrorWithLevel takes precedence over errorBody kind', () => {
+    // ProtocolErrorWithLevel's logLevel takes precedence, even if errorBody.kind would classify it differently
+    const err = new ProtocolErrorWithLevel(
+      {
+        kind: ErrorKind.ClientNotFound,
+        message: 'client not found',
+        origin: ErrorOrigin.ZeroCache,
+      },
+      'error',
+    );
     sendError(
       lc,
       ws,
@@ -195,7 +184,7 @@ describe('sendError', () => {
       },
       err,
     );
-    // ErrorWithLevel specifies 'error', so that takes precedence over the classify function
+    // ProtocolErrorWithLevel specifies 'error', so that takes precedence
     expect(lastLogLevel()).toBe('error');
   });
 
