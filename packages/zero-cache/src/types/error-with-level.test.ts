@@ -18,13 +18,13 @@ describe('ProtocolErrorWithLevel', () => {
     expect(error.logLevel).toBe('warn');
   });
 
-  test('defaults to error log level', () => {
+  test('defaults to warn log level', () => {
     const error = new ProtocolErrorWithLevel({
       kind: ErrorKind.Internal,
       message: 'test message',
       origin: ErrorOrigin.ZeroCache,
     });
-    expect(error.logLevel).toBe('error');
+    expect(error.logLevel).toBe('warn');
   });
 });
 

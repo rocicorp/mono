@@ -206,14 +206,11 @@ export class CVRStore {
         return result;
       }
       assert(err);
-      throw new ProtocolErrorWithLevel(
-        {
-          kind: ErrorKind.ClientNotFound,
-          message: `max attempts exceeded waiting for CVR@${err.cvrVersion} to catch up from ${err.rowsVersion}`,
-          origin: ErrorOrigin.ZeroCache,
-        },
-        'warn',
-      );
+      throw new ProtocolErrorWithLevel({
+        kind: ErrorKind.ClientNotFound,
+        message: `max attempts exceeded waiting for CVR@${err.cvrVersion} to catch up from ${err.rowsVersion}`,
+        origin: ErrorOrigin.ZeroCache,
+      });
     });
   }
 

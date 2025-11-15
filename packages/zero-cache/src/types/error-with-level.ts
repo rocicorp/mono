@@ -13,7 +13,7 @@ export class ProtocolErrorWithLevel extends ProtocolError {
 
   constructor(
     errorBody: ErrorBody,
-    logLevel: LogLevel = 'error',
+    logLevel: LogLevel = 'warn',
     options?: ErrorOptions,
   ) {
     super(errorBody, options);

@@ -73,16 +73,13 @@ export async function fetchFromAPIServer<TValidator extends Type>(
   });
 
   if (!urlMatch(url, allowedUrlPatterns)) {
-    throw new ProtocolErrorWithLevel(
-      {
-        kind: ErrorKind.TransformFailed,
-        origin: ErrorOrigin.ZeroCache,
-        reason: ErrorReason.Internal,
-        message: `URL "${url}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
-        queryIDs: [],
-      },
-      'warn',
-    );
+    throw new ProtocolErrorWithLevel({
+      kind: ErrorKind.TransformFailed,
+      origin: ErrorOrigin.ZeroCache,
+      reason: ErrorReason.Internal,
+      message: `URL "${url}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
+      queryIDs: [],
+    });
   }
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -151,7 +148,6 @@ export async function fetchFromAPIServer<TValidator extends Type>(
               message: `Fetch from API server returned non-OK status ${response.status}`,
               queryIDs: [],
             },
-        'warn',
       );
     }
 
@@ -181,7 +177,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
               message: `Failed to parse response from API server: ${getErrorMessage(error)}`,
               queryIDs: [],
             },
-        'warn',
+        'error',
         {cause: error},
       );
     }
@@ -211,7 +207,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
             message: `Fetch from API server failed with unknown error: ${getErrorMessage(error)}`,
             queryIDs: [],
           },
-      'warn',
+      'error',
       {cause: error},
     );
   }

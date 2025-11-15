@@ -361,14 +361,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // ServiceRunner.
         this.#lc.debug?.('state changes are inactive');
         clearTimeout(this.#expiredQueriesTimer);
-        throw new ProtocolErrorWithLevel(
-          {
-            kind: ErrorKind.Rehome,
-            message: 'Reconnect required',
-            origin: ErrorOrigin.ZeroCache,
-          },
-          'warn',
-        );
+        throw new ProtocolErrorWithLevel({
+          kind: ErrorKind.Rehome,
+          message: 'Reconnect required',
+          origin: ErrorOrigin.ZeroCache,
+        });
       }
       // If all clients have disconnected, cancel all pending work.
       if (await this.#checkForShutdownConditionsInLock()) {
@@ -436,14 +433,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               cvr.replicaVersion
             }, DB=${this.#pipelines.replicaVersion}`;
             lc.info?.(`resetting CVR: ${message}`);
-            throw new ProtocolErrorWithLevel(
-              {
-                kind: ErrorKind.ClientNotFound,
-                message,
-                origin: ErrorOrigin.ZeroCache,
-              },
-              'warn',
-            );
+            throw new ProtocolErrorWithLevel({
+              kind: ErrorKind.ClientNotFound,
+              message,
+              origin: ErrorOrigin.ZeroCache,
+            });
           }
 
           if (this.#pipelinesSynced) {
@@ -2069,14 +2063,11 @@ function checkClientAndCVRVersions(
     cmpVersions(client, NEW_CVR_VERSION) > 0
   ) {
     // CVR is empty but client is not.
-    throw new ProtocolErrorWithLevel(
-      {
-        kind: ErrorKind.ClientNotFound,
-        message: 'Client not found',
-        origin: ErrorOrigin.ZeroCache,
-      },
-      'warn',
-    );
+    throw new ProtocolErrorWithLevel({
+      kind: ErrorKind.ClientNotFound,
+      message: 'Client not found',
+      origin: ErrorOrigin.ZeroCache,
+    });
   }
 
   if (cmpVersions(client, cvr) > 0) {
