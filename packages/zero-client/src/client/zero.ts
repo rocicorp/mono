@@ -538,38 +538,28 @@ export class Zero<
       error => this.#disconnect(lc, error),
     );
     if (options.mutators) {
-      for (const [namespaceOrKey, mutatorOrMutators] of Object.entries(
-        options.mutators,
-      )) {
-        if (typeof mutatorOrMutators === 'function') {
-          const key = namespaceOrKey as string;
-          assertUnique(key);
-          replicacheMutators[key] = makeReplicacheMutator(
-            lc,
-            mutatorOrMutators,
-            schema,
-            // Replicache expects mutators to only be able to return JSON
-            // but Zero wraps the return with: `{server?: Promise<MutationResult>, client?: T}`
-          ) as () => MutatorReturn;
-          continue;
-        }
-        if (typeof mutatorOrMutators === 'object') {
-          for (const [name, mutator] of Object.entries(mutatorOrMutators)) {
-            const key = customMutatorKey(
-              namespaceOrKey as string,
-              name as string,
-            );
-            assertUnique(key);
-            replicacheMutators[key] = makeReplicacheMutator(
+      // Recursively process mutator definitions at arbitrary depth
+      const processMutators = (
+        mutators: CustomMutatorDefs,
+        namespacePrefix: string[] = [],
+      ) => {
+        for (const [key, value] of Object.entries(mutators)) {
+          if (typeof value === 'function') {
+            const fullKey = customMutatorKey(...namespacePrefix, key);
+            assertUnique(fullKey);
+            replicacheMutators[fullKey] = makeReplicacheMutator(
               lc,
-              mutator as CustomMutatorImpl<S>,
+              value as CustomMutatorImpl<S>,
               schema,
             ) as () => MutatorReturn;
+          } else if (typeof value === 'object') {
+            processMutators(value, [...namespacePrefix, key]);
+          } else {
+            unreachable(value);
           }
-          continue;
         }
-        unreachable(mutatorOrMutators);
-      }
+      };
+      processMutators(options.mutators);
     }
 
     this.storageKey = storageKey ?? '';
@@ -716,32 +706,34 @@ export class Zero<
     );
 
     if (options.mutators) {
-      for (const [namespaceOrKey, mutatorsOrMutator] of Object.entries(
-        options.mutators,
-      )) {
-        if (typeof mutatorsOrMutator === 'function') {
-          mutate[namespaceOrKey] = mutatorProxy.wrapCustomMutator(
-            must(rep.mutate[namespaceOrKey as string]) as unknown as (
-              ...args: unknown[]
-            ) => MutatorResult,
-          );
-          continue;
+      // Recursively expose mutators on the mutate property
+      const exposeMutators = (
+        mutators: CustomMutatorDefs,
+        target: Record<string, unknown>,
+        namespacePrefix: string[] = [],
+      ) => {
+        for (const [key, value] of Object.entries(mutators)) {
+          if (typeof value === 'function') {
+            const fullKey = customMutatorKey(...namespacePrefix, key);
+            target[key] = mutatorProxy.wrapCustomMutator(
+              must(rep.mutate[fullKey]) as unknown as (
+                ...args: unknown[]
+              ) => MutatorResult,
+            );
+          } else if (typeof value === 'object' && value !== null) {
+            let existing = target[key];
+            if (existing === undefined) {
+              existing = {};
+              target[key] = existing;
+            }
+            exposeMutators(value, existing as Record<string, unknown>, [
+              ...namespacePrefix,
+              key,
+            ]);
+          }
         }
-
-        let existing = mutate[namespaceOrKey];
-        if (existing === undefined) {
-          existing = {};
-          mutate[namespaceOrKey] = existing;
-        }
-
-        for (const name of Object.keys(mutatorsOrMutator)) {
-          existing[name] = mutatorProxy.wrapCustomMutator(
-            must(
-              rep.mutate[customMutatorKey(namespaceOrKey, name)],
-            ) as unknown as (...args: unknown[]) => MutatorResult,
-          );
-        }
-      }
+      };
+      exposeMutators(options.mutators, mutate);
     }
 
     this.mutate = mutate;

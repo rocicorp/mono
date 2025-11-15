@@ -92,6 +92,54 @@ test('argument types are preserved on the generated mutator interface', () => {
   }>();
 });
 
+test('argument types are preserved with arbitrary depth nesting', () => {
+  const mutators = {
+    level1: {
+      level2: {
+        level3: {
+          deepMutator: (
+            tx: MutatorTx,
+            {id, value}: {id: string; value: number},
+          ) => tx.mutate.issue.update({id, closed: value > 0}),
+        },
+        intermediateMutator: (tx: MutatorTx, id: string) =>
+          tx.mutate.issue.delete({id}),
+      },
+      topMutator: (
+        _tx: MutatorTx,
+        _args: {a: boolean; b: string; c?: number | undefined},
+      ) => Promise.resolve(),
+    },
+    flatMutator: (_tx: MutatorTx) => Promise.resolve(),
+  } as const;
+
+  type MutatorsInterface = MakeCustomMutatorInterfaces<
+    Schema,
+    typeof mutators,
+    unknown
+  >;
+
+  expectTypeOf<MutatorsInterface>().toEqualTypeOf<{
+    readonly level1: {
+      readonly level2: {
+        readonly level3: {
+          readonly deepMutator: (args: {
+            id: string;
+            value: number;
+          }) => MutatorResult;
+        };
+        readonly intermediateMutator: (id: string) => MutatorResult;
+      };
+      readonly topMutator: (args: {
+        a: boolean;
+        b: string;
+        c?: number | undefined;
+      }) => MutatorResult;
+    };
+    readonly flatMutator: () => MutatorResult;
+  }>();
+});
+
 test('supports mutators without a namespace', async () => {
   const z = zeroForTest({
     logLevel: 'debug',
@@ -119,6 +167,90 @@ test('supports mutators without a namespace', async () => {
   expect(issues[0].title).toEqual('no-namespace');
 });
 
+test('supports arbitrary depth nesting of mutators', async () => {
+  const z = zeroForTest({
+    logLevel: 'debug',
+    schema,
+    mutators: {
+      level1: {
+        level2: {
+          level3: {
+            createIssue: async (
+              tx: Transaction<Schema>,
+              args: InsertValue<typeof schema.tables.issue>,
+            ) => {
+              await tx.mutate.issue.insert(args);
+            },
+            updateTitle: async (
+              tx: Transaction<Schema>,
+              {id, title}: {id: string; title: string},
+            ) => {
+              await tx.mutate.issue.update({id, title});
+            },
+          },
+          anotherMutator: async (
+            tx: Transaction<Schema>,
+            args: InsertValue<typeof schema.tables.issue>,
+          ) => {
+            await tx.mutate.issue.insert(args);
+          },
+        },
+        directMutator: async (tx: Transaction<Schema>, id: string) => {
+          await tx.mutate.issue.update({id, closed: true});
+        },
+      },
+      topLevel: async (tx: Transaction<Schema>, id: string) => {
+        await tx.mutate.issue.update({id, title: 'top-level'});
+      },
+    },
+  });
+
+  // Test deeply nested mutator
+  await z.mutate.level1.level2.level3.createIssue({
+    id: '1',
+    title: 'deeply-nested',
+    closed: false,
+    ownerId: '',
+    description: '',
+    createdAt: 1743018138477,
+  }).client;
+
+  await z.markQueryAsGot(z.query.issue);
+  let issues = await z.run(z.query.issue);
+  expect(issues[0].title).toEqual('deeply-nested');
+
+  // Test deeply nested update
+  await z.mutate.level1.level2.level3.updateTitle({
+    id: '1',
+    title: 'updated-deep',
+  }).client;
+  issues = await z.run(z.query.issue);
+  expect(issues[0].title).toEqual('updated-deep');
+
+  // Test intermediate level mutator
+  await z.mutate.level1.level2.anotherMutator({
+    id: '2',
+    title: 'intermediate',
+    closed: false,
+    ownerId: '',
+    description: '',
+    createdAt: 1743018138477,
+  }).client;
+  issues = await z.run(z.query.issue);
+  expect(issues.length).toEqual(2);
+  expect(issues[1].title).toEqual('intermediate');
+
+  // Test level1 direct mutator
+  await z.mutate.level1.directMutator('2').client;
+  issues = await z.run(z.query.issue);
+  expect(issues[1].closed).toEqual(true);
+
+  // Test top level mutator
+  await z.mutate.topLevel('1').client;
+  issues = await z.run(z.query.issue);
+  expect(issues[0].title).toEqual('top-level');
+});
+
 test('detects collisions in mutator names', () => {
   expect(() =>
     zeroForTest({
@@ -142,7 +274,7 @@ test('detects collisions in mutator names', () => {
       },
     }),
   ).toThrowErrorMatchingInlineSnapshot(
-    `[Error: A mutator, or mutator namespace, has already been defined for issue|create]`,
+    `[Error: mutator names/namespaces must not include a |]`,
   );
 });
 

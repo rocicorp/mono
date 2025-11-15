@@ -167,12 +167,16 @@ export type UpdateValue<S extends TableSchema> = Expand<
   }
 >;
 
-export function customMutatorKey(namespace: string, name: string) {
-  assert(!namespace.includes('|'), 'mutator namespaces must not include a |');
-  assert(!name.includes('|'), 'mutator names must not include a |');
-  return `${namespace}|${name}`;
+export function customMutatorKey(...parts: string[]) {
+  for (const part of parts) {
+    assert(
+      !part.includes('|'),
+      'mutator names/namespaces must not include a |',
+    );
+  }
+  return parts.join('|');
 }
 
 export function splitMutatorKey(key: string) {
-  return key.split('|') as [string, string];
+  return key.split('|');
 }
