@@ -15,7 +15,6 @@ import {analyzeQuery} from '../analyze.ts';
 import type {ClientHandler} from './client-handler.ts';
 import type {CVRStore} from './cvr-store.ts';
 import type {CVRSnapshot} from './cvr.ts';
-import {must} from '../../../../shared/src/must.ts';
 
 export async function handleInspect(
   lc: LogContext,
@@ -144,7 +143,6 @@ export async function handleInspect(
         const result = await analyzeQuery(
           lc,
           config,
-          must(cvr.clientSchema),
           ast,
           body.options?.syncedRows,
           body.options?.vendedRows,

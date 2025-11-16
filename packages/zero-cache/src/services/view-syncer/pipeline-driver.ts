@@ -40,7 +40,7 @@ import {
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type RowKey} from '../../types/row-key.ts';
 import type {SchemaVersions} from '../../types/schema-versions.ts';
-import {upstreamSchema, type ShardID} from '../../types/shards.ts';
+import type {ShardID} from '../../types/shards.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
 import type {Snapshotter} from './snapshotter.ts';
@@ -108,7 +108,6 @@ export class PipelineDriver {
   #streamer: Streamer | null = null;
   #advanceContext: AdvanceContext | null = null;
   #replicaVersion: string | null = null;
-  #primaryKeys: Map<string, PrimaryKey> | null = null;
   #permissions: LoadedPermissions | null = null;
 
   readonly #advanceTime = getOrCreateHistogram('sync', 'ivm.advance-time', {
@@ -150,10 +149,23 @@ export class PipelineDriver {
    *
    * Must only be called once.
    */
-  init(clientSchema: ClientSchema) {
+  init(clientSchema: ClientSchema | null) {
     assert(!this.#snapshotter.initialized(), 'Already initialized');
-    this.#snapshotter.init();
-    this.#initAndResetCommon(clientSchema);
+
+    const {db} = this.#snapshotter.init().current();
+    const fullTables = new Map<string, LiteTableSpec>();
+    computeZqlSpecs(this.#lc, db.db, this.#tableSpecs, fullTables);
+    if (clientSchema) {
+      checkClientSchema(
+        this.#shardID,
+        clientSchema,
+        this.#tableSpecs,
+        fullTables,
+      );
+    }
+
+    const {replicaVersion} = getSubscriptionState(db);
+    this.#replicaVersion = replicaVersion;
   }
 
   /**
@@ -161,43 +173,6 @@ export class PipelineDriver {
    */
   initialized(): boolean {
     return this.#snapshotter.initialized();
-  }
-
-  /**
-   * Clears the current pipelines and TableSources, returning the PipelineDriver
-   * to its initial state. This should be called in response to a schema change,
-   * as TableSources need to be recomputed.
-   */
-  reset(clientSchema: ClientSchema) {
-    for (const {input} of this.#pipelines.values()) {
-      input.destroy();
-    }
-    this.#pipelines.clear();
-    this.#tables.clear();
-    this.#initAndResetCommon(clientSchema);
-  }
-
-  #initAndResetCommon(clientSchema: ClientSchema) {
-    const {db} = this.#snapshotter.current();
-    const fullTables = new Map<string, LiteTableSpec>();
-    computeZqlSpecs(this.#lc, db.db, this.#tableSpecs, fullTables);
-    checkClientSchema(
-      this.#shardID,
-      clientSchema,
-      this.#tableSpecs,
-      fullTables,
-    );
-    const primaryKeys = this.#primaryKeys ?? new Map<string, PrimaryKey>();
-    this.#primaryKeys = primaryKeys;
-    primaryKeys.clear();
-    for (const [table, spec] of this.#tableSpecs.entries()) {
-      if (table.startsWith(upstreamSchema(this.#shardID))) {
-        primaryKeys.set(table, spec.tableSpec.primaryKey);
-      }
-    }
-    buildPrimaryKeys(clientSchema, primaryKeys);
-    const {replicaVersion} = getSubscriptionState(db);
-    this.#replicaVersion = replicaVersion;
   }
 
   /** @returns The replica version. The PipelineDriver must have been initialized. */
@@ -265,6 +240,33 @@ export class PipelineDriver {
       return costModel;
     }
     return undefined;
+  }
+
+  /**
+   * Clears the current pipelines and TableSources, returning the PipelineDriver
+   * to its initial state. This should be called in response to a schema change,
+   * as TableSources need to be recomputed.
+   */
+  reset(clientSchema: ClientSchema | null) {
+    for (const {input} of this.#pipelines.values()) {
+      input.destroy();
+    }
+    this.#pipelines.clear();
+    this.#tables.clear();
+
+    const {db} = this.#snapshotter.current();
+    const fullTables = new Map<string, LiteTableSpec>();
+    computeZqlSpecs(this.#lc, db.db, this.#tableSpecs, fullTables);
+    if (clientSchema) {
+      checkClientSchema(
+        this.#shardID,
+        clientSchema,
+        this.#tableSpecs,
+        fullTables,
+      );
+    }
+    const {replicaVersion} = getSubscriptionState(db);
+    this.#replicaVersion = replicaVersion;
   }
 
   /**
@@ -379,7 +381,7 @@ export class PipelineDriver {
       },
     });
 
-    yield* hydrateInternal(input, transformationHash, must(this.#primaryKeys));
+    yield* hydrate(input, transformationHash, this.#tableSpecs);
 
     const hydrationTimeMs = timer.totalElapsed();
     if (runtimeDebugFlags.trackRowCountsVended) {
@@ -485,19 +487,22 @@ export class PipelineDriver {
         const start = performance.now();
         let type;
         try {
+          const tableSpec = mustGetTableSpec(this.#tableSpecs, table).tableSpec;
           const tableSource = this.#tables.get(table);
           if (!tableSource) {
             // no pipelines read from this table, so no need to process the change
             continue;
           }
-          const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
           let editOldRow: Row | undefined = undefined;
           for (const prevValue of prevValues) {
+            // Rows are ultimately referred to by the union key (in #streamNodes())
+            // so an update is represented as an `edit` if and only if the
+            // unionKey-based row keys are the same in prevValue and nextValue.
             if (
               nextValue &&
               deepEqual(
-                getRowKey(primaryKey, prevValue as Row) as JSONValue,
-                getRowKey(primaryKey, nextValue as Row) as JSONValue,
+                getRowKey(tableSpec.unionKey, prevValue as Row) as JSONValue,
+                getRowKey(tableSpec.unionKey, nextValue as Row) as JSONValue,
               )
             ) {
               editOldRow = prevValue;
@@ -589,8 +594,7 @@ export class PipelineDriver {
     }
 
     const tableSpec = mustGetTableSpec(this.#tableSpecs, tableName);
-
-    const primaryKey = mustGetPrimaryKey(this.#primaryKeys, tableName);
+    const {primaryKey} = tableSpec.tableSpec;
 
     const {db} = this.#snapshotter.current();
     source = new TableSource(
@@ -622,7 +626,7 @@ export class PipelineDriver {
 
   #startAccumulating() {
     assert(this.#streamer === null);
-    this.#streamer = new Streamer(must(this.#primaryKeys));
+    this.#streamer = new Streamer(this.#tableSpecs);
   }
 
   #stopAccumulating(): Streamer {
@@ -634,10 +638,10 @@ export class PipelineDriver {
 }
 
 class Streamer {
-  readonly #primaryKeys: Map<string, PrimaryKey>;
+  #tableSpecs: Map<string, LiteAndZqlSpec>;
 
-  constructor(primaryKeys: Map<string, PrimaryKey>) {
-    this.#primaryKeys = primaryKeys;
+  constructor(tableSpecs: Map<string, LiteAndZqlSpec>) {
+    this.#tableSpecs = tableSpecs;
   }
 
   readonly #changes: [
@@ -711,7 +715,11 @@ class Streamer {
   ): Iterable<RowChange> {
     const {tableName: table, system} = schema;
 
-    const primaryKey = must(this.#primaryKeys.get(table));
+    // The primaryKey here is used for referencing rows in CVR and del-row
+    // patches sent in pokes. This is the "unionKey", i.e. the union of all
+    // columns in unique indexes. This allows clients to migrate from, e.g.
+    // pk1 to pk2, as del-patches will be keyed by [...pk1, ...pk2].
+    const primaryKey = must(this.#tableSpecs.get(table)).tableSpec.unionKey;
 
     // We do not sync rows gathered by the permissions
     // system to the client.
@@ -757,50 +765,13 @@ function getRowKey(cols: PrimaryKey, row: Row): RowKey {
 export function* hydrate(
   input: Input,
   hash: string,
-  clientSchema: ClientSchema,
+  tableSpecs: Map<string, LiteAndZqlSpec>,
 ) {
   const res = input.fetch({});
-  const streamer = new Streamer(buildPrimaryKeys(clientSchema)).accumulate(
+  const streamer = new Streamer(tableSpecs).accumulate(
     hash,
     input.getSchema(),
     toAdds(res),
   );
   yield* streamer.stream();
-}
-
-export function* hydrateInternal(
-  input: Input,
-  hash: string,
-  primaryKeys: Map<string, PrimaryKey>,
-) {
-  const res = input.fetch({});
-  const streamer = new Streamer(primaryKeys).accumulate(
-    hash,
-    input.getSchema(),
-    toAdds(res),
-  );
-  yield* streamer.stream();
-}
-
-function buildPrimaryKeys(
-  clientSchema: ClientSchema,
-  primaryKeys: Map<string, PrimaryKey> = new Map<string, PrimaryKey>(),
-) {
-  for (const [tableName, {primaryKey}] of Object.entries(clientSchema.tables)) {
-    primaryKeys.set(tableName, primaryKey as unknown as PrimaryKey);
-  }
-  return primaryKeys;
-}
-
-function mustGetPrimaryKey(
-  primaryKeys: Map<string, PrimaryKey> | null,
-  table: string,
-): PrimaryKey {
-  const pKeys = must(primaryKeys, 'primaryKey map must be non-null');
-
-  return must(
-    pKeys.get(table),
-    `table '${table}' is not one of: ${[...pKeys.keys()].sort()}. ` +
-      `Check the spelling and ensure that the table has a primary key.`,
-  );
 }
