@@ -128,7 +128,6 @@ test('syncedQuery', () => {
       },
       type: 'simple',
     },
-    orderBy: [['id', 'asc']],
   });
 
   const wv = withValidation(def);
@@ -190,7 +189,6 @@ test('syncedQuery', () => {
       },
       type: 'simple',
     },
-    orderBy: [['id', 'asc']],
   });
 });
 
@@ -273,7 +271,6 @@ test('syncedQueryWithContext', () => {
       ],
       type: 'and',
     },
-    orderBy: [['id', 'asc']],
   });
 
   const wv = withValidation(def);
@@ -352,7 +349,6 @@ test('syncedQueryWithContext', () => {
       ],
       type: 'and',
     },
-    orderBy: [['id', 'asc']],
   });
 });
 
@@ -418,12 +414,6 @@ test('makeSchemaQuery', () => {
   );
   expect(q1.ast).toMatchInlineSnapshot(`
     {
-      "orderBy": [
-        [
-          "id",
-          "asc",
-        ],
-      ],
       "table": "issue",
       "where": {
         "left": {

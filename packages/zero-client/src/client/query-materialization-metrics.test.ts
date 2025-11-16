@@ -125,6 +125,7 @@ describe('query materialization metrics', () => {
 
     queryDelegate = new ZeroContext(
       new LogContext('info'),
+      schema,
       new IVMSourceBranch(schema.tables),
       'context',
       addServerQuerySpy as unknown as AddQuery,
@@ -573,6 +574,7 @@ describe('query materialization metrics', () => {
 
       context = new ZeroContext(
         new LogContext('info'),
+        schema,
         new IVMSourceBranch(schema.tables),
         'context',
         (() => () => {}) as unknown as AddQuery,

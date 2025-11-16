@@ -31,12 +31,6 @@ test('stable generation', () => {
   expect(queryWithContext(q, undefined).ast).toMatchInlineSnapshot(`
     {
       "limit": 126,
-      "orderBy": [
-        [
-          "schnitzel",
-          "asc",
-        ],
-      ],
       "related": [
         {
           "correlation": {
@@ -53,10 +47,6 @@ test('stable generation', () => {
             "orderBy": [
               [
                 "exploration",
-                "asc",
-              ],
-              [
-                "amendment",
                 "asc",
               ],
             ],
@@ -134,12 +124,6 @@ test('stable generation', () => {
               },
               "subquery": {
                 "alias": "zsubq_cleaner",
-                "orderBy": [
-                  [
-                    "amendment",
-                    "asc",
-                  ],
-                ],
                 "table": "cleaner",
                 "where": {
                   "conditions": [
@@ -157,12 +141,6 @@ test('stable generation', () => {
                         },
                         "subquery": {
                           "alias": "zsubq_cleaner",
-                          "orderBy": [
-                            [
-                              "amendment",
-                              "asc",
-                            ],
-                          ],
                           "table": "cleaner",
                           "where": {
                             "conditions": [

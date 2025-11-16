@@ -6,6 +6,7 @@ import {
 } from '../../../../shared/src/json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {Schema} from '../../../../zero-types/src/schema.ts';
 import type {Source} from '../../ivm/source.ts';
 import {createSource} from '../../ivm/test/source-factory.ts';
 import type {CustomQueryID} from '../named.ts';
@@ -43,15 +44,17 @@ export class QueryDelegateImpl<
   readonly enableNotExists = true; // Allow NOT EXISTS in tests
 
   constructor({
+    schema,
     sources = makeSources(),
     callGot = false,
     context,
   }: {
+    schema: Schema;
     sources?: Record<string, Source> | undefined;
     callGot?: boolean | undefined;
     context?: TContext | undefined;
-  } = {}) {
-    super(context as TContext);
+  }) {
+    super(context as TContext, schema);
     this.#sources = sources;
     this.callGot = callGot;
   }

@@ -45,6 +45,7 @@ import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
 import type {Snapshotter} from './snapshotter.ts';
 import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
+import {completeOrdering} from '../../../../zql/src/query/complete-ordering.ts';
 
 export type RowAdd = {
   readonly type: 'add';
@@ -365,6 +366,10 @@ export class PipelineDriver {
         decorateInput: input => input,
         addEdge() {},
         decorateFilterInput: input => input,
+        completeOrdering: ast =>
+          completeOrdering(ast, table =>
+            mustGetPrimaryKey(this.#primaryKeys, table),
+          ),
       },
       queryID,
       costModel,

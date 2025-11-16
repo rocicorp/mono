@@ -596,6 +596,7 @@ export class Zero<
 
     this.#zeroContext = new ZeroContext(
       lc,
+      schema,
       this.#ivmMain,
       this.#options.context as TContext,
       (ast, ttl, gotCallback) => {

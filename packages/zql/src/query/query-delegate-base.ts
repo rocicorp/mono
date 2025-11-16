@@ -5,6 +5,7 @@ import {MemoryStorage} from '../ivm/memory-storage.ts';
 import type {Input, InputBase, Storage} from '../ivm/operator.ts';
 import type {Source, SourceInput} from '../ivm/source.ts';
 import type {ViewFactory} from '../ivm/view.ts';
+import {completeOrdering} from './complete-ordering.ts';
 import type {MetricMap} from './metrics-delegate.ts';
 import type {CustomQueryID} from './named.ts';
 import type {
@@ -32,9 +33,17 @@ export abstract class QueryDelegateBase<TContext>
   implements QueryDelegate<TContext>
 {
   readonly #context: TContext;
+  readonly #schema: Schema;
 
-  constructor(context: TContext) {
+  constructor(context: TContext, schema: Schema) {
     this.#context = context;
+    this.#schema = schema;
+  }
+  completeOrdering(ast: AST): AST {
+    return completeOrdering(
+      ast,
+      tableName => this.#schema.tables[tableName].primaryKey,
+    );
   }
 
   /**

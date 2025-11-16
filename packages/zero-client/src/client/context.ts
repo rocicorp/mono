@@ -64,6 +64,7 @@ export class ZeroContext<TContext> extends QueryDelegateBase<TContext> {
 
   constructor(
     lc: LogContext,
+    schema: Schema,
     mainSources: IVMSourceBranch,
     context: TContext,
     addQuery: AddQuery,
@@ -75,7 +76,7 @@ export class ZeroContext<TContext> extends QueryDelegateBase<TContext> {
     addMetric: MetricsDelegate['addMetric'],
     assertValidRunOptions: (options?: RunOptions) => void,
   ) {
-    super(context);
+    super(context, schema);
     this.#lc = lc;
     this.#mainSources = mainSources;
     this.addServerQuery = addQuery;

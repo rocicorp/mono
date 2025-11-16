@@ -51,7 +51,7 @@ export interface Source {
    * input.
    *
    * @param sort The ordering of the rows. Source must return rows in this
-   * order.
+   * order.  Must include all primary keys of the table.
    * @param filters Filters to apply to the source.
    * @param splitEditKeys If an edit change modifies the values of any of the
    *   keys in splitEditKeys, the source should split the edit change into

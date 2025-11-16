@@ -46,6 +46,7 @@ test('getSource', () => {
 
   const context = new ZeroContext(
     new LogContext('info'),
+    schema,
     new IVMSourceBranch(schema.tables),
     'context',
     null as unknown as AddQuery,

@@ -63,7 +63,6 @@ describe('defineQuery', () => {
         op: '=',
         right: {type: 'literal', value: 'noOptionsId'},
       },
-      orderBy: [['id', 'asc']],
     });
   });
 
@@ -89,7 +88,6 @@ describe('defineQuery', () => {
         op: '=',
         right: {type: 'literal', value: 42},
       },
-      orderBy: [['id', 'asc']],
     });
   });
 
@@ -124,7 +122,6 @@ describe('defineQuery', () => {
         op: '=',
         right: {type: 'literal', value: 246}, // Should be the transformed number
       },
-      orderBy: [['id', 'asc']],
     });
   });
 
@@ -156,7 +153,6 @@ describe('defineQuery', () => {
         op: '=',
         right: {type: 'literal', value: 1},
       },
-      orderBy: [['id', 'asc']],
     });
   });
 
@@ -255,7 +251,6 @@ describe('defineQuery', () => {
     [result1, result2, result3, result4].forEach(result => {
       expect(result.ast).toEqual({
         table: 'foo',
-        orderBy: [['id', 'asc']],
       });
     });
   });

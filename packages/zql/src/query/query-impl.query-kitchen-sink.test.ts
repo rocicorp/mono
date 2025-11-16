@@ -343,10 +343,6 @@ describe('kitchen sink query', () => {
                 "title",
                 "asc",
               ],
-              [
-                "id",
-                "asc",
-              ],
             ],
             "related": [
               {
@@ -360,12 +356,6 @@ describe('kitchen sink query', () => {
                 },
                 "subquery": {
                   "alias": "owner",
-                  "orderBy": [
-                    [
-                      "id",
-                      "asc",
-                    ],
-                  ],
                   "table": "user",
                 },
                 "system": "client",
@@ -386,10 +376,6 @@ describe('kitchen sink query', () => {
                     [
                       "createdAt",
                       "desc",
-                    ],
-                    [
-                      "id",
-                      "asc",
                     ],
                   ],
                   "related": [
@@ -432,16 +418,6 @@ describe('kitchen sink query', () => {
                 "hidden": true,
                 "subquery": {
                   "alias": "labels",
-                  "orderBy": [
-                    [
-                      "issueId",
-                      "asc",
-                    ],
-                    [
-                      "labelId",
-                      "asc",
-                    ],
-                  ],
                   "related": [
                     {
                       "correlation": {
@@ -454,12 +430,6 @@ describe('kitchen sink query', () => {
                       },
                       "subquery": {
                         "alias": "labels",
-                        "orderBy": [
-                          [
-                            "id",
-                            "asc",
-                          ],
-                        ],
                         "table": "label",
                       },
                       "system": "client",
@@ -473,7 +443,10 @@ describe('kitchen sink query', () => {
             "start": {
               "exclusive": true,
               "row": {
+                "closed": false,
+                "description": "Description 1",
                 "id": "101",
+                "ownerId": "001",
                 "title": "Issue 1",
               },
             },

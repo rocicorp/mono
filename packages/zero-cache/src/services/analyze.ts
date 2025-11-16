@@ -12,6 +12,8 @@ import {computeZqlSpecs, mustGetTableSpec} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../db/specs.ts';
 import {runAst} from './run-ast.ts';
 import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
+import {completeOrdering} from '../../../zql/src/query/complete-ordering.ts';
+import type {PrimaryKey} from '../../../zero-types/src/schema.ts';
 
 export async function analyzeQuery(
   lc: LogContext,
@@ -59,6 +61,12 @@ export async function analyzeQuery(
         );
         tables.set(tableName, source);
         return source;
+      },
+      completeOrdering(ast) {
+        return completeOrdering(
+          ast,
+          tableName => clientSchema.tables[tableName].primaryKey,
+        );
       },
       createStorage() {
         return new MemoryStorage();

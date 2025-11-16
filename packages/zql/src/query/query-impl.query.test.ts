@@ -150,7 +150,7 @@ function addData(queryDelegate: QueryDelegate<unknown>) {
 
 describe('bare select', () => {
   test('empty source', () => {
-    const queryDelegate = new QueryDelegateImpl();
+    const queryDelegate = new QueryDelegateImpl({schema});
     const issueQuery = newQuery(schema, 'issue');
     const m: TypedView<unknown[]> = queryDelegate.materialize(issueQuery);
 

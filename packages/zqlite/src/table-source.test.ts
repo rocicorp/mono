@@ -338,20 +338,6 @@ describe('no primary key', () => {
   );
 
   test.each([
-    [[['a', 'asc']]],
-    [[['b', 'asc']]],
-    [[['c', 'asc']]],
-    [
-      [
-        ['b', 'asc'],
-        ['c', 'desc'],
-      ],
-    ],
-  ] satisfies [Ordering][])('disallows non-unique orderings: %o', sort => {
-    expect(() => source.connect(sort)).toThrowError('Cannot orderBy(');
-  });
-
-  test.each([
     [
       [['id', 'asc']],
       [

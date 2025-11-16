@@ -145,6 +145,7 @@ export class TransactionImpl<TSchema extends Schema, TContext>
 
     this.#zeroContext = newZeroContext(
       lc,
+      schema,
       txData.ivmSources as IVMSourceBranch,
       txData.context as TContext,
     );
@@ -220,11 +221,13 @@ function assertValidRunOptions(options: RunOptions | undefined): void {
 
 function newZeroContext<TContext>(
   lc: LogContext,
+  schema: Schema,
   ivmBranch: IVMSourceBranch,
   context: TContext,
 ) {
   return new ZeroContext(
     lc,
+    schema,
     ivmBranch,
     context,
     () => emptyFunction,

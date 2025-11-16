@@ -11,13 +11,11 @@ import type {
   CorrelatedSubqueryCondition,
   Disjunction,
   LiteralValue,
-  Ordering,
   Parameter,
   SimpleCondition,
   ValuePosition,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import {Exists} from '../ivm/exists.ts';
 import {FanIn} from '../ivm/fan-in.ts';
 import {FanOut} from '../ivm/fan-out.ts';
@@ -86,6 +84,8 @@ export interface BuilderDelegate {
 
   decorateSourceInput(input: SourceInput, queryID: string): Input;
 
+  completeOrdering(ast: AST): AST;
+
   /**
    * The AST is mapped on-the-wire between client and server names.
    *
@@ -125,6 +125,7 @@ export function buildPipeline(
   queryID: string,
   costModel?: ConnectionCostModel,
 ): Input {
+  ast = delegate.completeOrdering(ast);
   ast = delegate.mapAst ? delegate.mapAst(ast) : ast;
   if (costModel) {
     ast = planQuery(ast, costModel);
@@ -679,27 +680,6 @@ function gatherCorrelatedSubqueryQueryConditions(
     gather(condition);
   }
   return csqs;
-}
-
-export function assertOrderingIncludesPK(
-  ordering: Ordering,
-  pk: PrimaryKey,
-): void {
-  // oxlint-disable-next-line unicorn/prefer-set-has -- Array is more appropriate here for small collections
-  const orderingFields = ordering.map(([field]) => field);
-  const missingFields = pk.filter(pkField => !orderingFields.includes(pkField));
-
-  if (missingFields.length > 0) {
-    throw new Error(
-      `Ordering must include all primary key fields. Missing: ${missingFields.join(
-        ', ',
-      )}. ZQL automatically appends primary key fields to the ordering if they are missing 
-      so a common cause of this error is a casing mismatch between Postgres and ZQL.
-      E.g., "userid" vs "userID".
-      You may want to add double-quotes around your Postgres column names to prevent Postgres from lower-casing them:
-      https://www.postgresql.org/docs/current/sql-syntax-lexical.htm`,
-    );
-  }
 }
 
 function uniquifyCorrelatedSubqueryConditionAliases(ast: AST): AST {
