@@ -382,6 +382,9 @@ describe('computeZqlSpec', () => {
             "primaryKey": [
               "b",
             ],
+            "unionKey": [
+              "b",
+            ],
             "uniqueKeys": [
               [
                 "b",
@@ -442,6 +445,9 @@ describe('computeZqlSpec', () => {
             },
             "name": "foo",
             "primaryKey": [
+              "b",
+            ],
+            "unionKey": [
               "b",
             ],
             "uniqueKeys": [
@@ -509,6 +515,11 @@ describe('computeZqlSpec', () => {
             },
             "name": "foo",
             "primaryKey": [
+              "a",
+              "b",
+              "d",
+            ],
+            "unionKey": [
               "a",
               "b",
               "d",
@@ -595,6 +606,11 @@ describe('computeZqlSpec', () => {
             },
             "name": "foo",
             "primaryKey": [
+              "a",
+              "b",
+              "d",
+            ],
+            "unionKey": [
               "a",
               "b",
               "d",
@@ -687,6 +703,11 @@ describe('computeZqlSpec', () => {
               "c",
               "d",
             ],
+            "unionKey": [
+              "a",
+              "c",
+              "d",
+            ],
             "uniqueKeys": [
               [
                 "a",
@@ -771,6 +792,11 @@ describe('computeZqlSpec', () => {
             "name": "foo",
             "primaryKey": [
               "b",
+            ],
+            "unionKey": [
+              "a",
+              "b",
+              "c",
             ],
             "uniqueKeys": [
               [
@@ -858,6 +884,11 @@ describe('computeZqlSpec', () => {
             "name": "foo",
             "primaryKey": [
               "c",
+            ],
+            "unionKey": [
+              "b",
+              "c",
+              "d",
             ],
             "uniqueKeys": [
               [
@@ -973,6 +1004,11 @@ describe('computeZqlSpec', () => {
             "name": "funk",
             "primaryKey": [
               "id",
+            ],
+            "unionKey": [
+              "id",
+              "name",
+              "order",
             ],
             "uniqueKeys": [
               [

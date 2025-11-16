@@ -46,8 +46,7 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 38 adds structured push/transform error responses (0.25)
 // -- version 39 removes per-transform error types and adds `message` to app error (0.25)
 // -- version 40 adds `dbRowScansByQuery` to AnalyzeQueryResult (0.25)
-// -- version 41 makes ClientSchema.primaryKey required (0.25)
-export const PROTOCOL_VERSION = 41;
+export const PROTOCOL_VERSION = 40;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version
@@ -59,6 +58,6 @@ export const PROTOCOL_VERSION = 41;
  * from protocol versions before `MIN_SERVER_SUPPORTED_PROTOCOL_VERSION` are
  * closed with a `VersionNotSupported` error.
  */
-export const MIN_SERVER_SUPPORTED_SYNC_PROTOCOL = 30;
+export const MIN_SERVER_SUPPORTED_SYNC_PROTOCOL = 18;
 
 assert(MIN_SERVER_SUPPORTED_SYNC_PROTOCOL < PROTOCOL_VERSION);

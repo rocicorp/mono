@@ -2119,7 +2119,7 @@ describe('view-syncer/service', () => {
       {...SYNC_CONTEXT, schemaVersion: 1},
       [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
       {
-        tables: {foo: {columns: {bar: {type: 'string'}}, primaryKey: ['bar']}},
+        tables: {foo: {columns: {bar: {type: 'string'}}}},
       },
     );
     expect(await nextPoke(client)).toMatchInlineSnapshot(`

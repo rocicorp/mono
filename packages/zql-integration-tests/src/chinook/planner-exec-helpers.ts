@@ -25,7 +25,6 @@ import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
 import {spearmanCorrelation} from '../helpers/correlation.ts';
 import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
-import {clientSchemaFrom} from '../../../zero-schema/src/builder/schema-builder.ts';
 
 // Bootstrap setup
 export const pgContent = await getChinook();
@@ -247,7 +246,7 @@ export function executeAllPlanAttempts(
       for (const _rowChange of hydrate(
         pipeline,
         hashOfAST(astWithFlips),
-        clientSchemaFrom(schema).clientSchema,
+        tableSpecs,
       )) {
         // Consume rows to execute the query
       }

@@ -94,11 +94,9 @@ export function checkClientSchema(
         );
       }
     }
-    if (!clientSpec.primaryKey) {
-      errors.push(
-        `The "${table}" table's client schema does not specify a primary key.`,
-      );
-    } else {
+    // Clients on PROTOCOL_VERSION 30+ send the primaryKey for each table.
+    // Validate that it corresponds to a non-null unique index upstream.
+    if (clientSpec.primaryKey) {
       const clientPrimaryKey = new Set(clientSpec.primaryKey);
       if (
         !serverSpec.tableSpec.allPotentialPrimaryKeys.some(key =>

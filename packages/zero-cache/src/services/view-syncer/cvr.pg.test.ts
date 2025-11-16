@@ -349,7 +349,6 @@ describe('view-syncer/cvr', () => {
             bar: {type: 'string'},
             baz: {type: 'number'},
           },
-          primaryKey: ['bar'],
         },
       },
     });
@@ -373,9 +372,6 @@ describe('view-syncer/cvr', () => {
                   "type": "number",
                 },
               },
-              "primaryKey": [
-                "bar",
-              ],
             },
           },
         },
@@ -416,10 +412,7 @@ describe('view-syncer/cvr', () => {
           grantedAt: 1709251200000,
           clientSchema: {
             tables: {
-              foo: {
-                columns: {bar: {type: 'string'}, baz: {type: 'number'}},
-                primaryKey: ['bar'],
-              },
+              foo: {columns: {bar: {type: 'string'}, baz: {type: 'number'}}},
             },
           },
         },
@@ -440,7 +433,6 @@ describe('view-syncer/cvr', () => {
             baz: {type: 'number'},
             bar: {type: 'string'},
           },
-          primaryKey: ['bar'],
         },
       },
     });
@@ -455,7 +447,6 @@ describe('view-syncer/cvr', () => {
               baz: {type: 'string'},
               bar: {type: 'number'},
             },
-            primaryKey: ['bar'],
           },
         },
       }),
@@ -4021,6 +4012,331 @@ describe('view-syncer/cvr', () => {
     //     epochMillis: Date.UTC(2024, 3, 23, 1),
     //   } satisfies LastActive,
     // });
+  });
+
+  test('row key changed', async () => {
+    const ROW_KEY4 = {id: 999};
+    const NEW_ROW_KEY1 = {newID: '1foo'};
+    const NEW_ROW_KEY3 = {newID: '3baz'};
+    const NEW_ROW_KEY4 = {newID: 'voo'};
+
+    const initialState: DBState = {
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          version: '1ba',
+          replicaVersion: '123',
+          lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: ttlClockFromNumber(Date.UTC(2024, 3, 23)),
+          clientSchema: null,
+        },
+      ],
+      clients: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+        },
+      ],
+      queries: [
+        {
+          clientGroupID: 'abc123',
+          queryHash: 'oneHash',
+          clientAST: {table: 'issues'},
+          queryArgs: null,
+          queryName: null,
+          transformationHash: 'serverOneHash',
+          transformationVersion: '1aa',
+          patchVersion: '1aa:01',
+          internal: null,
+          deleted: null,
+        },
+      ],
+      desires: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          queryHash: 'oneHash',
+          patchVersion: '1a9:01',
+          deleted: null,
+          inactivatedAt: null,
+          ttl: DEFAULT_TTL_MS,
+        },
+      ],
+      rows: [
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY1,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1aa:01',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY2,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY4,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+      ],
+    };
+
+    await setInitialState(cvrDb, initialState);
+
+    const cvrStore = new CVRStore(
+      lc,
+      cvrDb,
+      upstreamDb,
+      SHARD,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
+    const cvr = await cvrStore.load(lc, LAST_CONNECT);
+    const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1bb', '123');
+
+    const {newVersion, queryPatches} = updater.trackQueries(
+      lc,
+      [{id: 'oneHash', transformationHash: 'serverOneHash'}],
+      [],
+    );
+    expect(newVersion).toEqual({stateVersion: '1bb'});
+    expect(queryPatches).toHaveLength(0);
+
+    // NEW_ROW_KEY1 should replace ROW_KEY1
+    expect(
+      await updater.received(
+        lc,
+        new Map([
+          [
+            {...ROW_TABLE, rowKey: NEW_ROW_KEY1},
+            {
+              version: '03',
+              refCounts: {oneHash: 1},
+              contents: {...ROW_KEY1, ...NEW_ROW_KEY1, value: 'foobar'},
+            },
+          ],
+        ]),
+      ),
+    ).toEqual([
+      {
+        toVersion: {stateVersion: '1aa', minorVersion: 1},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {...ROW_TABLE, rowKey: NEW_ROW_KEY1},
+          contents: {...ROW_KEY1, ...NEW_ROW_KEY1, value: 'foobar'},
+        },
+      },
+    ] satisfies PatchToVersion[]);
+
+    // NEW_ROW_KEY3 is new to this CVR.
+    expect(
+      await updater.received(
+        lc,
+        new Map([
+          [
+            {...ROW_TABLE, rowKey: NEW_ROW_KEY3},
+            {
+              version: '09',
+              refCounts: {oneHash: 1},
+              contents: {...ROW_KEY3, ...NEW_ROW_KEY3, value: 'barfoo'},
+            },
+          ],
+        ]),
+      ),
+    ).toEqual([
+      {
+        toVersion: newVersion,
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {...ROW_TABLE, rowKey: NEW_ROW_KEY3},
+          contents: {...ROW_KEY3, ...NEW_ROW_KEY3, value: 'barfoo'},
+        },
+      },
+    ] satisfies PatchToVersion[]);
+
+    // NEW_ROW_KEY4 gets added and removed, and should replace ROW_KEY4
+    expect(
+      await updater.received(
+        lc,
+        new Map([
+          [
+            {...ROW_TABLE, rowKey: NEW_ROW_KEY4},
+            {
+              version: '03',
+              refCounts: {oneHash: 1},
+              contents: {...ROW_KEY4, ...NEW_ROW_KEY4, value: 'voodoo'},
+            },
+          ],
+          [
+            {...ROW_TABLE, rowKey: NEW_ROW_KEY4},
+            {
+              version: '03',
+              refCounts: {oneHash: -1},
+            },
+          ],
+        ]),
+      ),
+    ).toEqual([
+      {
+        toVersion: {stateVersion: '1a0'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {...ROW_TABLE, rowKey: NEW_ROW_KEY4},
+          contents: {...ROW_KEY4, ...NEW_ROW_KEY4, value: 'voodoo'},
+        },
+      },
+      {
+        toVersion: {stateVersion: '1bb'},
+        patch: {
+          type: 'row',
+          op: 'del',
+          id: {...ROW_TABLE, rowKey: NEW_ROW_KEY4},
+        },
+      },
+    ] satisfies PatchToVersion[]);
+
+    // Note: ROW_ID2 was not received so it is deleted.
+    // ROW_ID1, on the other hand was recognized with the NEW_ROW_KEY1
+    // and so it is not deleted.
+    expect(await updater.deleteUnreferencedRows()).toEqual([
+      {
+        patch: {type: 'row', op: 'del', id: ROW_ID2},
+        toVersion: newVersion,
+      },
+    ] satisfies PatchToVersion[]);
+
+    const {cvr: updated, flushed} = await updater.flush(
+      lc,
+      LAST_CONNECT,
+      Date.UTC(2024, 3, 23, 1),
+      ttlClockFromNumber(Date.UTC(2024, 3, 23, 1)),
+    );
+    expect(flushed).toMatchInlineSnapshot(`
+      {
+        "clients": 0,
+        "desires": 0,
+        "instances": 1,
+        "queries": 0,
+        "rows": 6,
+        "rowsDeferred": 0,
+        "statements": 5,
+      }
+    `);
+
+    // Verify round tripping.
+    const doCVRStore2 = new CVRStore(
+      lc,
+      cvrDb,
+      upstreamDb,
+      SHARD,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
+    const reloaded = await doCVRStore2.load(lc, LAST_CONNECT);
+    expect(reloaded).toEqual(updated);
+
+    await expectState(cvrDb, {
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          lastActive: new Date('2024-04-23T01:00:00Z').getTime(),
+          ttlClock: ttlClockFromNumber(
+            new Date('2024-04-23T01:00:00Z').getTime(),
+          ),
+          version: '1bb',
+          replicaVersion: '123',
+          owner: 'my-task',
+          grantedAt: 1709251200000,
+          clientSchema: null,
+        },
+      ],
+      clients: initialState.clients,
+      queries: [
+        {
+          clientAST: {
+            table: 'issues',
+          },
+          clientGroupID: 'abc123',
+          queryArgs: null,
+          queryName: null,
+          deleted: null,
+          internal: null,
+          patchVersion: '1aa:01',
+          queryHash: 'oneHash',
+          transformationHash: 'serverOneHash',
+          transformationVersion: '1aa',
+        },
+      ],
+      desires: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          deleted: null,
+          patchVersion: '1a9:01',
+          queryHash: 'oneHash',
+          inactivatedAt: null,
+          ttl: DEFAULT_TTL_MS,
+        },
+      ],
+      rows: [
+        // Note: All the state from the previous ROW_KEY1 remains.
+        {
+          clientGroupID: 'abc123',
+          patchVersion: '1aa:01',
+          refCounts: {oneHash: 1},
+          rowKey: NEW_ROW_KEY1,
+          rowVersion: '03',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'abc123',
+          patchVersion: '1bb',
+          refCounts: null, // Deleted
+          rowKey: ROW_KEY2,
+          rowVersion: '03',
+          schema: 'public',
+          table: 'issues',
+        },
+        {
+          clientGroupID: 'abc123',
+          patchVersion: '1bb',
+          refCounts: {oneHash: 1},
+          rowKey: NEW_ROW_KEY3,
+          rowVersion: '09',
+          schema: 'public',
+          table: 'issues',
+        },
+        // NEW_ROW_KEY4 should added as deleted row, ensuring that
+        // the delete is computed when catching up old clients.
+        {
+          clientGroupID: 'abc123',
+          patchVersion: '1bb',
+          refCounts: null,
+          rowKey: NEW_ROW_KEY4,
+          rowVersion: '03',
+          schema: 'public',
+          table: 'issues',
+        },
+      ],
+    });
   });
 
   test('advance with delete that cancels out add', async () => {

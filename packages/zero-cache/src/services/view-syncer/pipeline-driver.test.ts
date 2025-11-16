@@ -22,20 +22,10 @@ import {getMutationResultsQuery} from './cvr.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
 import {ResetPipelinesSignal, Snapshotter} from './snapshotter.ts';
 import {TimeSliceTimer} from './view-syncer.ts';
-import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
-import {
-  boolean,
-  number,
-  string,
-  table,
-} from '../../../../zero-schema/src/builder/table-builder.ts';
-import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 
 const NO_TIME_ADVANCEMENT_TIMER = {totalElapsed: () => 0};
 
 describe('view-syncer/pipeline-driver', () => {
-  const shardID: ShardID = {appID: 'zeroz', shardNum: 1};
-  const mutationsTableName = `${upstreamSchema(shardID)}.mutations`;
   let dbFile: DbFile;
   let db: DB;
   let lc: LogContext;
@@ -53,8 +43,8 @@ describe('view-syncer/pipeline-driver', () => {
     pipelines = new PipelineDriver(
       lc,
       testLogConfig,
-      new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
-      shardID,
+      new Snapshotter(lc, dbFile.path, {appID: 'zeroz'}),
+      {appID: 'zeroz', shardNum: 1},
       new DatabaseStorage(storage).createClientGroupStorage('foo-client-group'),
       'pipeline-driver.test.ts',
       new InspectorDelegate(undefined),
@@ -73,7 +63,7 @@ describe('view-syncer/pipeline-driver', () => {
       );
       INSERT INTO "zeroz.schemaVersions" ("lock", "minSupportedVersion", "maxSupportedVersion", _0_version)    
         VALUES (1, 1, 1, '123');
-      CREATE TABLE "${mutationsTableName}" (
+      CREATE TABLE "zeroz.mutations" (
         "clientGroupID"  TEXT,
         "clientID"       TEXT,
         "mutationID"     INTEGER,
@@ -134,43 +124,6 @@ describe('view-syncer/pipeline-driver', () => {
 
   afterEach(() => {
     dbFile.delete();
-  });
-
-  const issues = table('issues')
-    .columns({
-      id: string(),
-      closed: boolean(),
-    })
-    .primaryKey('id');
-  const comments = table('comments')
-    .columns({
-      id: string(),
-      issueID: string(),
-      upvotes: number(),
-    })
-    .primaryKey('id');
-  const issueLabels = table('issueLabels')
-    .columns({
-      issueID: string(),
-      labelID: string(),
-      legacyID: string(),
-    })
-    .primaryKey('issueID', 'labelID');
-  const labels = table('labels')
-    .columns({
-      id: string(),
-      name: string(),
-    })
-    .primaryKey('id');
-  const uniques = table('uniques')
-    .columns({
-      id: string(),
-      name: string(),
-    })
-    .primaryKey('id');
-
-  const clientSchema = createSchema({
-    tables: [issues, comments, issueLabels, labels, uniques],
   });
 
   const ISSUES_AND_COMMENTS: AST = {
@@ -354,11 +307,11 @@ describe('view-syncer/pipeline-driver', () => {
   };
 
   const messages = new ReplicationMessages({
-    issues: 'id',
-    comments: 'id',
-    issueLabels: ['issueID', 'labelID'],
-    uniques: 'id',
-    [mutationsTableName]: ['clientGroupID', 'clientID', 'mutationID'],
+    'issues': 'id',
+    'comments': 'id',
+    'issueLabels': ['issueID', 'labelID'],
+    'uniques': 'id',
+    'zeroz.mutations': ['clientGroupID', 'clientID', 'mutationID'],
   });
   const zeroMessages = new ReplicationMessages(
     {schemaVersions: 'lock'},
@@ -376,12 +329,12 @@ describe('view-syncer/pipeline-driver', () => {
   }
 
   test('replica version', () => {
-    pipelines.init(clientSchema);
+    pipelines.init(null);
     expect(pipelines.replicaVersion).toBe('123');
   });
 
   test('add query', () => {
-    pipelines.init(clientSchema);
+    pipelines.init(null);
 
     expect([
       ...pipelines.addQuery(
@@ -502,7 +455,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('insert', () => {
-    pipelines.init(clientSchema);
+    pipelines.init(null);
     [
       ...pipelines.addQuery(
         'hash1',
@@ -571,7 +524,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('delete', () => {
-    pipelines.init(clientSchema);
+    pipelines.init(null);
     [
       ...pipelines.addQuery(
         'hash1',
@@ -621,7 +574,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('truncate', () => {
-    pipelines.init(clientSchema);
+    pipelines.init(null);
     [
       ...pipelines.addQuery(
         'hash1',
@@ -637,7 +590,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('update', () => {
-    pipelines.init(clientSchema);
+    pipelines.init(null);
     [
       ...pipelines.addQuery(
         'hash1',
@@ -706,7 +659,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('timeout on slow advancement', () => {
-    pipelines.init(clientSchema);
+    pipelines.init(null);
     [
       ...pipelines.addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, {
         // hydration time
@@ -725,7 +678,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('reset', () => {
-    pipelines.init(clientSchema);
+    pipelines.init(null);
     [
       ...pipelines.addQuery(
         'hash1',
@@ -787,7 +740,7 @@ describe('view-syncer/pipeline-driver', () => {
     );
 
     pipelines.advanceWithoutDiff();
-    pipelines.reset(clientSchema);
+    pipelines.reset(null);
 
     expect(pipelines.addedQueries()).toEqual([new Set(), new Map()]);
 
@@ -904,39 +857,41 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('update unique non-primary key', () => {
-    pipelines.init(clientSchema);
+    pipelines.init(null);
     expect([
       ...pipelines.addQuery('hash1', 'queryID1', UNIQUES_QUERY, startTimer()),
     ]).toMatchInlineSnapshot(`
-      [
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "123",
-            "id": "foo",
-            "name": "bar",
+        [
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "123",
+              "id": "foo",
+              "name": "bar",
+            },
+            "rowKey": {
+              "id": "foo",
+              "name": "bar",
+            },
+            "table": "uniques",
+            "type": "add",
           },
-          "rowKey": {
-            "id": "foo",
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "123",
+              "id": "boo",
+              "name": "dar",
+            },
+            "rowKey": {
+              "id": "boo",
+              "name": "dar",
+            },
+            "table": "uniques",
+            "type": "add",
           },
-          "table": "uniques",
-          "type": "add",
-        },
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "123",
-            "id": "boo",
-            "name": "dar",
-          },
-          "rowKey": {
-            "id": "boo",
-          },
-          "table": "uniques",
-          "type": "add",
-        },
-      ]
-    `);
+        ]
+      `);
 
     replicator.processTransaction(
       '134',
@@ -952,6 +907,16 @@ describe('view-syncer/pipeline-driver', () => {
       [
         {
           "queryHash": "hash1",
+          "row": undefined,
+          "rowKey": {
+            "id": "boo",
+            "name": "dar",
+          },
+          "table": "uniques",
+          "type": "remove",
+        },
+        {
+          "queryHash": "hash1",
           "row": {
             "_0_version": "134",
             "id": "boo",
@@ -959,48 +924,51 @@ describe('view-syncer/pipeline-driver', () => {
           },
           "rowKey": {
             "id": "boo",
+            "name": "far",
           },
           "table": "uniques",
-          "type": "edit",
+          "type": "add",
         },
       ]
     `);
   });
 
   test('unique constraint conflict due to changelog compression', () => {
-    pipelines.init(clientSchema);
+    pipelines.init(null);
     expect([
       ...pipelines.addQuery('hash1', 'queryID1', UNIQUES_QUERY, startTimer()),
     ]).toMatchInlineSnapshot(`
-      [
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "123",
-            "id": "foo",
-            "name": "bar",
+        [
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "123",
+              "id": "foo",
+              "name": "bar",
+            },
+            "rowKey": {
+              "id": "foo",
+              "name": "bar",
+            },
+            "table": "uniques",
+            "type": "add",
           },
-          "rowKey": {
-            "id": "foo",
+          {
+            "queryHash": "hash1",
+            "row": {
+              "_0_version": "123",
+              "id": "boo",
+              "name": "dar",
+            },
+            "rowKey": {
+              "id": "boo",
+              "name": "dar",
+            },
+            "table": "uniques",
+            "type": "add",
           },
-          "table": "uniques",
-          "type": "add",
-        },
-        {
-          "queryHash": "hash1",
-          "row": {
-            "_0_version": "123",
-            "id": "boo",
-            "name": "dar",
-          },
-          "rowKey": {
-            "id": "boo",
-          },
-          "table": "uniques",
-          "type": "add",
-        },
-      ]
-    `);
+        ]
+      `);
 
     replicator.processTransaction(
       '134',
@@ -1016,6 +984,7 @@ describe('view-syncer/pipeline-driver', () => {
           "row": undefined,
           "rowKey": {
             "id": "foo",
+            "name": "bar",
           },
           "table": "uniques",
           "type": "remove",
@@ -1029,6 +998,7 @@ describe('view-syncer/pipeline-driver', () => {
           },
           "rowKey": {
             "id": "baz",
+            "name": "bar",
           },
           "table": "uniques",
           "type": "add",
@@ -1042,6 +1012,7 @@ describe('view-syncer/pipeline-driver', () => {
           },
           "rowKey": {
             "id": "foo",
+            "name": "wuzzy",
           },
           "table": "uniques",
           "type": "add",
@@ -1051,7 +1022,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('whereExists query', () => {
-    pipelines.init(clientSchema);
+    pipelines.init(null);
     [
       ...pipelines.addQuery(
         'hash1',
@@ -1087,6 +1058,7 @@ describe('view-syncer/pipeline-driver', () => {
           "rowKey": {
             "issueID": "1",
             "labelID": "1",
+            "legacyID": "1-1",
           },
           "table": "issueLabels",
           "type": "remove",
@@ -1105,7 +1077,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('whereExists added by permissions return no rows', () => {
-    pipelines.init(clientSchema);
+    pipelines.init(null);
     expect([
       ...pipelines.addQuery(
         'hash1',
@@ -1164,6 +1136,7 @@ describe('view-syncer/pipeline-driver', () => {
           "rowKey": {
             "issueID": "1",
             "labelID": "1",
+            "legacyID": "1-1",
           },
           "table": "issueLabels",
           "type": "add",
@@ -1274,7 +1247,7 @@ describe('view-syncer/pipeline-driver', () => {
       ],
     };
 
-    pipelines.init(clientSchema);
+    pipelines.init(null);
     [...pipelines.addQuery('hash1', 'queryID1', query, startTimer())];
 
     replicator.processTransaction(
@@ -1312,6 +1285,7 @@ describe('view-syncer/pipeline-driver', () => {
           "rowKey": {
             "issueID": "2",
             "labelID": "1",
+            "legacyID": "2-1",
           },
           "table": "issueLabels",
           "type": "add",
@@ -1340,6 +1314,7 @@ describe('view-syncer/pipeline-driver', () => {
           "rowKey": {
             "issueID": "2",
             "labelID": "1",
+            "legacyID": "2-1",
           },
           "table": "issueLabels",
           "type": "add",
@@ -1386,6 +1361,7 @@ describe('view-syncer/pipeline-driver', () => {
           "rowKey": {
             "issueID": "2",
             "labelID": "1",
+            "legacyID": "2-1",
           },
           "table": "issueLabels",
           "type": "remove",
@@ -1405,6 +1381,7 @@ describe('view-syncer/pipeline-driver', () => {
           "rowKey": {
             "issueID": "2",
             "labelID": "1",
+            "legacyID": "2-1",
           },
           "table": "issueLabels",
           "type": "remove",
@@ -1423,7 +1400,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('getRow', () => {
-    pipelines.init(clientSchema);
+    pipelines.init(null);
 
     [
       ...pipelines.addQuery(
@@ -1490,15 +1467,12 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('get mutation results', () => {
-    pipelines.init(clientSchema);
-    const mutationResultsQuery = getMutationResultsQuery(
-      upstreamSchema(shardID),
-      'cg1',
-    );
+    pipelines.init(null);
+    const mutationResultsQuery = getMutationResultsQuery('zeroz', 'cg1');
 
     replicator.processTransaction(
       '134',
-      messages.insert(mutationsTableName, {
+      messages.insert('zeroz.mutations', {
         clientGroupID: 'cg1',
         clientID: 'c1',
         mutationID: 1,
@@ -1516,7 +1490,7 @@ describe('view-syncer/pipeline-driver', () => {
     ];
 
     expect(
-      pipelines.getRow(mutationsTableName, {
+      pipelines.getRow('zeroz.mutations', {
         clientGroupID: 'cg1',
         clientID: 'c1',
         mutationID: 1,
@@ -1525,7 +1499,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('schemaVersions change and insert', () => {
-    pipelines.init(clientSchema);
+    pipelines.init(null);
     [
       ...pipelines.addQuery(
         'hash1',
@@ -1575,7 +1549,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('multiple advancements', () => {
-    pipelines.init(clientSchema);
+    pipelines.init(null);
     [
       ...pipelines.addQuery(
         'hash1',
@@ -1659,7 +1633,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('remove query', () => {
-    pipelines.init(clientSchema);
+    pipelines.init(null);
     [
       ...pipelines.addQuery(
         'hash1',
@@ -1731,7 +1705,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('push fails on out of bounds numbers', () => {
-    pipelines.init(clientSchema);
+    pipelines.init(null);
     [
       ...pipelines.addQuery(
         'hash1',

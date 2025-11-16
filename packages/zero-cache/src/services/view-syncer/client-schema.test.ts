@@ -1,9 +1,6 @@
 import {beforeAll, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import type {
-  ClientSchema,
-  TableSchema,
-} from '../../../../zero-protocol/src/client-schema.ts';
+import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {computeZqlSpecs} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
@@ -70,7 +67,37 @@ describe('client schemas', () => {
               id: {type: 'string'},
               d: {type: 'number'},
             },
+          },
+        },
+      } satisfies ClientSchema,
+    ],
+    [
+      {
+        tables: {
+          bar: {
+            columns: {
+              id: {type: 'string'},
+              d: {type: 'number'},
+            },
             primaryKey: ['id'],
+          },
+        },
+      } satisfies ClientSchema,
+    ],
+    [
+      {
+        tables: {
+          bar: {
+            columns: {
+              id: {type: 'string'},
+              d: {type: 'number'},
+            },
+          },
+          foo: {
+            columns: {
+              id: {type: 'string'},
+              c: {type: 'json'},
+            },
           },
         },
       } satisfies ClientSchema,
@@ -105,6 +132,28 @@ describe('client schemas', () => {
               f: {type: 'json'},
               d: {type: 'number'},
             },
+          },
+          foo: {
+            columns: {
+              c: {type: 'json'},
+              id: {type: 'string'},
+              a: {type: 'number'},
+              b: {type: 'boolean'},
+            },
+          },
+        },
+      } satisfies ClientSchema,
+    ],
+    [
+      {
+        tables: {
+          bar: {
+            columns: {
+              e: {type: 'boolean'},
+              id: {type: 'string'},
+              f: {type: 'json'},
+              d: {type: 'number'},
+            },
             primaryKey: ['id'],
           },
           foo: {
@@ -115,6 +164,31 @@ describe('client schemas', () => {
               b: {type: 'boolean'},
             },
             primaryKey: ['id'],
+          },
+        },
+      } satisfies ClientSchema,
+    ],
+    [
+      {
+        tables: {
+          bar: {
+            columns: {
+              e: {type: 'boolean'},
+              id: {type: 'string'},
+              f: {type: 'json'},
+              d: {type: 'number'},
+            },
+          },
+          foo: {
+            columns: {
+              c: {type: 'json'},
+              id: {type: 'string'},
+              a: {type: 'number'},
+              b: {type: 'boolean'},
+              d: {type: 'number'},
+              e: {type: 'number'},
+              f: {type: 'number'},
+            },
           },
         },
       } satisfies ClientSchema,
@@ -160,7 +234,6 @@ describe('client schemas', () => {
               columns: {
                 id: {type: 'string'},
               },
-              primaryKey: ['id'],
             },
           },
         },
@@ -186,7 +259,6 @@ describe('client schemas', () => {
                 d: {type: 'number'},
                 zzz: {type: 'number'},
               },
-              primaryKey: ['id'],
             },
             foo: {
               columns: {
@@ -195,13 +267,11 @@ describe('client schemas', () => {
                 a: {type: 'number'},
                 b: {type: 'boolean'},
               },
-              primaryKey: ['id'],
             },
             yyy: {
               columns: {
                 id: {type: 'string'},
               },
-              primaryKey: ['id'],
             },
           },
         },
@@ -230,7 +300,6 @@ describe('client schemas', () => {
                 b: {type: 'boolean'},
                 notSyncedToClient: {type: 'json'},
               },
-              primaryKey: ['id'],
             },
           },
         },
@@ -258,7 +327,6 @@ describe('client schemas', () => {
                 e: {type: 'number'},
                 f: {type: 'number'},
               },
-              primaryKey: ['id'],
             },
           },
         },
@@ -283,7 +351,6 @@ describe('client schemas', () => {
               columns: {
                 id: {type: 'string'},
               },
-              primaryKey: ['id'],
             },
             foo: {
               columns: {
@@ -292,7 +359,6 @@ describe('client schemas', () => {
                 a: {type: 'number'},
                 b: {type: 'boolean'},
               },
-              primaryKey: ['id'],
             },
           },
         },
@@ -301,30 +367,6 @@ describe('client schemas', () => {
       ),
     ).toThrowErrorMatchingInlineSnapshot(
       `[ProtocolError: The "nopk" table is missing a primary key or non-null unique index and thus cannot be synced to the client]`,
-    );
-  });
-
-  test('client schema missing primary key', () => {
-    expect(() =>
-      checkClientSchema(
-        SHARD_ID,
-        {
-          tables: {
-            foo: {
-              columns: {
-                c: {type: 'json'},
-                id: {type: 'string'},
-                a: {type: 'number'},
-                b: {type: 'boolean'},
-              },
-            } as unknown as TableSchema, // force cast, missing primary key
-          },
-        },
-        tableSpecs,
-        fullTables,
-      ),
-    ).toThrowErrorMatchingInlineSnapshot(
-      `[ProtocolError: The "foo" table's client schema does not specify a primary key.]`,
     );
   });
 
@@ -451,7 +493,6 @@ describe('client schemas', () => {
                 a: {type: 'number'},
                 b: {type: 'boolean'},
               },
-              primaryKey: ['id'],
             },
           },
         },
