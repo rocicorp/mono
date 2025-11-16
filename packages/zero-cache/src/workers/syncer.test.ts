@@ -139,7 +139,7 @@ const baseParams = {
   clientGroupID: '1',
   userID: 'anon',
   wsID: '1',
-  protocolVersion: 21,
+  protocolVersion: 30,
 };
 
 function makeParams(clientID: number, params: any = {}) {
@@ -254,7 +254,7 @@ describe('connection telemetry', () => {
 
   test('should record connection success for valid protocol version', () => {
     // Create a connection with valid protocol version
-    newConnection(1, {protocolVersion: 21});
+    newConnection(1);
 
     // Should record connection success
     expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(1);
@@ -262,9 +262,9 @@ describe('connection telemetry', () => {
 
   test('should record multiple successful connections', () => {
     // Create multiple connections with valid protocol version
-    newConnection(1, {protocolVersion: 21});
-    newConnection(2, {protocolVersion: 21});
-    newConnection(3, {protocolVersion: 21});
+    newConnection(1);
+    newConnection(2);
+    newConnection(3);
 
     // Should record multiple connection successes
     expect(vi.mocked(recordConnectionSuccess)).toHaveBeenCalledTimes(3);
@@ -272,7 +272,9 @@ describe('connection telemetry', () => {
 
   test('should record connection attempted for each connection', () => {
     // Create connections - both should record attempts
-    newConnection(1, {protocolVersion: 21});
+    // supported protocol version
+    newConnection(1);
+    // unsupported protocol version
     newConnection(2, {protocolVersion: 21});
 
     // Should record connection attempts
@@ -421,7 +423,6 @@ describe('jwt auth missing options and missing endpoints', () => {
           clientID: `1`,
           userID: 'anon',
           wsID: '1',
-          protocolVersion: 21,
           auth: 'dummy-token',
         },
         {} as any,
