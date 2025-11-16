@@ -5,7 +5,6 @@ import type {LogConfig} from '../../otel/src/log-options.ts';
 import {timeSampled} from '../../otel/src/maybe-time.ts';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
-import {difference} from '../../shared/src/set-utils.ts';
 import type {Writable} from '../../shared/src/writable.ts';
 import type {Condition, Ordering} from '../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../zero-protocol/src/data.ts';
@@ -29,10 +28,10 @@ import {
 } from '../../zql/src/ivm/memory-source.ts';
 import type {FetchRequest} from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
-import type {
-  Source,
-  SourceChange,
-  SourceInput,
+import {
+  type Source,
+  type SourceChange,
+  type SourceInput,
 } from '../../zql/src/ivm/source.ts';
 import type {Stream} from '../../zql/src/ivm/stream.ts';
 import type {Database, Statement} from './db.ts';
@@ -43,6 +42,7 @@ import {
   toSQLiteType,
   type NoSubqueryCondition,
 } from './query-builder.ts';
+import {assertOrderingIncludesPK} from '../../zql/src/query/complete-ordering.ts';
 
 type Statements = {
   readonly cache: StatementCache;
@@ -88,7 +88,7 @@ export class TableSource implements Source {
     db: Database,
     tableName: string,
     columns: Record<string, SchemaValue>,
-    primaryKey: readonly [string, ...string[]],
+    primaryKey: PrimaryKey,
   ) {
     this.#lc = logContext;
     this.#logConfig = logConfig;
@@ -104,8 +104,12 @@ export class TableSource implements Source {
     );
   }
 
-  get table() {
-    return this.#table;
+  get tableSchema() {
+    return {
+      name: this.#table,
+      columns: this.#columns,
+      primaryKey: this.#primaryKey,
+    };
   }
 
   /**
@@ -195,7 +199,7 @@ export class TableSource implements Source {
     return {
       tableName: this.#table,
       columns: this.#columns,
-      primaryKey: this.#selectPrimaryKeyFor(connection.sort),
+      primaryKey: this.#primaryKey,
       sort: connection.sort,
       relationships: {},
       isHidden: false,
@@ -241,6 +245,7 @@ export class TableSource implements Source {
       compareRows: makeComparator(sort),
     };
     const schema = this.#getSchema(connection);
+    assertOrderingIncludesPK(sort, this.#primaryKey);
 
     this.#connections.push(connection);
     return input;
@@ -482,24 +487,6 @@ export class TableSource implements Source {
       order,
       request.reverse,
       request.start,
-    );
-  }
-
-  #selectPrimaryKeyFor(sort: Ordering) {
-    const columns = new Set(sort.map(([col]) => col));
-    for (const uniqueColumns of this.#uniqueIndexes.values()) {
-      if (difference(uniqueColumns, columns).size === 0) {
-        assert(uniqueColumns.size > 0);
-        return [...uniqueColumns] as unknown as PrimaryKey;
-      }
-    }
-    throw new Error(
-      `Cannot orderBy(${JSON.stringify(sort.map(([c]) => c))}). ` +
-        (sort.length === 1
-          ? `The column must be unique. `
-          : `One or more columns must form a unique index. `) +
-        `Did you forget to include a primary key or ` +
-        `(non-null) unique index on the "${this.#table}" table?`,
     );
   }
 }

@@ -10,13 +10,13 @@ import type {
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-types/src/schema-value.ts';
-import {assertOrderingIncludesPK} from '../builder/builder.ts';
 import type {DebugDelegate} from '../builder/debug-delegate.ts';
 import {
   createPredicate,
   transformFilters,
   type NoSubqueryCondition,
 } from '../builder/filter.ts';
+import {assertOrderingIncludesPK} from '../query/complete-ordering.ts';
 import type {Change} from './change.ts';
 import {
   constraintMatchesPrimaryKey,
@@ -113,13 +113,11 @@ export class MemorySource implements Source {
       data: primaryIndexData ?? new BTreeSet<Row>(comparator),
       usedBy: new Set(),
     });
-    assertOrderingIncludesPK(this.#primaryIndexSort, this.#primaryKey);
   }
 
-  // Mainly for tests.
-  getSchemaInfo() {
+  get tableSchema() {
     return {
-      tableName: this.#tableName,
+      name: this.#tableName,
       columns: this.#columns,
       primaryKey: this.#primaryKey,
     };
