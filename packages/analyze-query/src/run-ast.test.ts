@@ -92,7 +92,7 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
   expect(result1).toMatchInlineSnapshot(`
     {
       "afterPermissions": undefined,
-      "end": 1015,
+      "end": 1003,
       "readRowCount": 2,
       "readRowCountsByQuery": {
         "users": {
@@ -100,7 +100,7 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
         },
       },
       "readRows": undefined,
-      "start": 1014,
+      "start": 1002,
       "syncedRowCount": 0,
       "syncedRows": undefined,
       "warnings": [],
@@ -125,7 +125,7 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
   expect(result2).toMatchInlineSnapshot(`
     {
       "afterPermissions": undefined,
-      "end": 1029,
+      "end": 1005,
       "readRowCount": 2,
       "readRowCountsByQuery": {
         "users": {
@@ -146,7 +146,7 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
           ],
         },
       },
-      "start": 1028,
+      "start": 1004,
       "syncedRowCount": 0,
       "syncedRows": undefined,
       "warnings": [],
@@ -171,7 +171,7 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
   expect(result3).toMatchInlineSnapshot(`
     {
       "afterPermissions": undefined,
-      "end": 1043,
+      "end": 1007,
       "readRowCount": 2,
       "readRowCountsByQuery": {
         "users": {
@@ -179,7 +179,7 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
         },
       },
       "readRows": undefined,
-      "start": 1042,
+      "start": 1006,
       "syncedRowCount": 0,
       "syncedRows": undefined,
       "warnings": [],
@@ -214,11 +214,11 @@ test('runAst returns empty object for vendedRowCounts when no debug tracking', a
   expect(result).toMatchInlineSnapshot(`
     {
       "afterPermissions": undefined,
-      "end": 1015,
+      "end": 1003,
       "readRowCount": 0,
       "readRowCountsByQuery": {},
       "readRows": undefined,
-      "start": 1014,
+      "start": 1002,
       "syncedRowCount": 0,
       "syncedRows": undefined,
       "warnings": [],
@@ -253,7 +253,7 @@ test('runAst basic structure and functionality', async () => {
   expect(result).toMatchInlineSnapshot(`
     {
       "afterPermissions": undefined,
-      "end": 1015,
+      "end": 1003,
       "readRowCount": 2,
       "readRowCountsByQuery": {
         "users": {
@@ -261,7 +261,7 @@ test('runAst basic structure and functionality', async () => {
         },
       },
       "readRows": undefined,
-      "start": 1014,
+      "start": 1002,
       "syncedRowCount": 0,
       "syncedRows": undefined,
       "warnings": [],
