@@ -184,6 +184,7 @@ describe('unreadable tables', () => {
       expect(
         transformQuery(lc, ast(query), permissionRules, authData),
       ).toStrictEqual({
+        orderBy: [['id', 'asc']],
         related: undefined,
         table: tableName,
         where: {
@@ -202,6 +203,12 @@ describe('unreadable tables', () => {
     expect(transformQuery(lc, ast(query), permissionRules, authData))
       .toMatchInlineSnapshot(`
         {
+          "orderBy": [
+            [
+              "id",
+              "asc",
+            ],
+          ],
           "related": [
             {
               "correlation": {
@@ -214,6 +221,12 @@ describe('unreadable tables', () => {
               },
               "subquery": {
                 "alias": "unreadable",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
                 "related": undefined,
                 "table": "unreadable",
                 "where": {
@@ -234,6 +247,12 @@ describe('unreadable tables', () => {
               },
               "subquery": {
                 "alias": "readable",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
                 "related": undefined,
                 "table": "readable",
                 "where": {
@@ -254,6 +273,12 @@ describe('unreadable tables', () => {
     expect(transformQuery(lc, ast(query), permissionRules, undefined))
       .toMatchInlineSnapshot(`
         {
+          "orderBy": [
+            [
+              "id",
+              "asc",
+            ],
+          ],
           "related": [
             {
               "correlation": {
@@ -266,6 +291,12 @@ describe('unreadable tables', () => {
               },
               "subquery": {
                 "alias": "unreadable",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
                 "related": undefined,
                 "table": "unreadable",
                 "where": {
@@ -286,6 +317,12 @@ describe('unreadable tables', () => {
               },
               "subquery": {
                 "alias": "readable",
+                "orderBy": [
+                  [
+                    "id",
+                    "asc",
+                  ],
+                ],
                 "related": undefined,
                 "table": "readable",
                 "where": {
@@ -318,6 +355,12 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": [
           {
             "correlation": {
@@ -330,6 +373,12 @@ describe('unreadable tables', () => {
             },
             "subquery": {
               "alias": "readable",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
               "related": [
                 {
                   "correlation": {
@@ -342,6 +391,12 @@ describe('unreadable tables', () => {
                   },
                   "subquery": {
                     "alias": "readable",
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
                     "related": [
                       {
                         "correlation": {
@@ -354,6 +409,12 @@ describe('unreadable tables', () => {
                         },
                         "subquery": {
                           "alias": "unreadable",
+                          "orderBy": [
+                            [
+                              "id",
+                              "asc",
+                            ],
+                          ],
                           "related": undefined,
                           "table": "unreadable",
                           "where": {
@@ -403,6 +464,12 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": [
           {
             "correlation": {
@@ -415,6 +482,12 @@ describe('unreadable tables', () => {
             },
             "subquery": {
               "alias": "readable",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
               "related": [
                 {
                   "correlation": {
@@ -427,6 +500,12 @@ describe('unreadable tables', () => {
                   },
                   "subquery": {
                     "alias": "readable",
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
                     "related": [
                       {
                         "correlation": {
@@ -439,6 +518,12 @@ describe('unreadable tables', () => {
                         },
                         "subquery": {
                           "alias": "unreadable",
+                          "orderBy": [
+                            [
+                              "id",
+                              "asc",
+                            ],
+                          ],
                           "related": undefined,
                           "table": "unreadable",
                           "where": {
@@ -484,6 +569,12 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": [
           {
             "correlation": {
@@ -496,6 +587,12 @@ describe('unreadable tables', () => {
             },
             "subquery": {
               "alias": "unreadable",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
               "related": undefined,
               "table": "unreadable",
               "where": {
@@ -522,6 +619,12 @@ describe('unreadable tables', () => {
     expect(transformQuery(lc, ast(query), permissionRules, undefined))
       .toMatchInlineSnapshot(`
         {
+          "orderBy": [
+            [
+              "id",
+              "asc",
+            ],
+          ],
           "related": undefined,
           "table": "readable",
           "where": {
@@ -540,6 +643,12 @@ describe('unreadable tables', () => {
                   },
                   "subquery": {
                     "alias": "zsubq_unreadable",
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
                     "related": undefined,
                     "table": "unreadable",
                     "where": {
@@ -559,6 +668,12 @@ describe('unreadable tables', () => {
     expect(transformQuery(lc, ast(query), permissionRules, authData))
       .toMatchInlineSnapshot(`
         {
+          "orderBy": [
+            [
+              "id",
+              "asc",
+            ],
+          ],
           "related": undefined,
           "table": "readable",
           "where": {
@@ -577,6 +692,12 @@ describe('unreadable tables', () => {
                   },
                   "subquery": {
                     "alias": "zsubq_unreadable",
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
                     "related": undefined,
                     "table": "unreadable",
                     "where": {
@@ -608,6 +729,12 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": undefined,
         "table": "readable",
         "where": {
@@ -625,6 +752,12 @@ describe('unreadable tables', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_unreadable",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
                   "related": undefined,
                   "table": "unreadable",
                   "where": {
@@ -654,6 +787,12 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": undefined,
         "table": "readable",
         "where": {
@@ -671,6 +810,12 @@ describe('unreadable tables', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_unreadable",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
                   "related": undefined,
                   "table": "unreadable",
                   "where": {
@@ -702,6 +847,12 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": undefined,
         "table": "readable",
         "where": {
@@ -720,6 +871,12 @@ describe('unreadable tables', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_readable",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
                   "related": undefined,
                   "table": "readable",
                   "where": {
@@ -738,6 +895,12 @@ describe('unreadable tables', () => {
                           },
                           "subquery": {
                             "alias": "zsubq_unreadable",
+                            "orderBy": [
+                              [
+                                "id",
+                                "asc",
+                              ],
+                            ],
                             "related": undefined,
                             "table": "unreadable",
                             "where": {
@@ -776,6 +939,12 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": undefined,
         "table": "readable",
         "where": {
@@ -794,6 +963,12 @@ describe('unreadable tables', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_readable",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
                   "related": undefined,
                   "table": "readable",
                   "where": {
@@ -812,6 +987,12 @@ describe('unreadable tables', () => {
                           },
                           "subquery": {
                             "alias": "zsubq_unreadable",
+                            "orderBy": [
+                              [
+                                "id",
+                                "asc",
+                              ],
+                            ],
                             "related": undefined,
                             "table": "unreadable",
                             "where": {
@@ -851,6 +1032,12 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": undefined,
         "table": "readable",
         "where": {
@@ -868,6 +1055,12 @@ describe('unreadable tables', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_unreadable",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
                   "related": undefined,
                   "table": "unreadable",
                   "where": {
@@ -893,6 +1086,12 @@ describe('unreadable tables', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_readable",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
                   "related": undefined,
                   "table": "readable",
                   "where": {
@@ -923,6 +1122,12 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": undefined,
         "table": "readable",
         "where": {
@@ -940,6 +1145,12 @@ describe('unreadable tables', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_unreadable",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
                   "related": undefined,
                   "table": "unreadable",
                   "where": {
@@ -965,6 +1176,12 @@ describe('unreadable tables', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_readable",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
                   "related": undefined,
                   "table": "readable",
                   "where": {
@@ -994,6 +1211,12 @@ test('exists rules in permissions are tagged as the permissions system', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
+      "orderBy": [
+        [
+          "id",
+          "asc",
+        ],
+      ],
       "related": undefined,
       "table": "readableThruUnreadable",
       "where": {
@@ -1011,7 +1234,12 @@ test('exists rules in permissions are tagged as the permissions system', () => {
           "subquery": {
             "alias": "zsubq_unreadable",
             "limit": undefined,
-            "orderBy": undefined,
+            "orderBy": [
+              [
+                "id",
+                "asc",
+              ],
+            ],
             "related": undefined,
             "schema": undefined,
             "start": undefined,
@@ -1034,6 +1262,12 @@ test('exists rules in permissions are tagged as the permissions system', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
+      "orderBy": [
+        [
+          "id",
+          "asc",
+        ],
+      ],
       "related": [
         {
           "correlation": {
@@ -1046,6 +1280,12 @@ test('exists rules in permissions are tagged as the permissions system', () => {
           },
           "subquery": {
             "alias": "readableThruUnreadable",
+            "orderBy": [
+              [
+                "id",
+                "asc",
+              ],
+            ],
             "related": undefined,
             "table": "readableThruUnreadable",
             "where": {
@@ -1063,7 +1303,12 @@ test('exists rules in permissions are tagged as the permissions system', () => {
                 "subquery": {
                   "alias": "zsubq_unreadable",
                   "limit": undefined,
-                  "orderBy": undefined,
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
                   "related": undefined,
                   "schema": undefined,
                   "start": undefined,
@@ -1103,6 +1348,12 @@ describe('admin readable', () => {
       // all levels of the query (root, self1, self2) should have the admin policy applied.
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": [
           {
             "correlation": {
@@ -1115,6 +1366,12 @@ describe('admin readable', () => {
             },
             "subquery": {
               "alias": "self1",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
               "related": undefined,
               "table": "adminReadable",
               "where": {
@@ -1143,6 +1400,12 @@ describe('admin readable', () => {
             },
             "subquery": {
               "alias": "self2",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
               "related": undefined,
               "table": "adminReadable",
               "where": {
@@ -1194,6 +1457,12 @@ describe('admin readable', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": [
           {
             "correlation": {
@@ -1206,6 +1475,12 @@ describe('admin readable', () => {
             },
             "subquery": {
               "alias": "self1",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
               "related": undefined,
               "table": "adminReadable",
               "where": {
@@ -1251,6 +1526,12 @@ describe('admin readable', () => {
             },
             "subquery": {
               "alias": "self2",
+              "orderBy": [
+                [
+                  "id",
+                  "asc",
+                ],
+              ],
               "related": [
                 {
                   "correlation": {
@@ -1263,6 +1544,12 @@ describe('admin readable', () => {
                   },
                   "subquery": {
                     "alias": "self1",
+                    "orderBy": [
+                      [
+                        "id",
+                        "asc",
+                      ],
+                    ],
                     "related": undefined,
                     "table": "adminReadable",
                     "where": {
@@ -1376,6 +1663,12 @@ describe('admin readable', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": undefined,
         "table": "adminReadable",
         "where": {
@@ -1394,6 +1687,12 @@ describe('admin readable', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_self1",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
                   "related": undefined,
                   "table": "adminReadable",
                   "where": {
@@ -1444,6 +1743,12 @@ describe('admin readable', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": undefined,
         "table": "adminReadable",
         "where": {
@@ -1462,6 +1767,12 @@ describe('admin readable', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_self1",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
                   "related": undefined,
                   "table": "adminReadable",
                   "where": {
@@ -1529,6 +1840,12 @@ describe('admin readable', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "orderBy": [
+          [
+            "id",
+            "asc",
+          ],
+        ],
         "related": undefined,
         "table": "adminReadable",
         "where": {
@@ -1547,6 +1864,12 @@ describe('admin readable', () => {
                 },
                 "subquery": {
                   "alias": "zsubq_self1",
+                  "orderBy": [
+                    [
+                      "id",
+                      "asc",
+                    ],
+                  ],
                   "related": undefined,
                   "table": "adminReadable",
                   "where": {
@@ -1565,6 +1888,12 @@ describe('admin readable', () => {
                           },
                           "subquery": {
                             "alias": "zsubq_self2",
+                            "orderBy": [
+                              [
+                                "id",
+                                "asc",
+                              ],
+                            ],
                             "related": undefined,
                             "table": "adminReadable",
                             "where": {
