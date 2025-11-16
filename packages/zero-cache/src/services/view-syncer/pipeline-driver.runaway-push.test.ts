@@ -20,6 +20,11 @@ import {
 } from '../replicator/test-utils.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
 import {Snapshotter} from './snapshotter.ts';
+import {
+  string,
+  table,
+} from '../../../../zero-schema/src/builder/table-builder.ts';
+import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 
 describe('view-syncer/pipeline-driver', () => {
   let dbFile: DbFile;
@@ -96,6 +101,22 @@ describe('view-syncer/pipeline-driver', () => {
     dbFile.delete();
   });
 
+  const issue = table('issue')
+    .columns({
+      id: string(),
+      creatorID: string(),
+    })
+    .primaryKey('id');
+  const user = table('user')
+    .columns({
+      id: string(),
+      name: string(),
+    })
+    .primaryKey('id');
+  const clientSchema = createSchema({
+    tables: [issue, user],
+  });
+
   const ISSUES_WITH_CREATOR: AST = {
     table: 'issue',
     orderBy: [['id', 'desc']],
@@ -121,7 +142,7 @@ describe('view-syncer/pipeline-driver', () => {
   });
 
   test('timeout on single change that causes lot of push processing', () => {
-    pipelines.init(null);
+    pipelines.init(clientSchema);
     [
       ...pipelines.addQuery('hash1', 'queryID1', ISSUES_WITH_CREATOR, {
         totalElapsed: () => 1000,

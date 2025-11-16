@@ -8,6 +8,7 @@ import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {mustGetTableSpec} from '../db/lite-tables.ts';
 import {analyzeQuery} from './analyze.ts';
 import {runAst} from './run-ast.ts';
+import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 
 // Mock the runAst function
 vi.mock('./run-ast.ts', () => ({
@@ -64,6 +65,8 @@ describe('analyzeQuery', () => {
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 
+  const minimalClientSchema: ClientSchema = {tables: {}};
+
   const simpleAST: AST = {
     table: 'users',
   };
@@ -88,10 +91,16 @@ describe('analyzeQuery', () => {
     vi.mocked(runAst).mockResolvedValue(mockResult);
     vi.mocked(explainQueries).mockReturnValue(mockPlans);
 
-    const result = await analyzeQuery(lc, mockConfig, simpleAST);
+    const result = await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      simpleAST,
+    );
 
     expect(runAst).toHaveBeenCalledWith(
       lc,
+      minimalClientSchema,
       simpleAST,
       true, // isTransformed (AST already has server names)
       expect.objectContaining({
@@ -135,10 +144,18 @@ describe('analyzeQuery', () => {
     vi.mocked(runAst).mockResolvedValue(mockResult);
     vi.mocked(explainQueries).mockReturnValue({});
 
-    const result = await analyzeQuery(lc, mockConfig, simpleAST, false, true);
+    const result = await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      simpleAST,
+      false,
+      true,
+    );
 
     expect(runAst).toHaveBeenCalledWith(
       lc,
+      minimalClientSchema,
       simpleAST,
       true,
       expect.objectContaining({
@@ -180,10 +197,16 @@ describe('analyzeQuery', () => {
 
     vi.mocked(runAst).mockResolvedValue(mockResult);
 
-    const result = await analyzeQuery(lc, mockConfig, complexAST);
+    const result = await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      complexAST,
+    );
 
     expect(runAst).toHaveBeenCalledWith(
       lc,
+      minimalClientSchema,
       complexAST,
       true,
       expect.any(Object),
@@ -203,7 +226,12 @@ describe('analyzeQuery', () => {
     vi.mocked(runAst).mockResolvedValue(mockResult);
     vi.mocked(explainQueries).mockReturnValue({});
 
-    const result = await analyzeQuery(lc, mockConfig, simpleAST);
+    const result = await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      simpleAST,
+    );
 
     expect(explainQueries).toHaveBeenCalledWith({}, expect.any(Object));
     expect(result.plans).toEqual({});
@@ -221,7 +249,12 @@ describe('analyzeQuery', () => {
     vi.mocked(runAst).mockResolvedValue(mockResult);
     vi.mocked(explainQueries).mockReturnValue({});
 
-    const result = await analyzeQuery(lc, mockConfig, simpleAST);
+    const result = await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      simpleAST,
+    );
 
     expect(explainQueries).toHaveBeenCalledWith({}, expect.any(Object));
     expect(result.plans).toEqual({});
@@ -231,9 +264,9 @@ describe('analyzeQuery', () => {
     const error = new Error('Query analysis failed');
     vi.mocked(runAst).mockRejectedValue(error);
 
-    await expect(analyzeQuery(lc, mockConfig, simpleAST)).rejects.toThrow(
-      'Query analysis failed',
-    );
+    await expect(
+      analyzeQuery(lc, mockConfig, minimalClientSchema, simpleAST),
+    ).rejects.toThrow('Query analysis failed');
   });
 
   test('creates proper host delegate with getSource function', async () => {
@@ -256,10 +289,10 @@ describe('analyzeQuery', () => {
 
     vi.mocked(runAst).mockResolvedValue(mockResult);
 
-    await analyzeQuery(lc, mockConfig, simpleAST);
+    await analyzeQuery(lc, mockConfig, minimalClientSchema, simpleAST);
 
     // Verify that runAst was called with a host that has the expected functions
-    const hostArg = vi.mocked(runAst).mock.calls[0][3].host;
+    const hostArg = vi.mocked(runAst).mock.calls[0][4].host;
 
     expect(typeof hostArg.getSource).toBe('function');
     expect(typeof hostArg.createStorage).toBe('function');
@@ -308,9 +341,9 @@ describe('analyzeQuery', () => {
 
     vi.mocked(runAst).mockResolvedValue(mockResult);
 
-    await analyzeQuery(lc, mockConfig, simpleAST);
+    await analyzeQuery(lc, mockConfig, minimalClientSchema, simpleAST);
 
-    const hostArg = vi.mocked(runAst).mock.calls[0][3].host;
+    const hostArg = vi.mocked(runAst).mock.calls[0][4].host;
 
     // Call getSource twice with the same table name
     const tableName = 'test_table';
@@ -333,10 +366,18 @@ describe('analyzeQuery', () => {
       end: 1010,
     });
 
-    await analyzeQuery(lc, mockConfig, simpleAST, false, true);
+    await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      simpleAST,
+      false,
+      true,
+    );
 
     expect(runAst).toHaveBeenCalledWith(
       lc,
+      minimalClientSchema,
       simpleAST,
       true,
       expect.objectContaining({
@@ -373,7 +414,7 @@ describe('analyzeQuery', () => {
     vi.mocked(runAst).mockResolvedValue(mockResult);
     vi.mocked(explainQueries).mockReturnValue(mockPlans);
 
-    await analyzeQuery(lc, mockConfig, simpleAST);
+    await analyzeQuery(lc, mockConfig, minimalClientSchema, simpleAST);
 
     // Verify explainQueries is called with readRowCountsByQuery, not vendedRowCounts
     expect(explainQueries).toHaveBeenCalledWith(
@@ -416,7 +457,12 @@ describe('analyzeQuery', () => {
     vi.mocked(runAst).mockResolvedValue(mockResult);
     vi.mocked(explainQueries).mockReturnValue(expectedPlans);
 
-    const result = await analyzeQuery(lc, mockConfig, simpleAST);
+    const result = await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      simpleAST,
+    );
 
     // Critical assertion: explainQueries must be called with readRowCountsByQuery
     // If it were called with vendedRowCounts (undefined), we'd get no plans
@@ -443,7 +489,12 @@ describe('analyzeQuery', () => {
     vi.mocked(runAst).mockResolvedValue(mockResult);
     vi.mocked(explainQueries).mockReturnValue({});
 
-    const result = await analyzeQuery(lc, mockConfig, simpleAST);
+    const result = await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      simpleAST,
+    );
 
     // Should call explainQueries with empty object (due to ?? {} in the code)
     expect(explainQueries).toHaveBeenCalledWith({}, expect.any(Object));
@@ -522,7 +573,12 @@ describe('analyzeQuery', () => {
     vi.mocked(runAst).mockResolvedValue(mockResult);
     vi.mocked(explainQueries).mockReturnValue({});
 
-    const result = await analyzeQuery(lc, mockConfig, simpleAST);
+    const result = await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      simpleAST,
+    );
 
     // Verify elapsed is present (new property)
     expect(result.elapsed).toBe(50);
@@ -548,7 +604,12 @@ describe('analyzeQuery', () => {
     vi.mocked(runAst).mockResolvedValue(mockResult);
     vi.mocked(explainQueries).mockReturnValue({});
 
-    const result = await analyzeQuery(lc, mockConfig, simpleAST);
+    const result = await analyzeQuery(
+      lc,
+      mockConfig,
+      minimalClientSchema,
+      simpleAST,
+    );
 
     expect(result.elapsed).toBe(150);
     expect(result.elapsed).toBe(result.end - result.start);

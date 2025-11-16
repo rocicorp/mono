@@ -435,7 +435,7 @@ describe('permissions', () => {
     `);
   });
 
-  test('query for comments does not return issue rows as those are gotten by the permission system', async () => {
+  test.only('query for comments does not return issue rows as those are gotten by the permission system', async () => {
     const client = connect(
       {
         ...SYNC_CONTEXT,

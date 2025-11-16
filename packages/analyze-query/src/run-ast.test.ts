@@ -6,6 +6,9 @@ import type {BuilderDelegate} from '../../zql/src/builder/builder.ts';
 import {Debug} from '../../zql/src/builder/debug-delegate.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {runAst, type RunAstOptions} from './run-ast.ts';
+import type {ClientSchema} from '../../zero-protocol/src/client-schema.ts';
+
+const minimalClientSchema: ClientSchema = {tables: {}};
 
 // Mock only the complex dependencies that require extensive setup
 vi.mock('../../zero-cache/src/services/view-syncer/pipeline-driver.ts', () => ({
@@ -79,7 +82,13 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
     vendedRows: false,
   };
 
-  const result1 = await runAst(lc, ast, isTransformed, options1);
+  const result1 = await runAst(
+    lc,
+    minimalClientSchema,
+    ast,
+    isTransformed,
+    options1,
+  );
   expect(result1).toMatchInlineSnapshot(`
     {
       "afterPermissions": undefined,
@@ -106,7 +115,13 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
     vendedRows: true,
   };
 
-  const result2 = await runAst(lc, ast, isTransformed, options2);
+  const result2 = await runAst(
+    lc,
+    minimalClientSchema,
+    ast,
+    isTransformed,
+    options2,
+  );
   expect(result2).toMatchInlineSnapshot(`
     {
       "afterPermissions": undefined,
@@ -146,7 +161,13 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
     // vendedRows not specified
   };
 
-  const result3 = await runAst(lc, ast, isTransformed, options3);
+  const result3 = await runAst(
+    lc,
+    minimalClientSchema,
+    ast,
+    isTransformed,
+    options3,
+  );
   expect(result3).toMatchInlineSnapshot(`
     {
       "afterPermissions": undefined,
@@ -182,7 +203,13 @@ test('runAst returns empty object for vendedRowCounts when no debug tracking', a
     tableSpecs: new Map(),
   };
 
-  const result = await runAst(lc, ast, isTransformed, options);
+  const result = await runAst(
+    lc,
+    minimalClientSchema,
+    ast,
+    isTransformed,
+    options,
+  );
 
   expect(result).toMatchInlineSnapshot(`
     {
@@ -215,7 +242,13 @@ test('runAst basic structure and functionality', async () => {
     tableSpecs: new Map(),
   };
 
-  const result = await runAst(lc, ast, isTransformed, options);
+  const result = await runAst(
+    lc,
+    minimalClientSchema,
+    ast,
+    isTransformed,
+    options,
+  );
 
   expect(result).toMatchInlineSnapshot(`
     {
@@ -309,7 +342,13 @@ test('runAst counts only unique synced rows, skips duplicates', async () => {
     syncedRows: true, // Enable to verify syncedRows also deduplicates
   };
 
-  const result = await runAst(lc, ast, isTransformed, options);
+  const result = await runAst(
+    lc,
+    minimalClientSchema,
+    ast,
+    isTransformed,
+    options,
+  );
 
   // Should count only 4 unique rows: 3 from users table, 1 from posts table
   // Duplicates should be skipped
@@ -372,7 +411,13 @@ test('runAst handles case where all synced rows are duplicates', async () => {
     syncedRows: true,
   };
 
-  const result = await runAst(lc, ast, isTransformed, options);
+  const result = await runAst(
+    lc,
+    minimalClientSchema,
+    ast,
+    isTransformed,
+    options,
+  );
 
   // Should count only 1 unique row despite 3 identical rows being yielded
   expect(result.syncedRowCount).toBe(1);
@@ -422,7 +467,13 @@ test('runAst calls Promise.resolve every 10 rows for yielding', async () => {
     tableSpecs: new Map(),
   };
 
-  const runPromise = runAst(lc, ast, isTransformed, options);
+  const runPromise = runAst(
+    lc,
+    minimalClientSchema,
+    ast,
+    isTransformed,
+    options,
+  );
 
   // Advance timers to resolve any pending promises
   await vi.runAllTimersAsync();
@@ -466,7 +517,13 @@ test('runAst calls setTimeout (via sleep) when processing many rows', async () =
     tableSpecs: new Map(),
   };
 
-  const runPromise = runAst(lc, ast, isTransformed, options);
+  const runPromise = runAst(
+    lc,
+    minimalClientSchema,
+    ast,
+    isTransformed,
+    options,
+  );
 
   // Advance timers to resolve any sleep calls
   await vi.runAllTimersAsync();
