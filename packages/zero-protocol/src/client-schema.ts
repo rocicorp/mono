@@ -20,9 +20,7 @@ export type ColumnSchema = v.Infer<typeof columnSchemaSchema>;
 
 export const tableSchemaSchema = v.object({
   columns: v.record(columnSchemaSchema),
-  // TODO: Make this non-optional when bumping the
-  //       MIN_SERVER_SUPPORTED_SYNC_PROTOCOL to 30+.
-  primaryKey: v.array(v.string()).optional(),
+  primaryKey: v.array(v.string()),
 });
 
 export type TableSchema = v.Infer<typeof tableSchemaSchema>;
