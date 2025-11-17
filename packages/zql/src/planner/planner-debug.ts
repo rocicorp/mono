@@ -30,8 +30,8 @@ export type ConnectionCostsEvent = {
     cost: number;
     costEstimate: CostEstimate;
     pinned: boolean;
-    constraints: Map<string, PlannerConstraint | undefined>;
-    constraintCosts: Map<string, CostEstimate>;
+    constraints: Record<string, PlannerConstraint | undefined>;
+    constraintCosts: Record<string, CostEstimate>;
   }>;
 };
 
@@ -54,8 +54,8 @@ export type ConstraintsPropagatedEvent = {
   attemptNumber: number;
   connectionConstraints: Array<{
     connection: string;
-    constraints: Map<string, PlannerConstraint | undefined>;
-    constraintCosts: Map<string, CostEstimate>;
+    constraints: Record<string, PlannerConstraint | undefined>;
+    constraintCosts: Record<string, CostEstimate>;
   }>;
 };
 
@@ -372,17 +372,6 @@ function serializeCostEstimate(cost: CostEstimate): CostEstimateJSON {
 }
 
 /**
- * Convert a Map to a plain Record for JSON serialization.
- */
-function mapToRecord<K extends string, V>(map: Map<K, V>): Record<string, V> {
-  const record: Record<string, V> = {};
-  for (const [key, value] of map) {
-    record[key] = value;
-  }
-  return record;
-}
-
-/**
  * Serialize a single debug event to JSON-compatible format.
  */
 function serializeEvent(event: PlanDebugEvent): PlanDebugEventJSON {
@@ -403,14 +392,12 @@ function serializeEvent(event: PlanDebugEvent): PlanDebugEventJSON {
           cost: c.cost,
           costEstimate: serializeCostEstimate(c.costEstimate),
           pinned: c.pinned,
-          constraints: mapToRecord(c.constraints),
-          constraintCosts: mapToRecord(
-            new Map(
-              Array.from(c.constraintCosts.entries()).map(([k, v]) => [
-                k,
-                serializeCostEstimate(v),
-              ]),
-            ),
+          constraints: c.constraints,
+          constraintCosts: Object.fromEntries(
+            Object.entries(c.constraintCosts).map(([k, v]) => [
+              k,
+              serializeCostEstimate(v),
+            ]),
           ),
         })),
       };
@@ -421,14 +408,12 @@ function serializeEvent(event: PlanDebugEvent): PlanDebugEventJSON {
         attemptNumber: event.attemptNumber,
         connectionConstraints: event.connectionConstraints.map(cc => ({
           connection: cc.connection,
-          constraints: mapToRecord(cc.constraints),
-          constraintCosts: mapToRecord(
-            new Map(
-              Array.from(cc.constraintCosts.entries()).map(([k, v]) => [
-                k,
-                serializeCostEstimate(v),
-              ]),
-            ),
+          constraints: cc.constraints,
+          constraintCosts: Object.fromEntries(
+            Object.entries(cc.constraintCosts).map(([k, v]) => [
+              k,
+              serializeCostEstimate(v),
+            ]),
           ),
         })),
       };
@@ -455,7 +440,7 @@ function serializeEvent(event: PlanDebugEvent): PlanDebugEventJSON {
 
 /**
  * Serialize an array of debug events to JSON-compatible format.
- * This converts Maps to Records and omits non-serializable fields like functions.
+ * This omits non-serializable fields like functions.
  */
 export function serializePlanDebugEvents(
   events: PlanDebugEvent[],

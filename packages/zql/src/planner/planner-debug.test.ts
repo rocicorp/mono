@@ -361,10 +361,10 @@ describe('AccumulatorDebugger', () => {
 });
 
 describe('serializePlanDebugEvents', () => {
-  test('serializes events with Maps to Records', () => {
+  test('serializes events by omitting non-serializable fields', () => {
     const planDebugger = new AccumulatorDebugger();
 
-    // Add a connection-costs event (which has Maps in native format)
+    // Add a connection-costs event
     planDebugger.log({
       type: 'connection-costs',
       attemptNumber: 0,
@@ -382,21 +382,18 @@ describe('serializePlanDebugEvents', () => {
             fanout: () => ({fanout: 1, confidence: 'high'}),
           },
           pinned: false,
-          constraints: new Map([['id', {id: undefined}]]),
-          constraintCosts: new Map([
-            [
-              'id',
-              {
-                startupCost: 0,
-                scanEst: 5,
-                cost: 5,
-                returnedRows: 10,
-                selectivity: 0.1,
-                limit: undefined,
-                fanout: () => ({fanout: 1, confidence: 'high'}),
-              },
-            ],
-          ]),
+          constraints: {id: {id: undefined}},
+          constraintCosts: {
+            id: {
+              startupCost: 0,
+              scanEst: 5,
+              cost: 5,
+              returnedRows: 10,
+              selectivity: 0.1,
+              limit: undefined,
+              fanout: () => ({fanout: 1, confidence: 'high'}),
+            },
+          },
         },
       ],
     });

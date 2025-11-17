@@ -5,7 +5,12 @@ import type {
   PlanDebugEventJSON,
 } from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {
+  AccumulatorDebugger,
+  serializePlanDebugEvents,
+} from '../../../zql/src/planner/planner-debug.ts';
 import {explainQueries} from '../../../zqlite/src/explain-queries.ts';
+import {createSQLiteCostModel} from '../../../zqlite/src/sqlite-cost-model.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {mustGetTableSpec} from '../db/lite-tables.ts';
@@ -634,13 +639,6 @@ describe('analyzeQuery', () => {
 
   describe('planner debug', () => {
     test('includes planner events when plannerDebug is true', async () => {
-      const {AccumulatorDebugger, serializePlanDebugEvents} = await import(
-        '../../../zql/src/planner/planner-debug.ts'
-      );
-      const {createSQLiteCostModel} = await import(
-        '../../../zqlite/src/sqlite-cost-model.ts'
-      );
-
       const mockDebugEvents = [
         {type: 'attempt-start', attemptNumber: 0, totalAttempts: 1} as const,
         {
@@ -712,13 +710,6 @@ describe('analyzeQuery', () => {
     });
 
     test('does not include planner events when plannerDebug is false', async () => {
-      const {AccumulatorDebugger, serializePlanDebugEvents} = await import(
-        '../../../zql/src/planner/planner-debug.ts'
-      );
-      const {createSQLiteCostModel} = await import(
-        '../../../zqlite/src/sqlite-cost-model.ts'
-      );
-
       vi.clearAllMocks();
 
       const mockResult: AnalyzeQueryResult = {
@@ -768,13 +759,6 @@ describe('analyzeQuery', () => {
     });
 
     test('defaults plannerDebug to false when not provided', async () => {
-      const {AccumulatorDebugger} = await import(
-        '../../../zql/src/planner/planner-debug.ts'
-      );
-      const {createSQLiteCostModel} = await import(
-        '../../../zqlite/src/sqlite-cost-model.ts'
-      );
-
       vi.clearAllMocks();
 
       const mockResult: AnalyzeQueryResult = {
