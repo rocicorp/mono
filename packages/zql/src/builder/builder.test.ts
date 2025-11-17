@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {expect, test, vi} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {
@@ -10,6 +10,7 @@ import type {
 } from '../../../zero-protocol/src/ast.ts';
 import {Catch} from '../ivm/catch.ts';
 import {createSource} from '../ivm/test/source-factory.ts';
+import {simpleCostModel} from '../planner/test/helpers.ts';
 import {
   bindStaticParameters,
   buildPipeline,
@@ -2761,4 +2762,62 @@ test('groupSubqueryConditions', () => {
     [subqueryInAnd.conditions[0]],
     [subqueryInAnd.conditions[1]],
   ]);
+});
+
+test('graceful fallback when planner encounters too many joins', () => {
+  const {delegate} = testBuilderDelegate();
+
+  // Create a mock LogContext with a spy for warn
+  const warnSpy = vi.fn();
+  const testLc = {
+    ...lc,
+    warn: warnSpy,
+  } as unknown as typeof lc;
+
+  // Create an AST with 10 EXISTS conditions (MAX_FLIPPABLE_JOINS is 9)
+  // This should trigger the planner to throw PlannerException
+  const existsConditions: Condition[] = [];
+  for (let i = 0; i < 10; i++) {
+    existsConditions.push({
+      type: 'correlatedSubquery',
+      op: 'EXISTS',
+      related: {
+        system: 'client',
+        correlation: {parentField: ['id'], childField: ['userID']},
+        subquery: {
+          table: 'userStates',
+          alias: `zsubq_userStates_${i}`,
+          orderBy: [
+            ['userID', 'asc'],
+            ['stateCode', 'asc'],
+          ],
+        },
+      },
+    });
+  }
+
+  const ast: AST = {
+    table: 'users',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'and',
+      conditions: existsConditions,
+    },
+  };
+
+  // This should fall back gracefully instead of throwing
+  const sink = new Catch(
+    buildPipeline(ast, delegate, 'query-id', simpleCostModel, testLc),
+  );
+
+  // Verify the warning was logged with the exception kind
+  expect(warnSpy).toHaveBeenCalledWith(
+    expect.stringMatching(
+      /Query planner failed \(max_flippable_joins\).*10 EXISTS checks/,
+    ),
+  );
+
+  // Verify the query still works (falls back to unoptimized version)
+  const result = sink.fetch();
+  expect(result[0]).toBeDefined();
 });

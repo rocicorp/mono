@@ -318,9 +318,9 @@ for pattern in 0...(2^n - 1):
 
 ### Complexity Limits
 
-- **Max flippable joins**: 13 (configurable via `MAX_FLIPPABLE_JOINS`)
-- At 13 joins: 8,192 plans evaluated
-- Safety check throws error if limit exceeded
+- **Max flippable joins**: 9 (configurable via `MAX_FLIPPABLE_JOINS`)
+- At 9 joins: 512 plans evaluated
+- Safety check logs warning and falls back to unoptimized query if limit exceeded
 
 ### Planning Steps in Detail
 
