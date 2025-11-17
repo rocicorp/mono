@@ -324,8 +324,8 @@ if (config.outputVendedRows) {
   colorConsole.log(chalk.blue.bold('=== JS Row Scan Values: ===\n'));
   for (const source of sources.values()) {
     colorConsole.log(
-      chalk.bold(`${source.table}:`),
-      debug.getVendedRows()?.[source.table] ?? {},
+      chalk.bold(`${source.tableSchema.name}:`),
+      debug.getVendedRows()?.[source.tableSchema.name] ?? {},
     );
   }
 }
@@ -356,14 +356,14 @@ function showStats() {
   let totalRowsConsidered = 0;
   for (const source of sources.values()) {
     const values = Object.values(
-      debug.getVendedRowCounts()?.[source.table] ?? {},
+      debug.getVendedRowCounts()?.[source.tableSchema.name] ?? {},
     );
     for (const v of values) {
       totalRowsConsidered += v;
     }
     colorConsole.log(
-      chalk.bold(source.table + ' vended:'),
-      debug.getVendedRowCounts()?.[source.table] ?? {},
+      chalk.bold(source.tableSchema.name + ' vended:'),
+      debug.getVendedRowCounts()?.[source.tableSchema.name] ?? {},
     );
   }
 
