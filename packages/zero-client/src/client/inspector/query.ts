@@ -1,6 +1,6 @@
 import {astToZQL} from '../../../../ast-to-zql/src/ast-to-zql.ts';
-import {assert} from '../../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
+import {must} from '../../../../shared/src/must.ts';
 import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {
@@ -101,12 +101,19 @@ export class Query {
   }
 
   async analyze(options?: AnalyzeQueryOptions): Promise<AnalyzeQueryResult> {
-    assert(this.#serverAST, 'No server AST available for this query');
+    const details =
+      this.name && this.args
+        ? {
+            name: this.name,
+            args: this.args,
+          }
+        : {value: must(this.#serverAST, 'AST is required for unnamed queries')};
+
     return rpc(
       await this.#socket(),
       {
         op: 'analyze-query',
-        value: this.#serverAST,
+        ...details,
         options,
       },
       inspectAnalyzeQueryDownSchema,

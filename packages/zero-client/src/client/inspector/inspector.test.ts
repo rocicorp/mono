@@ -762,7 +762,7 @@ test('clientZQL', async () => {
 });
 
 describe('query analyze', () => {
-  test('analyze method calls correct protocol', async () => {
+  test('analyze method sends AST for unnamed queries', async () => {
     const z = zeroForTest({schema});
     await z.triggerConnected();
 
@@ -863,6 +863,108 @@ describe('query analyze', () => {
       {
         op: 'analyze-query',
         id: '000000000000000000000',
+        value: mockAnalyzeResult,
+      },
+    ]);
+
+    const result = await analyzePromise;
+    expect(result).toEqual(mockAnalyzeResult);
+
+    await z.close();
+  });
+
+  test('analyze method sends name and args for named queries', async () => {
+    const z = zeroForTest({schema});
+    await z.triggerConnected();
+
+    const ast: AST = {table: 'issues'};
+    const analyzeOptions = {
+      syncedRows: true,
+      vendedRows: false,
+    };
+
+    // Setup a named query
+    const idP = waitForID(z.socket, 'queries');
+    const queriesP = z.inspector.client.queries();
+    const id = await idP;
+
+    await z.triggerMessage([
+      'inspect',
+      {
+        op: 'queries',
+        id,
+        value: [
+          {
+            clientID: z.clientID,
+            queryID: '1',
+            ast,
+            name: 'myCustomQuery',
+            args: ['arg1', 42, {key: 'value'}],
+            deleted: false,
+            got: true,
+            inactivatedAt: null,
+            rowCount: 10,
+            ttl: 60_000,
+            metrics: null,
+          },
+        ],
+      },
+    ]);
+
+    const queries = await queriesP;
+    const query = queries[0];
+
+    (await z.socket).messages.length = 0; // Clear previous messages
+
+    // Wait for the analyze-query ID to be generated
+    const analyzeIdP = waitForID(z.socket, 'analyze-query');
+    const analyzePromise = query.analyze(analyzeOptions);
+    const analyzeId = await analyzeIdP;
+
+    // For named queries, should send name and args instead of AST
+    const messages = (await z.socket).jsonMessages;
+
+    expect(messages).toEqual([
+      [
+        'inspect',
+        {
+          args: [
+            'arg1',
+            42,
+            {
+              key: 'value',
+            },
+          ],
+          id: analyzeId,
+          name: 'myCustomQuery',
+          op: 'analyze-query',
+          options: {
+            syncedRows: true,
+            vendedRows: false,
+          },
+        },
+      ],
+    ]);
+
+    // Mock the server response
+    const mockAnalyzeResult = {
+      warnings: [],
+      syncedRowCount: 10,
+      start: 1000,
+      end: 1100,
+      syncedRows: {
+        issues: [{id: '1', title: 'Custom Query Result'}],
+      },
+      readRowCount: 10,
+      readRowCountsByQuery: {},
+      plans: {},
+    };
+
+    await z.triggerMessage([
+      'inspect',
+      {
+        op: 'analyze-query',
+        id: analyzeId,
         value: mockAnalyzeResult,
       },
     ]);
@@ -1006,7 +1108,7 @@ describe('query analyze', () => {
     const query = queries[0];
 
     await expect(query.analyze()).rejects.toThrow(
-      'No server AST available for this query',
+      'AST is required for unnamed queries',
     );
 
     await z.close();
