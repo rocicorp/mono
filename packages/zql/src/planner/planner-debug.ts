@@ -1,5 +1,13 @@
+import type * as v from '../../../shared/src/valita.ts';
 import type {Condition} from '../../../zero-protocol/src/ast.ts';
-import type {PlanDebugEventJSON} from '../../../zero-protocol/src/analyze-query-result.ts';
+import type {
+  attemptStartEventJSONSchema,
+  bestPlanSelectedEventJSONSchema,
+  connectionSelectedEventJSONSchema,
+  nodeConstraintEventJSONSchema,
+  PlanDebugEventJSON,
+  planFailedEventJSONSchema,
+} from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import type {CostEstimate, JoinType} from './planner-node.ts';
 import type {PlanState} from './planner-graph.ts';
@@ -13,11 +21,7 @@ import type {PlanState} from './planner-graph.ts';
 /**
  * Starting a new planning attempt with a different root connection.
  */
-export type AttemptStartEvent = {
-  type: 'attempt-start';
-  attemptNumber: number;
-  totalAttempts: number;
-};
+export type AttemptStartEvent = v.Infer<typeof attemptStartEventJSONSchema>;
 
 /**
  * Snapshot of connection costs before selecting the next connection.
@@ -38,13 +42,9 @@ export type ConnectionCostsEvent = {
 /**
  * A connection was chosen and pinned.
  */
-export type ConnectionSelectedEvent = {
-  type: 'connection-selected';
-  attemptNumber: number;
-  connection: string;
-  cost: number;
-  isRoot: boolean; // First connection in this attempt
-};
+export type ConnectionSelectedEvent = v.Infer<
+  typeof connectionSelectedEventJSONSchema
+>;
 
 /**
  * Constraints have been propagated through the graph.
@@ -78,25 +78,14 @@ export type PlanCompleteEvent = {
 /**
  * Planning attempt failed (e.g., unflippable join).
  */
-export type PlanFailedEvent = {
-  type: 'plan-failed';
-  attemptNumber: number;
-  reason: string;
-};
+export type PlanFailedEvent = v.Infer<typeof planFailedEventJSONSchema>;
 
 /**
  * The best plan across all attempts was selected.
  */
-export type BestPlanSelectedEvent = {
-  type: 'best-plan-selected';
-  bestAttemptNumber: number;
-  totalCost: number;
-  flipPattern: number; // Bitmask indicating which joins are flipped
-  joinStates: Array<{
-    join: string;
-    type: JoinType;
-  }>;
-};
+export type BestPlanSelectedEvent = v.Infer<
+  typeof bestPlanSelectedEventJSONSchema
+>;
 
 /**
  * A node computed its cost estimate during planning.
@@ -120,15 +109,7 @@ export type NodeCostEvent = {
  * Emitted by nodes during propagateConstraints() traversal.
  * attemptNumber is added by the debugger.
  */
-export type NodeConstraintEvent = {
-  type: 'node-constraint';
-  attemptNumber?: number;
-  nodeType: 'connection' | 'join' | 'fan-out' | 'fan-in' | 'terminus';
-  node: string;
-  branchPattern: number[];
-  constraint: PlannerConstraint | undefined;
-  from: string; // Name of the node that sent this constraint
-};
+export type NodeConstraintEvent = v.Infer<typeof nodeConstraintEventJSONSchema>;
 
 /**
  * Union of all debug event types.
