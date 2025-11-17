@@ -425,7 +425,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         await this.#runInLockWithCVR(async (lc, cvr) => {
           if (!this.#pipelines.initialized()) {
             // On the first version-ready signal, connect to the replica.
-            this.#pipelines.init(cvr.clientSchema);
+            this.#pipelines.init(must(cvr.clientSchema));
           }
           if (
             cvr.replicaVersion !== null &&
@@ -449,7 +449,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               return;
             }
             lc.info?.(`resetting pipelines: ${result.message}`);
-            this.#pipelines.reset(cvr.clientSchema);
+            this.#pipelines.reset(must(cvr.clientSchema));
           }
 
           // Advance the snapshot to the current version.

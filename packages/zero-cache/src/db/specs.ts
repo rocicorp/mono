@@ -83,13 +83,6 @@ export type LiteTableSpecWithKeys = Omit<LiteTableSpec, 'primaryKey'> & {
    * columns, i.e. suitable as a primary key.
    */
   allPotentialPrimaryKeys: PrimaryKey[];
-
-  /**
-   * The union of all columns that are part of any potential primary key.
-   * This is guaranteed to include any combination of columns that
-   * can serve as a primary key.
-   */
-  unionKey: PrimaryKey;
 };
 
 export type LiteAndZqlSpec = {

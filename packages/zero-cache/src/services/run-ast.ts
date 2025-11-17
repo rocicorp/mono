@@ -19,10 +19,10 @@ import {
 } from '../../../zql/src/builder/builder.ts';
 import type {Database} from '../../../zqlite/src/db.ts';
 import {transformAndHashQuery} from '../auth/read-authorizer.ts';
-import {computeZqlSpecs} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../db/specs.ts';
 import {hydrate} from './view-syncer/pipeline-driver.ts';
 import type {TokenData} from './view-syncer/view-syncer.ts';
+import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 
 export type RunAstOptions = {
   applyPermissions?: boolean | undefined;
@@ -38,11 +38,12 @@ export type RunAstOptions = {
 
 export async function runAst(
   lc: LogContext,
+  clientSchema: ClientSchema,
   ast: AST,
   isTransformed: boolean,
   options: RunAstOptions,
 ): Promise<AnalyzeQueryResult> {
-  const {clientToServerMapper, permissions, host, db} = options;
+  const {clientToServerMapper, permissions, host} = options;
   const result: AnalyzeQueryResult = {
     warnings: [],
     syncedRows: undefined,
@@ -78,7 +79,6 @@ export async function runAst(
     result.afterPermissions = await formatOutput(ast.table + astToZQL(ast));
   }
 
-  const tableSpecs = computeZqlSpecs(lc, db);
   const pipeline = buildPipeline(ast, host, 'query-id');
 
   const start = performance.now();
@@ -86,7 +86,7 @@ export async function runAst(
   let syncedRowCount = 0;
   const rowsByTable: Record<string, Row[]> = {};
   const seenByTable: Set<string> = new Set();
-  for (const rowChange of hydrate(pipeline, hashOfAST(ast), tableSpecs)) {
+  for (const rowChange of hydrate(pipeline, hashOfAST(ast), clientSchema)) {
     assert(rowChange.type === 'add');
 
     // yield to other tasks to avoid blocking for too long

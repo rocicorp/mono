@@ -601,6 +601,7 @@ describe('createSocket', () => {
           columns: {
             bar: {type: 'string'},
           },
+          primaryKey: ['bar'],
         },
       },
     };
