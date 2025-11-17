@@ -130,7 +130,7 @@ describe('fetchFromAPIServer', () => {
     expect(init?.headers).toEqual({'Content-Type': 'application/json'});
   });
 
-  test('rejects URLs that are not allowed by configuration', async () => {
+  test('rejects URLs that are not allowed by configuration for push', async () => {
     await expect(
       fetchFromAPIServer(
         validator,
@@ -143,7 +143,25 @@ describe('fetchFromAPIServer', () => {
         body,
       ),
     ).rejects.toThrow(
-      'URL "https://evil.example.com/endpoint" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration',
+      'URL "https://evil.example.com/endpoint" is not allowed by the ZERO_MUTATE_URL configuration',
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  test('rejects URLs that are not allowed by configuration for transform', async () => {
+    await expect(
+      fetchFromAPIServer(
+        validator,
+        'transform',
+        lc,
+        'https://evil.example.com/endpoint',
+        allowedPatterns,
+        shard,
+        {},
+        body,
+      ),
+    ).rejects.toThrow(
+      'URL "https://evil.example.com/endpoint" is not allowed by the ZERO_GET_QUERIES_URL configuration',
     );
     expect(mockFetch).not.toHaveBeenCalled();
   });
