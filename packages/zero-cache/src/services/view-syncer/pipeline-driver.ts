@@ -589,7 +589,6 @@ export class PipelineDriver {
     }
 
     const tableSpec = mustGetTableSpec(this.#tableSpecs, tableName);
-
     const primaryKey = mustGetPrimaryKey(this.#primaryKeys, tableName);
 
     const {db} = this.#snapshotter.current();

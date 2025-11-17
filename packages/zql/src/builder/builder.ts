@@ -129,11 +129,11 @@ export function buildPipeline(
   costModel?: ConnectionCostModel,
   lc?: LogContext,
 ): Input {
+  ast = delegate.mapAst ? delegate.mapAst(ast) : ast;
   ast = completeOrdering(
     ast,
     tableName => must(delegate.getSource(tableName)).tableSchema.primaryKey,
   );
-  ast = delegate.mapAst ? delegate.mapAst(ast) : ast;
   if (costModel) {
     try {
       ast = planQuery(ast, costModel);
