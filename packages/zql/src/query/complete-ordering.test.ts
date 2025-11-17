@@ -12,9 +12,7 @@ function ast(q: AnyQuery) {
 
 const tables: Record<string, TableSchema> = schema.tables;
 
-const getPrimaryKey = (tableName: string) => {
-  return tables[tableName].primaryKey;
-};
+const getPrimaryKey = (tableName: string) => tables[tableName].primaryKey;
 
 describe('completeOrdering', () => {
   test('basic', () => {
@@ -353,13 +351,12 @@ describe('completeOrdering', () => {
 
   test('exists in compound condition', () => {
     const issueQuery = newQuery(schema, 'issue').where(
-      ({and, or, cmp, exists}) => {
-        return and(
+      ({and, or, cmp, exists}) =>
+        and(
           cmp('id', '1'),
           exists('owner'),
           or(cmp('ownerId', '2'), exists('comments')),
-        );
-      },
+        ),
     );
 
     expect(ast(issueQuery)).toMatchInlineSnapshot(`

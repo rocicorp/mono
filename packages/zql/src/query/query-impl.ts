@@ -1,24 +1,21 @@
 import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import type {Writable} from '../../../shared/src/writable.ts';
 import {
   SUBQ_PREFIX,
   type AST,
   type CompoundKey,
   type Condition,
-  type Ordering,
   type Parameter,
   type SimpleOperator,
   type System,
 } from '../../../zero-protocol/src/ast.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
-import type {Row as IVMRow} from '../../../zero-protocol/src/data.ts';
 import {
   hashOfAST,
   hashOfNameAndArgs,
 } from '../../../zero-protocol/src/query-hash.ts';
-import type {Schema, TableSchema} from '../../../zero-types/src/schema.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import {buildPipeline} from '../builder/builder.ts';
 import {NotImplementedError} from '../error.ts';
 import {ArrayView} from '../ivm/array-view.ts';
