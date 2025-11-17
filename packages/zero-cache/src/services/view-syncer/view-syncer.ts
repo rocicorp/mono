@@ -13,7 +13,6 @@ import {version} from '../../../../otel/src/version.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
-import {wrapIterable} from '../../../../shared/src/iterables.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
@@ -235,6 +234,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #setTimeout: SetTimeout;
   readonly #customQueryTransformer: CustomQueryTransformer | undefined;
 
+  // Track query replacements for thrashing detection
+  readonly #queryReplacements = new Map<
+    string,
+    {count: number; windowStart: number}
+  >();
+
   readonly #activeClients = getOrCreateUpDownCounter(
     'sync',
     'active-clients',
@@ -257,6 +262,29 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'Time to advance all queries for a given client group after applying a new transaction to the replica.',
       unit: 's',
     },
+  );
+  readonly #queryTransformations = getOrCreateCounter(
+    'sync',
+    'query.transformations',
+    'Number of query transformations performed',
+  );
+  readonly #queryTransformationTime = getOrCreateHistogram(
+    'sync',
+    'query.transformation-time',
+    {
+      description: 'Time to transform custom queries via API server',
+      unit: 's',
+    },
+  );
+  readonly #queryTransformationHashChanges = getOrCreateCounter(
+    'sync',
+    'query.transformation-hash-changes',
+    'Number of times query transformation hash changed',
+  );
+  readonly #queryTransformationNoOps = getOrCreateCounter(
+    'sync',
+    'query.transformation-no-ops',
+    'Number of times query transformation resulted in no-op (hash unchanged)',
   );
 
   readonly #inspectorDelegate: InspectorDelegate;
@@ -1069,18 +1097,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'Custom/named queries were requested but no `ZERO_GET_QUERIES_URL` is configured for Zero Cache.',
       );
     }
-    const [_, byOriginalHash] = this.#pipelines.addedQueries();
     if (this.#customQueryTransformer && customQueries.size > 0) {
-      const filteredCustomQueries = this.#filterCustomQueries(
-        customQueries.values(),
-        byOriginalHash,
-        undefined,
-      );
-
+      // Always transform custom queries, even during initialization,
+      // to ensure authorization validation with current auth context.
       const transformedCustomQueries =
         await this.#customQueryTransformer.transform(
           this.#getHeaderOptions(this.#queryConfig.forwardCookies),
-          filteredCustomQueries,
+          customQueries.values(),
           this.userQueryURL,
         );
 
@@ -1316,42 +1339,82 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       let erroredQueryIDs: string[] | undefined;
       if (this.#customQueryTransformer && customQueries.size > 0) {
-        const filteredCustomQueries = this.#filterCustomQueries(
-          customQueries.values(),
-          byOriginalHash,
-          (origQuery, existing) => {
-            for (const transformed of existing) {
-              transformedQueries.push({
-                id: origQuery.id,
-                origQuery,
-                transformed: {
-                  id: origQuery.id,
-                  transformationHash: transformed.transformationHash,
-                  transformedAst: transformed.transformedAst,
-                },
-              });
-            }
-          },
-        );
+        // Always re-transform custom queries on client connection for security.
+        // This ensures the user's API server validates authorization with the
+        // current auth context.
+        const transformStart = performance.now();
+        let transformedCustomQueries;
+        try {
+          transformedCustomQueries =
+            await this.#customQueryTransformer.transform(
+              this.#getHeaderOptions(true),
+              customQueries.values(),
+              this.userQueryURL,
+            );
+          this.#queryTransformations.add(1, {result: 'success'});
+        } catch (e) {
+          this.#queryTransformations.add(1, {result: 'error'});
+          throw e;
+        } finally {
+          const transformDuration = (performance.now() - transformStart) / 1000;
+          this.#queryTransformationTime.record(transformDuration);
+        }
 
-        const transformedCustomQueries =
-          await this.#customQueryTransformer.transform(
-            this.#getHeaderOptions(true),
-            filteredCustomQueries,
-            this.userQueryURL,
+        // Check if transform failed entirely (HTTP error or server-side failure).
+        // This should disconnect the client and keep existing pipelines intact.
+        if (
+          !Array.isArray(transformedCustomQueries) &&
+          transformedCustomQueries.kind === ErrorKind.TransformFailed
+        ) {
+          // TransformFailedBody indicates an HTTP or infrastructure error.
+          // Throw to disconnect the client without modifying pipelines.
+          throw new ProtocolErrorWithLevel(
+            transformedCustomQueries,
+            getLogLevel(transformedCustomQueries.kind),
           );
+        }
 
+        // Process the transformed queries and track which ones succeeded.
+        const successfullyTransformed = new Map<string, TransformedAndHashed>();
         erroredQueryIDs = this.#processTransformedCustomQueries(
           lc,
           transformedCustomQueries,
-          (q: TransformedAndHashed) =>
+          (q: TransformedAndHashed) => {
+            successfullyTransformed.set(q.id, q);
             transformedQueries.push({
               id: q.id,
               origQuery: must(customQueries.get(q.id)),
               transformed: q,
-            }),
+            });
+          },
           customQueries,
         );
+
+        // Check for queries whose transformation hash changed and log for debugging.
+        // The old pipelines will be automatically removed via unhydrateQueries,
+        // and new pipelines will be added via addQueries.
+        for (const [queryID, newTransform] of successfullyTransformed) {
+          const existingTransforms = byOriginalHash.get(queryID);
+          if (existingTransforms && existingTransforms.length > 0) {
+            const oldHash = existingTransforms[0].transformationHash;
+            const newHash = newTransform.transformationHash;
+
+            if (oldHash !== newHash) {
+              // Transformation changed - log and check for thrashing.
+              // The unhydrateQueries mechanism below will remove the old pipeline,
+              // and addQueries will add the new one.
+              lc.info?.(
+                `Query ${queryID} transformation changed: ${oldHash} -> ${newHash}`,
+              );
+              this.#checkForThrashing(queryID);
+              this.#queryTransformationHashChanges.add(1);
+            } else {
+              // hash is the same, addQuery will no-op (no re-hydration needed)
+              this.#queryTransformationNoOps.add(1);
+            }
+          }
+          // else: new query, will be added normally
+        }
       }
 
       const serverQueries = transformedQueries.map(
@@ -1424,39 +1487,37 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     });
   }
 
-  // Removes queries from `customQueries` that are already
-  // transformed and in the pipelines. We do not want to re-transform
-  // a query that has already been transformed. The reason is that
-  // we do not want a query that is already running to suddenly flip
-  // to error due to re-calling transform.
-  #filterCustomQueries(
-    customQueries: Iterable<CustomQueryRecord>,
-    byOriginalHash: Map<
-      string,
-      {
-        transformationHash: string;
-        transformedAst: AST;
-      }[]
-    >,
-    onExisting:
-      | ((
-          origQuery: CustomQueryRecord,
-          existing: {
-            transformationHash: string;
-            transformedAst: AST;
-          }[],
-        ) => void)
-      | undefined,
-  ) {
-    return wrapIterable(customQueries).filter(origQuery => {
-      const existing = byOriginalHash.get(origQuery.id);
-      if (existing) {
-        onExisting?.(origQuery, existing);
-        return false;
-      }
+  /**
+   * Check if a query is being replaced too frequently (thrashing).
+   * Logs a warning if the query has been replaced more than 3 times in 60 seconds.
+   */
+  #checkForThrashing(queryID: string) {
+    const THRASH_WINDOW_MS = 60_000; // 60 seconds
+    const THRASH_THRESHOLD = 3;
+    const now = Date.now();
 
-      return true;
-    });
+    let record = this.#queryReplacements.get(queryID);
+    if (!record) {
+      record = {count: 1, windowStart: now};
+      this.#queryReplacements.set(queryID, record);
+      return;
+    }
+
+    // If outside the time window, delete the old entry and create a new one
+    if (now - record.windowStart > THRASH_WINDOW_MS) {
+      this.#queryReplacements.delete(queryID);
+      this.#queryReplacements.set(queryID, {count: 1, windowStart: now});
+      return;
+    }
+
+    // Increment count within the window
+    record.count++;
+
+    if (record.count >= THRASH_THRESHOLD) {
+      this.#lc.warn?.(
+        `Query thrashing detected for query ${queryID}. ${record.count} replacements in 60s. This may indicate clients with different auth contexts connecting to the same client group.`,
+      );
+    }
   }
 
   // This must be called from within the #lock.
@@ -1514,6 +1575,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
         // Remove per-query server metrics when query is deleted
         this.#inspectorDelegate.removeQuery(q.id);
+
+        // Clean up thrashing detection for removed queries
+        this.#queryReplacements.delete(q.id);
       }
       for (const hash of unhydrateQueries) {
         this.#pipelines.removeQuery(hash);
@@ -1522,6 +1586,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         if (ids) {
           for (const id of ids) {
             this.#inspectorDelegate.removeQuery(id);
+            // Clean up thrashing detection for unhydrated queries
+            this.#queryReplacements.delete(id);
           }
         }
       }
