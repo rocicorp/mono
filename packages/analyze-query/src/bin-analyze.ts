@@ -29,6 +29,7 @@ import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
 import type {AnalyzeQueryResult} from '../../zero-protocol/src/analyze-query-result.ts';
 import {type AST} from '../../zero-protocol/src/ast.ts';
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
+import {clientSchemaFrom} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import {
   Debug,
@@ -194,6 +195,7 @@ const db = new Database(lc, config.replicaFile);
 const {schema, permissions} = await loadSchemaAndPermissions(
   config.schema.path,
 );
+const clientSchema = clientSchemaFrom(schema).clientSchema;
 
 const sources = new Map<string, TableSource>();
 const clientToServerMapper = clientToServer(schema.tables);
@@ -236,7 +238,7 @@ let result: AnalyzeQueryResult;
 
 if (config.ast) {
   // the user likely has a transformed AST since the wire and storage formats are the transformed AST
-  result = await runAst(lc, JSON.parse(config.ast), true, {
+  result = await runAst(lc, clientSchema, JSON.parse(config.ast), true, {
     applyPermissions: config.applyPermissions,
     authData: config.authData,
     clientToServerMapper,
@@ -269,7 +271,7 @@ function runQuery(queryString: string): Promise<AnalyzeQueryResult> {
   const q: Query<Schema, string, PullRow<string, Schema>, undefined> = f(z);
 
   const ast = queryWithContext(q, undefined).ast;
-  return runAst(lc, ast, false, {
+  return runAst(lc, clientSchema, ast, false, {
     applyPermissions: config.applyPermissions,
     authData: config.authData,
     clientToServerMapper,
@@ -296,7 +298,7 @@ async function runHash(hash: string) {
   const ast = rows[0].clientAST as AST;
   colorConsole.log(await formatOutput(ast.table + astToZQL(ast)));
 
-  return runAst(lc, ast, true, {
+  return runAst(lc, clientSchema, ast, true, {
     applyPermissions: config.applyPermissions,
     authData: config.authData,
     clientToServerMapper,
