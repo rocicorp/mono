@@ -219,7 +219,7 @@ test('select from different schema', () => {
         FROM "alternate_schema"."user" AS "alternate_user_0"
          
          
-        
+        ORDER BY "alternate_user_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
         ) "root"",
       "values": [],
     }
@@ -318,7 +318,7 @@ test('compile with enum', () => {
         FROM "enumTable" AS "enumTable_0"
         WHERE "enumTable_0"."status"::text = $1::text COLLATE "ucs_basic"
          
-        
+        ORDER BY "enumTable_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
         ) "root"",
       "values": [
         "active",
@@ -351,7 +351,7 @@ test('compile with enumArray', () => {
               SELECT value::text COLLATE "ucs_basic" FROM jsonb_array_elements_text($1::text::jsonb)
             )
          
-        
+        ORDER BY "enumTable_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
         ) "root"",
       "values": [
         "["active"]",
@@ -382,7 +382,7 @@ test('compile with timestamp (with timezone)', () => {
         FROM "timestampsTable" AS "timestampsTable_0"
         WHERE "timestampsTable_0"."timestampWithTz" = to_timestamp($1::text::bigint / 1000.0)
          
-        
+        ORDER BY "timestampsTable_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
         ) "root"",
       "values": [
         ""abc"",
@@ -415,7 +415,7 @@ test('compile with timestamp array (with timezone)', () => {
               SELECT to_timestamp(value::text::bigint / 1000.0) FROM jsonb_array_elements_text($1::text::jsonb)
             )
          
-        
+        ORDER BY "timestampsTable_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
         ) "root"",
       "values": [
         ""abc"",
@@ -446,7 +446,7 @@ test('compile with timestamp (without timezone)', () => {
         FROM "timestampsTable" AS "timestampsTable_0"
         WHERE "timestampsTable_0"."timestampWithoutTz" = to_timestamp($1::text::bigint / 1000.0) AT TIME ZONE 'UTC'
          
-        
+        ORDER BY "timestampsTable_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
         ) "root"",
       "values": [
         ""abc"",
@@ -479,7 +479,7 @@ test('compile with timestamp (without timezone) array', () => {
               SELECT to_timestamp(value::text::bigint / 1000.0) AT TIME ZONE 'UTC' FROM jsonb_array_elements_text($1::text::jsonb)
             )
          
-        
+        ORDER BY "timestampsTable_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
         ) "root"",
       "values": [
         ""abc"",
@@ -1257,12 +1257,12 @@ test('related thru junction edge', () => {
       "text": "SELECT 
         COALESCE(json_agg(row_to_json("root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT (
-            SELECT COALESCE(json_agg(row_to_json("inner_labels")), '[]'::json) FROM (SELECT "label_2"."id" as "id","label_2"."name" as "name" FROM "issue_label" AS "issueLabel_1" JOIN "label" AS "label_2" ON "issueLabel_1"."label_id" = "label_2"."id" WHERE ("issue_0"."id" = "issueLabel_1"."issue_id")    ) "inner_labels"
+            SELECT COALESCE(json_agg(row_to_json("inner_labels")), '[]'::json) FROM (SELECT "label_2"."id" as "id","label_2"."name" as "name" FROM "issue_label" AS "issueLabel_1" JOIN "label" AS "label_2" ON "issueLabel_1"."label_id" = "label_2"."id" WHERE ("issue_0"."id" = "issueLabel_1"."issue_id")  ORDER BY "label_2"."id" COLLATE "ucs_basic" ASC NULLS FIRST  ) "inner_labels"
           ) as "labels","issue_0"."id" as "id","issue_0"."title" as "title","issue_0"."description" as "description","issue_0"."closed" as "closed","issue_0"."ownerId" as "ownerId",EXTRACT(EPOCH FROM "issue_0"."created") * 1000 as "created"
         FROM "issue" AS "issue_0"
          
          
-        
+        ORDER BY "issue_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
         ) "root"",
       "values": [],
     }
@@ -1297,13 +1297,13 @@ test('related w/o junction edge', () => {
         FROM "user" AS "user_1"
          
         WHERE "issue_0"."ownerId" = "user_1"."id"
-        
+        ORDER BY "user_1"."id" COLLATE "ucs_basic" ASC NULLS FIRST
         ) "inner_owner"
         ) as "owner","issue_0"."id" as "id","issue_0"."title" as "title","issue_0"."description" as "description","issue_0"."closed" as "closed","issue_0"."ownerId" as "ownerId",EXTRACT(EPOCH FROM "issue_0"."created") * 1000 as "created"
         FROM "issue" AS "issue_0"
          
          
-        
+        ORDER BY "issue_0"."id" COLLATE "ucs_basic" ASC NULLS FIRST
         ) "root"",
       "values": [],
     }
