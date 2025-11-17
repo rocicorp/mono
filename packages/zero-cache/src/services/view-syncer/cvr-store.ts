@@ -16,7 +16,6 @@ import {astSchema} from '../../../../zero-protocol/src/ast.ts';
 import {clientSchemaSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
-import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
 import type {InspectQueryRow} from '../../../../zero-protocol/src/inspect-down.ts';
 import {clampTTL, DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import * as Mode from '../../db/mode-enum.ts';
@@ -207,7 +206,7 @@ export class CVRStore {
         return result;
       }
       assert(err);
-      throw new ProtocolError({
+      throw new ProtocolErrorWithLevel({
         kind: ErrorKind.ClientNotFound,
         message: `max attempts exceeded waiting for CVR@${err.cvrVersion} to catch up from ${err.rowsVersion}`,
         origin: ErrorOrigin.ZeroCache,

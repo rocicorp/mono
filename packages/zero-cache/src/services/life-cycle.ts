@@ -162,9 +162,10 @@ export class ProcessManager {
     if (type === 'supporting') {
       // The replication-manager has no user-facing workers.
       // In this case, code === 0 shutdowns are not errors.
-      const log = code === 0 && this.#userFacing.size === 0 ? 'info' : 'error';
+      // Non-zero exits are warnings (not errors) since they're often transient issues.
+      const log = code === 0 && this.#userFacing.size === 0 ? 'info' : 'warn';
       this.#lc[log]?.(`${name} (${pid}) exited with code (${code})`, err ?? '');
-      return this.#exit(log === 'error' ? -1 : code);
+      return this.#exit(log === 'info' ? code : -1);
     }
 
     const log = this.#drainStart === 0 ? 'error' : 'warn';
