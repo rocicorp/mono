@@ -1,6 +1,7 @@
 import type {CustomMutatorDefs} from '../../../zero-client/src/client/custom.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Format, ViewFactory} from '../../../zql/src/ivm/view.ts';
+import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import type {
   HumanReadable,
@@ -17,7 +18,7 @@ import type {Zero} from './zero.ts';
  */
 const zeroDelegates = new WeakMap<
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  Zero<any, any, any>,
+  Zero<any, any, any, any>,
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   QueryDelegate<any>
 >();
@@ -26,7 +27,11 @@ export function registerZeroDelegate<
   TSchema extends Schema,
   MD extends CustomMutatorDefs | undefined,
   TContext,
->(zero: Zero<TSchema, MD, TContext>, delegate: QueryDelegate<TContext>): void {
+  QD extends QueryDefinitions<TSchema, TContext> | undefined,
+>(
+  zero: Zero<TSchema, MD, TContext, QD>,
+  delegate: QueryDelegate<TContext>,
+): void {
   zeroDelegates.set(zero, delegate);
 }
 
@@ -34,7 +39,8 @@ function mustGetDelegate<
   TSchema extends Schema,
   MD extends CustomMutatorDefs | undefined,
   TContext,
->(zero: Zero<TSchema, MD, TContext>): QueryDelegate<TContext> {
+  QD extends QueryDefinitions<TSchema, TContext> | undefined,
+>(zero: Zero<TSchema, MD, TContext, QD>): QueryDelegate<TContext> {
   const delegate = zeroDelegates.get(zero);
   if (!delegate) {
     throw new Error('Zero instance not registered with bindings');
@@ -94,7 +100,8 @@ export function bindingsForZero<
   TSchema extends Schema,
   MD extends CustomMutatorDefs | undefined,
   TContext,
->(zero: Zero<TSchema, MD, TContext>): BindingsForZero<TSchema, TContext> {
+  QD extends QueryDefinitions<TSchema, TContext> | undefined,
+>(zero: Zero<TSchema, MD, TContext, QD>): BindingsForZero<TSchema, TContext> {
   const delegate = mustGetDelegate(zero);
 
   return {

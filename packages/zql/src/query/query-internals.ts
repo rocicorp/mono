@@ -71,14 +71,33 @@ export interface QueryInternals<
 }
 
 /**
+ * Helper function to cast a Query to QueryInternals.
+ * This is used in tests and internal code to access query implementation details.
+ * The function asserts that the query has the queryInternalsTag to ensure it
+ * properly implements the QueryInternals interface.
+ *
+ * @internal
+ */
+export function asQueryInternals<
+  TSchema extends ZeroSchema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+  TContext,
+>(
+  query: Query<TSchema, TTable, TReturn, TContext>,
+): QueryInternals<TSchema, TTable, TReturn, TContext> {
+  assert(queryInternalsTag in query);
+  return query as unknown as QueryInternals<TSchema, TTable, TReturn, TContext>;
+}
+
+/**
  * Helper function to resolve a query with context.
  * This is used by binding libraries (React, Solid, etc.) to inject context
  * into queries without exposing the QueryDelegate interface.
  *
- * This function calls the `withContext` method on queries that support it
- * (such as ChainedQuery and RootNamedQuery) and returns the resolved query
- * as a QueryInternals, which provides access to internal query details
- * needed for materialization.
+ * This function calls the `withContext` method on queries and returns the
+ * resolved query as a QueryInternals, which provides access to internal
+ * query details needed for materialization.
  *
  * @internal
  */

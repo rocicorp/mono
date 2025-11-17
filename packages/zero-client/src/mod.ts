@@ -145,6 +145,7 @@ export type {
   QueryFn,
   SyncedQuery,
 } from '../../zql/src/query/named.ts';
+export type {QueryDefinitions} from '../../zql/src/query/query-definitions.ts';
 export type {QueryInternals} from '../../zql/src/query/query-internals.ts';
 export type {
   AnyQuery,
@@ -157,7 +158,6 @@ export type {
   RunOptions,
   ZeRow,
 } from '../../zql/src/query/query.ts';
-export {RootNamedQuery} from '../../zql/src/query/root-named-query.ts';
 export {type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 export {
