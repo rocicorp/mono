@@ -75,6 +75,30 @@ test('simple-fetch', () => {
   expect(out.fetch()).toEqual([]);
 });
 
+test('sort missing primary key columns', () => {
+  const s = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {a: {type: 'number'}, b: {type: 'string'}, c: {type: 'string'}},
+    ['a'],
+  );
+  expect(() => s.connect([])).toThrowErrorMatchingInlineSnapshot(
+    `[Error: Ordering must include all primary key fields. Missing: a.]`,
+  );
+  expect(() => s.connect([['b', 'asc']])).toThrowErrorMatchingInlineSnapshot(
+    `[Error: Ordering must include all primary key fields. Missing: a.]`,
+  );
+  expect(() =>
+    s.connect([
+      ['b', 'asc'],
+      ['c', 'desc'],
+    ]),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `[Error: Ordering must include all primary key fields. Missing: a.]`,
+  );
+});
+
 test('fetch-with-constraint', () => {
   const sort = [['a', 'asc']] as const;
   const s = createSource(
