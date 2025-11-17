@@ -70,6 +70,18 @@ function getWorkerEntryPoints(): Record<string, string> {
   return entryPoints;
 }
 
+function getToolsEntryPoints(): Record<string, string> {
+  return {
+    // This is used by:
+    // - .github/workflows/sst-gigabugs-deploy.yml
+    // - .github/workflows/sst-prod-deploy.yml
+    // - .github/workflows/sst-sandbox-deploy.yml
+    'zero-protocol/src/protocol-version': resolve(
+      '../zero-protocol/src/protocol-version.ts',
+    ),
+  };
+}
+
 function getAllEntryPoints(): Record<string, string> {
   const packageJSON = getPackageJSON();
 
@@ -79,6 +91,7 @@ function getAllEntryPoints(): Record<string, string> {
     ),
     ...extractEntries(packageJSON.bin ?? {}, (_, outPath) => outPath),
     ...getWorkerEntryPoints(),
+    ...getToolsEntryPoints(),
   };
 }
 
