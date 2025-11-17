@@ -22,10 +22,11 @@ import {transformAndHashQuery} from '../auth/read-authorizer.ts';
 import {computeZqlSpecs} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../db/specs.ts';
 import {hydrate} from './view-syncer/pipeline-driver.ts';
+import type {TokenData} from './view-syncer/view-syncer.ts';
 
 export type RunAstOptions = {
   applyPermissions?: boolean | undefined;
-  authData?: string | undefined;
+  authData?: TokenData | undefined;
   clientToServerMapper?: NameMapper | undefined;
   db: Database;
   host: BuilderDelegate;
@@ -60,8 +61,8 @@ export async function runAst(
     ast = mapAST(ast, must(clientToServerMapper));
   }
   if (options.applyPermissions) {
-    const authData = options.authData ? JSON.parse(options.authData) : {};
-    if (!options.authData) {
+    const authData = options.authData?.decoded;
+    if (!authData) {
       result.warnings.push(
         'No auth data provided. Permission rules will compare to `NULL` wherever an auth data field is referenced.',
       );

@@ -16,6 +16,7 @@ import {isAdminPasswordValid} from '../config/zero-config.ts';
 import {computeZqlSpecs, mustGetTableSpec} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../db/specs.ts';
 import {runAst} from './run-ast.ts';
+import type {TokenData} from './view-syncer/view-syncer.ts';
 
 export function setCors(res: FastifyReply) {
   return res
@@ -53,7 +54,7 @@ export async function analyzeQuery(
   syncedRows = true,
   vendedRows = false,
   permissions?: PermissionsConfig,
-  authData?: string,
+  authData?: TokenData,
 ): Promise<AnalyzeQueryResult> {
   using db = new Database(lc, config.replica.file);
   const fullTables = new Map<string, LiteTableSpec>();
