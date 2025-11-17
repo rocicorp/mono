@@ -1,15 +1,187 @@
 // Build script for @rocicorp/zero package
 import {spawn} from 'node:child_process';
-import {chmod, copyFile, mkdir, readFile, rm} from 'node:fs/promises';
-import {resolve} from 'node:path';
-import {build as viteBuild} from 'vite';
+import {existsSync} from 'node:fs';
+import {chmod, copyFile, mkdir, readFile} from 'node:fs/promises';
+import {builtinModules} from 'node:module';
+import {basename, resolve} from 'node:path';
+import {type InlineConfig, build as viteBuild} from 'vite';
+import {assert} from '../../shared/src/asserts.ts';
+import {makeDefine} from '../../shared/src/build.ts';
+import {getExternalFromPackageJSON} from '../../shared/src/tool/get-external-from-package-json.ts';
+import * as workerUrls from '../../zero-cache/src/server/worker-urls.ts';
 
 const forBundleSizeDashboard = process.argv.includes('--bundle-sizes');
 
+async function getExternal(): Promise<string[]> {
+  return [
+    ...(await getExternalFromPackageJSON(import.meta.url, true)),
+    'node:*',
+    'expo*',
+    '@op-engineering/*',
+    ...builtinModules,
+  ].sort();
+}
+
+const external = await getExternal();
+
+const define = {
+  ...makeDefine('unknown'),
+  'process.env.DISABLE_MUTATION_RECOVERY': 'true',
+};
+
+// Vite config helper functions
 async function getPackageJSON() {
   const content = await readFile(resolve('package.json'), 'utf-8');
   return JSON.parse(content);
 }
+
+function convertOutPathToSrcPath(outPath: string): string {
+  // Convert "zero/src/name" -> "src/name.ts" or "zero-cache/src/..." -> "../zero-cache/src/....ts"
+  if (outPath.startsWith('zero-cache/')) {
+    return `../${outPath}.ts`;
+  }
+  return outPath.replace('zero/src/', 'src/') + '.ts';
+}
+
+function extractOutPath(path: string): string | undefined {
+  const match = path.match(/^\.\/out\/(.+)\.js$/);
+  return match?.[1];
+}
+
+function extractEntries(
+  entries: Record<string, unknown>,
+  getEntryName: (key: string, outPath: string) => string,
+): Record<string, string> {
+  const entryPoints: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(entries)) {
+    const path =
+      typeof value === 'string' ? value : (value as {default?: string}).default;
+
+    if (typeof path === 'string') {
+      const outPath = extractOutPath(path);
+      if (outPath) {
+        const entryName = getEntryName(key, outPath);
+        entryPoints[entryName] = resolve(convertOutPathToSrcPath(outPath));
+      }
+    }
+  }
+
+  return entryPoints;
+}
+
+function getWorkerEntryPoints(): Record<string, string> {
+  // Worker files from zero-cache that need to be bundled
+  const baseDir = 'zero-cache/src/server';
+  const entryPoints: Record<string, string> = {};
+
+  for (const url of Object.values(workerUrls)) {
+    assert(url instanceof URL);
+
+    const worker = basename(url.pathname);
+
+    // verify that the file exists in the expected place.
+    const srcPath = resolve('..', baseDir, worker);
+    assert(existsSync(srcPath), `Worker source file not found: ${srcPath}`);
+
+    const workerName = worker.replace(/\.ts$/, '');
+    const outPath = `${baseDir}/${workerName}`;
+    entryPoints[outPath] = resolve(convertOutPathToSrcPath(outPath));
+  }
+
+  return entryPoints;
+}
+
+function getToolsEntryPoints(): Record<string, string> {
+  return {
+    // This is used by:
+    // - .github/workflows/sst-gigabugs-deploy.yml
+    // - .github/workflows/sst-prod-deploy.yml
+    // - .github/workflows/sst-sandbox-deploy.yml
+    'zero-protocol/src/protocol-version': resolve(
+      '../zero-protocol/src/protocol-version.ts',
+    ),
+  };
+}
+
+async function getAllEntryPoints(): Promise<Record<string, string>> {
+  const packageJSON = await getPackageJSON();
+
+  return {
+    ...extractEntries(packageJSON.exports ?? {}, (key, outPath) =>
+      key === '.' ? 'zero/src/zero' : outPath,
+    ),
+    ...extractEntries(packageJSON.bin ?? {}, (_, outPath) => outPath),
+    ...getWorkerEntryPoints(),
+    ...getToolsEntryPoints(),
+  };
+}
+
+const baseConfig: InlineConfig = {
+  configFile: false,
+  logLevel: 'warn',
+  define,
+  resolve: {
+    conditions: ['import', 'module', 'default'],
+  },
+  build: {
+    outDir: 'out',
+    // Clean output directory (but not for bundle sizes build which adds to existing out/)
+    emptyOutDir: !forBundleSizeDashboard,
+    minify: forBundleSizeDashboard,
+    sourcemap: true,
+    target: 'es2022',
+    ssr: true,
+    reportCompressedSize: false,
+  },
+};
+
+async function getViteConfig(): Promise<InlineConfig> {
+  return {
+    ...baseConfig,
+    build: {
+      ...baseConfig.build,
+      rollupOptions: {
+        external,
+        input: await getAllEntryPoints(),
+        output: {
+          format: 'es',
+          entryFileNames: '[name].js',
+          chunkFileNames: 'chunks/[name]-[hash].js',
+          preserveModules: true,
+        },
+      },
+    },
+  };
+}
+
+// Bundle size dashboard config: single entry, no code splitting, minified
+// Uses esbuild's dropLabels to strip BUNDLE_SIZE labeled code blocks
+const bundleSizeConfig: InlineConfig = {
+  ...baseConfig,
+  build: {
+    ...baseConfig.build,
+    rollupOptions: {
+      external,
+      input: {
+        // Single entry point for bundle size measurement
+        zero: resolve(import.meta.dirname, '../src/zero.ts'),
+      },
+      output: {
+        format: 'es',
+        entryFileNames: '[name].js',
+        // No code splitting for bundle size measurements
+        inlineDynamicImports: true,
+      },
+      treeshake: {
+        moduleSideEffects: false,
+      },
+    },
+  },
+  esbuild: {
+    dropLabels: ['BUNDLE_SIZE'],
+  },
+};
 
 async function makeBinFilesExecutable() {
   const packageJSON = await getPackageJSON();
@@ -24,57 +196,51 @@ async function makeBinFilesExecutable() {
 
 async function copyStaticFiles() {
   // Copy litestream config.yml to output directory
-  const parts = 'zero-cache/src/services/litestream/config.yml'.split('/');
-  const destDir = resolve('out', ...parts.slice(0, -1));
+  const relPath = 'zero-cache/src/services/litestream';
+  const fileName = 'config.yml';
+  const srcDir = resolve('..', relPath);
+  const destDir = resolve('out', relPath);
   await mkdir(destDir, {recursive: true});
-  await copyFile(resolve('..', ...parts), resolve('out', ...parts));
+  await copyFile(resolve(srcDir, fileName), resolve(destDir, fileName));
 }
 
-async function build() {
-  // Clean output directory (but not for bundle sizes build which adds to existing out/)
-  if (!forBundleSizeDashboard) {
-    await rm('out', {recursive: true, force: true});
-  }
+async function runPromise(p: Promise<unknown>, label: string) {
+  const start = performance.now();
+  await p;
+  const end = performance.now();
+  console.log(`✓ ${label} completed in ${((end - start) / 1000).toFixed(2)}s`);
+}
 
-  // Run vite build and tsc in parallel
-  const startTime = performance.now();
-
-  async function exec(cmd: string, name: string) {
-    const start = performance.now();
-    const [command, ...args] = cmd.split(' ');
-    const proc = spawn(command, args, {stdio: 'inherit'});
-    await new Promise<void>((resolve, reject) => {
+function exec(cmd: string, name: string) {
+  return runPromise(
+    new Promise<void>((resolve, reject) => {
+      const [command, ...args] = cmd.split(' ');
+      const proc = spawn(command, args, {stdio: 'inherit'});
       proc.on('exit', code =>
         code === 0 ? resolve() : reject(new Error(`${name} failed`)),
       );
       proc.on('error', reject);
-    });
-    const end = performance.now();
-    console.log(`✓ ${name} completed in ${((end - start) / 1000).toFixed(2)}s`);
-  }
+    }),
+    name,
+  );
+}
 
-  async function runViteBuild(configPath: string, label: string) {
-    const start = performance.now();
-    const {default: config} = await import(
-      resolve(import.meta.dirname, configPath)
-    );
-    await viteBuild({...config, configFile: false});
-    const end = performance.now();
-    console.log(
-      `✓ ${label} completed in ${((end - start) / 1000).toFixed(2)}s`,
-    );
-  }
+function runViteBuild(config: InlineConfig, label: string) {
+  return runPromise(viteBuild(config), label);
+}
+
+async function build() {
+  // Run vite build and tsc in parallel
+  const startTime = performance.now();
 
   if (forBundleSizeDashboard) {
     // For bundle size dashboard, build a single minified bundle
-    await runViteBuild(
-      'build-bundle-sizes-config.ts',
-      'vite build (bundle sizes)',
-    );
+    await runViteBuild(bundleSizeConfig, 'vite build (bundle sizes)');
   } else {
-    // Normal build: vite build + type declarations
+    // Normal build: use inline vite config + type declarations
+    const viteConfig = await getViteConfig();
     await Promise.all([
-      runViteBuild('../vite.config.ts', 'vite build'),
+      runViteBuild(viteConfig, 'vite build'),
       exec('tsc -p tsconfig.client.json', 'client dts'),
       exec('tsc -p tsconfig.server.json', 'server dts'),
     ]);
