@@ -92,18 +92,6 @@ function getWorkerEntryPoints(): Record<string, string> {
   return entryPoints;
 }
 
-function getToolsEntryPoints(): Record<string, string> {
-  return {
-    // This is used by:
-    // - .github/workflows/sst-gigabugs-deploy.yml
-    // - .github/workflows/sst-prod-deploy.yml
-    // - .github/workflows/sst-sandbox-deploy.yml
-    'zero-protocol/src/protocol-version': resolve(
-      '../zero-protocol/src/protocol-version.ts',
-    ),
-  };
-}
-
 async function getAllEntryPoints(): Promise<Record<string, string>> {
   const packageJSON = await getPackageJSON();
 
@@ -113,7 +101,6 @@ async function getAllEntryPoints(): Promise<Record<string, string>> {
     ),
     ...extractEntries(packageJSON.bin ?? {}, (_, outPath) => outPath),
     ...getWorkerEntryPoints(),
-    ...getToolsEntryPoints(),
   };
 }
 
