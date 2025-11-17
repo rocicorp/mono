@@ -9,7 +9,7 @@ function resolve(path: string): URL {
   return new URL(path, url);
 }
 
-// These URLs are part of the build process. See ../../zero/tool/build-vitest-config.ts
+// These URLs are part of the build process. See ../../zero/tool/build.ts
 // All these urls must be relative to this file and be located in the same directory.
 
 export const MAIN_URL = resolve('./main.ts');
