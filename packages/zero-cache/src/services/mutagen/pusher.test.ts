@@ -1149,7 +1149,7 @@ describe('pusher errors', () => {
         origin: ErrorOrigin.ZeroCache,
         reason: ErrorReason.Internal,
         message: expect.stringContaining(
-          'URL "http://malicious.com/endpoint" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration',
+          'URL "http://malicious.com/endpoint" is not allowed by the ZERO_MUTATE_URL configuration',
         ),
         mutationIDs: [
           {
