@@ -144,6 +144,74 @@ export type PlanDebugEvent =
   | NodeConstraintEvent;
 
 /**
+ * JSON-serializable version of CostEstimate (omits fanout function).
+ */
+export type CostEstimateJSON = Omit<CostEstimate, 'fanout'>;
+
+/**
+ * JSON-serializable versions of debug events.
+ * These convert Maps to Records and omit non-serializable fields.
+ */
+
+export type AttemptStartEventJSON = AttemptStartEvent;
+
+export type ConnectionCostsEventJSON = {
+  type: 'connection-costs';
+  attemptNumber: number;
+  costs: Array<{
+    connection: string;
+    cost: number;
+    costEstimate: CostEstimateJSON;
+    pinned: boolean;
+    constraints: Record<string, PlannerConstraint | undefined>;
+    constraintCosts: Record<string, CostEstimateJSON>;
+  }>;
+};
+
+export type ConnectionSelectedEventJSON = ConnectionSelectedEvent;
+
+export type ConstraintsPropagatedEventJSON = {
+  type: 'constraints-propagated';
+  attemptNumber: number;
+  connectionConstraints: Array<{
+    connection: string;
+    constraints: Record<string, PlannerConstraint | undefined>;
+    constraintCosts: Record<string, CostEstimateJSON>;
+  }>;
+};
+
+export type PlanCompleteEventJSON = Omit<PlanCompleteEvent, 'planSnapshot'>;
+
+export type PlanFailedEventJSON = PlanFailedEvent;
+
+export type BestPlanSelectedEventJSON = BestPlanSelectedEvent;
+
+export type NodeCostEventJSON = {
+  type: 'node-cost';
+  attemptNumber?: number | undefined;
+  nodeType: 'connection' | 'join' | 'fan-out' | 'fan-in' | 'terminus';
+  node: string;
+  branchPattern: number[];
+  downstreamChildSelectivity: number;
+  costEstimate: CostEstimateJSON;
+  filters?: Condition | undefined;
+  joinType?: JoinType | undefined;
+};
+
+export type NodeConstraintEventJSON = NodeConstraintEvent;
+
+export type PlanDebugEventJSON =
+  | AttemptStartEventJSON
+  | ConnectionCostsEventJSON
+  | ConnectionSelectedEventJSON
+  | ConstraintsPropagatedEventJSON
+  | PlanCompleteEventJSON
+  | PlanFailedEventJSON
+  | BestPlanSelectedEventJSON
+  | NodeCostEventJSON
+  | NodeConstraintEventJSON;
+
+/**
  * Interface for objects that receive debug events during planning.
  */
 export interface PlanDebugger {
@@ -386,4 +454,104 @@ function formatAttemptSummary(
   }
 
   return lines;
+}
+
+/**
+ * Convert a CostEstimate to JSON-serializable format (omits fanout function).
+ */
+function serializeCostEstimate(cost: CostEstimate): CostEstimateJSON {
+  const {fanout: _, ...rest} = cost;
+  return rest;
+}
+
+/**
+ * Convert a Map to a plain Record for JSON serialization.
+ */
+function mapToRecord<K extends string, V>(map: Map<K, V>): Record<string, V> {
+  const record: Record<string, V> = {};
+  for (const [key, value] of map) {
+    record[key] = value;
+  }
+  return record;
+}
+
+/**
+ * Serialize a single debug event to JSON-compatible format.
+ */
+function serializeEvent(event: PlanDebugEvent): PlanDebugEventJSON {
+  switch (event.type) {
+    case 'attempt-start':
+    case 'connection-selected':
+    case 'plan-failed':
+    case 'best-plan-selected':
+    case 'node-constraint':
+      return event;
+
+    case 'connection-costs':
+      return {
+        type: 'connection-costs',
+        attemptNumber: event.attemptNumber,
+        costs: event.costs.map(c => ({
+          connection: c.connection,
+          cost: c.cost,
+          costEstimate: serializeCostEstimate(c.costEstimate),
+          pinned: c.pinned,
+          constraints: mapToRecord(c.constraints),
+          constraintCosts: mapToRecord(
+            new Map(
+              Array.from(c.constraintCosts.entries()).map(([k, v]) => [
+                k,
+                serializeCostEstimate(v),
+              ]),
+            ),
+          ),
+        })),
+      };
+
+    case 'constraints-propagated':
+      return {
+        type: 'constraints-propagated',
+        attemptNumber: event.attemptNumber,
+        connectionConstraints: event.connectionConstraints.map(cc => ({
+          connection: cc.connection,
+          constraints: mapToRecord(cc.constraints),
+          constraintCosts: mapToRecord(
+            new Map(
+              Array.from(cc.constraintCosts.entries()).map(([k, v]) => [
+                k,
+                serializeCostEstimate(v),
+              ]),
+            ),
+          ),
+        })),
+      };
+
+    case 'plan-complete': {
+      const {planSnapshot: _, ...rest} = event;
+      return rest;
+    }
+
+    case 'node-cost':
+      return {
+        type: 'node-cost',
+        attemptNumber: event.attemptNumber,
+        nodeType: event.nodeType,
+        node: event.node,
+        branchPattern: event.branchPattern,
+        downstreamChildSelectivity: event.downstreamChildSelectivity,
+        costEstimate: serializeCostEstimate(event.costEstimate),
+        filters: event.filters,
+        joinType: event.joinType,
+      };
+  }
+}
+
+/**
+ * Serialize an array of debug events to JSON-compatible format.
+ * This converts Maps to Records and omits non-serializable fields like functions.
+ */
+export function serializePlanDebugEvents(
+  events: PlanDebugEvent[],
+): PlanDebugEventJSON[] {
+  return events.map(serializeEvent);
 }

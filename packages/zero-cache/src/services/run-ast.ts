@@ -17,6 +17,8 @@ import {
   buildPipeline,
   type BuilderDelegate,
 } from '../../../zql/src/builder/builder.ts';
+import type {PlanDebugger} from '../../../zql/src/planner/planner-debug.ts';
+import type {ConnectionCostModel} from '../../../zql/src/planner/planner-connection.ts';
 import type {Database} from '../../../zqlite/src/db.ts';
 import {transformAndHashQuery} from '../auth/read-authorizer.ts';
 import type {LiteAndZqlSpec} from '../db/specs.ts';
@@ -28,9 +30,11 @@ export type RunAstOptions = {
   applyPermissions?: boolean | undefined;
   authData?: TokenData | undefined;
   clientToServerMapper?: NameMapper | undefined;
+  costModel?: ConnectionCostModel | undefined;
   db: Database;
   host: BuilderDelegate;
   permissions?: PermissionsConfig | undefined;
+  planDebugger?: PlanDebugger | undefined;
   syncedRows?: boolean | undefined;
   tableSpecs: Map<string, LiteAndZqlSpec>;
   vendedRows?: boolean | undefined;
@@ -79,7 +83,14 @@ export async function runAst(
     result.afterPermissions = await formatOutput(ast.table + astToZQL(ast));
   }
 
-  const pipeline = buildPipeline(ast, host, 'query-id');
+  const pipeline = buildPipeline(
+    ast,
+    host,
+    'query-id',
+    options.costModel,
+    lc,
+    options.planDebugger,
+  );
 
   const start = performance.now();
 

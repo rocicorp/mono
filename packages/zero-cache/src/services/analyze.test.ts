@@ -48,6 +48,20 @@ vi.mock('../../../zql/src/builder/debug-delegate.ts', () => ({
   Debug: vi.fn(),
 }));
 
+// Mock planner debug and cost model
+vi.mock('../../../zql/src/planner/planner-debug.ts', () => ({
+  AccumulatorDebugger: vi.fn(() => ({
+    events: [],
+  })),
+  serializePlanDebugEvents: vi.fn(events => events),
+}));
+
+vi.mock('../../../zqlite/src/sqlite-cost-model.ts', () => ({
+  createSQLiteCostModel: vi.fn(() => ({
+    // Mock cost model function
+  })),
+}));
+
 describe('analyzeQuery', () => {
   const lc = createSilentLogContext();
 
@@ -613,5 +627,172 @@ describe('analyzeQuery', () => {
 
     expect(result.elapsed).toBe(150);
     expect(result.elapsed).toBe(result.end - result.start);
+  });
+
+  describe('planner debug', () => {
+    test('includes planner events when plannerDebug is true', async () => {
+      const {AccumulatorDebugger, serializePlanDebugEvents} = await import(
+        '../../../zql/src/planner/planner-debug.ts'
+      );
+      const {createSQLiteCostModel} = await import(
+        '../../../zqlite/src/sqlite-cost-model.ts'
+      );
+
+      const mockDebugEvents = [
+        {type: 'attempt-start', attemptNumber: 0, totalAttempts: 1} as const,
+        {
+          type: 'plan-complete',
+          attemptNumber: 0,
+          totalCost: 10.5,
+          flipPattern: 0,
+          joinStates: [],
+        } as const,
+      ];
+
+      const mockDebugger = {
+        events: mockDebugEvents,
+      };
+
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(AccumulatorDebugger).mockReturnValue(mockDebugger as any);
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      vi.mocked(serializePlanDebugEvents).mockReturnValue(mockDebugEvents as any);
+
+      const mockResult: AnalyzeQueryResult = {
+        warnings: [],
+        syncedRowCount: 5,
+        start: 1000,
+        end: 1050,
+        readRowCountsByQuery: {},
+      };
+
+      vi.mocked(runAst).mockResolvedValue(mockResult);
+      vi.mocked(explainQueries).mockReturnValue({});
+
+      const result = await analyzeQuery(
+        lc,
+        mockConfig,
+        simpleAST,
+        true,
+        false,
+        undefined,
+        undefined,
+        true, // plannerDebug = true
+      );
+
+      // Verify AccumulatorDebugger was created
+      expect(AccumulatorDebugger).toHaveBeenCalled();
+
+      // Verify createSQLiteCostModel was called
+      expect(createSQLiteCostModel).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.any(Map),
+      );
+
+      // Verify runAst was called with cost model and debugger
+      expect(runAst).toHaveBeenCalledWith(
+        lc,
+        simpleAST,
+        true,
+        expect.objectContaining({
+          costModel: expect.anything(),
+          planDebugger: mockDebugger,
+        }),
+      );
+
+      // Verify serializePlanDebugEvents was called
+      expect(serializePlanDebugEvents).toHaveBeenCalledWith(mockDebugEvents);
+
+      // Verify result includes plannerEvents
+      expect(result.plannerEvents).toEqual(mockDebugEvents);
+    });
+
+    test('does not include planner events when plannerDebug is false', async () => {
+      const {AccumulatorDebugger, serializePlanDebugEvents} = await import(
+        '../../../zql/src/planner/planner-debug.ts'
+      );
+      const {createSQLiteCostModel} = await import(
+        '../../../zqlite/src/sqlite-cost-model.ts'
+      );
+
+      vi.clearAllMocks();
+
+      const mockResult: AnalyzeQueryResult = {
+        warnings: [],
+        syncedRowCount: 5,
+        start: 1000,
+        end: 1050,
+        readRowCountsByQuery: {},
+      };
+
+      vi.mocked(runAst).mockResolvedValue(mockResult);
+      vi.mocked(explainQueries).mockReturnValue({});
+
+      const result = await analyzeQuery(
+        lc,
+        mockConfig,
+        simpleAST,
+        true,
+        false,
+        undefined,
+        undefined,
+        false, // plannerDebug = false
+      );
+
+      // Verify AccumulatorDebugger was NOT created
+      expect(AccumulatorDebugger).not.toHaveBeenCalled();
+
+      // Verify createSQLiteCostModel was NOT called
+      expect(createSQLiteCostModel).not.toHaveBeenCalled();
+
+      // Verify runAst was called without cost model and debugger
+      expect(runAst).toHaveBeenCalledWith(
+        lc,
+        simpleAST,
+        true,
+        expect.objectContaining({
+          costModel: undefined,
+          planDebugger: undefined,
+        }),
+      );
+
+      // Verify serializePlanDebugEvents was NOT called
+      expect(serializePlanDebugEvents).not.toHaveBeenCalled();
+
+      // Verify result does not include plannerEvents
+      expect(result.plannerEvents).toBeUndefined();
+    });
+
+    test('defaults plannerDebug to false when not provided', async () => {
+      const {AccumulatorDebugger} = await import(
+        '../../../zql/src/planner/planner-debug.ts'
+      );
+      const {createSQLiteCostModel} = await import(
+        '../../../zqlite/src/sqlite-cost-model.ts'
+      );
+
+      vi.clearAllMocks();
+
+      const mockResult: AnalyzeQueryResult = {
+        warnings: [],
+        syncedRowCount: 5,
+        start: 1000,
+        end: 1050,
+        readRowCountsByQuery: {},
+      };
+
+      vi.mocked(runAst).mockResolvedValue(mockResult);
+      vi.mocked(explainQueries).mockReturnValue({});
+
+      // Call without plannerDebug parameter
+      const result = await analyzeQuery(lc, mockConfig, simpleAST);
+
+      // Verify cost model and debugger were NOT created
+      expect(AccumulatorDebugger).not.toHaveBeenCalled();
+      expect(createSQLiteCostModel).not.toHaveBeenCalled();
+
+      // Verify result does not include plannerEvents
+      expect(result.plannerEvents).toBeUndefined();
+    });
   });
 });
