@@ -1,5 +1,9 @@
-import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
+import type {
+  AnalyzeQueryResult,
+  PlanDebugEventJSON,
+} from '../../../../zero-protocol/src/analyze-query-result.ts';
 import type {AnalyzeQueryOptions} from '../../../../zero-protocol/src/inspect-up.ts';
+import {formatPlannerEvents} from '../../../../zql/src/planner/planner-debug.ts';
 import type {QueryDelegate} from '../../../../zql/src/query/query-delegate.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import type {ClientGroup} from './client-group.ts';
@@ -73,5 +77,25 @@ export class Inspector {
       query,
       options,
     );
+  }
+
+  /**
+   * Format planner debug events as a human-readable string.
+   * This is a static utility method that can be used to format the plannerEvents
+   * returned from analyzeQuery when plannerDebug is enabled.
+   *
+   * @param events - Array of planner debug events from analyzeQuery result
+   * @returns Formatted string showing planning attempts, costs, and final plan selection
+   *
+   * @example
+   * ```typescript
+   * const result = await inspector.analyzeQuery(query, { plannerDebug: true });
+   * if (result.plannerEvents) {
+   *   console.log(Inspector.formatPlannerEvents(result.plannerEvents));
+   * }
+   * ```
+   */
+  static formatPlannerEvents(events: PlanDebugEventJSON[]): string {
+    return formatPlannerEvents(events);
   }
 }

@@ -1,6 +1,9 @@
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {AnalyzeQueryResult} from '../../../zero-protocol/src/analyze-query-result.ts';
+import type {
+  AnalyzeQueryResult,
+  PlanDebugEventJSON,
+} from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {explainQueries} from '../../../zqlite/src/explain-queries.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
@@ -655,8 +658,9 @@ describe('analyzeQuery', () => {
 
       // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       vi.mocked(AccumulatorDebugger).mockReturnValue(mockDebugger as any);
-      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-      vi.mocked(serializePlanDebugEvents).mockReturnValue(mockDebugEvents as any);
+      vi.mocked(serializePlanDebugEvents).mockReturnValue(
+        mockDebugEvents as unknown as PlanDebugEventJSON[],
+      );
 
       const mockResult: AnalyzeQueryResult = {
         warnings: [],
