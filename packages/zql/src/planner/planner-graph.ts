@@ -1,14 +1,15 @@
 import {assert} from '../../../shared/src/asserts.ts';
-import type {PlannerJoin} from './planner-join.ts';
-import type {PlannerFanOut} from './planner-fan-out.ts';
-import type {PlannerFanIn} from './planner-fan-in.ts';
+import {must} from '../../../shared/src/must.ts';
+import {PlannerException} from '../error.ts';
+import type {PlanDebugger} from './planner-debug.ts';
 import type {PlannerConnection} from './planner-connection.ts';
-import type {PlannerTerminus} from './planner-terminus.ts';
+import type {PlannerConstraint} from './planner-constraint.ts';
+import type {PlannerFanIn} from './planner-fan-in.ts';
+import type {PlannerFanOut} from './planner-fan-out.ts';
+import type {PlannerJoin} from './planner-join.ts';
 import type {PlannerNode} from './planner-node.ts';
 import {PlannerSource, type ConnectionCostModel} from './planner-source.ts';
-import type {PlannerConstraint} from './planner-constraint.ts';
-import {must} from '../../../shared/src/must.ts';
-import type {PlanDebugger} from './planner-debug.ts';
+import type {PlannerTerminus} from './planner-terminus.ts';
 
 /**
  * Captured state of a plan for comparison and restoration.
@@ -256,7 +257,8 @@ export class PlannerGraph {
 
     // Safety check: throw if too many flippable joins
     if (flippableJoins.length > MAX_FLIPPABLE_JOINS) {
-      throw new Error(
+      throw new PlannerException(
+        'max_flippable_joins',
         `Query has ${flippableJoins.length} EXISTS checks in a single RELATED call (or in the top level query), which would require ` +
           `${2 ** flippableJoins.length} plan evaluations. This may be very slow. ` +
           `Consider simplifying the query or increasing MAX_FLIPPABLE_JOINS (currently set to ${MAX_FLIPPABLE_JOINS}).`,
