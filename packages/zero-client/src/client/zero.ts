@@ -225,7 +225,7 @@ export type MakeCustomQueryInterface<
 
 declare const TESTING: boolean;
 
-export type TestingContext<TContext> = {
+export type TestingContext = {
   puller: Puller;
   pusher: Pusher;
   setReload: (r: () => void) => void;
@@ -233,14 +233,14 @@ export type TestingContext<TContext> = {
   connectStart: () => number | undefined;
   socketResolver: () => Resolver<WebSocket>;
   connectionManager: () => ConnectionManager;
-  queryDelegate: () => QueryDelegate<TContext>;
+  queryDelegate: () => QueryDelegate;
 };
 
 export const exposedToTestingSymbol = Symbol();
 export const createLogOptionsSymbol = Symbol();
 
-interface TestZero<TContext> {
-  [exposedToTestingSymbol]?: TestingContext<TContext>;
+interface TestZero {
+  [exposedToTestingSymbol]?: TestingContext;
   [createLogOptionsSymbol]?: (options: {
     consoleLogLevel: LogLevel;
     server: string | null;
@@ -252,8 +252,8 @@ function asTestZero<
   MD extends CustomMutatorDefs | undefined,
   Context,
   QD extends QueryDefinitions<S, Context> | undefined,
->(z: Zero<S, MD, Context, QD>): TestZero<Context> {
-  return z as TestZero<Context>;
+>(z: Zero<S, MD, Context, QD>): TestZero {
+  return z as TestZero;
 }
 
 export const RUN_LOOP_INTERVAL_MS = 5_000;
@@ -428,7 +428,7 @@ export class Zero<
    */
   pingTimeoutMs: number;
 
-  readonly #zeroContext: ZeroContext<TContext>;
+  readonly #zeroContext: ZeroContext;
 
   #pendingPullsByRequestID: Map<string, Resolver<PullResponseBody>> = new Map();
   #lastMutationIDReceived = 0;
@@ -646,7 +646,6 @@ export class Zero<
     this.#zeroContext = new ZeroContext(
       lc,
       this.#ivmMain,
-      this.#options.context as TContext,
       (ast, ttl, gotCallback) => {
         if (enableLegacyQueries) {
           return this.#queryManager.addLegacy(ast, ttl, gotCallback);

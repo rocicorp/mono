@@ -4,7 +4,7 @@ import type {SchemaQuery} from '../mutate/custom.ts';
 import type {NamedQueryFunction} from './define-query.ts';
 import {QueryParseError} from './error.ts';
 import {newQuery} from './query-impl.ts';
-import {queryWithContext} from './query-internals.ts';
+import {asQueryInternals} from './query-internals.ts';
 import {type AnyQuery, type Query} from './query.ts';
 
 export type QueryFn<
@@ -87,12 +87,11 @@ function syncedQueryImpl<
   TName extends string,
   TContext,
   TArg extends ReadonlyJSONValue[],
-  TReturnQuery extends AnyQuery,
   // oxlint-disable-next-line no-explicit-any
 >(name: TName, fn: any, takesContext: boolean) {
   return (context: TContext, args: TArg) => {
     const q = takesContext ? fn(context, ...args) : fn(...args);
-    return queryWithContext(q, context).nameAndArgs(name, args) as TReturnQuery;
+    return asQueryInternals(q).nameAndArgs(name, args);
   };
 }
 

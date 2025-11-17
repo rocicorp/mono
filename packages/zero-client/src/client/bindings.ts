@@ -3,6 +3,7 @@ import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Format, ViewFactory} from '../../../zql/src/ivm/view.ts';
 import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {
   HumanReadable,
   MaterializeOptions,
@@ -19,8 +20,7 @@ import type {Zero} from './zero.ts';
 const zeroDelegates = new WeakMap<
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   Zero<any, any, any, any>,
-  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  QueryDelegate<any>
+  QueryDelegate
 >();
 
 export function registerZeroDelegate<
@@ -28,10 +28,7 @@ export function registerZeroDelegate<
   MD extends CustomMutatorDefs | undefined,
   TContext,
   QD extends QueryDefinitions<TSchema, TContext> | undefined,
->(
-  zero: Zero<TSchema, MD, TContext, QD>,
-  delegate: QueryDelegate<TContext>,
-): void {
+>(zero: Zero<TSchema, MD, TContext, QD>, delegate: QueryDelegate): void {
   zeroDelegates.set(zero, delegate);
 }
 
@@ -40,7 +37,7 @@ function mustGetDelegate<
   MD extends CustomMutatorDefs | undefined,
   TContext,
   QD extends QueryDefinitions<TSchema, TContext> | undefined,
->(zero: Zero<TSchema, MD, TContext, QD>): QueryDelegate<TContext> {
+>(zero: Zero<TSchema, MD, TContext, QD>): QueryDelegate {
   const delegate = zeroDelegates.get(zero);
   if (!delegate) {
     throw new Error('Zero instance not registered with bindings');
@@ -116,14 +113,14 @@ export function bindingsForZero<
     hash<TTable extends keyof TSchema['tables'] & string, TReturn>(
       query: Query<TSchema, TTable, TReturn, TContext>,
     ): string {
-      const queryInternals = delegate.withContext(query);
+      const queryInternals = asQueryInternals(query);
       return queryInternals.hash();
     },
 
     format<TTable extends keyof TSchema['tables'] & string, TReturn>(
       query: Query<TSchema, TTable, TReturn, TContext>,
     ): Format {
-      const queryInternals = delegate.withContext(query);
+      const queryInternals = asQueryInternals(query);
       return queryInternals.format;
     },
   };

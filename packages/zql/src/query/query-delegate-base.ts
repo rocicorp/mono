@@ -13,7 +13,6 @@ import type {
   QueryDelegate,
 } from './query-delegate.ts';
 import {materializeImpl, preloadImpl, runImpl} from './query-impl.ts';
-import {queryWithContext, type QueryInternals} from './query-internals.ts';
 import type {
   HumanReadable,
   MaterializeOptions,
@@ -28,29 +27,7 @@ import type {TypedView} from './typed-view.ts';
  * Base class that provides default implementations for common QueryDelegate methods.
  * Subclasses can override specific methods as needed.
  */
-export abstract class QueryDelegateBase<TContext>
-  implements QueryDelegate<TContext>
-{
-  readonly #context: TContext;
-
-  constructor(context: TContext) {
-    this.#context = context;
-  }
-
-  /**
-   * Default implementation that calls queryWithContext.
-   * Override if you need custom context handling.
-   */
-  withContext<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-  >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-  ): QueryInternals<TSchema, TTable, TReturn, TContext> {
-    return queryWithContext(query, this.#context);
-  }
-
+export abstract class QueryDelegateBase implements QueryDelegate {
   /**
    * Default implementation that just calls applyViewUpdates synchronously.
    * Override if you need custom batching behavior (e.g., SolidJS).
@@ -75,6 +52,7 @@ export abstract class QueryDelegateBase<TContext>
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
+    TContext,
   >(
     query: Query<TSchema, TTable, TReturn, TContext>,
     factory?: undefined,
@@ -85,6 +63,7 @@ export abstract class QueryDelegateBase<TContext>
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
+    TContext,
     T,
   >(
     query: Query<TSchema, TTable, TReturn, TContext>,
@@ -99,6 +78,7 @@ export abstract class QueryDelegateBase<TContext>
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
+    TContext,
     T,
   >(
     query: Query<TSchema, TTable, TReturn, TContext>,
@@ -110,6 +90,7 @@ export abstract class QueryDelegateBase<TContext>
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
+    TContext,
     T,
   >(
     query: Query<TSchema, TTable, TReturn, TContext>,
@@ -127,6 +108,7 @@ export abstract class QueryDelegateBase<TContext>
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
+    TContext,
   >(
     query: Query<TSchema, TTable, TReturn, TContext>,
     options?: RunOptions,
@@ -142,6 +124,7 @@ export abstract class QueryDelegateBase<TContext>
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
+    TContext,
   >(
     query: Query<TSchema, TTable, TReturn, TContext>,
     options?: PreloadOptions,

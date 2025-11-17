@@ -5,7 +5,6 @@ import type {BuilderDelegate} from '../builder/builder.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {MetricsDelegate} from './metrics-delegate.ts';
 import type {CustomQueryID} from './named.ts';
-import type {QueryInternals} from './query-internals.ts';
 import type {
   HumanReadable,
   MaterializeOptions,
@@ -36,17 +35,7 @@ export interface NewQueryDelegate {
  * Interface for delegates that support materializing, running, and preloading queries.
  * This interface contains the methods needed to execute queries and manage their lifecycle.
  */
-export interface QueryDelegate<TContext>
-  extends BuilderDelegate,
-    MetricsDelegate {
-  withContext<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-  >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-  ): QueryInternals<TSchema, TTable, TReturn, TContext>;
-
+export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
   addServerQuery(ast: AST, ttl: TTL, gotCallback?: GotCallback): () => void;
 
   addCustomQuery(
@@ -92,6 +81,7 @@ export interface QueryDelegate<TContext>
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
+    TContext,
   >(
     query: Query<TSchema, TTable, TReturn, TContext>,
     factory?: undefined,
@@ -102,6 +92,7 @@ export interface QueryDelegate<TContext>
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
+    TContext,
     T,
   >(
     query: Query<TSchema, TTable, TReturn, TContext>,
@@ -116,6 +107,7 @@ export interface QueryDelegate<TContext>
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
+    TContext,
     T,
   >(
     query: Query<TSchema, TTable, TReturn, TContext>,
@@ -130,6 +122,7 @@ export interface QueryDelegate<TContext>
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
+    TContext,
   >(
     query: Query<TSchema, TTable, TReturn, TContext>,
     options?: RunOptions,
@@ -142,6 +135,7 @@ export interface QueryDelegate<TContext>
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
+    TContext,
   >(
     query: Query<TSchema, TTable, TReturn, TContext>,
     options?: PreloadOptions,

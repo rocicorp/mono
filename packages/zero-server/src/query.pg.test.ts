@@ -30,7 +30,6 @@ describe('makeSchemaQuery', () => {
         schema,
         mutate,
         query,
-        undefined,
       );
 
       const result = await transaction.run(transaction.query.basic);
@@ -55,7 +54,6 @@ describe('makeSchemaQuery', () => {
         schema,
         mutate,
         query,
-        undefined,
       );
 
       const result = await transaction.run(transaction.query.basic.one());
@@ -74,7 +72,6 @@ describe('makeSchemaQuery', () => {
         schema,
         mutate,
         query,
-        undefined,
       );
 
       const result = await transaction.run(

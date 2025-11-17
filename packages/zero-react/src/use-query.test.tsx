@@ -9,9 +9,11 @@ import {
   vi,
   type Mock,
 } from 'vitest';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {registerZeroDelegate} from '../../zero-client/src/client/bindings.ts';
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
+import type {QueryResultDetails} from '../../zero-client/src/types/query-result.ts';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
@@ -25,8 +27,6 @@ import {
   ViewStore,
 } from './use-query.tsx';
 import {ZeroProvider} from './zero-provider.tsx';
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
-import type {QueryResultDetails} from '../../zero-client/src/types/query-result.ts';
 
 function newMockQuery(
   query: string,
@@ -43,7 +43,7 @@ function newMockQuery(
 
 function newMockZero<MD extends CustomMutatorDefs, Context>(
   clientID: string,
-): {zero: Zero<Schema, MD, Context>; delegate: QueryDelegate<Context>} {
+): {zero: Zero<Schema, MD, Context>; delegate: QueryDelegate} {
   const view = newView();
   const delegate = newMockDelegate<Context>();
   const zero = {
@@ -54,7 +54,7 @@ function newMockZero<MD extends CustomMutatorDefs, Context>(
   return {zero, delegate};
 }
 
-function newMockDelegate<TContext>(): QueryDelegate<TContext> {
+function newMockDelegate<TContext>(): QueryDelegate {
   return {
     materialize: vi.fn().mockImplementation(() => newView()),
     withContext<
@@ -73,7 +73,7 @@ function newMockDelegate<TContext>(): QueryDelegate<TContext> {
         format: (q as any).format,
       } as QueryInternals<TSchema, TTable, TReturn, TContext>;
     },
-  } as unknown as QueryDelegate<TContext>;
+  } as unknown as QueryDelegate;
 }
 
 function newView() {

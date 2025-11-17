@@ -7,7 +7,7 @@ import {
   syncedQueryWithContext,
   withValidation,
 } from './named.ts';
-import {queryWithContext} from './query-internals.ts';
+import {asQueryInternals} from './query-internals.ts';
 import type {QueryResultType, QueryReturn, QueryRowType, Row} from './query.ts';
 import {schema} from './test/test-schemas.ts';
 
@@ -108,7 +108,7 @@ test('syncedQuery', () => {
     readonly createdAt: number;
   }>();
 
-  const q = queryWithContext(query, undefined);
+  const q = asQueryInternals(query);
   expect(q.customQueryID).toEqual({
     name: 'myQuery',
     args: ['123'],
@@ -169,7 +169,7 @@ test('syncedQuery', () => {
     readonly createdAt: number;
   }>();
 
-  const vq = queryWithContext(vquery, undefined);
+  const vq = asQueryInternals(vquery);
   expect(vq.customQueryID).toEqual({
     name: 'myQuery',
     args: ['123'],
@@ -234,7 +234,7 @@ test('syncedQueryWithContext', () => {
     readonly createdAt: number;
   }>();
 
-  const q = queryWithContext(query2, undefined);
+  const q = asQueryInternals(query2);
   expect(q.customQueryID).toEqual({
     name: 'myQuery',
     args: ['123'],
@@ -312,7 +312,7 @@ test('syncedQueryWithContext', () => {
     readonly createdAt: number;
   }>();
 
-  const vq = queryWithContext(vquery2, undefined);
+  const vq = asQueryInternals(vquery2);
   expect(vq.customQueryID).toEqual({
     name: 'myQuery',
     args: ['123'],
@@ -405,12 +405,10 @@ test('withValidation throws QueryParseError for syncedQueryWithContext', () => {
 
 test('makeSchemaQuery', () => {
   const builders = createBuilder(schema);
-  const q1 = queryWithContext(
-    queryWithContext(builders.issue.where('id', '123'), undefined).nameAndArgs(
-      'myName',
-      ['123'],
-    ),
-    undefined,
+  const q1 = asQueryInternals(
+    asQueryInternals(builders.issue.where('id', '123')).nameAndArgs('myName', [
+      '123',
+    ]),
   );
   expect(q1.ast).toMatchInlineSnapshot(`
     {

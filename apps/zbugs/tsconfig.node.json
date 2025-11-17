@@ -1,4 +1,11 @@
 {
   "extends": "../../tsconfig.json",
-  "include": ["vite.config.ts", "schema.ts", "api/index.ts"]
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM"],
+    "baseUrl": "../../packages",
+    "paths": {
+      "@rocicorp/zero": ["./zero/src/zero.ts"]
+    }
+  },
+  "include": ["vite.config.ts", "api/index.ts"]
 }

@@ -31,7 +31,11 @@ import {
 } from './expression.ts';
 import type {CustomQueryID} from './named.ts';
 import type {GotCallback, QueryDelegate} from './query-delegate.ts';
-import {queryInternalsTag, type QueryInternals} from './query-internals.ts';
+import {
+  asQueryInternals,
+  queryInternalsTag,
+  type QueryInternals,
+} from './query-internals.ts';
 import {
   type AnyQuery,
   type ExistsOptions,
@@ -565,7 +569,7 @@ export function materializeImpl<
   T,
 >(
   query: Query<TSchema, TTable, TReturn, TContext>,
-  delegate: QueryDelegate<TContext>,
+  delegate: QueryDelegate,
   factory: ViewFactory<
     TSchema,
     TTable,
@@ -578,8 +582,8 @@ export function materializeImpl<
 ): T {
   let ttl: TTL = options?.ttl ?? DEFAULT_TTL_MS;
 
-  const qi = delegate.withContext(query);
-  const {ast: ast, format, customQueryID} = qi;
+  const qi = asQueryInternals(query);
+  const {ast, format, customQueryID} = qi;
   const queryHash = qi.hash();
 
   const queryID = customQueryID
@@ -656,7 +660,7 @@ export async function runImpl<
   TContext,
 >(
   query: Query<TSchema, TTable, TReturn, TContext>,
-  delegate: QueryDelegate<TContext>,
+  delegate: QueryDelegate,
   options?: RunOptions,
 ): Promise<HumanReadable<TReturn>> {
   delegate.assertValidRunOptions(options);
@@ -696,16 +700,16 @@ export function preloadImpl<
   TContext,
 >(
   query: Query<TSchema, TTable, TReturn, TContext>,
-  delegate: QueryDelegate<TContext>,
+  delegate: QueryDelegate,
   options?: PreloadOptions,
 ): {
   cleanup: () => void;
   complete: Promise<void>;
 } {
-  const qi = delegate.withContext(query);
+  const qi = asQueryInternals(query);
   const ttl = options?.ttl ?? DEFAULT_PRELOAD_TTL_MS;
   const {resolve, promise: complete} = resolver<void>();
-  const {customQueryID, ast: ast} = qi;
+  const {customQueryID, ast} = qi;
   if (customQueryID) {
     const cleanup = delegate.addCustomQuery(ast, customQueryID, ttl, got => {
       if (got) {

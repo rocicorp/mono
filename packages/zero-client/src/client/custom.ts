@@ -126,7 +126,7 @@ export class TransactionImpl<TSchema extends Schema, TContext>
   readonly mutate: SchemaCRUD<TSchema>;
   readonly query: SchemaQuery<TSchema, TContext>;
   readonly #repTx: WriteTransaction;
-  readonly #zeroContext: ZeroContext<TContext>;
+  readonly #zeroContext: ZeroContext;
 
   constructor(lc: LogContext, repTx: WriteTransaction, schema: TSchema) {
     must(repTx.reason === 'initial' || repTx.reason === 'rebase');
@@ -146,7 +146,6 @@ export class TransactionImpl<TSchema extends Schema, TContext>
     this.#zeroContext = newZeroContext(
       lc,
       txData.ivmSources as IVMSourceBranch,
-      txData.context as TContext,
     );
   }
 
@@ -218,15 +217,10 @@ function assertValidRunOptions(options: RunOptions | undefined): void {
   );
 }
 
-function newZeroContext<TContext>(
-  lc: LogContext,
-  ivmBranch: IVMSourceBranch,
-  context: TContext,
-) {
+function newZeroContext(lc: LogContext, ivmBranch: IVMSourceBranch) {
   return new ZeroContext(
     lc,
     ivmBranch,
-    context,
     () => emptyFunction,
     () => emptyFunction,
     emptyFunction,

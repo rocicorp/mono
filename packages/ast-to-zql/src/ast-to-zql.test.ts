@@ -1,7 +1,7 @@
 import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {expect, test} from 'vitest';
 import {type AST} from '../../zero-protocol/src/ast.ts';
-import {queryWithContext} from '../../zql/src/query/query-internals.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../zql/src/query/query.ts';
 import {staticQuery} from '../../zql/src/query/static-query.ts';
 import {generateQuery} from '../../zql/src/query/test/query-gen.ts';
@@ -680,5 +680,5 @@ test('round trip', () => {
 });
 
 function ast(q: AnyQuery): AST {
-  return queryWithContext(q, undefined).ast;
+  return asQueryInternals(q).ast;
 }

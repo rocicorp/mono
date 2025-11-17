@@ -18,7 +18,7 @@ import type {
   TableCRUD,
   TransactionBase,
 } from '../../zql/src/mutate/custom.ts';
-import {queryWithContext} from '../../zql/src/query/query-internals.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {
   HumanReadable,
   Query,
@@ -65,7 +65,6 @@ export class TransactionImpl<
   readonly query: SchemaQuery<TSchema, TContext>;
   readonly #schema: TSchema;
   readonly #serverSchema: ServerSchema;
-  readonly #context: TContext;
 
   constructor(
     dbTransaction: DBTransaction<TWrappedTransaction>,
@@ -75,7 +74,6 @@ export class TransactionImpl<
     query: SchemaQuery<TSchema, TContext>,
     schema: TSchema,
     serverSchema: ServerSchema,
-    context: TContext,
   ) {
     this.dbTransaction = dbTransaction;
     this.clientID = clientID;
@@ -84,14 +82,13 @@ export class TransactionImpl<
     this.query = query;
     this.#schema = schema;
     this.#serverSchema = serverSchema;
-    this.#context = context;
   }
 
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(
     query: Query<TSchema, TTable, TReturn, TContext>,
     _options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
-    const queryInternals = queryWithContext(query, this.#context as TContext);
+    const queryInternals = asQueryInternals(query);
 
     // Execute the query using the database-specific executor
     return this.dbTransaction.runQuery<TReturn>(
@@ -126,7 +123,6 @@ export async function makeServerTransaction<
     serverSchema: ServerSchema,
   ) => SchemaCRUD<TSchema>,
   query: SchemaQuery<TSchema, TContext>,
-  context: TContext,
 ) {
   const serverSchema = await getServerSchema(dbTransaction, schema);
   return new TransactionImpl(
@@ -137,7 +133,6 @@ export async function makeServerTransaction<
     query,
     schema,
     serverSchema,
-    context,
   );
 }
 

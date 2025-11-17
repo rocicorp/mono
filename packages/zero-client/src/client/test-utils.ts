@@ -266,7 +266,7 @@ export class TestZero<
     });
   }
 
-  declare [exposedToTestingSymbol]: TestingContext<Context>;
+  declare [exposedToTestingSymbol]: TestingContext;
 
   get pusher() {
     assert(TESTING);

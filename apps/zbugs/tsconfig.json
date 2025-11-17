@@ -6,8 +6,7 @@
     "baseUrl": "../../packages",
     "paths": {
       "@rocicorp/zero": ["./zero/src/zero.ts"],
-      "@rocicorp/zero/react": ["./zero/src/react.ts"],
-      "@rocicorp/zero-cache/*": ["./zero-cache/src/*"]
+      "@rocicorp/zero/react": ["./zero/src/react.ts"]
     },
     "declaration": true
   },

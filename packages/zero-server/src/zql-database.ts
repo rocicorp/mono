@@ -114,7 +114,6 @@ export class ZQLDatabase<S extends Schema, WrappedTransaction, TContext>
       this.#schema,
       this.#mutate,
       this.#query,
-      undefined as TContext,
     );
   }
 

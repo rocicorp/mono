@@ -202,13 +202,9 @@ const clientToServerMapper = clientToServer(schema.tables);
 const debug = new Debug();
 const tableSpecs = computeZqlSpecs(lc, db);
 
-class AnalyzeQueryDelegate extends QueryDelegateBase<undefined> {
+class AnalyzeQueryDelegate extends QueryDelegateBase {
   readonly debug = debug;
   readonly defaultQueryComplete = true;
-
-  constructor() {
-    super(undefined);
-  }
 
   getSource(serverTableName: string): Source | undefined {
     let source = sources.get(serverTableName);
