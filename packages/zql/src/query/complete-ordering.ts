@@ -10,11 +10,19 @@ export function completeOrdering(
   const primaryKey = must(getPrimaryKey(ast.table));
   return {
     ...ast,
-    related: ast.related?.map(r => ({
-      ...r,
-      subquery: completeOrdering(r.subquery, getPrimaryKey),
-    })),
-    where: completeOrderingInCondition(ast.where, getPrimaryKey),
+    ...(ast.related
+      ? {
+          related: ast.related?.map(r => ({
+            ...r,
+            subquery: completeOrdering(r.subquery, getPrimaryKey),
+          })),
+        }
+      : undefined),
+    ...(ast.where
+      ? {
+          where: completeOrderingInCondition(ast.where, getPrimaryKey),
+        }
+      : undefined),
     orderBy: addPrimaryKeys(primaryKey, ast.orderBy),
   };
 }
