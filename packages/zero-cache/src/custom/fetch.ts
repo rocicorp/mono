@@ -73,13 +73,23 @@ export async function fetchFromAPIServer<TValidator extends Type>(
   });
 
   if (!urlMatch(url, allowedUrlPatterns)) {
-    throw new ProtocolErrorWithLevel({
-      kind: ErrorKind.TransformFailed,
-      origin: ErrorOrigin.ZeroCache,
-      reason: ErrorReason.Internal,
-      message: `URL "${url}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
-      queryIDs: [],
-    });
+    throw new ProtocolErrorWithLevel(
+      source === 'push'
+        ? {
+            kind: ErrorKind.PushFailed,
+            origin: ErrorOrigin.ZeroCache,
+            reason: ErrorReason.Internal,
+            message: `URL "${url}" is not allowed by the ZERO_MUTATE_URL configuration`,
+            mutationIDs: [],
+          }
+        : {
+            kind: ErrorKind.TransformFailed,
+            origin: ErrorOrigin.ZeroCache,
+            reason: ErrorReason.Internal,
+            message: `URL "${url}" is not allowed by the ZERO_GET_QUERIES_URL configuration`,
+            queryIDs: [],
+          },
+    );
   }
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',

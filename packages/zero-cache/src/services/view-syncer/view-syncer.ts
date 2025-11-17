@@ -1187,15 +1187,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     for (const q of transformedCustomQueries) {
       if ('error' in q) {
         const errorMessage = `Error transforming custom query ${q.name}: ${q.error}${q.details ? ` ${JSON.stringify(q.details)}` : ''}`;
-        // URL configuration errors should be warnings
-        const logLevel =
-          typeof q.details === 'string' &&
-          q.details.includes(
-            'not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration',
-          )
-            ? 'warn'
-            : 'error';
-        lc[logLevel]?.(errorMessage, q);
+        lc.error?.(errorMessage, q);
         appQueryErrors.push(q);
         continue;
       }
