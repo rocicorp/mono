@@ -32,7 +32,7 @@ describe('Chinook planner tests', () => {
 
     costModel = createSQLiteCostModel(dbs.sqlite, tableSpecs);
 
-    getPlanAST = makeGetPlanAST(mapper, costModel);
+    getPlanAST = makeGetPlanAST(schema, mapper, costModel);
   });
 
   test('tracks for a given album', () => {

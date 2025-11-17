@@ -26,6 +26,8 @@ import {schema} from './schema.ts';
 import {spearmanCorrelation} from '../helpers/correlation.ts';
 import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
 import {clientSchemaFrom} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {completeOrdering} from '../../../zql/src/query/complete-ordering.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 
 // Bootstrap setup
 export const pgContent = await getChinook();
@@ -206,12 +208,17 @@ export function executeAllPlanAttempts(
   query: any,
 ): PlanAttemptResult[] {
   // Get the query AST
-  const ast = queryWithContext(query, undefined).ast;
-  const mappedAST = mapAST(ast, mapper);
+  const ast = mapAST(
+    completeOrdering(queryWithContext(query, undefined).ast, tableName => {
+      const s: Schema = schema;
+      return s.tables[tableName].primaryKey;
+    }),
+    mapper,
+  );
 
   // Plan with debugger to collect all attempts
   const planDebugger = new AccumulatorDebugger();
-  planQuery(mappedAST, costModel, planDebugger);
+  planQuery(ast, costModel, planDebugger);
 
   // Get all completed plan attempts
   const planCompleteEvents = planDebugger.getEvents('plan-complete');
@@ -221,13 +228,13 @@ export function executeAllPlanAttempts(
   // Execute each plan variant
   for (const planEvent of planCompleteEvents) {
     // Rebuild the plan graph for this attempt
-    const plans = buildPlanGraph(mappedAST, costModel, true);
+    const plans = buildPlanGraph(ast, costModel, true);
 
     // Restore the exact plan state from the snapshot
     plans.plan.restorePlanningSnapshot(planEvent.planSnapshot);
 
     // Apply plans to AST to get variant with flip flags set
-    const astWithFlips = applyPlansToAST(mappedAST, plans);
+    const astWithFlips = applyPlansToAST(ast, plans);
 
     // Enable row count tracking
     runtimeDebugFlags.trackRowCountsVended = true;
