@@ -6,6 +6,7 @@ import {newQuery} from './query-impl.ts';
 import {asQueryInternals} from './query-internals.ts';
 import {type AnyQuery, type Query} from './query.ts';
 
+/** @deprecated */
 export type QueryFn<
   TContext,
   TTakesContext extends boolean,
@@ -15,6 +16,7 @@ export type QueryFn<
   ? {(...args: TArg): TReturnQuery}
   : {(context: TContext, ...args: TArg): TReturnQuery};
 
+/** @deprecated */
 export type SyncedQuery<
   TName extends string,
   TContext,
@@ -82,6 +84,7 @@ export function syncedQueryWithContext<
   return ret;
 }
 
+/** @deprecated */
 function syncedQueryImpl<
   TName extends string,
   TContext,
@@ -94,9 +97,12 @@ function syncedQueryImpl<
   };
 }
 
+/** @deprecated */
+
 // oxlint-disable-next-line no-explicit-any
 type AnySyncedQuery = SyncedQuery<any, any, any, any, any>;
 
+/** @deprecated */
 export function withValidation<F extends AnySyncedQuery>(
   fn: F,
   // oxlint-disable-next-line no-explicit-any

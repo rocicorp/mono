@@ -119,12 +119,9 @@ export type {
 export {
   defineQuery,
   defineQueryWithContextType,
+  isQueryDefinition,
 } from '../../zql/src/query/define-query.ts';
-export type {
-  DefinedQueryFunction,
-  DefineQueryFunc,
-  DefineQueryOptions,
-} from '../../zql/src/query/define-query.ts';
+export type {QueryDefinition} from '../../zql/src/query/define-query.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {
   ExpressionBuilder,

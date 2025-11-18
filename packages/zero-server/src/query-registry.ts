@@ -1,34 +1,33 @@
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import {
-  isDefinedQueryFunction,
-  type DefinedQueryFunction,
+  isQueryDefinition,
+  type QueryDefinition,
 } from '../../zql/src/query/define-query.ts';
 import type {QueryDefinitions} from '../../zql/src/query/query-definitions.ts';
 
-type AnyDefinedQueryFunction<S extends Schema> = DefinedQueryFunction<
+// oxlint-disable no-explicit-any
+type AnyQueryDefinition<S extends Schema> = QueryDefinition<
   S,
-  keyof S['tables'] & string,
-  // oxlint-disable-next-line no-explicit-any
   any,
-  // oxlint-disable-next-line no-explicit-any
   any,
-  ReadonlyJSONValue | undefined,
-  ReadonlyJSONValue | undefined
+  any,
+  any,
+  any
 >;
+// oxlint-enable no-explicit-any
 
 export class QueryRegistry<
   S extends Schema,
   // oxlint-disable-next-line no-explicit-any
   QD extends QueryDefinitions<S, any>,
 > {
-  readonly #map: Map<string, AnyDefinedQueryFunction<S>>;
+  readonly #map: Map<string, AnyQueryDefinition<S>>;
 
   constructor(queries: QD) {
     this.#map = buildMap(queries);
   }
 
-  mustGet(name: string): AnyDefinedQueryFunction<S> {
+  mustGet(name: string): AnyQueryDefinition<S> {
     const current = this.#map.get(name);
     if (!current) {
       throw new Error(`Cannot find query '${name}'`);
@@ -41,15 +40,14 @@ function buildMap<
   S extends Schema,
   QD extends QueryDefinitions<S, Context>,
   Context,
->(queries: QD): Map<string, AnyDefinedQueryFunction<S>> {
-  const map = new Map<string, AnyDefinedQueryFunction<S>>();
-  debugger;
+>(queries: QD): Map<string, AnyQueryDefinition<S>> {
+  const map = new Map<string, AnyQueryDefinition<S>>();
 
   function recurse(obj: unknown, prefix: string): void {
     if (typeof obj === 'object' && obj !== null) {
       for (const [key, value] of Object.entries(obj)) {
         const name = prefix ? `${prefix}.${key}` : key;
-        if (isDefinedQueryFunction(value)) {
+        if (isQueryDefinition(value)) {
           map.set(name, value);
         } else {
           recurse(value, name);

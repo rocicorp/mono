@@ -8,34 +8,26 @@ import {validateInput} from './validate-input.ts';
 
 const defineQueryTag = Symbol();
 
-export type DefineQueryOptions<Output, Input> = {
-  validator?: StandardSchemaV1<Input, Output> | undefined;
-};
-
 /**
- * Function type for root query functions that take context and args.
+ * A query definition function that has been wrapped by `defineQuery`.
+ * Contains the original function plus metadata (validator and tag).
  */
-export type DefineQueryFunc<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
-  TContext,
-  TArgs,
-> = (options: {args: TArgs; ctx: TContext}) => Query<TSchema, TTable, TReturn>;
-
-export type DefinedQueryFunction<
+export type QueryDefinition<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
   TContext,
   TOutput extends ReadonlyJSONValue | undefined,
   TInput extends TOutput,
-> = DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput> & {
+> = ((options: {
+  args: TOutput;
+  ctx: TContext;
+}) => Query<TSchema, TTable, TReturn>) & {
   [defineQueryTag]: true;
   validator: StandardSchemaV1<TInput, TOutput> | undefined;
 };
 
-export function isDefinedQueryFunction<
+export function isQueryDefinition<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
@@ -44,14 +36,7 @@ export function isDefinedQueryFunction<
   TInput extends TOutput,
 >(
   f: unknown,
-): f is DefinedQueryFunction<
-  TSchema,
-  TTable,
-  TReturn,
-  TContext,
-  TOutput,
-  TInput
-> {
+): f is QueryDefinition<TSchema, TTable, TReturn, TContext, TOutput, TInput> {
   // oxlint-disable-next-line no-explicit-any
   return typeof f === 'function' && (f as any)[defineQueryTag];
 }
@@ -64,8 +49,11 @@ export function defineQuery<
   TContext,
   TArgs extends ReadonlyJSONValue | undefined,
 >(
-  queryFn: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TArgs>,
-): DefinedQueryFunction<TSchema, TTable, TReturn, TContext, TArgs, TArgs>;
+  queryFn: (options: {
+    args: TArgs;
+    ctx: TContext;
+  }) => Query<TSchema, TTable, TReturn>,
+): QueryDefinition<TSchema, TTable, TReturn, TContext, TArgs, TArgs>;
 
 // Overload for validator parameter - Input and Output can be different
 export function defineQuery<
@@ -77,8 +65,11 @@ export function defineQuery<
   TInput extends TOutput,
 >(
   validator: StandardSchemaV1<TInput, TOutput>,
-  queryFn: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
-): DefinedQueryFunction<TSchema, TTable, TReturn, TContext, TOutput, TInput>;
+  queryFn: (options: {
+    args: TOutput;
+    ctx: TContext;
+  }) => Query<TSchema, TTable, TReturn>,
+): QueryDefinition<TSchema, TTable, TReturn, TContext, TOutput, TInput>;
 
 // Implementation
 export function defineQuery<
@@ -91,18 +82,21 @@ export function defineQuery<
 >(
   validatorOrQueryFn:
     | StandardSchemaV1<TInput, TOutput>
-    | DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
-  queryFn?: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
-): DefinedQueryFunction<TSchema, TTable, TReturn, TContext, TOutput, TInput> {
+    | ((options: {
+        args: TOutput;
+        ctx: TContext;
+      }) => Query<TSchema, TTable, TReturn>),
+  queryFn?: (options: {
+    args: TOutput;
+    ctx: TContext;
+  }) => Query<TSchema, TTable, TReturn>,
+): QueryDefinition<TSchema, TTable, TReturn, TContext, TOutput, TInput> {
   // Handle different parameter patterns
   let validator: StandardSchemaV1<TInput, TOutput> | undefined;
-  let actualQueryFn: DefineQueryFunc<
-    TSchema,
-    TTable,
-    TReturn,
-    TContext,
-    TOutput
-  >;
+  let actualQueryFn: (options: {
+    args: TOutput;
+    ctx: TContext;
+  }) => Query<TSchema, TTable, TReturn>;
 
   if (typeof validatorOrQueryFn === 'function') {
     // defineQuery(queryFn) - no validator
@@ -115,7 +109,7 @@ export function defineQuery<
   }
 
   // Pass through the function as-is, only adding tag and validator
-  const f = actualQueryFn as DefinedQueryFunction<
+  const f = actualQueryFn as QueryDefinition<
     TSchema,
     TTable,
     TReturn,
@@ -140,10 +134,10 @@ export function defineQuery<
 export function wrapCustomQuery<TArgs, Context>(
   queryName: string,
   // oxlint-disable-next-line no-explicit-any
-  definedQueryFunc: DefinedQueryFunction<any, any, any, any, any, any>,
+  queryDefinition: QueryDefinition<any, any, any, any, any, any>,
   contextHolder: {context: Context},
 ): (args: TArgs) => AnyQuery {
-  const {validator} = definedQueryFunc;
+  const {validator} = queryDefinition;
   return (args?: TArgs) => {
     // The args that we send to the server is the args that the user passed in.
     // This is what gets fed into the validator.
@@ -151,7 +145,7 @@ export function wrapCustomQuery<TArgs, Context>(
     if (validator) {
       runtimeArgs = validateInput(queryName, args, validator, 'query');
     }
-    const q = definedQueryFunc({
+    const q = queryDefinition({
       args: runtimeArgs,
       ctx: contextHolder.context,
     });
@@ -196,8 +190,11 @@ export function defineQueryWithContextType<TContext>(): {
     TReturn,
     TArgs extends ReadonlyJSONValue | undefined,
   >(
-    queryFn: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TArgs>,
-  ): DefinedQueryFunction<TSchema, TTable, TReturn, TContext, TArgs, TArgs>;
+    queryFn: (options: {
+      args: TArgs;
+      ctx: TContext;
+    }) => Query<TSchema, TTable, TReturn>,
+  ): QueryDefinition<TSchema, TTable, TReturn, TContext, TArgs, TArgs>;
 
   <
     TSchema extends Schema,
@@ -207,8 +204,11 @@ export function defineQueryWithContextType<TContext>(): {
     TInput extends TOutput,
   >(
     validator: StandardSchemaV1<TInput, TOutput>,
-    queryFn: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
-  ): DefinedQueryFunction<TSchema, TTable, TReturn, TContext, TOutput, TInput>;
+    queryFn: (options: {
+      args: TOutput;
+      ctx: TContext;
+    }) => Query<TSchema, TTable, TReturn>,
+  ): QueryDefinition<TSchema, TTable, TReturn, TContext, TOutput, TInput>;
 } {
   return defineQuery as {
     <
@@ -217,8 +217,11 @@ export function defineQueryWithContextType<TContext>(): {
       TReturn,
       TArgs extends ReadonlyJSONValue | undefined,
     >(
-      queryFn: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TArgs>,
-    ): DefinedQueryFunction<TSchema, TTable, TReturn, TContext, TArgs, TArgs>;
+      queryFn: (options: {
+        args: TArgs;
+        ctx: TContext;
+      }) => Query<TSchema, TTable, TReturn>,
+    ): QueryDefinition<TSchema, TTable, TReturn, TContext, TArgs, TArgs>;
 
     <
       TSchema extends Schema,
@@ -228,14 +231,10 @@ export function defineQueryWithContextType<TContext>(): {
       TInput extends TOutput,
     >(
       validator: StandardSchemaV1<TInput, TOutput>,
-      queryFn: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
-    ): DefinedQueryFunction<
-      TSchema,
-      TTable,
-      TReturn,
-      TContext,
-      TOutput,
-      TInput
-    >;
+      queryFn: (options: {
+        args: TOutput;
+        ctx: TContext;
+      }) => Query<TSchema, TTable, TReturn>,
+    ): QueryDefinition<TSchema, TTable, TReturn, TContext, TOutput, TInput>;
   };
 }

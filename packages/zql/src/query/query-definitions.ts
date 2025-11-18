@@ -1,34 +1,20 @@
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {DefinedQueryFunction} from './define-query.ts';
+import type {QueryDefinition} from './define-query.ts';
 
 // oxlint-disable no-explicit-any
 
-export type QueryDefinitions<TSchema extends Schema, TContext> = {
-  [namespaceOrKey: string]:
+export type QueryDefinitions<S extends Schema, Context> = {
+  readonly [key: string]:
     | {
-        [key: string]: DefinedQueryFunction<
-          TSchema,
-          keyof TSchema['tables'] & string,
-          any,
-          TContext,
-          any,
-          any
-        >;
+        [key: string]: QueryDefinition<S, any, any, Context, any, any>;
       }
-    | DefinedQueryFunction<
-        TSchema,
-        keyof TSchema['tables'] & string,
-        any,
-        TContext,
-        any,
-        any
-      >;
+    | QueryDefinition<S, any, any, Context, any, any>;
 };
 
 export type NamespacedNamesOfQueryDefinitions<
   QD extends QueryDefinitions<Schema, any>,
 > = {
-  [K in keyof QD]: QD[K] extends DefinedQueryFunction<
+  [K in keyof QD]: QD[K] extends QueryDefinition<
     Schema,
     keyof Schema['tables'] & string,
     any,
@@ -38,7 +24,7 @@ export type NamespacedNamesOfQueryDefinitions<
   >
     ? K & string
     : QD[K] extends {
-          [key: string]: DefinedQueryFunction<
+          [key: string]: QueryDefinition<
             Schema,
             keyof Schema['tables'] & string,
             any,
