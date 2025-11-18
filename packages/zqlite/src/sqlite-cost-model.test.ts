@@ -159,4 +159,73 @@ describe('SQLite cost model', () => {
     expect(startupCost).toBe(0);
     expect(rows).toBe(1920);
   });
+
+  test('inline values work with string literals', () => {
+    // This test verifies that string values are properly inlined and escaped
+    const {rows} = costModel(
+      'foo',
+      [['a', 'asc']],
+      {
+        type: 'simple',
+        left: {type: 'column', name: 'b'},
+        op: '=',
+        right: {type: 'literal', value: 'test string'},
+      },
+      undefined,
+    );
+    // SQLite can estimate selectivity based on actual value
+    expect(rows).toBe(480);
+  });
+
+  test('inline values work with boolean literals', () => {
+    // This test verifies that boolean values are properly inlined as 1/0
+    const {rows} = costModel(
+      'foo',
+      [['a', 'asc']],
+      {
+        type: 'simple',
+        left: {type: 'column', name: 'b'},
+        op: '=',
+        right: {type: 'literal', value: true},
+      },
+      undefined,
+    );
+    // SQLite estimates based on the inlined value (1)
+    expect(rows).toBe(960);
+  });
+
+  test('inline values work with null literals', () => {
+    // This test verifies that null values are properly inlined as NULL
+    const {rows} = costModel(
+      'foo',
+      [['a', 'asc']],
+      {
+        type: 'simple',
+        left: {type: 'column', name: 'b'},
+        op: 'IS',
+        right: {type: 'literal', value: null},
+      },
+      undefined,
+    );
+    // SQLite estimates based on statistics (none inserted in our test data, but estimates conservatively)
+    expect(rows).toBe(1792);
+  });
+
+  test('inline values work with array literals in IN clauses', () => {
+    // This test verifies that array values are properly inlined as JSON
+    const {rows} = costModel(
+      'foo',
+      [['a', 'asc']],
+      {
+        type: 'simple',
+        left: {type: 'column', name: 'a'},
+        op: 'IN',
+        right: {type: 'literal', value: [1, 4, 7, 10]},
+      },
+      undefined,
+    );
+    // SQLite can estimate based on the array size
+    expect(rows).toBeGreaterThan(0);
+    expect(rows).toBeLessThan(1920);
+  });
 });
