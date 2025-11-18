@@ -161,12 +161,15 @@ export function withValidation<
   return fn as any;
 }
 
+/** @deprecated */
 export type ParseFn<T extends ReadonlyJSONValue[]> = (args: unknown[]) => T;
 
+/** @deprecated */
 export type HasParseFn<T extends ReadonlyJSONValue[]> = {
   parse: ParseFn<T>;
 };
 
+/** @deprecated */
 export type Parser<T extends ReadonlyJSONValue[]> = ParseFn<T> | HasParseFn<T>;
 
 export type CustomQueryID = {
@@ -177,19 +180,7 @@ export type CustomQueryID = {
 /**
  * Returns a set of query builders for the given schema.
  */
-export function createBuilder<S extends Schema, TContext>(
-  s: S,
-): SchemaQuery<S, TContext> {
-  return makeQueryBuilders(s) as SchemaQuery<S, TContext>;
-}
-
-/**
- * This produces the query builders for a given schema.
- * For use in Zero on the server to process custom queries.
- */
-function makeQueryBuilders<S extends Schema, TContext>(
-  schema: S,
-): SchemaQuery<S, TContext> {
+export function createBuilder<S extends Schema>(schema: S): SchemaQuery<S> {
   return new Proxy(
     {},
     {
@@ -208,5 +199,5 @@ function makeQueryBuilders<S extends Schema, TContext>(
         return q;
       },
     },
-  ) as SchemaQuery<S, TContext>;
+  ) as SchemaQuery<S>;
 }

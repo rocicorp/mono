@@ -108,23 +108,19 @@ export type MakeCustomMutatorInterfaces<
       : never;
 };
 
-export type MakeCustomMutatorInterface<
-  TSchema extends Schema,
-  F,
-  TContext,
-> = F extends (
-  tx: ClientTransaction<TSchema, TContext>,
+export type MakeCustomMutatorInterface<TSchema extends Schema, F> = F extends (
+  tx: ClientTransaction<TSchema>,
   ...args: infer Args
 ) => Promise<void>
   ? (...args: Args) => MutatorResult
   : never;
 
-export class TransactionImpl<TSchema extends Schema, TContext>
-  implements ClientTransaction<TSchema, TContext>
+export class TransactionImpl<TSchema extends Schema>
+  implements ClientTransaction<TSchema>
 {
   readonly location = 'client';
   readonly mutate: SchemaCRUD<TSchema>;
-  readonly query: SchemaQuery<TSchema, TContext>;
+  readonly query: SchemaQuery<TSchema>;
   readonly #repTx: WriteTransaction;
   readonly #zeroContext: ZeroContext;
 

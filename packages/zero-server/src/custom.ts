@@ -26,11 +26,8 @@ import type {
 } from '../../zql/src/query/query.ts';
 import {getServerSchema} from './schema.ts';
 
-interface ServerTransaction<
-  TSchema extends Schema,
-  TWrappedTransaction,
-  TContext,
-> extends TransactionBase<TSchema, TContext> {
+interface ServerTransaction<TSchema extends Schema, TWrappedTransaction>
+  extends TransactionBase<TSchema> {
   readonly location: 'server';
   readonly reason: 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
@@ -50,11 +47,8 @@ export type CustomMutatorImpl<TDBTransaction, TArgs = any> = (
   args: TArgs,
 ) => Promise<void>;
 
-export class TransactionImpl<
-  TSchema extends Schema,
-  TWrappedTransaction,
-  TContext,
-> implements ServerTransaction<TSchema, TWrappedTransaction, TContext>
+export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
+  implements ServerTransaction<TSchema, TWrappedTransaction>
 {
   readonly location = 'server';
   readonly reason = 'authoritative';
@@ -62,7 +56,7 @@ export class TransactionImpl<
   readonly clientID: string;
   readonly mutationID: number;
   readonly mutate: SchemaCRUD<TSchema>;
-  readonly query: SchemaQuery<TSchema, TContext>;
+  readonly query: SchemaQuery<TSchema>;
   readonly #schema: TSchema;
   readonly #serverSchema: ServerSchema;
 
@@ -71,7 +65,7 @@ export class TransactionImpl<
     clientID: string,
     mutationID: number,
     mutate: SchemaCRUD<TSchema>,
-    query: SchemaQuery<TSchema, TContext>,
+    query: SchemaQuery<TSchema>,
     schema: TSchema,
     serverSchema: ServerSchema,
   ) {
@@ -112,7 +106,6 @@ type WithHiddenTxAndSchema = {
 export async function makeServerTransaction<
   TSchema extends Schema,
   TWrappedTransaction,
-  TContext,
 >(
   dbTransaction: DBTransaction<TWrappedTransaction>,
   clientID: string,
@@ -122,7 +115,7 @@ export async function makeServerTransaction<
     dbTransaction: DBTransaction<TWrappedTransaction>,
     serverSchema: ServerSchema,
   ) => SchemaCRUD<TSchema>,
-  query: SchemaQuery<TSchema, TContext>,
+  query: SchemaQuery<TSchema>,
 ) {
   const serverSchema = await getServerSchema(dbTransaction, schema);
   return new TransactionImpl(

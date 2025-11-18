@@ -9,7 +9,7 @@ import {Transaction} from './test/util.ts';
 
 describe('makeSchemaQuery', () => {
   let pg: PostgresDB;
-  let query: SchemaQuery<typeof schema, unknown>;
+  let query: SchemaQuery<typeof schema>;
 
   beforeEach(async () => {
     pg = await testDBs.create('makeSchemaQuery-test');

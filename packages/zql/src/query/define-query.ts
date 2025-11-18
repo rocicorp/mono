@@ -6,8 +6,7 @@ import {asQueryInternals} from './query-internals.ts';
 import type {AnyQuery, Query} from './query.ts';
 import {validateInput} from './validate-input.ts';
 
-const defineQueryTag = Symbol('xxxxxxx');
-// const defineQueryTag = '__DEFINE_QUERY_TAG__' as const;
+const defineQueryTag = Symbol();
 
 export type DefineQueryOptions<Output, Input> = {
   validator?: StandardSchemaV1<Input, Output> | undefined;
