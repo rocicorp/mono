@@ -170,7 +170,6 @@ test('useQuery with ttl', () => {
   expect(addServerQuerySpy).toHaveBeenCalledTimes(0);
   expect(updateServerQuerySpy).toHaveBeenCalledExactlyOnceWith(
     {
-      orderBy: [['a', 'asc']],
       table: 'table',
     },
     '10m',

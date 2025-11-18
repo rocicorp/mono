@@ -921,7 +921,7 @@ describe('server results and keeping read queries', () => {
     // query is not removed, only put.
     expect(filter(messages)).toMatchInlineSnapshot(`
       [
-        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"1vsd9vcx6ynd4","ast":{"table":"issues","limit":1,"orderBy":[["id","asc"]]},"ttl":300000}]}]",
+        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"2c1evh894a8vx","ast":{"table":"issues","limit":1},"ttl":300000}]}]",
       ]
     `);
     messages.length = 0;
@@ -955,7 +955,7 @@ describe('server results and keeping read queries', () => {
     // mutation is no longer outstanding, query is removed.
     await vi.waitFor(() => {
       expect(filter(messages)).toEqual([
-        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"1vsd9vcx6ynd4"}]}]`,
+        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"2c1evh894a8vx"}]}]`,
       ]);
     });
 
@@ -971,7 +971,7 @@ describe('server results and keeping read queries', () => {
 
     expect(filter(messages)).toMatchInlineSnapshot(`
       [
-        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"12hwg3ihkijhm","ast":{"table":"issues","orderBy":[["id","asc"]]},"ttl":300000}]}]",
+        "["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"put","hash":"2uh1iy5olazzo","ast":{"table":"issues"},"ttl":300000}]}]",
       ]
     `);
     messages.length = 0;
@@ -1015,7 +1015,7 @@ describe('server results and keeping read queries', () => {
 
     await vi.waitFor(() => {
       expect(filter(messages)).toEqual([
-        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"12hwg3ihkijhm"}]}]`,
+        `["changeDesiredQueries",{"desiredQueriesPatch":[{"op":"del","hash":"2uh1iy5olazzo"}]}]`,
       ]);
     });
 

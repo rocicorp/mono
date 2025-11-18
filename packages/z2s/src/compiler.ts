@@ -30,6 +30,7 @@ import type {
   ServerSchema,
 } from '../../zero-types/src/server-schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
+import {completeOrdering} from '../../zql/src/query/complete-ordering.ts';
 import {
   sql,
   sqlConvertColumnArg,
@@ -70,6 +71,10 @@ export function compile(
   ast: AST,
   format?: Format,
 ): SQLQuery {
+  ast = completeOrdering(
+    ast,
+    tableName => zqlSchema.tables[tableName].primaryKey,
+  );
   const spec: Spec = {
     aliasCount: 0,
     server: {

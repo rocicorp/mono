@@ -3,7 +3,7 @@ import {hasOwn} from '../../../shared/src/has-own.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
-import {assertOrderingIncludesPK} from '../builder/builder.ts';
+import {assertOrderingIncludesPK} from '../query/complete-ordering.ts';
 import {type Change, type EditChange, type RemoveChange} from './change.ts';
 import type {Constraint} from './constraint.ts';
 import {compareValues, type Comparator, type Node} from './data.ts';

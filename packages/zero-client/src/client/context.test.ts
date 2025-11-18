@@ -60,7 +60,7 @@ test('getSource', () => {
 
   const source = context.getSource('users');
   assert(source instanceof MemorySource);
-  expect(source.getSchemaInfo()).toMatchInlineSnapshot(`
+  expect(source.tableSchema).toMatchInlineSnapshot(`
     {
       "columns": {
         "id": {
@@ -74,10 +74,10 @@ test('getSource', () => {
           "type": "string",
         },
       },
+      "name": "users",
       "primaryKey": [
         "id",
       ],
-      "tableName": "users",
     }
   `);
 
@@ -88,7 +88,7 @@ test('getSource', () => {
 
   // Should work for other table too.
   const source2 = context.getSource('userStates');
-  expect((source2 as MemorySource).getSchemaInfo()).toMatchInlineSnapshot(`
+  expect((source2 as MemorySource).tableSchema).toMatchInlineSnapshot(`
     {
       "columns": {
         "stateCode": {
@@ -102,11 +102,11 @@ test('getSource', () => {
           "type": "string",
         },
       },
+      "name": "userStates",
       "primaryKey": [
         "userID",
         "stateCode",
       ],
-      "tableName": "userStates",
     }
   `);
 });

@@ -732,7 +732,6 @@ test('clientZQL', async () => {
               op: '=',
               right: {type: 'literal', value: 'arv'},
             },
-            orderBy: [['id', 'asc']],
           },
           name: null,
           args: null,
@@ -750,12 +749,8 @@ test('clientZQL', async () => {
   const queries = await queriesP;
   expect(queries).toHaveLength(1);
   expect(queries[0].id).toBe(bindingsForZero(z).hash(issueQuery));
-  expect(queries[0].clientZQL).toBe(
-    "issue.where('ownerId', 'arv').orderBy('id', 'asc')",
-  );
-  expect(queries[0].serverZQL).toBe(
-    "issues.where('owner_id', 'arv').orderBy('id', 'asc')",
-  );
+  expect(queries[0].clientZQL).toBe("issue.where('ownerId', 'arv')");
+  expect(queries[0].serverZQL).toBe("issues.where('owner_id', 'arv')");
 
   view.destroy();
   await z.close();

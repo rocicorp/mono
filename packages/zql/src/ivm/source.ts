@@ -1,5 +1,6 @@
 import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {TableSchema} from '../../../zero-types/src/schema.ts';
 import type {DebugDelegate} from '../builder/debug-delegate.ts';
 import type {Input} from './operator.ts';
 
@@ -45,13 +46,14 @@ export type SourceChange =
  * ```
  */
 export interface Source {
+  get tableSchema(): TableSchema;
   /**
    * Creates an input that an operator can connect to. To free resources used
    * by connection, downstream operators call `destroy()` on the returned
    * input.
    *
    * @param sort The ordering of the rows. Source must return rows in this
-   * order.
+   * order.  Must include all primary keys of the table.
    * @param filters Filters to apply to the source.
    * @param splitEditKeys If an edit change modifies the values of any of the
    *   keys in splitEditKeys, the source should split the edit change into

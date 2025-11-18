@@ -1,24 +1,21 @@
 import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import type {Writable} from '../../../shared/src/writable.ts';
 import {
   SUBQ_PREFIX,
   type AST,
   type CompoundKey,
   type Condition,
-  type Ordering,
   type Parameter,
   type SimpleOperator,
   type System,
 } from '../../../zero-protocol/src/ast.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
-import type {Row as IVMRow} from '../../../zero-protocol/src/data.ts';
 import {
   hashOfAST,
   hashOfNameAndArgs,
 } from '../../../zero-protocol/src/query-hash.ts';
-import type {Schema, TableSchema} from '../../../zero-types/src/schema.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import {buildPipeline} from '../builder/builder.ts';
 import {NotImplementedError} from '../error.ts';
 import {ArrayView} from '../ivm/array-view.ts';
@@ -151,7 +148,7 @@ export abstract class AbstractQuery<
 
   hash(): string {
     if (!this.#hash) {
-      this.#hash = hashOfAST(this.#completeAst());
+      this.#hash = hashOfAST(this.#ast);
     }
     return this.#hash;
   }
@@ -249,10 +246,7 @@ export abstract class AbstractQuery<
                 parentField: sourceField,
                 childField: destField,
               },
-              subquery: addPrimaryKeysToAst(
-                this.#schema.tables[destSchema],
-                subQuery.#ast,
-              ),
+              subquery: subQuery.#ast,
             },
           ],
         },
@@ -311,10 +305,6 @@ export abstract class AbstractQuery<
               subquery: {
                 table: junctionSchema,
                 alias: relationship,
-                orderBy: addPrimaryKeys(
-                  this.#schema.tables[junctionSchema],
-                  undefined,
-                ),
                 related: [
                   {
                     system: this.#system,
@@ -322,10 +312,7 @@ export abstract class AbstractQuery<
                       parentField: secondRelation.sourceField,
                       childField: secondRelation.destField,
                     },
-                    subquery: addPrimaryKeysToAst(
-                      this.#schema.tables[destSchema],
-                      sq.#ast,
-                    ),
+                    subquery: sq.#ast,
                   },
                 ],
               },
@@ -488,10 +475,7 @@ export abstract class AbstractQuery<
             parentField: sourceField,
             childField: destField,
           },
-          subquery: addPrimaryKeysToAst(
-            this.#schema.tables[destTableName],
-            subQuery.#ast,
-          ),
+          subquery: subQuery.#ast,
         },
         op: 'EXISTS',
         flip,
@@ -530,10 +514,6 @@ export abstract class AbstractQuery<
           subquery: {
             table: junctionSchema,
             alias: `${SUBQ_PREFIX}${relationship}`,
-            orderBy: addPrimaryKeys(
-              this.#schema.tables[junctionSchema],
-              undefined,
-            ),
             where: {
               type: 'correlatedSubquery',
               related: {
@@ -543,11 +523,9 @@ export abstract class AbstractQuery<
                   childField: secondRelation.destField,
                 },
 
-                subquery: addPrimaryKeysToAst(
-                  this.#schema.tables[destSchema],
-                  (queryToDest as QueryImpl<Schema, string, unknown, unknown>)
-                    .#ast,
-                ),
+                subquery: (
+                  queryToDest as QueryImpl<Schema, string, unknown, unknown>
+                ).#ast,
               },
               op: 'EXISTS',
               flip,
@@ -562,43 +540,8 @@ export abstract class AbstractQuery<
     throw new Error(`Invalid relationship ${relationship}`);
   };
 
-  #completedAST: AST | undefined;
-
   get ast(): AST {
-    return this.#completeAst();
-  }
-
-  #completeAst(): AST {
-    if (!this.#completedAST) {
-      const finalOrderBy = addPrimaryKeys(
-        this.#schema.tables[this.#tableName],
-        this.#ast.orderBy,
-      );
-      if (this.#ast.start) {
-        const {row} = this.#ast.start;
-        const narrowedRow: Writable<IVMRow> = {};
-        for (const [field] of finalOrderBy) {
-          narrowedRow[field] = row[field];
-        }
-        this.#completedAST = {
-          ...this.#ast,
-          start: {
-            ...this.#ast.start,
-            row: narrowedRow,
-          },
-          orderBy: finalOrderBy,
-        };
-      } else {
-        this.#completedAST = {
-          ...this.#ast,
-          orderBy: addPrimaryKeys(
-            this.#schema.tables[this.#tableName],
-            this.#ast.orderBy,
-          ),
-        };
-      }
-    }
-    return this.#completedAST;
+    return this.#ast;
   }
 }
 
@@ -824,35 +767,6 @@ export class QueryImpl<
         ),
     );
   }
-}
-
-function addPrimaryKeys(
-  schema: TableSchema,
-  orderBy: Ordering | undefined,
-): Ordering {
-  orderBy = orderBy ?? [];
-  const {primaryKey} = schema;
-  const primaryKeysToAdd = new Set(primaryKey);
-
-  for (const [field] of orderBy) {
-    primaryKeysToAdd.delete(field);
-  }
-
-  if (primaryKeysToAdd.size === 0) {
-    return orderBy;
-  }
-
-  return [
-    ...orderBy,
-    ...[...primaryKeysToAdd].map(key => [key, 'asc'] as [string, 'asc']),
-  ];
-}
-
-function addPrimaryKeysToAst(schema: TableSchema, ast: AST): AST {
-  return {
-    ...ast,
-    orderBy: addPrimaryKeys(schema, ast.orderBy),
-  };
 }
 
 function arrayViewFactory<
