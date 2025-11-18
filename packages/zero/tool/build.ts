@@ -1,7 +1,7 @@
 // Build script for @rocicorp/zero package
 import {spawn} from 'node:child_process';
 import {existsSync} from 'node:fs';
-import {chmod, copyFile, mkdir, readFile, rmdir} from 'node:fs/promises';
+import {chmod, copyFile, mkdir, readFile, rm} from 'node:fs/promises';
 import {builtinModules} from 'node:module';
 import {basename, resolve} from 'node:path';
 import {type InlineConfig, build as viteBuild} from 'vite';
@@ -221,7 +221,7 @@ async function build() {
 
   // Clean output directory for normal builds (preserve for bundle size dashboard)
   if (!forBundleSizeDashboard) {
-    await rmdir(resolve('out'), {recursive: true});
+    await rm(resolve('out'), {recursive: true, force: true});
   }
 
   if (forBundleSizeDashboard) {
