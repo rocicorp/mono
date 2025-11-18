@@ -1,3 +1,5 @@
+import type {Counter, ObservableGauge} from '@opentelemetry/api';
+import {metrics} from '@opentelemetry/api';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Database, Statement} from '../db.ts';
 
@@ -6,6 +8,36 @@ export type CachedStatement = {
   sql: string;
   statement: Statement;
 };
+
+// OpenTelemetry Metrics
+// These metrics help observe cache behavior in production:
+// - hits/misses: understand cache effectiveness
+// - returns: track statement reuse patterns
+// - drops: monitor cache eviction
+// - size: observe current cache memory usage
+// - unique_queries: track query diversity
+const meter = metrics.getMeter('zqlite');
+const cacheHits: Counter = meter.createCounter('zqlite.statement_cache.hits', {
+  description: 'Number of statement cache hits',
+});
+const cacheMisses: Counter = meter.createCounter(
+  'zqlite.statement_cache.misses',
+  {
+    description: 'Number of statement cache misses',
+  },
+);
+const cacheReturns: Counter = meter.createCounter(
+  'zqlite.statement_cache.returns',
+  {
+    description: 'Number of statements returned to cache',
+  },
+);
+const cacheDrops: Counter = meter.createCounter(
+  'zqlite.statement_cache.drops',
+  {
+    description: 'Number of statements dropped from cache',
+  },
+);
 /**
  * SQLite statement preparation isn't cheap as it involves evaluating possible
  * query plans and picking the best one (in addition to parsing the SQL).
@@ -35,6 +67,8 @@ export class StatementCache {
   #cache: CachedStatementMap = new Map<string, Statement[]>();
   readonly #db: Database;
   #size: number = 0;
+  readonly #sizeGauge: ObservableGauge;
+  readonly #uniqueQueriesGauge: ObservableGauge;
 
   /**
    * The db connection used to prepare the statement.
@@ -43,6 +77,26 @@ export class StatementCache {
    */
   constructor(db: Database) {
     this.#db = db;
+    // Create observable gauges for this specific cache instance
+    this.#sizeGauge = meter.createObservableGauge(
+      'zqlite.statement_cache.size',
+      {
+        description: 'Current number of cached statements',
+      },
+    );
+    this.#sizeGauge.addCallback(result => {
+      result.observe(this.#size);
+    });
+
+    this.#uniqueQueriesGauge = meter.createObservableGauge(
+      'zqlite.statement_cache.unique_queries',
+      {
+        description: 'Number of unique SQL queries in cache',
+      },
+    );
+    this.#uniqueQueriesGauge.addCallback(result => {
+      result.observe(this.#cache.size);
+    });
   }
 
   // the number of statements in the cache
@@ -66,6 +120,7 @@ export class StatementCache {
         break;
       }
     }
+    cacheDrops.add(n);
   }
 
   /**
@@ -90,8 +145,10 @@ export class StatementCache {
       if (statements.length === 0) {
         this.#cache.delete(sql);
       }
+      cacheHits.add(1);
       return {sql, statement};
     }
+    cacheMisses.add(1);
     const statement = this.#db.prepare(sql);
     return {sql, statement};
   }
@@ -122,6 +179,7 @@ export class StatementCache {
     if (statements) {
       statements.push(statement.statement);
       this.#size++;
+      cacheReturns.add(1);
     }
   }
 }
