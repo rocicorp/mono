@@ -52,9 +52,8 @@ export abstract class QueryDelegateBase implements QueryDelegate {
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
-    TContext,
   >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
+    query: Query<TSchema, TTable, TReturn>,
     factory?: undefined,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
@@ -63,11 +62,10 @@ export abstract class QueryDelegateBase implements QueryDelegate {
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
-    TContext,
     T,
   >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
+    query: Query<TSchema, TTable, TReturn>,
+    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
 
@@ -78,11 +76,10 @@ export abstract class QueryDelegateBase implements QueryDelegate {
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
-    TContext,
     T,
   >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
+    query: Query<TSchema, TTable, TReturn>,
+    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
 
@@ -90,11 +87,10 @@ export abstract class QueryDelegateBase implements QueryDelegate {
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
-    TContext,
     T,
   >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
+    query: Query<TSchema, TTable, TReturn>,
+    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
     options?: MaterializeOptions,
   ): T {
     return materializeImpl(query, this, factory, options);
@@ -108,9 +104,8 @@ export abstract class QueryDelegateBase implements QueryDelegate {
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
-    TContext,
   >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
+    query: Query<TSchema, TTable, TReturn>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return runImpl(query, this, options);
@@ -124,9 +119,8 @@ export abstract class QueryDelegateBase implements QueryDelegate {
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
-    TContext,
   >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
+    query: Query<TSchema, TTable, TReturn>,
     options?: PreloadOptions,
   ): {
     cleanup: () => void;

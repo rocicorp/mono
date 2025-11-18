@@ -21,7 +21,6 @@ export interface QueryInternals<
   TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
-  TContext,
 > {
   readonly [queryInternalsTag]: true;
 
@@ -67,7 +66,7 @@ export interface QueryInternals<
   nameAndArgs(
     name: string,
     args: ReadonlyArray<ReadonlyJSONValue>,
-  ): Query<TSchema, TTable, TReturn, TContext>;
+  ): Query<TSchema, TTable, TReturn>;
 }
 
 /**
@@ -82,25 +81,23 @@ export function asQueryInternals<
   TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
-  TContext,
 >(
-  query: Query<TSchema, TTable, TReturn, TContext>,
-): QueryInternals<TSchema, TTable, TReturn, TContext> {
+  query: Query<TSchema, TTable, TReturn>,
+): QueryInternals<TSchema, TTable, TReturn> {
   assert(queryInternalsTag in query);
-  return query as unknown as QueryInternals<TSchema, TTable, TReturn, TContext>;
+  return query as unknown as QueryInternals<TSchema, TTable, TReturn>;
 }
 
 export function asQuery<
   TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
-  TContext,
 >(
-  queryInternals: QueryInternals<TSchema, TTable, TReturn, TContext>,
-): Query<TSchema, TTable, TReturn, TContext> {
+  queryInternals: QueryInternals<TSchema, TTable, TReturn>,
+): Query<TSchema, TTable, TReturn> {
   assert(queryInternalsTag in queryInternals);
-  return queryInternals as unknown as Query<TSchema, TTable, TReturn, TContext>;
+  return queryInternals as unknown as Query<TSchema, TTable, TReturn>;
 }
 
 // oxlint-disable-next-line no-explicit-any
-export type AnyQueryInternals = QueryInternals<ZeroSchema, string, any, any>;
+export type AnyQueryInternals = QueryInternals<ZeroSchema, string, any>;

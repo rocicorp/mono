@@ -165,8 +165,8 @@ export class TransactionImpl<TSchema extends Schema, TContext>
     return (this.#repTx as WriteTransactionImpl)[zeroData]?.token;
   }
 
-  run<TTable extends keyof TSchema['tables'] & string, TReturn, TContext>(
-    query: Query<TSchema, TTable, TReturn, TContext>,
+  run<TTable extends keyof TSchema['tables'] & string, TReturn>(
+    query: Query<TSchema, TTable, TReturn>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return this.#zeroContext.run(query, options);

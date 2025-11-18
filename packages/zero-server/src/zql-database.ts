@@ -117,8 +117,8 @@ export class ZQLDatabase<S extends Schema, WrappedTransaction, TContext>
     );
   }
 
-  run<TTable extends keyof S['tables'] & string, TReturn, TContext>(
-    query: Query<S, TTable, TReturn, TContext>,
+  run<TTable extends keyof S['tables'] & string, TReturn>(
+    query: Query<S, TTable, TReturn>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return this.transaction(tx => tx.run(query, options));

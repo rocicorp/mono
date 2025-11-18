@@ -34,7 +34,7 @@ export interface TransactionBase<S extends Schema, TContext> {
   readonly query: SchemaQuery<S, TContext>;
 
   run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn, TContext>,
+    query: Query<S, TTable, TReturn>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>>;
 }
@@ -127,13 +127,8 @@ export type TableCRUD<S extends TableSchema> = {
   delete: (id: DeleteID<S>) => Promise<void>;
 };
 
-export type SchemaQuery<S extends Schema, TContext> = {
-  readonly [K in keyof S['tables'] & string]: Query<
-    S,
-    K,
-    PullRow<K, S>,
-    TContext
-  >;
+export type SchemaQuery<S extends Schema, _TContext> = {
+  readonly [K in keyof S['tables'] & string]: Query<S, K, PullRow<K, S>>;
 };
 
 export type DeleteID<S extends TableSchema> = Expand<PrimaryKeyFields<S>>;

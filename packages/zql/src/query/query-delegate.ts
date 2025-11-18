@@ -81,9 +81,8 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
-    TContext,
   >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
+    query: Query<TSchema, TTable, TReturn>,
     factory?: undefined,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
@@ -92,11 +91,10 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
-    TContext,
     T,
   >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
+    query: Query<TSchema, TTable, TReturn>,
+    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
 
@@ -107,11 +105,10 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
-    TContext,
     T,
   >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
+    query: Query<TSchema, TTable, TReturn>,
+    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
 
@@ -122,9 +119,8 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
-    TContext,
   >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
+    query: Query<TSchema, TTable, TReturn>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>>;
 
@@ -135,9 +131,8 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
-    TContext,
   >(
-    query: Query<TSchema, TTable, TReturn, TContext>,
+    query: Query<TSchema, TTable, TReturn>,
     options?: PreloadOptions,
   ): {
     cleanup: () => void;

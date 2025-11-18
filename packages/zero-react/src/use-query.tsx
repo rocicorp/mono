@@ -63,9 +63,8 @@ export function useQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
-  TContext,
 >(
-  query: Query<TSchema, TTable, TReturn, TContext>,
+  query: Query<TSchema, TTable, TReturn>,
   options?: UseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -89,9 +88,8 @@ export function useSuspenseQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
-  TContext,
 >(
-  query: Query<TSchema, TTable, TReturn, TContext>,
+  query: Query<TSchema, TTable, TReturn>,
   options?: UseSuspenseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -307,7 +305,7 @@ export class ViewStore {
     TContext,
   >(
     zero: Zero<TSchema, MD, TContext>,
-    query: Query<TSchema, TTable, TReturn, TContext>,
+    query: Query<TSchema, TTable, TReturn>,
     enabled: boolean,
     ttl: TTL,
   ): {
@@ -388,7 +386,7 @@ class ViewWrapper<
 > {
   #view: TypedView<HumanReadable<TReturn>> | undefined;
   readonly #onDematerialized;
-  readonly #query: Query<TSchema, TTable, TReturn, TContext>;
+  readonly #query: Query<TSchema, TTable, TReturn>;
   readonly #format: Format;
   #snapshot: QueryResult<TReturn>;
   #reactInternals: Set<() => void>;
@@ -397,11 +395,11 @@ class ViewWrapper<
   #completeResolver = resolver<void>();
   #nonEmpty = false;
   #nonEmptyResolver = resolver<void>();
-  readonly #bindings: BindingsForZero<TSchema, TContext>;
+  readonly #bindings: BindingsForZero<TSchema>;
 
   constructor(
-    bindings: BindingsForZero<TSchema, TContext>,
-    query: Query<TSchema, TTable, TReturn, TContext>,
+    bindings: BindingsForZero<TSchema>,
+    query: Query<TSchema, TTable, TReturn>,
     format: Format,
     ttl: TTL,
     onDematerialized: (

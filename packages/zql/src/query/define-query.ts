@@ -22,25 +22,22 @@ export type DefineQueryFunc<
   TReturn,
   TContext,
   TArgs,
-> = (options: {
-  args: TArgs;
-  ctx: TContext;
-}) => Query<TSchema, TTable, TReturn, TContext>;
+> = (options: {args: TArgs; ctx: TContext}) => Query<TSchema, TTable, TReturn>;
 
 export type NamedQueryFunction<
   TName extends string,
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
-  TContext,
+  _TContext,
   TOutput extends ReadonlyJSONValue | undefined,
   TInput extends TOutput,
 > = ([TOutput] extends [undefined]
-  ? (() => Query<TSchema, TTable, TReturn, TContext>) &
-      ((args: undefined) => Query<TSchema, TTable, TReturn, TContext>)
+  ? (() => Query<TSchema, TTable, TReturn>) &
+      ((args: undefined) => Query<TSchema, TTable, TReturn>)
   : undefined extends TOutput
-    ? (args?: TInput) => Query<TSchema, TTable, TReturn, TContext>
-    : (args: TInput) => Query<TSchema, TTable, TReturn, TContext>) & {
+    ? (args?: TInput) => Query<TSchema, TTable, TReturn>
+    : (args: TInput) => Query<TSchema, TTable, TReturn>) & {
   queryName: TName;
 };
 

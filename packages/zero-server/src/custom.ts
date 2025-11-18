@@ -85,7 +85,7 @@ export class TransactionImpl<
   }
 
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TSchema, TTable, TReturn, TContext>,
+    query: Query<TSchema, TTable, TReturn>,
     _options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     const queryInternals = asQueryInternals(query);

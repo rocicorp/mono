@@ -193,12 +193,12 @@ export type MakeCustomQueryInterfaces<
   readonly [NamespaceOrName in keyof QD]: QD[NamespaceOrName] extends (options: {
     ctx: TContext;
     args: infer Args;
-  }) => Query<S, infer TTable, infer TReturn, TContext>
+  }) => Query<S, infer TTable, infer TReturn>
     ? [Args] extends [undefined]
-      ? () => Query<S, TTable & string, TReturn, TContext>
+      ? () => Query<S, TTable & string, TReturn>
       : undefined extends Args
-        ? (args?: Args) => Query<S, TTable & string, TReturn, TContext>
-        : (args: Args) => Query<S, TTable & string, TReturn, TContext>
+        ? (args?: Args) => Query<S, TTable & string, TReturn>
+        : (args: Args) => Query<S, TTable & string, TReturn>
     : {
         readonly [P in keyof QD[NamespaceOrName]]: MakeCustomQueryInterface<
           S,
@@ -215,12 +215,12 @@ export type MakeCustomQueryInterface<
 > = F extends (options: {
   ctx: TContext;
   args: infer Args;
-}) => Query<TSchema, infer TTable, infer TReturn, TContext>
+}) => Query<TSchema, infer TTable, infer TReturn>
   ? [Args] extends [undefined]
-    ? () => Query<TSchema, TTable & string, TReturn, TContext>
+    ? () => Query<TSchema, TTable & string, TReturn>
     : undefined extends Args
-      ? (args?: Args) => Query<TSchema, TTable & string, TReturn, TContext>
-      : (args: Args) => Query<TSchema, TTable & string, TReturn, TContext>
+      ? (args?: Args) => Query<TSchema, TTable & string, TReturn>
+      : (args: Args) => Query<TSchema, TTable & string, TReturn>
   : never;
 
 declare const TESTING: boolean;
@@ -939,7 +939,7 @@ export class Zero<
   preload<
     TTable extends keyof S['tables'] & string,
     TReturn extends PullRow<TTable, S>,
-  >(query: Query<S, TTable, TReturn, TContext>, options?: PreloadOptions) {
+  >(query: Query<S, TTable, TReturn>, options?: PreloadOptions) {
     return this.#zeroContext.preload(query, options);
   }
 
@@ -964,7 +964,7 @@ export class Zero<
    * ```
    */
   run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn, TContext>,
+    query: Query<S, TTable, TReturn>,
     runOptions?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return this.#zeroContext.run(query, runOptions);
@@ -999,19 +999,17 @@ export class Zero<
    * ```
    */
   materialize<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn, TContext>,
+    query: Query<S, TTable, TReturn>,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn, TContext>,
-    factory: ViewFactory<S, TTable, TReturn, TContext, T>,
+    query: Query<S, TTable, TReturn>,
+    factory: ViewFactory<S, TTable, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn, TContext>,
-    factoryOrOptions?:
-      | ViewFactory<S, TTable, TReturn, TContext, T>
-      | MaterializeOptions,
+    query: Query<S, TTable, TReturn>,
+    factoryOrOptions?: ViewFactory<S, TTable, TReturn, T> | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
     let factory;

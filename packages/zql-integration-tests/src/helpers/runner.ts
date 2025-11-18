@@ -1053,7 +1053,7 @@ class TestPGQueryDelegate extends QueryDelegateBase {
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
   >(
-    query: Query<TSchema, TTable, TReturn, unknown>,
+    query: Query<TSchema, TTable, TReturn>,
     _options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     const queryInternals = asQueryInternals(query);
