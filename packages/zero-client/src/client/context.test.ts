@@ -74,10 +74,10 @@ test('getSource', () => {
           "type": "string",
         },
       },
+      "name": "users",
       "primaryKey": [
         "id",
       ],
-      "name": "users",
     }
   `);
 
@@ -102,11 +102,11 @@ test('getSource', () => {
           "type": "string",
         },
       },
+      "name": "userStates",
       "primaryKey": [
         "userID",
         "stateCode",
       ],
-      "name": "userStates",
     }
   `);
 });

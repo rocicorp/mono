@@ -1042,10 +1042,9 @@ describe('initConnection', () => {
         desiredQueriesPatch: [
           {
             ast: {
-              orderBy: [['id', 'asc']],
               table: 'e',
             },
-            hash: '29j3x0l4bxthp',
+            hash: '1fr5t3cw7vi5',
             op: 'put',
             ttl: 300000,
           },
@@ -1170,10 +1169,9 @@ describe('initConnection', () => {
         desiredQueriesPatch: [
           {
             ast: {
-              orderBy: [['id', 'asc']],
               table: 'e',
             },
-            hash: '29j3x0l4bxthp',
+            hash: '1fr5t3cw7vi5',
             op: 'put',
             ttl: 300000,
           },
@@ -1206,45 +1204,39 @@ describe('initConnection', () => {
     mockSocket.onUpstream(msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
-              [
-                "initConnection",
-                {
-                  "clientSchema": {
-                    "tables": {
-                      "e": {
-                        "columns": {
-                          "id": {
-                            "type": "string",
-                          },
-                          "value": {
-                            "type": "string",
-                          },
-                        },
-                        "primaryKey": [
-                          "id",
-                        ],
+          [
+            "initConnection",
+            {
+              "clientSchema": {
+                "tables": {
+                  "e": {
+                    "columns": {
+                      "id": {
+                        "type": "string",
+                      },
+                      "value": {
+                        "type": "string",
                       },
                     },
+                    "primaryKey": [
+                      "id",
+                    ],
                   },
-                  "desiredQueriesPatch": [
-                    {
-                      "ast": {
-                        "orderBy": [
-                          [
-                            "id",
-                            "asc",
-                          ],
-                        ],
-                        "table": "e",
-                      },
-                      "hash": "29j3x0l4bxthp",
-                      "op": "put",
-                      "ttl": 300000,
-                    },
-                  ],
                 },
-              ]
-            `);
+              },
+              "desiredQueriesPatch": [
+                {
+                  "ast": {
+                    "table": "e",
+                  },
+                  "hash": "1fr5t3cw7vi5",
+                  "op": "put",
+                  "ttl": 300000,
+                },
+              ],
+            },
+          ]
+        `);
 
       expect(r.connectionStatus).toEqual(ConnectionStatus.Connecting);
     });
@@ -1278,50 +1270,44 @@ describe('initConnection', () => {
     mockSocket.onUpstream(msg => {
       expect(valita.parse(JSON.parse(msg), initConnectionMessageSchema))
         .toMatchInlineSnapshot(`
-                [
-                  "initConnection",
-                  {
-                    "clientSchema": {
-                      "tables": {
-                        "e": {
-                          "columns": {
-                            "id": {
-                              "type": "string",
-                            },
-                            "value": {
-                              "type": "string",
-                            },
-                          },
-                          "primaryKey": [
-                            "id",
-                          ],
-                        },
+          [
+            "initConnection",
+            {
+              "clientSchema": {
+                "tables": {
+                  "e": {
+                    "columns": {
+                      "id": {
+                        "type": "string",
+                      },
+                      "value": {
+                        "type": "string",
                       },
                     },
-                    "deleted": {
-                      "clientIDs": [
-                        "a",
-                      ],
-                    },
-                    "desiredQueriesPatch": [
-                      {
-                        "ast": {
-                          "orderBy": [
-                            [
-                              "id",
-                              "asc",
-                            ],
-                          ],
-                          "table": "e",
-                        },
-                        "hash": "29j3x0l4bxthp",
-                        "op": "put",
-                        "ttl": 300000,
-                      },
+                    "primaryKey": [
+                      "id",
                     ],
                   },
-                ]
-              `);
+                },
+              },
+              "deleted": {
+                "clientIDs": [
+                  "a",
+                ],
+              },
+              "desiredQueriesPatch": [
+                {
+                  "ast": {
+                    "table": "e",
+                  },
+                  "hash": "1fr5t3cw7vi5",
+                  "op": "put",
+                  "ttl": 300000,
+                },
+              ],
+            },
+          ]
+        `);
 
       expect(r.connectionStatus).toEqual(ConnectionStatus.Connecting);
     });
@@ -1358,9 +1344,8 @@ describe('initConnection', () => {
             {
               ast: {
                 table: 'e',
-                orderBy: [['id', 'asc']],
               } satisfies AST,
-              hash: '29j3x0l4bxthp',
+              hash: '1fr5t3cw7vi5',
               op: 'put',
               ttl: 300000,
             },
@@ -1456,7 +1441,7 @@ describe('initConnection', () => {
         {
           desiredQueriesPatch: [
             {
-              hash: '29j3x0l4bxthp',
+              hash: '1fr5t3cw7vi5',
               op: 'del',
             },
           ],
