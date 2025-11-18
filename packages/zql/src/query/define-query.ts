@@ -23,35 +23,6 @@ export type DefineQueryFunc<
   TArgs,
 > = (options: {args: TArgs; ctx: TContext}) => Query<TSchema, TTable, TReturn>;
 
-export type NamedQueryFunction<
-  TName extends string,
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
-  _TContext,
-  TOutput extends ReadonlyJSONValue | undefined,
-  TInput extends TOutput,
-> = ([TOutput] extends [undefined]
-  ? (() => Query<TSchema, TTable, TReturn>) &
-      ((args: undefined) => Query<TSchema, TTable, TReturn>)
-  : undefined extends TOutput
-    ? (args?: TInput) => Query<TSchema, TTable, TReturn>
-    : (args: TInput) => Query<TSchema, TTable, TReturn>) & {
-  queryName: TName;
-};
-
-export type AnyNamedQueryFunction = NamedQueryFunction<
-  string,
-  Schema,
-  string,
-  // oxlint-disable-next-line no-explicit-any
-  any,
-  // oxlint-disable-next-line no-explicit-any
-  any,
-  ReadonlyJSONValue | undefined,
-  ReadonlyJSONValue | undefined
->;
-
 export type DefinedQueryFunction<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,

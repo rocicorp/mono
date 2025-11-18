@@ -121,11 +121,9 @@ export {
   defineQueryWithContextType,
 } from '../../zql/src/query/define-query.ts';
 export type {
-  AnyNamedQueryFunction,
   DefinedQueryFunction,
   DefineQueryFunc,
   DefineQueryOptions,
-  NamedQueryFunction,
 } from '../../zql/src/query/define-query.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {

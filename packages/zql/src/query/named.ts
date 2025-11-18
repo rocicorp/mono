@@ -1,7 +1,6 @@
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {SchemaQuery} from '../mutate/custom.ts';
-import type {NamedQueryFunction} from './define-query.ts';
 import {QueryParseError} from './error.ts';
 import {newQuery} from './query-impl.ts';
 import {asQueryInternals} from './query-internals.ts';
@@ -98,35 +97,7 @@ function syncedQueryImpl<
 // oxlint-disable-next-line no-explicit-any
 type AnySyncedQuery = SyncedQuery<any, any, any, any, any>;
 
-type AnyNamedQueryFunction = NamedQueryFunction<
-  // oxlint-disable-next-line no-explicit-any
-  any,
-  // oxlint-disable-next-line no-explicit-any
-  any,
-  // oxlint-disable-next-line no-explicit-any
-  any,
-  // oxlint-disable-next-line no-explicit-any
-  any,
-  // oxlint-disable-next-line no-explicit-any
-  any,
-  // oxlint-disable-next-line no-explicit-any
-  any,
-  // oxlint-disable-next-line no-explicit-any
-  any
->;
-
 export function withValidation<F extends AnySyncedQuery>(
-  fn: F,
-  // oxlint-disable-next-line no-explicit-any
-): F extends SyncedQuery<infer N, infer C, any, infer A, infer R>
-  ? SyncedQuery<N, C, true, A, R>
-  : never;
-
-export function withValidation<F extends AnyNamedQueryFunction>(fn: F): F;
-
-export function withValidation<
-  F extends AnySyncedQuery | AnyNamedQueryFunction,
->(
   fn: F,
   // oxlint-disable-next-line no-explicit-any
 ): F extends SyncedQuery<infer N, infer C, any, infer A, infer R>
@@ -156,7 +127,8 @@ export function withValidation<
     return ret;
   }
 
-  // Otherwise this is a NamedQueryFunction which always validates.
+  // If we don't have a parse function, return the function as-is
+  // (this shouldn't happen in practice)
   // oxlint-disable-next-line no-explicit-any
   return fn as any;
 }
