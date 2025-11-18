@@ -1,4 +1,5 @@
 import type * as v from '../../../shared/src/valita.ts';
+import {removeFunctions} from '../../../shared/src/remove-functions.ts';
 import type {Condition} from '../../../zero-protocol/src/ast.ts';
 import type {
   attemptStartEventJSONSchema,
@@ -124,11 +125,6 @@ export type PlanDebugEvent =
   | BestPlanSelectedEvent
   | NodeCostEvent
   | NodeConstraintEvent;
-
-/**
- * JSON-serializable version of CostEstimate (omits fanout function).
- */
-type CostEstimateJSON = Omit<CostEstimate, 'fanout'>;
 
 /**
  * Interface for objects that receive debug events during planning.
@@ -345,78 +341,11 @@ function formatAttemptSummary(
 }
 
 /**
- * Convert a CostEstimate to JSON-serializable format (omits fanout function).
- */
-function serializeCostEstimate(cost: CostEstimate): CostEstimateJSON {
-  const {fanout: _, ...rest} = cost;
-  return rest;
-}
-
-/**
  * Serialize a single debug event to JSON-compatible format.
+ * Removes function properties and other non-serializable values (Maps, Sets).
  */
 function serializeEvent(event: PlanDebugEvent): PlanDebugEventJSON {
-  switch (event.type) {
-    case 'attempt-start':
-    case 'connection-selected':
-    case 'plan-failed':
-    case 'best-plan-selected':
-    case 'node-constraint':
-      return event;
-
-    case 'connection-costs':
-      return {
-        type: 'connection-costs',
-        attemptNumber: event.attemptNumber,
-        costs: event.costs.map(c => ({
-          connection: c.connection,
-          cost: c.cost,
-          costEstimate: serializeCostEstimate(c.costEstimate),
-          pinned: c.pinned,
-          constraints: c.constraints,
-          constraintCosts: Object.fromEntries(
-            Object.entries(c.constraintCosts).map(([k, v]) => [
-              k,
-              serializeCostEstimate(v),
-            ]),
-          ),
-        })),
-      };
-
-    case 'constraints-propagated':
-      return {
-        type: 'constraints-propagated',
-        attemptNumber: event.attemptNumber,
-        connectionConstraints: event.connectionConstraints.map(cc => ({
-          connection: cc.connection,
-          constraints: cc.constraints,
-          constraintCosts: Object.fromEntries(
-            Object.entries(cc.constraintCosts).map(([k, v]) => [
-              k,
-              serializeCostEstimate(v),
-            ]),
-          ),
-        })),
-      };
-
-    case 'plan-complete': {
-      const {planSnapshot: _, ...rest} = event;
-      return rest;
-    }
-
-    case 'node-cost':
-      return {
-        type: 'node-cost',
-        attemptNumber: event.attemptNumber,
-        nodeType: event.nodeType,
-        node: event.node,
-        branchPattern: event.branchPattern,
-        downstreamChildSelectivity: event.downstreamChildSelectivity,
-        costEstimate: serializeCostEstimate(event.costEstimate),
-        filters: event.filters,
-        joinType: event.joinType,
-      };
-  }
+  return removeFunctions(event) as PlanDebugEventJSON;
 }
 
 /**
