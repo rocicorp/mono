@@ -7,7 +7,7 @@ import type {PlannerConstraint} from '../../zql/src/planner/planner-constraint.t
 import SQLite3Database from '@rocicorp/zero-sqlite3';
 import {buildSelectQuery, type NoSubqueryCondition} from './query-builder.ts';
 import type {Database, Statement} from './db.ts';
-import {compile} from './internal/sql.ts';
+import {compileInline} from './internal/sql-inline.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import type {SchemaValue} from '../../zero-types/src/schema-value.ts';
@@ -67,7 +67,12 @@ export function createSQLiteCostModel(
       undefined, // start is undefined here
     );
 
-    const sql = compile(query);
+    // Use compileInline to inline actual values into the SQL for cost estimation.
+    // This allows SQLite's query planner to see real values and make better decisions
+    // about index usage and query plans. This is safe here because it's only used for
+    // cost estimation, not for executing user-facing queries (which use parameterized
+    // queries via the standard compile() function).
+    const sql = compileInline(query);
 
     // Prepare statement to get scanstatus information
     const stmt = db.prepare(sql);
