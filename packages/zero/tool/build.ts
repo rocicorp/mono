@@ -1,7 +1,7 @@
 // Build script for @rocicorp/zero package
 import {spawn} from 'node:child_process';
 import {existsSync} from 'node:fs';
-import {chmod, copyFile, mkdir, readFile} from 'node:fs/promises';
+import {chmod, copyFile, mkdir, readFile, rm} from 'node:fs/promises';
 import {builtinModules} from 'node:module';
 import {basename, resolve} from 'node:path';
 import {type InlineConfig, build as viteBuild} from 'vite';
@@ -113,8 +113,7 @@ const baseConfig: InlineConfig = {
   },
   build: {
     outDir: 'out',
-    // Clean output directory (but not for bundle sizes build which adds to existing out/)
-    emptyOutDir: !forBundleSizeDashboard,
+    emptyOutDir: false,
     minify: forBundleSizeDashboard,
     sourcemap: true,
     target: 'es2022',
@@ -219,6 +218,11 @@ function runViteBuild(config: InlineConfig, label: string) {
 async function build() {
   // Run vite build and tsc in parallel
   const startTime = performance.now();
+
+  // Clean output directory for normal builds (preserve for bundle size dashboard)
+  if (!forBundleSizeDashboard) {
+    await rm(resolve('out'), {recursive: true, force: true});
+  }
 
   if (forBundleSizeDashboard) {
     // For bundle size dashboard, build a single minified bundle
