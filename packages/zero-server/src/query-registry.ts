@@ -1,9 +1,12 @@
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import {
   isQueryDefinition,
   type QueryDefinition,
 } from '../../zql/src/query/define-query.ts';
 import type {QueryDefinitions} from '../../zql/src/query/query-definitions.ts';
+import type {AnyQuery} from '../../zql/src/query/query.ts';
+import {validateInput} from './validate-input.ts';
 
 // oxlint-disable no-explicit-any
 type AnyQueryDefinition<S extends Schema> = QueryDefinition<
@@ -27,12 +30,24 @@ export class QueryRegistry<
     this.#map = buildMap(queries);
   }
 
-  mustGet(name: string): AnyQueryDefinition<S> {
-    const current = this.#map.get(name);
-    if (!current) {
+  mustGet<Context>(
+    name: string,
+    context?: Context,
+  ): (args?: ReadonlyJSONValue) => AnyQuery {
+    const f = this.#map.get(name);
+    if (!f) {
       throw new Error(`Cannot find query '${name}'`);
     }
-    return current;
+
+    // Validate args if a validator is present, otherwise return args as is.
+    const {validator} = f;
+    const validate = validator
+      ? (args: ReadonlyJSONValue | undefined) =>
+          validateInput(name, args, validator, 'query')
+      : (args: ReadonlyJSONValue | undefined) => args;
+
+    return (args?: ReadonlyJSONValue) =>
+      f({args: validate(args), ctx: context});
   }
 }
 

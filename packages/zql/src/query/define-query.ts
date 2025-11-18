@@ -4,7 +4,6 @@ import {must} from '../../../shared/src/must.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {asQueryInternals} from './query-internals.ts';
 import type {AnyQuery, Query} from './query.ts';
-import {validateInput} from './validate-input.ts';
 
 const defineQueryTag = Symbol();
 
@@ -124,29 +123,24 @@ export function defineQuery<
 }
 
 /**
- * Wraps a defined query function with a query name, creating a function that
- * returns a Query that has bound the name and args to the instance.
+ * Wraps a query definition with a query name and context, creating a function that
+ * returns a Query with the name and args bound to the instance.
  *
  * @param queryName - The name to assign to the query
- * @param definedQueryFunc - The defined query function to wrap
+ * @param f - The query definition to wrap
+ * @param contextHolder - An object containing the context to pass to the query
  * @returns A function that takes args and returns a Query
  */
 export function wrapCustomQuery<TArgs, Context>(
   queryName: string,
   // oxlint-disable-next-line no-explicit-any
-  queryDefinition: QueryDefinition<any, any, any, any, any, any>,
+  f: QueryDefinition<any, any, any, any, any, any>,
   contextHolder: {context: Context},
 ): (args: TArgs) => AnyQuery {
-  const {validator} = queryDefinition;
   return (args?: TArgs) => {
-    // The args that we send to the server is the args that the user passed in.
-    // This is what gets fed into the validator.
-    let runtimeArgs = args;
-    if (validator) {
-      runtimeArgs = validateInput(queryName, args, validator, 'query');
-    }
-    const q = queryDefinition({
-      args: runtimeArgs,
+    // Pass args directly without validation - validation happens server-side
+    const q = f({
+      args,
       ctx: contextHolder.context,
     });
     return asQueryInternals(q).nameAndArgs(

@@ -221,8 +221,8 @@ async function getQueriesHandler(
     reply.send(
       await handleTransformRequest(
         (name: string, args: ReadonlyJSONValue | undefined) => {
-          const query = queryRegistry.mustGet(name);
-          return query({args, ctx: authData});
+          const query = queryRegistry.mustGet(name, authData);
+          return query(args);
         },
         schema,
         request.body,
