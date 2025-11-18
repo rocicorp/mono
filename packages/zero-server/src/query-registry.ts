@@ -3,10 +3,10 @@ import type {Schema} from '../../zero-types/src/schema.ts';
 import {
   isQueryDefinition,
   type QueryDefinition,
+  wrapCustomQuery,
 } from '../../zql/src/query/define-query.ts';
 import type {QueryDefinitions} from '../../zql/src/query/query-definitions.ts';
 import type {AnyQuery} from '../../zql/src/query/query.ts';
-import {validateInput} from './validate-input.ts';
 
 // oxlint-disable no-explicit-any
 type AnyQueryDefinition<S extends Schema> = QueryDefinition<
@@ -39,15 +39,7 @@ export class QueryRegistry<
       throw new Error(`Cannot find query '${name}'`);
     }
 
-    // Validate args if a validator is present, otherwise return args as is.
-    const {validator} = f;
-    const validate = validator
-      ? (args: ReadonlyJSONValue | undefined) =>
-          validateInput(name, args, validator, 'query')
-      : (args: ReadonlyJSONValue | undefined) => args;
-
-    return (args?: ReadonlyJSONValue) =>
-      f({args: validate(args), ctx: context});
+    return wrapCustomQuery(name, f, {context});
   }
 }
 
