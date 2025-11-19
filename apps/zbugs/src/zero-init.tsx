@@ -40,7 +40,3 @@ export function ZeroInit({children}: {children: ReactNode}) {
 
   return <ZeroProvider {...props}>{children}</ZeroProvider>;
 }
-
-// const queries: QueryDefinitions<Schema, AuthData | undefined> = m.queries2;
-
-export type TEST = (typeof queries)['user'];
