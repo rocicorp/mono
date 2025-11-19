@@ -1,9 +1,5 @@
-import type {Zero} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
-import type {AuthData} from '../../shared/auth.ts';
-import type {Mutators} from '../../shared/mutators.ts';
-import type {Queries} from '../../shared/queries.ts';
-import {type Schema} from '../../shared/schema.ts';
+import type {ZeroBugs} from '../../shared/zero-type.ts';
 import {useZero} from './use-zero.ts';
 
 export function useUserPref(key: string): string | undefined {
@@ -13,7 +9,7 @@ export function useUserPref(key: string): string | undefined {
 }
 
 export async function setUserPref(
-  z: Zero<Schema, Mutators, AuthData | undefined, Queries>,
+  z: ZeroBugs,
   key: string,
   value: string,
   mutate = z.mutate,
@@ -27,7 +23,7 @@ export function useNumericPref(key: string, defaultValue: number): number {
 }
 
 export function setNumericPref(
-  z: Zero<Schema, Mutators, AuthData | undefined, Queries>,
+  z: ZeroBugs,
   key: string,
   value: number,
 ): Promise<void> {

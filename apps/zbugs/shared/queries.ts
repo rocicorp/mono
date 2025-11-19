@@ -2,7 +2,6 @@ import {
   defineQueryWithContextType,
   escapeLike,
   type Query,
-  type QueryDefinitions,
 } from '@rocicorp/zero';
 import * as z from 'zod/mini';
 import type {AuthData, Role} from './auth.ts';
@@ -198,6 +197,8 @@ export const queries = {
       .related('creator', creator => creator.one()),
   ),
 
+  // TODO(arv): Remove
+
   // The below queries are DEPRECATED
   issuePreload: defineQuery(idValidator, ({ctx: auth, args: userID}) =>
     applyIssuePermissions(
@@ -273,7 +274,7 @@ export const queries = {
       return q;
     },
   ),
-} as const satisfies QueryDefinitions<Schema, AuthData | undefined>;
+} as const;
 
 export type Queries = typeof queries;
 
