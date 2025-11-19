@@ -63,7 +63,9 @@ import {
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
+import {defineQuery} from '../../../zql/src/query/define-query.ts';
 import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
+import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
@@ -173,10 +175,12 @@ test('throws error when custom query key conflicts with table name', () => {
     zeroForTest({
       schema,
       queries: {
-        user: () => schema.tables.user,
+        user: defineQuery(() => undefined as unknown as AnyQuery),
       },
     }),
-  ).toThrow('Query namespace or key "user" conflicts with an existing table name.');
+  ).toThrow(
+    'Query namespace or key "user" conflicts with an existing table name.',
+  );
 
   // Test namespace that conflicts with table name
   expect(() =>
@@ -184,20 +188,22 @@ test('throws error when custom query key conflicts with table name', () => {
       schema,
       queries: {
         issue: {
-          all: () => schema.tables.issue,
+          all: defineQuery(() => undefined as unknown as AnyQuery),
         },
       },
     }),
-  ).toThrow('Query namespace or key "issue" conflicts with an existing table name.');
+  ).toThrow(
+    'Query namespace or key "issue" conflicts with an existing table name.',
+  );
 
   // Test that non-conflicting queries work fine
   expect(() =>
     zeroForTest({
       schema,
       queries: {
-        custom: () => schema.tables.user,
+        custom: defineQuery(() => undefined as unknown as AnyQuery),
         myNamespace: {
-          users: () => schema.tables.user,
+          users: defineQuery(() => undefined as unknown as AnyQuery),
         },
       },
     }),
