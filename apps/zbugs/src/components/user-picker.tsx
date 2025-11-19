@@ -5,8 +5,8 @@ import {toSorted} from '../../../../packages/shared/src/to-sorted.ts';
 import {type Schema} from '../../shared/schema.ts';
 import avatarIcon from '../assets/icons/avatar-default.svg';
 import {avatarURLWithSize} from '../avatar-url-with-size.ts';
+import {useZero} from '../hooks/use-zero.ts';
 import {Combobox} from './combobox.tsx';
-import {queries} from '../../shared/queries.ts';
 
 type Props = {
   projectName: string;
@@ -31,8 +31,9 @@ export function UserPicker({
   allowNone = true,
   filter = undefined,
 }: Props) {
+  const z = useZero();
   const [unsortedUsers] = useQuery(
-    queries.userPickerV2({
+    z.query.usersForProject({
       projectName,
       disabled: !!disabled,
       login: selected?.login,

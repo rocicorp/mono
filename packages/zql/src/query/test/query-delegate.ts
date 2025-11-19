@@ -29,9 +29,7 @@ type Entry = {
   args: readonly ReadonlyJSONValue[] | undefined;
   ttl: TTL;
 };
-export class QueryDelegateImpl<
-  TContext = undefined,
-> extends QueryDelegateBase<TContext> {
+export class QueryDelegateImpl<TContext = undefined> extends QueryDelegateBase {
   readonly #sources: Record<string, Source> = makeSources();
   readonly #commitListeners: Set<CommitListener> = new Set();
 
@@ -45,13 +43,12 @@ export class QueryDelegateImpl<
   constructor({
     sources = makeSources(),
     callGot = false,
-    context,
   }: {
     sources?: Record<string, Source> | undefined;
     callGot?: boolean | undefined;
     context?: TContext | undefined;
   } = {}) {
-    super(context as TContext);
+    super();
     this.#sources = sources;
     this.callGot = callGot;
   }

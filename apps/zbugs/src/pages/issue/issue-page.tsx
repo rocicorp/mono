@@ -24,7 +24,7 @@ import {must} from '../../../../../packages/shared/src/must.ts';
 import {difference} from '../../../../../packages/shared/src/set-utils.ts';
 import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
 import type {NotificationType} from '../../../shared/mutators.ts';
-import {queries, type ListContextParams} from '../../../shared/queries.ts';
+import {type ListContextParams} from '../../../shared/queries.ts';
 import {
   type CommentRow,
   type IssueRow,
@@ -71,8 +71,6 @@ import {CommentComposer} from './comment-composer.tsx';
 import {Comment} from './comment.tsx';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
 
-const {emojiChange, issueDetail, issueListV2} = queries;
-
 function softNavigate(path: string, state?: ZbugsHistoryState) {
   navigate(path, {state});
   requestAnimationFrame(() => {
@@ -101,7 +99,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   }, [listContext]);
 
   const [issue, issueResult] = useQuery(
-    issueDetail({idField, id, userID: z.userID}),
+    z.query.issueDetail({idField, id, userID: z.userID}),
     CACHE_NAV,
   );
   useEffect(() => {
@@ -218,7 +216,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   };
 
   const [[next]] = useQuery(
-    issueListV2({
+    z.query.issueListV2({
       listContext: listContextParams,
       userID: z.userID,
       limit: 1,
@@ -237,7 +235,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   });
 
   const [[prev]] = useQuery(
-    issueListV2({
+    z.query.issueListV2({
       listContext: listContextParams,
       userID: z.userID,
       limit: 1,
@@ -1007,9 +1005,12 @@ function useEmojiChangeListener(
   issue: Issue | undefined,
   cb: (added: readonly Emoji[], removed: readonly Emoji[]) => void,
 ) {
+  const z = useZero();
   const enabled = issue !== undefined;
   const issueID = issue?.id;
-  const [emojis, result] = useQuery(emojiChange(issueID ?? ''), {enabled});
+  const [emojis, result] = useQuery(z.query.emojiChange(issueID ?? ''), {
+    enabled,
+  });
 
   const lastEmojis = useRef<Map<string, Emoji> | undefined>();
 
@@ -1135,7 +1136,7 @@ export function IssueRedirect() {
   const {idField, id} = getId(params);
 
   const [issue, issueResult] = useQuery(
-    issueDetail({idField, id, userID: z.userID}),
+    z.query.issueDetail({idField, id, userID: z.userID}),
     CACHE_NAV,
   );
 

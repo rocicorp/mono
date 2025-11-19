@@ -16,7 +16,6 @@ import {useLocation, useParams, useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {
-  queries,
   type ListContext,
   type ListContextParams,
 } from '../../../shared/queries.ts';
@@ -112,7 +111,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     }
   }, [projectName]);
 
-  const [projects] = useQuery(queries.allProjects());
+  const [projects] = useQuery(z.query.allProjects());
   const project = projects.find(
     p => p.lowerCaseName === projectName.toLocaleLowerCase(),
   );
@@ -187,7 +186,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
       ? queryAnchor.anchor
       : TOP_ANCHOR;
 
-  const q = queries.issueListV2({
+  const q = z.query.issueListV2({
     listContext: listContextParams,
     userID: z.userID,
     limit: pageSize,

@@ -81,13 +81,16 @@ import {
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
+import {wrapCustomQuery} from '../../../zql/src/query/define-query.ts';
 import {
   type ClientMetricMap,
   type MetricMap,
   isClientMetric,
 } from '../../../zql/src/query/metrics-delegate.ts';
+import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
+import {queryInternalsTag} from '../../../zql/src/query/query-internals.ts';
 import {
   type HumanReadable,
   type MaterializeOptions,
@@ -179,9 +182,51 @@ export type MakeEntityQueriesFromSchema<S extends Schema> = {
   readonly [K in keyof S['tables'] & string]: Query<S, K>;
 };
 
+/**
+ * The shape exposed on the `Zero.query` instance with custom queries.
+ * Custom defined queries are added as properties that can be called to create query objects.
+ */
+export type MakeCustomQueryInterfaces<
+  S extends Schema,
+  QD extends QueryDefinitions<S, TContext>,
+  TContext,
+> = {
+  readonly [NamespaceOrName in keyof QD]: QD[NamespaceOrName] extends (options: {
+    ctx: TContext;
+    args: infer Args;
+  }) => Query<S, infer TTable, infer TReturn>
+    ? [Args] extends [undefined]
+      ? () => Query<S, TTable & string, TReturn>
+      : undefined extends Args
+        ? (args?: Args) => Query<S, TTable & string, TReturn>
+        : (args: Args) => Query<S, TTable & string, TReturn>
+    : {
+        readonly [P in keyof QD[NamespaceOrName]]: MakeCustomQueryInterface<
+          S,
+          QD[NamespaceOrName][P],
+          TContext
+        >;
+      };
+};
+
+export type MakeCustomQueryInterface<
+  TSchema extends Schema,
+  F,
+  TContext,
+> = F extends (options: {
+  ctx: TContext;
+  args: infer Args;
+}) => Query<TSchema, infer TTable, infer TReturn>
+  ? [Args] extends [undefined]
+    ? () => Query<TSchema, TTable & string, TReturn>
+    : undefined extends Args
+      ? (args?: Args) => Query<TSchema, TTable & string, TReturn>
+      : (args: Args) => Query<TSchema, TTable & string, TReturn>
+  : never;
+
 declare const TESTING: boolean;
 
-export type TestingContext<TContext> = {
+export type TestingContext = {
   puller: Puller;
   pusher: Pusher;
   setReload: (r: () => void) => void;
@@ -189,14 +234,14 @@ export type TestingContext<TContext> = {
   connectStart: () => number | undefined;
   socketResolver: () => Resolver<WebSocket>;
   connectionManager: () => ConnectionManager;
-  queryDelegate: () => QueryDelegate<TContext>;
+  queryDelegate: () => QueryDelegate;
 };
 
 export const exposedToTestingSymbol = Symbol();
 export const createLogOptionsSymbol = Symbol();
 
-interface TestZero<TContext> {
-  [exposedToTestingSymbol]?: TestingContext<TContext>;
+interface TestZero {
+  [exposedToTestingSymbol]?: TestingContext;
   [createLogOptionsSymbol]?: (options: {
     consoleLogLevel: LogLevel;
     server: string | null;
@@ -207,8 +252,9 @@ function asTestZero<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined,
   Context,
->(z: Zero<S, MD, Context>): TestZero<Context> {
-  return z as TestZero<Context>;
+  QD extends QueryDefinitions<S, Context> | undefined,
+>(z: Zero<S, MD, Context, QD>): TestZero {
+  return z as TestZero;
 }
 
 export const RUN_LOOP_INTERVAL_MS = 5_000;
@@ -304,10 +350,21 @@ const CLOSE_CODE_NORMAL = 1000;
 const CLOSE_CODE_GOING_AWAY = 1001;
 type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
 
+type MakeZeroQueryType<
+  QD extends QueryDefinitions<S, TContext> | undefined,
+  S extends Schema,
+  TContext,
+> =
+  QD extends QueryDefinitions<S, TContext>
+    ? MakeEntityQueriesFromSchema<S> &
+        MakeCustomQueryInterfaces<S, QD, TContext>
+    : MakeEntityQueriesFromSchema<S>;
+
 export class Zero<
   const S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
   TContext = unknown,
+  QD extends QueryDefinitions<S, TContext> | undefined = undefined,
 > {
   readonly version = version;
 
@@ -382,7 +439,7 @@ export class Zero<
    */
   pingTimeoutMs: number;
 
-  readonly #zeroContext: ZeroContext<TContext>;
+  readonly #zeroContext: ZeroContext;
 
   #pendingPullsByRequestID: Map<string, Resolver<PullResponseBody>> = new Map();
   #lastMutationIDReceived = 0;
@@ -414,9 +471,12 @@ export class Zero<
   // 2. client successfully connects
   #totalToConnectStart: number | undefined = undefined;
 
-  readonly #options: ZeroOptions<S, MD, TContext>;
+  readonly #options: ZeroOptions<S, MD, TContext, QD>;
 
-  readonly query: MakeEntityQueriesFromSchema<S>;
+  readonly query: QD extends QueryDefinitions<S, TContext>
+    ? MakeEntityQueriesFromSchema<S> &
+        MakeCustomQueryInterfaces<S, QD, TContext>
+    : MakeEntityQueriesFromSchema<S>;
 
   // TODO: Metrics needs to be rethought entirely as we're not going to
   // send metrics to customer server.
@@ -429,7 +489,7 @@ export class Zero<
   /**
    * Constructs a new Zero client.
    */
-  constructor(options: ZeroOptions<S, MD, TContext>) {
+  constructor(options: ZeroOptions<S, MD, TContext, QD>) {
     const {
       userID,
       storageKey,
@@ -443,7 +503,7 @@ export class Zero<
       batchViewUpdates = applyViewUpdates => applyViewUpdates(),
       maxRecentQueries = 0,
       slowMaterializeThreshold = 5_000,
-    } = options as ZeroOptions<S, MD>;
+    } = options;
     if (!userID) {
       throw new ClientError({
         kind: ClientErrorKind.Internal,
@@ -456,7 +516,7 @@ export class Zero<
       false /*options.enableAnalytics,*/, // Reenable analytics
     );
 
-    let {kvStore = 'idb'} = options as ZeroOptions<S, MD>;
+    let {kvStore = 'idb'} = options;
     if (kvStore === 'idb') {
       if (!getBrowserGlobal('indexedDB')) {
         // oxlint-disable-next-line no-console
@@ -597,7 +657,6 @@ export class Zero<
     this.#zeroContext = new ZeroContext(
       lc,
       this.#ivmMain,
-      this.#options.context as TContext,
       (ast, ttl, gotCallback) => {
         if (enableLegacyQueries) {
           return this.#queryManager.addLegacy(ast, ttl, gotCallback);
@@ -891,7 +950,7 @@ export class Zero<
   preload<
     TTable extends keyof S['tables'] & string,
     TReturn extends PullRow<TTable, S>,
-  >(query: Query<S, TTable, TReturn, TContext>, options?: PreloadOptions) {
+  >(query: Query<S, TTable, TReturn>, options?: PreloadOptions) {
     return this.#zeroContext.preload(query, options);
   }
 
@@ -916,7 +975,7 @@ export class Zero<
    * ```
    */
   run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn, TContext>,
+    query: Query<S, TTable, TReturn>,
     runOptions?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return this.#zeroContext.run(query, runOptions);
@@ -951,19 +1010,17 @@ export class Zero<
    * ```
    */
   materialize<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn, TContext>,
+    query: Query<S, TTable, TReturn>,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn, TContext>,
-    factory: ViewFactory<S, TTable, TReturn, TContext, T>,
+    query: Query<S, TTable, TReturn>,
+    factory: ViewFactory<S, TTable, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn, TContext>,
-    factoryOrOptions?:
-      | ViewFactory<S, TTable, TReturn, TContext, T>
-      | MaterializeOptions,
+    query: Query<S, TTable, TReturn>,
+    factoryOrOptions?: ViewFactory<S, TTable, TReturn, T> | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
     let factory;
@@ -2269,14 +2326,58 @@ export class Zero<
     // }
   }
 
-  #registerQueries(schema: Schema): MakeEntityQueriesFromSchema<S> {
-    const rv = {} as Record<string, Query<Schema, string>>;
-    // Not using parse yet
+  #registerQueries(schema: Schema): MakeZeroQueryType<QD, S, TContext> {
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    const rv = {} as Record<string, any>;
+
+    // Register entity queries for each table
     for (const name of Object.keys(schema.tables)) {
       rv[name] = newQuery(schema, name);
     }
 
-    return rv as MakeEntityQueriesFromSchema<S>;
+    // Register custom queries if provided
+    if (this.#options.queries) {
+      for (const [namespaceOrKey, queriesOrQuery] of Object.entries(
+        this.#options.queries,
+      )) {
+        if (typeof queriesOrQuery === 'function') {
+          // Single query function - wrap it with the name
+          if (rv[namespaceOrKey] !== undefined) {
+            throw new Error(
+              `Query namespace or key "${namespaceOrKey}" conflicts with an existing table name.`,
+            );
+          }
+          rv[namespaceOrKey] = wrapCustomQuery(
+            namespaceOrKey,
+            queriesOrQuery,
+            this,
+          );
+          continue;
+        } else {
+          // Namespace with multiple queries
+          assert(typeof queriesOrQuery === 'object');
+          const existing = rv[namespaceOrKey];
+          // Check if the namespace conflicts with an existing table query
+          if (existing !== undefined && queryInternalsTag in existing) {
+            throw new Error(
+              `Query namespace or key "${namespaceOrKey}" conflicts with an existing table name.`,
+            );
+          }
+          const namespace = existing ?? {};
+          rv[namespaceOrKey] = namespace;
+
+          for (const [name, query] of Object.entries(queriesOrQuery)) {
+            namespace[name] = wrapCustomQuery(
+              `${namespaceOrKey}.${name}`,
+              query,
+              this,
+            );
+          }
+        }
+      }
+    }
+
+    return rv as MakeZeroQueryType<QD, S, TContext>;
   }
 
   /**
@@ -2296,7 +2397,7 @@ export class Zero<
         this.#zeroContext,
         async () => {
           await this.#connectResolver.promise;
-          return this.#socket!;
+          return must(this.#socket);
         },
       ));
     }
