@@ -90,6 +90,7 @@ import {
 import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
+import {queryInternalsTag} from '../../../zql/src/query/query-internals.ts';
 import {
   type HumanReadable,
   type MaterializeOptions,
@@ -348,6 +349,16 @@ export function getInternalReplicacheImplForTesting(
 const CLOSE_CODE_NORMAL = 1000;
 const CLOSE_CODE_GOING_AWAY = 1001;
 type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
+
+type MakeZeroQueryType<
+  QD extends QueryDefinitions<S, TContext> | undefined,
+  S extends Schema,
+  TContext,
+> =
+  QD extends QueryDefinitions<S, TContext>
+    ? MakeEntityQueriesFromSchema<S> &
+        MakeCustomQueryInterfaces<S, QD, TContext>
+    : MakeEntityQueriesFromSchema<S>;
 
 export class Zero<
   const S extends Schema,
@@ -2315,12 +2326,7 @@ export class Zero<
     // }
   }
 
-  #registerQueries(
-    schema: Schema,
-  ): QD extends QueryDefinitions<S, TContext>
-    ? MakeEntityQueriesFromSchema<S> &
-        MakeCustomQueryInterfaces<S, QD, TContext>
-    : MakeEntityQueriesFromSchema<S> {
+  #registerQueries(schema: Schema): MakeZeroQueryType<QD, S, TContext> {
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     const rv = {} as Record<string, any>;
 
@@ -2336,6 +2342,11 @@ export class Zero<
       )) {
         if (typeof queriesOrQuery === 'function') {
           // Single query function - wrap it with the name
+          if (rv[namespaceOrKey] !== undefined) {
+            throw new Error(
+              `Query namespace or key "${namespaceOrKey}" conflicts with an existing table name.`,
+            );
+          }
           rv[namespaceOrKey] = wrapCustomQuery(
             namespaceOrKey,
             queriesOrQuery,
@@ -2345,14 +2356,18 @@ export class Zero<
         } else {
           // Namespace with multiple queries
           assert(typeof queriesOrQuery === 'object');
-          let existing = rv[namespaceOrKey];
-          if (existing === undefined) {
-            existing = {};
-            rv[namespaceOrKey] = existing;
+          const existing = rv[namespaceOrKey];
+          // Check if the namespace conflicts with an existing table query
+          if (existing !== undefined && queryInternalsTag in existing) {
+            throw new Error(
+              `Query namespace or key "${namespaceOrKey}" conflicts with an existing table name.`,
+            );
           }
+          const namespace = existing ?? {};
+          rv[namespaceOrKey] = namespace;
 
           for (const [name, query] of Object.entries(queriesOrQuery)) {
-            existing[name] = wrapCustomQuery(
+            namespace[name] = wrapCustomQuery(
               `${namespaceOrKey}.${name}`,
               query,
               this,
@@ -2362,10 +2377,7 @@ export class Zero<
       }
     }
 
-    return rv as QD extends QueryDefinitions<S, TContext>
-      ? MakeEntityQueriesFromSchema<S> &
-          MakeCustomQueryInterfaces<S, QD, TContext>
-      : MakeEntityQueriesFromSchema<S>;
+    return rv as MakeZeroQueryType<QD, S, TContext>;
   }
 
   /**

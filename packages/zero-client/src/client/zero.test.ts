@@ -150,6 +150,60 @@ test('expose and unexpose', async () => {
   expect(g.__zero).toBeUndefined();
 });
 
+test('throws error when custom query key conflicts with table name', () => {
+  const schema = createSchema({
+    tables: [
+      table('user')
+        .columns({
+          id: string(),
+          name: string(),
+        })
+        .primaryKey('id'),
+      table('issue')
+        .columns({
+          id: string(),
+          title: string(),
+        })
+        .primaryKey('id'),
+    ],
+  });
+
+  // Test single query function that conflicts with table name
+  expect(() =>
+    zeroForTest({
+      schema,
+      queries: {
+        user: () => schema.tables.user,
+      },
+    }),
+  ).toThrow('Query namespace or key "user" conflicts with an existing table name.');
+
+  // Test namespace that conflicts with table name
+  expect(() =>
+    zeroForTest({
+      schema,
+      queries: {
+        issue: {
+          all: () => schema.tables.issue,
+        },
+      },
+    }),
+  ).toThrow('Query namespace or key "issue" conflicts with an existing table name.');
+
+  // Test that non-conflicting queries work fine
+  expect(() =>
+    zeroForTest({
+      schema,
+      queries: {
+        custom: () => schema.tables.user,
+        myNamespace: {
+          users: () => schema.tables.user,
+        },
+      },
+    }),
+  ).not.toThrow();
+});
+
 describe('onOnlineChange callback', () => {
   const getNewZero = () => {
     let onlineCount = 0;
