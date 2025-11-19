@@ -16,10 +16,9 @@ export type ViewFactory<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
-  TContext,
   T,
 > = (
-  query: Query<TSchema, TTable, TReturn, TContext>,
+  query: Query<TSchema, TTable, TReturn>,
   input: Input,
   format: Format,
   onDestroy: () => void,
@@ -29,4 +28,4 @@ export type ViewFactory<
 ) => T;
 
 // oxlint-disable-next-line no-explicit-any
-export type AnyViewFactory = ViewFactory<Schema, any, any, any, any>;
+export type AnyViewFactory = ViewFactory<Schema, any, any, any>;

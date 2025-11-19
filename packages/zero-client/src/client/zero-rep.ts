@@ -35,8 +35,8 @@ type TxData = {
   context: unknown;
 };
 
-export class ZeroRep<TContext> implements ZeroOption {
-  readonly #context: ZeroContext<TContext>;
+export class ZeroRep implements ZeroOption {
+  readonly #context: ZeroContext;
   readonly #ivmMain: IVMSourceBranch;
   readonly #customMutatorsEnabled: boolean;
   readonly #mutationTracker: MutationTracker;
@@ -45,7 +45,7 @@ export class ZeroRep<TContext> implements ZeroOption {
   #auth: string = REPLICACHE_NO_AUTH_TOKEN;
 
   constructor(
-    context: ZeroContext<TContext>,
+    context: ZeroContext,
     ivmMain: IVMSourceBranch,
     customMutatorsEnabled: boolean,
     mutationTracker: MutationTracker,

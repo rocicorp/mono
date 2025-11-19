@@ -28,8 +28,8 @@ import {pgClient} from '../../zero-cache/src/types/pg.ts';
 import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
 import type {AnalyzeQueryResult} from '../../zero-protocol/src/analyze-query-result.ts';
 import {type AST} from '../../zero-protocol/src/ast.ts';
-import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
 import {clientSchemaFrom} from '../../zero-schema/src/builder/schema-builder.ts';
+import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import {
   Debug,
@@ -38,7 +38,7 @@ import {
 import type {Source} from '../../zql/src/ivm/source.ts';
 import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
-import {queryWithContext} from '../../zql/src/query/query-internals.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {PullRow, Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
@@ -202,13 +202,9 @@ const clientToServerMapper = clientToServer(schema.tables);
 const debug = new Debug();
 const tableSpecs = computeZqlSpecs(lc, db);
 
-class AnalyzeQueryDelegate extends QueryDelegateBase<undefined> {
+class AnalyzeQueryDelegate extends QueryDelegateBase {
   readonly debug = debug;
   readonly defaultQueryComplete = true;
-
-  constructor() {
-    super(undefined);
-  }
 
   getSource(serverTableName: string): Source | undefined {
     let source = sources.get(serverTableName);
@@ -268,9 +264,9 @@ function runQuery(queryString: string): Promise<AnalyzeQueryResult> {
   };
 
   const f = new Function('z', `return z.query.${queryString};`);
-  const q: Query<Schema, string, PullRow<string, Schema>, undefined> = f(z);
+  const q: Query<Schema, string, PullRow<string, Schema>> = f(z);
 
-  const ast = queryWithContext(q, undefined).ast;
+  const ast = asQueryInternals(q).ast;
   return runAst(lc, clientSchema, ast, false, {
     applyPermissions: config.applyPermissions,
     authData: config.authData,

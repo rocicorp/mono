@@ -4,12 +4,13 @@ import classNames from 'classnames';
 import {memo, useCallback, useEffect, useMemo, useState} from 'react';
 import {useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
-import {queries, type ListContext} from '../../shared/queries.ts';
+import {type ListContext} from '../../shared/queries.ts';
 import logoGigabugsURL from '../assets/images/logo-gigabugs.svg';
 import logoURL from '../assets/images/logo.svg';
 import markURL from '../assets/images/mark.svg';
 import {useIsOffline} from '../hooks/use-is-offline.ts';
 import {useLogin} from '../hooks/use-login.tsx';
+import {useZero} from '../hooks/use-zero.ts';
 import {IssueComposer} from '../pages/issue/issue-composer.tsx';
 import {isGigabugs, links, useListContext, useProjectName} from '../routes.tsx';
 import {AvatarImage} from './avatar-image.tsx';
@@ -20,6 +21,7 @@ import {Link} from './link.tsx';
 import {ProjectPicker} from './project-picker.tsx';
 
 export const Nav = memo(() => {
+  const z = useZero();
   const search = useSearch();
   const qs = useMemo(() => new URLSearchParams(search), [search]);
   const {listContext} = useListContext();
@@ -29,9 +31,9 @@ export const Nav = memo(() => {
   const isOffline = useIsOffline();
   const [isMobile, setIsMobile] = useState(false);
   const [showUserPanel, setShowUserPanel] = useState(false); // State to control visibility of user-panel-mobile
-  const [user] = useQuery(queries.user(login.loginState?.decoded.sub ?? ''));
+  const [user] = useQuery(z.query.user(login.loginState?.decoded.sub ?? ''));
 
-  const [projects] = useQuery(queries.allProjects());
+  const [projects] = useQuery(z.query.allProjects());
   const project = projects.find(
     p => p.lowerCaseName === projectName.toLocaleLowerCase(),
   );

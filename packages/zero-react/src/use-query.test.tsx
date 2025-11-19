@@ -9,14 +9,19 @@ import {
   vi,
   type Mock,
 } from 'vitest';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {registerZeroDelegate} from '../../zero-client/src/client/bindings.ts';
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
+import type {QueryResultDetails} from '../../zero-client/src/types/query-result.ts';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {type AbstractQuery} from '../../zql/src/query/query-impl.ts';
-import type {QueryInternals} from '../../zql/src/query/query-internals.ts';
+import {
+  queryInternalsTag,
+  type QueryInternals,
+} from '../../zql/src/query/query-internals.ts';
 import type {Query} from '../../zql/src/query/query.ts';
 import type {ResultType} from '../../zql/src/query/typed-view.ts';
 import {
@@ -25,14 +30,13 @@ import {
   ViewStore,
 } from './use-query.tsx';
 import {ZeroProvider} from './zero-provider.tsx';
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
-import type {QueryResultDetails} from '../../zero-client/src/types/query-result.ts';
 
 function newMockQuery(
   query: string,
   singular = false,
 ): Query<Schema, string, unknown> {
   const ret = {
+    [queryInternalsTag]: true,
     hash() {
       return query;
     },
@@ -43,9 +47,9 @@ function newMockQuery(
 
 function newMockZero<MD extends CustomMutatorDefs, Context>(
   clientID: string,
-): {zero: Zero<Schema, MD, Context>; delegate: QueryDelegate<Context>} {
+): {zero: Zero<Schema, MD, Context>; delegate: QueryDelegate} {
   const view = newView();
-  const delegate = newMockDelegate<Context>();
+  const delegate = newMockDelegate();
   const zero = {
     clientID,
     materialize: vi.fn().mockImplementation(() => view),
@@ -54,7 +58,7 @@ function newMockZero<MD extends CustomMutatorDefs, Context>(
   return {zero, delegate};
 }
 
-function newMockDelegate<TContext>(): QueryDelegate<TContext> {
+function newMockDelegate(): QueryDelegate {
   return {
     materialize: vi.fn().mockImplementation(() => newView()),
     withContext<
@@ -62,8 +66,8 @@ function newMockDelegate<TContext>(): QueryDelegate<TContext> {
       TTable extends keyof TSchema['tables'] & string,
       TReturn,
     >(
-      q: Query<TSchema, TTable, TReturn, TContext>,
-    ): QueryInternals<TSchema, TTable, TReturn, TContext> {
+      q: Query<TSchema, TTable, TReturn>,
+    ): QueryInternals<TSchema, TTable, TReturn> {
       return {
         hash() {
           // oxlint-disable-next-line no-explicit-any
@@ -71,9 +75,9 @@ function newMockDelegate<TContext>(): QueryDelegate<TContext> {
         },
         // oxlint-disable-next-line no-explicit-any
         format: (q as any).format,
-      } as QueryInternals<TSchema, TTable, TReturn, TContext>;
+      } as QueryInternals<TSchema, TTable, TReturn>;
     },
-  } as unknown as QueryDelegate<TContext>;
+  } as unknown as QueryDelegate;
 }
 
 function newView() {
