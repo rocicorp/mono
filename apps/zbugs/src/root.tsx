@@ -21,7 +21,7 @@ function OGImageUpdater() {
 
   useEffect(() => {
     const ogImage = isGigabugs(projectName)
-      ? 'https://zero.rocicorp.dev/api/og?title=Gigabugs&subtitle=2.5%20Million%20Row%20Sync%20Demo&logo=zero'
+      ? 'https://zero.rocicorp.dev/api/og?title=Megabugs&subtitle=2.5%20Million%20Row%20Sync%20Demo&logo=zero'
       : `${window.location.origin}/og-image.png`;
 
     // Update OG image meta tags
@@ -43,7 +43,7 @@ function OGImageUpdater() {
       ogImageAlt.setAttribute(
         'content',
         isGigabugs(projectName)
-          ? 'Gigabugs - 2.5 Million Row Sync Demo'
+          ? 'Megabugs - 2.5 Million Row Sync Demo'
           : 'Zero Bugs logo',
       );
     }
@@ -55,7 +55,7 @@ function OGImageUpdater() {
       twitterImageAlt.setAttribute(
         'content',
         isGigabugs(projectName)
-          ? 'Gigabugs - 2.5 Million Row Sync Demo'
+          ? 'Megabugs - 2.5 Million Row Sync Demo'
           : 'Zero Bugs logo',
       );
     }

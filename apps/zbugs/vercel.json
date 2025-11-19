@@ -6,6 +6,10 @@
         {
           "type": "host",
           "value": "gigabugs.rocicorp.dev"
+        },
+        {
+          "type": "host",
+          "value": "megabugs.rocicorp.dev"
         }
       ],
       "destination": "https://bugs.rocicorp.dev/p/roci",

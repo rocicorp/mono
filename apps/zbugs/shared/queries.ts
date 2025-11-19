@@ -51,7 +51,7 @@ export const queries = {
     {
       validator: z.undefined(),
     },
-    () => builder.label,
+    () => builder.label.where(({cmpLit}) => cmpLit(true, '=', false)),
   ),
 
   allUsers: defineQuery(

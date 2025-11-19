@@ -5,7 +5,7 @@ import {memo, useCallback, useEffect, useMemo, useState} from 'react';
 import {useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import {queries, type ListContext} from '../../shared/queries.ts';
-import logoGigabugsURL from '../assets/images/logo-gigabugs.svg';
+import logoMegabugsURL from '../assets/images/logo-megabugs.svg';
 import logoURL from '../assets/images/logo.svg';
 import markURL from '../assets/images/mark.svg';
 import {useIsOffline} from '../hooks/use-is-offline.ts';
@@ -71,7 +71,7 @@ export const Nav = memo(() => {
           <img
             src={
               (project?.logoURL ?? isGigabugs(projectName))
-                ? logoGigabugsURL
+                ? logoMegabugsURL
                 : logoURL
             }
             className="zero-logo"
