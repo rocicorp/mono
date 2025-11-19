@@ -39,21 +39,16 @@ describe('handleGetQueriesRequest', () => {
     // oxlint-disable-next-line require-await
     const cb = vi.fn(async () => ({query: makeQuery(ast)}));
 
-    const result = await handleGetQueriesRequest(
-      cb,
-      schema,
+    const result = await handleGetQueriesRequest(cb, schema, [
+      'transform',
       [
-        'transform',
-        [
-          {
-            id: 'q1',
-            name: 'namesByFoo',
-            args: [{foo: 'bar'}],
-          },
-        ],
+        {
+          id: 'q1',
+          name: 'namesByFoo',
+          args: [{foo: 'bar'}],
+        },
       ],
-      'context',
-    );
+    ]);
 
     expect(cb).toHaveBeenCalledWith('namesByFoo', [{foo: 'bar'}]);
     expect(result[0]).toBe('transformed');
@@ -98,12 +93,7 @@ describe('handleGetQueriesRequest', () => {
       body,
     });
 
-    const result = await handleGetQueriesRequest(
-      cb,
-      schema,
-      request,
-      'context',
-    );
+    const result = await handleGetQueriesRequest(cb, schema, request);
 
     expect(cb).toHaveBeenCalledWith('basicLimited', []);
     expect(result).toEqual([
@@ -125,7 +115,6 @@ describe('handleGetQueriesRequest', () => {
       },
       schema,
       ['invalid', []],
-      'context',
     );
 
     expect(result[0]).toBe('transformFailed');
@@ -152,7 +141,6 @@ describe('handleGetQueriesRequest', () => {
       },
       schema,
       request,
-      'context',
     );
 
     expect(result[0]).toBe('transformFailed');
@@ -179,18 +167,13 @@ describe('handleGetQueriesRequest', () => {
       return {query: makeQuery(ast)};
     });
 
-    const result = await handleGetQueriesRequest(
-      cb,
-      schema,
+    const result = await handleGetQueriesRequest(cb, schema, [
+      'transform',
       [
-        'transform',
-        [
-          {id: 'q1', name: 'first', args: []},
-          {id: 'q2', name: 'second', args: []},
-        ],
+        {id: 'q1', name: 'first', args: []},
+        {id: 'q2', name: 'second', args: []},
       ],
-      'context',
-    );
+    ]);
 
     expect(cb).toHaveBeenCalledTimes(2);
     expect(result[0]).toBe('transformed');
@@ -216,12 +199,10 @@ describe('handleGetQueriesRequest', () => {
       throw error;
     });
 
-    const result = await handleGetQueriesRequest(
-      cb,
-      schema,
-      ['transform', [{id: 'q1', name: 'test', args: []}]],
-      'context',
-    );
+    const result = await handleGetQueriesRequest(cb, schema, [
+      'transform',
+      [{id: 'q1', name: 'test', args: []}],
+    ]);
 
     expect(result[0]).toBe('transformed');
     assert(result[0] === 'transformed');
@@ -245,12 +226,10 @@ describe('handleGetQueriesRequest', () => {
       throw error;
     });
 
-    const result = await handleGetQueriesRequest(
-      cb,
-      schema,
-      ['transform', [{id: 'q1', name: 'test', args: []}]],
-      'context',
-    );
+    const result = await handleGetQueriesRequest(cb, schema, [
+      'transform',
+      [{id: 'q1', name: 'test', args: []}],
+    ]);
 
     expect(result[0]).toBe('transformed');
     assert(result[0] === 'transformed');
@@ -273,12 +252,10 @@ describe('handleGetQueriesRequest', () => {
       throw parseError;
     });
 
-    const result = await handleGetQueriesRequest(
-      cb,
-      schema,
-      ['transform', [{id: 'q1', name: 'testQuery', args: [{foo: 'bar'}]}]],
-      'context',
-    );
+    const result = await handleGetQueriesRequest(cb, schema, [
+      'transform',
+      [{id: 'q1', name: 'testQuery', args: [{foo: 'bar'}]}],
+    ]);
 
     expect(result[0]).toBe('transformed');
     assert(result[0] === 'transformed');
@@ -307,18 +284,13 @@ describe('handleGetQueriesRequest', () => {
       return {query: makeQuery(ast)};
     });
 
-    const result = await handleGetQueriesRequest(
-      cb,
-      schema,
+    const result = await handleGetQueriesRequest(cb, schema, [
+      'transform',
       [
-        'transform',
-        [
-          {id: 'q1', name: 'parseErrorQuery', args: []},
-          {id: 'q2', name: 'successQuery', args: []},
-        ],
+        {id: 'q1', name: 'parseErrorQuery', args: []},
+        {id: 'q2', name: 'successQuery', args: []},
       ],
-      'context',
-    );
+    ]);
 
     expect(cb).toHaveBeenCalledTimes(2);
     expect(result[0]).toBe('transformed');
@@ -355,12 +327,10 @@ describe('handleGetQueriesRequest', () => {
       // oxlint-disable-next-line require-await
       const cb = vi.fn(async () => ({query: makeQuery(ast)}));
 
-      const result = await handleGetQueriesRequest(
-        cb,
-        schema,
-        ['transform', [{id: 'q1', name: 'test', args: []}]],
-        'context',
-      );
+      const result = await handleGetQueriesRequest(cb, schema, [
+        'transform',
+        [{id: 'q1', name: 'test', args: []}],
+      ]);
 
       expect(result[0]).toBe('transformFailed');
       assert(result[0] === 'transformFailed');

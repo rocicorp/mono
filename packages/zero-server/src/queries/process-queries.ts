@@ -29,14 +29,13 @@ import {createLogContext} from '../logging.ts';
  * If you need to limit concurrency, you can use a library like `p-limit` to wrap the `cb` function.
  * @deprecated Use {@linkcode handleTransformRequest} instead.
  */
-export function handleGetQueriesRequest<S extends Schema, Context>(
+export function handleGetQueriesRequest<S extends Schema>(
   cb: (
     name: string,
     args: readonly ReadonlyJSONValue[],
   ) => MaybePromise<{query: AnyQuery} | AnyQuery>,
   schema: S,
   requestOrJsonBody: Request | ReadonlyJSONValue,
-  _context: Context,
   logLevel: LogLevel = 'info',
 ): Promise<TransformResponseMessage> {
   const lc = createLogContext(logLevel).withContext('GetQueries');
