@@ -90,7 +90,7 @@ import {
 import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
-import {queryInternalsTag} from '../../../zql/src/query/query-internals.ts';
+import {isQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import {
   type HumanReadable,
   type MaterializeOptions,
@@ -360,6 +360,79 @@ type MakeZeroQueryType<
         MakeCustomQueryInterfaces<S, QD, TContext>
     : MakeEntityQueriesFromSchema<S>;
 
+/**
+ * Registers both entity queries (from schema tables) and custom queries at arbitrary depth.
+ * Returns a combined query interface that includes table queries and custom query namespaces.
+ *
+ * @param schema - The Zero schema containing table definitions
+ * @param queries - Optional custom query definitions that can be nested arbitrarily deep
+ * @param contextHolder - The Zero instance that will be passed to wrapCustomQuery for binding
+ * @returns A query object with both entity and custom queries
+ */
+function registerQueries<
+  S extends Schema,
+  TContext,
+  QD extends QueryDefinitions<S, TContext> | undefined,
+>(
+  schema: S,
+  queries: QD,
+  contextHolder: {context: TContext},
+  lc: LogContext,
+): MakeZeroQueryType<QD, S, TContext> {
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  const rv = {} as Record<string, any>;
+
+  // Register entity queries for each table
+  for (const name of Object.keys(schema.tables)) {
+    rv[name] = newQuery(schema, name);
+  }
+
+  // Register custom queries if provided
+  if (queries) {
+    // Recursively process query definitions at arbitrary depth
+    const processQueries = (
+      queriesToProcess: QueryDefinitions<S, TContext>,
+      target: Record<string, unknown>,
+      namespacePrefix: string[] = [],
+    ) => {
+      for (const [key, value] of Object.entries(queriesToProcess)) {
+        if (typeof value === 'function') {
+          const queryName = [...namespacePrefix, key].join('.');
+          // Single query function - wrap it with the name
+          const targetValue = target[key];
+          if (isQueryInternals(targetValue)) {
+            lc.debug?.(
+              `Query key "${[...namespacePrefix, key].join('.')}" conflicts with an existing table name.`,
+            );
+          }
+
+          target[key] = wrapCustomQuery(queryName, value, contextHolder);
+        } else {
+          // Namespace with nested queries
+          let existing = target[key];
+          // Check if the namespace conflicts with an existing table query
+          if (isQueryInternals(existing)) {
+            lc.debug?.(
+              `Query namespace "${[...namespacePrefix, key].join('.')}" conflicts with an existing table name.`,
+            );
+          }
+          if (existing === undefined) {
+            existing = {};
+            target[key] = existing;
+          }
+          processQueries(value, existing as Record<string, unknown>, [
+            ...namespacePrefix,
+            key,
+          ]);
+        }
+      }
+    };
+    processQueries(queries, rv);
+  }
+
+  return rv as MakeZeroQueryType<QD, S, TContext>;
+}
+
 export class Zero<
   const S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
@@ -380,6 +453,7 @@ export class Zero<
 
   readonly #pokeHandler: PokeHandler;
   readonly #queryManager: QueryManager;
+  // oxlint-disable-next-line no-unused-private-class-members -- used as argument to QueryImpl
   readonly #ivmMain: IVMSourceBranch;
   readonly #clientToServer: NameMapper;
   readonly #deleteClientsManager: DeleteClientsManager;
@@ -822,7 +896,15 @@ export class Zero<
       this.#rep.clientGroupID,
     );
 
-    this.query = this.#registerQueries(schema);
+    this.query = registerQueries(
+      schema,
+      this.#options.queries,
+      this,
+      lc,
+    ) as QD extends QueryDefinitions<S, TContext>
+      ? MakeEntityQueriesFromSchema<S> &
+          MakeCustomQueryInterfaces<S, QD, TContext>
+      : MakeEntityQueriesFromSchema<S>;
 
     reportReloadReason(this.#lc);
 
@@ -2326,60 +2408,6 @@ export class Zero<
     // }
   }
 
-  #registerQueries(schema: Schema): MakeZeroQueryType<QD, S, TContext> {
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    const rv = {} as Record<string, any>;
-
-    // Register entity queries for each table
-    for (const name of Object.keys(schema.tables)) {
-      rv[name] = newQuery(schema, name);
-    }
-
-    // Register custom queries if provided
-    if (this.#options.queries) {
-      for (const [namespaceOrKey, queriesOrQuery] of Object.entries(
-        this.#options.queries,
-      )) {
-        if (typeof queriesOrQuery === 'function') {
-          // Single query function - wrap it with the name
-          if (rv[namespaceOrKey] !== undefined) {
-            throw new Error(
-              `Query namespace or key "${namespaceOrKey}" conflicts with an existing table name.`,
-            );
-          }
-          rv[namespaceOrKey] = wrapCustomQuery(
-            namespaceOrKey,
-            queriesOrQuery,
-            this,
-          );
-          continue;
-        } else {
-          // Namespace with multiple queries
-          assert(typeof queriesOrQuery === 'object');
-          const existing = rv[namespaceOrKey];
-          // Check if the namespace conflicts with an existing table query
-          if (existing !== undefined && queryInternalsTag in existing) {
-            throw new Error(
-              `Query namespace or key "${namespaceOrKey}" conflicts with an existing table name.`,
-            );
-          }
-          const namespace = existing ?? {};
-          rv[namespaceOrKey] = namespace;
-
-          for (const [name, query] of Object.entries(queriesOrQuery)) {
-            namespace[name] = wrapCustomQuery(
-              `${namespaceOrKey}.${name}`,
-              query,
-              this,
-            );
-          }
-        }
-      }
-    }
-
-    return rv as MakeZeroQueryType<QD, S, TContext>;
-  }
-
   /**
    * `inspector` is an object that can be used to inspect the state of the
    * queries a Zero instance uses. It is intended for debugging purposes.
@@ -2403,6 +2431,7 @@ export class Zero<
     }
   }
 
+  // oxlint-disable-next-line no-unused-private-class-members -- passed to QueryImpl
   #addMetric: <K extends keyof MetricMap>(
     metric: K,
     value: number,

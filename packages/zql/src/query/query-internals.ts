@@ -88,6 +88,14 @@ export function asQueryInternals<
   return query as unknown as QueryInternals<TSchema, TTable, TReturn>;
 }
 
+export function isQueryInternals<
+  TSchema extends ZeroSchema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+>(obj: unknown): obj is QueryInternals<TSchema, TTable, TReturn> {
+  return typeof obj === 'object' && obj !== null && queryInternalsTag in obj;
+}
+
 export function asQuery<
   TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,

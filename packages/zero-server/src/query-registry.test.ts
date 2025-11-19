@@ -271,4 +271,152 @@ describe('QueryRegistry', () => {
       'Validation failed for query createUser: ID is required, Name is required, Invalid format',
     );
   });
+
+  test('should handle deeply nested query definitions', () => {
+    const queries = {
+      api: {
+        v1: {
+          users: {
+            get: defineQuery(({args}: {args: {id: string}}) =>
+              builder.user.where('id', args.id).one(),
+            ),
+            list: defineQuery(
+              ({args: _args}: {args: undefined}) => builder.user,
+            ),
+          },
+          admin: {
+            getUser: defineQuery(({args}: {args: {id: string}}) =>
+              builder.user.where('id', args.id).one(),
+            ),
+          },
+        },
+        v2: {
+          users: {
+            get: defineQuery(({args}: {args: {id: string}}) =>
+              builder.user.where('id', args.id).one(),
+            ),
+          },
+        },
+      },
+    };
+
+    const registry = new QueryRegistry(queries);
+
+    // Test all nested paths
+    expect(registry.mustGet('api.v1.users.get')({id: 'user-1'})).toBeDefined();
+    expect(registry.mustGet('api.v1.users.list')()).toBeDefined();
+    expect(
+      registry.mustGet('api.v1.admin.getUser')({id: 'user-1'}),
+    ).toBeDefined();
+    expect(registry.mustGet('api.v2.users.get')({id: 'user-1'})).toBeDefined();
+  });
+
+  test('should handle empty query definitions', () => {
+    const queries = {};
+    const registry = new QueryRegistry(queries);
+
+    expect(() => registry.mustGet('anyQuery')).toThrow(
+      "Cannot find query 'anyQuery'",
+    );
+  });
+
+  test('should handle query with complex nested args', () => {
+    type ComplexArgs = {
+      user: {id: string; metadata: {role: string; permissions: string[]}};
+      filters: {age?: number; active: boolean};
+    };
+
+    const queries = {
+      complexQuery: defineQuery(({args}: {args: ComplexArgs}) =>
+        builder.user.where('id', args.user.id),
+      ),
+    };
+
+    const registry = new QueryRegistry(queries);
+    const queryFn = registry.mustGet('complexQuery');
+
+    const complexArgs: ComplexArgs = {
+      user: {
+        id: 'user-1',
+        metadata: {role: 'admin', permissions: ['read', 'write']},
+      },
+      filters: {age: 25, active: true},
+    };
+
+    expect(queryFn(complexArgs)).toBeDefined();
+  });
+
+  test('should pass different contexts to different queries', () => {
+    type Context = {userId: string};
+    const capturedContexts: Context[] = [];
+
+    const queries = {
+      query1: defineQuery(({args, ctx}: {args: {id: string}; ctx: Context}) => {
+        capturedContexts.push(ctx);
+        return builder.user.where('id', args.id).one();
+      }),
+      query2: defineQuery(({args, ctx}: {args: {id: string}; ctx: Context}) => {
+        capturedContexts.push(ctx);
+        return builder.user.where('id', args.id).one();
+      }),
+    };
+
+    const registry = new QueryRegistry(queries);
+
+    const context1: Context = {userId: 'user-1'};
+    const context2: Context = {userId: 'user-2'};
+
+    const queryFn1 = registry.mustGet<Context>('query1', context1);
+    const queryFn2 = registry.mustGet<Context>('query2', context2);
+
+    queryFn1({id: 'test-1'});
+    queryFn2({id: 'test-2'});
+
+    expect(capturedContexts).toEqual([context1, context2]);
+  });
+
+  test('should handle query names with special characters', () => {
+    const queries = {
+      'user-query': defineQuery(({args}: {args: {id: string}}) =>
+        builder.user.where('id', args.id).one(),
+      ),
+      'user_query': defineQuery(({args}: {args: {id: string}}) =>
+        builder.user.where('id', args.id).one(),
+      ),
+    };
+
+    const registry = new QueryRegistry(queries);
+
+    expect(registry.mustGet('user-query')({id: 'user-1'})).toBeDefined();
+    expect(registry.mustGet('user_query')({id: 'user-1'})).toBeDefined();
+  });
+
+  test('should handle validator with complex error structure', () => {
+    const validator: StandardSchemaV1<{id: string}, {id: string}> = {
+      '~standard': {
+        version: 1,
+        vendor: 'test',
+        validate: () => ({
+          issues: [
+            {message: 'Error 1', path: ['id']},
+            {message: 'Error 2', path: ['name']},
+            {message: 'Global error'},
+          ],
+        }),
+      },
+    };
+
+    const queries = {
+      testQuery: defineQuery(validator, ({args}: {args: {id: string}}) =>
+        builder.user.where('id', args.id).one(),
+      ),
+    };
+
+    const registry = new QueryRegistry(queries);
+    const queryFn = registry.mustGet('testQuery');
+
+    expect(() => queryFn({id: ''})).toThrow(
+      'Validation failed for query testQuery: Error 1, Error 2, Global error',
+    );
+  });
 });

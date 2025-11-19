@@ -152,7 +152,7 @@ test('expose and unexpose', async () => {
   expect(g.__zero).toBeUndefined();
 });
 
-test('throws error when custom query key conflicts with table name', () => {
+test('custom query keys can override table names', () => {
   const schema = createSchema({
     tables: [
       table('user')
@@ -170,42 +170,64 @@ test('throws error when custom query key conflicts with table name', () => {
     ],
   });
 
-  // Test single query function that conflicts with table name
-  expect(() =>
-    zeroForTest({
-      schema,
-      queries: {
-        user: defineQuery(() => undefined as unknown as AnyQuery),
-      },
-    }),
-  ).toThrow(
-    'Query namespace or key "user" conflicts with an existing table name.',
-  );
+  // Test single query function that conflicts with table name - should override
+  const z1 = zeroForTest({
+    schema,
+    queries: {
+      user: defineQuery(() => undefined as unknown as AnyQuery),
+    },
+  });
 
-  // Test namespace that conflicts with table name
-  expect(() =>
-    zeroForTest({
-      schema,
-      queries: {
-        issue: {
-          all: defineQuery(() => undefined as unknown as AnyQuery),
-        },
+  // The custom query should override the table query
+  expect(z1.query.user).toBeTypeOf('function');
+
+  // Test namespace that conflicts with table name - should override
+  const z2 = zeroForTest({
+    schema,
+    queries: {
+      issue: {
+        all: defineQuery(() => undefined as unknown as AnyQuery),
       },
-    }),
-  ).toThrow(
-    'Query namespace or key "issue" conflicts with an existing table name.',
-  );
+    },
+  });
+
+  // The custom namespace should override the table query
+  expect(z2.query.issue).toBeTypeOf('object');
+  expect(z2.query.issue.all).toBeTypeOf('function');
 
   // Test that non-conflicting queries work fine
+  const z3 = zeroForTest({
+    schema,
+    queries: {
+      custom: defineQuery(() => undefined as unknown as AnyQuery),
+      myNamespace: {
+        users: defineQuery(() => undefined as unknown as AnyQuery),
+      },
+    },
+  });
+
+  expect(z3.query.custom).toBeTypeOf('function');
+  expect(z3.query.myNamespace.users).toBeTypeOf('function');
+
+  // Test arbitrary depth nesting of query namespaces
   expect(() =>
     zeroForTest({
       schema,
       queries: {
-        custom: defineQuery(() => undefined as unknown as AnyQuery),
-        myNamespace: {
-          users: defineQuery(() => undefined as unknown as AnyQuery),
+        level1: {
+          level2: {
+            level3: {
+              deepQuery: defineQuery(() => undefined as unknown as AnyQuery),
+            },
+            intermediateQuery: defineQuery(
+              () => undefined as unknown as AnyQuery,
+            ),
+          },
+          topQuery: defineQuery(() => undefined as unknown as AnyQuery),
         },
-      },
+        topLevel: defineQuery(() => undefined as unknown as AnyQuery),
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
     }),
   ).not.toThrow();
 });
