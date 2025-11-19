@@ -16,7 +16,6 @@ import {
   table,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
 import type {Schema} from '../../../../zero-types/src/schema.ts';
-import type {QueryDefinitions} from '../../../../zql/src/query/query-definitions.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {schema} from '../../../../zql/src/query/test/test-schemas.ts';
 import {nanoid} from '../../util/nanoid.ts';
@@ -52,11 +51,9 @@ async function waitForID(socketP: Promise<MockSocket>, op: string) {
 async function getMetrics<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined,
-  Context,
-  QD extends QueryDefinitions<S, Context> | undefined,
 >(
   inspector: Inspector,
-  z: TestZero<S, MD, Context, QD>,
+  z: TestZero<S, MD>,
   metricsResponseValue?: InspectMetricsDown['value'],
 ): Promise<Metrics> {
   const socket = await z.socket;
@@ -1904,7 +1901,7 @@ describe('authenticate', () => {
 
 describe('inspector.analyzeQuery name mapping', () => {
   async function testAnalyzeQuery<S extends Schema>(
-    z: TestZero<S>,
+    z: TestZero<S, undefined>,
     query: AnyQuery,
     options: AnalyzeQueryOptions | undefined,
     mockResult: AnalyzeQueryResult,

@@ -24,7 +24,7 @@ export class Inspector {
   constructor(
     rep: Rep,
     inspectorDelegate: InspectorDelegate,
-    queryDelegate: QueryDelegate,
+    queryDelegate: QueryDelegate<unknown>,
     getSocket: () => Promise<WebSocket>,
   ) {
     this.#delegate = {

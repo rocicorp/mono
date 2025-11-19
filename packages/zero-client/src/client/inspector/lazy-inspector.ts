@@ -37,7 +37,6 @@ import type {
   ServerMetricMap,
 } from '../../../../zql/src/query/metrics-delegate.ts';
 import type {QueryDelegate} from '../../../../zql/src/query/query-delegate.ts';
-import {asQueryInternals} from '../../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {nanoid} from '../../util/nanoid.ts';
 import {ENTITIES_KEY_PREFIX} from '../keys.ts';
@@ -336,7 +335,7 @@ export async function analyzeQuery(
   query: AnyQuery,
   options?: AnalyzeQueryOptions,
 ): Promise<AnalyzeQueryResult> {
-  const qi = asQueryInternals(query);
+  const qi = delegate.queryDelegate.withContext(query);
   const {customQueryID} = qi;
   const queryParameters = customQueryID
     ? {name: customQueryID.name, args: customQueryID.args}
@@ -365,7 +364,7 @@ export interface InspectorDelegate {
 export interface ExtendedInspectorDelegate extends InspectorDelegate {
   readonly rep: Rep;
   readonly getSocket: () => Promise<WebSocket>;
-  readonly queryDelegate: QueryDelegate;
+  readonly queryDelegate: QueryDelegate<unknown>;
   lazy: Promise<Lazy>;
 }
 

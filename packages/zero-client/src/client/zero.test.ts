@@ -63,9 +63,6 @@ import {
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
-import {defineQuery} from '../../../zql/src/query/define-query.ts';
-import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
-import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
@@ -150,64 +147,6 @@ test('expose and unexpose', async () => {
   expect(g.__zero).toBe(z4);
   await z4.close();
   expect(g.__zero).toBeUndefined();
-});
-
-test('throws error when custom query key conflicts with table name', () => {
-  const schema = createSchema({
-    tables: [
-      table('user')
-        .columns({
-          id: string(),
-          name: string(),
-        })
-        .primaryKey('id'),
-      table('issue')
-        .columns({
-          id: string(),
-          title: string(),
-        })
-        .primaryKey('id'),
-    ],
-  });
-
-  // Test single query function that conflicts with table name
-  expect(() =>
-    zeroForTest({
-      schema,
-      queries: {
-        user: defineQuery(() => undefined as unknown as AnyQuery),
-      },
-    }),
-  ).toThrow(
-    'Query namespace or key "user" conflicts with an existing table name.',
-  );
-
-  // Test namespace that conflicts with table name
-  expect(() =>
-    zeroForTest({
-      schema,
-      queries: {
-        issue: {
-          all: defineQuery(() => undefined as unknown as AnyQuery),
-        },
-      },
-    }),
-  ).toThrow(
-    'Query namespace or key "issue" conflicts with an existing table name.',
-  );
-
-  // Test that non-conflicting queries work fine
-  expect(() =>
-    zeroForTest({
-      schema,
-      queries: {
-        custom: defineQuery(() => undefined as unknown as AnyQuery),
-        myNamespace: {
-          users: defineQuery(() => undefined as unknown as AnyQuery),
-        },
-      },
-    }),
-  ).not.toThrow();
 });
 
 describe('onOnlineChange callback', () => {
@@ -1120,16 +1059,14 @@ describe('initConnection', () => {
 
   async function zeroForTestWithDeletedClients<
     const S extends Schema,
-    MD extends CustomMutatorDefs,
-    Context,
-    QD extends QueryDefinitions<S, Context>,
+    MD extends CustomMutatorDefs = CustomMutatorDefs,
   >(
-    options: Partial<ZeroOptions<S, MD, Context, QD>> & {
+    options: Partial<ZeroOptions<S, MD>> & {
       deletedClients?:
         | {clientGroupID?: ClientGroupID | undefined; clientID: ClientID}[]
         | undefined;
     },
-  ): Promise<TestZero<S, MD, Context, QD>> {
+  ): Promise<TestZero<S, MD>> {
     // We need to set the deleted clients before creating the zero instance but
     // we use a random name for the user ID. So we create a zero instance with a
     // random user ID, set the deleted clients, close it and then create a new
@@ -3473,8 +3410,8 @@ test('kvStore option', async () => {
     [refCountSymbol]: number;
   };
 
-  const t = async (
-    kvStore: ZeroOptions<Schema>['kvStore'],
+  const t = async <S extends Schema>(
+    kvStore: ZeroOptions<S>['kvStore'],
     userID: string,
     expectedIDBOpenCalled: boolean,
     expectedValue: E[],
@@ -3559,30 +3496,30 @@ test('Close during connect should sleep', async () => {
 });
 
 test('Zero close should stop timeout', async () => {
-  const z = zeroForTest({
+  const r = zeroForTest({
     logLevel: 'debug',
   });
 
-  await z.waitForConnectionStatus(ConnectionStatus.Connecting);
-  await z.close();
-  await z.waitForConnectionStatus(ConnectionStatus.Closed);
-  expect(z.closed).toBe(true);
+  await r.waitForConnectionStatus(ConnectionStatus.Connecting);
+  await r.close();
+  await r.waitForConnectionStatus(ConnectionStatus.Closed);
+  expect(r.closed).toBe(true);
   await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS);
-  expectLogMessages(z).not.contain(connectTimeoutMessage);
+  expectLogMessages(r).not.contain(connectTimeoutMessage);
 });
 
 test('Zero close should stop timeout, close delayed', async () => {
-  const z = zeroForTest({
+  const r = zeroForTest({
     logLevel: 'debug',
   });
 
-  await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+  await r.waitForConnectionStatus(ConnectionStatus.Connecting);
   await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS / 2);
-  await z.close();
-  await z.waitForConnectionStatus(ConnectionStatus.Closed);
-  expect(z.closed).toBe(true);
+  await r.close();
+  await r.waitForConnectionStatus(ConnectionStatus.Closed);
+  expect(r.closed).toBe(true);
   await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS / 2);
-  expectLogMessages(z).not.contain(connectTimeoutMessage);
+  expectLogMessages(r).not.contain(connectTimeoutMessage);
 });
 
 test('ensure we get the same query object back', () => {

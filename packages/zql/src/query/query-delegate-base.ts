@@ -13,6 +13,7 @@ import type {
   QueryDelegate,
 } from './query-delegate.ts';
 import {materializeImpl, preloadImpl, runImpl} from './query-impl.ts';
+import {queryWithContext, type QueryInternals} from './query-internals.ts';
 import type {
   HumanReadable,
   MaterializeOptions,
@@ -27,7 +28,29 @@ import type {TypedView} from './typed-view.ts';
  * Base class that provides default implementations for common QueryDelegate methods.
  * Subclasses can override specific methods as needed.
  */
-export abstract class QueryDelegateBase implements QueryDelegate {
+export abstract class QueryDelegateBase<TContext>
+  implements QueryDelegate<TContext>
+{
+  readonly #context: TContext;
+
+  constructor(context: TContext) {
+    this.#context = context;
+  }
+
+  /**
+   * Default implementation that calls queryWithContext.
+   * Override if you need custom context handling.
+   */
+  withContext<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+  >(
+    query: Query<TSchema, TTable, TReturn, TContext>,
+  ): QueryInternals<TSchema, TTable, TReturn, TContext> {
+    return queryWithContext(query, this.#context);
+  }
+
   /**
    * Default implementation that just calls applyViewUpdates synchronously.
    * Override if you need custom batching behavior (e.g., SolidJS).
@@ -53,7 +76,7 @@ export abstract class QueryDelegateBase implements QueryDelegate {
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
   >(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
     factory?: undefined,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
@@ -64,8 +87,8 @@ export abstract class QueryDelegateBase implements QueryDelegate {
     TReturn,
     T,
   >(
-    query: Query<TSchema, TTable, TReturn>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
+    factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
     options?: MaterializeOptions,
   ): T;
 
@@ -78,8 +101,8 @@ export abstract class QueryDelegateBase implements QueryDelegate {
     TReturn,
     T,
   >(
-    query: Query<TSchema, TTable, TReturn>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
+    factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
     options?: MaterializeOptions,
   ): T;
 
@@ -89,8 +112,8 @@ export abstract class QueryDelegateBase implements QueryDelegate {
     TReturn,
     T,
   >(
-    query: Query<TSchema, TTable, TReturn>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
+    factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
     options?: MaterializeOptions,
   ): T {
     return materializeImpl(query, this, factory, options);
@@ -105,7 +128,7 @@ export abstract class QueryDelegateBase implements QueryDelegate {
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
   >(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return runImpl(query, this, options);
@@ -120,7 +143,7 @@ export abstract class QueryDelegateBase implements QueryDelegate {
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
   >(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
     options?: PreloadOptions,
   ): {
     cleanup: () => void;

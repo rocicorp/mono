@@ -8,9 +8,8 @@ import {Octokit} from '@octokit/core';
 import type {ReadonlyJSONValue} from '@rocicorp/zero';
 import {
   getMutation,
+  handleGetQueriesRequest,
   handleMutationRequest,
-  handleTransformRequest,
-  QueryRegistry,
 } from '@rocicorp/zero/server';
 import {zeroPostgresJS} from '@rocicorp/zero/server/adapters/postgresjs';
 import assert from 'assert';
@@ -20,9 +19,9 @@ import {jwtVerify, SignJWT, type JWK} from 'jose';
 import {nanoid} from 'nanoid';
 import postgres from 'postgres';
 import {must} from '../../../packages/shared/src/must.ts';
+import {getQuery} from '../server/get-query.ts';
 import {createServerMutators} from '../server/server-mutators.ts';
 import {jwtDataSchema, type JWTData} from '../shared/auth.ts';
-import {queries} from '../shared/queries.ts';
 import {schema} from '../shared/schema.ts';
 import {getPresignedUrl} from '../src/server/upload.ts';
 
@@ -208,8 +207,6 @@ fastify.post<{
   Body: ReadonlyJSONValue;
 }>('/api/get-queries', getQueriesHandler);
 
-const queryRegistry = new QueryRegistry(queries);
-
 async function getQueriesHandler(
   request: FastifyRequest<{
     Querystring: Record<string, string>;
@@ -219,13 +216,11 @@ async function getQueriesHandler(
 ) {
   await withAuth(request, reply, async authData => {
     reply.send(
-      await handleTransformRequest(
-        (name: string, args: ReadonlyJSONValue | undefined) => {
-          const query = queryRegistry.mustGet(name, authData);
-          return query(args);
-        },
+      await handleGetQueriesRequest(
+        (name, args) => getQuery(name, args),
         schema,
         request.body,
+        authData,
       ),
     );
   });

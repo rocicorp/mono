@@ -108,21 +108,25 @@ export type MakeCustomMutatorInterfaces<
       : never;
 };
 
-export type MakeCustomMutatorInterface<TSchema extends Schema, F> = F extends (
-  tx: ClientTransaction<TSchema>,
+export type MakeCustomMutatorInterface<
+  TSchema extends Schema,
+  F,
+  TContext,
+> = F extends (
+  tx: ClientTransaction<TSchema, TContext>,
   ...args: infer Args
 ) => Promise<void>
   ? (...args: Args) => MutatorResult
   : never;
 
-export class TransactionImpl<TSchema extends Schema>
-  implements ClientTransaction<TSchema>
+export class TransactionImpl<TSchema extends Schema, TContext>
+  implements ClientTransaction<TSchema, TContext>
 {
   readonly location = 'client';
   readonly mutate: SchemaCRUD<TSchema>;
-  readonly query: SchemaQuery<TSchema>;
+  readonly query: SchemaQuery<TSchema, TContext>;
   readonly #repTx: WriteTransaction;
-  readonly #zeroContext: ZeroContext;
+  readonly #zeroContext: ZeroContext<TContext>;
 
   constructor(lc: LogContext, repTx: WriteTransaction, schema: TSchema) {
     must(repTx.reason === 'initial' || repTx.reason === 'rebase');
@@ -142,6 +146,7 @@ export class TransactionImpl<TSchema extends Schema>
     this.#zeroContext = newZeroContext(
       lc,
       txData.ivmSources as IVMSourceBranch,
+      txData.context as TContext,
     );
   }
 
@@ -161,8 +166,8 @@ export class TransactionImpl<TSchema extends Schema>
     return (this.#repTx as WriteTransactionImpl)[zeroData]?.token;
   }
 
-  run<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TSchema, TTable, TReturn>,
+  run<TTable extends keyof TSchema['tables'] & string, TReturn, TContext>(
+    query: Query<TSchema, TTable, TReturn, TContext>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return this.#zeroContext.run(query, options);
@@ -213,10 +218,15 @@ function assertValidRunOptions(options: RunOptions | undefined): void {
   );
 }
 
-function newZeroContext(lc: LogContext, ivmBranch: IVMSourceBranch) {
+function newZeroContext<TContext>(
+  lc: LogContext,
+  ivmBranch: IVMSourceBranch,
+  context: TContext,
+) {
   return new ZeroContext(
     lc,
     ivmBranch,
+    context,
     () => emptyFunction,
     () => emptyFunction,
     emptyFunction,

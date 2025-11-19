@@ -63,12 +63,12 @@ type Context = unknown;
 
 function newMockZero<MD extends CustomMutatorDefs>(
   clientID: string,
-  queryDelegate: QueryDelegate,
+  queryDelegate: QueryDelegate<Context>,
 ): Zero<Schema, MD, Context> {
   function m<TTable extends keyof Schema['tables'] & string, TReturn, T>(
-    query: Query<Schema, TTable, TReturn>,
+    query: Query<Schema, TTable, TReturn, Context>,
     factoryOrOptions?:
-      | ViewFactory<Schema, TTable, TReturn, T>
+      | ViewFactory<Schema, TTable, TReturn, Context, T>
       | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {

@@ -1,4 +1,4 @@
-import type {LogContext, LogLevel} from '@rocicorp/logger';
+import type {LogLevel} from '@rocicorp/logger';
 import {getErrorDetails, getErrorMessage} from '../../../shared/src/error.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
@@ -16,7 +16,7 @@ import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {QueryParseError} from '../../../zql/src/query/error.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {createLogContext} from '../logging.ts';
 
@@ -27,31 +27,19 @@ import {createLogContext} from '../logging.ts';
  * This function will call `cb` in parallel for each query found in the request.
  *
  * If you need to limit concurrency, you can use a library like `p-limit` to wrap the `cb` function.
- * @deprecated Use {@linkcode handleTransformRequest} instead.
  */
-export function handleGetQueriesRequest<S extends Schema>(
+export async function handleGetQueriesRequest<S extends Schema, Context>(
   cb: (
     name: string,
     args: readonly ReadonlyJSONValue[],
   ) => MaybePromise<{query: AnyQuery} | AnyQuery>,
   schema: S,
   requestOrJsonBody: Request | ReadonlyJSONValue,
-  logLevel: LogLevel = 'info',
+  context: Context,
+  logLevel?: LogLevel,
 ): Promise<TransformResponseMessage> {
-  const lc = createLogContext(logLevel).withContext('GetQueries');
-  return transform(cb, schema, requestOrJsonBody, lc, 'get');
-}
+  const lc = createLogContext(logLevel ?? 'info').withContext('GetQueries');
 
-async function transform<S extends Schema>(
-  cb: (
-    name: string,
-    args: readonly ReadonlyJSONValue[],
-  ) => MaybePromise<{query: AnyQuery} | AnyQuery>,
-  schema: S,
-  requestOrJsonBody: Request | ReadonlyJSONValue,
-  lc: LogContext,
-  apiName: 'get' | 'transform',
-): Promise<TransformResponseMessage> {
   let parsed: TransformRequestMessage;
   let queryIDs: string[] = [];
   try {
@@ -66,7 +54,7 @@ async function transform<S extends Schema>(
 
     queryIDs = parsed[1].map(r => r.id);
   } catch (error) {
-    lc.error?.(`Failed to parse ${apiName} queries request`, error);
+    lc.error?.('Failed to parse get queries request', error);
 
     const message = `Failed to parse get queries request: ${getErrorMessage(error)}`;
     const details = getErrorDetails(error);
@@ -107,7 +95,7 @@ async function transform<S extends Schema>(
         }
 
         try {
-          const q = asQueryInternals(finalQuery);
+          const q = queryWithContext(finalQuery, context);
           const ast = mapAST(q.ast, nameMapper);
 
           return {
@@ -140,43 +128,3 @@ async function transform<S extends Schema>(
     ];
   }
 }
-
-/**
- * Processes a transform request by invoking the provided callback for each query.
- * The callback should return a Query that is the transformed result.
- *
- * This function will call `transformQuery` in parallel for each query found in the request.
- *
- * @param transformQuery - Callback function that takes a query name and args, and returns a Query
- * @param schema - The Zero schema
- * @param requestOrJsonBody - Either a Request object or the JSON body directly
- * @param logLevel - Logging level (defaults to 'info')
- * @returns A Promise that resolves to a TransformResponseMessage
- */
-export function handleTransformRequest<S extends Schema>(
-  transformQuery: TransformQueryFunction,
-  schema: S,
-  requestOrJsonBody: Request | ReadonlyJSONValue,
-  logLevel: LogLevel = 'info',
-) {
-  const lc = createLogContext(logLevel).withContext('TransformRequest');
-  return transform(
-    (name, argsArray) => transformQuery(name, argsArray[0]),
-    schema,
-    requestOrJsonBody,
-    lc,
-    'transform',
-  );
-}
-
-/**
- * A function that transforms a query by name and arguments into a Query object.
- *
- * @param name - The name of the query (can be dot-separated for nested queries)
- * @param args - The arguments to pass to the query (can be undefined)
- * @returns A Query object
- */
-export type TransformQueryFunction = (
-  name: string,
-  args: ReadonlyJSONValue | undefined,
-) => AnyQuery;

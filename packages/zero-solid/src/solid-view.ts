@@ -255,8 +255,9 @@ export function createSolidViewFactory(
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
+    TContext,
   >(
-    _query: Query<TSchema, TTable, TReturn>,
+    _query: Query<TSchema, TTable, TReturn, TContext>,
     input: Input,
     format: Format,
     onDestroy: () => void,

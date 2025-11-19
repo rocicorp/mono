@@ -4,6 +4,7 @@ import type {Hash} from '../../../replicache/src/hash.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {DebugDelegate} from '../../../zql/src/builder/debug-delegate.ts';
 import type {Input} from '../../../zql/src/ivm/operator.ts';
 import type {Source, SourceInput} from '../../../zql/src/ivm/source.ts';
@@ -11,7 +12,12 @@ import {MeasurePushOperator} from '../../../zql/src/query/measure-push-operator.
 import type {MetricsDelegate} from '../../../zql/src/query/metrics-delegate.ts';
 import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
 import type {CommitListener} from '../../../zql/src/query/query-delegate.ts';
-import type {RunOptions} from '../../../zql/src/query/query.ts';
+import {type AnyQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import type {
+  AnyQuery,
+  Query,
+  RunOptions,
+} from '../../../zql/src/query/query.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
 import type {QueryManager} from './query-manager.ts';
 
@@ -27,7 +33,7 @@ export type FlushQueryChanges = QueryManager['flushBatch'];
  * Replicache data and pushes them into IVM and on tells the server about new
  * queries.
  */
-export class ZeroContext extends QueryDelegateBase {
+export class ZeroContext<TContext> extends QueryDelegateBase<TContext> {
   readonly #lc: LogContext;
 
   // It is a bummer to have to maintain separate MemorySources here and copy the
@@ -54,9 +60,12 @@ export class ZeroContext extends QueryDelegateBase {
 
   readonly addMetric: MetricsDelegate['addMetric'];
 
+  readonly #queryInternals = new WeakMap<AnyQuery, AnyQueryInternals>();
+
   constructor(
     lc: LogContext,
     mainSources: IVMSourceBranch,
+    context: TContext,
     addQuery: AddQuery,
     addCustomQuery: AddCustomQuery,
     updateQuery: UpdateQuery,
@@ -66,7 +75,7 @@ export class ZeroContext extends QueryDelegateBase {
     addMetric: MetricsDelegate['addMetric'],
     assertValidRunOptions: (options?: RunOptions) => void,
   ) {
-    super();
+    super(context);
     this.#lc = lc;
     this.#mainSources = mainSources;
     this.addServerQuery = addQuery;
@@ -77,6 +86,21 @@ export class ZeroContext extends QueryDelegateBase {
     this.addCustomQuery = addCustomQuery;
     this.flushQueryChanges = flushQueryChanges;
     this.addMetric = addMetric;
+  }
+
+  override withContext<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+  >(query: Query<TSchema, TTable, TReturn, TContext>) {
+    const existing = this.#queryInternals.get(query);
+    if (existing) {
+      return existing;
+    }
+
+    const qi = super.withContext(query);
+    this.#queryInternals.set(query, qi);
+    return qi;
   }
 
   applyFiltersAnyway?: boolean | undefined;

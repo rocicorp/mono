@@ -2,15 +2,15 @@
 import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
 import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {
+  Schema,
+  Schema as ZeroSchema,
+  LastInTuple,
+  TableSchema,
+} from '../../../zero-types/src/schema.ts';
+import type {
   SchemaValueToTSType,
   SchemaValueWithCustomType,
 } from '../../../zero-types/src/schema-value.ts';
-import type {
-  LastInTuple,
-  Schema,
-  TableSchema,
-  Schema as ZeroSchema,
-} from '../../../zero-types/src/schema.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {TTL} from './ttl.ts';
 
@@ -33,7 +33,8 @@ type ArraySelectors<E extends TableSchema> = {
     : never;
 }[keyof E['columns']];
 
-export type QueryReturn<Q> = Q extends Query<any, any, infer R> ? R : never;
+export type QueryReturn<Q> =
+  Q extends Query<any, any, infer R, any> ? R : never;
 
 export type QueryTable<Q> = Q extends Query<any, infer T, any> ? T : never;
 
@@ -158,11 +159,13 @@ export type QueryResultType<Q> = Q extends
  * @typeParam TSchema The database schema type extending ZeroSchema
  * @typeParam TTable The name of the table being queried, must be a key of TSchema['tables']
  * @typeParam TReturn The return type of the query, defaults to PullRow<TTable, TSchema>
+ * @typeParam TContext The context type required for named queries, defaults to unknown
  */
 export interface Query<
   TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
+  TContext = unknown,
 > {
   related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
@@ -173,7 +176,8 @@ export interface Query<
       TReturn,
       DestRow<TTable, TSchema, TRelationship>,
       TRelationship
-    >
+    >,
+    TContext
   >;
   related<
     TRelationship extends AvailableRelationships<TTable, TSchema>,
@@ -196,7 +200,8 @@ export interface Query<
         ? TSubReturn
         : never,
       TRelationship
-    >
+    >,
+    TContext
   >;
 
   where<
@@ -208,7 +213,7 @@ export interface Query<
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
       | ParameterReference,
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TSchema, TTable, TReturn, TContext>;
   where<
     TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
   >(
@@ -216,36 +221,36 @@ export interface Query<
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
       | ParameterReference,
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TSchema, TTable, TReturn, TContext>;
   where(
     expressionFactory: ExpressionFactory<TSchema, TTable>,
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TSchema, TTable, TReturn, TContext>;
 
   whereExists(
     relationship: AvailableRelationships<TTable, TSchema>,
     options?: ExistsOptions,
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TSchema, TTable, TReturn, TContext>;
   whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb: (
       q: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
     ) => Query<TSchema, string>,
     options?: ExistsOptions,
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TSchema, TTable, TReturn, TContext>;
 
   start(
     row: Partial<PullRow<TTable, TSchema>>,
     opts?: {inclusive: boolean},
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TSchema, TTable, TReturn, TContext>;
 
-  limit(limit: number): Query<TSchema, TTable, TReturn>;
+  limit(limit: number): Query<TSchema, TTable, TReturn, TContext>;
 
   orderBy<TSelector extends Selector<PullTableSchema<TTable, TSchema>>>(
     field: TSelector,
     direction: 'asc' | 'desc',
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TSchema, TTable, TReturn, TContext>;
 
-  one(): Query<TSchema, TTable, TReturn | undefined>;
+  one(): Query<TSchema, TTable, TReturn | undefined, TContext>;
 }
 
 export type PreloadOptions = {
@@ -300,4 +305,4 @@ export const DEFAULT_RUN_OPTIONS_COMPLETE = {
   type: 'complete',
 } as const;
 
-export type AnyQuery = Query<Schema, string, any>;
+export type AnyQuery = Query<Schema, string, any, any>;

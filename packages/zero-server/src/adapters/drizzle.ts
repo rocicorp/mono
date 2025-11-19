@@ -192,10 +192,11 @@ export function toIterableRows(result: unknown): Iterable<Row> {
 export function zeroDrizzle<
   TSchema extends Schema,
   TDrizzle extends DrizzleDatabase,
+  TContext,
 >(
   schema: TSchema,
   client: TDrizzle,
-): ZQLDatabase<TSchema, DrizzleTransaction<TDrizzle>> {
+): ZQLDatabase<TSchema, DrizzleTransaction<TDrizzle>, TContext> {
   return new ZQLDatabase(
     new DrizzleConnection<TDrizzle, DrizzleTransaction<TDrizzle>>(client),
     schema,

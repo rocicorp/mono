@@ -1,9 +1,8 @@
 import {useQuery} from '../../../../packages/zero-react/src/use-query.tsx';
-import {useZero} from '../hooks/use-zero.ts';
+import {queries} from '../../shared/queries.ts';
 
 export function QueryUsers() {
-  const z = useZero();
-  const [users, details] = useQuery(z.query.allUsers());
+  const [users, details] = useQuery(queries.allUsers());
   if (details.type === 'unknown') {
     return <div>Loading...</div>;
   }

@@ -12,7 +12,11 @@ export function staticQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
->(schema: TSchema, tableName: TTable): Query<TSchema, TTable, TReturn> {
+  TContext = unknown,
+>(
+  schema: TSchema,
+  tableName: TTable,
+): Query<TSchema, TTable, TReturn, TContext> {
   return new StaticQuery<TSchema, TTable, TReturn>(
     schema,
     tableName,
@@ -29,7 +33,8 @@ export class StaticQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
-> extends AbstractQuery<TSchema, TTable, TReturn> {
+  TContext = unknown,
+> extends AbstractQuery<TSchema, TTable, TReturn, TContext> {
   constructor(
     schema: TSchema,
     tableName: TTable,
@@ -69,7 +74,10 @@ export function asStaticQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
->(q: Query<TSchema, TTable, TReturn>): StaticQuery<TSchema, TTable, TReturn> {
+  TContext,
+>(
+  q: Query<TSchema, TTable, TReturn, TContext>,
+): StaticQuery<TSchema, TTable, TReturn, TContext> {
   assert(q instanceof StaticQuery);
   return q;
 }
