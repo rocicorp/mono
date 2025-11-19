@@ -230,17 +230,13 @@ export async function handleMutationRequest<
 
       let mutationPhase: MutationPhase = 'preTransaction';
 
-      const transactProxy: TransactFn<D> = innerCb => {
+      const transactProxy: TransactFn<D> = async innerCb => {
         mutationPhase = 'transactionPending';
-        const txPromise = transactor.transact(m, (tx, name, args) =>
+        const result = await transactor.transact(m, (tx, name, args) =>
           applicationErrorWrapper(() => innerCb(tx, name, args)),
         );
-        txPromise
-          .then(() => {
-            mutationPhase = 'postCommit';
-          })
-          .catch(() => {});
-        return txPromise;
+        mutationPhase = 'postCommit';
+        return result;
       };
 
       try {
