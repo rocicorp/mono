@@ -10,7 +10,7 @@ import logoURL from '../assets/images/logo.svg';
 import markURL from '../assets/images/mark.svg';
 import {useIsOffline} from '../hooks/use-is-offline.ts';
 import {useLogin} from '../hooks/use-login.tsx';
-import {useZero} from '../hooks/use-zero.ts';
+import {useZero} from '@rocicorp/zero/react';
 import {IssueComposer} from '../pages/issue/issue-composer.tsx';
 import {isGigabugs, links, useListContext, useProjectName} from '../routes.tsx';
 import {AvatarImage} from './avatar-image.tsx';

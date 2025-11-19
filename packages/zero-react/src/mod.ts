@@ -20,7 +20,6 @@ export {
 export {useZeroConnectionState} from './use-zero-connection-state.tsx';
 export {useZeroOnline} from './use-zero-online.tsx';
 export {
-  createUseZero,
   useZero,
   ZeroContext,
   ZeroProvider,

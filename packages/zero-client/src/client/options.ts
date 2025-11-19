@@ -4,16 +4,27 @@ import * as v from '../../../shared/src/valita.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
 import type {CustomMutatorDefs} from './custom.ts';
+import type {
+  Register,
+  RegisteredContext,
+  RegisteredMutators,
+  RegisteredQueries,
+  RegisteredSchema,
+} from './register.ts';
 import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 
 /**
  * Configuration for {@linkcode Zero}.
  */
 export interface ZeroOptions<
-  S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
-  QD extends QueryDefinitions<S, Context> | undefined = undefined,
+  S extends Schema = RegisteredSchema,
+  MD extends CustomMutatorDefs | undefined = RegisteredMutators,
+  Context = RegisteredContext,
+  QD extends QueryDefinitions<S, Context> | undefined = RegisteredQueries<
+    Register,
+    S,
+    Context
+  >,
 > {
   /**
    * URL to the zero-cache. This can be a simple hostname, e.g.
@@ -297,10 +308,14 @@ export interface ZeroOptions<
  * @deprecated Use {@link ZeroOptions} instead.
  */
 export interface ZeroAdvancedOptions<
-  S extends Schema,
-  MD extends CustomMutatorDefs | undefined,
-  Context,
-  QD extends QueryDefinitions<S, Context> | undefined,
+  S extends Schema = RegisteredSchema,
+  MD extends CustomMutatorDefs | undefined = RegisteredMutators,
+  Context = RegisteredContext,
+  QD extends QueryDefinitions<S, Context> | undefined = RegisteredQueries<
+    Register,
+    S,
+    Context
+  >,
 > extends ZeroOptions<S, MD, Context, QD> {}
 
 type UpdateNeededReasonBase = {

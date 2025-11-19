@@ -13,7 +13,7 @@ import {Markdown} from '../../components/markdown.tsx';
 import {RelativeTime} from '../../components/relative-time.tsx';
 import {useHash} from '../../hooks/use-hash.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
-import {useZero} from '../../hooks/use-zero.ts';
+import {useZero} from '@rocicorp/zero/react';
 import {CommentComposer} from './comment-composer.tsx';
 import style from './comment.module.css';
 

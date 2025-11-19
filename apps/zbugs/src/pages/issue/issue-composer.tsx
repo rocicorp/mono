@@ -8,7 +8,7 @@ import {
 } from '../../components/image-upload-area.tsx';
 import {Modal, ModalActions, ModalBody} from '../../components/modal.tsx';
 import {useIsOffline} from '../../hooks/use-is-offline.ts';
-import {useZero} from '../../hooks/use-zero.ts';
+import {useZero} from '@rocicorp/zero/react';
 import {
   MAX_ISSUE_DESCRIPTION_LENGTH,
   MAX_ISSUE_TITLE_LENGTH,

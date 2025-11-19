@@ -10,6 +10,13 @@ import {
 import {stringCompare} from '../../shared/src/string-compare.ts';
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
+import type {
+  Register,
+  RegisteredContext,
+  RegisteredMutators,
+  RegisteredQueries,
+  RegisteredSchema,
+} from '../../zero-client/src/client/register.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {QueryDefinitions} from '../../zql/src/query/query-definitions.ts';
@@ -17,10 +24,14 @@ import type {QueryDefinitions} from '../../zql/src/query/query-definitions.ts';
 export const ZeroContext = createContext<unknown | undefined>(undefined);
 
 export function useZero<
-  S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
-  QD extends QueryDefinitions<S, Context> | undefined = undefined,
+  S extends Schema = RegisteredSchema,
+  MD extends CustomMutatorDefs | undefined = RegisteredMutators,
+  Context = RegisteredContext,
+  QD extends QueryDefinitions<S, Context> | undefined = RegisteredQueries<
+    Register,
+    S,
+    Context
+  >,
 >(): Zero<S, MD, Context, QD> {
   const zero = useContext(ZeroContext);
   if (zero === undefined) {
@@ -29,20 +40,15 @@ export function useZero<
   return zero as Zero<S, MD, Context, QD>;
 }
 
-export function createUseZero<
-  S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
-  QD extends QueryDefinitions<S, Context> | undefined = undefined,
->() {
-  return () => useZero<S, MD, Context, QD>();
-}
-
 export type ZeroProviderProps<
-  S extends Schema,
-  MD extends CustomMutatorDefs | undefined,
-  Context,
-  QD extends QueryDefinitions<S, Context> | undefined,
+  S extends Schema = RegisteredSchema,
+  MD extends CustomMutatorDefs | undefined = RegisteredMutators,
+  Context = RegisteredContext,
+  QD extends QueryDefinitions<S, Context> | undefined = RegisteredQueries<
+    Register,
+    S,
+    Context
+  >,
 > = (ZeroOptions<S, MD, Context, QD> | {zero: Zero<S, MD, Context, QD>}) & {
   init?: (zero: Zero<S, MD, Context, QD>) => void;
   children: ReactNode;
@@ -51,10 +57,14 @@ export type ZeroProviderProps<
 const NO_AUTH_SET = Symbol();
 
 export function ZeroProvider<
-  S extends Schema,
-  MD extends CustomMutatorDefs | undefined,
-  Context,
-  QD extends QueryDefinitions<S, Context> | undefined,
+  S extends Schema = RegisteredSchema,
+  MD extends CustomMutatorDefs | undefined = RegisteredMutators,
+  Context = RegisteredContext,
+  QD extends QueryDefinitions<S, Context> | undefined = RegisteredQueries<
+    Register,
+    S,
+    Context
+  >,
 >({children, init, ...props}: ZeroProviderProps<S, MD, Context, QD>) {
   const isExternalZero = 'zero' in props;
 

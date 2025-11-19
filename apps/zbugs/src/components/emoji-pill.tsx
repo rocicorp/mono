@@ -9,7 +9,7 @@ import {
 } from '../emoji-utils.ts';
 import {useDocumentHasFocus} from '../hooks/use-document-has-focus.ts';
 import {useNumericPref} from '../hooks/use-user-pref.ts';
-import {useZero} from '../hooks/use-zero.ts';
+import {useZero} from '@rocicorp/zero/react';
 import {AvatarImage} from './avatar-image.tsx';
 import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
 import {SKIN_TONE_PREF} from './emoji-picker.tsx';

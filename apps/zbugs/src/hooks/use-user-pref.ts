@@ -1,6 +1,5 @@
-import {useQuery} from '@rocicorp/zero/react';
+import {useQuery, useZero} from '@rocicorp/zero/react';
 import type {ZeroBugs} from '../../shared/zero-type.ts';
-import {useZero} from './use-zero.ts';
 
 export function useUserPref(key: string): string | undefined {
   const z = useZero();

@@ -278,3 +278,9 @@ export const builder = createBuilder(schema);
 
 export const ZERO_PROJECT_ID = 'iCNlS2qEpzYWEes1RTf-D';
 export const ZERO_PROJECT_NAME = 'Zero';
+
+declare module '@rocicorp/zero' {
+  interface Register {
+    schema: Schema;
+  }
+}

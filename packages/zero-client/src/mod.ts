@@ -183,6 +183,13 @@ export type {Client as InspectorClient} from './client/inspector/client.ts';
 export type {Inspector} from './client/inspector/inspector.ts';
 export type {Query as InspectorQuery} from './client/inspector/query.ts';
 export type {UpdateNeededReason, ZeroOptions} from './client/options.ts';
+export type {
+  Register,
+  RegisteredContext,
+  RegisteredMutators,
+  RegisteredQueries,
+  RegisteredSchema,
+} from './client/register.ts';
 export {UpdateNeededReasonType} from './client/update-needed-reason-type.ts';
 export {Zero, type MakeEntityQueriesFromSchema} from './client/zero.ts';
 export type {

@@ -2,6 +2,7 @@ import {createComputed, createSignal, onCleanup, type Accessor} from 'solid-js';
 import {createStore} from 'solid-js/store';
 import type {ClientID} from '../../replicache/src/sync/ids.ts';
 import {bindingsForZero} from '../../zero-client/src/client/bindings.ts';
+import type {RegisteredSchema} from '../../zero-client/src/client/register.ts';
 import type {QueryResultDetails} from '../../zero-client/src/types/query-result.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {HumanReadable, Query} from '../../zql/src/query/query.ts';
@@ -36,9 +37,10 @@ export type UseQueryOptions = {
  * @deprecated Use {@linkcode useQuery} instead.
  */
 export function createQuery<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
+  TSchema extends Schema = RegisteredSchema,
+  TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+    string,
+  TReturn = unknown,
 >(
   querySignal: Accessor<Query<TSchema, TTable, TReturn>>,
   options?: CreateQueryOptions | Accessor<CreateQueryOptions>,
@@ -47,9 +49,10 @@ export function createQuery<
 }
 
 export function useQuery<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
+  TSchema extends Schema = RegisteredSchema,
+  TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+    string,
+  TReturn = unknown,
 >(
   querySignal: Accessor<Query<TSchema, TTable, TReturn>>,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,

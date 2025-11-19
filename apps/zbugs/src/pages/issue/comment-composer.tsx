@@ -8,7 +8,7 @@ import {
 } from '../../components/image-upload-area.tsx';
 import {useIsOffline} from '../../hooks/use-is-offline.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
-import {useZero} from '../../hooks/use-zero.ts';
+import {useZero} from '@rocicorp/zero/react';
 import {maxCommentLength} from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
 

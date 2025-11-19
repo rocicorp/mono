@@ -161,6 +161,13 @@ import {MutationTracker} from './mutation-tracker.ts';
 import {MutatorProxy} from './mutator-proxy.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import {QueryManager} from './query-manager.ts';
+import type {
+  Register,
+  RegisteredContext,
+  RegisteredMutators,
+  RegisteredQueries,
+  RegisteredSchema,
+} from './register.ts';
 import {
   reloadScheduled,
   reloadWithReason,
@@ -361,10 +368,14 @@ type MakeZeroQueryType<
     : MakeEntityQueriesFromSchema<S>;
 
 export class Zero<
-  const S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
-  TContext = unknown,
-  QD extends QueryDefinitions<S, TContext> | undefined = undefined,
+  const S extends Schema = RegisteredSchema,
+  MD extends CustomMutatorDefs | undefined = RegisteredMutators,
+  TContext = RegisteredContext,
+  QD extends QueryDefinitions<S, TContext> | undefined = RegisteredQueries<
+    Register,
+    S,
+    TContext
+  >,
 > {
   readonly version = version;
 

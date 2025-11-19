@@ -1,6 +1,6 @@
 import {useZeroConnectionState} from '@rocicorp/zero/react';
 import {useCallback} from 'react';
-import {useZero} from '../hooks/use-zero.ts';
+import {useZero} from '@rocicorp/zero/react';
 import {Button} from './button.tsx';
 import {Modal, ModalActions, ModalText} from './modal.tsx';
 
