@@ -1,13 +1,13 @@
 import {describe, expect, test} from 'vitest';
 import type {ExpressionFactory} from './expression.ts';
 import {newQuery} from './query-impl.ts';
-import {asQueryInternals} from './query-internals.ts';
+import {queryWithContext} from './query-internals.ts';
 import {type AnyQuery} from './query.ts';
 import {staticQuery} from './static-query.ts';
 import {schema} from './test/test-schemas.ts';
 
 function ast(q: AnyQuery) {
-  return asQueryInternals(q).ast;
+  return queryWithContext(q, undefined).ast;
 }
 
 describe('building the AST', () => {

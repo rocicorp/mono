@@ -13,7 +13,11 @@ import {builder} from '../shared/schema.ts';
 import {notify} from './notify.ts';
 
 export type PostCommitTask = () => Promise<void>;
-type MutatorTx = ServerTransaction<Schema, PostgresJsTransaction>;
+type MutatorTx = ServerTransaction<
+  Schema,
+  PostgresJsTransaction,
+  AuthData | undefined
+>;
 
 export function createServerMutators(
   authData: AuthData | undefined,

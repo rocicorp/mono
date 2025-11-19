@@ -6,13 +6,13 @@ import type {AST, Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
 import {planQuery} from '../../../zql/src/planner/planner-builder.ts';
 import type {CostModelCost} from '../../../zql/src/planner/planner-connection.ts';
 import type {PlannerConstraint} from '../../../zql/src/planner/planner-constraint.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {pick} from '../helpers/planner.ts';
 import {builder} from './schema.ts';
 
 function ast(q: AnyQuery) {
-  return asQueryInternals(q).ast;
+  return queryWithContext(q, undefined).ast;
 }
 
 /**

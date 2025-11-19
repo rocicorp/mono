@@ -49,7 +49,7 @@ type NotificationArgs = {issueID: string} & (
 );
 
 export async function notify(
-  tx: ServerTransaction<Schema, TransactionSql>,
+  tx: ServerTransaction<Schema, TransactionSql, AuthData | undefined>,
   authData: AuthData | undefined,
   args: NotificationArgs,
   postCommitTasks: PostCommitTask[],
@@ -257,7 +257,7 @@ const emailRegex =
   /^(?!\.)(?!.*\.\.)([A-Za-z0-9_'+\-.]*)[A-Za-z0-9_+-]@([A-Za-z0-9][A-Za-z0-9-]*\.)+[A-Za-z]{2,}$/;
 
 export async function gatherRecipients(
-  tx: ServerTransaction<Schema, TransactionSql>,
+  tx: ServerTransaction<Schema, TransactionSql, AuthData | undefined>,
   issueID: string,
   actorID: string,
   excludeActor = true,

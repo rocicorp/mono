@@ -5,6 +5,7 @@ import type {BuilderDelegate} from '../builder/builder.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {MetricsDelegate} from './metrics-delegate.ts';
 import type {CustomQueryID} from './named.ts';
+import type {QueryInternals} from './query-internals.ts';
 import type {
   HumanReadable,
   MaterializeOptions,
@@ -35,7 +36,17 @@ export interface NewQueryDelegate {
  * Interface for delegates that support materializing, running, and preloading queries.
  * This interface contains the methods needed to execute queries and manage their lifecycle.
  */
-export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
+export interface QueryDelegate<TContext>
+  extends BuilderDelegate,
+    MetricsDelegate {
+  withContext<
+    TSchema extends Schema,
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+  >(
+    query: Query<TSchema, TTable, TReturn, TContext>,
+  ): QueryInternals<TSchema, TTable, TReturn, TContext>;
+
   addServerQuery(ast: AST, ttl: TTL, gotCallback?: GotCallback): () => void;
 
   addCustomQuery(
@@ -82,7 +93,7 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
   >(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
     factory?: undefined,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
@@ -93,8 +104,8 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
     TReturn,
     T,
   >(
-    query: Query<TSchema, TTable, TReturn>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
+    factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
     options?: MaterializeOptions,
   ): T;
 
@@ -107,8 +118,8 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
     TReturn,
     T,
   >(
-    query: Query<TSchema, TTable, TReturn>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
+    factory?: ViewFactory<TSchema, TTable, TReturn, TContext, T>,
     options?: MaterializeOptions,
   ): T;
 
@@ -120,7 +131,7 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
   >(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>>;
 
@@ -132,7 +143,7 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
   >(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
     options?: PreloadOptions,
   ): {
     cleanup: () => void;

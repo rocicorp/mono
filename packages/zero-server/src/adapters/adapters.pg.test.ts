@@ -93,8 +93,8 @@ const mockTransactionInput = {
   mutationID: 0,
 } as const;
 
-async function exerciseMutations<WrappedTransaction>(
-  zql: ZQLDatabase<typeof schema, WrappedTransaction>,
+async function exerciseMutations<WrappedTransaction, TContext>(
+  zql: ZQLDatabase<typeof schema, WrappedTransaction, TContext>,
   expect: ExpectStatic,
 ) {
   const baseUser = getRandomUser();
@@ -433,7 +433,9 @@ describe('drizzle and node-postgres', () => {
         }
       | undefined
     >();
-    expectTypeOf(zql).toMatchTypeOf<ZQLDatabase<typeof schema, TxType>>();
+    expectTypeOf(zql).toMatchTypeOf<
+      ZQLDatabase<typeof schema, TxType, unknown>
+    >();
   });
 });
 
@@ -566,6 +568,8 @@ describe('drizzle and postgres-js', () => {
         }
       | undefined
     >();
-    expectTypeOf(zql).toMatchTypeOf<ZQLDatabase<typeof schema, TxType>>();
+    expectTypeOf(zql).toMatchTypeOf<
+      ZQLDatabase<typeof schema, TxType, unknown>
+    >();
   });
 });

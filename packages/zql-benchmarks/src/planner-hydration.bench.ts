@@ -15,7 +15,7 @@ import {bootstrap} from '../../zql-integration-tests/src/helpers/runner.ts';
 import {defaultFormat} from '../../zql/src/ivm/default-format.ts';
 import {planQuery} from '../../zql/src/planner/planner-builder.ts';
 import {QueryImpl} from '../../zql/src/query/query-impl.ts';
-import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
+import {queryWithContext} from '../../zql/src/query/query-internals.ts';
 import type {PullRow, Query} from '../../zql/src/query/query.ts';
 import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
 
@@ -47,7 +47,12 @@ function createQuery<TTable extends keyof typeof schema.tables>(
   queryAST: AST,
 ) {
   const q = new QueryImpl(schema, tableName, queryAST, defaultFormat, 'test');
-  return q as Query<typeof schema, TTable, PullRow<TTable, typeof schema>>;
+  return q as Query<
+    typeof schema,
+    TTable,
+    PullRow<TTable, typeof schema>,
+    unknown
+  >;
 }
 
 // Helper to benchmark planned vs unplanned
@@ -55,7 +60,7 @@ function benchmarkQuery<TTable extends keyof typeof schema.tables>(
   name: string,
   query: Query<typeof schema, TTable>,
 ) {
-  const unplannedAST = asQueryInternals(query).ast;
+  const unplannedAST = queryWithContext(query, undefined).ast;
 
   // Map to server names, plan, then map back to client names
   const mappedAST = mapAST(unplannedAST, clientToServerMapper);

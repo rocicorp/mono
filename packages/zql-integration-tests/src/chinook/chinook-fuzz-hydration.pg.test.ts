@@ -4,7 +4,7 @@ import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {expect, test} from 'vitest';
 import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../../ast-to-zql/src/format.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
 import '../helpers/comparePg.ts';
@@ -40,8 +40,8 @@ if (REPRO_SEED) {
     console.log(
       'ZQL',
       await formatOutput(
-        asQueryInternals(query[0]).ast.table +
-          astToZQL(asQueryInternals(query[0]).ast),
+        queryWithContext(query[0], undefined).ast.table +
+          astToZQL(queryWithContext(query[0], undefined).ast),
       ),
     );
     await runCase(tc);
@@ -112,6 +112,6 @@ async function shrink(generations: AnyQuery[], seed: number) {
     throw new Error('no failure found');
   }
   const query = generations[lastFailure];
-  const queryInternals = asQueryInternals(query);
+  const queryInternals = queryWithContext(query, undefined);
   return formatOutput(queryInternals.ast.table + astToZQL(queryInternals.ast));
 }

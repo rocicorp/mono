@@ -31,11 +31,7 @@ import {
 } from './expression.ts';
 import type {CustomQueryID} from './named.ts';
 import type {GotCallback, QueryDelegate} from './query-delegate.ts';
-import {
-  asQueryInternals,
-  queryInternalsTag,
-  type QueryInternals,
-} from './query-internals.ts';
+import {queryInternalsTag, type QueryInternals} from './query-internals.ts';
 import {
   type AnyQuery,
   type ExistsOptions,
@@ -54,7 +50,8 @@ export function newQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
->(schema: TSchema, table: TTable): Query<TSchema, TTable, TReturn> {
+  TContext = unknown,
+>(schema: TSchema, table: TTable): Query<TSchema, TTable, TReturn, TContext> {
   return new QueryImpl(schema, table, {table}, defaultFormat, undefined);
 }
 
@@ -73,7 +70,7 @@ export function staticParam(
 // oxlint-disable-next-line no-explicit-any
 type GetFilterTypeAny = GetFilterType<any, any, any>;
 
-type NewQueryFunction<TSchema extends Schema> = <
+type NewQueryFunction<TSchema extends Schema, TContext> = <
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
 >(
@@ -83,16 +80,17 @@ type NewQueryFunction<TSchema extends Schema> = <
   format: Format,
   customQueryID: CustomQueryID | undefined,
   currentJunction: string | undefined,
-) => Query<TSchema, TTable, TReturn>;
+) => Query<TSchema, TTable, TReturn, TContext>;
 
 export abstract class AbstractQuery<
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn = PullRow<TTable, TSchema>,
+    TContext = unknown,
   >
   implements
-    Query<TSchema, TTable, TReturn>,
-    QueryInternals<TSchema, TTable, TReturn>
+    Query<TSchema, TTable, TReturn, TContext>,
+    QueryInternals<TSchema, TTable, TReturn, TContext>
 {
   readonly [queryInternalsTag] = true;
 
@@ -104,7 +102,7 @@ export abstract class AbstractQuery<
   readonly #system: System;
   readonly #currentJunction: string | undefined;
   readonly customQueryID: CustomQueryID | undefined;
-  readonly #newQuery: NewQueryFunction<TSchema>;
+  readonly #newQuery: NewQueryFunction<TSchema, TContext>;
 
   constructor(
     schema: TSchema,
@@ -114,7 +112,7 @@ export abstract class AbstractQuery<
     system: System,
     customQueryID: CustomQueryID | undefined,
     currentJunction: string | undefined,
-    newQuery: NewQueryFunction<TSchema>,
+    newQuery: NewQueryFunction<TSchema, TContext>,
   ) {
     this.#schema = schema;
     this.#tableName = tableName;
@@ -126,10 +124,16 @@ export abstract class AbstractQuery<
     this.#newQuery = newQuery;
   }
 
+  withContext(
+    _ctx: TContext,
+  ): QueryInternals<TSchema, TTable, TReturn, TContext> {
+    return this as QueryInternals<TSchema, TTable, TReturn, TContext>;
+  }
+
   nameAndArgs(
     name: string,
     args: ReadonlyArray<ReadonlyJSONValue>,
-  ): Query<TSchema, TTable, TReturn> {
+  ): Query<TSchema, TTable, TReturn, TContext> {
     return this.#newQuery(
       this.#tableName,
       this.#ast,
@@ -149,7 +153,7 @@ export abstract class AbstractQuery<
     return this.#hash;
   }
 
-  one = (): Query<TSchema, TTable, TReturn | undefined> =>
+  one = (): Query<TSchema, TTable, TReturn | undefined, TContext> =>
     this.#newQuery(
       this.#tableName,
       {
@@ -168,7 +172,7 @@ export abstract class AbstractQuery<
     relationship: string,
     cbOrOptions?: ((q: AnyQuery) => AnyQuery) | ExistsOptions,
     options?: ExistsOptions,
-  ): Query<TSchema, TTable, TReturn> => {
+  ): Query<TSchema, TTable, TReturn, TContext> => {
     const cb = typeof cbOrOptions === 'function' ? cbOrOptions : undefined;
     const opts = typeof cbOrOptions === 'function' ? options : cbOrOptions;
     const flipped = opts?.flip;
@@ -185,7 +189,7 @@ export abstract class AbstractQuery<
     relationship: string,
     cb?: (q: AnyQuery) => AnyQuery,
     // oxlint-disable-next-line no-explicit-any
-  ): Query<Schema, string, any> => {
+  ): Query<Schema, string, any, TContext> => {
     if (relationship.startsWith(SUBQ_PREFIX)) {
       throw new Error(
         `Relationship names may not start with "${SUBQ_PREFIX}". That is a reserved prefix.`,
@@ -334,7 +338,7 @@ export abstract class AbstractQuery<
     fieldOrExpressionFactory: string | ExpressionFactory<TSchema, TTable>,
     opOrValue?: SimpleOperator | GetFilterTypeAny | Parameter,
     value?: GetFilterTypeAny | Parameter,
-  ): Query<TSchema, TTable, TReturn> => {
+  ): Query<TSchema, TTable, TReturn, TContext> => {
     let cond: Condition;
 
     if (typeof fieldOrExpressionFactory === 'function') {
@@ -369,9 +373,9 @@ export abstract class AbstractQuery<
   };
 
   start = (
-    row: Partial<Record<string, ReadonlyJSONValue | undefined>>,
+    row: Partial<PullRow<TTable, TSchema>>,
     opts?: {inclusive: boolean},
-  ): Query<TSchema, TTable, TReturn> =>
+  ): Query<TSchema, TTable, TReturn, TContext> =>
     this.#newQuery(
       this.#tableName,
       {
@@ -386,7 +390,7 @@ export abstract class AbstractQuery<
       this.#currentJunction,
     );
 
-  limit = (limit: number): Query<TSchema, TTable, TReturn> => {
+  limit = (limit: number): Query<TSchema, TTable, TReturn, TContext> => {
     if (limit < 0) {
       throw new Error('Limit must be non-negative');
     }
@@ -415,7 +419,7 @@ export abstract class AbstractQuery<
   orderBy = <TSelector extends keyof TSchema['tables'][TTable]['columns']>(
     field: TSelector,
     direction: 'asc' | 'desc',
-  ): Query<TSchema, TTable, TReturn> => {
+  ): Query<TSchema, TTable, TReturn, TContext> => {
     if (this.#currentJunction) {
       throw new NotImplementedError(
         'Order by is not supported in junction relationships yet. Junction relationship being ordered: ' +
@@ -518,8 +522,10 @@ export abstract class AbstractQuery<
                   parentField: secondRelation.sourceField,
                   childField: secondRelation.destField,
                 },
-                subquery: (queryToDest as QueryImpl<Schema, string, unknown>)
-                  .#ast,
+
+                subquery: (
+                  queryToDest as QueryImpl<Schema, string, unknown, unknown>
+                ).#ast,
               },
               op: 'EXISTS',
               flip,
@@ -543,7 +549,10 @@ function asAbstractQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
->(q: Query<TSchema, TTable, TReturn>): AbstractQuery<TSchema, TTable, TReturn> {
+  TContext,
+>(
+  q: Query<TSchema, TTable, TReturn, TContext>,
+): AbstractQuery<TSchema, TTable, TReturn, TContext> {
   assert(q instanceof AbstractQuery);
   return q;
 }
@@ -552,14 +561,16 @@ export function materializeImpl<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
+  TContext,
   T,
 >(
-  query: Query<TSchema, TTable, TReturn>,
-  delegate: QueryDelegate,
+  query: Query<TSchema, TTable, TReturn, TContext>,
+  delegate: QueryDelegate<TContext>,
   factory: ViewFactory<
     TSchema,
     TTable,
     TReturn,
+    TContext,
     T
     // oxlint-disable-next-line no-explicit-any
   > = arrayViewFactory as any,
@@ -567,8 +578,8 @@ export function materializeImpl<
 ): T {
   let ttl: TTL = options?.ttl ?? DEFAULT_TTL_MS;
 
-  const qi = asQueryInternals(query);
-  const {ast, format, customQueryID} = qi;
+  const qi = delegate.withContext(query);
+  const {ast: ast, format, customQueryID} = qi;
   const queryHash = qi.hash();
 
   const queryID = customQueryID
@@ -642,9 +653,10 @@ export async function runImpl<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
+  TContext,
 >(
-  query: Query<TSchema, TTable, TReturn>,
-  delegate: QueryDelegate,
+  query: Query<TSchema, TTable, TReturn, TContext>,
+  delegate: QueryDelegate<TContext>,
   options?: RunOptions,
 ): Promise<HumanReadable<TReturn>> {
   delegate.assertValidRunOptions(options);
@@ -681,18 +693,19 @@ export function preloadImpl<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
+  TContext,
 >(
-  query: Query<TSchema, TTable, TReturn>,
-  delegate: QueryDelegate,
+  query: Query<TSchema, TTable, TReturn, TContext>,
+  delegate: QueryDelegate<TContext>,
   options?: PreloadOptions,
 ): {
   cleanup: () => void;
   complete: Promise<void>;
 } {
-  const qi = asQueryInternals(query);
+  const qi = delegate.withContext(query);
   const ttl = options?.ttl ?? DEFAULT_PRELOAD_TTL_MS;
   const {resolve, promise: complete} = resolver<void>();
-  const {customQueryID, ast} = qi;
+  const {customQueryID, ast: ast} = qi;
   if (customQueryID) {
     const cleanup = delegate.addCustomQuery(ast, customQueryID, ttl, got => {
       if (got) {
@@ -720,9 +733,10 @@ export class QueryImpl<
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn = PullRow<TTable, TSchema>,
+    TContext = unknown,
   >
-  extends AbstractQuery<TSchema, TTable, TReturn>
-  implements Query<TSchema, TTable, TReturn>
+  extends AbstractQuery<TSchema, TTable, TReturn, TContext>
+  implements Query<TSchema, TTable, TReturn, TContext>
 {
   constructor(
     schema: TSchema,
@@ -759,8 +773,9 @@ function arrayViewFactory<
   TSchema extends Schema,
   TTable extends string,
   TReturn,
+  TContext,
 >(
-  _query: QueryInternals<TSchema, TTable, TReturn>,
+  _query: QueryInternals<TSchema, TTable, TReturn, TContext>,
   input: Input,
   format: Format,
   onDestroy: () => void,

@@ -7,7 +7,6 @@ import type {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import type {MetricMap} from '../../../zql/src/query/metrics-delegate.ts';
 import type {CustomQueryID} from '../../../zql/src/query/named.ts';
 import {QueryImpl} from '../../../zql/src/query/query-impl.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {
   ZeroContext,
@@ -84,7 +83,7 @@ interface MockView {
 
 describe('query materialization metrics', () => {
   let addMetricSpy: ReturnType<typeof vi.fn>;
-  let queryDelegate: ZeroContext;
+  let queryDelegate: ZeroContext<unknown>;
   let gotCallback: ((got: boolean) => void) | undefined;
   let addServerQuerySpy: ReturnType<typeof vi.fn>;
   let addCustomQuerySpy: ReturnType<typeof vi.fn>;
@@ -127,6 +126,7 @@ describe('query materialization metrics', () => {
     queryDelegate = new ZeroContext(
       new LogContext('info'),
       new IVMSourceBranch(schema.tables),
+      'context',
       addServerQuerySpy as unknown as AddQuery,
       addCustomQuerySpy as unknown as AddCustomQuery,
       (() => {}) as unknown as UpdateQuery,
@@ -154,7 +154,7 @@ describe('query materialization metrics', () => {
         expectedDelta: 35,
         setup: () => {
           const query = createTestQuery();
-          return asQueryInternals(query).nameAndArgs('getUsers', []);
+          return queryDelegate.withContext(query).nameAndArgs('getUsers', []);
         },
         additionalChecks: () => {
           expect(addCustomQuerySpy).toHaveBeenCalledOnce();
@@ -297,7 +297,7 @@ describe('query materialization metrics', () => {
         expectedDelta: 150,
         setup: () => {
           const query = createTestQuery();
-          return asQueryInternals(query).nameAndArgs('getUsers', []);
+          return queryDelegate.withContext(query).nameAndArgs('getUsers', []);
         },
         additionalChecks: () => {
           expect(addCustomQuerySpy).toHaveBeenCalledOnce();
@@ -564,7 +564,7 @@ describe('query materialization metrics', () => {
 
   describe('edge cases and error scenarios', () => {
     let addMetricSpy: ReturnType<typeof vi.fn>;
-    let context: ZeroContext;
+    let context: ZeroContext<unknown>;
 
     beforeEach(() => {
       vi.useFakeTimers();
@@ -574,6 +574,7 @@ describe('query materialization metrics', () => {
       context = new ZeroContext(
         new LogContext('info'),
         new IVMSourceBranch(schema.tables),
+        'context',
         (() => () => {}) as unknown as AddQuery,
         (() => () => {}) as unknown as AddCustomQuery,
         (() => {}) as unknown as UpdateQuery,

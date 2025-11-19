@@ -4,7 +4,7 @@ import type {Schema} from '../../../../zero-types/src/schema.ts';
 import type {ServerSchema} from '../../../../zero-types/src/server-schema.ts';
 import {getDataForType} from '../../../../zql-integration-tests/src/helpers/data-gen.ts';
 import {NotImplementedError} from '../../error.ts';
-import {asQueryInternals} from '../query-internals.ts';
+import {queryWithContext} from '../query-internals.ts';
 import type {AnyQuery} from '../query.ts';
 import {staticQuery} from '../static-query.ts';
 import {randomValueForType, selectRandom, shuffle, type Rng} from './util.ts';
@@ -100,7 +100,7 @@ function augmentQuery(
   }
 
   function addOrderBy(query: AnyQuery) {
-    const tableName = asQueryInternals(query).ast.table;
+    const tableName = queryWithContext(query, undefined).ast.table;
     const table = schema.tables[tableName];
     const columnNames = Object.keys(table.columns);
     // we wouldn't really order by _every_ column, right?
@@ -139,7 +139,7 @@ function augmentQuery(
       return query;
     }
 
-    const tableName = asQueryInternals(query).ast.table;
+    const tableName = queryWithContext(query, undefined).ast.table;
     const table = schema.tables[tableName];
     const columnNames = Object.keys(table.columns);
     for (let i = 0; i < numConditions; i++) {
@@ -187,7 +187,7 @@ function augmentQuery(
       return query;
     }
 
-    const tableName = asQueryInternals(query).ast.table;
+    const tableName = queryWithContext(query, undefined).ast.table;
     const relationships = Object.keys(schema.relationships[tableName] ?? {});
     const relationshipsToAdd = Math.floor(rng() * 4);
     if (relationshipsToAdd === 0) {
@@ -228,7 +228,7 @@ function augmentQuery(
       return query;
     }
 
-    const tableName = asQueryInternals(query).ast.table;
+    const tableName = queryWithContext(query, undefined).ast.table;
     const relationships = Object.keys(schema.relationships[tableName] ?? {});
     const existsToAdd = Math.floor(rng() * 4);
     if (existsToAdd === 0) {

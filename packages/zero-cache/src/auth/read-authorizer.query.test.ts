@@ -35,7 +35,7 @@ import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
 import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
 import type {Query, Row} from '../../../zql/src/query/query.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
@@ -450,7 +450,7 @@ const permissions = must(
   }),
 );
 
-let queryDelegate: QueryDelegate;
+let queryDelegate: QueryDelegate<undefined>;
 let replica: Database;
 function toDbType(type: ValueType) {
   switch (type) {
@@ -466,7 +466,7 @@ function toDbType(type: ValueType) {
 }
 let writeAuthorizer: WriteAuthorizerImpl;
 
-class ReadAuthorizerTestQueryDelegate extends QueryDelegateBase {
+class ReadAuthorizerTestQueryDelegate extends QueryDelegateBase<undefined> {
   readonly defaultQueryComplete = true;
 
   readonly #sources = new Map<string, Source>();
@@ -474,7 +474,7 @@ class ReadAuthorizerTestQueryDelegate extends QueryDelegateBase {
   readonly #lc: LogContext;
 
   constructor(replica: Database, lc: LogContext) {
-    super();
+    super(undefined);
     this.#replica = replica;
     this.#lc = lc;
   }
@@ -906,12 +906,12 @@ describe('issue permissions', () => {
 function runReadQueryWithPermissions(
   authData: AuthData,
   query: Query<ZeroSchema, string>,
-  queryDelegate: QueryDelegate,
+  queryDelegate: QueryDelegate<undefined>,
 ) {
   const updatedAst = bindStaticParameters(
     transformQuery(
       new LogContext('debug'),
-      asQueryInternals(query).ast,
+      queryWithContext(query, undefined).ast,
       permissions,
       authData,
     ),

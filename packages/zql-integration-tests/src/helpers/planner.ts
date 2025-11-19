@@ -5,7 +5,7 @@ import {planQuery} from '../../../zql/src/planner/planner-builder.ts';
 import type {ConnectionCostModel} from '../../../zql/src/planner/planner-connection.ts';
 import type {PlanDebugger} from '../../../zql/src/planner/planner-debug.ts';
 import {completeOrdering} from '../../../zql/src/query/complete-ordering.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 
 export function makeGetPlanAST(
@@ -14,7 +14,7 @@ export function makeGetPlanAST(
   costModel: ConnectionCostModel,
 ) {
   return (q: AnyQuery, planDebugger?: PlanDebugger) => {
-    const ast = asQueryInternals(q).ast;
+    const ast = queryWithContext(q, undefined).ast;
     return planQuery(
       mapAST(
         completeOrdering(ast, tableName => schema.tables[tableName].primaryKey),

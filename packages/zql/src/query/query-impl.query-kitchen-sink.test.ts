@@ -5,7 +5,7 @@ import {newQuery} from './query-impl.ts';
 import {QueryDelegateImpl} from './test/query-delegate.ts';
 import {schema} from './test/test-schemas.ts';
 
-function addData(queryDelegate: QueryDelegate) {
+function addData(queryDelegate: QueryDelegate<unknown>) {
   const userSource = must(queryDelegate.getSource('user'));
   const issueSource = must(queryDelegate.getSource('issue'));
   const commentSource = must(queryDelegate.getSource('comment'));

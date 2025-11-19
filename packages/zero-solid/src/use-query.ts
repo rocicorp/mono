@@ -50,8 +50,9 @@ export function useQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
+  TContext,
 >(
-  querySignal: Accessor<Query<TSchema, TTable, TReturn>>,
+  querySignal: Accessor<Query<TSchema, TTable, TReturn, TContext>>,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
 ): QueryResult<TReturn> {
   const [state, setState] = createStore<State>([
@@ -74,7 +75,7 @@ export function useQuery<
     [
       SolidView | undefined,
       ClientID | undefined,
-      Query<TSchema, TTable, TReturn> | undefined,
+      Query<TSchema, TTable, TReturn, TContext> | undefined,
       string | undefined,
       TTL | undefined,
       number,

@@ -1,6 +1,6 @@
 import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {expect, test} from 'vitest';
-import {asQueryInternals} from '../query-internals.ts';
+import {queryWithContext} from '../query-internals.ts';
 import {generateQuery} from './query-gen.ts';
 import {generateSchema} from './schema-gen.ts';
 
@@ -28,7 +28,7 @@ test('stable generation', () => {
   const schema = generateSchema(rng, faker);
   const q = generateQuery(schema, {}, rng, faker);
 
-  expect(asQueryInternals(q).ast).toMatchInlineSnapshot(`
+  expect(queryWithContext(q, undefined).ast).toMatchInlineSnapshot(`
     {
       "limit": 126,
       "related": [

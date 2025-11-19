@@ -9,7 +9,7 @@ import {
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {defineQuery} from './define-query.ts';
 import {createBuilder} from './named.ts';
-import {asQueryInternals} from './query-internals.ts';
+import {queryWithContext} from './query-internals.ts';
 
 const schema = createSchema({
   tables: [
@@ -43,14 +43,19 @@ function makeValidator<Input, Output>(
 }
 
 describe('defineQuery', () => {
-  test('should work without validator parameter', () => {
-    const query = defineQuery(({ctx}: {ctx: string; args: undefined}) => {
-      expect(ctx).toBe('noOptionsContext');
-      return builder.foo.where('id', '=', 'noOptionsId');
-    });
+  test('should work without options parameter', () => {
+    const query = defineQuery(
+      'testNoOptions',
+      ({ctx}: {ctx: string; args: undefined}) => {
+        expect(ctx).toBe('noOptionsContext');
+        return builder.foo.where('id', '=', 'noOptionsId');
+      },
+    );
 
-    const result = query({args: undefined, ctx: 'noOptionsContext'});
-    expect(asQueryInternals(result).ast).toEqual({
+    expect(query.queryName).toBe('testNoOptions');
+
+    const result = queryWithContext(query(undefined), 'noOptionsContext');
+    expect(result.ast).toEqual({
       table: 'foo',
       where: {
         type: 'simple',
@@ -61,44 +66,77 @@ describe('defineQuery', () => {
     });
   });
 
-  test('should work with validator that uses same type for input and output', () => {
+  test('should work with empty options object (no validator)', () => {
     const query = defineQuery(
-      makeValidator<number, number>(data => {
-        if (typeof data === 'number') {
-          return data * 2; // Transform but keep same type
-        }
-        throw new Error('Expected number');
-      }),
+      'testEmptyOptions',
+      {},
       ({ctx, args}: {ctx: string; args: number}) => {
-        expect(ctx).toBe('validatorContext');
-        // Note: Validation happens server-side, not at query definition call time
-        // So args here is the raw input, not transformed
-        expect(typeof args).toBe('number');
+        expect(ctx).toBe('emptyContext');
+        expect(args).toBe(42);
         return builder.foo.where('val', '=', args);
       },
     );
 
-    const result = query({args: 123, ctx: 'validatorContext'});
-    expect(asQueryInternals(result).ast).toEqual({
+    expect(query.queryName).toBe('testEmptyOptions');
+
+    const result = queryWithContext(query(42), 'emptyContext');
+    expect(result.ast).toEqual({
       table: 'foo',
       where: {
         type: 'simple',
         left: {type: 'column', name: 'val'},
         op: '=',
-        right: {type: 'literal', value: 123},
+        right: {type: 'literal', value: 42},
+      },
+    });
+  });
+
+  test('should work with validator that uses same type for input and output', () => {
+    const query = defineQuery(
+      'testWithValidator',
+      {
+        validator: makeValidator<number, number>(data => {
+          if (typeof data === 'number') {
+            return data * 2; // Transform but keep same type
+          }
+          throw new Error('Expected number');
+        }),
+      },
+      ({ctx, args}: {ctx: string; args: number}) => {
+        expect(ctx).toBe('validatorContext');
+        expect(args).toBe(246); // Should be doubled from 123
+        expect(typeof args).toBe('number');
+        return builder.foo.where('val', '=', args);
+      },
+    );
+
+    expect(query.queryName).toBe('testWithValidator');
+
+    // Input is number, should be transformed by validator
+    const result = queryWithContext(query(123), 'validatorContext');
+    expect(result.ast).toEqual({
+      table: 'foo',
+      where: {
+        type: 'simple',
+        left: {type: 'column', name: 'val'},
+        op: '=',
+        right: {type: 'literal', value: 246}, // Should be the transformed number
       },
     });
   });
 
   test('should work with validator that returns undefined', () => {
     const query = defineQuery(
+      'testUndefinedValidator',
       {
-        '~standard': {
-          version: 1,
-          vendor: 'test',
-          validate: (_data: unknown) => ({value: undefined}),
-        },
-      } as StandardSchemaV1<undefined, undefined>,
+        validator: {
+          '~standard': {
+            version: 1,
+            vendor: 'test',
+            validate: (_data: unknown) => ({value: undefined}),
+          },
+        } as StandardSchemaV1<unknown, undefined>,
+      },
       ({ctx, args}: {ctx: string; args: undefined}) => {
         expect(ctx).toBe('undefinedValidatorContext');
         expect(args).toBeUndefined();
@@ -106,8 +144,8 @@ describe('defineQuery', () => {
       },
     );
 
-    const result = query({args: undefined, ctx: 'undefinedValidatorContext'});
-    expect(asQueryInternals(result).ast).toEqual({
+    const result = queryWithContext(query(), 'undefinedValidatorContext');
+    expect(result.ast).toEqual({
       table: 'foo',
       where: {
         type: 'simple',
@@ -118,83 +156,100 @@ describe('defineQuery', () => {
     });
   });
 
-  test('should store validator for later use', () => {
-    const validator = {
-      '~standard': {
-        version: 1,
-        vendor: 'test',
-        validate: (_data: unknown) => ({
-          issues: [{path: ['args'], message: 'Invalid input'}],
-        }),
-      },
-    } as StandardSchemaV1<string, string>;
-
+  test('should throw error when validator fails', () => {
     const query = defineQuery(
-      validator,
+      'testValidatorError',
+      {
+        validator: {
+          '~standard': {
+            version: 1,
+            vendor: 'test',
+            validate: (_data: unknown) => ({
+              issues: [{path: ['args'], message: 'Invalid input'}],
+            }),
+          },
+        } as StandardSchemaV1<unknown, string>,
+      },
       ({args}: {ctx: string; args: string}) =>
         builder.foo.where('id', '=', args),
     );
 
-    // Validator is stored on the query definition for later use
-    expect(query.validator).toBe(validator);
+    expect(() => queryWithContext(query('invalid'), 'errorContext')).toThrow(
+      'Validation failed for query testValidatorError',
+    );
   });
 
-  test('should store async validator for later use', () => {
-    const validator = {
-      '~standard': {
-        version: 1,
-        vendor: 'test',
-        validate: async (data: unknown) => {
-          // Simulate async validation
-          await new Promise(resolve => setTimeout(resolve, 1));
-          return {value: `processed-${String(data)}`};
-        },
-      },
-    } as StandardSchemaV1<string, string>;
-
+  test('should throw error when validator returns a promise', () => {
     const query = defineQuery(
-      validator,
+      'testAsyncValidator',
+      {
+        validator: {
+          '~standard': {
+            version: 1,
+            vendor: 'test',
+            validate: async (data: unknown) => {
+              // Simulate async validation
+              await new Promise(resolve => setTimeout(resolve, 1));
+              return {value: `processed-${String(data)}`};
+            },
+          },
+        } as StandardSchemaV1<string, string>,
+      },
       ({ctx, args}: {ctx: string; args: string}) => {
         expect(ctx).toBe('asyncContext');
+        expect(args).toBe('processed-input');
         return builder.foo.where('id', '=', args);
       },
     );
 
-    // Validator is stored for later use, no validation happens at call time
-    expect(query.validator).toBe(validator);
-    const result = query({args: 'input', ctx: 'asyncContext'});
-    expect(asQueryInternals(result).ast).toEqual({
-      table: 'foo',
-      where: {
-        type: 'simple',
-        left: {type: 'column', name: 'id'},
-        op: '=',
-        right: {type: 'literal', value: 'input'},
-      },
-    });
+    expect(() => queryWithContext(query('input'), 'asyncContext')).toThrow(
+      'Async validators are not supported. Query name testAsyncValidator',
+    );
   });
 
-  test('should work with different overloads', () => {
-    const query1 = defineQuery(({ctx}: {ctx: string; args: undefined}) => {
-      expect(ctx).toBe('ctx1');
-      return builder.foo;
-    });
+  test('should preserve query name property and work with different overloads', () => {
+    const query1 = defineQuery(
+      'query1',
+      ({ctx}: {ctx: string; args: undefined}) => {
+        expect(ctx).toBe('ctx1');
+        return builder.foo;
+      },
+    );
     const query2 = defineQuery(
-      makeValidator<string, string>((x: unknown) => x as string),
-      ({ctx, args}: {ctx: string; args: string}) => {
+      'query2',
+      {},
+      ({ctx}: {ctx: string; args: undefined}) => {
         expect(ctx).toBe('ctx2');
+        return builder.foo;
+      },
+    );
+    const query3 = defineQuery(
+      'query3',
+      {},
+      ({ctx}: {ctx: string; args: undefined}) => {
+        expect(ctx).toBe('ctx3');
+        return builder.foo;
+      },
+    );
+    const query4 = defineQuery(
+      'query4',
+      {validator: makeValidator((x: unknown) => x as string)},
+      ({ctx, args}: {ctx: string; args: string}) => {
+        expect(ctx).toBe('ctx4');
         expect(args).toBe('test');
         return builder.foo;
       },
     );
 
     // Test that all overloads actually work
-    const result1 = query1({args: undefined, ctx: 'ctx1'});
-    const result2 = query2({args: 'test', ctx: 'ctx2'});
+    const result1 = queryWithContext(query1(undefined), 'ctx1');
+    const result2 = queryWithContext(query2(undefined), 'ctx2');
+    const result3 = queryWithContext(query3(undefined), 'ctx3');
+    const result4 = queryWithContext(query4('test'), 'ctx4');
 
     // All should return the basic table query
-    [result1, result2].forEach(result => {
-      expect(asQueryInternals(result).ast).toEqual({
+    [result1, result2, result3, result4].forEach(result => {
+      expect(result.ast).toEqual({
         table: 'foo',
       });
     });
@@ -204,65 +259,175 @@ describe('defineQuery', () => {
 // Type Tests
 describe('defineQuery types', () => {
   test('no type annotations should treat ctx as unknown and args as ReadonlyJSONValue | undefined', () => {
-    const query = defineQuery(({ctx, args}) => {
+    // Test no options parameter
+    const query1 = defineQuery('noOptionsNoAnnotations', ({ctx, args}) => {
       expectTypeOf(ctx).toEqualTypeOf<unknown>();
       expectTypeOf(args).toEqualTypeOf<ReadonlyJSONValue | undefined>();
       return builder.foo.where('val', '=', 123);
     });
 
-    // Function takes single object parameter with args and ctx
-    expectTypeOf(query).toBeCallableWith({args: 42, ctx: 'test'});
-    expectTypeOf(query).toBeCallableWith({args: 'string', ctx: null});
-    expectTypeOf(query).toBeCallableWith({args: true, ctx: {}});
-    expectTypeOf(query).toBeCallableWith({args: null, ctx: undefined});
-    expectTypeOf(query).toBeCallableWith({args: undefined, ctx: 123});
+    // Test empty options parameter - should behave the same
+    const query2 = defineQuery(
+      'emptyOptionsNoAnnotations',
+      {},
+      ({ctx, args}) => {
+        expectTypeOf(ctx).toEqualTypeOf<unknown>();
+        expectTypeOf(args).toEqualTypeOf<ReadonlyJSONValue | undefined>();
+        return builder.foo.where('val', '=', 123);
+      },
+    );
+
+    // Note: undefined options parameter is not allowed in 3-arg form
+
+    // All should accept ReadonlyJSONValue types for args
+    expectTypeOf(query1).toBeCallableWith(42);
+    expectTypeOf(query1).toBeCallableWith('string');
+    expectTypeOf(query1).toBeCallableWith(true);
+    expectTypeOf(query1).toBeCallableWith(null);
+    expectTypeOf(query1).toBeCallableWith(undefined);
+    expectTypeOf(query1).toBeCallableWith();
+
+    // Same for query2 (query3 with undefined options not supported in 3-arg form)
+    expectTypeOf(query2).toBeCallableWith(42);
   });
 
   test('with type annotations should respect those types', () => {
-    const query = defineQuery(({ctx, args}: {ctx: string; args: number}) => {
-      expectTypeOf(ctx).toEqualTypeOf<string>();
-      expectTypeOf(args).toEqualTypeOf<number>();
-      return builder.foo.where('val', '=', args);
-    });
+    // Test no options parameter with type annotations
+    const query1 = defineQuery(
+      'noOptionsWithAnnotations',
+      ({ctx, args}: {ctx: string; args: number}) => {
+        expectTypeOf(ctx).toEqualTypeOf<string>();
+        expectTypeOf(args).toEqualTypeOf<number>();
+        return builder.foo.where('val', '=', args);
+      },
+    );
 
-    // Should respect the type annotations
-    expectTypeOf(query).toBeCallableWith({args: 42, ctx: 'test'});
+    // Test empty options parameter - should behave the same
+    const query2 = defineQuery(
+      'emptyOptionsWithAnnotations',
+      {},
+      ({ctx, args}: {ctx: string; args: number}) => {
+        expectTypeOf(ctx).toEqualTypeOf<string>();
+        expectTypeOf(args).toEqualTypeOf<number>();
+        return builder.foo.where('val', '=', args);
+      },
+    );
+
+    // Note: undefined options parameter not supported in 3-arg form
+
+    // All should respect the type annotations
+    expectTypeOf(query1).toBeCallableWith(42);
+    expectTypeOf(query2).toBeCallableWith(42);
 
     // @ts-expect-error - Type 'boolean' is not assignable to type 'number'
-    expectTypeOf(query).toBeCallableWith({args: true, ctx: 'test'});
+    expectTypeOf(query2).toBeCallableWith(true);
 
     // @ts-expect-error - Type 'boolean' is not assignable to type 'string'
-    expectTypeOf(query).toBeCallableWith({ctx: false, args: 42});
+    expectTypeOf(query2).toBeCallableWith({ctx: false, args: 42});
+
+    // Should have correct query names
+    expectTypeOf(query1.queryName).toEqualTypeOf<'noOptionsWithAnnotations'>();
+    expectTypeOf(
+      query2.queryName,
+    ).toEqualTypeOf<'emptyOptionsWithAnnotations'>();
   });
 
   test('validator with same input/output type', () => {
     const query = defineQuery(
-      makeValidator<string, string>(data => {
-        if (typeof data === 'string') {
-          return data.toUpperCase();
-        }
-        throw new Error('Expected string');
-      }),
-      ({ctx: _ctx, args}: {ctx: string; args: string}) => {
+      'validatorSameType',
+      {
+        validator: makeValidator<string, string>(data => {
+          if (typeof data === 'string') {
+            return data.toUpperCase();
+          }
+          throw new Error('Expected string');
+        }),
+      },
+      ({ctx: _ctx, args}) => {
         expectTypeOf(args).toEqualTypeOf<string>();
         return builder.foo.where('id', '=', args);
       },
     );
 
-    expectTypeOf(query).toBeCallableWith({args: 'hello', ctx: 'test'});
+    expectTypeOf(query.queryName).toEqualTypeOf<'validatorSameType'>();
+    expectTypeOf(query).toBeCallableWith('hello');
   });
 
   test('undefined args handling', () => {
-    const query = defineQuery(({args}: {args: undefined}) => {
-      expectTypeOf(args).toEqualTypeOf<undefined>();
+    // All three forms should behave the same when args is undefined
+    const query1 = defineQuery(
+      'undefinedArgs1',
+      ({args}: {args: undefined}) => {
+        expectTypeOf(args).toEqualTypeOf<undefined>();
+        return builder.foo;
+      },
+    );
+
+    const query2 = defineQuery(
+      'undefinedArgs2',
+      {},
+      ({args}: {args: undefined}) => {
+        expectTypeOf(args).toEqualTypeOf<undefined>();
+        return builder.foo;
+      },
+    );
+
+    const query3 = defineQuery(
+      'undefinedArgs3',
+      {
+        validator: makeValidator<undefined, undefined>(x => x as undefined),
+      },
+      ({args}) => {
+        expectTypeOf(args).toEqualTypeOf<undefined>();
+        return builder.foo;
+      },
+    );
+
+    // Note: query3 with undefined options not supported in 3-arg form
+
+    // All should be callable with args: undefined
+    expectTypeOf(query1).toBeCallableWith(undefined);
+    expectTypeOf(query2).toBeCallableWith(undefined);
+    expectTypeOf(query3).toBeCallableWith(undefined);
+
+    expectTypeOf(query1).toBeCallableWith();
+    expectTypeOf(query2).toBeCallableWith();
+    expectTypeOf(query3).toBeCallableWith();
+
+    // Should not accept any other types
+    // @ts-expect-error - Type 'number' is not assignable to type 'undefined'
+    expectTypeOf(query1).toBeCallableWith(123);
+    // @ts-expect-error - Type 'string' is not assignable to type 'undefined'
+    expectTypeOf(query2).toBeCallableWith('test');
+    // @ts-expect-error - Type 'boolean' is not assignable to type 'undefined'
+    expectTypeOf(query3).toBeCallableWith(true);
+  });
+
+  test('No validator and no type annotations should treat args as ReadonlyJSONValue | undefined', () => {
+    const query = defineQuery('noValidatorNoAnnotations', ({args}) => {
+      expectTypeOf(args).toEqualTypeOf<ReadonlyJSONValue | undefined>();
       return builder.foo;
     });
 
-    // Should be callable with args: undefined
-    expectTypeOf(query).toBeCallableWith({args: undefined, ctx: 'test'});
+    // Should accept any ReadonlyJSONValue type
+    expectTypeOf(query).toBeCallableWith(42);
+    expectTypeOf(query).toBeCallableWith('string');
+    expectTypeOf(query).toBeCallableWith(true);
+    expectTypeOf(query).toBeCallableWith(null);
+    expectTypeOf(query).toBeCallableWith(undefined);
+    expectTypeOf(query).toBeCallableWith();
+    expectTypeOf(query).toBeCallableWith({foo: 'bar'});
+    expectTypeOf(query).toBeCallableWith(['a', 'b', 'c']);
 
-    // @ts-expect-error - Type 'number' is not assignable to type 'undefined'
-    expectTypeOf(query).toBeCallableWith({args: 123, ctx: 'test'});
+    // should not accept non-JSON types
+    // @ts-expect-error - Type 'Map<string, string>' is not assignable to type 'ReadonlyJSONValue'
+    expectTypeOf(query).toBeCallableWith(new Map());
+    // @ts-expect-error - Type 'Set<number>' is not assignable to type 'ReadonlyJSONValue'
+    expectTypeOf(query).toBeCallableWith(new Set());
+    // @ts-expect-error - Type 'Date' is not assignable to type 'ReadonlyJSONValue'
+    expectTypeOf(query).toBeCallableWith(new Date());
+    // @ts-expect-error - Type 'symbol' is not assignable to type 'ReadonlyJSONValue'
+    expectTypeOf(query).toBeCallableWith(Symbol('test'));
   });
 
   test('should reject invalid validator input types', () => {
@@ -276,87 +441,131 @@ describe('defineQuery types', () => {
       },
     );
 
-    const validatedQuery = defineQuery(literalToStringValidator, ({args}) => {
-      expectTypeOf(args).toEqualTypeOf<string>();
-      return builder.foo;
-    });
+    const validatedQuery = defineQuery(
+      'validatedTest',
+      {validator: literalToStringValidator},
+      ({args}) => {
+        expectTypeOf(args).toEqualTypeOf<string>();
+        return builder.foo;
+      },
+    );
 
-    // Valid usage - args is constrained to the validator's input type ('foo' | 'bar')
-    expectTypeOf(validatedQuery).toBeCallableWith({
-      args: 'foo' as const,
-      ctx: 'test',
-    });
+    // Valid usage
+    expectTypeOf(validatedQuery).toBeCallableWith('foo' as const);
 
-    // The following would be type errors because args must be 'foo' | 'bar'
-    // but the query function receives string (the output type)
-    // This demonstrates that TInput constrains what can be passed in
+    // @ts-expect-error - Type 'string' is not assignable to type '"foo" | "bar"' (validator input)
+    expectTypeOf(validatedQuery).toBeCallableWith('baz');
+
+    // @ts-expect-error - Type 'number' is not assignable to type '"foo" | "bar"' (validator input)
+    expectTypeOf(validatedQuery).toBeCallableWith(123);
+
+    // @ts-expect-error - Type 'boolean' is not assignable to type '"foo" | "bar"' (validator input)
+    expectTypeOf(validatedQuery).toBeCallableWith(true);
   });
 
-  test('TInput and TOutput can be unrelated types', () => {
-    // TInput and TOutput are independent - both just need to extend ReadonlyJSONValue | undefined
-    // This allows validators to transform types arbitrarily (e.g., for Zod defaults)
+  test('should reject wrong overload usage', () => {
+    // Test that 3-argument form requires options object (can't be undefined)
 
-    // Common case: Same types
+    // This should work (empty object is fine)
+    const validThreeArg = defineQuery(
+      'validThreeArg',
+      {},
+      ({ctx: _ctx}: {ctx: string; args: undefined}) => builder.foo,
+    );
+
+    // Note: The undefined options case is caught at the function definition level,
+    // demonstrating that the type system correctly requires an options object
+    // in the 3-argument form.
+
+    void validThreeArg();
+    void validThreeArg(undefined);
+    // @ts-expect-error - Argument of type '32' is not assignable to parameter of type 'undefined'
+    void validThreeArg(32);
+
+    // Add assertion to satisfy test requirements
+    expect(validThreeArg.queryName).toBe('validThreeArg');
+  });
+
+  test('should reject calling query with wrong argument type', () => {
+    const queryWithArgs = defineQuery(
+      'argsTest',
+      ({ctx: _ctx, args: _args}: {ctx: string; args: string}) => builder.foo,
+    );
+
+    // @ts-expect-error - Argument of type 'number' is not assignable to parameter of type 'string'
+    void queryWithArgs(123);
+
+    // Add assertion to satisfy test requirements
+    expect(queryWithArgs.queryName).toBe('argsTest');
+  });
+
+  test('should have readonly queryName property', () => {
+    const query = defineQuery(
+      'readonlyNameTest',
+      ({ctx: _ctx}: {ctx: string; args: undefined}) => builder.foo,
+    );
+
+    expectTypeOf(query.queryName).toEqualTypeOf<'readonlyNameTest'>();
+
+    // @ts-expect-error - Cannot assign to 'queryName' because it is a read-only property
+    query.queryName = 'different';
+  });
+
+  test('No validator and no args should allow calling with no arguments', () => {
+    const query = defineQuery('noArgsNoValidator', () => builder.foo);
+
+    // Should allow calling with no arguments
+    expectTypeOf(query).toBeCallableWith();
+    expectTypeOf(query).toBeCallableWith(undefined);
+
+    query();
+
+    // these are OK since they are ReadonlyJSONValue
+    expectTypeOf(query).toBeCallableWith(123);
+    expectTypeOf(query).toBeCallableWith('test');
+  });
+
+  test('TInput extends TOutput constraint - ensures type safety', () => {
+    // The TInput extends TOutput constraint prevents validators from widening types.
+    // This ensures the validator's input type is compatible with (assignable to) the output type.
+
+    // Valid: TInput === TOutput (same types - most common case)
     const query1 = defineQuery(
-      makeValidator<string, string>(data => {
-        if (typeof data === 'string') return data.toUpperCase();
-        throw new Error('Expected string');
-      }),
+      'sameTypes',
+      {
+        validator: makeValidator<string, string>(data => {
+          if (typeof data === 'string') return data.toUpperCase();
+          throw new Error('Expected string');
+        }),
+      },
       ({args}) => {
         expectTypeOf(args).toEqualTypeOf<string>();
         return builder.foo.where('id', '=', args);
       },
     );
-    // When called directly, pass the output type
-    expectTypeOf(query1).toBeCallableWith({args: 'hello', ctx: 'test'});
+    expectTypeOf(query1).toBeCallableWith('hello');
 
-    // Narrowing: literal input to wider output
+    // Valid: Narrow input type extends wide output type (literal to base)
     const query2 = defineQuery(
-      makeValidator<'foo' | 'bar', string>(data => {
-        if (data === 'foo' || data === 'bar') return data;
-        throw new Error('Expected foo or bar');
-      }),
+      'narrowToWide',
+      {
+        validator: makeValidator<'foo' | 'bar', string>(data => {
+          if (data === 'foo' || data === 'bar') return data;
+          throw new Error('Expected foo or bar');
+        }),
+      },
       ({args}) => {
         expectTypeOf(args).toEqualTypeOf<string>();
         return builder.foo.where('id', '=', args);
       },
     );
-    // When called directly, pass the output type (string, not 'foo' | 'bar')
-    expectTypeOf(query2).toBeCallableWith({args: 'hello', ctx: 'test'});
+    expectTypeOf(query2).toBeCallableWith('foo' as const);
+    // @ts-expect-error - Type 'string' is not assignable to type '"foo" | "bar"'
+    expectTypeOf(query2).toBeCallableWith('baz');
 
-    // Widening: wider input to narrower output (used for defaults)
-    // Input: string | undefined, Output: string
-    const defaultValidator = makeValidator<string | undefined, string>(data =>
-      data === undefined ? 'default' : (data as string),
-    );
-    const query3 = defineQuery(defaultValidator, ({args}) => {
-      expectTypeOf(args).toEqualTypeOf<string>();
-      return builder.foo.where('id', '=', args);
-    });
-    // When called directly, pass the output type (string, not string | undefined)
-    expectTypeOf(query3).toBeCallableWith({args: 'hello', ctx: 'test'});
-    // Verify the validator's input type accepts undefined
-    expectTypeOf(defaultValidator['~standard'].validate).toBeCallableWith(
-      undefined,
-    );
-
-    // Transform: completely different types
-    const stringToNumberValidator = makeValidator<string, number>(data => {
-      if (typeof data === 'string') {
-        const num = parseInt(data, 10);
-        if (!isNaN(num)) return num;
-      }
-      throw new Error('Expected numeric string');
-    });
-    const query4 = defineQuery(stringToNumberValidator, ({args}) => {
-      expectTypeOf(args).toEqualTypeOf<number>();
-      return builder.foo.where('val', '=', args);
-    });
-    // When called directly, pass the output type (number, not string)
-    expectTypeOf(query4).toBeCallableWith({args: 123, ctx: 'test'});
-    // Verify the validator's input type accepts string
-    expectTypeOf(
-      stringToNumberValidator['~standard'].validate,
-    ).toBeCallableWith('123');
+    // The following patterns are prevented at compile time:
+    // - Wide input to narrow output: DefineQueryOptions<string, 'foo' | 'bar'>
+    // - Unrelated types: DefineQueryOptions<string, number>
+    // - Optional to required: DefineQueryOptions<string | undefined, string>
   });
 });

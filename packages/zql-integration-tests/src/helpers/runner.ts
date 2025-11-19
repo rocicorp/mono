@@ -41,7 +41,7 @@ import type {DBTransaction} from '../../../zql/src/mutate/custom.ts';
 import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {QueryImpl} from '../../../zql/src/query/query-impl.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
 import type {
   AnyQuery,
   HumanReadable,
@@ -69,8 +69,8 @@ type DBs<TSchema extends Schema> = {
 
 type Delegates = {
   pg: TestPGQueryDelegate;
-  sqlite: QueryDelegate;
-  memory: QueryDelegate;
+  sqlite: QueryDelegate<undefined>;
+  memory: QueryDelegate<undefined>;
   mapper: NameMapper;
 };
 
@@ -465,7 +465,11 @@ function makeBenchmark<TSchema extends Schema>({
   }
 }
 
-function benchHydration(name: string, delegate: QueryDelegate, q: AnyQuery) {
+function benchHydration(
+  name: string,
+  delegate: QueryDelegate<unknown>,
+  q: AnyQuery,
+) {
   bench(name, async () => {
     await delegate.run(q);
   });
@@ -599,7 +603,7 @@ export async function runAndCompare(
   const sqliteResult = mapResultToClientNames(
     await delegates.sqlite.run(query),
     zqlSchema,
-    asQueryInternals(query).ast.table,
+    delegates.sqlite.withContext(query).ast.table,
   );
   const memoryResult = await delegates.memory.run(query);
 
@@ -659,7 +663,7 @@ async function checkPush(
 function gatherRows(
   zqlSchema: Schema,
   q: AnyQuery,
-  queryDelegate: QueryDelegate,
+  queryDelegate: QueryDelegate<unknown>,
 ): Map<string, Map<string, Row>> {
   const rows = new Map<string, Map<string, Row>>();
 
@@ -789,7 +793,7 @@ async function checkRemove(
       mapResultToClientNames(
         zqliteMaterialized.data,
         zqlSchema,
-        asQueryInternals(query).ast.table,
+        delegates.sqlite.withContext(query).ast.table,
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -840,7 +844,7 @@ async function checkAddBack(
       mapResultToClientNames(
         zqliteMaterialized.data,
         zqlSchema,
-        asQueryInternals(query).ast.table,
+        delegates.sqlite.withContext(query).ast.table,
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -921,7 +925,7 @@ async function checkEditToRandom(
       mapResultToClientNames(
         zqliteMaterialized.data,
         zqlSchema,
-        asQueryInternals(query).ast.table,
+        delegates.sqlite.withContext(query).ast.table,
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -996,7 +1000,7 @@ async function checkEditToMatch(
       mapResultToClientNames(
         zqliteMaterialized.data,
         zqlSchema,
-        asQueryInternals(query).ast.table,
+        delegates.sqlite.withContext(query).ast.table,
       ),
     ).toEqualPg(pgResult);
     expect(zqlMaterialized.data).toEqualPg(pgResult);
@@ -1006,14 +1010,14 @@ async function checkEditToMatch(
   zqlMaterialized.destroy();
 }
 
-class TestPGQueryDelegate extends QueryDelegateBase {
+class TestPGQueryDelegate extends QueryDelegateBase<undefined> {
   readonly #pg: PostgresDB;
   readonly #schema: Schema;
   readonly serverSchema: ServerSchema;
   readonly transaction: DBTransaction<PostgresDB>;
 
   constructor(pg: PostgresDB, schema: Schema, serverSchema: ServerSchema) {
-    super();
+    super(undefined);
     this.#pg = pg;
     this.#schema = schema;
     this.serverSchema = serverSchema;
@@ -1053,10 +1057,10 @@ class TestPGQueryDelegate extends QueryDelegateBase {
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
   >(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TSchema, TTable, TReturn, unknown>,
     _options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
-    const queryInternals = asQueryInternals(query);
+    const queryInternals = queryWithContext(query, undefined);
     const sqlQuery = formatPgInternalConvert(
       compile(
         this.serverSchema,

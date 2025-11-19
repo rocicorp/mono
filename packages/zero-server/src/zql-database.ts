@@ -29,15 +29,15 @@ import type {
  * writing data that the Zero client does, so that mutator functions can be
  * shared across client and server.
  */
-export class ZQLDatabase<S extends Schema, WrappedTransaction>
-  implements Database<TransactionImpl<S, WrappedTransaction>>
+export class ZQLDatabase<S extends Schema, WrappedTransaction, TContext>
+  implements Database<TransactionImpl<S, WrappedTransaction, TContext>>
 {
   readonly connection: DBConnection<WrappedTransaction>;
   readonly #mutate: (
     dbTransaction: DBTransaction<WrappedTransaction>,
     serverSchema: ServerSchema,
   ) => SchemaCRUD<S>;
-  readonly #query: SchemaQuery<S>;
+  readonly #query: SchemaQuery<S, TContext>;
   readonly #schema: S;
 
   constructor(connection: DBConnection<WrappedTransaction>, schema: S) {
@@ -49,7 +49,7 @@ export class ZQLDatabase<S extends Schema, WrappedTransaction>
 
   transaction<R>(
     callback: (
-      tx: TransactionImpl<S, WrappedTransaction>,
+      tx: TransactionImpl<S, WrappedTransaction, TContext>,
       transactionHooks: TransactionProviderHooks,
     ) => MaybePromise<R>,
     transactionInput?: TransactionProviderInput,
@@ -114,11 +114,12 @@ export class ZQLDatabase<S extends Schema, WrappedTransaction>
       this.#schema,
       this.#mutate,
       this.#query,
+      undefined as TContext,
     );
   }
 
-  run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+  run<TTable extends keyof S['tables'] & string, TReturn, TContext>(
+    query: Query<S, TTable, TReturn, TContext>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return this.transaction(tx => tx.run(query, options));

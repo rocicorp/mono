@@ -7,7 +7,7 @@ import type {CommitListener} from '../../zql/src/query/query-delegate.ts';
 import type {Database} from './db.ts';
 import {TableSource} from './table-source.ts';
 
-export class QueryDelegateImpl extends QueryDelegateBase {
+export class QueryDelegateImpl<TContext> extends QueryDelegateBase<TContext> {
   readonly #lc: LogContext;
   readonly #db: Database;
   readonly #schema: Schema;
@@ -20,9 +20,10 @@ export class QueryDelegateImpl extends QueryDelegateBase {
     lc: LogContext,
     db: Database,
     schema: Schema,
+    context: TContext,
     logConfig?: LogConfig,
   ) {
-    super();
+    super(context);
     this.#lc = lc.withContext('class', 'QueryDelegateImpl');
     this.#db = db;
     this.#schema = schema;

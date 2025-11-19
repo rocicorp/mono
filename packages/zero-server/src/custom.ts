@@ -18,7 +18,7 @@ import type {
   TableCRUD,
   TransactionBase,
 } from '../../zql/src/mutate/custom.ts';
-import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
+import {queryWithContext} from '../../zql/src/query/query-internals.ts';
 import type {
   HumanReadable,
   Query,
@@ -26,8 +26,11 @@ import type {
 } from '../../zql/src/query/query.ts';
 import {getServerSchema} from './schema.ts';
 
-interface ServerTransaction<TSchema extends Schema, TWrappedTransaction>
-  extends TransactionBase<TSchema> {
+interface ServerTransaction<
+  TSchema extends Schema,
+  TWrappedTransaction,
+  TContext,
+> extends TransactionBase<TSchema, TContext> {
   readonly location: 'server';
   readonly reason: 'authoritative';
   readonly dbTransaction: DBTransaction<TWrappedTransaction>;
@@ -47,8 +50,11 @@ export type CustomMutatorImpl<TDBTransaction, TArgs = any> = (
   args: TArgs,
 ) => Promise<void>;
 
-export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
-  implements ServerTransaction<TSchema, TWrappedTransaction>
+export class TransactionImpl<
+  TSchema extends Schema,
+  TWrappedTransaction,
+  TContext,
+> implements ServerTransaction<TSchema, TWrappedTransaction, TContext>
 {
   readonly location = 'server';
   readonly reason = 'authoritative';
@@ -56,18 +62,20 @@ export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
   readonly clientID: string;
   readonly mutationID: number;
   readonly mutate: SchemaCRUD<TSchema>;
-  readonly query: SchemaQuery<TSchema>;
+  readonly query: SchemaQuery<TSchema, TContext>;
   readonly #schema: TSchema;
   readonly #serverSchema: ServerSchema;
+  readonly #context: TContext;
 
   constructor(
     dbTransaction: DBTransaction<TWrappedTransaction>,
     clientID: string,
     mutationID: number,
     mutate: SchemaCRUD<TSchema>,
-    query: SchemaQuery<TSchema>,
+    query: SchemaQuery<TSchema, TContext>,
     schema: TSchema,
     serverSchema: ServerSchema,
+    context: TContext,
   ) {
     this.dbTransaction = dbTransaction;
     this.clientID = clientID;
@@ -76,13 +84,14 @@ export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
     this.query = query;
     this.#schema = schema;
     this.#serverSchema = serverSchema;
+    this.#context = context;
   }
 
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TSchema, TTable, TReturn, TContext>,
     _options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
-    const queryInternals = asQueryInternals(query);
+    const queryInternals = queryWithContext(query, this.#context as TContext);
 
     // Execute the query using the database-specific executor
     return this.dbTransaction.runQuery<TReturn>(
@@ -106,6 +115,7 @@ type WithHiddenTxAndSchema = {
 export async function makeServerTransaction<
   TSchema extends Schema,
   TWrappedTransaction,
+  TContext,
 >(
   dbTransaction: DBTransaction<TWrappedTransaction>,
   clientID: string,
@@ -115,7 +125,8 @@ export async function makeServerTransaction<
     dbTransaction: DBTransaction<TWrappedTransaction>,
     serverSchema: ServerSchema,
   ) => SchemaCRUD<TSchema>,
-  query: SchemaQuery<TSchema>,
+  query: SchemaQuery<TSchema, TContext>,
+  context: TContext,
 ) {
   const serverSchema = await getServerSchema(dbTransaction, schema);
   return new TransactionImpl(
@@ -126,6 +137,7 @@ export async function makeServerTransaction<
     query,
     schema,
     serverSchema,
+    context,
   );
 }
 

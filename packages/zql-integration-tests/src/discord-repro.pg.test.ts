@@ -21,7 +21,7 @@ let pg: PostgresDB;
 let sqlite: Database;
 type Schema = typeof schema;
 let issueQuery: Query<Schema, 'issue'>;
-let queryDelegate: QueryDelegate;
+let queryDelegate: QueryDelegate<unknown>;
 
 beforeAll(async () => {
   pg = await testDBs.create('discord-repro');

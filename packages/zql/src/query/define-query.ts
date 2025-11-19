@@ -1,183 +1,191 @@
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {must} from '../../../shared/src/must.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import {asQueryInternals} from './query-internals.ts';
-import type {AnyQuery, Query} from './query.ts';
-import {validateInput} from './validate-input.ts';
+import type {Query} from './query.ts';
+import {RootNamedQuery} from './root-named-query.ts';
 
-const defineQueryTag = Symbol();
-
-/**
- * A query definition function that has been wrapped by `defineQuery`.
- * Contains the original function plus metadata (validator and tag).
- */
-export type QueryDefinition<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
-  TContext,
-  TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
-> = ((options: {
-  args: TOutput;
-  ctx: TContext;
-}) => Query<TSchema, TTable, TReturn>) & {
-  [defineQueryTag]: true;
-  validator: StandardSchemaV1<TInput, TOutput> | undefined;
+export type DefineQueryOptions<Input, Output> = {
+  validator?: StandardSchemaV1<Input, Output> | undefined;
 };
 
-export function isQueryDefinition<
+/**
+ * Function type for root query functions that take context and args.
+ */
+export type DefineQueryFunc<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
   TContext,
-  TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
->(
-  f: unknown,
-): f is QueryDefinition<TSchema, TTable, TReturn, TContext, TInput, TOutput> {
-  // oxlint-disable-next-line no-explicit-any
-  return typeof f === 'function' && (f as any)[defineQueryTag];
-}
+  TArgs,
+> = (options: {
+  ctx: TContext;
+  args: TArgs;
+}) => Query<TSchema, TTable, TReturn, TContext>;
 
-// Overload for no validator parameter with default inference for untyped functions
+export type NamedQueryFunction<
+  TName extends string,
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+  TContext,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TInput extends TOutput,
+> = ([TOutput] extends [undefined]
+  ? (() => Query<TSchema, TTable, TReturn, TContext>) &
+      ((args: undefined) => Query<TSchema, TTable, TReturn, TContext>)
+  : undefined extends TOutput
+    ? (args?: TInput) => Query<TSchema, TTable, TReturn, TContext>
+    : (args: TInput) => Query<TSchema, TTable, TReturn, TContext>) & {
+  queryName: TName;
+};
+
+export type AnyNamedQueryFunction = NamedQueryFunction<
+  string,
+  Schema,
+  string,
+  // oxlint-disable-next-line no-explicit-any
+  any,
+  // oxlint-disable-next-line no-explicit-any
+  any,
+  ReadonlyJSONValue | undefined,
+  ReadonlyJSONValue | undefined
+>;
+
+// Overload for no options parameter with default inference for untyped functions
 export function defineQuery<
+  TName extends string,
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
   TContext,
   TArgs extends ReadonlyJSONValue | undefined,
 >(
-  queryFn: (options: {
-    args: TArgs;
-    ctx: TContext;
-  }) => Query<TSchema, TTable, TReturn>,
-): QueryDefinition<TSchema, TTable, TReturn, TContext, TArgs, TArgs>;
+  name: TName,
+  queryFn: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TArgs>,
+): NamedQueryFunction<TName, TSchema, TTable, TReturn, TContext, TArgs, TArgs>;
 
-// Overload for validator parameter - Input and Output can be different
+// Overload for options parameter with validator - Input and Output can be different
 export function defineQuery<
+  TName extends string,
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
   TContext,
-  TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
+  TInput extends TOutput = TOutput,
 >(
-  validator: StandardSchemaV1<TInput, TOutput>,
-  queryFn: (options: {
-    args: TOutput;
-    ctx: TContext;
-  }) => Query<TSchema, TTable, TReturn>,
-): QueryDefinition<TSchema, TTable, TReturn, TContext, TInput, TOutput>;
+  name: TName,
+  options: DefineQueryOptions<TInput, TOutput>,
+  queryFn: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
+): NamedQueryFunction<
+  TName,
+  TSchema,
+  TTable,
+  TReturn,
+  TContext,
+  TOutput,
+  TInput
+>;
+
+// Overload for options parameter without validator with default inference
+export function defineQuery<
+  TName extends string,
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+  TContext,
+  TArgs extends ReadonlyJSONValue | undefined,
+>(
+  name: TName,
+  options: {},
+  queryFn: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TArgs>,
+): NamedQueryFunction<TName, TSchema, TTable, TReturn, TContext, TArgs, TArgs>;
 
 // Implementation
 export function defineQuery<
+  TName extends string,
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
   TContext,
-  TInput extends ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined,
+  TInput extends TOutput = TOutput,
 >(
-  validatorOrQueryFn:
-    | StandardSchemaV1<TInput, TOutput>
-    | ((options: {
-        args: TOutput;
-        ctx: TContext;
-      }) => Query<TSchema, TTable, TReturn>),
-  queryFn?: (options: {
-    args: TOutput;
-    ctx: TContext;
-  }) => Query<TSchema, TTable, TReturn>,
-): QueryDefinition<TSchema, TTable, TReturn, TContext, TInput, TOutput> {
+  name: TName,
+  optionsOrQueryFn:
+    | DefineQueryOptions<TInput, TOutput>
+    | DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
+  queryFn?: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
+): NamedQueryFunction<
+  TName,
+  TSchema,
+  TTable,
+  TReturn,
+  TContext,
+  TOutput,
+  TInput
+> {
   // Handle different parameter patterns
-  let validator: StandardSchemaV1<TInput, TOutput> | undefined;
-  let actualQueryFn: (options: {
-    args: TOutput;
-    ctx: TContext;
-  }) => Query<TSchema, TTable, TReturn>;
-
-  if (typeof validatorOrQueryFn === 'function') {
-    // defineQuery(queryFn) - no validator
-    validator = undefined;
-    actualQueryFn = validatorOrQueryFn;
-  } else {
-    // defineQuery(validator, queryFn) - with validator
-    validator = validatorOrQueryFn;
-    actualQueryFn = must(queryFn);
-  }
-
-  // Pass through the function as-is, only adding tag and validator
-  const f = actualQueryFn as QueryDefinition<
+  let defineOptions: DefineQueryOptions<TInput, TOutput> | undefined;
+  let actualQueryFn: DefineQueryFunc<
     TSchema,
     TTable,
     TReturn,
     TContext,
-    TInput,
     TOutput
   >;
 
-  f[defineQueryTag] = true;
-  f.validator = validator;
+  if (typeof optionsOrQueryFn === 'function') {
+    // defineQuery(name, queryFn) - no options
+    defineOptions = undefined;
+    actualQueryFn = optionsOrQueryFn;
+  } else {
+    // defineQuery(name, options, queryFn) - with options
+    defineOptions = optionsOrQueryFn;
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+    actualQueryFn = queryFn!;
+  }
+
+  const f = ((args?: TInput) =>
+    new RootNamedQuery(
+      name,
+      actualQueryFn,
+      args,
+      defineOptions?.validator,
+    )) as unknown as NamedQueryFunction<
+    TName,
+    TSchema,
+    TTable,
+    TReturn,
+    TContext,
+    TOutput,
+    TInput
+  >;
+  f.queryName = name;
   return f;
 }
 
 /**
- * Wraps a query definition with a query name and context, creating a function that
- * returns a Query with the name and args bound to the instance.
- *
- * @param queryName - The name to assign to the query
- * @param f - The query definition to wrap
- * @param contextHolder - An object containing the context to pass to the query
- * @returns A function that takes args and returns a Query
- */
-export function wrapCustomQuery<TArgs, Context>(
-  queryName: string,
-  // oxlint-disable-next-line no-explicit-any
-  f: QueryDefinition<any, any, any, any, any, any>,
-  contextHolder: {context: Context},
-): (args: TArgs) => AnyQuery {
-  const {validator} = f;
-  const validate = validator
-    ? (args: TArgs) =>
-        validateInput<TArgs, TArgs>(queryName, args, validator, 'query')
-    : (args: TArgs) => args;
-
-  return (args?: TArgs) => {
-    // The args that we send to the server is the args that the user passed in.
-    // This is what gets fed into the validator.
-    const q = f({
-      args: validate(args as TArgs),
-      ctx: contextHolder.context,
-    });
-    return asQueryInternals(q).nameAndArgs(
-      queryName,
-      // TODO(arv): Get rid of the array?
-      args === undefined ? [] : [args as unknown as ReadonlyJSONValue],
-    );
-  };
-}
-
-/**
  * Creates a type-safe query definition function that is parameterized by a
- * custom context type, without requiring a query name.
+ * custom context type.
  *
  * This utility allows you to define queries with explicit context typing,
  * ensuring that the query function receives the correct context type. It
- * returns a function that can be used to define queries with schema,
+ * returns a function that can be used to define named queries with schema,
  * table, input, and output types.
  *
  * @typeParam TContext - The type of the context object that will be passed to
  * the query function.
  *
- * @returns A function for defining queries with the specified context type.
+ * @returns A function for defining named queries with the specified context
+ * type.
  *
  * @example
  * ```ts
- * const defineQuery2 = defineQuery2WithContextType<MyContext>();
- * const myQuery = defineQuery2(
- *   z.string(),
+ * const defineQuery = defineQueryWithContextType<MyContext>();
+ * const myQuery = defineQuery(
+ *   "getUser",
+ *   {validator: z.string()},
  *   ({ctx, args}) => {
  *     ctx satisfies MyContext;
  *     ...
@@ -185,58 +193,48 @@ export function wrapCustomQuery<TArgs, Context>(
  * );
  * ```
  */
-export function defineQueryWithContextType<TContext>(): {
-  <
+export function defineQueryWithContextType<TContext>(): <
+  TName extends string,
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TInput extends TOutput = TOutput,
+>(
+  name: TName,
+  optionsOrQueryFn:
+    | DefineQueryOptions<TInput, TOutput>
+    | DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
+  queryFn?: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
+) => NamedQueryFunction<
+  TName,
+  TSchema,
+  TTable,
+  TReturn,
+  TContext,
+  TOutput,
+  TInput
+> {
+  return defineQuery as <
+    TName extends string,
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
-    TArgs extends ReadonlyJSONValue | undefined,
-  >(
-    queryFn: (options: {
-      args: TArgs;
-      ctx: TContext;
-    }) => Query<TSchema, TTable, TReturn>,
-  ): QueryDefinition<TSchema, TTable, TReturn, TContext, TArgs, TArgs>;
-
-  <
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-    TInput extends ReadonlyJSONValue | undefined,
     TOutput extends ReadonlyJSONValue | undefined,
+    TInput extends TOutput = TOutput,
   >(
-    validator: StandardSchemaV1<TInput, TOutput>,
-    queryFn: (options: {
-      args: TOutput;
-      ctx: TContext;
-    }) => Query<TSchema, TTable, TReturn>,
-  ): QueryDefinition<TSchema, TTable, TReturn, TContext, TInput, TOutput>;
-} {
-  return defineQuery as {
-    <
-      TSchema extends Schema,
-      TTable extends keyof TSchema['tables'] & string,
-      TReturn,
-      TArgs extends ReadonlyJSONValue | undefined,
-    >(
-      queryFn: (options: {
-        args: TArgs;
-        ctx: TContext;
-      }) => Query<TSchema, TTable, TReturn>,
-    ): QueryDefinition<TSchema, TTable, TReturn, TContext, TArgs, TArgs>;
-
-    <
-      TSchema extends Schema,
-      TTable extends keyof TSchema['tables'] & string,
-      TReturn,
-      TInput extends ReadonlyJSONValue | undefined,
-      TOutput extends ReadonlyJSONValue | undefined,
-    >(
-      validator: StandardSchemaV1<TInput, TOutput>,
-      queryFn: (options: {
-        args: TOutput;
-        ctx: TContext;
-      }) => Query<TSchema, TTable, TReturn>,
-    ): QueryDefinition<TSchema, TTable, TReturn, TContext, TInput, TOutput>;
-  };
+    name: TName,
+    optionsOrQueryFn:
+      | DefineQueryOptions<TInput, TOutput>
+      | DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
+    queryFn?: DefineQueryFunc<TSchema, TTable, TReturn, TContext, TOutput>,
+  ) => NamedQueryFunction<
+    TName,
+    TSchema,
+    TTable,
+    TReturn,
+    TContext,
+    TOutput,
+    TInput
+  >;
 }

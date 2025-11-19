@@ -10,7 +10,8 @@ import {zeroStressSchema} from './zero-stress-schema-test.ts';
 import {Zero, type MakeEntityQueriesFromSchema} from './zero.ts';
 
 type Schema = typeof zeroStressSchema;
-type Tx = Transaction<Schema, unknown>;
+type Context = {userId: string} | null;
+type Tx = Transaction<Schema, unknown, Context>;
 
 describe('stress test types', () => {
   test('zero can resolve query return types', async () => {

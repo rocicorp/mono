@@ -9,7 +9,6 @@ import {number, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {createSource} from '../ivm/test/source-factory.ts';
 import type {QueryDelegate} from './query-delegate.ts';
 import {newQuery} from './query-impl.ts';
-import {asQueryInternals} from './query-internals.ts';
 import {QueryDelegateImpl} from './test/query-delegate.ts';
 import {schema} from './test/test-schemas.ts';
 import type {TypedView} from './typed-view.ts';
@@ -31,7 +30,7 @@ import type {TypedView} from './typed-view.ts';
 
 const lc = createSilentLogContext();
 
-function addData(queryDelegate: QueryDelegate) {
+function addData(queryDelegate: QueryDelegate<unknown>) {
   const userSource = must(queryDelegate.getSource('user'));
   const issueSource = must(queryDelegate.getSource('issue'));
   const commentSource = must(queryDelegate.getSource('comment'));
@@ -591,7 +590,7 @@ describe('joins and filters', () => {
     addData(queryDelegate);
 
     const q1 = newQuery(schema, 'issue').one();
-    expect(asQueryInternals(q1).format).toEqual({
+    expect(queryDelegate.withContext(q1).format).toEqual({
       singular: true,
       relationships: {},
     });
@@ -599,7 +598,7 @@ describe('joins and filters', () => {
     const q2 = newQuery(schema, 'issue')
       .one()
       .related('comments', q => q.one());
-    expect(asQueryInternals(q2).format).toEqual({
+    expect(queryDelegate.withContext(q2).format).toEqual({
       singular: true,
       relationships: {
         comments: {
@@ -610,7 +609,7 @@ describe('joins and filters', () => {
     });
 
     const q3 = newQuery(schema, 'issue').related('comments', q => q.one());
-    expect(asQueryInternals(q3).format).toEqual({
+    expect(queryDelegate.withContext(q3).format).toEqual({
       singular: false,
       relationships: {
         comments: {
@@ -628,7 +627,7 @@ describe('joins and filters', () => {
       .where('closed', false)
       .limit(100)
       .orderBy('title', 'desc');
-    expect(asQueryInternals(q4).format).toEqual({
+    expect(queryDelegate.withContext(q4).format).toEqual({
       singular: true,
       relationships: {
         comments: {
@@ -1562,7 +1561,7 @@ test('where exists', () => {
 
 // More comprehensive tests of flipped exists are in `chinook-join-flip.pg.test`
 test("flipped exists, or'ed", () => {
-  const queryDelegate: QueryDelegate = new QueryDelegateImpl();
+  const queryDelegate: QueryDelegate<unknown> = new QueryDelegateImpl();
   const commentSource = must(queryDelegate.getSource('comment'));
   const issueSource = must(queryDelegate.getSource('issue'));
 
@@ -2013,7 +2012,7 @@ describe('addCustom / addServer are called', () => {
     const queryDelegate = new QueryDelegateImpl();
     let query = newQuery(schema, 'issue');
     if (type === 'addCustomQuery') {
-      query = asQueryInternals(query).nameAndArgs('issue', []);
+      query = queryDelegate.withContext(query).nameAndArgs('issue', []);
     }
     const spy = vi.spyOn(queryDelegate, type);
     switch (op) {

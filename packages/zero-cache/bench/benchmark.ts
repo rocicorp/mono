@@ -24,8 +24,12 @@ export function bench(opts: Options) {
   const sources = new Map<string, Source>();
   const tableSpecs = computeZqlSpecs(lc, db);
 
-  class BenchmarkQueryDelegate extends QueryDelegateBase {
+  class BenchmarkQueryDelegate extends QueryDelegateBase<undefined> {
     readonly defaultQueryComplete = true;
+
+    constructor() {
+      super(undefined);
+    }
 
     getSource(name: string): Source | undefined {
       let source = sources.get(name);

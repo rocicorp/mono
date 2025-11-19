@@ -1,33 +1,33 @@
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {computeZqlSpecs} from '../../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../../zero-cache/src/db/specs.ts';
-import {hydrate} from '../../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
-import {mapAST} from '../../../zero-protocol/src/ast.ts';
-import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
-import {clientSchemaFrom} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   clientToServer,
   type NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
-import {buildPipeline} from '../../../zql/src/builder/builder.ts';
+import {createSQLiteCostModel} from '../../../zqlite/src/sqlite-cost-model.ts';
+import {AccumulatorDebugger} from '../../../zql/src/planner/planner-debug.ts';
 import {
-  Debug,
-  runtimeDebugFlags,
-} from '../../../zql/src/builder/debug-delegate.ts';
-import {
-  applyPlansToAST,
   buildPlanGraph,
+  applyPlansToAST,
   planQuery,
 } from '../../../zql/src/planner/planner-builder.ts';
-import {AccumulatorDebugger} from '../../../zql/src/planner/planner-debug.ts';
-import {completeOrdering} from '../../../zql/src/query/complete-ordering.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
-import {createSQLiteCostModel} from '../../../zqlite/src/sqlite-cost-model.ts';
-import {spearmanCorrelation} from '../helpers/correlation.ts';
+import {mapAST} from '../../../zero-protocol/src/ast.ts';
+import {
+  runtimeDebugFlags,
+  Debug,
+} from '../../../zql/src/builder/debug-delegate.ts';
+import {buildPipeline} from '../../../zql/src/builder/builder.ts';
+import {hydrate} from '../../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
+import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import {bootstrap} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
+import {spearmanCorrelation} from '../helpers/correlation.ts';
+import {queryWithContext} from '../../../zql/src/query/query-internals.ts';
+import {clientSchemaFrom} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {completeOrdering} from '../../../zql/src/query/complete-ordering.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 
 // Bootstrap setup
 export const pgContent = await getChinook();
@@ -209,7 +209,7 @@ export function executeAllPlanAttempts(
 ): PlanAttemptResult[] {
   // Get the query AST
   const ast = mapAST(
-    completeOrdering(asQueryInternals(query).ast, tableName => {
+    completeOrdering(queryWithContext(query, undefined).ast, tableName => {
       const s: Schema = schema;
       return s.tables[tableName].primaryKey;
     }),
