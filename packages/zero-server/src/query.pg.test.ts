@@ -9,7 +9,7 @@ import {Transaction} from './test/util.ts';
 
 describe('makeSchemaQuery', () => {
   let pg: PostgresDB;
-  let query: SchemaQuery<typeof schema, unknown>;
+  let query: SchemaQuery<typeof schema>;
 
   beforeEach(async () => {
     pg = await testDBs.create('makeSchemaQuery-test');
@@ -30,7 +30,6 @@ describe('makeSchemaQuery', () => {
         schema,
         mutate,
         query,
-        undefined,
       );
 
       const result = await transaction.run(transaction.query.basic);
@@ -55,7 +54,6 @@ describe('makeSchemaQuery', () => {
         schema,
         mutate,
         query,
-        undefined,
       );
 
       const result = await transaction.run(transaction.query.basic.one());
@@ -74,7 +72,6 @@ describe('makeSchemaQuery', () => {
         schema,
         mutate,
         query,
-        undefined,
       );
 
       const result = await transaction.run(

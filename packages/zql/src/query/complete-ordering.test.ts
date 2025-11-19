@@ -1,13 +1,13 @@
 import {describe, expect, test} from 'vitest';
+import type {TableSchema} from '../../../zero-types/src/schema.ts';
+import {completeOrdering} from './complete-ordering.ts';
 import {newQuery} from './query-impl.ts';
-import {queryWithContext} from './query-internals.ts';
+import {asQueryInternals} from './query-internals.ts';
 import {type AnyQuery} from './query.ts';
 import {schema} from './test/test-schemas.ts';
-import {completeOrdering} from './complete-ordering.ts';
-import type {TableSchema} from '../../../zero-types/src/schema.ts';
 
 function ast(q: AnyQuery) {
-  return queryWithContext(q, undefined).ast;
+  return asQueryInternals(q).ast;
 }
 
 const tables: Record<string, TableSchema> = schema.tables;
