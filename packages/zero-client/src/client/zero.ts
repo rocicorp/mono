@@ -453,7 +453,6 @@ export class Zero<
 
   readonly #pokeHandler: PokeHandler;
   readonly #queryManager: QueryManager;
-  // oxlint-disable-next-line no-unused-private-class-members -- used as argument to QueryImpl
   readonly #ivmMain: IVMSourceBranch;
   readonly #clientToServer: NameMapper;
   readonly #deleteClientsManager: DeleteClientsManager;
@@ -2431,7 +2430,6 @@ export class Zero<
     }
   }
 
-  // oxlint-disable-next-line no-unused-private-class-members -- passed to QueryImpl
   #addMetric: <K extends keyof MetricMap>(
     metric: K,
     value: number,
