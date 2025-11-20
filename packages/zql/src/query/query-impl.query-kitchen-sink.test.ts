@@ -309,7 +309,7 @@ describe('kitchen sink query', () => {
   test('complex query with filters, limits, and multiple joins', () => {
     const queryDelegate = new QueryDelegateImpl();
     addData(queryDelegate);
-    const issueQuery = newQuery(schema, 'issue')
+    const issueQuery = newQuery(undefined, schema, 'issue')
       .where('ownerId', 'IN', ['001', '002', '003'])
       .where('closed', false)
       .related('owner')

@@ -192,7 +192,7 @@ describe('collation behavior', () => {
     runPgQuery: (query: string, args: unknown[]) => Promise<unknown[]>,
   ) {
     async function testColumn(col: 'name' | 'size' | 'uuid') {
-      const itemQuery = newQuery(schema, 'item');
+      const itemQuery = newQuery(undefined, schema, 'item');
       const query = itemQuery.orderBy(col, 'asc');
       const pgResult = await runAsSQL(query, runPgQuery);
       const zqlResult = mapResultToClientNames(
@@ -200,7 +200,7 @@ describe('collation behavior', () => {
         schema,
         'item',
       );
-      const memoryItemQuery = newQuery(schema, 'item');
+      const memoryItemQuery = newQuery(undefined, schema, 'item');
       const memoryResult = await memoryQueryDelegate.run(
         memoryItemQuery.orderBy(col, 'asc'),
       );

@@ -99,6 +99,7 @@ import {
   type Query,
   type RunOptions,
 } from '../../../zql/src/query/query.ts';
+import type {RunnableQuery} from '../../../zql/src/query/runnable-query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
@@ -179,7 +180,7 @@ import {
 export type NoRelations = Record<string, never>;
 
 export type MakeEntityQueriesFromSchema<S extends Schema> = {
-  readonly [K in keyof S['tables'] & string]: Query<S, K>;
+  readonly [K in keyof S['tables'] & string]: RunnableQuery<S, K>;
 };
 
 /**
@@ -196,10 +197,10 @@ export type MakeCustomQueryInterfaces<
     args: infer Args;
   }) => Query<S, infer TTable, infer TReturn>
     ? [Args] extends [undefined]
-      ? () => Query<S, TTable & string, TReturn>
+      ? () => RunnableQuery<S, TTable & string, TReturn>
       : undefined extends Args
-        ? (args?: Args) => Query<S, TTable & string, TReturn>
-        : (args: Args) => Query<S, TTable & string, TReturn>
+        ? (args?: Args) => RunnableQuery<S, TTable & string, TReturn>
+        : (args: Args) => RunnableQuery<S, TTable & string, TReturn>
     : {
         readonly [P in keyof QD[NamespaceOrName]]: MakeCustomQueryInterface<
           S,
@@ -218,10 +219,10 @@ export type MakeCustomQueryInterface<
   args: infer Args;
 }) => Query<TSchema, infer TTable, infer TReturn>
   ? [Args] extends [undefined]
-    ? () => Query<TSchema, TTable & string, TReturn>
+    ? () => RunnableQuery<TSchema, TTable & string, TReturn>
     : undefined extends Args
-      ? (args?: Args) => Query<TSchema, TTable & string, TReturn>
-      : (args: Args) => Query<TSchema, TTable & string, TReturn>
+      ? (args?: Args) => RunnableQuery<TSchema, TTable & string, TReturn>
+      : (args: Args) => RunnableQuery<TSchema, TTable & string, TReturn>
   : never;
 
 declare const TESTING: boolean;
@@ -374,6 +375,7 @@ function registerQueries<
   TContext,
   QD extends QueryDefinitions<S, TContext> | undefined,
 >(
+  delegate: QueryDelegate,
   schema: S,
   queries: QD,
   contextHolder: {context: TContext},
@@ -384,7 +386,7 @@ function registerQueries<
 
   // Register entity queries for each table
   for (const name of Object.keys(schema.tables)) {
-    rv[name] = newQuery(schema, name);
+    rv[name] = newQuery(delegate, schema, name);
   }
 
   // Register custom queries if provided
@@ -896,6 +898,7 @@ export class Zero<
     );
 
     this.query = registerQueries(
+      this.#zeroContext,
       schema,
       this.#options.queries,
       this,

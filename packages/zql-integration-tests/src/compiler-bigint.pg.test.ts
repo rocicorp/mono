@@ -132,7 +132,7 @@ beforeAll(async () => {
 
   queryDelegate = newQueryDelegate(lc, testLogConfig, sqlite, schema);
 
-  issueQuery = newQuery(schema, 'issue');
+  issueQuery = newQuery(undefined, schema, 'issue');
 
   // Check that PG, SQLite, and test data are in sync
   const [issuePgRows, commentPgRows] = await Promise.all([

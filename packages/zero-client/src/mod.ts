@@ -154,6 +154,7 @@ export type {
   RunOptions,
   ZeRow,
 } from '../../zql/src/query/query.ts';
+export type {RunnableQuery} from '../../zql/src/query/runnable-query.ts';
 export {type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 export {

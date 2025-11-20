@@ -258,7 +258,7 @@ function runQuery(queryString: string): Promise<AnalyzeQueryResult> {
     query: Object.fromEntries(
       Object.entries(schema.tables).map(([name]) => [
         name,
-        newQuery(schema, name),
+        newQuery(undefined, schema, name),
       ]),
     ),
   };

@@ -16,7 +16,7 @@ const getPrimaryKey = (tableName: string) => tables[tableName].primaryKey;
 
 describe('completeOrdering', () => {
   test('basic', () => {
-    const issueQuery = newQuery(schema, 'issue');
+    const issueQuery = newQuery(undefined, schema, 'issue');
     expect(ast(issueQuery)).toMatchInlineSnapshot(`
       {
         "table": "issue",
@@ -37,7 +37,10 @@ describe('completeOrdering', () => {
   });
 
   test('basic, ordered on non primary key', () => {
-    const issueQuery = newQuery(schema, 'issue').orderBy('title', 'asc');
+    const issueQuery = newQuery(undefined, schema, 'issue').orderBy(
+      'title',
+      'asc',
+    );
     expect(ast(issueQuery)).toMatchInlineSnapshot(`
       {
         "orderBy": [
@@ -68,7 +71,10 @@ describe('completeOrdering', () => {
   });
 
   test('basic, partial order', () => {
-    const q = newQuery(schema, 'issueLabel').orderBy('labelId', 'asc');
+    const q = newQuery(undefined, schema, 'issueLabel').orderBy(
+      'labelId',
+      'asc',
+    );
     expect(ast(q)).toMatchInlineSnapshot(`
       {
         "orderBy": [
@@ -96,7 +102,10 @@ describe('completeOrdering', () => {
       }
     `);
 
-    const q2 = newQuery(schema, 'issueLabel').orderBy('issueId', 'asc');
+    const q2 = newQuery(undefined, schema, 'issueLabel').orderBy(
+      'issueId',
+      'asc',
+    );
     expect(ast(q2)).toMatchInlineSnapshot(`
       {
         "orderBy": [
@@ -126,7 +135,7 @@ describe('completeOrdering', () => {
   });
 
   test('related', () => {
-    const issueQuery = newQuery(schema, 'issue').related('labels');
+    const issueQuery = newQuery(undefined, schema, 'issue').related('labels');
     expect(ast(issueQuery)).toMatchInlineSnapshot(`
       {
         "related": [
@@ -233,7 +242,9 @@ describe('completeOrdering', () => {
   });
 
   test('exists', () => {
-    const issueQuery = newQuery(schema, 'issue').whereExists('labels');
+    const issueQuery = newQuery(undefined, schema, 'issue').whereExists(
+      'labels',
+    );
     expect(ast(issueQuery)).toMatchInlineSnapshot(`
       {
         "table": "issue",
@@ -350,7 +361,7 @@ describe('completeOrdering', () => {
   });
 
   test('exists in compound condition', () => {
-    const issueQuery = newQuery(schema, 'issue').where(
+    const issueQuery = newQuery(undefined, schema, 'issue').where(
       ({and, or, cmp, exists}) =>
         and(
           cmp('id', '1'),

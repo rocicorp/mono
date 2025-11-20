@@ -54,8 +54,19 @@ export function newQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
->(schema: TSchema, table: TTable): Query<TSchema, TTable, TReturn> {
-  return new QueryImpl(schema, table, {table}, defaultFormat, undefined);
+>(
+  delegate: QueryDelegate | undefined,
+  schema: TSchema,
+  table: TTable,
+): Query<TSchema, TTable, TReturn> {
+  return new QueryImpl(
+    delegate,
+    schema,
+    table,
+    {table},
+    defaultFormat,
+    undefined,
+  );
 }
 
 export function staticParam(
@@ -149,7 +160,7 @@ export abstract class AbstractQuery<
     return this.#hash;
   }
 
-  one = (): Query<TSchema, TTable, TReturn | undefined> =>
+  one = (): this =>
     this.#newQuery(
       this.#tableName,
       {
@@ -162,13 +173,13 @@ export abstract class AbstractQuery<
       },
       this.customQueryID,
       this.#currentJunction,
-    );
+    ) as this;
 
   whereExists = (
     relationship: string,
     cbOrOptions?: ((q: AnyQuery) => AnyQuery) | ExistsOptions,
     options?: ExistsOptions,
-  ): Query<TSchema, TTable, TReturn> => {
+  ): this => {
     const cb = typeof cbOrOptions === 'function' ? cbOrOptions : undefined;
     const opts = typeof cbOrOptions === 'function' ? options : cbOrOptions;
     const flipped = opts?.flip;
@@ -183,9 +194,9 @@ export abstract class AbstractQuery<
 
   related = (
     relationship: string,
-    cb?: (q: AnyQuery) => AnyQuery,
+    cb?: (q: this) => any,
     // oxlint-disable-next-line no-explicit-any
-  ): Query<Schema, string, any> => {
+  ): this => {
     if (relationship.startsWith(SUBQ_PREFIX)) {
       throw new Error(
         `Relationship names may not start with "${SUBQ_PREFIX}". That is a reserved prefix.`,
@@ -209,14 +220,14 @@ export abstract class AbstractQuery<
         },
         this.customQueryID,
         undefined,
-      ) as AnyQuery;
+      ) as this;
       // Intentionally not setting to `one` as it is a perf degradation
       // and the user should not be making the mistake of setting cardinality to
       // `one` when it is actually not.
       // if (cardinality === 'one') {
       //   q = q.one();
       // }
-      const subQuery = asAbstractQuery(cb(q));
+      const subQuery = asAbstractQuery(cb(q as this));
       assert(
         isCompoundKey(sourceField),
         'The source of a relationship must specify at last 1 field',
@@ -255,7 +266,7 @@ export abstract class AbstractQuery<
         },
         this.customQueryID,
         this.#currentJunction,
-      ) as AnyQuery;
+      ) as this;
     }
 
     if (isTwoHop(related)) {
@@ -276,7 +287,7 @@ export abstract class AbstractQuery<
             },
             this.customQueryID,
             relationship,
-          ),
+          ) as this,
         ),
       );
 
@@ -324,7 +335,7 @@ export abstract class AbstractQuery<
         },
         this.customQueryID,
         this.#currentJunction,
-      ) as AnyQuery;
+      ) as this;
     }
 
     throw new Error(`Invalid relationship ${relationship}`);
@@ -334,7 +345,7 @@ export abstract class AbstractQuery<
     fieldOrExpressionFactory: string | ExpressionFactory<TSchema, TTable>,
     opOrValue?: SimpleOperator | GetFilterTypeAny | Parameter,
     value?: GetFilterTypeAny | Parameter,
-  ): Query<TSchema, TTable, TReturn> => {
+  ): this => {
     let cond: Condition;
 
     if (typeof fieldOrExpressionFactory === 'function') {
@@ -365,13 +376,13 @@ export abstract class AbstractQuery<
       this.format,
       this.customQueryID,
       this.#currentJunction,
-    );
+    ) as this;
   };
 
   start = (
     row: Partial<Record<string, ReadonlyJSONValue | undefined>>,
     opts?: {inclusive: boolean},
-  ): Query<TSchema, TTable, TReturn> =>
+  ): this =>
     this.#newQuery(
       this.#tableName,
       {
@@ -384,9 +395,9 @@ export abstract class AbstractQuery<
       this.format,
       this.customQueryID,
       this.#currentJunction,
-    );
+    ) as this;
 
-  limit = (limit: number): Query<TSchema, TTable, TReturn> => {
+  limit = (limit: number): this => {
     if (limit < 0) {
       throw new Error('Limit must be non-negative');
     }
@@ -409,13 +420,13 @@ export abstract class AbstractQuery<
       this.format,
       this.customQueryID,
       this.#currentJunction,
-    );
+    ) as this;
   };
 
   orderBy = <TSelector extends keyof TSchema['tables'][TTable]['columns']>(
     field: TSelector,
     direction: 'asc' | 'desc',
-  ): Query<TSchema, TTable, TReturn> => {
+  ): this => {
     if (this.#currentJunction) {
       throw new NotImplementedError(
         'Order by is not supported in junction relationships yet. Junction relationship being ordered: ' +
@@ -431,7 +442,7 @@ export abstract class AbstractQuery<
       this.format,
       this.customQueryID,
       this.#currentJunction,
-    );
+    ) as this;
   };
 
   protected _exists = (
@@ -724,7 +735,10 @@ export class QueryImpl<
   extends AbstractQuery<TSchema, TTable, TReturn>
   implements Query<TSchema, TTable, TReturn>
 {
+  readonly #delegate: QueryDelegate | undefined;
+
   constructor(
+    delegate: QueryDelegate | undefined,
     schema: TSchema,
     tableName: TTable,
     ast: AST = {table: tableName},
@@ -743,6 +757,7 @@ export class QueryImpl<
       currentJunction,
       (tableName, ast, format, customQueryID, currentJunction) =>
         new QueryImpl(
+          delegate,
           schema,
           tableName,
           ast,
@@ -752,6 +767,19 @@ export class QueryImpl<
           currentJunction,
         ),
     );
+    this.#delegate = delegate;
+  }
+
+  run(options?: RunOptions): Promise<HumanReadable<TReturn>> {
+    if (!this.#delegate) {
+      return Promise.reject(
+        new Error(
+          'Cannot call run() on a query that is not attached to a Zero instance. ' +
+            'Use zero.run(query) or create the query through zero.query instead.',
+        ),
+      );
+    }
+    return this.#delegate.run(this, options) as Promise<HumanReadable<TReturn>>;
   }
 }
 

@@ -1,4 +1,5 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
+/* oxlint-disable no-unused-vars -- TReturn is used by type consumers */
 import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
 import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {
@@ -65,24 +66,6 @@ export type DestTableName<
   TSchema extends ZeroSchema,
   TRelationship extends string,
 > = LastInTuple<TSchema['relationships'][TTable][TRelationship]>['destSchema'];
-
-type DestRow<
-  TTable extends string,
-  TSchema extends ZeroSchema,
-  TRelationship extends string,
-> = TSchema['relationships'][TTable][TRelationship][0]['cardinality'] extends 'many'
-  ? PullRow<DestTableName<TTable, TSchema, TRelationship>, TSchema>
-  : PullRow<DestTableName<TTable, TSchema, TRelationship>, TSchema> | undefined;
-
-type AddSubreturn<TExistingReturn, TSubselectReturn, TAs extends string> = {
-  readonly [K in TAs]: undefined extends TSubselectReturn
-    ? TSubselectReturn
-    : readonly TSubselectReturn[];
-} extends infer TNewRelationship
-  ? undefined extends TExistingReturn
-    ? (Exclude<TExistingReturn, undefined> & TNewRelationship) | undefined
-    : TExistingReturn & TNewRelationship
-  : never;
 
 export type PullTableSchema<
   TTable extends string,
@@ -162,42 +145,19 @@ export type QueryResultType<Q> = Q extends
 export interface Query<
   TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
+  // @ts-ignore - TReturn is used by type consumers for tracking return types
   TReturn = PullRow<TTable, TSchema>,
 > {
   related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
-  ): Query<
-    TSchema,
-    TTable,
-    AddSubreturn<
-      TReturn,
-      DestRow<TTable, TSchema, TRelationship>,
-      TRelationship
-    >
-  >;
+  ): this;
   related<
     TRelationship extends AvailableRelationships<TTable, TSchema>,
     TSub extends Query<TSchema, string, any>,
   >(
     relationship: TRelationship,
-    cb: (
-      q: Query<
-        TSchema,
-        DestTableName<TTable, TSchema, TRelationship>,
-        DestRow<TTable, TSchema, TRelationship>
-      >,
-    ) => TSub,
-  ): Query<
-    TSchema,
-    TTable,
-    AddSubreturn<
-      TReturn,
-      TSub extends Query<TSchema, string, infer TSubReturn>
-        ? TSubReturn
-        : never,
-      TRelationship
-    >
-  >;
+    cb: (q: this) => TSub,
+  ): this;
 
   where<
     TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
@@ -208,7 +168,7 @@ export interface Query<
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
       | ParameterReference,
-  ): Query<TSchema, TTable, TReturn>;
+  ): this;
   where<
     TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
   >(
@@ -216,36 +176,34 @@ export interface Query<
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
       | ParameterReference,
-  ): Query<TSchema, TTable, TReturn>;
-  where(
-    expressionFactory: ExpressionFactory<TSchema, TTable>,
-  ): Query<TSchema, TTable, TReturn>;
+  ): this;
+  where(expressionFactory: ExpressionFactory<TSchema, TTable>): this;
 
   whereExists(
     relationship: AvailableRelationships<TTable, TSchema>,
     options?: ExistsOptions,
-  ): Query<TSchema, TTable, TReturn>;
+  ): this;
   whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb: (
       q: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
     ) => Query<TSchema, string>,
     options?: ExistsOptions,
-  ): Query<TSchema, TTable, TReturn>;
+  ): this;
 
   start(
     row: Partial<PullRow<TTable, TSchema>>,
     opts?: {inclusive: boolean},
-  ): Query<TSchema, TTable, TReturn>;
+  ): this;
 
-  limit(limit: number): Query<TSchema, TTable, TReturn>;
+  limit(limit: number): this;
 
   orderBy<TSelector extends Selector<PullTableSchema<TTable, TSchema>>>(
     field: TSelector,
     direction: 'asc' | 'desc',
-  ): Query<TSchema, TTable, TReturn>;
+  ): this;
 
-  one(): Query<TSchema, TTable, TReturn | undefined>;
+  one(): this;
 }
 
 export type PreloadOptions = {

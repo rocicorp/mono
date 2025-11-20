@@ -12,14 +12,14 @@ function ast(q: AnyQuery) {
 
 describe('building the AST', () => {
   test('creates a new query', () => {
-    const issueQuery = newQuery(schema, 'issue');
+    const issueQuery = newQuery(undefined, schema, 'issue');
     expect(ast(issueQuery)).toEqual({
       table: 'issue',
     });
   });
 
   test('exists over junction with extra conditions', () => {
-    const issueQuery = newQuery(schema, 'issue');
+    const issueQuery = newQuery(undefined, schema, 'issue');
     const notExists = issueQuery.where(({exists}) =>
       exists('labels', q => q.where('id', '=', '1').where('name', '=', 'foo')),
     );
@@ -100,7 +100,7 @@ describe('building the AST', () => {
   });
 
   test('where inserts a condition', () => {
-    const issueQuery = newQuery(schema, 'issue');
+    const issueQuery = newQuery(undefined, schema, 'issue');
     const where = issueQuery.where('id', '=', '1');
     expect(ast(where)).toMatchInlineSnapshot(`
       {
@@ -158,7 +158,7 @@ describe('building the AST', () => {
   });
 
   test('multiple WHERE calls result in a single top level AND', () => {
-    const issueQuery = newQuery(schema, 'issue');
+    const issueQuery = newQuery(undefined, schema, 'issue');
     const where = issueQuery
       .where('id', '1')
       .where('title', 'foo')
@@ -225,7 +225,7 @@ describe('building the AST', () => {
   });
 
   test('start adds a start field', () => {
-    const issueQuery = newQuery(schema, 'issue');
+    const issueQuery = newQuery(undefined, schema, 'issue');
     const start = issueQuery.start({id: '1'});
     expect(ast(start)).toMatchInlineSnapshot(`
       {
@@ -254,7 +254,7 @@ describe('building the AST', () => {
   });
 
   test('related: field edges', () => {
-    const issueQuery = newQuery(schema, 'issue');
+    const issueQuery = newQuery(undefined, schema, 'issue');
     const related = issueQuery.related('owner', q => q);
     expect(ast(related)).toMatchInlineSnapshot(`
       {
@@ -281,7 +281,7 @@ describe('building the AST', () => {
   });
 
   test('related: junction edges', () => {
-    const issueQuery = newQuery(schema, 'issue');
+    const issueQuery = newQuery(undefined, schema, 'issue');
     const related = issueQuery.related('labels', q => q);
     expect(ast(related)).toMatchInlineSnapshot(`
       {
@@ -326,7 +326,7 @@ describe('building the AST', () => {
   });
 
   test('related: never stacked edges', () => {
-    const issueQuery = newQuery(schema, 'issue');
+    const issueQuery = newQuery(undefined, schema, 'issue');
     const related = issueQuery.related('owner', oq =>
       oq.related('issues', iq => iq.related('labels', lq => lq)),
     );
@@ -407,7 +407,7 @@ describe('building the AST', () => {
   });
 
   test('related: never siblings', () => {
-    const issueQuery = newQuery(schema, 'issue');
+    const issueQuery = newQuery(undefined, schema, 'issue');
     const related = issueQuery
       .related('owner', oq => oq)
       .related('comments', cq => cq)
@@ -486,7 +486,7 @@ describe('building the AST', () => {
 });
 
 test('where expressions', () => {
-  const issueQuery = newQuery(schema, 'issue');
+  const issueQuery = newQuery(undefined, schema, 'issue');
   expect(ast(issueQuery.where('id', '=', '1')).where).toMatchInlineSnapshot(`
     {
       "left": {
@@ -743,7 +743,7 @@ test('where expressions', () => {
 // but we should double-check that `where` uses `expression` rather than trying to
 // mutate the AST itself.
 test('where to dnf', () => {
-  const issueQuery = newQuery(schema, 'issue');
+  const issueQuery = newQuery(undefined, schema, 'issue');
   let flatten = issueQuery.where('id', '=', '1').where('closed', true);
   expect(ast(flatten).where).toMatchInlineSnapshot(`
     {
@@ -917,7 +917,7 @@ test('where to dnf', () => {
 });
 
 describe('expression builder', () => {
-  const issueQuery = newQuery(schema, 'issue');
+  const issueQuery = newQuery(undefined, schema, 'issue');
 
   test('basics', () => {
     const expr = issueQuery.where(({cmp}) => cmp('id', '=', '1'));
@@ -1394,7 +1394,7 @@ describe('expression builder', () => {
 
 describe('exists', () => {
   test('field relationship', () => {
-    const issueQuery = newQuery(schema, 'issue');
+    const issueQuery = newQuery(undefined, schema, 'issue');
 
     // full expression
     expect(ast(issueQuery.where(({exists}) => exists('owner'))))
@@ -1453,7 +1453,7 @@ describe('exists', () => {
   });
 
   test('field relationship with further conditions', () => {
-    const issueQuery = newQuery(schema, 'issue');
+    const issueQuery = newQuery(undefined, schema, 'issue');
 
     expect(ast(issueQuery.whereExists('owner', q => q.where('id', '1'))))
       .toMatchInlineSnapshot(`
@@ -1557,7 +1557,7 @@ describe('exists', () => {
   });
 
   test('junction edge', () => {
-    const issueQuery = newQuery(schema, 'issue');
+    const issueQuery = newQuery(undefined, schema, 'issue');
 
     expect(ast(issueQuery.whereExists('labels'))).toMatchInlineSnapshot(`
       {
@@ -1607,7 +1607,7 @@ describe('exists', () => {
   });
 
   test('existence within an or branch', () => {
-    const issueQuery = newQuery(schema, 'issue');
+    const issueQuery = newQuery(undefined, schema, 'issue');
 
     expect(
       ast(
@@ -1751,7 +1751,7 @@ describe('exists', () => {
   });
 
   test('many exists on different relationships', () => {
-    const issueQuery = newQuery(schema, 'issue');
+    const issueQuery = newQuery(undefined, schema, 'issue');
     expect(
       ast(
         issueQuery
@@ -1852,7 +1852,7 @@ describe('exists', () => {
   });
 
   test('exists with flip option - field relationship', () => {
-    const issueQuery = newQuery(schema, 'issue');
+    const issueQuery = newQuery(undefined, schema, 'issue');
 
     // Using whereExists with flip option
     expect(ast(issueQuery.whereExists('owner', {flip: true})))
@@ -1917,7 +1917,7 @@ describe('exists', () => {
   });
 
   test('exists with flip option - junction relationship', () => {
-    const issueQuery = newQuery(schema, 'issue');
+    const issueQuery = newQuery(undefined, schema, 'issue');
 
     expect(ast(issueQuery.whereExists('labels', {flip: true})))
       .toMatchInlineSnapshot(`
@@ -1968,7 +1968,7 @@ describe('exists', () => {
   });
 
   test('exists with flip option and callback', () => {
-    const issueQuery = newQuery(schema, 'issue');
+    const issueQuery = newQuery(undefined, schema, 'issue');
 
     expect(
       ast(
@@ -2014,7 +2014,7 @@ describe('exists', () => {
   });
 
   test('many exists on the same relationship', () => {
-    const issueQuery = newQuery(schema, 'issue');
+    const issueQuery = newQuery(undefined, schema, 'issue');
     expect(
       ast(
         issueQuery.where(({and, exists}) =>
@@ -2102,7 +2102,7 @@ describe('exists', () => {
 });
 
 test('one in schema should not imply limit 1 in the ast -- the user needs to get this right so we do not degrade perf tracking extra data in take', () => {
-  const issueQuery = newQuery(schema, 'issue');
+  const issueQuery = newQuery(undefined, schema, 'issue');
   const q1 = issueQuery.related('owner');
   const q2 = issueQuery.related('comments');
 
