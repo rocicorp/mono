@@ -4,6 +4,7 @@ import {existsSync} from 'node:fs';
 import {chmod, copyFile, mkdir, readFile, rm} from 'node:fs/promises';
 import {builtinModules} from 'node:module';
 import {basename, resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {type InlineConfig, build as viteBuild} from 'vite';
 import {assert} from '../../shared/src/asserts.ts';
 import {makeDefine} from '../../shared/src/build.ts';
@@ -245,6 +246,9 @@ async function build() {
   console.log(`\n✓ Build completed in ${totalDuration}s`);
 }
 
-if (import.meta.main) {
+const isMain =
+  fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+
+if (isMain) {
   await build();
 }
