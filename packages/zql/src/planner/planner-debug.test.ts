@@ -287,7 +287,7 @@ describe('formatPlannerEvents', () => {
 
     const formatted = formatPlannerEvents(events);
 
-    expect(formatted).toContain('filters=status = "active"');
+    expect(formatted).toContain("filters=status = 'active'");
   });
 
   test('formats empty events array', () => {

@@ -1,5 +1,5 @@
 import type * as v from '../../../shared/src/valita.ts';
-import type {Condition} from '../../../zero-protocol/src/ast.ts';
+import type {Condition, ValuePosition} from '../../../zero-protocol/src/ast.ts';
 import type {
   attemptStartEventJSONSchema,
   bestPlanSelectedEventJSONSchema,
@@ -188,6 +188,24 @@ function formatConstraint(
 }
 
 /**
+ * Format a ValuePosition (column, literal, or static parameter) as a human-readable string.
+ */
+function formatValuePosition(value: ValuePosition): string {
+  switch (value.type) {
+    case 'column':
+      return value.name;
+    case 'literal':
+      // Format literal values with SQL-style quoting for strings
+      if (typeof value.value === 'string') {
+        return `'${value.value}'`;
+      }
+      return JSON.stringify(value.value);
+    case 'static':
+      return `@${value.anchor}.${Array.isArray(value.field) ? value.field.join('.') : value.field}`;
+  }
+}
+
+/**
  * Format a Condition (filter) as a human-readable string.
  */
 function formatFilter(filter: Condition | undefined): string {
@@ -195,7 +213,7 @@ function formatFilter(filter: Condition | undefined): string {
 
   switch (filter.type) {
     case 'simple':
-      return `${filter.left.type === 'column' ? filter.left.name : JSON.stringify(filter.left)} ${filter.op} ${filter.right.type === 'literal' ? JSON.stringify(filter.right.value) : JSON.stringify(filter.right)}`;
+      return `${formatValuePosition(filter.left)} ${filter.op} ${formatValuePosition(filter.right)}`;
     case 'and':
       return `(${filter.conditions.map(formatFilter).join(' AND ')})`;
     case 'or':
