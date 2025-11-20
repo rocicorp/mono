@@ -89,8 +89,8 @@ type AdvanceContext = {
 };
 
 /**
- * No matter how fast hydration is given advancement at least this long to
- * complete before doing a full pipeline reset.
+ * No matter how fast hydration is, advancement is given at least this long to
+ * complete before doing a pipeline reset.
  */
 const MIN_ADVANCEMENT_TIME_LIMIT_MS = 30;
 

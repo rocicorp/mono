@@ -723,7 +723,7 @@ describe('view-syncer/pipeline-driver', () => {
       `[ResetPipelinesSignal: Advancement exceeded timeout at 0 of 1 changes after 60 ms. Advancement time limited based on total hydration time of 100 ms.]`,
     );
 
-    // Test that after reset hydration and advancement works.
+    // Test that after reset hydration and advancement work.
     pipelines.reset(clientSchema);
 
     expect(pipelines.addedQueries()).toEqual([new Set(), new Map()]);
@@ -742,7 +742,7 @@ describe('view-syncer/pipeline-driver', () => {
     ]).not.toThrow();
   });
 
-  test('advancement timeout has a minimum', () => {
+  test('advancement timeout has a minimum limit', () => {
     pipelines.init(clientSchema);
     [
       ...pipelines.addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, {
@@ -754,7 +754,7 @@ describe('view-syncer/pipeline-driver', () => {
     replicator.processTransaction('134', messages.insert('issues', {id: 'i1'}));
 
     // 29 is larger than the hydration time but less than the minimum
-    // advancement time
+    // advancement time limit
     expect(() => [
       ...pipelines.advance({totalElapsed: () => 29}).changes,
     ]).not.toThrow();
