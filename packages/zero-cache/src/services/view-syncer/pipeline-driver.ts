@@ -89,6 +89,12 @@ type AdvanceContext = {
 };
 
 /**
+ * No matter how fast hydration is given advancement at least this long to
+ * complete before doing a full pipeline reset.
+ */
+const MIN_ADVANCEMENT_TIME_LIMIT_MS = 30;
+
+/**
  * Manages the state of IVM pipelines for a given ViewSyncer (i.e. client group).
  */
 export class PipelineDriver {
@@ -572,11 +578,12 @@ export class PipelineDriver {
     } = this.#advanceContext;
     const elapsed = advanceTimer.totalElapsed();
     if (
-      elapsed > totalHydrationTimeMs ||
-      (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2)
+      elapsed > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
+      (elapsed > totalHydrationTimeMs ||
+        (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2))
     ) {
       throw new ResetPipelinesSignal(
-        `Advancement exceeded timeout at ${pos} of ${numChanges} changes after ${elapsed} ms. Advancement time limited base on total hydration time of ${totalHydrationTimeMs} ms.`,
+        `Advancement exceeded timeout at ${pos} of ${numChanges} changes after ${elapsed} ms. Advancement time limited based on total hydration time of ${totalHydrationTimeMs} ms.`,
       );
     }
   }
@@ -612,11 +619,16 @@ export class PipelineDriver {
 
   *#push(source: TableSource, change: SourceChange): Iterable<RowChange> {
     this.#startAccumulating();
-    for (const _ of source.genPush(change)) {
-      yield* this.#stopAccumulating().stream();
-      this.#startAccumulating();
+    try {
+      for (const _ of source.genPush(change)) {
+        yield* this.#stopAccumulating().stream();
+        this.#startAccumulating();
+      }
+    } finally {
+      if (this.#streamer !== null) {
+        this.#stopAccumulating();
+      }
     }
-    this.#stopAccumulating();
   }
 
   #startAccumulating() {
