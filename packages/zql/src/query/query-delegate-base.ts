@@ -14,10 +14,12 @@ import type {
 } from './query-delegate.ts';
 import {materializeImpl, preloadImpl, runImpl} from './query-impl.ts';
 import type {
+  AnyQuery,
   HumanReadable,
   MaterializeOptions,
   PreloadOptions,
   Query,
+  QueryReturn,
   RunOptions,
 } from './query.ts';
 import type {TTL} from './ttl.ts';
@@ -48,49 +50,30 @@ export abstract class QueryDelegateBase implements QueryDelegate {
    * Default implementation calls materializeImpl.
    * Override if you need custom materialization behavior.
    */
-  materialize<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-  >(
-    query: Query<TSchema, TTable, TReturn>,
+  materialize<TQuery extends AnyQuery>(
+    query: TQuery,
     factory?: undefined,
     options?: MaterializeOptions,
-  ): TypedView<HumanReadable<TReturn>>;
+  ): TypedView<HumanReadable<QueryReturn<TQuery>>>;
 
-  materialize<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-    T,
-  >(
-    query: Query<TSchema, TTable, TReturn>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
+  materialize<TQuery extends AnyQuery, T>(
+    query: TQuery,
+    factory?: ViewFactory<TQuery, T>,
     options?: MaterializeOptions,
   ): T;
 
   /**
    * Materialize a query into a custom view using a provided factory function.
    */
-  materialize<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-    T,
-  >(
-    query: Query<TSchema, TTable, TReturn>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
+  materialize<TQuery extends AnyQuery, T>(
+    query: TQuery,
+    factory?: ViewFactory<TQuery, T>,
     options?: MaterializeOptions,
   ): T;
 
-  materialize<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-    T,
-  >(
-    query: Query<TSchema, TTable, TReturn>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
+  materialize<TQuery extends AnyQuery, T>(
+    query: TQuery,
+    factory?: ViewFactory<TQuery, T>,
     options?: MaterializeOptions,
   ): T {
     return materializeImpl(query, this, factory, options);
@@ -100,14 +83,10 @@ export abstract class QueryDelegateBase implements QueryDelegate {
    * Default implementation calls runImpl.
    * Override if you need custom query execution (e.g., TestPGQueryDelegate).
    */
-  run<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-  >(
-    query: Query<TSchema, TTable, TReturn>,
+  run<TQuery extends AnyQuery>(
+    query: TQuery,
     options?: RunOptions,
-  ): Promise<HumanReadable<TReturn>> {
+  ): Promise<HumanReadable<QueryReturn<TQuery>>> {
     return runImpl(query, this, options);
   }
 

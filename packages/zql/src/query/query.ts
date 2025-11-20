@@ -12,6 +12,7 @@ import type {
   Schema as ZeroSchema,
 } from '../../../zero-types/src/schema.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
+import type {RunnableQuery} from './runnable-query.ts';
 import type {TTL} from './ttl.ts';
 
 type Selector<E extends TableSchema> = keyof E['columns'];
@@ -33,7 +34,12 @@ type ArraySelectors<E extends TableSchema> = {
     : never;
 }[keyof E['columns']];
 
-export type QueryReturn<Q> = Q extends Query<any, any, infer R> ? R : never;
+export type QueryReturn<Q> =
+  Q extends RunnableQuery<any, any, infer R>
+    ? R
+    : Q extends Query<any, any, infer R>
+      ? R
+      : never;
 
 export type QueryTable<Q> = Q extends Query<any, infer T, any> ? T : never;
 
@@ -66,15 +72,19 @@ export type DestTableName<
   TRelationship extends string,
 > = LastInTuple<TSchema['relationships'][TTable][TRelationship]>['destSchema'];
 
-type DestRow<
-  TTable extends string,
+export type DestRow<
   TSchema extends ZeroSchema,
+  TTable extends string,
   TRelationship extends string,
 > = TSchema['relationships'][TTable][TRelationship][0]['cardinality'] extends 'many'
   ? PullRow<DestTableName<TTable, TSchema, TRelationship>, TSchema>
   : PullRow<DestTableName<TTable, TSchema, TRelationship>, TSchema> | undefined;
 
-type AddSubreturn<TExistingReturn, TSubselectReturn, TAs extends string> = {
+export type AddSubreturn<
+  TExistingReturn,
+  TSubselectReturn,
+  TAs extends string,
+> = {
   readonly [K in TAs]: undefined extends TSubselectReturn
     ? TSubselectReturn
     : readonly TSubselectReturn[];
@@ -129,6 +139,30 @@ export type QueryResultType<Q> = Q extends
   ? HumanReadable<QueryRowType<Q>>
   : never;
 
+export type RelatedCallback<
+  TSchema extends ZeroSchema,
+  TTable extends keyof TSchema['tables'] & string,
+  TRelationship extends AvailableRelationships<TTable, TSchema>,
+  TSub extends Query<TSchema, string, any>,
+> = (
+  q: Query<
+    TSchema,
+    DestTableName<TTable, TSchema, TRelationship>,
+    DestRow<TSchema, TTable, TRelationship>
+  >,
+) => TSub;
+
+export type RelatedQueryReturn<
+  TReturn,
+  TTable extends keyof TSchema['tables'] & string,
+  TSchema extends ZeroSchema,
+  TRelationship extends AvailableRelationships<TTable, TSchema>,
+> = AddSubreturn<
+  TReturn,
+  DestRow<TSchema, TTable, TRelationship>,
+  TRelationship
+>;
+
 /**
  * A hybrid query that runs on both client and server.
  * Results are returned immediately from the client followed by authoritative
@@ -169,35 +203,17 @@ export interface Query<
   ): Query<
     TSchema,
     TTable,
-    AddSubreturn<
-      TReturn,
-      DestRow<TTable, TSchema, TRelationship>,
-      TRelationship
-    >
+    RelatedQueryReturn<TReturn, TTable, TSchema, TRelationship>
   >;
   related<
     TRelationship extends AvailableRelationships<TTable, TSchema>,
-    TSub extends Query<TSchema, string, any>,
+    TSub extends AnyQuery<TSchema>,
   >(
     relationship: TRelationship,
-    cb: (
-      q: Query<
-        TSchema,
-        DestTableName<TTable, TSchema, TRelationship>,
-        DestRow<TTable, TSchema, TRelationship>
-      >,
-    ) => TSub,
-  ): Query<
-    TSchema,
-    TTable,
-    AddSubreturn<
-      TReturn,
-      TSub extends Query<TSchema, string, infer TSubReturn>
-        ? TSubReturn
-        : never,
-      TRelationship
-    >
-  >;
+    cb: RelatedCallback<TSchema, TTable, TRelationship, TSub>,
+  ): TSub extends Query<TSchema, string, infer TSubReturn>
+    ? Query<TSchema, TTable, AddSubreturn<TReturn, TSubReturn, TRelationship>>
+    : never;
 
   where<
     TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
@@ -208,7 +224,7 @@ export interface Query<
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
       | ParameterReference,
-  ): Query<TSchema, TTable, TReturn>;
+  ): this;
   where<
     TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
   >(
@@ -216,34 +232,32 @@ export interface Query<
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
       | ParameterReference,
-  ): Query<TSchema, TTable, TReturn>;
-  where(
-    expressionFactory: ExpressionFactory<TSchema, TTable>,
-  ): Query<TSchema, TTable, TReturn>;
+  ): this;
+  where(expressionFactory: ExpressionFactory<TSchema, TTable>): this;
 
   whereExists(
     relationship: AvailableRelationships<TTable, TSchema>,
     options?: ExistsOptions,
-  ): Query<TSchema, TTable, TReturn>;
+  ): this;
   whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb: (
       q: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
     ) => Query<TSchema, string>,
     options?: ExistsOptions,
-  ): Query<TSchema, TTable, TReturn>;
+  ): this;
 
   start(
     row: Partial<PullRow<TTable, TSchema>>,
     opts?: {inclusive: boolean},
-  ): Query<TSchema, TTable, TReturn>;
+  ): this;
 
-  limit(limit: number): Query<TSchema, TTable, TReturn>;
+  limit(limit: number): this;
 
   orderBy<TSelector extends Selector<PullTableSchema<TTable, TSchema>>>(
     field: TSelector,
     direction: 'asc' | 'desc',
-  ): Query<TSchema, TTable, TReturn>;
+  ): this;
 
   one(): Query<TSchema, TTable, TReturn | undefined>;
 }
@@ -300,4 +314,8 @@ export const DEFAULT_RUN_OPTIONS_COMPLETE = {
   type: 'complete',
 } as const;
 
-export type AnyQuery = Query<Schema, string, any>;
+export type AnyQuery<TSchema extends Schema = Schema> = Query<
+  TSchema,
+  string,
+  any
+>;

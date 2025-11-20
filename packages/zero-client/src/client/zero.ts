@@ -92,13 +92,16 @@ import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../../zql/src/query/query-impl.ts';
 import {isQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import {
+  type AnyQuery,
   type HumanReadable,
   type MaterializeOptions,
   type PreloadOptions,
   type PullRow,
   type Query,
+  type QueryReturn,
   type RunOptions,
 } from '../../../zql/src/query/query.ts';
+import type {RunnableQuery} from '../../../zql/src/query/runnable-query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
@@ -196,10 +199,10 @@ export type MakeCustomQueryInterfaces<
     args: infer Args;
   }) => Query<S, infer TTable, infer TReturn>
     ? [Args] extends [undefined]
-      ? () => Query<S, TTable & string, TReturn>
+      ? () => RunnableQuery<S, TTable & string, TReturn>
       : undefined extends Args
-        ? (args?: Args) => Query<S, TTable & string, TReturn>
-        : (args: Args) => Query<S, TTable & string, TReturn>
+        ? (args?: Args) => RunnableQuery<S, TTable & string, TReturn>
+        : (args: Args) => RunnableQuery<S, TTable & string, TReturn>
     : {
         readonly [P in keyof QD[NamespaceOrName]]: MakeCustomQueryInterface<
           S,
@@ -218,10 +221,10 @@ export type MakeCustomQueryInterface<
   args: infer Args;
 }) => Query<TSchema, infer TTable, infer TReturn>
   ? [Args] extends [undefined]
-    ? () => Query<TSchema, TTable & string, TReturn>
+    ? () => RunnableQuery<TSchema, TTable & string, TReturn>
     : undefined extends Args
-      ? (args?: Args) => Query<TSchema, TTable & string, TReturn>
-      : (args: Args) => Query<TSchema, TTable & string, TReturn>
+      ? (args?: Args) => RunnableQuery<TSchema, TTable & string, TReturn>
+      : (args: Args) => RunnableQuery<TSchema, TTable & string, TReturn>
   : never;
 
 declare const TESTING: boolean;
@@ -434,10 +437,10 @@ function registerQueries<
 }
 
 export class Zero<
-  const S extends Schema,
+  const TSchema extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
   TContext = unknown,
-  QD extends QueryDefinitions<S, TContext> | undefined = undefined,
+  QD extends QueryDefinitions<TSchema, TContext> | undefined = undefined,
 > {
   readonly version = version;
 
@@ -544,12 +547,12 @@ export class Zero<
   // 2. client successfully connects
   #totalToConnectStart: number | undefined = undefined;
 
-  readonly #options: ZeroOptions<S, MD, TContext, QD>;
+  readonly #options: ZeroOptions<TSchema, MD, TContext, QD>;
 
-  readonly query: QD extends QueryDefinitions<S, TContext>
-    ? MakeEntityQueriesFromSchema<S> &
-        MakeCustomQueryInterfaces<S, QD, TContext>
-    : MakeEntityQueriesFromSchema<S>;
+  readonly query: QD extends QueryDefinitions<TSchema, TContext>
+    ? MakeEntityQueriesFromSchema<TSchema> &
+        MakeCustomQueryInterfaces<TSchema, QD, TContext>
+    : MakeEntityQueriesFromSchema<TSchema>;
 
   // TODO: Metrics needs to be rethought entirely as we're not going to
   // send metrics to customer server.
@@ -562,7 +565,7 @@ export class Zero<
   /**
    * Constructs a new Zero client.
    */
-  constructor(options: ZeroOptions<S, MD, TContext, QD>) {
+  constructor(options: ZeroOptions<TSchema, MD, TContext, QD>) {
     const {
       userID,
       storageKey,
@@ -682,7 +685,7 @@ export class Zero<
             assertUnique(fullKey);
             replicacheMutators[fullKey] = makeReplicacheMutator(
               lc,
-              value as CustomMutatorImpl<S>,
+              value as CustomMutatorImpl<TSchema>,
               schema,
             ) as () => MutatorReturn;
           } else if (typeof value === 'object') {
@@ -829,8 +832,7 @@ export class Zero<
     this.#onClientStateNotFound = onClientStateNotFoundCallback;
     this.#rep.onClientStateNotFound = onClientStateNotFoundCallback;
 
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    const {mutate, mutateBatch} = makeCRUDMutate<S>(schema, rep.mutate) as any;
+    const {mutate, mutateBatch} = makeCRUDMutate<TSchema>(schema, rep.mutate);
 
     const mutatorProxy = new MutatorProxy(
       this.#connectionManager,
@@ -868,7 +870,8 @@ export class Zero<
       exposeMutators(options.mutators, mutate);
     }
 
-    this.mutate = mutate;
+    // oxlint-disable-next-line no-explicit-any
+    this.mutate = mutate as any;
     this.mutateBatch = mutateBatch;
 
     this.#queryManager = new QueryManager(
@@ -900,10 +903,10 @@ export class Zero<
       this.#options.queries,
       this,
       lc,
-    ) as QD extends QueryDefinitions<S, TContext>
-      ? MakeEntityQueriesFromSchema<S> &
-          MakeCustomQueryInterfaces<S, QD, TContext>
-      : MakeEntityQueriesFromSchema<S>;
+    ) as QD extends QueryDefinitions<TSchema, TContext>
+      ? MakeEntityQueriesFromSchema<TSchema> &
+          MakeCustomQueryInterfaces<TSchema, QD, TContext>
+      : MakeEntityQueriesFromSchema<TSchema>;
 
     reportReloadReason(this.#lc);
 
@@ -1029,9 +1032,9 @@ export class Zero<
    * ```
    */
   preload<
-    TTable extends keyof S['tables'] & string,
-    TReturn extends PullRow<TTable, S>,
-  >(query: Query<S, TTable, TReturn>, options?: PreloadOptions) {
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn extends PullRow<TTable, TSchema>,
+  >(query: Query<TSchema, TTable, TReturn>, options?: PreloadOptions) {
     return this.#zeroContext.preload(query, options);
   }
 
@@ -1055,10 +1058,10 @@ export class Zero<
    * const cachedUsers = await zero.run(userQuery, {type: 'unknown'});
    * ```
    */
-  run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+  run<TQuery extends AnyQuery>(
+    query: TQuery,
     runOptions?: RunOptions,
-  ): Promise<HumanReadable<TReturn>> {
+  ): Promise<HumanReadable<QueryReturn<TQuery>>> {
     return this.#zeroContext.run(query, runOptions);
   }
 
@@ -1090,18 +1093,18 @@ export class Zero<
    * const customView = zero.materialize(userQuery, (query) => new MyCustomView(query));
    * ```
    */
-  materialize<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+  materialize<TQuery extends AnyQuery<TSchema>>(
+    query: TQuery,
     options?: MaterializeOptions,
-  ): TypedView<HumanReadable<TReturn>>;
-  materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
-    factory: ViewFactory<S, TTable, TReturn, T>,
+  ): TypedView<HumanReadable<QueryReturn<TQuery>>>;
+  materialize<TQuery extends AnyQuery<TSchema>, T>(
+    query: TQuery,
+    factory: ViewFactory<TQuery, T>,
     options?: MaterializeOptions,
   ): T;
-  materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
-    factoryOrOptions?: ViewFactory<S, TTable, TReturn, T> | MaterializeOptions,
+  materialize<TQuery extends AnyQuery<TSchema>, T>(
+    query: TQuery,
+    factoryOrOptions?: ViewFactory<TQuery, T> | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
     let factory;
@@ -1156,7 +1159,7 @@ export class Zero<
    * }
    * ```
    */
-  get schema(): S {
+  get schema(): TSchema {
     return this.#options.schema;
   }
 
@@ -1191,10 +1194,13 @@ export class Zero<
    * ```
    */
   readonly mutate: MD extends CustomMutatorDefs
-    ? S['enableLegacyMutators'] extends false
-      ? MakeCustomMutatorInterfaces<S, MD, TContext>
-      : DeepMerge<DBMutator<S>, MakeCustomMutatorInterfaces<S, MD, TContext>>
-    : DBMutator<S>;
+    ? TSchema['enableLegacyMutators'] extends false
+      ? MakeCustomMutatorInterfaces<TSchema, MD, TContext>
+      : DeepMerge<
+          DBMutator<TSchema>,
+          MakeCustomMutatorInterfaces<TSchema, MD, TContext>
+        >
+    : DBMutator<TSchema>;
 
   /**
    * Provides a way to batch multiple CRUD mutations together:
@@ -1213,7 +1219,7 @@ export class Zero<
    * `mutateBatch` is not allowed inside another `mutateBatch` call. Doing so
    * will throw an error.
    */
-  readonly mutateBatch: BatchMutator<S>;
+  readonly mutateBatch: BatchMutator<TSchema>;
 
   /**
    * The connection API for managing Zero's connection lifecycle.

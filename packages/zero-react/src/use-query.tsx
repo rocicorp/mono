@@ -16,7 +16,12 @@ import type {
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
-import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
+import {
+  type AnyQuery,
+  type HumanReadable,
+  type Query,
+  type QueryReturn,
+} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 import {useZero} from './zero-provider.tsx';
@@ -59,14 +64,10 @@ const suspend: (p: Promise<unknown>) => void = reactUse
       throw p;
     };
 
-export function useQuery<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
->(
-  query: Query<TSchema, TTable, TReturn>,
+export function useQuery<TQuery extends AnyQuery>(
+  query: TQuery,
   options?: UseQueryOptions | boolean,
-): QueryResult<TReturn> {
+): QueryResult<QueryReturn<TQuery>> {
   let enabled = true;
   let ttl: TTL = DEFAULT_TTL_MS;
   if (typeof options === 'boolean') {
@@ -229,7 +230,7 @@ function makeError(retry: () => void, error: ErroredQuery): QueryErrorDetails {
 declare const TESTING: boolean;
 
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-type AnyViewWrapper = ViewWrapper<any, any, any, any, any>;
+type AnyViewWrapper = ViewWrapper<any, any, any, any>;
 
 const allViews = new WeakMap<ViewStore, Map<string, AnyViewWrapper>>();
 
@@ -299,17 +300,16 @@ export class ViewStore {
 
   getView<
     TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
     MD extends CustomMutatorDefs | undefined,
     TContext,
+    TQuery extends AnyQuery<TSchema>,
   >(
     zero: Zero<TSchema, MD, TContext>,
-    query: Query<TSchema, TTable, TReturn>,
+    query: TQuery,
     enabled: boolean,
     ttl: TTL,
   ): {
-    getSnapshot: () => QueryResult<TReturn>;
+    getSnapshot: () => QueryResult<QueryReturn<TQuery>>;
     subscribeReactInternals: (internals: () => void) => () => void;
     updateTTL: (ttl: TTL) => void;
     waitForComplete: () => Promise<void>;
@@ -346,7 +346,7 @@ export class ViewStore {
     } else {
       existing.updateTTL(ttl);
     }
-    return existing as ViewWrapper<TSchema, TTable, TReturn, MD, TContext>;
+    return existing as ViewWrapper<TSchema, MD, TContext, QueryReturn<TQuery>>;
   }
 }
 
@@ -379,31 +379,30 @@ const viewStore = new ViewStore();
  */
 class ViewWrapper<
   TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
   MD extends CustomMutatorDefs | undefined,
   TContext,
+  TQuery extends AnyQuery<TSchema>,
 > {
-  #view: TypedView<HumanReadable<TReturn>> | undefined;
+  #view: TypedView<HumanReadable<QueryReturn<TQuery>>> | undefined;
   readonly #onDematerialized;
-  readonly #query: Query<TSchema, TTable, TReturn>;
+  readonly #query: TQuery;
   readonly #format: Format;
-  #snapshot: QueryResult<TReturn>;
+  #snapshot: QueryResult<QueryReturn<TQuery>>;
   #reactInternals: Set<() => void>;
   #ttl: TTL;
   #complete = false;
   #completeResolver = resolver<void>();
   #nonEmpty = false;
   #nonEmptyResolver = resolver<void>();
-  readonly #bindings: BindingsForZero<TSchema>;
+  readonly #bindings: BindingsForZero;
 
   constructor(
-    bindings: BindingsForZero<TSchema>,
-    query: Query<TSchema, TTable, TReturn>,
+    bindings: BindingsForZero,
+    query: TQuery,
     format: Format,
     ttl: TTL,
     onDematerialized: (
-      view: ViewWrapper<TSchema, TTable, TReturn, MD, TContext>,
+      view: ViewWrapper<TSchema, MD, TContext, TQuery>,
     ) => void,
   ) {
     this.#bindings = bindings;
@@ -417,14 +416,16 @@ class ViewWrapper<
   }
 
   #onData = (
-    snap: Immutable<HumanReadable<TReturn>>,
+    snap: Immutable<HumanReadable<QueryReturn<TQuery>>>,
     resultType: ResultType,
     error?: ErroredQuery,
   ) => {
     const data =
       snap === undefined
         ? snap
-        : (deepClone(snap as ReadonlyJSONValue) as HumanReadable<TReturn>);
+        : (deepClone(snap as ReadonlyJSONValue) as HumanReadable<
+            QueryReturn<TQuery>
+          >);
     this.#snapshot = getSnapshot(
       this.#format.singular,
       data,

@@ -6,6 +6,7 @@ import type {Format, ViewFactory} from '../ivm/view.ts';
 import type {MetricsDelegate} from './metrics-delegate.ts';
 import type {CustomQueryID} from './named.ts';
 import type {
+  AnyQuery,
   HumanReadable,
   MaterializeOptions,
   PreloadOptions,
@@ -87,28 +88,18 @@ export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
 
-  materialize<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-    T,
-  >(
-    query: Query<TSchema, TTable, TReturn>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
+  materialize<TQuery extends AnyQuery, T>(
+    query: TQuery,
+    factory?: ViewFactory<TQuery, T>,
     options?: MaterializeOptions,
   ): T;
 
   /**
    * Materialize a query into a custom view using a provided factory function.
    */
-  materialize<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn,
-    T,
-  >(
-    query: Query<TSchema, TTable, TReturn>,
-    factory?: ViewFactory<TSchema, TTable, TReturn, T>,
+  materialize<TQuery extends AnyQuery, T>(
+    query: TQuery,
+    factory?: ViewFactory<TQuery, T>,
     options?: MaterializeOptions,
   ): T;
 

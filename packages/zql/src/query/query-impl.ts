@@ -45,6 +45,7 @@ import {
   type PreloadOptions,
   type PullRow,
   type Query,
+  type QueryReturn,
   type RunOptions,
 } from './query.ts';
 import {DEFAULT_PRELOAD_TTL_MS, DEFAULT_TTL_MS, type TTL} from './ttl.ts';
@@ -73,17 +74,17 @@ export function staticParam(
 // oxlint-disable-next-line no-explicit-any
 type GetFilterTypeAny = GetFilterType<any, any, any>;
 
-type NewQueryFunction<TSchema extends Schema> = <
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
->(
+type NewQueryFunction<
+  TSchema extends Schema,
+  QueryReturn = AnyQuery<TSchema>,
+> = <TTable extends keyof TSchema['tables'] & string>(
   this: unknown,
   tableName: TTable,
   ast: AST,
   format: Format,
   customQueryID: CustomQueryID | undefined,
   currentJunction: string | undefined,
-) => Query<TSchema, TTable, TReturn>;
+) => QueryReturn;
 
 export abstract class AbstractQuery<
     TSchema extends Schema,
@@ -104,7 +105,7 @@ export abstract class AbstractQuery<
   readonly #system: System;
   readonly #currentJunction: string | undefined;
   readonly customQueryID: CustomQueryID | undefined;
-  readonly #newQuery: NewQueryFunction<TSchema>;
+  readonly #newQuery: NewQueryFunction<TSchema, this>;
 
   constructor(
     schema: TSchema,
@@ -123,13 +124,10 @@ export abstract class AbstractQuery<
     this.#system = system;
     this.#currentJunction = currentJunction;
     this.customQueryID = customQueryID;
-    this.#newQuery = newQuery;
+    this.#newQuery = newQuery as NewQueryFunction<TSchema, this>;
   }
 
-  nameAndArgs(
-    name: string,
-    args: ReadonlyArray<ReadonlyJSONValue>,
-  ): Query<TSchema, TTable, TReturn> {
+  nameAndArgs(name: string, args: ReadonlyArray<ReadonlyJSONValue>): this {
     return this.#newQuery(
       this.#tableName,
       this.#ast,
@@ -168,7 +166,7 @@ export abstract class AbstractQuery<
     relationship: string,
     cbOrOptions?: ((q: AnyQuery) => AnyQuery) | ExistsOptions,
     options?: ExistsOptions,
-  ): Query<TSchema, TTable, TReturn> => {
+  ): this => {
     const cb = typeof cbOrOptions === 'function' ? cbOrOptions : undefined;
     const opts = typeof cbOrOptions === 'function' ? options : cbOrOptions;
     const flipped = opts?.flip;
@@ -334,7 +332,7 @@ export abstract class AbstractQuery<
     fieldOrExpressionFactory: string | ExpressionFactory<TSchema, TTable>,
     opOrValue?: SimpleOperator | GetFilterTypeAny | Parameter,
     value?: GetFilterTypeAny | Parameter,
-  ): Query<TSchema, TTable, TReturn> => {
+  ): this => {
     let cond: Condition;
 
     if (typeof fieldOrExpressionFactory === 'function') {
@@ -371,7 +369,7 @@ export abstract class AbstractQuery<
   start = (
     row: Partial<Record<string, ReadonlyJSONValue | undefined>>,
     opts?: {inclusive: boolean},
-  ): Query<TSchema, TTable, TReturn> =>
+  ): this =>
     this.#newQuery(
       this.#tableName,
       {
@@ -386,7 +384,7 @@ export abstract class AbstractQuery<
       this.#currentJunction,
     );
 
-  limit = (limit: number): Query<TSchema, TTable, TReturn> => {
+  limit = (limit: number): this => {
     if (limit < 0) {
       throw new Error('Limit must be non-negative');
     }
@@ -415,7 +413,7 @@ export abstract class AbstractQuery<
   orderBy = <TSelector extends keyof TSchema['tables'][TTable]['columns']>(
     field: TSelector,
     direction: 'asc' | 'desc',
-  ): Query<TSchema, TTable, TReturn> => {
+  ): this => {
     if (this.#currentJunction) {
       throw new NotImplementedError(
         'Order by is not supported in junction relationships yet. Junction relationship being ordered: ' +
@@ -548,18 +546,11 @@ function asAbstractQuery<
   return q;
 }
 
-export function materializeImpl<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
-  T,
->(
-  query: Query<TSchema, TTable, TReturn>,
+export function materializeImpl<TQuery extends AnyQuery, T>(
+  query: TQuery,
   delegate: QueryDelegate,
   factory: ViewFactory<
-    TSchema,
-    TTable,
-    TReturn,
+    TQuery,
     T
     // oxlint-disable-next-line no-explicit-any
   > = arrayViewFactory as any,
@@ -638,17 +629,13 @@ export function materializeImpl<
 }
 
 // oxlint-disable-next-line require-await
-export async function runImpl<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
->(
-  query: Query<TSchema, TTable, TReturn>,
+export async function runImpl<TQuery extends AnyQuery>(
+  query: TQuery,
   delegate: QueryDelegate,
   options?: RunOptions,
-): Promise<HumanReadable<TReturn>> {
+): Promise<HumanReadable<QueryReturn<TQuery>>> {
   delegate.assertValidRunOptions(options);
-  const v: TypedView<HumanReadable<TReturn>> = materializeImpl(
+  const v: TypedView<HumanReadable<QueryReturn<TQuery>>> = materializeImpl(
     query,
     delegate,
     undefined,
@@ -661,7 +648,7 @@ export async function runImpl<
       v.addListener((data, type) => {
         if (type === 'complete') {
           v.destroy();
-          resolve(data as HumanReadable<TReturn>);
+          resolve(data as HumanReadable<QueryReturn<TQuery>>);
         } else if (type === 'error') {
           v.destroy();
           resolve(Promise.reject(data));

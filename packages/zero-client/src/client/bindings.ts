@@ -5,9 +5,10 @@ import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {
+  AnyQuery,
   HumanReadable,
   MaterializeOptions,
-  Query,
+  QueryReturn,
 } from '../../../zql/src/query/query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import type {Zero} from './zero.ts';
@@ -51,40 +52,36 @@ function mustGetDelegate<
  *
  * @internal This API is for bindings only, not end users.
  */
-export interface BindingsForZero<TSchema extends Schema> {
+export interface BindingsForZero {
   /**
    * Materialize a query into a reactive view without a custom factory.
    * Returns a TypedView that automatically updates when underlying data changes.
    */
-  materialize<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TSchema, TTable, TReturn>,
+  materialize<TQuery extends AnyQuery>(
+    query: TQuery,
     factory?: undefined,
     options?: MaterializeOptions,
-  ): TypedView<HumanReadable<TReturn>>;
+  ): TypedView<HumanReadable<QueryReturn<TQuery>>>;
 
   /**
    * Materialize a query into a reactive view using a custom factory.
    * The factory can transform the view into a framework-specific reactive object.
    */
-  materialize<TTable extends keyof TSchema['tables'] & string, TReturn, T>(
-    query: Query<TSchema, TTable, TReturn>,
-    factory: ViewFactory<TSchema, TTable, TReturn, T>,
+  materialize<TQuery extends AnyQuery, T>(
+    query: TQuery,
+    factory: ViewFactory<TQuery, T>,
     options?: MaterializeOptions,
   ): T;
 
   /**
    * Compute the hash of a query for caching and deduplication purposes.
    */
-  hash<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TSchema, TTable, TReturn>,
-  ): string;
+  hash(query: AnyQuery): string;
 
   /**
    * Get the format/schema of a query's result set.
    */
-  format<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TSchema, TTable, TReturn>,
-  ): Format;
+  format(query: AnyQuery): Format;
 }
 
 /**
@@ -93,33 +90,27 @@ export interface BindingsForZero<TSchema extends Schema> {
  *
  * @internal This API is for bindings only, not end users.
  */
-export function bindingsForZero<
-  TSchema extends Schema,
-  MD extends CustomMutatorDefs | undefined,
-  TContext,
-  QD extends QueryDefinitions<TSchema, TContext> | undefined,
->(zero: Zero<TSchema, MD, TContext, QD>): BindingsForZero<TSchema> {
+// oxlint-disable-next-line no-explicit-any
+export function bindingsForZero<TZero extends Zero<any, any, any, any>>(
+  zero: TZero,
+): BindingsForZero {
   const delegate = mustGetDelegate(zero);
 
   return {
-    materialize<TTable extends keyof TSchema['tables'] & string, TReturn, T>(
-      query: Query<TSchema, TTable, TReturn>,
-      factory?: ViewFactory<TSchema, TTable, TReturn, T>,
+    materialize<TQuery extends AnyQuery, T>(
+      query: TQuery,
+      factory?: ViewFactory<TQuery, T>,
       options?: MaterializeOptions,
-    ) {
+    ): T {
       return delegate.materialize(query, factory, options);
     },
 
-    hash<TTable extends keyof TSchema['tables'] & string, TReturn>(
-      query: Query<TSchema, TTable, TReturn>,
-    ): string {
+    hash(query: AnyQuery): string {
       const queryInternals = asQueryInternals(query);
       return queryInternals.hash();
     },
 
-    format<TTable extends keyof TSchema['tables'] & string, TReturn>(
-      query: Query<TSchema, TTable, TReturn>,
-    ): Format {
+    format(query: AnyQuery): Format {
       const queryInternals = asQueryInternals(query);
       return queryInternals.format;
     },
