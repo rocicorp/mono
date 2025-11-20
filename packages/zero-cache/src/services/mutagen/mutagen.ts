@@ -20,7 +20,7 @@ import {
   type UpsertOp,
 } from '../../../../zero-protocol/src/push.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
-import {DatabaseStorage} from '../../../../zqlite/src/database-storage.ts';
+import type {DatabaseStorage} from '../../../../zqlite/src/database-storage.ts';
 import {
   WriteAuthorizerImpl,
   type WriteAuthorizer,

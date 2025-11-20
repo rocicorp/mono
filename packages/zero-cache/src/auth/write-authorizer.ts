@@ -31,9 +31,9 @@ import {
   asStaticQuery,
   staticQuery,
 } from '../../../zql/src/query/static-query.ts';
-import {
+import type {
   DatabaseStorage,
-  type ClientGroupStorage,
+  ClientGroupStorage,
 } from '../../../zqlite/src/database-storage.ts';
 import type {Database} from '../../../zqlite/src/db.ts';
 import {compile, sql} from '../../../zqlite/src/internal/sql.ts';
