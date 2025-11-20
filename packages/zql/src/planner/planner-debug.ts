@@ -1,5 +1,9 @@
 import type * as v from '../../../shared/src/valita.ts';
-import type {Condition, ValuePosition} from '../../../zero-protocol/src/ast.ts';
+import type {
+  Condition,
+  Ordering,
+  ValuePosition,
+} from '../../../zero-protocol/src/ast.ts';
 import type {
   attemptStartEventJSONSchema,
   bestPlanSelectedEventJSONSchema,
@@ -101,6 +105,7 @@ export type NodeCostEvent = {
   downstreamChildSelectivity: number;
   costEstimate: Omit<CostEstimate, 'fanout'>;
   filters?: Condition | undefined; // Only for connections
+  ordering?: Ordering | undefined; // Only for connections
   joinType?: JoinType | undefined; // Only for joins
 };
 
@@ -226,6 +231,16 @@ function formatFilter(filter: Condition | undefined): string {
 }
 
 /**
+ * Format an Ordering as a human-readable string.
+ */
+function formatOrdering(ordering: Ordering | undefined): string {
+  if (!ordering || ordering.length === 0) return 'none';
+  return ordering
+    .map(([field, direction]) => `${field} ${direction}`)
+    .join(', ');
+}
+
+/**
  * Format a compact summary for a single planning attempt.
  */
 function formatAttemptSummary(
@@ -283,6 +298,7 @@ function formatAttemptSummary(
 
       const constraintStr = formatConstraint(constraint);
       const filterStr = formatFilter(cost.filters);
+      const orderingStr = formatOrdering(cost.ordering);
       const limitStr =
         cost.costEstimate.limit !== undefined
           ? cost.costEstimate.limit.toString()
@@ -300,6 +316,7 @@ function formatAttemptSummary(
       );
       lines.push(`      constraints=${constraintStr}`);
       lines.push(`      filters=${filterStr}`);
+      lines.push(`      ordering=${orderingStr}`);
     }
   }
 

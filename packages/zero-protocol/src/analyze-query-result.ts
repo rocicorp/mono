@@ -1,6 +1,6 @@
 import * as v from '../../shared/src/valita.ts';
 
-import {conditionSchema} from './ast.ts';
+import {conditionSchema, orderingSchema} from './ast.ts';
 import {rowSchema} from './data.ts';
 
 export const rowCountsByQuerySchema = v.record(v.number());
@@ -124,6 +124,7 @@ const nodeCostEventJSONSchema = v.object({
   downstreamChildSelectivity: v.number(),
   costEstimate: costEstimateJSONSchema,
   filters: conditionSchema.optional(),
+  ordering: orderingSchema.optional(),
   joinType: joinTypeSchema.optional(),
 });
 

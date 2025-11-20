@@ -234,6 +234,7 @@ export class PlannerConnection {
         downstreamChildSelectivity,
         costEstimate: omitFanout(cost),
         filters: this.#filters,
+        ordering: this.#sort,
       });
     }
 
@@ -308,6 +309,11 @@ export class PlannerConnection {
   /** Get filters for debugging. */
   getFiltersForDebug(): Condition | undefined {
     return this.#filters;
+  }
+
+  /** Get sort/ordering for debugging. */
+  getSortForDebug(): Ordering {
+    return this.#sort;
   }
 
   /** Get estimated cost for each constraint branch. */
