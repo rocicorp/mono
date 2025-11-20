@@ -342,14 +342,21 @@ function formatAttemptSummary(
 /**
  * Serialize a single debug event to JSON-compatible format.
  * The fanout function is already omitted when events are created.
+ * The planSnapshot is excluded as it's internal state not needed for debugging.
  */
 function serializeEvent(event: PlanDebugEvent): PlanDebugEventJSON {
+  // Remove planSnapshot from plan-complete events
+  if (event.type === 'plan-complete') {
+    const {planSnapshot: _, ...rest} = event;
+    return rest as PlanDebugEventJSON;
+  }
   return event as PlanDebugEventJSON;
 }
 
 /**
  * Serialize an array of debug events to JSON-compatible format.
  * The fanout function is already omitted when events are created.
+ * The planSnapshot is excluded as it's internal state not needed for debugging.
  */
 export function serializePlanDebugEvents(
   events: PlanDebugEvent[],

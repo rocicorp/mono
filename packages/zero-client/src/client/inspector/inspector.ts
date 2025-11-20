@@ -82,7 +82,7 @@ export class Inspector {
   /**
    * Format planner debug events as a human-readable string.
    */
-  static formatPlannerEvents(events: PlanDebugEventJSON[]): string {
+  formatPlannerEvents(events: PlanDebugEventJSON[]): string {
     return formatPlannerEvents(events);
   }
 }
