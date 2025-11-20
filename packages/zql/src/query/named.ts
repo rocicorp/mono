@@ -172,7 +172,7 @@ export function createBuilder<S extends Schema>(schema: S): SchemaQuery<S> {
           throw new Error(`Table ${prop} does not exist in schema`);
         }
 
-        const q = newQuery(schema, prop);
+        const q = newQuery(undefined, schema, prop);
         target[prop] = q;
         return q;
       },

@@ -377,6 +377,7 @@ function registerQueries<
   TContext,
   QD extends QueryDefinitions<S, TContext> | undefined,
 >(
+  delegate: QueryDelegate,
   schema: S,
   queries: QD,
   contextHolder: {context: TContext},
@@ -387,7 +388,7 @@ function registerQueries<
 
   // Register entity queries for each table
   for (const name of Object.keys(schema.tables)) {
-    rv[name] = newQuery(schema, name);
+    rv[name] = newQuery(delegate, schema, name);
   }
 
   // Register custom queries if provided
@@ -899,6 +900,7 @@ export class Zero<
     );
 
     this.query = registerQueries(
+      this.#zeroContext,
       schema,
       this.#options.queries,
       this,

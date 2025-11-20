@@ -1,6 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {must} from '../../../shared/src/must.ts';
 import {
   SUBQ_PREFIX,
   type AST,
@@ -38,6 +39,7 @@ import {
 } from './query-internals.ts';
 import {
   type AnyQuery,
+  type AvailableRelationships,
   type ExistsOptions,
   type GetFilterType,
   type HumanReadable,
@@ -48,6 +50,7 @@ import {
   type QueryReturn,
   type RunOptions,
 } from './query.ts';
+import type {RunnableQuery} from './runnable-query.ts';
 import {DEFAULT_PRELOAD_TTL_MS, DEFAULT_TTL_MS, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
 
@@ -55,8 +58,19 @@ export function newQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
->(schema: TSchema, table: TTable): Query<TSchema, TTable, TReturn> {
-  return new QueryImpl(schema, table, {table}, defaultFormat, undefined);
+>(
+  delegate: QueryDelegate | undefined,
+  schema: TSchema,
+  table: TTable,
+): Query<TSchema, TTable, TReturn> {
+  return new QueryImpl(
+    delegate,
+    schema,
+    table,
+    {table},
+    defaultFormat,
+    undefined,
+  );
 }
 
 export function staticParam(
@@ -709,9 +723,12 @@ export class QueryImpl<
     TReturn = PullRow<TTable, TSchema>,
   >
   extends AbstractQuery<TSchema, TTable, TReturn>
-  implements Query<TSchema, TTable, TReturn>
+  implements RunnableQuery<TSchema, TTable, TReturn>
 {
+  readonly #delegate: QueryDelegate | undefined;
+
   constructor(
+    delegate: QueryDelegate | undefined,
     schema: TSchema,
     tableName: TTable,
     ast: AST = {table: tableName},
@@ -730,6 +747,7 @@ export class QueryImpl<
       currentJunction,
       (tableName, ast, format, customQueryID, currentJunction) =>
         new QueryImpl(
+          delegate,
           schema,
           tableName,
           ast,
@@ -739,6 +757,65 @@ export class QueryImpl<
           currentJunction,
         ),
     );
+    this.#delegate = delegate;
+  }
+
+  declare one: () => RunnableQuery<TSchema, TTable, TReturn | undefined>;
+
+  declare related: <
+    TRelationship extends AvailableRelationships<TTable, TSchema>,
+  >(
+    relationship: TRelationship,
+    cb?: (q: AnyQuery) => AnyQuery,
+    // oxlint-disable-next-line no-explicit-any
+  ) => RunnableQuery<TSchema, string, any>;
+
+  // declare related: <
+  //   TRelationship extends AvailableRelationships<TTable, TSchema>,
+  // >(
+  //   relationship: TRelationship,
+  // ) => RunnableQuery<
+  //   TSchema,
+  //   TTable,
+  //   RelatedQueryReturn<TReturn, TTable, TSchema, TRelationship>
+  // >;
+  // declare related: <
+  //   TRelationship extends AvailableRelationships<TTable, TSchema>,
+  //   TSub extends AnyQuery<TSchema>,
+  // >(
+  //   relationship: TRelationship,
+  //   cb: RelatedCallback<TSchema, TTable, TRelationship, TSub>,
+  // ) => TSub extends Query<TSchema, string, infer TSubReturn>
+  //   ? Query<TSchema, TTable, AddSubreturn<TReturn, TSubReturn, TRelationship>>
+  //   : never;
+
+  // related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
+  //     relationship: TRelationship,
+  //   ): RunnableQuery<
+  //     TSchema,
+  //     TTable,
+  //     AddSubreturn<
+  //       TReturn,
+  //       DestRow<TSchema, TTable, TRelationship>,
+  //       TRelationship
+  //     >
+  //   >;
+  //   related<
+  //     TRelationship extends AvailableRelationships<TTable, TSchema>,
+  //     TSub extends RunnableQuery<TSchema, string, any>,
+  //   >(
+  //     relationship: TRelationship,
+  //     cb: RelatedCallback<TSchema, TTable, TRelationship, TSub>,
+  //   ): RunnableQuery<
+  //     TSchema,
+  //     TTable,
+  //     AddSubreturn<TReturn, QueryReturn<TSub>, TRelationship>
+  //   >;
+
+  run(options?: RunOptions): Promise<HumanReadable<TReturn>> {
+    return must(this.#delegate).run(this, options) as Promise<
+      HumanReadable<TReturn>
+    >;
   }
 }
 
