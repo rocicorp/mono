@@ -674,6 +674,7 @@ describe('analyzeQuery', () => {
       const result = await analyzeQuery(
         lc,
         mockConfig,
+        minimalClientSchema,
         simpleAST,
         true,
         false,
@@ -726,6 +727,7 @@ describe('analyzeQuery', () => {
       const result = await analyzeQuery(
         lc,
         mockConfig,
+        minimalClientSchema,
         simpleAST,
         true,
         false,
@@ -773,7 +775,12 @@ describe('analyzeQuery', () => {
       vi.mocked(explainQueries).mockReturnValue({});
 
       // Call without plannerDebug parameter
-      const result = await analyzeQuery(lc, mockConfig, simpleAST);
+      const result = await analyzeQuery(
+        lc,
+        mockConfig,
+        minimalClientSchema,
+        simpleAST,
+      );
 
       // Verify cost model and debugger were NOT created
       expect(AccumulatorDebugger).not.toHaveBeenCalled();
