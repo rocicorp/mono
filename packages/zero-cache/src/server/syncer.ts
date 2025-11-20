@@ -79,6 +79,10 @@ export default function runWorker(
     lc,
     path.join(tmpDir, `sync-worker-${randomUUID()}`),
   );
+  const writeAuthzStorage = DatabaseStorage.create(
+    lc,
+    path.join(tmpDir, `mutagen-${randomUUID()}`),
+  );
 
   const shard = getShardID(config);
 
@@ -140,6 +144,7 @@ export default function runWorker(
       id,
       upstreamDB,
       config,
+      writeAuthzStorage,
     );
 
   const pusherFactory =
