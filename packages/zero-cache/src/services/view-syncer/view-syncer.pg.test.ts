@@ -1509,6 +1509,18 @@ describe('view-syncer/service', () => {
             const rowsPatchAfterFailure = pokePart[1].rowsPatch;
             expect(rowsPatchAfterFailure).toBeTruthy();
             expect(rowsPatchAfterFailure!.length).toBeGreaterThan(0);
+
+            // Verify NO deletions for issues table (pipeline shared, still active)
+            const issueDelOps = rowsPatchAfterFailure!.filter(
+              op => op.op === 'del' && op.tableName === 'issues',
+            );
+            expect(issueDelOps.length).toBe(0);
+
+            // Verify issues rows are still present (put operations)
+            const issuePutOps = rowsPatchAfterFailure!.filter(
+              op => op.op === 'put' && op.tableName === 'issues',
+            );
+            expect(issuePutOps.length).toBeGreaterThan(0);
           } else {
             // Verify custom-1 was removed from CVR (by checking it's marked as deleted or removed)
             const queriesAfterFailure =
@@ -1518,6 +1530,32 @@ describe('view-syncer/service', () => {
               queriesAfterFailure.length === 0 ||
                 queriesAfterFailure[0].transformationHash === null,
             ).toBe(true);
+
+            // Verify rowsPatch contains deletions for issues table (hash-1 pipeline removed)
+            const rowsPatchAfterFailure = pokePart[1].rowsPatch;
+            expect(rowsPatchAfterFailure).toBeTruthy();
+
+            // Should have deletion operations for all 4 issues rows (ids: '1', '2', '3', '4')
+            const issueDelOps = rowsPatchAfterFailure!.filter(
+              op => op.op === 'del' && op.tableName === 'issues',
+            );
+            expect(issueDelOps.length).toBe(4);
+
+            // Verify all issue IDs are deleted
+            const deletedIssueIds = issueDelOps
+              .map(
+                op =>
+                  (op as {op: 'del'; tableName: string; id: {id: string}}).id
+                    .id,
+              )
+              .sort();
+            expect(deletedIssueIds).toEqual(['1', '2', '3', '4']);
+
+            // Verify no deletions for users table (hash-2 pipeline still active)
+            const userDelOps = rowsPatchAfterFailure!.filter(
+              op => op.op === 'del' && op.tableName === 'users',
+            );
+            expect(userDelOps.length).toBe(0);
           }
 
           // Verify custom-2 is still present/active
