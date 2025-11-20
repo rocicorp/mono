@@ -182,7 +182,7 @@ import {
 export type NoRelations = Record<string, never>;
 
 export type MakeEntityQueriesFromSchema<S extends Schema> = {
-  readonly [K in keyof S['tables'] & string]: Query<S, K>;
+  readonly [K in keyof S['tables'] & string]: RunnableQuery<S, K>;
 };
 
 /**
