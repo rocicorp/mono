@@ -358,17 +358,39 @@ function formatAttemptSummary(
 }
 
 /**
+ * Convert undefined values to null recursively for JSON serialization.
+ * PlannerConstraint uses Record<string, undefined> which loses keys during JSON.stringify.
+ */
+function convertUndefinedToNull(value: unknown): unknown {
+  if (value === undefined) {
+    return null;
+  }
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(convertUndefinedToNull);
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(value)) {
+    result[key] = convertUndefinedToNull(val);
+  }
+  return result;
+}
+
+/**
  * Serialize a single debug event to JSON-compatible format.
  * The fanout function is already omitted when events are created.
  * The planSnapshot is excluded as it's internal state not needed for debugging.
+ * Undefined values in constraints are converted to null for JSON serialization.
  */
 function serializeEvent(event: PlanDebugEvent): PlanDebugEventJSON {
   // Remove planSnapshot from plan-complete events
   if (event.type === 'plan-complete') {
     const {planSnapshot: _, ...rest} = event;
-    return rest as PlanDebugEventJSON;
+    return convertUndefinedToNull(rest) as PlanDebugEventJSON;
   }
-  return event as PlanDebugEventJSON;
+  return convertUndefinedToNull(event) as PlanDebugEventJSON;
 }
 
 /**

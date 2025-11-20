@@ -26,7 +26,7 @@ const costEstimateJSONSchema = v.object({
   limit: v.number().optional(),
 });
 
-const plannerConstraintSchema = v.record(v.unknown());
+const plannerConstraintSchema = v.record(v.union(v.unknown(), v.null()));
 
 const attemptStartEventJSONSchema = v.object({
   type: v.literal('attempt-start'),
@@ -43,7 +43,7 @@ const connectionCostsEventJSONSchema = v.object({
       cost: v.number(),
       costEstimate: costEstimateJSONSchema,
       pinned: v.boolean(),
-      constraints: v.record(v.union(plannerConstraintSchema, v.undefined())),
+      constraints: v.record(v.union(plannerConstraintSchema, v.null())),
       constraintCosts: v.record(costEstimateJSONSchema),
     }),
   ),
@@ -63,7 +63,7 @@ const constraintsPropagatedEventJSONSchema = v.object({
   connectionConstraints: v.array(
     v.object({
       connection: v.string(),
-      constraints: v.record(v.union(plannerConstraintSchema, v.undefined())),
+      constraints: v.record(v.union(plannerConstraintSchema, v.null())),
       constraintCosts: v.record(costEstimateJSONSchema),
     }),
   ),
@@ -133,7 +133,7 @@ const nodeConstraintEventJSONSchema = v.object({
   nodeType: nodeTypeSchema,
   node: v.string(),
   branchPattern: v.array(v.number()),
-  constraint: plannerConstraintSchema.optional(),
+  constraint: v.union(plannerConstraintSchema, v.null()).optional(),
   from: v.string(),
 });
 

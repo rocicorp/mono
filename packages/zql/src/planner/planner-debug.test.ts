@@ -401,7 +401,7 @@ describe('serializePlanDebugEvents', () => {
     expect(serialized).toHaveLength(1);
     const event = serialized[0];
     if (event.type === 'connection-costs') {
-      expect(event.costs[0].constraints).toEqual({id: {id: undefined}});
+      expect(event.costs[0].constraints).toEqual({id: {id: null}});
       expect(event.costs[0].constraintCosts).toHaveProperty('id');
       expect(event.costs[0].costEstimate).not.toHaveProperty('fanout');
     }

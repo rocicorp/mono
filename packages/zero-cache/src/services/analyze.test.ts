@@ -652,6 +652,7 @@ describe('analyzeQuery', () => {
 
       const mockDebugger = {
         events: mockDebugEvents,
+        format: vi.fn().mockReturnValue('formatted debug output'),
       };
 
       // oxlint-disable-next-line @typescript-eslint/no-explicit-any
