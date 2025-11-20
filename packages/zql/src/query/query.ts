@@ -208,7 +208,7 @@ export interface Query<
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
       | ParameterReference,
-  ): Query<TSchema, TTable, TReturn>;
+  ): this;
   where<
     TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
   >(
@@ -216,34 +216,32 @@ export interface Query<
     value:
       | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
       | ParameterReference,
-  ): Query<TSchema, TTable, TReturn>;
-  where(
-    expressionFactory: ExpressionFactory<TSchema, TTable>,
-  ): Query<TSchema, TTable, TReturn>;
+  ): this;
+  where(expressionFactory: ExpressionFactory<TSchema, TTable>): this;
 
   whereExists(
     relationship: AvailableRelationships<TTable, TSchema>,
     options?: ExistsOptions,
-  ): Query<TSchema, TTable, TReturn>;
+  ): this;
   whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb: (
       q: Query<TSchema, DestTableName<TTable, TSchema, TRelationship>>,
     ) => Query<TSchema, string>,
     options?: ExistsOptions,
-  ): Query<TSchema, TTable, TReturn>;
+  ): this;
 
   start(
     row: Partial<PullRow<TTable, TSchema>>,
     opts?: {inclusive: boolean},
-  ): Query<TSchema, TTable, TReturn>;
+  ): this;
 
-  limit(limit: number): Query<TSchema, TTable, TReturn>;
+  limit(limit: number): this;
 
   orderBy<TSelector extends Selector<PullTableSchema<TTable, TSchema>>>(
     field: TSelector,
     direction: 'asc' | 'desc',
-  ): Query<TSchema, TTable, TReturn>;
+  ): this;
 
   one(): Query<TSchema, TTable, TReturn | undefined>;
 }

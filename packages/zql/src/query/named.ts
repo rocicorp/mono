@@ -158,7 +158,10 @@ export type CustomQueryID = {
 /**
  * Returns a set of query builders for the given schema.
  */
-export function createBuilder<S extends Schema>(schema: S): SchemaQuery<S> {
+export function createBuilder<S extends Schema>(
+  schema: S,
+  delegate?: import('./query-delegate.ts').QueryDelegate,
+): SchemaQuery<S> {
   return new Proxy(
     {},
     {
@@ -172,7 +175,7 @@ export function createBuilder<S extends Schema>(schema: S): SchemaQuery<S> {
           throw new Error(`Table ${prop} does not exist in schema`);
         }
 
-        const q = newQuery(schema, prop);
+        const q = newQuery(schema, prop, delegate);
         target[prop] = q;
         return q;
       },

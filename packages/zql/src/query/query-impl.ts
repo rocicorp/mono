@@ -54,8 +54,21 @@ export function newQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
->(schema: TSchema, table: TTable): Query<TSchema, TTable, TReturn> {
-  return new QueryImpl(schema, table, {table}, defaultFormat, undefined);
+>(
+  schema: TSchema,
+  table: TTable,
+  delegate?: QueryDelegate,
+): Query<TSchema, TTable, TReturn> {
+  return new QueryImpl(
+    schema,
+    table,
+    {table},
+    defaultFormat,
+    undefined,
+    undefined,
+    undefined,
+    delegate,
+  );
 }
 
 export function staticParam(
@@ -168,7 +181,7 @@ export abstract class AbstractQuery<
     relationship: string,
     cbOrOptions?: ((q: AnyQuery) => AnyQuery) | ExistsOptions,
     options?: ExistsOptions,
-  ): Query<TSchema, TTable, TReturn> => {
+  ): this => {
     const cb = typeof cbOrOptions === 'function' ? cbOrOptions : undefined;
     const opts = typeof cbOrOptions === 'function' ? options : cbOrOptions;
     const flipped = opts?.flip;
@@ -334,7 +347,7 @@ export abstract class AbstractQuery<
     fieldOrExpressionFactory: string | ExpressionFactory<TSchema, TTable>,
     opOrValue?: SimpleOperator | GetFilterTypeAny | Parameter,
     value?: GetFilterTypeAny | Parameter,
-  ): Query<TSchema, TTable, TReturn> => {
+  ): this => {
     let cond: Condition;
 
     if (typeof fieldOrExpressionFactory === 'function') {
@@ -365,13 +378,13 @@ export abstract class AbstractQuery<
       this.format,
       this.customQueryID,
       this.#currentJunction,
-    );
+    ) as this;
   };
 
   start = (
     row: Partial<Record<string, ReadonlyJSONValue | undefined>>,
     opts?: {inclusive: boolean},
-  ): Query<TSchema, TTable, TReturn> =>
+  ): this =>
     this.#newQuery(
       this.#tableName,
       {
@@ -384,9 +397,9 @@ export abstract class AbstractQuery<
       this.format,
       this.customQueryID,
       this.#currentJunction,
-    );
+    ) as this;
 
-  limit = (limit: number): Query<TSchema, TTable, TReturn> => {
+  limit = (limit: number): this => {
     if (limit < 0) {
       throw new Error('Limit must be non-negative');
     }
@@ -409,13 +422,13 @@ export abstract class AbstractQuery<
       this.format,
       this.customQueryID,
       this.#currentJunction,
-    );
+    ) as this;
   };
 
   orderBy = <TSelector extends keyof TSchema['tables'][TTable]['columns']>(
     field: TSelector,
     direction: 'asc' | 'desc',
-  ): Query<TSchema, TTable, TReturn> => {
+  ): this => {
     if (this.#currentJunction) {
       throw new NotImplementedError(
         'Order by is not supported in junction relationships yet. Junction relationship being ordered: ' +
@@ -431,7 +444,7 @@ export abstract class AbstractQuery<
       this.format,
       this.customQueryID,
       this.#currentJunction,
-    );
+    ) as this;
   };
 
   protected _exists = (
@@ -724,6 +737,8 @@ export class QueryImpl<
   extends AbstractQuery<TSchema, TTable, TReturn>
   implements Query<TSchema, TTable, TReturn>
 {
+  readonly #delegate: QueryDelegate | undefined;
+
   constructor(
     schema: TSchema,
     tableName: TTable,
@@ -732,6 +747,7 @@ export class QueryImpl<
     system: System = 'client',
     customQueryID?: CustomQueryID,
     currentJunction?: string,
+    delegate?: QueryDelegate,
   ) {
     super(
       schema,
@@ -750,8 +766,20 @@ export class QueryImpl<
           system,
           customQueryID,
           currentJunction,
+          delegate,
         ),
     );
+    this.#delegate = delegate;
+  }
+
+  run(options?: RunOptions): Promise<HumanReadable<TReturn>> {
+    if (!this.#delegate) {
+      throw new Error(
+        'Cannot call run() on a query without a delegate. ' +
+          'Use zero.run(query) instead, or ensure the query was created from zero.query.*',
+      );
+    }
+    return this.#delegate.run(this, options);
   }
 }
 

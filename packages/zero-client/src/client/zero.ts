@@ -99,6 +99,7 @@ import {
   type Query,
   type RunOptions,
 } from '../../../zql/src/query/query.ts';
+import type {RunnableQuery} from '../../../zql/src/query/runnable-query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
@@ -179,7 +180,7 @@ import {
 export type NoRelations = Record<string, never>;
 
 export type MakeEntityQueriesFromSchema<S extends Schema> = {
-  readonly [K in keyof S['tables'] & string]: Query<S, K>;
+  readonly [K in keyof S['tables'] & string]: RunnableQuery<S, K>;
 };
 
 /**
@@ -378,13 +379,14 @@ function registerQueries<
   queries: QD,
   contextHolder: {context: TContext},
   lc: LogContext,
+  delegate?: import('../../../zql/src/query/query-delegate.ts').QueryDelegate,
 ): MakeZeroQueryType<QD, S, TContext> {
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   const rv = {} as Record<string, any>;
 
   // Register entity queries for each table
   for (const name of Object.keys(schema.tables)) {
-    rv[name] = newQuery(schema, name);
+    rv[name] = newQuery(schema, name, delegate);
   }
 
   // Register custom queries if provided
@@ -900,6 +902,7 @@ export class Zero<
       this.#options.queries,
       this,
       lc,
+      this.#zeroContext,
     ) as QD extends QueryDefinitions<S, TContext>
       ? MakeEntityQueriesFromSchema<S> &
           MakeCustomQueryInterfaces<S, QD, TContext>

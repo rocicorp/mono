@@ -11,6 +11,7 @@ import type {
   Query,
   RunOptions,
 } from '../query/query.ts';
+import type {RunnableQuery} from '../query/runnable-query.ts';
 
 type ClientID = string;
 
@@ -121,7 +122,11 @@ export type TableCRUD<S extends TableSchema> = {
 };
 
 export type SchemaQuery<S extends Schema> = {
-  readonly [K in keyof S['tables'] & string]: Query<S, K, PullRow<K, S>>;
+  readonly [K in keyof S['tables'] & string]: RunnableQuery<
+    S,
+    K,
+    PullRow<K, S>
+  >;
 };
 
 export type DeleteID<S extends TableSchema> = Expand<PrimaryKeyFields<S>>;
