@@ -246,8 +246,7 @@ async function build() {
   console.log(`\n✓ Build completed in ${totalDuration}s`);
 }
 
-const isMain =
-  fileURLToPath(import.meta.url) === resolve(process.argv[1]);
+const isMain = fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 
 if (isMain) {
   await build();
