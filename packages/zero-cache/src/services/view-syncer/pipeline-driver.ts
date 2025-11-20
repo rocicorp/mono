@@ -463,7 +463,9 @@ export class PipelineDriver {
     assert(this.initialized());
     const diff = this.#snapshotter.advance(this.#tableSpecs);
     const {prev, curr, changes} = diff;
-    this.#lc.debug?.(`${prev.version} => ${curr.version}: ${changes} changes`);
+    this.#lc.debug?.(
+      `advance ${prev.version} => ${curr.version}: ${changes} changes`,
+    );
 
     return {
       version: curr.version,
@@ -477,7 +479,6 @@ export class PipelineDriver {
     timer: {totalElapsed: () => number},
     numChanges: number,
   ): Iterable<RowChange> {
-    this.#lc.warn?.('advance');
     this.#advanceContext = {
       timer,
       totalHydrationTimeMs: this.totalHydrationTimeMs(),
