@@ -179,7 +179,7 @@ export class AccumulatorDebugger implements PlanDebugger {
  * Format a constraint object as a human-readable string.
  */
 function formatConstraint(
-  constraint: PlannerConstraint | Record<string, unknown> | undefined,
+  constraint: PlannerConstraint | Record<string, unknown> | null | undefined,
 ): string {
   if (!constraint) return '{}';
   const keys = Object.keys(constraint);
@@ -358,22 +358,21 @@ function formatAttemptSummary(
 }
 
 /**
- * Convert undefined values to null recursively for JSON serialization.
+ * Convert undefined values to null in a constraint object for JSON serialization.
  * PlannerConstraint uses Record<string, undefined> which loses keys during JSON.stringify.
  */
-function convertUndefinedToNull(value: unknown): unknown {
-  if (value === undefined) {
+function convertConstraintUndefinedToNull(
+  constraint: PlannerConstraint | Record<string, unknown> | undefined | null,
+): Record<string, unknown> | undefined | null {
+  if (constraint === undefined) {
+    return undefined;
+  }
+  if (constraint === null) {
     return null;
   }
-  if (value === null || typeof value !== 'object') {
-    return value;
-  }
-  if (Array.isArray(value)) {
-    return value.map(convertUndefinedToNull);
-  }
   const result: Record<string, unknown> = {};
-  for (const [key, val] of Object.entries(value)) {
-    result[key] = convertUndefinedToNull(val);
+  for (const [key, val] of Object.entries(constraint)) {
+    result[key] = val === undefined ? null : val;
   }
   return result;
 }
@@ -388,9 +387,48 @@ function serializeEvent(event: PlanDebugEvent): PlanDebugEventJSON {
   // Remove planSnapshot from plan-complete events
   if (event.type === 'plan-complete') {
     const {planSnapshot: _, ...rest} = event;
-    return convertUndefinedToNull(rest) as PlanDebugEventJSON;
+    return rest as PlanDebugEventJSON;
   }
-  return convertUndefinedToNull(event) as PlanDebugEventJSON;
+
+  // Convert constraint undefined values to null for specific event types
+  if (event.type === 'node-constraint') {
+    return {
+      ...event,
+      constraint: convertConstraintUndefinedToNull(event.constraint),
+    } as PlanDebugEventJSON;
+  }
+
+  if (event.type === 'connection-costs') {
+    return {
+      ...event,
+      costs: event.costs.map(cost => ({
+        ...cost,
+        constraints: Object.fromEntries(
+          Object.entries(cost.constraints).map(([key, val]) => [
+            key,
+            convertConstraintUndefinedToNull(val),
+          ]),
+        ),
+      })),
+    } as PlanDebugEventJSON;
+  }
+
+  if (event.type === 'constraints-propagated') {
+    return {
+      ...event,
+      connectionConstraints: event.connectionConstraints.map(cc => ({
+        ...cc,
+        constraints: Object.fromEntries(
+          Object.entries(cc.constraints).map(([key, val]) => [
+            key,
+            convertConstraintUndefinedToNull(val),
+          ]),
+        ),
+      })),
+    } as PlanDebugEventJSON;
+  }
+
+  return event as PlanDebugEventJSON;
 }
 
 /**
