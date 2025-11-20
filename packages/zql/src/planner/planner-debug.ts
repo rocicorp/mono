@@ -1,5 +1,4 @@
 import type * as v from '../../../shared/src/valita.ts';
-import {removeFunctions} from '../../../shared/src/remove-functions.ts';
 import type {Condition} from '../../../zero-protocol/src/ast.ts';
 import type {
   attemptStartEventJSONSchema,
@@ -33,10 +32,10 @@ export type ConnectionCostsEvent = {
   costs: Array<{
     connection: string;
     cost: number;
-    costEstimate: CostEstimate;
+    costEstimate: Omit<CostEstimate, 'fanout'>;
     pinned: boolean;
     constraints: Record<string, PlannerConstraint | undefined>;
-    constraintCosts: Record<string, CostEstimate>;
+    constraintCosts: Record<string, Omit<CostEstimate, 'fanout'>>;
   }>;
 };
 
@@ -56,7 +55,7 @@ export type ConstraintsPropagatedEvent = {
   connectionConstraints: Array<{
     connection: string;
     constraints: Record<string, PlannerConstraint | undefined>;
-    constraintCosts: Record<string, CostEstimate>;
+    constraintCosts: Record<string, Omit<CostEstimate, 'fanout'>>;
   }>;
 };
 
@@ -100,7 +99,7 @@ export type NodeCostEvent = {
   node: string;
   branchPattern: number[];
   downstreamChildSelectivity: number;
-  costEstimate: CostEstimate;
+  costEstimate: Omit<CostEstimate, 'fanout'>;
   filters?: Condition | undefined; // Only for connections
   joinType?: JoinType | undefined; // Only for joins
 };
@@ -342,15 +341,15 @@ function formatAttemptSummary(
 
 /**
  * Serialize a single debug event to JSON-compatible format.
- * Removes function properties and other non-serializable values (Maps, Sets).
+ * The fanout function is already omitted when events are created.
  */
 function serializeEvent(event: PlanDebugEvent): PlanDebugEventJSON {
-  return removeFunctions(event) as PlanDebugEventJSON;
+  return event as PlanDebugEventJSON;
 }
 
 /**
  * Serialize an array of debug events to JSON-compatible format.
- * This omits non-serializable fields like functions.
+ * The fanout function is already omitted when events are created.
  */
 export function serializePlanDebugEvents(
   events: PlanDebugEvent[],
