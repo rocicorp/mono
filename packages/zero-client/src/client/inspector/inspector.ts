@@ -81,19 +81,6 @@ export class Inspector {
 
   /**
    * Format planner debug events as a human-readable string.
-   * This is a static utility method that can be used to format the plannerEvents
-   * returned from analyzeQuery when plannerDebug is enabled.
-   *
-   * @param events - Array of planner debug events from analyzeQuery result
-   * @returns Formatted string showing planning attempts, costs, and final plan selection
-   *
-   * @example
-   * ```typescript
-   * const result = await inspector.analyzeQuery(query, { plannerDebug: true });
-   * if (result.plannerEvents) {
-   *   console.log(Inspector.formatPlannerEvents(result.plannerEvents));
-   * }
-   * ```
    */
   static formatPlannerEvents(events: PlanDebugEventJSON[]): string {
     return formatPlannerEvents(events);

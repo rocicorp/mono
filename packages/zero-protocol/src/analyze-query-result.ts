@@ -151,7 +151,6 @@ const planDebugEventJSONSchema = v.union(
 
 export type PlanDebugEventJSON = v.Infer<typeof planDebugEventJSONSchema>;
 
-// Export individual event schemas for type inference in zql
 export {
   attemptStartEventJSONSchema,
   connectionSelectedEventJSONSchema,

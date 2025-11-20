@@ -1,25 +1,7 @@
 import {hasOwn} from './has-own.ts';
 
 /**
- * Recursively removes function-valued properties and other non-JSON-serializable
- * values (Maps, Sets) from an object, creating a deep copy suitable for JSON
- * serialization.
- *
- * This is useful for preparing objects for JSON.stringify() or for sending over
- * the wire, where functions and other non-serializable types would be lost anyway.
- *
- * @param value - The value to serialize
- * @param seen - Internal set for circular reference detection
- * @returns A new object with non-serializable properties removed
- *
- * @example
- * const obj = {
- *   name: 'foo',
- *   compute: () => 42,
- *   nested: { data: 1, fn: () => 'bar' }
- * };
- * const cleaned = removeFunctions(obj);
- * // { name: 'foo', nested: { data: 1 } }
+ * Recursively removes functions, Maps, and Sets from an object for JSON serialization.
  */
 export function removeFunctions<T>(value: T, seen = new Set<unknown>()): T {
   // Handle primitives and null

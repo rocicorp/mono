@@ -37,7 +37,6 @@ export async function analyzeQuery(
 
   computeZqlSpecs(lc, db, tableSpecs, fullTables);
 
-  // Create planner debugger and cost model if requested
   const planDebugger = plannerDebug ? new AccumulatorDebugger() : undefined;
   const costModel = plannerDebug
     ? createSQLiteCostModel(db, tableSpecs)
@@ -86,7 +85,6 @@ export async function analyzeQuery(
 
   result.plans = explainQueries(result.readRowCountsByQuery ?? {}, db);
 
-  // Serialize planner debug events if captured
   if (planDebugger) {
     result.plannerEvents = serializePlanDebugEvents(planDebugger.events);
   }

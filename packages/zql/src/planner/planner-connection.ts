@@ -293,10 +293,7 @@ export class PlannerConnection {
     this.#cachedConstraintCosts.clear();
   }
 
-  /**
-   * Get current constraints for debugging.
-   * Returns a copy of the constraints map.
-   */
+  /** Get current constraints for debugging. */
   getConstraintsForDebug(): Record<string, PlannerConstraint | undefined> {
     const record: Record<string, PlannerConstraint | undefined> = {};
     for (const [key, value] of this.#constraints) {
@@ -305,19 +302,12 @@ export class PlannerConnection {
     return record;
   }
 
-  /**
-   * Get filters for debugging.
-   * Returns the filters applied to this connection.
-   */
+  /** Get filters for debugging. */
   getFiltersForDebug(): Condition | undefined {
     return this.#filters;
   }
 
-  /**
-   * Get estimated cost for each constraint branch.
-   * Returns a record of constraint key to cost estimate.
-   * Forces cost calculation if not already cached.
-   */
+  /** Get estimated cost for each constraint branch. */
   getConstraintCostsForDebug(): Record<string, CostEstimate> {
     const record: Record<string, CostEstimate> = {};
     for (const [key, value] of this.#cachedConstraintCosts) {
