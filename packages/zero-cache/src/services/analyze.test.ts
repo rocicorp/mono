@@ -695,6 +695,7 @@ describe('analyzeQuery', () => {
       // Verify runAst was called with cost model and debugger
       expect(runAst).toHaveBeenCalledWith(
         lc,
+        minimalClientSchema,
         simpleAST,
         true,
         expect.objectContaining({
@@ -745,6 +746,7 @@ describe('analyzeQuery', () => {
       // Verify runAst was called without cost model and debugger
       expect(runAst).toHaveBeenCalledWith(
         lc,
+        minimalClientSchema,
         simpleAST,
         true,
         expect.objectContaining({
