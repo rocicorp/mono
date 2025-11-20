@@ -89,6 +89,12 @@ type AdvanceContext = {
 };
 
 /**
+ * No matter how fast hydration is, advancement is given at least this long to
+ * complete before doing a pipeline reset.
+ */
+const MIN_ADVANCEMENT_TIME_LIMIT_MS = 30;
+
+/**
  * Manages the state of IVM pipelines for a given ViewSyncer (i.e. client group).
  */
 export class PipelineDriver {
@@ -457,7 +463,9 @@ export class PipelineDriver {
     assert(this.initialized());
     const diff = this.#snapshotter.advance(this.#tableSpecs);
     const {prev, curr, changes} = diff;
-    this.#lc.debug?.(`${prev.version} => ${curr.version}: ${changes} changes`);
+    this.#lc.debug?.(
+      `advance ${prev.version} => ${curr.version}: ${changes} changes`,
+    );
 
     return {
       version: curr.version,
@@ -471,7 +479,6 @@ export class PipelineDriver {
     timer: {totalElapsed: () => number},
     numChanges: number,
   ): Iterable<RowChange> {
-    this.#lc.warn?.('advance');
     this.#advanceContext = {
       timer,
       totalHydrationTimeMs: this.totalHydrationTimeMs(),
@@ -572,11 +579,12 @@ export class PipelineDriver {
     } = this.#advanceContext;
     const elapsed = advanceTimer.totalElapsed();
     if (
-      elapsed > totalHydrationTimeMs ||
-      (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2)
+      elapsed > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
+      (elapsed > totalHydrationTimeMs ||
+        (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2))
     ) {
       throw new ResetPipelinesSignal(
-        `Advancement exceeded timeout at ${pos} of ${numChanges} changes after ${elapsed} ms. Advancement time limited base on total hydration time of ${totalHydrationTimeMs} ms.`,
+        `Advancement exceeded timeout at ${pos} of ${numChanges} changes after ${elapsed} ms. Advancement time limited based on total hydration time of ${totalHydrationTimeMs} ms.`,
       );
     }
   }
@@ -612,11 +620,16 @@ export class PipelineDriver {
 
   *#push(source: TableSource, change: SourceChange): Iterable<RowChange> {
     this.#startAccumulating();
-    for (const _ of source.genPush(change)) {
-      yield* this.#stopAccumulating().stream();
-      this.#startAccumulating();
+    try {
+      for (const _ of source.genPush(change)) {
+        yield* this.#stopAccumulating().stream();
+        this.#startAccumulating();
+      }
+    } finally {
+      if (this.#streamer !== null) {
+        this.#stopAccumulating();
+      }
     }
-    this.#stopAccumulating();
   }
 
   #startAccumulating() {
