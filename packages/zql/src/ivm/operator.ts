@@ -29,7 +29,7 @@ export interface Input extends InputBase {
    * Fetch data. May modify the data in place.
    * Returns nodes sorted in order of `SourceSchema.compareRows`.
    */
-  fetch(req: FetchRequest): Stream<Node>;
+  fetch(req: FetchRequest): Stream<Node | 'yield'>;
 
   /**
    * Cleanup maintained state. This is called when `output` will no longer need
@@ -84,6 +84,14 @@ export const throwOutput: Output = {
     throw new Error('Output not set');
   },
 };
+
+export function* skipYields(stream: Stream<Node | 'yield'>): Stream<Node> {
+  for (const node of stream) {
+    if (node !== 'yield') {
+      yield node;
+    }
+  }
+}
 
 /**
  * Operators are arranged into pipelines.

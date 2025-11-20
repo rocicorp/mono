@@ -108,6 +108,9 @@ export function valuesEqual(a: Value, b: Value): boolean {
 }
 
 export function drainStreams(node: Node) {
+  if (node === 'yield') {
+    return;
+  }
   for (const stream of Object.values(node.relationships)) {
     for (const node of stream()) {
       drainStreams(node);
