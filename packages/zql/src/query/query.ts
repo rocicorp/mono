@@ -108,28 +108,24 @@ export type PullRow<TTable extends string, TSchema extends ZeroSchema> = {
   >;
 } & {};
 
-export type Row<
-  T extends
-    | TableSchema
-    | Query<ZeroSchema, string, any>
-    | ((...args: any) => Query<ZeroSchema, string, any>),
-> = T extends TableSchema
+export type Row<T> = T extends TableSchema
   ? {
       readonly [K in keyof T['columns']]: SchemaValueToTSType<T['columns'][K]>;
     }
-  : T extends
-        | Query<ZeroSchema, string, any>
-        | ((...args: any) => Query<ZeroSchema, string, any>)
-    ? QueryRowType<T>
-    : never;
-
-export type QueryRowType<Q> = Q extends (
-  ...args: any
-) => Query<any, any, infer R>
-  ? R
-  : Q extends Query<any, any, infer R>
+  : T extends RunnableQuery<ZeroSchema, string, infer R>
     ? R
-    : never;
+    : T extends Query<ZeroSchema, string, infer R>
+      ? R
+      : T extends (...args: any) => Query<ZeroSchema, string, infer R>
+        ? R
+        : never;
+
+export type QueryRowType<Q> =
+  Q extends RunnableQuery<any, any, infer R>
+    ? R
+    : Q extends Query<any, any, infer R>
+      ? R
+      : never;
 
 export type ZeRow<Q> = QueryRowType<Q>;
 

@@ -7,6 +7,7 @@ import {
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
+import type {Query} from '../../../zql/src/query/query.ts';
 import type {RunnableQuery} from '../../../zql/src/query/runnable-query.ts';
 import {zeroForTest} from './test-utils.ts';
 
@@ -455,5 +456,36 @@ describe('RunnableQuery - edge cases', () => {
     const noResults = await z.query.issue.limit(0).run();
 
     expect(noResults).toEqual([]);
+  });
+
+  test('related() with callback accepts Query subtype', () => {
+    const z = zeroForTest({schema: issueSchema});
+
+    // Type test: related() callback should accept any Query subtype
+    const query = z.query.issue.related('owner', q => {
+      expectTypeOf(q).toEqualTypeOf<Query<typeof issueSchema, 'user'>>();
+      expectTypeOf(q).not.toHaveProperty('run'); // Not RunnableQuery
+      return q.where('name', '=', 'Alice');
+    });
+
+    // Verify the query is runnable and has the correct return type
+    expectTypeOf(query).toHaveProperty('run');
+    expectTypeOf<ReturnType<typeof query.run>>().toEqualTypeOf<
+      Promise<
+        {
+          readonly id: string;
+          readonly title: string;
+          readonly status: string;
+          readonly priority: number;
+          readonly ownerId: string;
+          readonly owner:
+            | {
+                readonly id: string;
+                readonly name: string;
+              }
+            | undefined;
+        }[]
+      >
+    >();
   });
 });

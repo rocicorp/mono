@@ -34,7 +34,7 @@ export interface RunnableQuery<
   >;
   related<
     TRelationship extends AvailableRelationships<TTable, TSchema>,
-    TSub extends RunnableQuery<TSchema, string, any>,
+    TSub extends Query<TSchema, string, any>,
   >(
     relationship: TRelationship,
     cb: RelatedCallback<TSchema, TTable, TRelationship, TSub>,
