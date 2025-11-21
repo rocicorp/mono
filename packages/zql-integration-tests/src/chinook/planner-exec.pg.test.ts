@@ -41,15 +41,6 @@ describe('Chinook planner execution cost validation', () => {
       ],
     },
 
-    /**
-     * DEGRADED: Value inlining causes major plan regression.
-     * The planner now picks attempt 2 (cost 2635) instead of attempt 0 (cost 58).
-     * Correlation dropped from 0.4 to -0.2 (negative correlation!).
-     * Picked plan is 45x worse than optimal.
-     *
-     * Root cause: More accurate STAT4 estimates for individual predicates may
-     * be causing worse combined selectivity estimates, leading to suboptimal plan selection.
-     */
     {
       name: 'parallel joins - track with album and genre',
       query: queries.track
@@ -57,15 +48,11 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('genre', q => q.where('name', 'Rock'))
         .limit(10),
       validations: [
-        ['within-optimal', 45.5],
-        ['within-baseline', 45.5],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
       ],
     },
 
-    /**
-     * DEGRADED (minor): Correlation dropped from 0.8 to 0.4 due to value inlining.
-     * Still picks optimal plan, so no functional impact.
-     */
     {
       name: 'three-level join - track with album, artist, and condition',
       query: queries.track
@@ -77,7 +64,7 @@ describe('Chinook planner execution cost validation', () => {
         .where('milliseconds', '>', 200000)
         .limit(10),
       validations: [
-        ['correlation', 0.4],
+        ['correlation', 0.8],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -146,18 +133,6 @@ describe('Chinook planner execution cost validation', () => {
       ],
     },
 
-    /**
-     * DEGRADED: Value inlining causes major plan regression.
-     * Previously picked optimal plan, now picks attempt 7 (cost 5433) vs optimal (attempt 0, cost 90).
-     * Picked plan is 60x worse than optimal.
-     *
-     * Root cause: SQLite still has bad default assumptions for non-indexed columns
-     * (`employee.where('title', 'Sales Support Agent')` selectivity), but value inlining
-     * may be amplifying these errors through the nested join planning.
-     *
-     * Previously: correlation=0.0, picked optimal plan despite poor correlation
-     * Now: correlation=0.214, but picks much worse plan
-     */
     {
       name: 'deep nesting - invoiceLine to invoice to customer to employee',
       query: queries.invoiceLine
@@ -171,8 +146,8 @@ describe('Chinook planner execution cost validation', () => {
         .limit(20),
       validations: [
         ['correlation', 0.0],
-        ['within-optimal', 60.5],
-        ['within-baseline', 60.5],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
       ],
     },
 
@@ -364,10 +339,6 @@ describe('Chinook planner execution cost validation', () => {
       ],
     },
 
-    /**
-     * DEGRADED (very minor): Picked plan ratio increased from 1.40x to 1.42x (just 1.7% over threshold).
-     * Essentially no change - within rounding error.
-     */
     {
       name: 'deep nesting with very selective top filter',
       query: queries.invoiceLine
@@ -394,15 +365,11 @@ describe('Chinook planner execution cost validation', () => {
       ],
     },
 
-    /**
-     * DEGRADED (minor): Correlation dropped from 1.0 to 0.8 due to value inlining.
-     * Still picks optimal plan, so no functional impact.
-     */
     {
       name: 'dense junction - popular playlist with many tracks',
       query: queries.playlist.where('id', 1).whereExists('tracks'),
       validations: [
-        ['correlation', 0.8],
+        ['correlation', 1.0],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
