@@ -182,10 +182,9 @@ async function mutateHandler(
   const mutators = createServerMutators(jwtData, postCommitTasks);
 
   const response = await handleMutationRequest(
-    transact =>
-      transact(dbProvider, (tx, name, args) =>
-        getMutation(mutators, name)(tx, args),
-      ),
+    dbProvider,
+    (transact, _mutation) =>
+      transact((tx, name, args) => getMutation(mutators, name)(tx, args)),
     request.query,
     request.body,
     'info',

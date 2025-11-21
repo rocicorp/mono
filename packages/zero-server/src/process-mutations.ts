@@ -2,6 +2,7 @@ import type {LogContext, LogLevel} from '@rocicorp/logger';
 import {assert} from '../../shared/src/asserts.ts';
 import {getErrorDetails, getErrorMessage} from '../../shared/src/error.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {promiseVoid} from '../../shared/src/resolved-promises.ts';
 import type {MaybePromise} from '../../shared/src/types.ts';
 import * as v from '../../shared/src/valita.ts';
 import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
@@ -56,8 +57,7 @@ export interface Database<T> {
 export type ExtractTransactionType<D> = D extends Database<infer T> ? T : never;
 export type Params = v.Infer<typeof pushParamsSchema>;
 
-export type TransactFn = <D extends Database<ExtractTransactionType<D>>>(
-  dbProvider: D,
+export type TransactFn<D extends Database<ExtractTransactionType<D>>> = (
   cb: TransactFnCallback<D>,
 ) => Promise<MutationResponse>;
 
@@ -68,10 +68,12 @@ export type TransactFnCallback<D extends Database<ExtractTransactionType<D>>> =
     mutatorArgs: ReadonlyJSONValue,
   ) => Promise<void>;
 
-export type Parsed = {
-  transact: TransactFn;
+export type Parsed<D extends Database<ExtractTransactionType<D>>> = {
+  transact: TransactFn<D>;
   mutations: CustomMutation[];
 };
+
+type MutationPhase = 'preTransaction' | 'transactionPending' | 'postCommit';
 
 const applicationErrorWrapper = async <T>(fn: () => Promise<T>): Promise<T> => {
   try {
@@ -90,33 +92,35 @@ const applicationErrorWrapper = async <T>(fn: () => Promise<T>): Promise<T> => {
   }
 };
 
-/**
- * Call `cb` for each mutation in the request.
- * The callback is called sequentially for each mutation.
- * If a mutation is out of order, the processing will stop and an error will be returned.
- * If a mutation has already been processed, it will be skipped and the processing will continue.
- * If a mutation receives an application error, it will be skipped, the error will be returned to the client, and processing will continue.
- */
-export function handleMutationRequest(
+export function handleMutationRequest<
+  D extends Database<ExtractTransactionType<D>>,
+>(
+  dbProvider: D,
   cb: (
-    transact: TransactFn,
+    transact: TransactFn<D>,
     mutation: CustomMutation,
   ) => Promise<MutationResponse>,
   queryString: URLSearchParams | Record<string, string>,
   body: ReadonlyJSONValue,
   logLevel?: LogLevel,
 ): Promise<PushResponse>;
-export function handleMutationRequest(
+export function handleMutationRequest<
+  D extends Database<ExtractTransactionType<D>>,
+>(
+  dbProvider: D,
   cb: (
-    transact: TransactFn,
+    transact: TransactFn<D>,
     mutation: CustomMutation,
   ) => Promise<MutationResponse>,
   request: Request,
   logLevel?: LogLevel,
 ): Promise<PushResponse>;
-export async function handleMutationRequest(
+export async function handleMutationRequest<
+  D extends Database<ExtractTransactionType<D>>,
+>(
+  dbProvider: D,
   cb: (
-    transact: TransactFn,
+    transact: TransactFn<D>,
     mutation: CustomMutation,
   ) => Promise<MutationResponse>,
   queryOrQueryString: Request | URLSearchParams | Record<string, string>,
@@ -212,15 +216,28 @@ export async function handleMutationRequest(
   let processedCount = 0;
 
   try {
-    const transactor = new Transactor(req, queryParams, lc);
+    const transactor = new Transactor(dbProvider, req, queryParams, lc);
 
+    // Each mutation goes through three phases:
+    //   1. Pre-transaction: user logic that runs before `transact` is called. If
+    //      this throws we still advance LMID and persist the failure result.
+    //   2. Transaction: the callback passed to `transact`, which can be retried
+    //      if it fails with an ApplicationError.
+    //   3. Post-commit: any logic that runs after `transact` resolves. Failures
+    //      here are logged but the mutation remains committed.
     for (const m of req.mutations) {
       assert(m.type === 'custom', 'Expected custom mutation');
 
-      const transactProxy: TransactFn = (dbProvider, innerCb) =>
-        transactor.transact(dbProvider, m, (tx, name, args) =>
+      let mutationPhase: MutationPhase = 'preTransaction';
+
+      const transactProxy: TransactFn<D> = async innerCb => {
+        mutationPhase = 'transactionPending';
+        const result = await transactor.transact(m, (tx, name, args) =>
           applicationErrorWrapper(() => innerCb(tx, name, args)),
         );
+        mutationPhase = 'postCommit';
+        return result;
+      };
 
       try {
         const res = await applicationErrorWrapper(() => cb(transactProxy, m));
@@ -232,11 +249,23 @@ export async function handleMutationRequest(
           throw error;
         }
 
+        if (mutationPhase === 'preTransaction') {
+          // Pre-transaction
+          await transactor.persistPreTransactionFailure(m, error);
+        } else if (mutationPhase === 'postCommit') {
+          // Post-commit
+          lc.error?.(
+            `Post-commit mutation handler failed for mutation ${m.id} for client ${m.clientID}`,
+            error,
+          );
+        }
+
         lc.warn?.(
           `Application error processing mutation ${m.id} for client ${m.clientID}`,
           error,
         );
         responses.push(makeAppErrorResponse(m, error));
+
         processedCount++;
       }
     }
@@ -268,31 +297,27 @@ export async function handleMutationRequest(
   }
 }
 
-class Transactor {
+class Transactor<D extends Database<ExtractTransactionType<D>>> {
+  readonly #dbProvider: D;
   readonly #req: PushBody;
   readonly #params: Params;
   readonly #lc: LogContext;
 
-  constructor(req: PushBody, params: Params, lc: LogContext) {
+  constructor(dbProvider: D, req: PushBody, params: Params, lc: LogContext) {
+    this.#dbProvider = dbProvider;
     this.#req = req;
     this.#params = params;
     this.#lc = lc;
   }
 
-  transact = async <D extends Database<ExtractTransactionType<D>>>(
-    dbProvider: D,
+  transact = async (
     mutation: CustomMutation,
     cb: TransactFnCallback<D>,
   ): Promise<MutationResponse> => {
     let appError: ApplicationError | undefined = undefined;
     for (;;) {
       try {
-        const ret = await this.#transactImpl(
-          dbProvider,
-          mutation,
-          cb,
-          appError,
-        );
+        const ret = await this.#transactImpl(mutation, cb, appError);
         if (appError !== undefined) {
           this.#lc.warn?.(
             `Mutation ${mutation.id} for client ${mutation.clientID} was retried after an error`,
@@ -331,33 +356,40 @@ class Transactor {
           continue;
         }
 
-        if (error instanceof DatabaseTransactionError) {
-          this.#lc.error?.(
-            `Database error processing mutation ${mutation.id} for client ${mutation.clientID}`,
-            error,
-          );
-        } else {
-          this.#lc.error?.(
-            `Unexpected error processing mutation ${mutation.id} for client ${mutation.clientID}`,
-            error,
-          );
-        }
+        this.#lc.error?.(
+          `Unexpected error processing mutation ${mutation.id} for client ${mutation.clientID}`,
+          error,
+        );
 
         throw error;
       }
     }
   };
 
-  #transactImpl<D extends Database<ExtractTransactionType<D>>>(
-    dbProvider: D,
+  async persistPreTransactionFailure(
+    mutation: CustomMutation,
+    appError: ApplicationError<ReadonlyJSONValue | undefined>,
+  ): Promise<MutationResponse> {
+    // User-land code threw before calling `transact`. We still need to bump the
+    // LMID for this mutation and persist the error so that the client knows it failed.
+    const ret = await this.#transactImpl(
+      mutation,
+      // noop callback since there's no transaction to execute
+      () => promiseVoid,
+      appError,
+    );
+    return ret;
+  }
+
+  async #transactImpl(
     mutation: CustomMutation,
     cb: TransactFnCallback<D>,
     appError: ApplicationError | undefined,
-  ): MaybePromise<MutationResponse> {
+  ): Promise<MutationResponse> {
     let transactionPhase: DatabaseTransactionPhase = 'open';
 
-    return dbProvider
-      .transaction(
+    try {
+      const ret = await this.#dbProvider.transaction(
         async (dbTx, transactionHooks) => {
           // update the transaction phase to 'execute' after the transaction is opened
           transactionPhase = 'execute';
@@ -387,24 +419,30 @@ class Transactor {
             result: {},
           };
         },
-        {
-          upstreamSchema: this.#params.schema,
-          clientGroupID: this.#req.clientGroupID,
-          clientID: mutation.clientID,
-          mutationID: mutation.id,
-        },
-      )
-      .catch(error => {
-        if (
-          isApplicationError(error) ||
-          error instanceof OutOfOrderMutation ||
-          error instanceof MutationAlreadyProcessedError
-        ) {
-          throw error;
-        }
+        this.#getTransactionInput(mutation),
+      );
 
-        throw new DatabaseTransactionError(transactionPhase, {cause: error});
-      });
+      return ret;
+    } catch (error) {
+      if (
+        isApplicationError(error) ||
+        error instanceof OutOfOrderMutation ||
+        error instanceof MutationAlreadyProcessedError
+      ) {
+        throw error;
+      }
+
+      throw new DatabaseTransactionError(transactionPhase, {cause: error});
+    }
+  }
+
+  #getTransactionInput(mutation: CustomMutation): TransactionProviderInput {
+    return {
+      upstreamSchema: this.#params.schema,
+      clientGroupID: this.#req.clientGroupID,
+      clientID: mutation.clientID,
+      mutationID: mutation.id,
+    };
   }
 
   async #checkAndIncrementLastMutationID(

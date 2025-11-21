@@ -1,20 +1,20 @@
 import {type LogLevel} from '@rocicorp/logger';
 import {assert} from '../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {must} from '../../shared/src/must.ts';
 import {
   type CustomMutation,
   type MutationResponse,
   type PushResponse,
 } from '../../zero-protocol/src/push.ts';
-import {splitMutatorKey} from '../../zql/src/mutate/custom.ts';
-import type {CustomMutatorDefs} from './custom.ts';
 import {
-  type ExtractTransactionType,
   type Database,
+  type ExtractTransactionType,
   handleMutationRequest,
   type TransactFn,
 } from '../../zero-server/src/process-mutations.ts';
-import {must} from '../../shared/src/must.ts';
+import {splitMutatorKey} from '../../zql/src/mutate/custom.ts';
+import type {CustomMutatorDefs} from './custom.ts';
 
 export class PushProcessor<
   D extends Database<ExtractTransactionType<D>>,
@@ -59,13 +59,15 @@ export class PushProcessor<
   ): Promise<PushResponse> {
     if (queryOrQueryString instanceof Request) {
       return handleMutationRequest(
-        (transact, mutations) =>
-          this.#processMutation(mutators, transact, mutations),
+        this.#dbProvider,
+        (transact, mutation) =>
+          this.#processMutation(mutators, transact, mutation),
         queryOrQueryString,
         this.#logLevel,
       );
     }
     return handleMutationRequest(
+      this.#dbProvider,
       (transact, mutation) =>
         this.#processMutation(mutators, transact, mutation),
       queryOrQueryString,
@@ -76,10 +78,10 @@ export class PushProcessor<
 
   #processMutation(
     mutators: MD,
-    transact: TransactFn,
+    transact: TransactFn<D>,
     _mutation: CustomMutation,
   ): Promise<MutationResponse> {
-    return transact(this.#dbProvider, (tx, name, args) =>
+    return transact((tx, name, args) =>
       this.#dispatchMutation(mutators, tx, name, args),
     );
   }
