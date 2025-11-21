@@ -246,7 +246,7 @@ export class MemorySource implements Source {
     return [...this.#indexes.keys()];
   }
 
-  *#fetch(req: FetchRequest, from: Connection): Stream<Node> {
+  *#fetch(req: FetchRequest, from: Connection): Stream<Node | 'yield'> {
     const callingConnectionIndex = this.#connections.indexOf(from);
     assert(callingConnectionIndex !== -1, 'Output not found');
     const conn = this.#connections[callingConnectionIndex];
@@ -353,7 +353,7 @@ export class MemorySource implements Source {
   }
 
   #cleanup(req: FetchRequest, connection: Connection): Stream<Node> {
-    return this.#fetch(req, connection);
+    return this.#fetch(req, connection) as Stream<Node>;
   }
 
   push(change: SourceChange): void {
