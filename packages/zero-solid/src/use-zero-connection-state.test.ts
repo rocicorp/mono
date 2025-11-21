@@ -1,4 +1,5 @@
 import {renderHook} from '@solidjs/testing-library';
+import {createSignal} from 'solid-js';
 import {afterEach, describe, expect, test, vi, type Mock} from 'vitest';
 import {ConnectionStatus} from '../../zero-client/src/client/connection-status.ts';
 import type {ConnectionState} from '../../zero-client/src/client/connection.ts';
@@ -25,7 +26,10 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function mockZero(initialState: ConnectionState) {
+function mockZero(
+  initialState: ConnectionState,
+  options?: {register?: boolean},
+) {
   const listeners = new Set<(state: ConnectionState) => void>();
   const unsubscribeMock = vi.fn();
 
@@ -46,9 +50,12 @@ function mockZero(initialState: ConnectionState) {
     },
   };
 
-  useZeroMock.mockReturnValue(() => zero);
+  if (options?.register !== false) {
+    useZeroMock.mockReturnValue(() => zero);
+  }
 
   return {
+    zero,
     stateStore,
     listeners,
     unsubscribeMock,
@@ -96,5 +103,43 @@ describe('useZeroConnectionState (Solid)', () => {
     cleanup();
 
     expect(unsubscribeMock).toHaveBeenCalledTimes(1);
+  });
+
+  test('re-subscribes when zero instance changes', () => {
+    const initialState: ConnectionState = {
+      name: 'connecting',
+    };
+    const nextInitialState: ConnectionState = {
+      name: ConnectionStatus.Connected,
+    };
+
+    const zeroA = mockZero(initialState, {register: false});
+    const zeroB = mockZero(nextInitialState, {register: false});
+
+    const [currentZero, setCurrentZero] = createSignal<ZeroLike>(zeroA.zero);
+    useZeroMock.mockReturnValue(currentZero);
+
+    const {result, cleanup} = renderHook(useZeroConnectionState);
+
+    expect(result()).toEqual(initialState);
+    expect(zeroA.subscribeMock).toHaveBeenCalledTimes(1);
+
+    setCurrentZero(zeroB.zero);
+
+    expect(zeroA.unsubscribeMock).toHaveBeenCalledTimes(1);
+    expect(zeroB.subscribeMock).toHaveBeenCalledTimes(1);
+
+    const updatedState: ConnectionState = {
+      name: ConnectionStatus.Disconnected,
+      reason: 'network',
+    };
+    zeroB.stateStore.current = updatedState;
+    for (const listener of zeroB.listeners) {
+      listener(updatedState);
+    }
+
+    expect(result()).toEqual(updatedState);
+
+    cleanup();
   });
 });
