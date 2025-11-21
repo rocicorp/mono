@@ -13,11 +13,7 @@ import {
 } from '../../../../zql/src/builder/debug-delegate.ts';
 import type {Change} from '../../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../../zql/src/ivm/data.ts';
-import {
-  skipYields,
-  type Input,
-  type Storage,
-} from '../../../../zql/src/ivm/operator.ts';
+import {type Input, type Storage} from '../../../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
 import type {
   Source,
@@ -88,8 +84,11 @@ type AdvanceContext = {
   readonly timer: {totalElapsed: () => number};
   readonly totalHydrationTimeMs: number;
   readonly numChanges: number;
-  advanceCheckCount: number;
   pos: number;
+};
+
+type HydrateContext = {
+  readonly timer: {elapsedLap: () => number};
 };
 
 /**
@@ -97,6 +96,7 @@ type AdvanceContext = {
  * complete before doing a pipeline reset.
  */
 const MIN_ADVANCEMENT_TIME_LIMIT_MS = 30;
+const HYDRATE_YIELD_THRESHOLD_MS = 200;
 
 /**
  * Manages the state of IVM pipelines for a given ViewSyncer (i.e. client group).
@@ -116,6 +116,7 @@ export class PipelineDriver {
   readonly #tableSpecs = new Map<string, LiteAndZqlSpec>();
   readonly #costModels: WeakMap<Database, ConnectionCostModel> | undefined;
   #streamer: Streamer | null = null;
+  #hydrateContext: HydrateContext | null = null;
   #advanceContext: AdvanceContext | null = null;
   #replicaVersion: string | null = null;
   #primaryKeys: Map<string, PrimaryKey> | null = null;
@@ -342,7 +343,7 @@ export class PipelineDriver {
     transformationHash: string,
     queryID: string,
     query: AST,
-    timer: {totalElapsed: () => number},
+    timer: {totalElapsed: () => number; elapsedLap: () => number},
   ): Iterable<RowChange | 'yield'> {
     assert(this.initialized());
     this.#inspectorDelegate.addQuery(transformationHash, queryID, query);
@@ -384,12 +385,23 @@ export class PipelineDriver {
       push: change => {
         const streamer = this.#streamer;
         assert(streamer, 'must #startAccumulating() before pushing changes');
-        this.#checkAdvanceProgress();
         streamer.accumulate(transformationHash, schema, [change]);
       },
     });
 
-    yield* hydrateInternal(input, transformationHash, must(this.#primaryKeys));
+    assert(this.#advanceContext === null);
+    this.#hydrateContext = {
+      timer,
+    };
+    try {
+      yield* hydrateInternal(
+        input,
+        transformationHash,
+        must(this.#primaryKeys),
+      );
+    } finally {
+      this.#hydrateContext = null;
+    }
 
     const hydrationTimeMs = timer.totalElapsed();
     if (runtimeDebugFlags.trackRowCountsVended) {
@@ -483,16 +495,15 @@ export class PipelineDriver {
     timer: {totalElapsed: () => number},
     numChanges: number,
   ): Iterable<RowChange> {
+    assert(this.#hydrateContext === null);
     this.#advanceContext = {
       timer,
       totalHydrationTimeMs: this.totalHydrationTimeMs(),
       numChanges,
-      advanceCheckCount: 0,
       pos: 0,
     };
     try {
       for (const {table, prevValues, nextValue} of diff) {
-        this.#checkAdvanceProgress();
         const start = performance.now();
         let type;
         try {
@@ -559,40 +570,6 @@ export class PipelineDriver {
     }
   }
 
-  #checkAdvanceProgress() {
-    // Cancel the advancement processing if it takes longer than half the
-    // total hydration time to make it through half of the advancement, or
-    // if processing time exceeds total hydration time.
-    // This serves as both a circuit breaker for very large transactions,
-    // as well as a bound on the amount of time the previous connection locks
-    // the inactive WAL file (as the lock prevents WAL2 from switching to the
-    // free WAL when the current one is over the size limit, which can make
-    // the WAL grow continuously and compound slowness).
-    assert(this.#advanceContext !== null);
-    // Reduce the overhead of checking the timer by only
-    // actually checking on the first and then every 10th call to
-    // checkAdvanceProgress
-    if (this.#advanceContext.advanceCheckCount++ % 10 === 0) {
-      return;
-    }
-    const {
-      pos,
-      numChanges,
-      timer: advanceTimer,
-      totalHydrationTimeMs,
-    } = this.#advanceContext;
-    const elapsed = advanceTimer.totalElapsed();
-    if (
-      elapsed > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
-      (elapsed > totalHydrationTimeMs ||
-        (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2))
-    ) {
-      throw new ResetPipelinesSignal(
-        `Advancement exceeded timeout at ${pos} of ${numChanges} changes after ${elapsed} ms. Advancement time limited based on total hydration time of ${totalHydrationTimeMs} ms.`,
-      );
-    }
-  }
-
   /** Implements `BuilderDelegate.getSource()` */
   #getSource(tableName: string): Source {
     let source = this.#tables.get(tableName);
@@ -611,10 +588,46 @@ export class PipelineDriver {
       tableName,
       tableSpec.zqlSpec,
       primaryKey,
+      () => this.#shouldYield(),
     );
     this.#tables.set(tableName, source);
     this.#lc.debug?.(`created TableSource for ${tableName}`);
     return source;
+  }
+
+  #shouldYield(): boolean {
+    if (this.#hydrateContext) {
+      return (
+        this.#hydrateContext.timer.elapsedLap() > HYDRATE_YIELD_THRESHOLD_MS
+      );
+    }
+    if (this.#advanceContext) {
+      // Cancel the advancement processing if it takes longer than half the
+      // total hydration time to make it through half of the advancement, or
+      // if processing time exceeds total hydration time.
+      // This serves as both a circuit breaker for very large transactions,
+      // as well as a bound on the amount of time the previous connection locks
+      // the inactive WAL file (as the lock prevents WAL2 from switching to the
+      // free WAL when the current one is over the size limit, which can make
+      // the WAL grow continuously and compound slowness).
+      const {
+        pos,
+        numChanges,
+        timer: advanceTimer,
+        totalHydrationTimeMs,
+      } = this.#advanceContext;
+      const elapsed = advanceTimer.totalElapsed();
+      if (
+        elapsed > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
+        (elapsed > totalHydrationTimeMs ||
+          (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2))
+      ) {
+        throw new ResetPipelinesSignal(
+          `Advancement exceeded timeout at ${pos} of ${numChanges} changes after ${elapsed} ms. Advancement time limited based on total hydration time of ${totalHydrationTimeMs} ms.`,
+        );
+      }
+    }
+    return false;
   }
 
   /** Implements `BuilderDelegate.createStorage()` */

@@ -1155,7 +1155,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             if (change === 'yield') {
               await timer.yieldProcess();
             } else {
-              count++
+              count++;
             }
           }
         },
@@ -1998,8 +1998,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
 // Update CVR after every 10000 rows.
 const CURSOR_PAGE_SIZE = 10000;
-// Yield the process after churning for > 250ms.
-const TIME_SLICE_MS = 250;
 
 function createHashToIDs(cvr: CVRSnapshot) {
   const hashToIDs = new Map<string, string[]>();

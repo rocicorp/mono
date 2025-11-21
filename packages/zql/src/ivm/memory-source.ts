@@ -33,6 +33,7 @@ import {
 } from './data.ts';
 import {filterPush} from './filter-push.ts';
 import {
+  skipYields,
   type FetchRequest,
   type Input,
   type Output,
@@ -341,7 +342,7 @@ export class MemorySource implements Source {
     );
 
     const withConstraint = generateWithConstraint(
-      generateWithStart(withOverlay, req.start, connectionComparator),
+      skipYields(generateWithStart(withOverlay, req.start, connectionComparator)),
       // we use `req.constraint` and not `fetchOrPkConstraint` here because we need to
       // AND the constraint with what could have been the primary key constraint
       req.constraint,
@@ -551,16 +552,20 @@ function* genPush(
 }
 
 export function* generateWithStart(
-  nodes: Iterable<Node>,
+  nodes: Iterable<Node | 'yield'>,
   start: Start | undefined,
   compare: (r1: Row, r2: Row) => number,
-): Stream<Node> {
+): Stream<Node | 'yield'> {
   if (!start) {
     yield* nodes;
     return;
   }
   let started = false;
   for (const node of nodes) {
+    if (node === 'yield') {
+      yield node;
+      continue;
+    }
     if (!started) {
       if (start.basis === 'at') {
         if (compare(node.row, start.row) >= 0) {

@@ -481,6 +481,7 @@ export class Take implements Operator {
 
         const beforeBoundNode = must(
           first(
+          skipYields(
             this.#input.fetch({
               start: {
                 row: takeState.bound,
@@ -489,6 +490,7 @@ export class Take implements Operator {
               constraint,
               reverse: true,
             }),
+          ),
           ),
         );
 
@@ -506,13 +508,15 @@ export class Take implements Operator {
       // Find the first item at the old bounds. This will be the new bounds.
       const newBoundNode = must(
         first(
-          this.#input.fetch({
-            start: {
-              row: takeState.bound,
-              basis: 'at',
-            },
-            constraint,
-          }),
+          skipYields(
+            this.#input.fetch({
+              start: {
+                row: takeState.bound,
+                basis: 'at',
+              },
+              constraint,
+            }),
+          ),
         ),
       );
 
@@ -562,14 +566,16 @@ export class Take implements Operator {
       assert(newCmp < 0, 'New comparison must be less than 0');
 
       const [oldBoundNode, newBoundNode] = take(
-        this.#input.fetch({
-          start: {
-            row: takeState.bound,
-            basis: 'at',
-          },
-          constraint,
-          reverse: true,
-        }),
+        skipYields(
+          this.#input.fetch({
+            start: {
+              row: takeState.bound,
+              basis: 'at',
+            },
+            constraint,
+            reverse: true,
+          }),
+        ),
         2,
       );
       // Remove before add to maintain invariant that
@@ -617,13 +623,15 @@ export class Take implements Operator {
       // the newRow as the new bound.
       const afterBoundNode = must(
         first(
-          this.#input.fetch({
-            start: {
-              row: takeState.bound,
-              basis: 'after',
-            },
-            constraint,
-          }),
+          skipYields(
+            this.#input.fetch({
+              start: {
+                row: takeState.bound,
+                basis: 'after',
+              },
+              constraint,
+            }),
+          ),
         ),
       );
 

@@ -398,7 +398,7 @@ export function makeAddEmptyRelationships(
  * This modifies the `relationships` object in place.
  */
 export function mergeEmpty(
-  relationships: Record<string, () => Stream<Node>>,
+  relationships: Record<string, () => Stream<Node | 'yield'>>,
   relationshipNames: string[],
 ) {
   for (const relName of relationshipNames) {

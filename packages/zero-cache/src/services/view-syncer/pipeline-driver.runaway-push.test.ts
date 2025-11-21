@@ -146,6 +146,7 @@ describe('view-syncer/pipeline-driver', () => {
     [
       ...pipelines.addQuery('hash1', 'queryID1', ISSUES_WITH_CREATOR, {
         totalElapsed: () => 1000,
+        elapsedLap: () => 1000,
       }),
     ];
 

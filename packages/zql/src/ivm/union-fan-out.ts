@@ -39,7 +39,7 @@ export class UnionFanOut implements Operator {
     return this.#input.getSchema();
   }
 
-  fetch(req: FetchRequest): Stream<Node> {
+  fetch(req: FetchRequest): Stream<Node | 'yield'> {
     return this.#input.fetch(req);
   }
 

@@ -711,6 +711,7 @@ describe('view-syncer/pipeline-driver', () => {
       ...pipelines.addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, {
         // hydration time
         totalElapsed: () => 100,
+        elapsedLap: () => 100,
       }),
     ];
 
@@ -732,6 +733,7 @@ describe('view-syncer/pipeline-driver', () => {
       ...pipelines.addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, {
         // hydration time
         totalElapsed: () => 100,
+        elapsedLap: () => 100,
       }),
     ];
 
@@ -748,6 +750,7 @@ describe('view-syncer/pipeline-driver', () => {
       ...pipelines.addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, {
         // very low hydration time
         totalElapsed: () => 25,
+        elapsedLap: () => 25,
       }),
     ];
 
