@@ -55,6 +55,14 @@ export type CostEstimate = {
   fanout: FanoutCostModel;
 };
 
+/**
+ * Omit the fanout function from a cost estimate for serialization.
+ */
+export function omitFanout(cost: CostEstimate): Omit<CostEstimate, 'fanout'> {
+  const {fanout: _, ...rest} = cost;
+  return rest;
+}
+
 export type NodeType = PlannerNode['kind'];
 
 export type JoinOrConnection = 'join' | 'connection';

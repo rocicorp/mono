@@ -47,7 +47,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 39 removes per-transform error types and adds `message` to app error (0.25)
 // -- version 40 adds `dbRowScansByQuery` to AnalyzeQueryResult (0.25)
 // -- version 41 makes ClientSchema.primaryKey required (0.25)
-export const PROTOCOL_VERSION = 41;
+// -- version 42 adds planner events to AnalyzeQueryResult (0.25)
+export const PROTOCOL_VERSION = 42;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version

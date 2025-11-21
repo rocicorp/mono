@@ -39,6 +39,7 @@ import {UnionFanOut} from '../ivm/union-fan-out.ts';
 import {planQuery} from '../planner/planner-builder.ts';
 import type {ConnectionCostModel} from '../planner/planner-connection.ts';
 import {completeOrdering} from '../query/complete-ordering.ts';
+import type {PlanDebugger} from '../planner/planner-debug.ts';
 import type {DebugDelegate} from './debug-delegate.ts';
 import {createPredicate, type NoSubqueryCondition} from './filter.ts';
 
@@ -128,6 +129,7 @@ export function buildPipeline(
   queryID: string,
   costModel?: ConnectionCostModel,
   lc?: LogContext,
+  planDebugger?: PlanDebugger,
 ): Input {
   ast = delegate.mapAst ? delegate.mapAst(ast) : ast;
   ast = completeOrdering(
@@ -136,7 +138,7 @@ export function buildPipeline(
   );
   if (costModel) {
     try {
-      ast = planQuery(ast, costModel);
+      ast = planQuery(ast, costModel, planDebugger);
     } catch (e) {
       // If the planner fails (e.g., too many joins), fall back to the
       // unoptimized query rather than failing the entire query.

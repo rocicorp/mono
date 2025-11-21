@@ -1,5 +1,6 @@
 import type {PlannerConstraint} from './planner-constraint.ts';
 import type {PlanDebugger} from './planner-debug.ts';
+import {omitFanout} from './planner-node.ts';
 import type {
   CostEstimate,
   JoinOrConnection,
@@ -68,14 +69,16 @@ export class PlannerFanOut {
       planDebugger,
     );
 
-    planDebugger?.log({
-      type: 'node-cost',
-      nodeType: 'fan-out',
-      node: 'FO',
-      branchPattern,
-      downstreamChildSelectivity,
-      costEstimate: ret,
-    });
+    if (planDebugger) {
+      planDebugger.log({
+        type: 'node-cost',
+        nodeType: 'fan-out',
+        node: 'FO',
+        branchPattern,
+        downstreamChildSelectivity,
+        costEstimate: omitFanout(ret),
+      });
+    }
 
     return ret;
   }

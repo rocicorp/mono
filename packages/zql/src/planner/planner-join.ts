@@ -4,6 +4,7 @@ import {
   type PlannerConstraint,
 } from './planner-constraint.ts';
 import type {PlanDebugger} from './planner-debug.ts';
+import {omitFanout} from './planner-node.ts';
 import type {
   CostEstimate,
   JoinOrConnection,
@@ -386,15 +387,17 @@ export class PlannerJoin {
       };
     }
 
-    planDebugger?.log({
-      type: 'node-cost',
-      nodeType: 'join',
-      node: this.getName(),
-      branchPattern,
-      downstreamChildSelectivity,
-      costEstimate,
-      joinType: this.#type,
-    });
+    if (planDebugger) {
+      planDebugger.log({
+        type: 'node-cost',
+        nodeType: 'join',
+        node: this.getName(),
+        branchPattern,
+        downstreamChildSelectivity,
+        costEstimate: omitFanout(costEstimate),
+        joinType: this.#type,
+      });
+    }
 
     return costEstimate;
   }

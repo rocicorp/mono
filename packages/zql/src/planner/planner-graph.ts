@@ -7,6 +7,7 @@ import type {PlannerConstraint} from './planner-constraint.ts';
 import type {PlannerFanIn} from './planner-fan-in.ts';
 import type {PlannerFanOut} from './planner-fan-out.ts';
 import type {PlannerJoin} from './planner-join.ts';
+import {omitFanout} from './planner-node.ts';
 import type {PlannerNode} from './planner-node.ts';
 import {PlannerSource, type ConnectionCostModel} from './planner-source.ts';
 import type {PlannerTerminus} from './planner-terminus.ts';
@@ -308,11 +309,21 @@ export class PlannerGraph {
         planDebugger.log({
           type: 'constraints-propagated',
           attemptNumber: pattern,
-          connectionConstraints: this.connections.map(c => ({
-            connection: c.name,
-            constraints: c.getConstraintsForDebug(),
-            constraintCosts: c.getConstraintCostsForDebug(),
-          })),
+          connectionConstraints: this.connections.map(c => {
+            const constraintCosts = c.getConstraintCostsForDebug();
+            const constraintCostsWithoutFanout: Record<
+              string,
+              Omit<(typeof constraintCosts)[string], 'fanout'>
+            > = {};
+            for (const [key, cost] of Object.entries(constraintCosts)) {
+              constraintCostsWithoutFanout[key] = omitFanout(cost);
+            }
+            return {
+              connection: c.name,
+              constraints: c.getConstraintsForDebug(),
+              constraintCosts: constraintCostsWithoutFanout,
+            };
+          }),
         });
       }
 

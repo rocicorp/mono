@@ -5,6 +5,7 @@ import {
   type PlannerConstraint,
 } from './planner-constraint.ts';
 import type {PlanDebugger} from './planner-debug.ts';
+import {omitFanout} from './planner-node.ts';
 import type {
   CostEstimate,
   JoinOrConnection,
@@ -224,15 +225,18 @@ export class PlannerConnection {
     };
     this.#cachedConstraintCosts.set(key, cost);
 
-    planDebugger?.log({
-      type: 'node-cost',
-      nodeType: 'connection',
-      node: this.name,
-      branchPattern,
-      downstreamChildSelectivity,
-      costEstimate: cost,
-      filters: this.#filters,
-    });
+    if (planDebugger) {
+      planDebugger.log({
+        type: 'node-cost',
+        nodeType: 'connection',
+        node: this.name,
+        branchPattern,
+        downstreamChildSelectivity,
+        costEstimate: omitFanout(cost),
+        filters: this.#filters,
+        ordering: this.#sort,
+      });
+    }
 
     return cost;
   }
@@ -293,30 +297,32 @@ export class PlannerConnection {
     this.#cachedConstraintCosts.clear();
   }
 
-  /**
-   * Get current constraints for debugging.
-   * Returns a copy of the constraints map.
-   */
-  getConstraintsForDebug(): Map<string, PlannerConstraint | undefined> {
-    return new Map(this.#constraints);
+  /** Get current constraints for debugging. */
+  getConstraintsForDebug(): Record<string, PlannerConstraint | undefined> {
+    const record: Record<string, PlannerConstraint | undefined> = {};
+    for (const [key, value] of this.#constraints) {
+      record[key] = value;
+    }
+    return record;
   }
 
-  /**
-   * Get filters for debugging.
-   * Returns the filters applied to this connection.
-   */
+  /** Get filters for debugging. */
   getFiltersForDebug(): Condition | undefined {
     return this.#filters;
   }
 
-  /**
-   * Get estimated cost for each constraint branch.
-   * Returns a map of constraint key to cost estimate.
-   * Forces cost calculation if not already cached.
-   */
-  getConstraintCostsForDebug(): Map<string, CostEstimate> {
-    // Return copy of cached costs
-    return new Map(this.#cachedConstraintCosts);
+  /** Get sort/ordering for debugging. */
+  getSortForDebug(): Ordering {
+    return this.#sort;
+  }
+
+  /** Get estimated cost for each constraint branch. */
+  getConstraintCostsForDebug(): Record<string, CostEstimate> {
+    const record: Record<string, CostEstimate> = {};
+    for (const [key, value] of this.#cachedConstraintCosts) {
+      record[key] = value;
+    }
+    return record;
   }
 }
 

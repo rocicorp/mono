@@ -4,8 +4,13 @@ import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
 import {Debug} from '../../../zql/src/builder/debug-delegate.ts';
 import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
+import {
+  AccumulatorDebugger,
+  serializePlanDebugEvents,
+} from '../../../zql/src/planner/planner-debug.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {explainQueries} from '../../../zqlite/src/explain-queries.ts';
+import {createSQLiteCostModel} from '../../../zqlite/src/sqlite-cost-model.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {computeZqlSpecs, mustGetTableSpec} from '../db/lite-tables.ts';
@@ -23,6 +28,7 @@ export async function analyzeQuery(
   vendedRows = false,
   permissions?: PermissionsConfig,
   authData?: TokenData,
+  plannerDebug = false,
 ): Promise<AnalyzeQueryResult> {
   using db = new Database(lc, config.replica.file);
   const fullTables = new Map<string, LiteTableSpec>();
@@ -31,6 +37,10 @@ export async function analyzeQuery(
 
   computeZqlSpecs(lc, db, tableSpecs, fullTables);
 
+  const planDebugger = plannerDebug ? new AccumulatorDebugger() : undefined;
+  const costModel = plannerDebug
+    ? createSQLiteCostModel(db, tableSpecs)
+    : undefined;
   const result = await runAst(lc, clientSchema, ast, true, {
     applyPermissions: permissions !== undefined,
     syncedRows,
@@ -39,6 +49,8 @@ export async function analyzeQuery(
     db,
     tableSpecs,
     permissions,
+    costModel,
+    planDebugger,
     host: {
       debug: new Debug(),
       getSource(tableName: string) {
@@ -72,5 +84,10 @@ export async function analyzeQuery(
   });
 
   result.plans = explainQueries(result.readRowCountsByQuery ?? {}, db);
+
+  if (planDebugger) {
+    result.plannerEvents = serializePlanDebugEvents(planDebugger.events);
+  }
+
   return result;
 }
