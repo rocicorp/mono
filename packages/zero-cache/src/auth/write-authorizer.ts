@@ -2,13 +2,9 @@ import type {SQLQuery} from '@databases/sql';
 import type {MaybePromise} from '@opentelemetry/resources';
 import {LogContext} from '@rocicorp/logger';
 import type {JWTPayload} from 'jose';
-import {tmpdir} from 'node:os';
-import path from 'node:path';
-import {pid} from 'node:process';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
-import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {Condition} from '../../../zero-protocol/src/ast.ts';
 import {
@@ -88,17 +84,13 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     replica: Database,
     appID: string,
     cgID: string,
+    writeAuthzStorage: DatabaseStorage,
   ) {
     this.#appID = appID;
     this.#lc = lc.withContext('class', 'WriteAuthorizerImpl');
     this.#logConfig = config.log;
     this.#schema = getSchema(this.#lc, replica);
     this.#replica = replica;
-    const tmpDir = config.storageDBTmpDir ?? tmpdir();
-    const writeAuthzStorage = DatabaseStorage.create(
-      lc,
-      path.join(tmpDir, `mutagen-${pid}-${randInt(1000000, 9999999)}`),
-    );
     this.#cgStorage = writeAuthzStorage.createClientGroupStorage(cgID);
     this.#builderDelegate = {
       getSource: name => this.#getSource(name),
