@@ -80,10 +80,10 @@ describe('SQL inline formatter', () => {
     );
   });
 
-  test('handles undefined as NULL', () => {
+  test('handles undefined as PLACEHOLDER IMPORTANT! MUST KEEP THIS FOR PLANNING', () => {
     const query = sql`SELECT * FROM foo WHERE a = ${undefined}`;
     const result = compileInline(query);
-    expect(result).toBe('SELECT * FROM foo WHERE a = NULL');
+    expect(result).toBe('SELECT * FROM foo WHERE a = ?');
   });
 
   test('handles object values as JSON', () => {
