@@ -44,9 +44,39 @@ export const colorConsole = {
 
 export const consoleSink: LogSink = {
   log(level, context, ...args) {
-    colorConsole[level](stringifyContext(context), ...args.map(stringifyValue));
+    colorConsole[level](
+      toLocalIsoString(),
+      stringifyContext(context),
+      ...args.map(stringifyValue),
+    );
   },
 };
+
+function toLocalIsoString(date = new Date()) {
+  const tzo = -date.getTimezoneOffset();
+  const sign = tzo >= 0 ? '+' : '-';
+  const pad = (n: number, len = 2) => String(Math.abs(n)).padStart(len, '0');
+
+  return (
+    date.getFullYear() +
+    '-' +
+    pad(date.getMonth() + 1) +
+    '-' +
+    pad(date.getDate()) +
+    'T' +
+    pad(date.getHours()) +
+    ':' +
+    pad(date.getMinutes()) +
+    ':' +
+    pad(date.getSeconds()) +
+    '.' +
+    pad(date.getMilliseconds(), 3) +
+    sign +
+    pad(tzo / 60) +
+    ':' +
+    pad(tzo % 60)
+  );
+}
 
 export function getLogSink(config: LogConfig): LogSink {
   return config.format === 'json' ? consoleJsonLogSink : consoleSink;
@@ -91,18 +121,22 @@ const consoleJsonLogSink: LogSink = {
 
 export function errorOrObject(v: unknown): object | undefined {
   if (v instanceof Error) {
-    return {
-      ...v, // some properties of Error subclasses may be enumerable
-      name: v.name,
-      errorMsg: v.message,
-      stack: v.stack,
-      ...('cause' in v ? {cause: errorOrObject(v.cause)} : null),
-    };
+    return toErrorLogObject(v);
   }
   if (v && typeof v === 'object') {
     return v;
   }
   return undefined;
+}
+
+function toErrorLogObject(v: Error) {
+  return {
+    ...v, // some properties of Error subclasses may be enumerable
+    name: v.name,
+    errorMsg: v.message,
+    stack: v.stack,
+    ...('cause' in v ? {cause: errorOrObject(v.cause)} : null),
+  };
 }
 
 function stringifyContext(context: Context | undefined): unknown[] {
@@ -114,9 +148,12 @@ function stringifyContext(context: Context | undefined): unknown[] {
   return args;
 }
 
-function stringifyValue(v: unknown): string {
+function stringifyValue(v: unknown) {
   if (typeof v === 'string') {
     return v;
+  }
+  if (v instanceof Error) {
+    return stringify(toErrorLogObject(v));
   }
   return stringify(v);
 }
