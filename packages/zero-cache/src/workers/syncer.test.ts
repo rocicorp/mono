@@ -36,6 +36,10 @@ import {
   TestLogSink,
 } from '../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../zqlite/src/db.ts';
+import {
+  CREATE_STORAGE_TABLE,
+  DatabaseStorage,
+} from '../../../zqlite/src/database-storage.ts';
 import * as jwt from '../auth/jwt.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
 import {
@@ -76,6 +80,10 @@ function makeFactories(
   mutagensOut: MutagenService[],
   pushersOut: PusherService[],
 ) {
+  const storageDb = new Database(lc, ':memory:');
+  storageDb.prepare(CREATE_STORAGE_TABLE).run();
+  const writeAuthzStorage = new DatabaseStorage(storageDb);
+
   return {
     viewSyncerFactory: (id: string) =>
       ({
@@ -98,6 +106,7 @@ function makeFactories(
           replica: {file: tempFile},
           perUserMutationLimit: {},
         } as ZeroConfig,
+        writeAuthzStorage,
       );
       mutagensOut.push(ret);
       return ret;
