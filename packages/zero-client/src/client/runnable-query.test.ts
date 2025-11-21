@@ -1,4 +1,5 @@
 import {expect, test} from 'vitest';
+import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   number,
@@ -102,4 +103,69 @@ test('query.run() works alongside zero.run() for one() queries', async () => {
 
   const noResult = await z.run(z.query.user.where('id', '999').one());
   expect(noResult).toBeUndefined();
+});
+
+test('query.run() works with related queries', async () => {
+  const relatedSchema = createSchema({
+    tables: [
+      table('user')
+        .columns({
+          id: string(),
+          name: string(),
+        })
+        .primaryKey('id'),
+      table('post')
+        .columns({
+          id: string(),
+          userId: string(),
+          title: string(),
+        })
+        .primaryKey('id'),
+    ],
+    relationships: [
+      relationships(
+        table('user')
+          .columns({
+            id: string(),
+            name: string(),
+          })
+          .primaryKey('id'),
+        connect => ({
+          posts: connect.many({
+            sourceField: ['id'],
+            destField: ['userId'],
+            destSchema: table('post')
+              .columns({
+                id: string(),
+                userId: string(),
+                title: string(),
+              })
+              .primaryKey('id'),
+          }),
+        }),
+      ),
+    ],
+  });
+
+  const z = zeroForTest({schema: relatedSchema});
+
+  await z.mutate.user.insert({id: '1', name: 'Alice'});
+  await z.mutate.post.insert({id: 'p1', userId: '1', title: 'Post 1'});
+  await z.mutate.post.insert({id: 'p2', userId: '1', title: 'Post 2'});
+
+  // Test that .related() preserves RunnableQuery and .run() works
+  const results = await z.query.user.related('posts').run();
+
+  expect(results).toHaveLength(1);
+  expect(results[0]).toMatchObject({
+    id: '1',
+    name: 'Alice',
+  });
+  expect(results[0].posts).toHaveLength(2);
+  expect(results[0].posts).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({id: 'p1', title: 'Post 1'}),
+      expect.objectContaining({id: 'p2', title: 'Post 2'}),
+    ]),
+  );
 });

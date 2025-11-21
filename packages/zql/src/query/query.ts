@@ -66,7 +66,7 @@ export type DestTableName<
   TRelationship extends string,
 > = LastInTuple<TSchema['relationships'][TTable][TRelationship]>['destSchema'];
 
-type DestRow<
+export type DestRow<
   TTable extends string,
   TSchema extends ZeroSchema,
   TRelationship extends string,
@@ -74,7 +74,11 @@ type DestRow<
   ? PullRow<DestTableName<TTable, TSchema, TRelationship>, TSchema>
   : PullRow<DestTableName<TTable, TSchema, TRelationship>, TSchema> | undefined;
 
-type AddSubreturn<TExistingReturn, TSubselectReturn, TAs extends string> = {
+export type AddSubreturn<
+  TExistingReturn,
+  TSubselectReturn,
+  TAs extends string,
+> = {
   readonly [K in TAs]: undefined extends TSubselectReturn
     ? TSubselectReturn
     : readonly TSubselectReturn[];
