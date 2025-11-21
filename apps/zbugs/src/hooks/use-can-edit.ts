@@ -1,6 +1,6 @@
 import {useQuery} from '@rocicorp/zero/react';
 import {useLogin} from './use-login.tsx';
-import {useZero} from './use-zero.ts';
+import {useZero} from '@rocicorp/zero/react';
 
 export function useCanEdit(ownerUserID: string | undefined): boolean {
   const login = useLogin();

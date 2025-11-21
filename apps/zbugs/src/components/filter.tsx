@@ -1,9 +1,8 @@
-import {useQuery} from '@rocicorp/zero/react';
+import {useQuery, useZero} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {memo, useMemo, useState} from 'react';
 import {toSorted} from '../../../../packages/shared/src/to-sorted.ts';
 import labelIcon from '../assets/icons/label.svg';
-import {useZero} from '../hooks/use-zero.ts';
 import {Button} from './button.tsx';
 import {Combobox} from './combobox.tsx';
 import {UserPicker} from './user-picker.tsx';

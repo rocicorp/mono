@@ -366,4 +366,8 @@ export function createMutators(authData: AuthData | undefined) {
   }
 }
 
-export type Mutators = ReturnType<typeof createMutators>;
+declare module '@rocicorp/zero' {
+  interface Register {
+    mutators: ReturnType<typeof createMutators>;
+  }
+}

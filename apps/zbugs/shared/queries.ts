@@ -276,7 +276,11 @@ export const queries = {
   ),
 } as const;
 
-export type Queries = typeof queries;
+declare module '@rocicorp/zero' {
+  interface Register {
+    queries: typeof queries;
+  }
+}
 
 export type ListContext = {
   readonly href: string;

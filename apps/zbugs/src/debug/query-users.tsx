@@ -1,5 +1,4 @@
-import {useQuery} from '../../../../packages/zero-react/src/use-query.tsx';
-import {useZero} from '../hooks/use-zero.ts';
+import {useQuery, useZero} from '@rocicorp/zero/react';
 
 export function QueryUsers() {
   const z = useZero();

@@ -5,6 +5,12 @@ import {MutationError, MutationErrorCode} from './error.ts';
 import type {MutatorTx} from './mutators.ts';
 import {builder, type schema} from './schema.ts';
 
+declare module '@rocicorp/zero' {
+  interface Register {
+    context: AuthData | undefined;
+  }
+}
+
 /** The contents of the zbugs JWT */
 export const jwtDataSchema = v.object({
   sub: v.string(),

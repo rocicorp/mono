@@ -11,6 +11,7 @@ import {
   useRole,
   useTransitionStatus,
 } from '@floating-ui/react';
+import {useZero} from '@rocicorp/zero/react';
 import {nanoid} from 'nanoid';
 import {
   forwardRef,
@@ -28,7 +29,6 @@ import {
 } from '../emoji-utils.ts';
 import {useIsOffline} from '../hooks/use-is-offline.ts';
 import {useLogin} from '../hooks/use-login.tsx';
-import {useZero} from '../hooks/use-zero.ts';
 import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
 import {type ButtonProps} from './button.tsx';
 import {EmojiPicker} from './emoji-picker.tsx';

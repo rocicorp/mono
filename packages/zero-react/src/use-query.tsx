@@ -8,6 +8,7 @@ import {
   type BindingsForZero,
 } from '../../zero-client/src/client/bindings.ts';
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
+import type {RegisteredSchema} from '../../zero-client/src/client/register.ts';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
 import type {
   QueryErrorDetails,
@@ -60,9 +61,10 @@ const suspend: (p: Promise<unknown>) => void = reactUse
     };
 
 export function useQuery<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
+  TSchema extends Schema = RegisteredSchema,
+  TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+    string,
+  TReturn = unknown,
 >(
   query: Query<TSchema, TTable, TReturn>,
   options?: UseQueryOptions | boolean,
@@ -75,7 +77,7 @@ export function useQuery<
     ({enabled = true, ttl = DEFAULT_TTL_MS} = options);
   }
 
-  const view = viewStore.getView(useZero(), query, enabled, ttl);
+  const view = viewStore.getView(useZero<TSchema>(), query, enabled, ttl);
   // https://react.dev/reference/react/useSyncExternalStore
   return useSyncExternalStore(
     view.subscribeReactInternals,
@@ -85,9 +87,10 @@ export function useQuery<
 }
 
 export function useSuspenseQuery<
-  TSchema extends Schema,
-  TTable extends keyof TSchema['tables'] & string,
-  TReturn,
+  TSchema extends Schema = RegisteredSchema,
+  TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+    string,
+  TReturn = unknown,
 >(
   query: Query<TSchema, TTable, TReturn>,
   options?: UseSuspenseQueryOptions | boolean,
@@ -105,7 +108,7 @@ export function useSuspenseQuery<
     } = options);
   }
 
-  const view = viewStore.getView(useZero(), query, enabled, ttl);
+  const view = viewStore.getView(useZero<TSchema>(), query, enabled, ttl);
   // https://react.dev/reference/react/useSyncExternalStore
   const snapshot = useSyncExternalStore(
     view.subscribeReactInternals,

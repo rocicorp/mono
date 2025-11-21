@@ -5,7 +5,7 @@ import {toSorted} from '../../../../packages/shared/src/to-sorted.ts';
 import {type Schema} from '../../shared/schema.ts';
 import avatarIcon from '../assets/icons/avatar-default.svg';
 import {avatarURLWithSize} from '../avatar-url-with-size.ts';
-import {useZero} from '../hooks/use-zero.ts';
+import {useZero} from '@rocicorp/zero/react';
 import {Combobox} from './combobox.tsx';
 
 type Props = {

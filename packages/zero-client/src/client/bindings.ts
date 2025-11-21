@@ -10,6 +10,13 @@ import type {
   Query,
 } from '../../../zql/src/query/query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
+import type {
+  Register,
+  RegisteredContext,
+  RegisteredMutators,
+  RegisteredQueries,
+  RegisteredSchema,
+} from './register.ts';
 import type {Zero} from './zero.ts';
 
 /**
@@ -24,19 +31,23 @@ const zeroDelegates = new WeakMap<
 >();
 
 export function registerZeroDelegate<
-  TSchema extends Schema,
-  MD extends CustomMutatorDefs | undefined,
-  TContext,
-  QD extends QueryDefinitions<TSchema, TContext> | undefined,
+  TSchema extends Schema = RegisteredSchema,
+  MD extends CustomMutatorDefs | undefined = RegisteredMutators,
+  TContext = RegisteredContext,
+  QD extends
+    | QueryDefinitions<TSchema, TContext>
+    | undefined = RegisteredQueries<Register, TSchema, TContext>,
 >(zero: Zero<TSchema, MD, TContext, QD>, delegate: QueryDelegate): void {
   zeroDelegates.set(zero, delegate);
 }
 
 function mustGetDelegate<
-  TSchema extends Schema,
-  MD extends CustomMutatorDefs | undefined,
-  TContext,
-  QD extends QueryDefinitions<TSchema, TContext> | undefined,
+  TSchema extends Schema = RegisteredSchema,
+  MD extends CustomMutatorDefs | undefined = RegisteredMutators,
+  TContext = RegisteredContext,
+  QD extends
+    | QueryDefinitions<TSchema, TContext>
+    | undefined = RegisteredQueries<Register, TSchema, TContext>,
 >(zero: Zero<TSchema, MD, TContext, QD>): QueryDelegate {
   const delegate = zeroDelegates.get(zero);
   if (!delegate) {
@@ -51,7 +62,7 @@ function mustGetDelegate<
  *
  * @internal This API is for bindings only, not end users.
  */
-export interface BindingsForZero<TSchema extends Schema> {
+export interface BindingsForZero<TSchema extends Schema = RegisteredSchema> {
   /**
    * Materialize a query into a reactive view without a custom factory.
    * Returns a TypedView that automatically updates when underlying data changes.
@@ -94,10 +105,12 @@ export interface BindingsForZero<TSchema extends Schema> {
  * @internal This API is for bindings only, not end users.
  */
 export function bindingsForZero<
-  TSchema extends Schema,
-  MD extends CustomMutatorDefs | undefined,
-  TContext,
-  QD extends QueryDefinitions<TSchema, TContext> | undefined,
+  TSchema extends Schema = RegisteredSchema,
+  MD extends CustomMutatorDefs | undefined = RegisteredMutators,
+  TContext = RegisteredContext,
+  QD extends
+    | QueryDefinitions<TSchema, TContext>
+    | undefined = RegisteredQueries<Register, TSchema, TContext>,
 >(zero: Zero<TSchema, MD, TContext, QD>): BindingsForZero<TSchema> {
   const delegate = mustGetDelegate(zero);
 
