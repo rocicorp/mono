@@ -219,6 +219,7 @@ export function executeAllPlanAttempts(
   // Plan with debugger to collect all attempts
   const planDebugger = new AccumulatorDebugger();
   planQuery(ast, costModel, planDebugger);
+  console.log(planDebugger.format());
 
   // Get all completed plan attempts
   const planCompleteEvents = planDebugger.getEvents('plan-complete');

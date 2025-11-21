@@ -21,7 +21,7 @@ function escapeSQLiteString(str: string): string {
  * @returns SQL literal representation of the value
  */
 function inlineValue(value: unknown): string {
-  if (value === null || value === undefined) {
+  if (value === null) {
     return 'NULL';
   }
   if (typeof value === 'string') {
@@ -52,10 +52,19 @@ function inlineValue(value: unknown): string {
  */
 const sqliteInlineFormat: FormatConfig = {
   escapeIdentifier: str => escapeSQLiteIdentifier(str),
-  formatValue: value => ({
-    placeholder: inlineValue(value),
-    value: undefined, // No binding needed since value is inlined
-  }),
+  formatValue: value =>
+    // undefined is our signal to use a placeholder
+    // IMPORTANT. Changing this will break the planner as it will assume `NULL`
+    // for constraints!
+    value === undefined
+      ? {
+          placeholder: '?',
+          value,
+        }
+      : {
+          placeholder: inlineValue(value),
+          value: undefined, // No binding needed since value is inlined
+        },
 };
 
 /**
