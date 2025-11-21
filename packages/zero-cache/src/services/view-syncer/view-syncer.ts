@@ -1459,10 +1459,33 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       // These are queries we need to remove from `desired`, not `got`, because they never transformed.
       if (erroredQueryIDs) {
+        // Build a set of transformation hashes that succeeded
+        const successfulHashes = new Set(
+          transformedQueries.map(
+            ({transformed}) => transformed.transformationHash,
+          ),
+        );
+
         for (const queryID of erroredQueryIDs) {
+          // Try to get the last known transformation hash for this query
+          let lastKnownHash: string | undefined;
+
+          // Check if the query exists in the CVR with a transformation hash
+          const cvrQuery = cvr.queries[queryID];
+          if (cvrQuery?.transformationHash) {
+            lastKnownHash = cvrQuery.transformationHash;
+          }
+
+          // If a successfully transformed query has the same hash, we can't remove it
+          // because that would remove the pipeline for the successful query
+          const transformationHash =
+            lastKnownHash && successfulHashes.has(lastKnownHash)
+              ? undefined
+              : lastKnownHash;
+
           removeQueries.push({
             id: queryID,
-            transformationHash: undefined,
+            transformationHash,
           });
         }
       }
