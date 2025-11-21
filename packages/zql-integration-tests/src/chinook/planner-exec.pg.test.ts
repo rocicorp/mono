@@ -163,7 +163,7 @@ describe('Chinook planner execution cost validation', () => {
       extraIndexValidations: [
         ['correlation', 0.8],
         ['within-optimal', 1],
-        ['within-baseline', 1],
+        ['within-baseline', 0.65],
       ],
     },
 
@@ -214,7 +214,7 @@ describe('Chinook planner execution cost validation', () => {
           album.whereExists('tracks', track => track),
         ),
       validations: [
-        ['correlation', 0.4],
+        ['correlation', 0.75],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -236,13 +236,13 @@ describe('Chinook planner execution cost validation', () => {
         ),
       ),
       validations: [
-        ['correlation', 0.6],
+        ['correlation', 0.75],
         ['within-optimal', 1],
         ['within-baseline', 0.077],
       ],
       extraIndexValidations: [
         ['correlation', 0.6],
-        ['within-baseline', 0.077],
+        ['within-baseline', 0.001],
       ],
     },
 
@@ -258,12 +258,12 @@ describe('Chinook planner execution cost validation', () => {
         )
         .limit(5),
       validations: [
-        ['correlation', -1.0],
-        ['within-optimal', 100],
+        ['correlation', 0.15],
+        ['within-optimal', 1.5],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', -1.0],
+        ['correlation', -0.5],
         ['within-baseline', 1],
       ],
     },
@@ -280,12 +280,12 @@ describe('Chinook planner execution cost validation', () => {
         )
         .limit(20),
       validations: [
-        ['correlation', 0.0],
+        ['correlation', 0.25],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', 0.0],
+        ['correlation', 0.3],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -365,8 +365,8 @@ describe('Chinook planner execution cost validation', () => {
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', 0.94],
-        ['within-baseline', 1],
+        ['correlation', 0.9],
+        ['within-baseline', 0.001],
       ],
     },
 
@@ -385,7 +385,7 @@ describe('Chinook planner execution cost validation', () => {
         .limit(10),
       validations: [
         ['correlation', -1.0],
-        ['within-optimal', 87],
+        ['within-optimal', 10],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
@@ -431,7 +431,7 @@ describe('Chinook planner execution cost validation', () => {
         ['within-baseline', 0.106],
       ],
       extraIndexValidations: [
-        ['correlation', 0],
+        ['correlation', 0.35],
         ['within-optimal', 1.22],
         ['within-baseline', 0.106],
       ],
@@ -465,9 +465,9 @@ describe('Chinook planner execution cost validation', () => {
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', 0],
+        ['correlation', 0.95],
         ['within-optimal', 1],
-        ['within-baseline', 1],
+        ['within-baseline', 0.5],
       ],
     },
 
@@ -482,7 +482,7 @@ describe('Chinook planner execution cost validation', () => {
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', 0.1],
+        ['correlation', 0.9],
         ['within-baseline', 1],
       ],
     },
@@ -499,7 +499,7 @@ describe('Chinook planner execution cost validation', () => {
       ],
       extraIndexValidations: [
         ['correlation', 0.94],
-        ['within-baseline', 0.77],
+        ['within-baseline', 0.001],
       ],
     },
 
@@ -533,7 +533,7 @@ describe('Chinook planner execution cost validation', () => {
         ['within-baseline', 1.43],
       ],
       extraIndexValidations: [
-        ['correlation', 0.0],
+        ['correlation', 0.85],
         ['within-baseline', 1.43],
       ],
     },
@@ -586,9 +586,9 @@ describe('Chinook planner execution cost validation', () => {
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', 0.8],
+        ['correlation', 0.9],
         ['within-optimal', 1],
-        ['within-baseline', 1],
+        ['within-baseline', 0.8],
       ],
     },
 
@@ -607,9 +607,9 @@ describe('Chinook planner execution cost validation', () => {
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', 0.4],
-        ['within-optimal', 2.03],
-        ['within-baseline', 1],
+        ['correlation', 0.9],
+        ['within-optimal', 1],
+        ['within-baseline', 0.35],
       ],
     },
 
@@ -628,9 +628,9 @@ describe('Chinook planner execution cost validation', () => {
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', 0.4],
-        ['within-optimal', 2.24],
-        ['within-baseline', 1],
+        ['correlation', 0.9],
+        ['within-optimal', 1],
+        ['within-baseline', 0.3],
       ],
     },
   ])('$name', ({name, query, validations, extraIndexValidations}) => {
