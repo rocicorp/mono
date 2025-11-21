@@ -40,6 +40,10 @@ import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {completedAST, newQuery} from '../../../zql/src/query/query-impl.ts';
 import {type Query, type Row} from '../../../zql/src/query/query.ts';
 import {Database} from '../../../zqlite/src/db.ts';
+import {
+  CREATE_STORAGE_TABLE,
+  DatabaseStorage,
+} from '../../../zqlite/src/database-storage.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
 import {transformQuery} from './read-authorizer.ts';
@@ -454,6 +458,7 @@ const permissions = must(
 
 let queryDelegate: QueryDelegate;
 let replica: Database;
+let writeAuthzStorage: DatabaseStorage;
 function toDbType(type: ValueType) {
   switch (type) {
     case 'string':
@@ -541,12 +546,17 @@ beforeEach(() => {
     must(queryDelegate.getSource(table.name));
   }
 
+  const storageDb = new Database(lc, ':memory:');
+  storageDb.prepare(CREATE_STORAGE_TABLE).run();
+  writeAuthzStorage = new DatabaseStorage(storageDb);
+
   writeAuthorizer = new WriteAuthorizerImpl(
     lc,
     zeroConfig,
     replica,
     'app',
     'cg',
+    writeAuthzStorage,
   );
 });
 const lc = createSilentLogContext();

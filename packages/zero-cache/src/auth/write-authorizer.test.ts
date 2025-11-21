@@ -11,6 +11,10 @@ import type {
   Rule,
 } from '../../../zero-schema/src/compiled-permissions.ts';
 import {Database} from '../../../zqlite/src/db.ts';
+import {
+  CREATE_STORAGE_TABLE,
+  DatabaseStorage,
+} from '../../../zqlite/src/database-storage.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
 import {WriteAuthorizerImpl} from './write-authorizer.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
@@ -47,6 +51,7 @@ const allowIfAIsSubject = [
 ] satisfies Rule;
 
 let replica: Database;
+let writeAuthzStorage: DatabaseStorage;
 
 beforeEach(() => {
   replica = new Database(lc, ':memory:');
@@ -56,6 +61,9 @@ beforeEach(() => {
     CREATE TABLE "the_app.permissions" (permissions JSON, hash TEXT);
     INSERT INTO "the_app.permissions" (permissions) VALUES (NULL);
     `);
+  const storageDb = new Database(lc, ':memory:');
+  storageDb.prepare(CREATE_STORAGE_TABLE).run();
+  writeAuthzStorage = new DatabaseStorage(storageDb);
 });
 
 function setPermissions(permissions: PermissionsConfig) {
@@ -79,6 +87,7 @@ describe('normalize ops', () => {
       replica,
       'the_app',
       'cg',
+      writeAuthzStorage,
     );
     const normalized = authorizer.normalizeOps([
       {
@@ -104,6 +113,7 @@ describe('normalize ops', () => {
       replica,
       'the_app',
       'cg',
+      writeAuthzStorage,
     );
     const normalized = authorizer.normalizeOps([
       {
@@ -136,6 +146,7 @@ describe('default deny', () => {
       replica,
       'the_app',
       'cg',
+      writeAuthzStorage,
     );
 
     expect(
@@ -179,6 +190,7 @@ describe('default deny', () => {
       replica,
       'the_app',
       'cg',
+      writeAuthzStorage,
     );
 
     const op: InsertOp = {
@@ -216,6 +228,7 @@ describe('default deny', () => {
       replica,
       'the_app',
       'cg',
+      writeAuthzStorage,
     );
 
     const op: UpdateOp = {
@@ -252,6 +265,7 @@ describe('default deny', () => {
       replica,
       'the_app',
       'cg',
+      writeAuthzStorage,
     );
 
     const op: UpdateOp = {
@@ -288,6 +302,7 @@ describe('pre & post mutation', () => {
       replica,
       'the_app',
       'cg',
+      writeAuthzStorage,
     );
 
     const op: DeleteOp = {
@@ -323,6 +338,7 @@ describe('pre & post mutation', () => {
       replica,
       'the_app',
       'cg',
+      writeAuthzStorage,
     );
 
     const op: InsertOp = {
@@ -360,6 +376,7 @@ describe('pre & post mutation', () => {
       replica,
       'the_app',
       'cg',
+      writeAuthzStorage,
     );
 
     const op: UpdateOp = {
@@ -396,6 +413,7 @@ describe('pre & post mutation', () => {
       replica,
       'the_app',
       'cg',
+      writeAuthzStorage,
     );
 
     const op: UpdateOp = {
@@ -420,6 +438,7 @@ describe('pre & post mutation', () => {
       replica,
       'the_app',
       'cg',
+      writeAuthzStorage,
     );
 
     expect(() => authorizer.destroy()).not.toThrow();
@@ -446,6 +465,7 @@ describe('primary key validation', () => {
       replica,
       'the_app',
       'cg',
+      writeAuthzStorage,
     );
 
     const op: UpdateOp = {
@@ -477,6 +497,7 @@ describe('primary key validation', () => {
       replica,
       'the_app',
       'cg',
+      writeAuthzStorage,
     );
 
     const op: DeleteOp = {
@@ -508,6 +529,7 @@ describe('primary key validation', () => {
       replica,
       'the_app',
       'cg',
+      writeAuthzStorage,
     );
 
     const op: InsertOp = {
@@ -529,6 +551,7 @@ describe('primary key validation', () => {
       replica,
       'the_app',
       'cg',
+      writeAuthzStorage,
     );
 
     expect(() =>
@@ -564,6 +587,7 @@ describe('primary key validation', () => {
       replica,
       'the_app',
       'cg',
+      writeAuthzStorage,
     );
 
     const op: UpdateOp = {
@@ -595,6 +619,7 @@ describe('primary key validation', () => {
       replica,
       'the_app',
       'cg',
+      writeAuthzStorage,
     );
 
     const op: UpdateOp = {

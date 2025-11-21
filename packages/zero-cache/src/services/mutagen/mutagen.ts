@@ -20,6 +20,7 @@ import {
   type UpsertOp,
 } from '../../../../zero-protocol/src/push.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import type {DatabaseStorage} from '../../../../zqlite/src/database-storage.ts';
 import {
   WriteAuthorizerImpl,
   type WriteAuthorizer,
@@ -76,6 +77,7 @@ export class MutagenService implements Mutagen, Service {
     clientGroupID: string,
     upstream: PostgresDB,
     config: ZeroConfig,
+    writeAuthzStorage: DatabaseStorage,
   ) {
     this.id = clientGroupID;
     this.#lc = lc;
@@ -90,6 +92,7 @@ export class MutagenService implements Mutagen, Service {
       this.#replica,
       shard.appID,
       clientGroupID,
+      writeAuthzStorage,
     );
 
     if (config.perUserMutationLimit.max !== undefined) {

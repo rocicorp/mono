@@ -1,3 +1,4 @@
+import {randomUUID} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pid} from 'node:process';
@@ -76,7 +77,11 @@ export default function runWorker(
   const tmpDir = config.storageDBTmpDir ?? tmpdir();
   const operatorStorage = DatabaseStorage.create(
     lc,
-    path.join(tmpDir, `sync-worker-${pid}-${randInt(1000000, 9999999)}`),
+    path.join(tmpDir, `sync-worker-${randomUUID()}`),
+  );
+  const writeAuthzStorage = DatabaseStorage.create(
+    lc,
+    path.join(tmpDir, `mutagen-${randomUUID()}`),
   );
 
   const shard = getShardID(config);
@@ -136,6 +141,7 @@ export default function runWorker(
       id,
       upstreamDB,
       config,
+      writeAuthzStorage,
     );
 
   const pusherFactory =
