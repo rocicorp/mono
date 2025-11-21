@@ -710,18 +710,54 @@ describe('view-syncer/pipeline-driver', () => {
     [
       ...pipelines.addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, {
         // hydration time
-        totalElapsed: () => 10,
+        totalElapsed: () => 100,
       }),
     ];
 
     replicator.processTransaction('134', messages.insert('issues', {id: 'i1'}));
 
-    // 6ms is larger than half of the hydration time.
+    // 60ms is larger than half of the hydration time.
     expect(() => [
-      ...pipelines.advance({totalElapsed: () => 6}).changes,
+      ...pipelines.advance({totalElapsed: () => 60}).changes,
     ]).toThrowErrorMatchingInlineSnapshot(
-      `[ResetPipelinesSignal: Advancement exceeded timeout at 0 of 1 changes after 6 ms. Advancement time limited base on total hydration time of 10 ms.]`,
+      `[ResetPipelinesSignal: Advancement exceeded timeout at 0 of 1 changes after 60 ms. Advancement time limited based on total hydration time of 100 ms.]`,
     );
+
+    // Test that after reset hydration and advancement work.
+    pipelines.reset(clientSchema);
+
+    expect(pipelines.addedQueries()).toEqual([new Set(), new Map()]);
+
+    [
+      ...pipelines.addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, {
+        // hydration time
+        totalElapsed: () => 100,
+      }),
+    ];
+
+    replicator.processTransaction('140', messages.insert('issues', {id: 'i1'}));
+
+    expect(() => [
+      ...pipelines.advance({totalElapsed: () => 20}).changes,
+    ]).not.toThrow();
+  });
+
+  test('advancement timeout has a minimum limit', () => {
+    pipelines.init(clientSchema);
+    [
+      ...pipelines.addQuery('hash1', 'queryID1', ISSUES_AND_COMMENTS, {
+        // very low hydration time
+        totalElapsed: () => 25,
+      }),
+    ];
+
+    replicator.processTransaction('134', messages.insert('issues', {id: 'i1'}));
+
+    // 29 is larger than the hydration time but less than the minimum
+    // advancement time limit
+    expect(() => [
+      ...pipelines.advance({totalElapsed: () => 29}).changes,
+    ]).not.toThrow();
   });
 
   test('reset', () => {

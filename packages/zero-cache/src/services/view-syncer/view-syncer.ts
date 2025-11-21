@@ -474,7 +474,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
       this.#cleanup();
     } catch (e) {
-      this.#lc[getLogLevel(e)]?.(`stopping view-syncer: ${String(e)}`, e);
+      this.#lc[getLogLevel(e)]?.(
+        `stopping view-syncer ${this.id}: ${String(e)}`,
+        e,
+      );
       this.#cleanup(e);
     } finally {
       // Always wait for the cvrStore to flush, regardless of how the service
@@ -482,7 +485,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       await this.#cvrStore
         .flushed(this.#lc)
         .catch(e => this.#lc[getLogLevel(e)]?.(e));
-      this.#lc.info?.('view-syncer stopped');
+      this.#lc.info?.(`view-syncer ${this.id} finished`);
       this.#stopped.resolve();
     }
   }
