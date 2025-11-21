@@ -13,7 +13,11 @@ import {
 } from '../../../../zql/src/builder/debug-delegate.ts';
 import type {Change} from '../../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../../zql/src/ivm/data.ts';
-import type {Input, Storage} from '../../../../zql/src/ivm/operator.ts';
+import {
+  skipYields,
+  type Input,
+  type Storage,
+} from '../../../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
 import type {
   Source,
@@ -339,7 +343,7 @@ export class PipelineDriver {
     queryID: string,
     query: AST,
     timer: {totalElapsed: () => number},
-  ): Iterable<RowChange> {
+  ): Iterable<RowChange | 'yield'> {
     assert(this.initialized());
     this.#inspectorDelegate.addQuery(transformationHash, queryID, query);
     if (this.#pipelines.has(transformationHash)) {
@@ -622,7 +626,11 @@ export class PipelineDriver {
     this.#startAccumulating();
     try {
       for (const _ of source.genPush(change)) {
-        yield* this.#stopAccumulating().stream();
+        for (const change of this.#stopAccumulating().stream()) {
+          if (change !== 'yield') {
+            yield change;
+          }
+        }
         this.#startAccumulating();
       }
     } finally {
@@ -655,19 +663,19 @@ class Streamer {
   readonly #changes: [
     hash: string,
     schema: SourceSchema,
-    changes: Iterable<Change>,
+    changes: Iterable<Change | 'yield'>,
   ][] = [];
 
   accumulate(
     hash: string,
     schema: SourceSchema,
-    changes: Iterable<Change>,
+    changes: Iterable<Change | 'yield'>,
   ): this {
     this.#changes.push([hash, schema, changes]);
     return this;
   }
 
-  *stream(): Iterable<RowChange> {
+  *stream(): Iterable<RowChange | 'yield'> {
     for (const [hash, schema, changes] of this.#changes) {
       yield* this.#streamChanges(hash, schema, changes);
     }
@@ -676,8 +684,8 @@ class Streamer {
   *#streamChanges(
     queryHash: string,
     schema: SourceSchema,
-    changes: Iterable<Change>,
-  ): Iterable<RowChange> {
+    changes: Iterable<Change | 'yield'>,
+  ): Iterable<RowChange | 'yield'> {
     // We do not sync rows gathered by the permissions
     // system to the client.
     if (schema.system === 'permissions') {
@@ -685,6 +693,10 @@ class Streamer {
     }
 
     for (const change of changes) {
+      if (change === 'yield') {
+        yield change;
+        continue;
+      }
       const {type} = change;
 
       switch (type) {
@@ -719,8 +731,8 @@ class Streamer {
     queryHash: string,
     schema: SourceSchema,
     op: 'add' | 'remove' | 'edit',
-    nodes: () => Iterable<Node>,
-  ): Iterable<RowChange> {
+    nodes: () => Iterable<Node | 'yield'>,
+  ): Iterable<RowChange | 'yield'> {
     const {tableName: table, system} = schema;
 
     const primaryKey = must(this.#primaryKeys.get(table));
@@ -732,6 +744,10 @@ class Streamer {
     }
 
     for (const node of nodes()) {
+      if (node === 'yield') {
+        yield node;
+        continue;
+      }
       const {relationships, row} = node;
       const rowKey = getRowKey(primaryKey, row);
 
@@ -751,8 +767,12 @@ class Streamer {
   }
 }
 
-function* toAdds(nodes: Iterable<Node>): Iterable<Change> {
+function* toAdds(nodes: Iterable<Node | 'yield'>): Iterable<Change | 'yield'> {
   for (const node of nodes) {
+    if (node === 'yield') {
+      yield node;
+      continue;
+    }
     yield {type: 'add', node};
   }
 }
@@ -770,7 +790,7 @@ export function* hydrate(
   input: Input,
   hash: string,
   clientSchema: ClientSchema,
-) {
+): Iterable<RowChange | 'yield'> {
   const res = input.fetch({});
   const streamer = new Streamer(buildPrimaryKeys(clientSchema)).accumulate(
     hash,
@@ -784,7 +804,7 @@ export function* hydrateInternal(
   input: Input,
   hash: string,
   primaryKeys: Map<string, PrimaryKey>,
-) {
+): Iterable<RowChange | 'yield'> {
   const res = input.fetch({});
   const streamer = new Streamer(primaryKeys).accumulate(
     hash,

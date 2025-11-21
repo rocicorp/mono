@@ -15,6 +15,7 @@ import {
 } from './join-utils.ts';
 import {
   throwOutput,
+  skipYields,
   type FetchRequest,
   type Input,
   type Output,
@@ -113,7 +114,7 @@ export class FlippedJoin implements Input {
   // generally when the parent cardinality is expected to be small) a different
   // algorithm should be used:  For each child node, fetch all parent nodes
   // eagerly and then sort using quicksort.
-  *fetch(req: FetchRequest): Stream<Node> {
+  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
     // Translate constraints for the parent on parts of the join key to
     // constraints for the child.
     const childConstraint: Record<string, Value> = {};
@@ -127,11 +128,16 @@ export class FlippedJoin implements Input {
         }
       }
     }
-    const childNodes = [
-      ...this.#child.fetch(
-        hasChildConstraint ? {constraint: childConstraint} : {},
-      ),
-    ];
+    const childNodes: Node[] = [];
+    for (const node of this.#child.fetch(
+      hasChildConstraint ? {constraint: childConstraint} : {},
+    )) {
+      if (node === 'yield') {
+        yield node;
+        continue;
+      }
+      childNodes.push(node);
+    }
     // FlippedJoin's split-push change overlay logic is largely
     // the same as Join's with the exception of remove.  For remove,
     // the change is undone here, and then re-applied to parents with order
@@ -148,7 +154,7 @@ export class FlippedJoin implements Input {
       );
       childNodes.splice(insertPos, 0, removedNode);
     }
-    const parentIterators: Iterator<Node>[] = [];
+    const parentIterators: Iterator<Node | 'yield'>[] = [];
     let threw = false;
     try {
       for (const childNode of childNodes) {
@@ -179,8 +185,13 @@ export class FlippedJoin implements Input {
       const nextParentNodes: (Node | null)[] = [];
       for (let i = 0; i < parentIterators.length; i++) {
         const iter = parentIterators[i];
-        const result = iter.next();
-        nextParentNodes[i] = result.done ? null : result.value;
+        let result = iter.next();
+        // Skip yields when initializing
+        while (!result.done && result.value === 'yield') {
+          yield result.value;
+          result = iter.next();
+        }
+        nextParentNodes[i] = result.done ? null : result.value as Node;
       }
 
       while (true) {
@@ -209,14 +220,19 @@ export class FlippedJoin implements Input {
         if (minParentNode === null) {
           return;
         }
-        const relatedChildNodes: Node[] = [];
+        const relatedChildNodes: (Node|'yield')[] = [];
         for (const minParentNodeChildIndex of minParentNodeChildIndexes) {
           relatedChildNodes.push(childNodes[minParentNodeChildIndex]);
           const iter = parentIterators[minParentNodeChildIndex];
-          const result = iter.next();
+          let result = iter.next();
+          // Skip yields when advancing
+          while (!result.done && result.value === 'yield') {
+            yield result.value;
+            result = iter.next();
+          }
           nextParentNodes[minParentNodeChildIndex] = result.done
             ? null
-            : result.value;
+            : result.value as Node;
         }
         let overlaidRelatedChildNodes = relatedChildNodes;
         if (
@@ -300,14 +316,16 @@ export class FlippedJoin implements Input {
         position: undefined,
       };
       try {
-        const parentNodeStream = this.#parent.fetch({
-          constraint: Object.fromEntries(
-            this.#parentKey.map((key, i) => [
-              key,
-              change.node.row[this.#childKey[i]],
-            ]),
-          ),
-        });
+        const parentNodeStream = skipYields(
+          this.#parent.fetch({
+            constraint: Object.fromEntries(
+              this.#parentKey.map((key, i) => [
+                key,
+                change.node.row[this.#childKey[i]],
+              ]),
+            ),
+          }),
+        );
         for (const parentNode of parentNodeStream) {
           this.#inprogressChildChange = {
             change,
@@ -323,7 +341,7 @@ export class FlippedJoin implements Input {
               ),
             });
           if (!exists) {
-            for (const childNode of childNodeStream()) {
+            for (const childNode of skipYields(childNodeStream())) {
               if (
                 this.#child
                   .getSchema()

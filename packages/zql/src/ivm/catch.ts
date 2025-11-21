@@ -2,7 +2,12 @@ import {unreachable} from '../../../shared/src/asserts.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Change} from './change.ts';
 import type {Node} from './data.ts';
-import type {FetchRequest, Input, Output} from './operator.ts';
+import {
+  skipYields,
+  type FetchRequest,
+  type Input,
+  type Output,
+} from './operator.ts';
 
 export type CaughtNode = {
   row: Row;
@@ -57,7 +62,7 @@ export class Catch implements Output {
   }
 
   fetch(req: FetchRequest = {}) {
-    return [...this.#input.fetch(req)].map(expandNode);
+    return [...skipYields(this.#input.fetch(req))].map(expandNode);
   }
 
   cleanup(req: FetchRequest = {}) {
@@ -66,7 +71,7 @@ export class Catch implements Output {
 
   push(change: Change) {
     const fetch = this.#fetchOnPush
-      ? [...this.#input.fetch({})].map(expandNode)
+      ? [...skipYields(this.#input.fetch({}))].map(expandNode)
       : [];
     const expandedChange = expandChange(change);
     if (this.#fetchOnPush) {
@@ -121,7 +126,7 @@ export function expandNode(node: Node): CaughtNode {
     relationships: Object.fromEntries(
       Object.entries(node.relationships).map(([k, v]) => [
         k,
-        [...v()].map(expandNode),
+        [...skipYields(v())].map(expandNode),
       ]),
     ),
   };
