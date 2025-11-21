@@ -229,3 +229,80 @@ describe('SQLite cost model', () => {
     expect(rows).toBeLessThan(1920);
   });
 });
+
+describe('SQLite cost model with skewed data (STAT4 verification)', () => {
+  let db: Database;
+  let costModel: ReturnType<typeof createSQLiteCostModel>;
+
+  beforeEach(() => {
+    const lc = createSilentLogContext();
+    db = new Database(lc, ':memory:');
+
+    // Create table with proper types for computeZqlSpecs
+    db.exec(`
+      CREATE TABLE skewed (id INTEGER PRIMARY KEY, value INTEGER);
+      CREATE UNIQUE INDEX skewed_id_unique ON skewed(id);
+      CREATE INDEX idx_skewed_value ON skewed(value);
+    `);
+
+    // Insert SKEWED data:
+    // - 1900 rows with value=1 (common)
+    // - 100 rows with value=999 (rare)
+    const stmt = db.prepare('INSERT INTO skewed (id, value) VALUES (?, ?)');
+    for (let i = 0; i < 1900; i++) {
+      stmt.run(i, 1);
+    }
+    for (let i = 1900; i < 2000; i++) {
+      stmt.run(i, 999);
+    }
+
+    // Run ANALYZE to populate STAT4 statistics
+    db.exec('ANALYZE');
+
+    // Get table specs
+    const tableSpecs = new Map<string, LiteAndZqlSpec>();
+    computeZqlSpecs(lc, db, tableSpecs);
+
+    // Create the cost model
+    costModel = createSQLiteCostModel(db, tableSpecs);
+  });
+
+  test('value inlining leverages STAT4 for accurate estimates on rare values', () => {
+    // Query for the RARE value (999) - only 100 out of 2000 rows
+    const rareEstimate = costModel(
+      'skewed',
+      [['id', 'asc']],
+      {
+        type: 'simple',
+        left: {type: 'column', name: 'value'},
+        op: '=',
+        right: {type: 'literal', value: 999},
+      },
+      undefined,
+    );
+
+    // With inlined values and STAT4, SQLite should recognize 999 is rare
+    // and estimate close to the actual 100 rows
+    expect(rareEstimate.rows).toBeLessThan(500); // Much less than average (1000)
+    expect(rareEstimate.rows).toBeGreaterThan(50); // But not zero
+  });
+
+  test('value inlining leverages STAT4 for accurate estimates on common values', () => {
+    // Query for the COMMON value (1) - 1900 out of 2000 rows
+    const commonEstimate = costModel(
+      'skewed',
+      [['id', 'asc']],
+      {
+        type: 'simple',
+        left: {type: 'column', name: 'value'},
+        op: '=',
+        right: {type: 'literal', value: 1},
+      },
+      undefined,
+    );
+
+    // Should recognize 1 is common and estimate much higher
+    expect(commonEstimate.rows).toBeGreaterThan(1500);
+    expect(commonEstimate.rows).toBeLessThan(2000);
+  });
+});
