@@ -753,32 +753,6 @@ describe('Chinook planner execution cost validation', () => {
       }
     }
 
-    // Log actual values for all tests with headroom analysis
-    // eslint-disable-next-line no-console
-    console.log('');
-    // eslint-disable-next-line no-console
-    console.log('  [Baseline DB - FK indices only]');
-    for (const v of validationResults) {
-      const symbol = v.passed ? '✓' : '✗';
-      if (v.type === 'correlation') {
-        const margin = v.actualValue - v.threshold;
-        const headroom =
-          v.threshold > 0 ? ((margin / v.threshold) * 100).toFixed(1) : 'N/A';
-        // eslint-disable-next-line no-console
-        console.log(
-          `  ${v.type}: actual=${v.actualValue.toFixed(3)}, threshold=${v.threshold} (headroom: ${headroom}%) ${symbol}`,
-        );
-      } else {
-        const margin = v.threshold - v.actualValue;
-        const headroom =
-          v.threshold > 0 ? ((margin / v.threshold) * 100).toFixed(1) : 'N/A';
-        // eslint-disable-next-line no-console
-        console.log(
-          `  ${v.type}: actual=${v.actualValue.toFixed(2)}x, threshold=${v.threshold}x (headroom: ${headroom}%) ${symbol}`,
-        );
-      }
-    }
-
     // Check if all validations passed
     let failedValidations = validationResults.filter(v => !v.passed);
 
