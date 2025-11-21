@@ -153,17 +153,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
         ],
         [
           "0",
-          "fetchCount",
-          {
-            "constraint": {
-              "id": "i1",
-              "ownerId": "o2",
-            },
-          },
-          0,
-        ],
-        [
-          "0",
           "fetch",
           {
             "constraint": {
@@ -171,17 +160,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
               "ownerId": "o2",
             },
           },
-        ],
-        [
-          "0",
-          "fetchCount",
-          {
-            "constraint": {
-              "id": "i1",
-              "ownerId": "o2",
-            },
-          },
-          0,
         ],
         [
           "0",
@@ -202,6 +180,28 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
               "ownerId": "o2",
             },
           },
+        ],
+        [
+          "0",
+          "fetchCount",
+          {
+            "constraint": {
+              "id": "i1",
+              "ownerId": "o2",
+            },
+          },
+          0,
+        ],
+        [
+          "0",
+          "fetchCount",
+          {
+            "constraint": {
+              "id": "i1",
+              "ownerId": "o2",
+            },
+          },
+          0,
         ],
         [
           "0",
@@ -328,6 +328,44 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
           },
         ],
         [
+          "1",
+          "fetch",
+          {
+            "constraint": {
+              "issueId": "i1",
+            },
+          },
+        ],
+        [
+          "1",
+          "fetchCount",
+          {
+            "constraint": {
+              "issueId": "i1",
+            },
+          },
+          1,
+        ],
+        [
+          "2",
+          "fetch",
+          {
+            "constraint": {
+              "id": "o1",
+            },
+          },
+        ],
+        [
+          "2",
+          "fetchCount",
+          {
+            "constraint": {
+              "id": "o1",
+            },
+          },
+          1,
+        ],
+        [
           "0",
           "fetchCount",
           {
@@ -335,11 +373,34 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
               "id": "i1",
             },
           },
-          0,
+          1,
         ],
       ]
     `);
-    expect(output).toMatchInlineSnapshot(`[]`);
+    expect(output).toMatchInlineSnapshot(`
+      [
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "id": "c5",
+                  "issueId": "i1",
+                },
+              },
+              "type": "add",
+            },
+            "relationshipName": "comments",
+          },
+          "row": {
+            "id": "i1",
+            "ownerId": "o1",
+          },
+          "type": "child",
+        },
+      ]
+    `);
   });
 
   test('remove owner', () => {
@@ -395,17 +456,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
         ],
         [
           "0",
-          "fetchCount",
-          {
-            "constraint": {
-              "id": "i1",
-              "ownerId": "o2",
-            },
-          },
-          0,
-        ],
-        [
-          "0",
           "fetch",
           {
             "constraint": {
@@ -413,17 +463,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
               "ownerId": "o2",
             },
           },
-        ],
-        [
-          "0",
-          "fetchCount",
-          {
-            "constraint": {
-              "id": "i1",
-              "ownerId": "o2",
-            },
-          },
-          0,
         ],
         [
           "0",
@@ -444,6 +483,28 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
               "ownerId": "o2",
             },
           },
+        ],
+        [
+          "0",
+          "fetchCount",
+          {
+            "constraint": {
+              "id": "i1",
+              "ownerId": "o2",
+            },
+          },
+          0,
+        ],
+        [
+          "0",
+          "fetchCount",
+          {
+            "constraint": {
+              "id": "i1",
+              "ownerId": "o2",
+            },
+          },
+          0,
         ],
         [
           "0",
@@ -570,6 +631,44 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
           },
         ],
         [
+          "1",
+          "fetch",
+          {
+            "constraint": {
+              "issueId": "i2",
+            },
+          },
+        ],
+        [
+          "1",
+          "fetchCount",
+          {
+            "constraint": {
+              "issueId": "i2",
+            },
+          },
+          1,
+        ],
+        [
+          "2",
+          "fetch",
+          {
+            "constraint": {
+              "id": "o2",
+            },
+          },
+        ],
+        [
+          "2",
+          "fetchCount",
+          {
+            "constraint": {
+              "id": "o2",
+            },
+          },
+          1,
+        ],
+        [
           "0",
           "fetchCount",
           {
@@ -577,11 +676,34 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
               "id": "i2",
             },
           },
-          0,
+          1,
         ],
       ]
     `);
-    expect(output).toMatchInlineSnapshot(`[]`);
+    expect(output).toMatchInlineSnapshot(`
+      [
+        {
+          "child": {
+            "change": {
+              "node": {
+                "relationships": {},
+                "row": {
+                  "id": "c4",
+                  "issueId": "i2",
+                },
+              },
+              "type": "remove",
+            },
+            "relationshipName": "comments",
+          },
+          "row": {
+            "id": "i2",
+            "ownerId": "o2",
+          },
+          "type": "child",
+        },
+      ]
+    `);
   });
 
   const normalBase = base;
@@ -670,11 +792,46 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
                 "issueId": "i1",
               },
             },
-            0,
+            1,
+          ],
+          [
+            "2",
+            "fetch",
+            {
+              "constraint": {
+                "id": "o1",
+              },
+            },
+          ],
+          [
+            "2",
+            "fetchCount",
+            {
+              "constraint": {
+                "id": "o1",
+              },
+            },
+            1,
           ],
         ]
       `);
-      expect(output).toMatchInlineSnapshot(`[]`);
+      expect(output).toMatchInlineSnapshot(`
+        [
+          {
+            "oldRow": {
+              "id": "i1",
+              "ownerId": "o1",
+              "text": "issue 1",
+            },
+            "row": {
+              "id": "i1",
+              "ownerId": "o1",
+              "text": "issue 1 changed",
+            },
+            "type": "edit",
+          },
+        ]
+      `);
     });
 
     test('edit comment', () => {
@@ -720,6 +877,25 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
             },
           ],
           [
+            "2",
+            "fetch",
+            {
+              "constraint": {
+                "id": "o2",
+              },
+            },
+          ],
+          [
+            "2",
+            "fetchCount",
+            {
+              "constraint": {
+                "id": "o2",
+              },
+            },
+            1,
+          ],
+          [
             "0",
             "fetchCount",
             {
@@ -727,11 +903,38 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
                 "id": "i2",
               },
             },
-            0,
+            1,
           ],
         ]
       `);
-      expect(output).toMatchInlineSnapshot(`[]`);
+      expect(output).toMatchInlineSnapshot(`
+        [
+          {
+            "child": {
+              "change": {
+                "oldRow": {
+                  "id": "c4",
+                  "issueId": "i2",
+                  "text": "comment 4",
+                },
+                "row": {
+                  "id": "c4",
+                  "issueId": "i2",
+                  "text": "comment 4 changed",
+                },
+                "type": "edit",
+              },
+              "relationshipName": "comments",
+            },
+            "row": {
+              "id": "i2",
+              "ownerId": "o2",
+              "text": "issue 2",
+            },
+            "type": "child",
+          },
+        ]
+      `);
     });
 
     test('edit owner', () => {
@@ -788,17 +991,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
           ],
           [
             "0",
-            "fetchCount",
-            {
-              "constraint": {
-                "id": "i1",
-                "ownerId": "o2",
-              },
-            },
-            0,
-          ],
-          [
-            "0",
             "fetch",
             {
               "constraint": {
@@ -806,17 +998,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
                 "ownerId": "o2",
               },
             },
-          ],
-          [
-            "0",
-            "fetchCount",
-            {
-              "constraint": {
-                "id": "i1",
-                "ownerId": "o2",
-              },
-            },
-            0,
           ],
           [
             "0",
@@ -837,6 +1018,28 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
                 "ownerId": "o2",
               },
             },
+          ],
+          [
+            "0",
+            "fetchCount",
+            {
+              "constraint": {
+                "id": "i1",
+                "ownerId": "o2",
+              },
+            },
+            0,
+          ],
+          [
+            "0",
+            "fetchCount",
+            {
+              "constraint": {
+                "id": "i1",
+                "ownerId": "o2",
+              },
+            },
+            0,
           ],
           [
             "0",
