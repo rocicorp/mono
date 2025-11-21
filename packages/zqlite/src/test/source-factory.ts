@@ -90,7 +90,7 @@ export function mapResultToClientNames<T, S extends Schema>(
   return mapResult(result, schema, rootTable) as T;
 }
 
-class SourceFactoryQueryDelegate extends QueryDelegateBase<undefined> {
+class SourceFactoryQueryDelegate extends QueryDelegateBase {
   readonly defaultQueryComplete = true;
   readonly enableNotExists = true;
 
@@ -108,7 +108,7 @@ class SourceFactoryQueryDelegate extends QueryDelegateBase<undefined> {
     db: Database,
     schema: Schema,
   ) {
-    super(undefined);
+    super();
     this.#lc = lc;
     this.#logConfig = logConfig;
     this.#db = db;
@@ -178,6 +178,6 @@ export function newQueryDelegate(
   logConfig: LogConfig,
   db: Database,
   schema: Schema,
-): QueryDelegate<undefined> {
+): QueryDelegate {
   return new SourceFactoryQueryDelegate(lc, logConfig, db, schema);
 }

@@ -11,7 +11,7 @@ import {
   newQueryDelegate,
 } from './test/source-factory.ts';
 
-let queryDelegate: QueryDelegate<unknown>;
+let queryDelegate: QueryDelegate;
 
 const lc = createSilentLogContext();
 

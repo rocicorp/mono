@@ -6,7 +6,7 @@ import type {StaticQuery} from '../static-query.ts';
 export type Rng = () => number;
 
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-export type AnyStaticQuery = StaticQuery<Schema, string, any, any>;
+export type AnyStaticQuery = StaticQuery<Schema, string, any>;
 
 export function selectRandom<T>(rng: Rng, values: readonly T[]): T {
   return values[Math.floor(rng() * values.length)];

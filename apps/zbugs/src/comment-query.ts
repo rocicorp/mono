@@ -1,12 +1,7 @@
-import type {Zero} from '@rocicorp/zero';
-import type {AuthData} from '../shared/auth.ts';
-import type {Mutators} from '../shared/mutators.ts';
-import type {IssueRow, Schema} from '../shared/schema.ts';
+import type {IssueRow} from '../shared/schema.ts';
+import type {ZeroBugs} from '../shared/zero-type.ts';
 
-export function commentQuery(
-  z: Zero<Schema, Mutators, AuthData | undefined>,
-  displayed: IssueRow | undefined,
-) {
+export function commentQuery(z: ZeroBugs, displayed: IssueRow | undefined) {
   return z.query.comment
     .where('issueID', 'IS', displayed?.id ?? null)
     .related('creator')

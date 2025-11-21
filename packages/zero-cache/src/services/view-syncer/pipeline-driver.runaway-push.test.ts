@@ -160,7 +160,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(() => [
       ...pipelines.advance({totalElapsed: () => elapsed++}).changes,
     ]).toThrowErrorMatchingInlineSnapshot(
-      `[ResetPipelinesSignal: Advancement exceeded timeout at 0 of 1 changes after 501 ms. Advancement time limited base on total hydration time of 1000 ms.]`,
+      `[ResetPipelinesSignal: Advancement exceeded timeout at 0 of 1 changes after 501 ms. Advancement time limited based on total hydration time of 1000 ms.]`,
     );
   });
 });
