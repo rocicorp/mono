@@ -178,6 +178,10 @@ export type {
   MutatorResultSuccessDetails,
   MutatorResult as PromiseWithServerResult,
 } from './client/custom.ts';
+export type {
+  AnalyzeQueryResult,
+  PlanDebugEventJSON,
+} from '../../zero-protocol/src/analyze-query-result.ts';
 export type {ClientGroup as InspectorClientGroup} from './client/inspector/client-group.ts';
 export type {Client as InspectorClient} from './client/inspector/client.ts';
 export type {Inspector} from './client/inspector/inspector.ts';

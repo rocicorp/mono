@@ -1356,6 +1356,223 @@ describe('view-syncer/service', () => {
                 `);
     });
 
+    describe.each([
+      {
+        name: 'different hashes - removes old pipeline',
+        hash1: 'hash-1',
+        hash2: 'hash-2',
+        ast1: ISSUES_QUERY,
+        ast2: USERS_QUERY,
+        expectSameHash: false,
+        expectRowsPresent: false,
+      },
+      {
+        name: 'same hash - keeps pipeline for successful query',
+        hash1: 'hash-same',
+        hash2: 'hash-same',
+        ast1: ISSUES_QUERY,
+        ast2: ISSUES_QUERY,
+        expectSameHash: true,
+        expectRowsPresent: true,
+      },
+    ])(
+      'failed query re-transformation: $name',
+      ({hash1, hash2, ast1, ast2, expectSameHash, expectRowsPresent}) => {
+        test('removes failed query using last known transformation hash', async () => {
+          // Use spy pattern to control mock behavior between connections
+          using transformSpy = vi
+            .spyOn(customQueryTransformer!, 'transform')
+            .mockResolvedValueOnce([
+              {
+                id: 'custom-1',
+                transformedAst: ast1,
+                transformationHash: hash1,
+              },
+              {
+                id: 'custom-2',
+                transformedAst: ast2,
+                transformationHash: hash2,
+              },
+            ]);
+
+          const client1 = connect(SYNC_CONTEXT, [
+            {
+              op: 'put',
+              hash: 'custom-1',
+              name: 'named-query-1',
+              args: ['thing'],
+            },
+            {
+              op: 'put',
+              hash: 'custom-2',
+              name: 'named-query-2',
+              args: ['thing'],
+            },
+          ]);
+
+          // Initial config poke
+          await nextPoke(client1);
+
+          // Trigger hydration
+          stateChanges.push({state: 'version-ready'});
+          const hydrateResponse = await nextPoke(client1);
+
+          // Verify first transformation was called
+          expect(transformSpy).toHaveBeenCalledTimes(1);
+
+          if (expectRowsPresent) {
+            // Verify rows were hydrated (pipeline was created)
+            const pokePart = hydrateResponse.find(
+              ([cmd]) => cmd === 'pokePart',
+            ) as [string, PokePartBody];
+            expect(pokePart).toBeTruthy();
+            const rowsPatch = pokePart[1].rowsPatch;
+            expect(rowsPatch).toBeTruthy();
+            expect(rowsPatch!.length).toBeGreaterThan(0);
+          }
+
+          // Verify both queries are in CVR with transformation hashes
+          const queriesAfterFirstConnect =
+            await cvrDB`SELECT "queryHash", "transformationHash" FROM "this_app_2/cvr".queries WHERE "transformationHash" IS NOT NULL ORDER BY "queryHash"`;
+          // Should have custom-1, custom-2, and possibly internal queries
+          expect(queriesAfterFirstConnect.length).toBeGreaterThanOrEqual(2);
+
+          const custom1Query = queriesAfterFirstConnect.find(
+            q => q.queryHash === 'custom-1',
+          );
+          const custom2Query = queriesAfterFirstConnect.find(
+            q => q.queryHash === 'custom-2',
+          );
+
+          expect(custom1Query).toBeTruthy();
+          expect(custom1Query!.transformationHash).toBe(hash1);
+          expect(custom2Query).toBeTruthy();
+          expect(custom2Query!.transformationHash).toBe(hash2);
+
+          if (expectSameHash) {
+            // Verify both queries share the same transformation hash
+            expect(custom1Query!.transformationHash).toBe(
+              custom2Query!.transformationHash,
+            );
+          }
+
+          // Second connection - custom-1 fails transformation, custom-2 succeeds
+          transformSpy.mockResolvedValueOnce([
+            {
+              error: 'app',
+              id: 'custom-1',
+              name: 'named-query-1',
+              message: 'Authorization failed',
+            },
+            {
+              id: 'custom-2',
+              transformedAst: ast2,
+              transformationHash: hash2,
+            },
+          ]);
+
+          const client2 = connect(
+            {...SYNC_CONTEXT, clientID: 'bar', wsID: 'ws2'},
+            [
+              {
+                op: 'put',
+                hash: 'custom-1',
+                name: 'named-query-1',
+                args: ['thing'],
+              },
+              {
+                op: 'put',
+                hash: 'custom-2',
+                name: 'named-query-2',
+                args: ['thing'],
+              },
+            ],
+          );
+
+          // Get the response - on reconnection, the query removal happens via poke
+          const response = await nextPoke(client2);
+
+          // Verify second transformation was called
+          expect(transformSpy).toHaveBeenCalledTimes(2);
+
+          // Verify custom-1 was removed from gotQueries
+          const pokePart = response.find(([cmd]) => cmd === 'pokePart') as [
+            string,
+            PokePartBody,
+          ];
+          expect(pokePart).toBeTruthy();
+          const gotQueriesPatch = pokePart[1].gotQueriesPatch;
+          expect(gotQueriesPatch).toContainEqual({hash: 'custom-1', op: 'del'});
+
+          if (expectRowsPresent) {
+            // Verify rows are still present (pipeline not removed because custom-2 uses same hash)
+            const rowsPatchAfterFailure = pokePart[1].rowsPatch;
+            expect(rowsPatchAfterFailure).toBeTruthy();
+            expect(rowsPatchAfterFailure!.length).toBeGreaterThan(0);
+
+            // Verify NO deletions for issues table (pipeline shared, still active)
+            const issueDelOps = rowsPatchAfterFailure!.filter(
+              op => op.op === 'del' && op.tableName === 'issues',
+            );
+            expect(issueDelOps.length).toBe(0);
+
+            // Verify issues rows are still present (put operations)
+            const issuePutOps = rowsPatchAfterFailure!.filter(
+              op => op.op === 'put' && op.tableName === 'issues',
+            );
+            expect(issuePutOps.length).toBeGreaterThan(0);
+          } else {
+            // Verify custom-1 was removed from CVR (by checking it's marked as deleted or removed)
+            const queriesAfterFailure =
+              await cvrDB`SELECT "queryHash", "transformationHash" FROM "this_app_2/cvr".queries WHERE "queryHash" = 'custom-1'`;
+            // Query should either be deleted or removed from the active set
+            expect(
+              queriesAfterFailure.length === 0 ||
+                queriesAfterFailure[0].transformationHash === null,
+            ).toBe(true);
+
+            // Verify rowsPatch contains deletions for issues table (hash-1 pipeline removed)
+            const rowsPatchAfterFailure = pokePart[1].rowsPatch;
+            expect(rowsPatchAfterFailure).toBeTruthy();
+
+            // Should have deletion operations for all 4 issues rows (ids: '1', '2', '3', '4')
+            const issueDelOps = rowsPatchAfterFailure!.filter(
+              op => op.op === 'del' && op.tableName === 'issues',
+            );
+            expect(issueDelOps.length).toBe(4);
+
+            // Verify all issue IDs are deleted
+            const deletedIssueIds = issueDelOps
+              .map(
+                op =>
+                  (op as {op: 'del'; tableName: string; id: {id: string}}).id
+                    .id,
+              )
+              .sort();
+            expect(deletedIssueIds).toEqual(['1', '2', '3', '4']);
+
+            // Verify no deletions for users table (hash-2 pipeline still active)
+            const userDelOps = rowsPatchAfterFailure!.filter(
+              op => op.op === 'del' && op.tableName === 'users',
+            );
+            expect(userDelOps.length).toBe(0);
+          }
+
+          // Verify custom-2 is still present/active
+          if (expectRowsPresent) {
+            expect(gotQueriesPatch).toContainEqual({
+              hash: 'custom-2',
+              op: 'put',
+            });
+          } else {
+            const custom2QueryAfterFailure =
+              await cvrDB`SELECT "queryHash", "transformationHash" FROM "this_app_2/cvr".queries WHERE "queryHash" = 'custom-2' AND "transformationHash" IS NOT NULL`;
+            expect(custom2QueryAfterFailure).toHaveLength(1);
+          }
+        });
+      },
+    );
+
     // not yet supported: test('a single custom query that returns many queries' () => {});
   });
 
