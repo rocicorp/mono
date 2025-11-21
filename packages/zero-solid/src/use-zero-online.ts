@@ -1,4 +1,4 @@
-import {createSignal, onCleanup, type Accessor} from 'solid-js';
+import {createEffect, createSignal, onCleanup, type Accessor} from 'solid-js';
 import {useZero} from './use-zero.ts';
 
 /**
@@ -8,13 +8,15 @@ import {useZero} from './use-zero.ts';
  * @deprecated Use {@linkcode useZeroConnectionState} instead, which provides more detailed connection state.
  */
 export function useZeroOnline(): Accessor<boolean> {
-  const zero = useZero()();
+  const zero = useZero();
 
-  const [online, setOnline] = createSignal<boolean>(zero.online);
+  const [online, setOnline] = createSignal<boolean>(zero().online);
 
-  const unsubscribe = zero.onOnline(setOnline);
+  createEffect(() => {
+    const unsubscribe = zero().onOnline(setOnline);
 
-  onCleanup(unsubscribe);
+    onCleanup(unsubscribe);
+  });
 
   return online;
 }

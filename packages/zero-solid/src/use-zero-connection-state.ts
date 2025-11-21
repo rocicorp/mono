@@ -1,4 +1,4 @@
-import {createSignal, onCleanup, type Accessor} from 'solid-js';
+import {createEffect, createSignal, onCleanup, type Accessor} from 'solid-js';
 import type {ConnectionState} from '../../zero-client/src/client/connection.ts';
 import {useZero} from './use-zero.ts';
 
@@ -9,15 +9,17 @@ import {useZero} from './use-zero.ts';
  * @see {@link ConnectionState} for more details on the connection state.
  */
 export function useZeroConnectionState(): Accessor<ConnectionState> {
-  const zero = useZero()();
+  const zero = useZero();
 
   const [connectionState, setConnectionState] = createSignal<ConnectionState>(
-    zero.connection.state.current,
+    zero().connection.state.current,
   );
 
-  const unsubscribe = zero.connection.state.subscribe(setConnectionState);
+  createEffect(() => {
+    const unsubscribe = zero().connection.state.subscribe(setConnectionState);
 
-  onCleanup(unsubscribe);
+    onCleanup(unsubscribe);
+  });
 
   return connectionState;
 }
