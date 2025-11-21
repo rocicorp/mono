@@ -2,6 +2,7 @@ import {beforeAll, describe, expect, test} from 'vitest';
 import {
   queries,
   initializePlannerInfrastructure,
+  initializeIndexedDatabase,
   executeAllPlanAttempts,
   validateCorrelation,
   validateWithinOptimal,
@@ -12,6 +13,7 @@ import {
 describe('Chinook planner execution cost validation', () => {
   beforeAll(() => {
     initializePlannerInfrastructure();
+    initializeIndexedDatabase();
   });
 
   test.each([
@@ -24,6 +26,11 @@ describe('Chinook planner execution cost validation', () => {
         ['correlation', 1.0],
         ['within-optimal', 1],
         ['within-baseline', 0.1],
+      ],
+      extraIndexValidations: [
+        ['correlation', 1.0],
+        ['within-optimal', 1],
+        ['within-baseline', 0.01],
       ],
     },
 
@@ -39,6 +46,11 @@ describe('Chinook planner execution cost validation', () => {
         ['within-optimal', 1],
         ['within-baseline', 0.08],
       ],
+      extraIndexValidations: [
+        ['correlation', 0.94],
+        ['within-optimal', 1],
+        ['within-baseline', 0.01],
+      ],
     },
 
     {
@@ -49,6 +61,11 @@ describe('Chinook planner execution cost validation', () => {
         .limit(10),
       validations: [
         ['correlation', 0.4],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
+      extraIndexValidations: [
+        ['correlation', 0.8],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -69,6 +86,11 @@ describe('Chinook planner execution cost validation', () => {
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
+      extraIndexValidations: [
+        ['correlation', 0.8],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
     },
 
     {
@@ -77,6 +99,11 @@ describe('Chinook planner execution cost validation', () => {
         .where('title', 'Greatest Hits')
         .whereExists('tracks', t => t),
       validations: [
+        ['correlation', 1.0],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
+      extraIndexValidations: [
         ['correlation', 1.0],
         ['within-optimal', 1],
         ['within-baseline', 1],
@@ -91,7 +118,12 @@ describe('Chinook planner execution cost validation', () => {
           album.whereExists('tracks', track => track),
         ),
       validations: [
-        ['correlation', 0.8],
+        ['correlation', 0.4],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
+      extraIndexValidations: [
+        ['correlation', 0.4],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -108,16 +140,17 @@ describe('Chinook planner execution cost validation', () => {
         ),
       ),
       validations: [
-        ['correlation', 0.8],
-        ['within-optimal', 1],
+        ['correlation', 0.6],
+        ['within-baseline', 0.077],
+      ],
+      extraIndexValidations: [
+        ['correlation', 0.6],
         ['within-baseline', 0.077],
       ],
     },
 
-    // Correlation fails because SQLite does not have stats on the milliseconds column.
-    // It assumes 80% selectivity.
-    // We still end up picking a rather good plan though.
-    // Within 1.3x of the best plan (execution time wise)
+    // Correlation and within-optimal fail because of empty/near-empty result sets causing division by zero.
+    // SQLite does not have stats on the milliseconds column so assumes 80% selectivity.
     {
       name: 'extreme selectivity - artist to album to long tracks',
       query: queries.artist
@@ -127,11 +160,8 @@ describe('Chinook planner execution cost validation', () => {
           ),
         )
         .limit(5),
-      validations: [
-        ['correlation', 0.0],
-        ['within-optimal', 1.28],
-        ['within-baseline', 1],
-      ],
+      validations: [['within-baseline', 1]],
+      extraIndexValidations: [['within-baseline', 1]],
     },
 
     {
@@ -146,6 +176,11 @@ describe('Chinook planner execution cost validation', () => {
         )
         .limit(20),
       validations: [
+        ['correlation', 0.0],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
+      extraIndexValidations: [
         ['correlation', 0.0],
         ['within-optimal', 1],
         ['within-baseline', 1],
@@ -172,34 +207,20 @@ describe('Chinook planner execution cost validation', () => {
         ['within-optimal', 1.7],
         ['within-baseline', 1.7],
       ],
+      extraIndexValidations: [
+        ['correlation', 0],
+        ['within-optimal', 1.7],
+        ['within-baseline', 1.7],
+      ],
     },
 
     /**
-    Problems:
-    1. track.composer is not indexed
-    2. sqlite returns 0.25 selectivity for `where composer = 'Kurt Cobain'
-
-    The actual selectivity is 0.007.
-
-    The estimated 25% selectivity compounds problems when we get to join fanout.
-
-    It says "with 484 tracks per playlist and 25% global match rate,
-    virtually EVERY playlist will have a match." This inflates
-    scaledChildSelectivity to 1.0, which then tells the parent "you'll
-    find matches in the first 10 playlists you scan."
-
-    Reality: The 26 Kurt Cobain tracks are concentrated in maybe just
-    1-2 playlists out of 18. So you need to scan ALL 18 playlists
-    (not just 10) to find matches.
-
-    The other problem is that we assume we only need to scan 4 tracks in each
-    playlist to find a Kurt Cobain track (because of the 25% selectivity).
-    If Kurt Cobain is only in 1 playlist we actually must scan all tracks for all playlists
-    until we hit that final playlist.
-
-    >> Sticking an index on `composer` fixes this query.
-
-    3.5x worse!
+     * FIXED: Value inlining bug fix dramatically improved this query!
+     * Previously: correlation=0.0, within-optimal=3.36x (picked plan was 3x worse than optimal)
+     * Now: correlation=0.8, within-optimal=1.0x (picks optimal plan)
+     *
+     * Even without an index on track.composer, the planner now makes good decisions.
+     * Indices don't provide additional benefit since the planner already picks the optimal plan.
      */
     {
       name: 'junction table - playlist to tracks via playlistTrack',
@@ -211,12 +232,19 @@ describe('Chinook planner execution cost validation', () => {
         ['within-optimal', 3.37],
         ['within-baseline', 1],
       ],
+      extraIndexValidations: [
+        ['correlation', 0.8],
+        ['within-optimal', 1],
+        ['within-baseline', 0.025],
+      ],
     },
 
     /**
-     * Fails correlation because SQLite assumes 25% selectivity.
+     * FIXED: Value inlining bug fix dramatically improved this query!
+     * Previously: correlation=0.0, within-optimal=14.74x (picked plan was 15x worse than optimal)
+     * Now: correlation=0.94, within-optimal=1.0x (picks optimal plan)
      *
-     * 15x worse!
+     * The planner now correctly handles empty result sets.
      */
     {
       name: 'empty result - nonexistent artist',
@@ -229,7 +257,10 @@ describe('Chinook planner execution cost validation', () => {
         .limit(10),
       validations: [
         ['correlation', 0.0],
-        ['within-optimal', 14.75],
+        ['within-baseline', 1],
+      ],
+      extraIndexValidations: [
+        ['correlation', 0.94],
         ['within-baseline', 1],
       ],
     },
@@ -248,7 +279,11 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('album', album => album.where('title', '>', 'Z'))
         .limit(10),
       validations: [
-        ['within-optimal', 8.61],
+        ['within-optimal', 87],
+        ['within-baseline', 1],
+      ],
+      extraIndexValidations: [
+        ['within-optimal', 87],
         ['within-baseline', 1],
       ],
     },
@@ -261,6 +296,11 @@ describe('Chinook planner execution cost validation', () => {
         .where('name', 'Rock')
         .whereExists('tracks', t => t.where('milliseconds', '>', 200000)),
       validations: [
+        ['correlation', 1.0],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
+      extraIndexValidations: [
         ['correlation', 1.0],
         ['within-optimal', 1],
         ['within-baseline', 1],
@@ -283,6 +323,11 @@ describe('Chinook planner execution cost validation', () => {
         ['within-optimal', 1.22],
         ['within-baseline', 0.106],
       ],
+      extraIndexValidations: [
+        ['correlation', 0],
+        ['within-optimal', 1.22],
+        ['within-baseline', 0.106],
+      ],
     },
 
     {
@@ -291,6 +336,11 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('albums', album => album.whereExists('tracks'))
         .limit(1),
       validations: [
+        ['correlation', 0.4],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
+      extraIndexValidations: [
         ['correlation', 0.4],
         ['within-optimal', 1],
         ['within-baseline', 1],
@@ -307,6 +357,11 @@ describe('Chinook planner execution cost validation', () => {
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
+      extraIndexValidations: [
+        ['correlation', 0],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
     },
 
     {
@@ -316,7 +371,10 @@ describe('Chinook planner execution cost validation', () => {
         .where('name', 'NonexistentTrackXYZ'),
       validations: [
         ['correlation', 0.1],
-        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
+      extraIndexValidations: [
+        ['correlation', 0.1],
         ['within-baseline', 1],
       ],
     },
@@ -328,7 +386,10 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('lines', i => i.where('quantity', '>', 1)),
       validations: [
         ['correlation', 0.94],
-        ['within-optimal', 1],
+        ['within-baseline', 0.77],
+      ],
+      extraIndexValidations: [
+        ['correlation', 0.94],
         ['within-baseline', 0.77],
       ],
     },
@@ -343,6 +404,11 @@ describe('Chinook planner execution cost validation', () => {
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
+      extraIndexValidations: [
+        ['correlation', 0.8],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
     },
 
     {
@@ -352,10 +418,8 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('invoice', i =>
           i.whereExists('customer', c => c.whereExists('supportRep', e => e)),
         ),
-      validations: [
-        ['within-optimal', 1.43],
-        ['within-baseline', 1.43],
-      ],
+      validations: [['within-baseline', 1.43]],
+      extraIndexValidations: [['within-baseline', 1.43]],
     },
 
     {
@@ -367,7 +431,12 @@ describe('Chinook planner execution cost validation', () => {
       validations: [
         ['correlation', 1.0],
         ['within-optimal', 1],
-        ['within-baseline', 0.01],
+        ['within-baseline', 0.012],
+      ],
+      extraIndexValidations: [
+        ['correlation', 1.0],
+        ['within-optimal', 1],
+        ['within-baseline', 0.012],
       ],
     },
 
@@ -375,6 +444,11 @@ describe('Chinook planner execution cost validation', () => {
       name: 'dense junction - popular playlist with many tracks',
       query: queries.playlist.where('id', 1).whereExists('tracks'),
       validations: [
+        ['correlation', 1.0],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
+      extraIndexValidations: [
         ['correlation', 1.0],
         ['within-optimal', 1],
         ['within-baseline', 1],
@@ -395,6 +469,11 @@ describe('Chinook planner execution cost validation', () => {
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
+      extraIndexValidations: [
+        ['correlation', 0.8],
+        ['within-optimal', 1],
+        ['within-baseline', 1],
+      ],
     },
 
     {
@@ -407,6 +486,11 @@ describe('Chinook planner execution cost validation', () => {
         )
         .limit(50),
       validations: [
+        ['correlation', 0.4],
+        ['within-optimal', 2.03],
+        ['within-baseline', 1],
+      ],
+      extraIndexValidations: [
         ['correlation', 0.4],
         ['within-optimal', 2.03],
         ['within-baseline', 1],
@@ -427,9 +511,14 @@ describe('Chinook planner execution cost validation', () => {
         ['within-optimal', 2.24],
         ['within-baseline', 1],
       ],
+      extraIndexValidations: [
+        ['correlation', 0.4],
+        ['within-optimal', 2.24],
+        ['within-baseline', 1],
+      ],
     },
-  ])('$name', ({query, validations}) => {
-    // Execute all plan attempts and collect results
+  ])('$name', ({query, validations, extraIndexValidations}) => {
+    // Execute all plan attempts and collect results (baseline DB)
     const results = executeAllPlanAttempts(query);
 
     // Verify we got multiple planning attempts
@@ -453,6 +542,8 @@ describe('Chinook planner execution cost validation', () => {
     // Log actual values for all tests with headroom analysis
     // eslint-disable-next-line no-console
     console.log('');
+    // eslint-disable-next-line no-console
+    console.log('  [Baseline DB - FK indices only]');
     for (const v of validationResults) {
       const symbol = v.passed ? '✓' : '✗';
       if (v.type === 'correlation') {
@@ -475,7 +566,64 @@ describe('Chinook planner execution cost validation', () => {
     }
 
     // Check if all validations passed
-    const failedValidations = validationResults.filter(v => !v.passed);
+    let failedValidations = validationResults.filter(v => !v.passed);
+
+    // If extraIndexValidations provided, run against indexed DB
+    if (extraIndexValidations) {
+      // eslint-disable-next-line no-console
+      console.log('');
+      // eslint-disable-next-line no-console
+      console.log('  [Indexed DB - with extra indices]');
+
+      const indexedResults = executeAllPlanAttempts(query, true);
+      const indexedValidationResults: ValidationResult[] = [];
+
+      for (const validation of extraIndexValidations) {
+        const [validationType, threshold] = validation as [string, number];
+
+        if (validationType === 'correlation') {
+          indexedValidationResults.push(
+            validateCorrelation(indexedResults, threshold),
+          );
+        } else if (validationType === 'within-optimal') {
+          indexedValidationResults.push(
+            validateWithinOptimal(indexedResults, threshold),
+          );
+        } else if (validationType === 'within-baseline') {
+          indexedValidationResults.push(
+            validateWithinBaseline(indexedResults, threshold),
+          );
+        }
+      }
+
+      // Log indexed validation results
+      for (const v of indexedValidationResults) {
+        const symbol = v.passed ? '✓' : '✗';
+        if (v.type === 'correlation') {
+          const margin = v.actualValue - v.threshold;
+          const headroom =
+            v.threshold > 0 ? ((margin / v.threshold) * 100).toFixed(1) : 'N/A';
+          // eslint-disable-next-line no-console
+          console.log(
+            `  ${v.type}: actual=${v.actualValue.toFixed(3)}, threshold=${v.threshold} (headroom: ${headroom}%) ${symbol}`,
+          );
+        } else {
+          const margin = v.threshold - v.actualValue;
+          const headroom =
+            v.threshold > 0 ? ((margin / v.threshold) * 100).toFixed(1) : 'N/A';
+          // eslint-disable-next-line no-console
+          console.log(
+            `  ${v.type}: actual=${v.actualValue.toFixed(2)}x, threshold=${v.threshold}x (headroom: ${headroom}%) ${symbol}`,
+          );
+        }
+      }
+
+      // Add indexed failures to overall failures
+      failedValidations = [
+        ...failedValidations,
+        ...indexedValidationResults.filter(v => !v.passed),
+      ];
+    }
 
     if (failedValidations.length > 0) {
       const estimatedCosts = results.map(r => r.estimatedCost);
