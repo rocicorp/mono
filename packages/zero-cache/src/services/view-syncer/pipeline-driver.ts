@@ -633,8 +633,7 @@ export class PipelineDriver {
   }
 
   #startAccumulating() {
-    assert(this.#streamer === null, 'null');
-    assert(this.#streamer !== null);
+    assert(this.#streamer === null);
     this.#streamer = new Streamer(must(this.#primaryKeys));
   }
 
