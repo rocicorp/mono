@@ -1,4 +1,4 @@
-import {beforeAll, describe, expect, test} from 'vitest';
+import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {
   queries,
   initializePlannerInfrastructure,
@@ -10,10 +10,106 @@ import {
   type ValidationResult,
 } from './planner-exec-helpers.ts';
 
+// Global collection for summary table
+type TestSummary = {
+  name: string;
+  base: {
+    correlation?: number;
+    correlationThreshold?: number;
+    withinOptimal?: number;
+    withinOptimalThreshold?: number;
+    withinBaseline?: number;
+    withinBaselineThreshold?: number;
+  };
+  indexed: {
+    correlation?: number;
+    correlationThreshold?: number;
+    withinOptimal?: number;
+    withinOptimalThreshold?: number;
+    withinBaseline?: number;
+    withinBaselineThreshold?: number;
+  };
+};
+
+const testSummaries: TestSummary[] = [];
+
 describe('Chinook planner execution cost validation', () => {
   beforeAll(() => {
     initializePlannerInfrastructure();
     initializeIndexedDatabase();
+  });
+
+  afterAll(() => {
+    // Print summary table in markdown format
+    // eslint-disable-next-line no-console
+    console.log('\n\n=== VALIDATION SUMMARY (Markdown Table) ===\n');
+
+    // Helper to format number or N/A
+    const fmt = (num: number | undefined) =>
+      num !== undefined ? num.toFixed(2) : 'N/A';
+
+    // Helper to format actual/threshold and indicate if it can be tightened
+    const fmtWithThreshold = (
+      actual: number | undefined,
+      threshold: number | undefined,
+      type: 'correlation' | 'within-optimal' | 'within-baseline',
+    ) => {
+      if (actual === undefined || threshold === undefined) {
+        return fmt(actual);
+      }
+
+      const actualStr = actual.toFixed(2);
+      const thresholdStr = threshold.toFixed(2);
+
+      // Check if can be tightened (has significant headroom)
+      let canTighten = false;
+      if (type === 'correlation') {
+        // For correlation, actual > threshold is good (headroom > 10%)
+        canTighten = actual >= threshold && actual - threshold > 0.1;
+      } else {
+        // For within-optimal and within-baseline, actual < threshold is good
+        // Check if actual is significantly better (>10% headroom)
+        canTighten =
+          actual <= threshold &&
+          threshold > 0 &&
+          (threshold - actual) / threshold > 0.1;
+      }
+
+      if (canTighten) {
+        return `${actualStr} (${thresholdStr}) 🔧`;
+      } else if (actualStr !== thresholdStr) {
+        return `${actualStr} (${thresholdStr})`;
+      } else {
+        return actualStr;
+      }
+    };
+
+    // Print markdown table header
+    // eslint-disable-next-line no-console
+    console.log(
+      '| Test Name | Base: corr | Base: opt | Base: baseline | Indexed: corr | Indexed: opt | Indexed: baseline |',
+    );
+    // eslint-disable-next-line no-console
+    console.log(
+      '|-----------|------------|-----------|----------------|---------------|--------------|-------------------|',
+    );
+
+    // Print rows
+    for (const summary of testSummaries) {
+      const row =
+        `| ${summary.name} ` +
+        `| ${fmtWithThreshold(summary.base.correlation, summary.base.correlationThreshold, 'correlation')} ` +
+        `| ${fmtWithThreshold(summary.base.withinOptimal, summary.base.withinOptimalThreshold, 'within-optimal')} ` +
+        `| ${fmtWithThreshold(summary.base.withinBaseline, summary.base.withinBaselineThreshold, 'within-baseline')} ` +
+        `| ${fmtWithThreshold(summary.indexed.correlation, summary.indexed.correlationThreshold, 'correlation')} ` +
+        `| ${fmtWithThreshold(summary.indexed.withinOptimal, summary.indexed.withinOptimalThreshold, 'within-optimal')} ` +
+        `| ${fmtWithThreshold(summary.indexed.withinBaseline, summary.indexed.withinBaselineThreshold, 'within-baseline')} |`;
+      // eslint-disable-next-line no-console
+      console.log(row);
+    }
+
+    // eslint-disable-next-line no-console
+    console.log('\n🔧 = Can be tightened (>10% headroom)\n');
   });
 
   test.each([
@@ -141,6 +237,7 @@ describe('Chinook planner execution cost validation', () => {
       ),
       validations: [
         ['correlation', 0.6],
+        ['within-optimal', 1],
         ['within-baseline', 0.077],
       ],
       extraIndexValidations: [
@@ -160,8 +257,15 @@ describe('Chinook planner execution cost validation', () => {
           ),
         )
         .limit(5),
-      validations: [['within-baseline', 1]],
-      extraIndexValidations: [['within-baseline', 1]],
+      validations: [
+        ['correlation', -1.0],
+        ['within-optimal', 100],
+        ['within-baseline', 1],
+      ],
+      extraIndexValidations: [
+        ['correlation', -1.0],
+        ['within-baseline', 1],
+      ],
     },
 
     {
@@ -257,6 +361,7 @@ describe('Chinook planner execution cost validation', () => {
         .limit(10),
       validations: [
         ['correlation', 0.0],
+        ['within-optimal', 15],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
@@ -279,10 +384,12 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('album', album => album.where('title', '>', 'Z'))
         .limit(10),
       validations: [
+        ['correlation', -1.0],
         ['within-optimal', 87],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
+        ['correlation', -1.0],
         ['within-optimal', 87],
         ['within-baseline', 1],
       ],
@@ -371,6 +478,7 @@ describe('Chinook planner execution cost validation', () => {
         .where('name', 'NonexistentTrackXYZ'),
       validations: [
         ['correlation', 0.1],
+        ['within-optimal', 1],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
@@ -386,6 +494,7 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('lines', i => i.where('quantity', '>', 1)),
       validations: [
         ['correlation', 0.94],
+        ['within-optimal', 1],
         ['within-baseline', 0.77],
       ],
       extraIndexValidations: [
@@ -418,8 +527,15 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('invoice', i =>
           i.whereExists('customer', c => c.whereExists('supportRep', e => e)),
         ),
-      validations: [['within-baseline', 1.43]],
-      extraIndexValidations: [['within-baseline', 1.43]],
+      validations: [
+        ['correlation', -0.5],
+        ['within-optimal', 1.5],
+        ['within-baseline', 1.43],
+      ],
+      extraIndexValidations: [
+        ['correlation', 0.0],
+        ['within-baseline', 1.43],
+      ],
     },
 
     {
@@ -517,12 +633,19 @@ describe('Chinook planner execution cost validation', () => {
         ['within-baseline', 1],
       ],
     },
-  ])('$name', ({query, validations, extraIndexValidations}) => {
+  ])('$name', ({name, query, validations, extraIndexValidations}) => {
     // Execute all plan attempts and collect results (baseline DB)
     const results = executeAllPlanAttempts(query);
 
     // Verify we got multiple planning attempts
     expect(results.length).toBeGreaterThan(0);
+
+    // Initialize summary entry
+    const summary: TestSummary = {
+      name,
+      base: {},
+      indexed: {},
+    };
 
     // Run requested validations
     const validationResults: ValidationResult[] = [];
@@ -531,11 +654,20 @@ describe('Chinook planner execution cost validation', () => {
       const [validationType, threshold] = validation as [string, number];
 
       if (validationType === 'correlation') {
-        validationResults.push(validateCorrelation(results, threshold));
+        const result = validateCorrelation(results, threshold);
+        validationResults.push(result);
+        summary.base.correlation = result.actualValue;
+        summary.base.correlationThreshold = threshold;
       } else if (validationType === 'within-optimal') {
-        validationResults.push(validateWithinOptimal(results, threshold));
+        const result = validateWithinOptimal(results, threshold);
+        validationResults.push(result);
+        summary.base.withinOptimal = result.actualValue;
+        summary.base.withinOptimalThreshold = threshold;
       } else if (validationType === 'within-baseline') {
-        validationResults.push(validateWithinBaseline(results, threshold));
+        const result = validateWithinBaseline(results, threshold);
+        validationResults.push(result);
+        summary.base.withinBaseline = result.actualValue;
+        summary.base.withinBaselineThreshold = threshold;
       }
     }
 
@@ -582,17 +714,20 @@ describe('Chinook planner execution cost validation', () => {
         const [validationType, threshold] = validation as [string, number];
 
         if (validationType === 'correlation') {
-          indexedValidationResults.push(
-            validateCorrelation(indexedResults, threshold),
-          );
+          const result = validateCorrelation(indexedResults, threshold);
+          indexedValidationResults.push(result);
+          summary.indexed.correlation = result.actualValue;
+          summary.indexed.correlationThreshold = threshold;
         } else if (validationType === 'within-optimal') {
-          indexedValidationResults.push(
-            validateWithinOptimal(indexedResults, threshold),
-          );
+          const result = validateWithinOptimal(indexedResults, threshold);
+          indexedValidationResults.push(result);
+          summary.indexed.withinOptimal = result.actualValue;
+          summary.indexed.withinOptimalThreshold = threshold;
         } else if (validationType === 'within-baseline') {
-          indexedValidationResults.push(
-            validateWithinBaseline(indexedResults, threshold),
-          );
+          const result = validateWithinBaseline(indexedResults, threshold);
+          indexedValidationResults.push(result);
+          summary.indexed.withinBaseline = result.actualValue;
+          summary.indexed.withinBaselineThreshold = threshold;
         }
       }
 
@@ -624,6 +759,9 @@ describe('Chinook planner execution cost validation', () => {
         ...indexedValidationResults.filter(v => !v.passed),
       ];
     }
+
+    // Store summary for final report
+    testSummaries.push(summary);
 
     if (failedValidations.length > 0) {
       const estimatedCosts = results.map(r => r.estimatedCost);
