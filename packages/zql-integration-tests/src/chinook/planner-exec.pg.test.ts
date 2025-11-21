@@ -110,6 +110,88 @@ describe('Chinook planner execution cost validation', () => {
 
     // eslint-disable-next-line no-console
     console.log('\n🔧 = Can be tightened (>10% headroom)\n');
+
+    // Print impact summary
+    // eslint-disable-next-line no-console
+    console.log('\n=== INDEXED DB IMPACT SUMMARY ===\n');
+    // eslint-disable-next-line no-console
+    console.log(
+      '| Test Name | Correlation Impact | Within-Optimal Impact | Within-Baseline Impact |',
+    );
+    // eslint-disable-next-line no-console
+    console.log(
+      '|-----------|--------------------|-----------------------|------------------------|',
+    );
+
+    for (const summary of testSummaries) {
+      const corrImpact = (() => {
+        if (
+          summary.base.correlation === undefined ||
+          summary.indexed.correlation === undefined
+        ) {
+          return 'N/A';
+        }
+        const delta = summary.indexed.correlation - summary.base.correlation;
+        if (Math.abs(delta) < 0.05) return '→ (no change)';
+        if (delta > 0) return `↑ +${delta.toFixed(2)} (better)`;
+        return `↓ ${delta.toFixed(2)} (worse)`;
+      })();
+
+      const optImpact = (() => {
+        if (
+          summary.base.withinOptimal === undefined ||
+          summary.indexed.withinOptimal === undefined
+        ) {
+          return 'N/A';
+        }
+        const base = summary.base.withinOptimal;
+        const indexed = summary.indexed.withinOptimal;
+        const delta = indexed - base;
+
+        if (Math.abs(delta) < 0.05) return '→ (no change)';
+
+        // For within-optimal, lower is better (closer to optimal plan)
+        if (delta < 0) {
+          // Improved: went from base → indexed (e.g., 3.36x → 1.0x)
+          return `↑ ${base.toFixed(2)}x → ${indexed.toFixed(2)}x (better)`;
+        }
+        // Degraded: went from base → indexed (e.g., 1.0x → 3.36x)
+        return `↓ ${base.toFixed(2)}x → ${indexed.toFixed(2)}x (worse)`;
+      })();
+
+      const baselineImpact = (() => {
+        if (
+          summary.base.withinBaseline === undefined ||
+          summary.indexed.withinBaseline === undefined
+        ) {
+          return 'N/A';
+        }
+        const base = summary.base.withinBaseline;
+        const indexed = summary.indexed.withinBaseline;
+        const delta = indexed - base;
+
+        if (Math.abs(delta) < 0.05) return '→ (no change)';
+
+        // For within-baseline, lower is better (chosen plan closer to optimal than baseline)
+        if (delta < 0) {
+          const improvement = Math.abs(delta / base) * 100;
+          return `↑ ${base.toFixed(2)}x → ${indexed.toFixed(2)}x (${improvement.toFixed(0)}% better)`;
+        }
+        return `↓ ${base.toFixed(2)}x → ${indexed.toFixed(2)}x (worse)`;
+      })();
+
+      const row =
+        `| ${summary.name} ` +
+        `| ${corrImpact} ` +
+        `| ${optImpact} ` +
+        `| ${baselineImpact} |`;
+      // eslint-disable-next-line no-console
+      console.log(row);
+    }
+    // eslint-disable-next-line no-console
+    console.log(
+      '\n↑ = Improved with indexing | ↓ = Degraded with indexing | → = No significant change\n',
+    );
   });
 
   test.each([
