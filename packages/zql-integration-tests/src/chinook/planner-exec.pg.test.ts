@@ -48,6 +48,7 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('genre', q => q.where('name', 'Rock'))
         .limit(10),
       validations: [
+        ['correlation', 0.4],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -167,6 +168,7 @@ describe('Chinook planner execution cost validation', () => {
         )
         .limit(15),
       validations: [
+        ['correlation', 0],
         ['within-optimal', 1.7],
         ['within-baseline', 1.7],
       ],
@@ -277,6 +279,7 @@ describe('Chinook planner execution cost validation', () => {
             ),
         ),
       validations: [
+        ['correlation', 0.4],
         ['within-optimal', 1.22],
         ['within-baseline', 0.106],
       ],
@@ -288,6 +291,7 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('albums', album => album.whereExists('tracks'))
         .limit(1),
       validations: [
+        ['correlation', 0.4],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -299,6 +303,7 @@ describe('Chinook planner execution cost validation', () => {
         manager.where('title', 'General Manager'),
       ),
       validations: [
+        ['correlation', 0],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -310,6 +315,7 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('album', a => a.whereExists('artist'))
         .where('name', 'NonexistentTrackXYZ'),
       validations: [
+        ['correlation', 0.1],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -401,7 +407,8 @@ describe('Chinook planner execution cost validation', () => {
         )
         .limit(50),
       validations: [
-        ['within-optimal', 2.1],
+        ['correlation', 0.4],
+        ['within-optimal', 2.03],
         ['within-baseline', 1],
       ],
     },
@@ -416,7 +423,8 @@ describe('Chinook planner execution cost validation', () => {
         )
         .limit(100),
       validations: [
-        ['within-optimal', 2.38],
+        ['correlation', 0.4],
+        ['within-optimal', 2.24],
         ['within-baseline', 1],
       ],
     },
