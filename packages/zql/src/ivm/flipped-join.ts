@@ -8,7 +8,7 @@ import type {Change} from './change.ts';
 import {constraintsAreCompatible, type Constraint} from './constraint.ts';
 import type {Node} from './data.ts';
 import {
-  generateWithOverlay,
+  generateWithOverlayNoYield,
   isJoinMatch,
   rowEqualsForCompoundKey,
   type JoinChangeOverlay,
@@ -186,12 +186,12 @@ export class FlippedJoin implements Input {
       for (let i = 0; i < parentIterators.length; i++) {
         const iter = parentIterators[i];
         let result = iter.next();
-        // Skip yields when initializing
+        // yield yields when initializing
         while (!result.done && result.value === 'yield') {
           yield result.value;
           result = iter.next();
         }
-        nextParentNodes[i] = result.done ? null : result.value as Node;
+        nextParentNodes[i] = result.done ? null : (result.value as Node);
       }
 
       while (true) {
@@ -220,19 +220,19 @@ export class FlippedJoin implements Input {
         if (minParentNode === null) {
           return;
         }
-        const relatedChildNodes: (Node|'yield')[] = [];
+        const relatedChildNodes: Node[] = [];
         for (const minParentNodeChildIndex of minParentNodeChildIndexes) {
           relatedChildNodes.push(childNodes[minParentNodeChildIndex]);
           const iter = parentIterators[minParentNodeChildIndex];
           let result = iter.next();
-          // Skip yields when advancing
+          // yield yields when advancing
           while (!result.done && result.value === 'yield') {
             yield result.value;
             result = iter.next();
           }
           nextParentNodes[minParentNodeChildIndex] = result.done
             ? null
-            : result.value as Node;
+            : (result.value as Node);
         }
         let overlaidRelatedChildNodes = relatedChildNodes;
         if (
@@ -262,7 +262,7 @@ export class FlippedJoin implements Input {
             }
           } else if (!hasInprogressChildChangeBeenPushedForMinParentNode) {
             overlaidRelatedChildNodes = [
-              ...generateWithOverlay(
+              ...generateWithOverlayNoYield(
                 relatedChildNodes,
                 this.#inprogressChildChange.change,
                 this.#child.getSchema(),
