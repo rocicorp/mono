@@ -100,7 +100,7 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     expect(output).toMatchInlineSnapshot(`[]`);
   });
 
-  test('push owner', () => {
+  test.only('push owner', () => {
     const {log, output} = pushSiblingTest({
       ...base,
       sources: [
@@ -1152,6 +1152,7 @@ function pushSiblingTest(t: PushTestSibling): PushTestSiblingResults {
   c.fetch();
 
   log.length = 0;
+  console.log('clear-------');
 
   for (const [sourceIndex, change] of t.pushes) {
     sources[sourceIndex].source.push(change);
