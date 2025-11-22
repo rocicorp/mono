@@ -33,8 +33,7 @@ export async function analyzeQuery(
 
   computeZqlSpecs(lc, db, tableSpecs, fullTables);
 
-  const timer = new TimeSliceTimer();
-  timer.start();
+  const timer = await new TimeSliceTimer().start();
   const shouldYield = () => {
     return timer.elapsedLap() > TIME_SLICE_LAP_THRESHOLD_MS;
   };

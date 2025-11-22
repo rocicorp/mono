@@ -89,7 +89,9 @@ export async function runAst(
   const seenByTable: Set<string> = new Set();
   for (const rowChange of hydrate(pipeline, hashOfAST(ast), clientSchema)) {
     if (rowChange === 'yield') {
+      console.log('yielding');
       await yieldProcess();
+      console.log('done yielding');
       continue;
     }
     assert(rowChange.type === 'add');

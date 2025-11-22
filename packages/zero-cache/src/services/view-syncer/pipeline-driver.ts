@@ -504,6 +504,10 @@ export class PipelineDriver {
     };
     try {
       for (const {table, prevValues, nextValue} of diff) {
+        // Advance progress is checked each time a row is fetched
+        // from a TableSource during push processing, but some pushes
+        // don't read any rows.  Check af
+        this.#checkAdvanceProgress();
         const start = performance.now();
         let type;
         try {
@@ -602,32 +606,41 @@ export class PipelineDriver {
       );
     }
     if (this.#advanceContext) {
-      // Cancel the advancement processing if it takes longer than half the
-      // total hydration time to make it through half of the advancement, or
-      // if processing time exceeds total hydration time.
-      // This serves as both a circuit breaker for very large transactions,
-      // as well as a bound on the amount of time the previous connection locks
-      // the inactive WAL file (as the lock prevents WAL2 from switching to the
-      // free WAL when the current one is over the size limit, which can make
-      // the WAL grow continuously and compound slowness).
-      const {
-        pos,
-        numChanges,
-        timer: advanceTimer,
-        totalHydrationTimeMs,
-      } = this.#advanceContext;
-      const elapsed = advanceTimer.totalElapsed();
-      if (
-        elapsed > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
-        (elapsed > totalHydrationTimeMs ||
-          (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2))
-      ) {
-        throw new ResetPipelinesSignal(
-          `Advancement exceeded timeout at ${pos} of ${numChanges} changes after ${elapsed} ms. Advancement time limited based on total hydration time of ${totalHydrationTimeMs} ms.`,
-        );
-      }
+      this.#checkAdvanceProgress();
     }
     return false;
+  }
+
+  /**
+   * Cancel the advancement processing, by throwing a ResetPipelinesSignal, if
+   * it has taken longer than half the total hydration time to make it through
+   * half of the advancement, or if processing time exceeds total hydration
+   * time.  This serves as both a circuit breaker for very large transactions,
+   * as well as a bound on the amount of time the previous connection locks
+   * the inactive WAL file (as the lock prevents WAL2 from switching to the
+   * free WAL when the current one is over the size limit, which can make
+   * the WAL grow continuously and compound slowness).
+   * This is checked:
+   * 1. before starting to process each change in an advancement is processed
+   * 2. whenever a row is fetched from a TableSource during push processing
+   */
+  #checkAdvanceProgress() {
+    const {
+      pos,
+      numChanges,
+      timer: advanceTimer,
+      totalHydrationTimeMs,
+    } = must(this.#advanceContext);
+    const elapsed = advanceTimer.totalElapsed();
+    if (
+      elapsed > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
+      (elapsed > totalHydrationTimeMs ||
+        (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2))
+    ) {
+      throw new ResetPipelinesSignal(
+        `Advancement exceeded timeout at ${pos} of ${numChanges} changes after ${elapsed} ms. Advancement time limited based on total hydration time of ${totalHydrationTimeMs} ms.`,
+      );
+    }
   }
 
   /** Implements `BuilderDelegate.createStorage()` */
