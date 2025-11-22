@@ -100,7 +100,7 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
     expect(output).toMatchInlineSnapshot(`[]`);
   });
 
-  test.only('push owner', () => {
+  test('push owner', () => {
     const {log, output} = pushSiblingTest({
       ...base,
       sources: [
@@ -153,17 +153,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
         ],
         [
           "0",
-          "fetchCount",
-          {
-            "constraint": {
-              "id": "i1",
-              "ownerId": "o2",
-            },
-          },
-          0,
-        ],
-        [
-          "0",
           "fetch",
           {
             "constraint": {
@@ -171,17 +160,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
               "ownerId": "o2",
             },
           },
-        ],
-        [
-          "0",
-          "fetchCount",
-          {
-            "constraint": {
-              "id": "i1",
-              "ownerId": "o2",
-            },
-          },
-          0,
         ],
         [
           "0",
@@ -202,6 +180,28 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
               "ownerId": "o2",
             },
           },
+        ],
+        [
+          "0",
+          "fetchCount",
+          {
+            "constraint": {
+              "id": "i1",
+              "ownerId": "o2",
+            },
+          },
+          0,
+        ],
+        [
+          "0",
+          "fetchCount",
+          {
+            "constraint": {
+              "id": "i1",
+              "ownerId": "o2",
+            },
+          },
+          0,
         ],
         [
           "0",
@@ -456,17 +456,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
         ],
         [
           "0",
-          "fetchCount",
-          {
-            "constraint": {
-              "id": "i1",
-              "ownerId": "o2",
-            },
-          },
-          0,
-        ],
-        [
-          "0",
           "fetch",
           {
             "constraint": {
@@ -474,17 +463,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
               "ownerId": "o2",
             },
           },
-        ],
-        [
-          "0",
-          "fetchCount",
-          {
-            "constraint": {
-              "id": "i1",
-              "ownerId": "o2",
-            },
-          },
-          0,
         ],
         [
           "0",
@@ -505,6 +483,28 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
               "ownerId": "o2",
             },
           },
+        ],
+        [
+          "0",
+          "fetchCount",
+          {
+            "constraint": {
+              "id": "i1",
+              "ownerId": "o2",
+            },
+          },
+          0,
+        ],
+        [
+          "0",
+          "fetchCount",
+          {
+            "constraint": {
+              "id": "i1",
+              "ownerId": "o2",
+            },
+          },
+          0,
         ],
         [
           "0",
@@ -991,17 +991,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
           ],
           [
             "0",
-            "fetchCount",
-            {
-              "constraint": {
-                "id": "i1",
-                "ownerId": "o2",
-              },
-            },
-            0,
-          ],
-          [
-            "0",
             "fetch",
             {
               "constraint": {
@@ -1009,17 +998,6 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
                 "ownerId": "o2",
               },
             },
-          ],
-          [
-            "0",
-            "fetchCount",
-            {
-              "constraint": {
-                "id": "i1",
-                "ownerId": "o2",
-              },
-            },
-            0,
           ],
           [
             "0",
@@ -1040,6 +1018,28 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
                 "ownerId": "o2",
               },
             },
+          ],
+          [
+            "0",
+            "fetchCount",
+            {
+              "constraint": {
+                "id": "i1",
+                "ownerId": "o2",
+              },
+            },
+            0,
+          ],
+          [
+            "0",
+            "fetchCount",
+            {
+              "constraint": {
+                "id": "i1",
+                "ownerId": "o2",
+              },
+            },
+            0,
           ],
           [
             "0",
@@ -1152,7 +1152,6 @@ function pushSiblingTest(t: PushTestSibling): PushTestSiblingResults {
   c.fetch();
 
   log.length = 0;
-  console.log('clear-------');
 
   for (const [sourceIndex, change] of t.pushes) {
     sources[sourceIndex].source.push(change);

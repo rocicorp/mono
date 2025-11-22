@@ -60,21 +60,23 @@ export class Snitch implements Operator {
     this.log.push(message);
   }
 
-  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
-    console.log('snitch', [this.#name, 'fetch', req]);
+  fetch(req: FetchRequest): Stream<Node | 'yield'> {
     this.#log([this.#name, 'fetch', req]);
+    return this.fetchGenerator(req);
+  }
+
+  *fetchGenerator(req: FetchRequest): Stream<Node | 'yield'> {
     let count = 0;
     try {
       for (const node of this.#input.fetch(req)) {
-        // if (node === 'yield') {
-        //   yield node;
-        //   continue;
-        // }
+        if (node === 'yield') {
+          yield node;
+          continue;
+        }
         count++;
         yield node;
       }
     } finally {
-      console.log('snitch', [this.#name, 'fetchCount', req, count]);
       this.#log([this.#name, 'fetchCount', req, count]);
     }
   }
