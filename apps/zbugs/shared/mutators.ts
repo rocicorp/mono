@@ -14,7 +14,7 @@ import {
   type AuthData,
 } from './auth.ts';
 import {MutationError, MutationErrorCode} from './error.ts';
-import {builder, ZERO_PROJECT_ID, type schema} from './schema.ts';
+import {builder, ZERO_PROJECT_ID, type Schema} from './schema.ts';
 
 function projectIDWithDefault(projectID: string | undefined): string {
   return projectID ?? ZERO_PROJECT_ID;
@@ -22,7 +22,7 @@ function projectIDWithDefault(projectID: string | undefined): string {
 
 export type NotificationType = 'subscribe' | 'unsubscribe';
 
-export type MutatorTx = Transaction<typeof schema, AuthData | undefined>;
+export type MutatorTx = Transaction<Schema, AuthData | undefined>;
 
 const defineMutator = defineMutatorWithContextType<AuthData | undefined>();
 
@@ -120,7 +120,7 @@ async function updateIssueNotification(
   }
 }
 
-export const mutators = defineMutators<AuthData | undefined>()({
+export const mutators = defineMutators<Schema, AuthData | undefined>()({
   issue: {
     create: defineMutator(
       z.object({
@@ -164,7 +164,7 @@ export const mutators = defineMutators<AuthData | undefined>()({
         open: z.optional(z.boolean()),
         modified: z.number(),
         assigneeID: z.optional(z.nullable(z.string())),
-        visibility: z.optional(z.enum(['public', 'private'])),
+        visibility: z.optional(z.enum(['public', 'internal'])),
       }),
       async (tx, {args: change, ctx: authData}) => {
         const oldIssue = await tx.run(
@@ -179,9 +179,14 @@ export const mutators = defineMutators<AuthData | undefined>()({
           );
         }
 
-        await assertIsCreatorOrAdmin(tx as unknown as MutatorTx, authData, builder.issue, change.id);
+        await assertIsCreatorOrAdmin(
+          tx as unknown as MutatorTx,
+          authData,
+          builder.issue,
+          change.id,
+        );
         await tx.mutate.issue.update(
-          change as UpdateValue<typeof schema.tables.issue>,
+          change as UpdateValue<Schema['tables']['issue']>,
         );
 
         const isAssigneeChange =
@@ -214,7 +219,12 @@ export const mutators = defineMutators<AuthData | undefined>()({
     ),
 
     delete: defineMutator(z.string(), async (tx, {args: id, ctx: authData}) => {
-      await assertIsCreatorOrAdmin(tx as unknown as MutatorTx, authData, builder.issue, id);
+      await assertIsCreatorOrAdmin(
+        tx as unknown as MutatorTx,
+        authData,
+        builder.issue,
+        id,
+      );
       await tx.mutate.issue.delete({id});
     }),
 
@@ -225,7 +235,12 @@ export const mutators = defineMutators<AuthData | undefined>()({
         projectID: z.optional(z.string()),
       }),
       async (tx, {args, ctx: authData}) => {
-        await assertIsCreatorOrAdmin(tx as unknown as MutatorTx, authData, builder.issue, args.issueID);
+        await assertIsCreatorOrAdmin(
+          tx as unknown as MutatorTx,
+          authData,
+          builder.issue,
+          args.issueID,
+        );
         await tx.mutate.issueLabel.insert({
           issueID: args.issueID,
           labelID: args.labelID,
@@ -240,7 +255,12 @@ export const mutators = defineMutators<AuthData | undefined>()({
         labelID: z.string(),
       }),
       async (tx, {args, ctx: authData}) => {
-        await assertIsCreatorOrAdmin(tx as unknown as MutatorTx, authData, builder.issue, args.issueID);
+        await assertIsCreatorOrAdmin(
+          tx as unknown as MutatorTx,
+          authData,
+          builder.issue,
+          args.issueID,
+        );
         await tx.mutate.issueLabel.delete({
           issueID: args.issueID,
           labelID: args.labelID,
@@ -298,7 +318,12 @@ export const mutators = defineMutators<AuthData | undefined>()({
     ),
 
     remove: defineMutator(z.string(), async (tx, {args: id, ctx: authData}) => {
-      await assertIsCreatorOrAdmin(tx as unknown as MutatorTx, authData, builder.emoji, id);
+      await assertIsCreatorOrAdmin(
+        tx as unknown as MutatorTx,
+        authData,
+        builder.emoji,
+        id,
+      );
       await tx.mutate.emoji.delete({id});
     }),
   },
@@ -315,7 +340,11 @@ export const mutators = defineMutators<AuthData | undefined>()({
         assertIsLoggedIn(authData);
         const creatorID = authData.sub;
 
-        await assertUserCanSeeIssue(tx as unknown as MutatorTx, creatorID, args.issueID);
+        await assertUserCanSeeIssue(
+          tx as unknown as MutatorTx,
+          creatorID,
+          args.issueID,
+        );
 
         await tx.mutate.comment.insert({
           id: args.id,
@@ -340,13 +369,23 @@ export const mutators = defineMutators<AuthData | undefined>()({
         body: z.string(),
       }),
       async (tx, {args, ctx: authData}) => {
-        await assertIsCreatorOrAdmin(tx as unknown as MutatorTx, authData, builder.comment, args.id);
+        await assertIsCreatorOrAdmin(
+          tx as unknown as MutatorTx,
+          authData,
+          builder.comment,
+          args.id,
+        );
         await tx.mutate.comment.update({id: args.id, body: args.body});
       },
     ),
 
     remove: defineMutator(z.string(), async (tx, {args: id, ctx: authData}) => {
-      await assertIsCreatorOrAdmin(tx as unknown as MutatorTx, authData, builder.comment, id);
+      await assertIsCreatorOrAdmin(
+        tx as unknown as MutatorTx,
+        authData,
+        builder.comment,
+        id,
+      );
       await tx.mutate.comment.delete({id});
     }),
   },

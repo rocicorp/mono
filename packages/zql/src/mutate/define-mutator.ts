@@ -191,6 +191,17 @@ export function defineMutatorWithContextType<TContext>(): {
 }
 
 /**
+ * Base type for mutator registries used in constraints.
+ * This is a simpler recursive type that doesn't require the full definition shape.
+ */
+export type MutatorRegistryBase<S extends Schema, TContext> = {
+  readonly [key: string]:
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    | ((args: any) => MutatorThunk<S, TContext>)
+    | MutatorRegistryBase<S, TContext>;
+};
+
+/**
  * The type returned by defineMutators - same tree shape but each leaf
  * is now a function that takes args and returns a thunk (tx, ctx) => Promise<void>.
  */
@@ -231,7 +242,7 @@ export type MutatorThunk<S extends Schema, TContext> = ((
  *
  * @example
  * ```typescript
- * const mutators = defineMutators<AuthData>()({
+ * const mutators = defineMutators<typeof schema, AuthData>()({
  *   issue: {
  *     create: defineMutator(z.object({...}), (tx, {args, ctx}) => {
  *       await tx.mutate.issue.insert({...});
@@ -240,13 +251,13 @@ export type MutatorThunk<S extends Schema, TContext> = ((
  * });
  * ```
  */
-export function defineMutators<TContext>(): <
+export function defineMutators<
   S extends Schema,
-  T extends MutatorDefinitions<S, TContext>,
->(
+  TContext,
+>(): <T extends MutatorDefinitions<S, TContext>>(
   defs: T,
 ) => MutatorRegistry<S, TContext, T> {
-  return <S extends Schema, T extends MutatorDefinitions<S, TContext>>(
+  return <T extends MutatorDefinitions<S, TContext>>(
     defs: T,
   ): MutatorRegistry<S, TContext, T> => defineMutatorsImpl(defs, '');
 }

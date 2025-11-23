@@ -2,7 +2,7 @@ import type {LogLevel} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {MutatorRegistry} from '../../../zql/src/mutate/define-mutator.ts';
+import type {MutatorRegistryBase} from '../../../zql/src/mutate/define-mutator.ts';
 import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
 import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 
@@ -11,8 +11,7 @@ import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
  */
 export interface ZeroOptions<
   S extends Schema,
-  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  MD extends MutatorRegistry<S, Context, any> | undefined = undefined,
+  MD extends MutatorRegistryBase<S, Context> | undefined = undefined,
   Context = unknown,
   QD extends QueryDefinitions<S, Context> | undefined = undefined,
 > {
@@ -299,8 +298,7 @@ export interface ZeroOptions<
  */
 export interface ZeroAdvancedOptions<
   S extends Schema,
-  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  MD extends MutatorRegistry<S, Context, any> | undefined,
+  MD extends MutatorRegistryBase<S, Context> | undefined,
   Context,
   QD extends QueryDefinitions<S, Context> | undefined,
 > extends ZeroOptions<S, MD, Context, QD> {}

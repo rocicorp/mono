@@ -1,6 +1,6 @@
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Format, ViewFactory} from '../../../zql/src/ivm/view.ts';
-import type {MutatorRegistry} from '../../../zql/src/mutate/define-mutator.ts';
+import type {MutatorRegistryBase} from '../../../zql/src/mutate/define-mutator.ts';
 import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
@@ -26,7 +26,7 @@ const zeroDelegates = new WeakMap<
 export function registerZeroDelegate<
   TSchema extends Schema,
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  MD extends MutatorRegistry<TSchema, TContext, any> | undefined,
+  MD extends MutatorRegistryBase<TSchema, TContext> | undefined,
   TContext,
   QD extends QueryDefinitions<TSchema, TContext> | undefined,
 >(zero: Zero<TSchema, MD, TContext, QD>, delegate: QueryDelegate): void {
@@ -36,7 +36,7 @@ export function registerZeroDelegate<
 function mustGetDelegate<
   TSchema extends Schema,
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  MD extends MutatorRegistry<TSchema, TContext, any> | undefined,
+  MD extends MutatorRegistryBase<TSchema, TContext> | undefined,
   TContext,
   QD extends QueryDefinitions<TSchema, TContext> | undefined,
 >(zero: Zero<TSchema, MD, TContext, QD>): QueryDelegate {
@@ -98,7 +98,7 @@ export interface BindingsForZero<TSchema extends Schema> {
 export function bindingsForZero<
   TSchema extends Schema,
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  MD extends MutatorRegistry<TSchema, TContext, any> | undefined,
+  MD extends MutatorRegistryBase<TSchema, TContext> | undefined,
   TContext,
   QD extends QueryDefinitions<TSchema, TContext> | undefined,
 >(zero: Zero<TSchema, MD, TContext, QD>): BindingsForZero<TSchema> {

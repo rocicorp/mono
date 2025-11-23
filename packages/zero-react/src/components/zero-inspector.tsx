@@ -1,7 +1,7 @@
 import {lazy, Suspense, useState} from 'react';
 import type {Zero} from '../../../zero-client/src/client/zero.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {MutatorRegistry} from '../../../zql/src/mutate/define-mutator.ts';
+import type {MutatorRegistryBase} from '../../../zql/src/mutate/define-mutator.ts';
 import {MarkIcon} from './mark-icon.tsx';
 
 const Inspector = lazy(() => import('./inspector.tsx'));
@@ -9,7 +9,7 @@ const Inspector = lazy(() => import('./inspector.tsx'));
 export function ZeroInspector<
   S extends Schema,
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  MD extends MutatorRegistry<S, unknown, any> | undefined = undefined,
+  MD extends MutatorRegistryBase<S, unknown> | undefined = undefined,
 >({zero}: {zero: Zero<S, MD>}): JSX.Element {
   const [show, setShow] = useState(false);
   return show ? (

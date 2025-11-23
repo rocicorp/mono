@@ -8,7 +8,7 @@ import {
   type BindingsForZero,
 } from '../../zero-client/src/client/bindings.ts';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
-import type {MutatorRegistry} from '../../zql/src/mutate/define-mutator.ts';
+import type {MutatorRegistryBase} from '../../zql/src/mutate/define-mutator.ts';
 import type {
   QueryErrorDetails,
   QueryResultDetails,
@@ -77,7 +77,7 @@ export function useQuery<
   }
 
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  const zero = useZero<TSchema, MutatorRegistry<TSchema, TContext, any> | undefined, TContext>();
+  const zero = useZero<TSchema, MutatorRegistryBase<TSchema, TContext> | undefined, TContext>();
   const resolvedQuery = typeof query === 'function' ? query(zero.context) : query;
   const view = viewStore.getView(zero, resolvedQuery, enabled, ttl);
   // https://react.dev/reference/react/useSyncExternalStore
@@ -111,7 +111,7 @@ export function useSuspenseQuery<
   }
 
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  const zero = useZero<TSchema, MutatorRegistry<TSchema, TContext, any> | undefined, TContext>();
+  const zero = useZero<TSchema, MutatorRegistryBase<TSchema, TContext> | undefined, TContext>();
   const resolvedQuery = typeof query === 'function' ? query(zero.context) : query;
   const view = viewStore.getView(zero, resolvedQuery, enabled, ttl);
   // https://react.dev/reference/react/useSyncExternalStore
@@ -310,7 +310,7 @@ export class ViewStore {
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    MD extends MutatorRegistry<TSchema, TContext, any> | undefined,
+    MD extends MutatorRegistryBase<TSchema, TContext> | undefined,
     TContext,
   >(
     zero: Zero<TSchema, MD, TContext>,
@@ -391,7 +391,7 @@ class ViewWrapper<
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  MD extends MutatorRegistry<TSchema, TContext, any> | undefined,
+  MD extends MutatorRegistryBase<TSchema, TContext> | undefined,
   TContext,
 > {
   #view: TypedView<HumanReadable<TReturn>> | undefined;

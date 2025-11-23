@@ -40,7 +40,7 @@ import type {
 } from './connection-manager.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import type {LogOptions} from './log-options.ts';
-import type {MutatorRegistry} from '../../../zql/src/mutate/define-mutator.ts';
+import type {MutatorRegistryBase} from '../../../zql/src/mutate/define-mutator.ts';
 import type {ZeroOptions} from './options.ts';
 import {
   Zero,
@@ -103,7 +103,7 @@ export class MockSocket extends EventTarget {
 export class TestZero<
   const S extends Schema,
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  MD extends MutatorRegistry<S, Context, any> | undefined = undefined,
+  MD extends MutatorRegistryBase<S, Context> | undefined = undefined,
   Context = unknown,
   QD extends QueryDefinitions<S, Context> | undefined = undefined,
 > extends Zero<S, MD, Context, QD> {
@@ -319,7 +319,7 @@ let testZeroCounter = 0;
 export function zeroForTest<
   const S extends Schema,
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  MD extends MutatorRegistry<S, Context, any> | undefined = undefined,
+  MD extends MutatorRegistryBase<S, Context> | undefined = undefined,
   Context = unknown,
   QD extends QueryDefinitions<S, Context> | undefined = undefined,
 >(

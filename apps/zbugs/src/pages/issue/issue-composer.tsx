@@ -1,5 +1,6 @@
 import {nanoid} from 'nanoid';
 import {useCallback, useEffect, useRef, useState} from 'react';
+import {mutators} from '../../../shared/mutators.ts';
 import {Button} from '../../components/button.tsx';
 import {GigabugsPromo} from '../../components/gigabugs-promo.tsx';
 import {
@@ -61,14 +62,14 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
   const handleSubmit = async () => {
     const id = nanoid();
 
-    const result = z.mutate.issue.create({
+    const result = z.mutate(mutators.issue.create({
       id,
       projectID,
       title,
       description: description ?? '',
       created: Date.now(),
       modified: Date.now(),
-    });
+    }));
 
     // we wait for the client result to redirect to the issue page
     const clientResult = await result.client;

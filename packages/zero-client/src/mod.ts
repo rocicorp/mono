@@ -138,6 +138,7 @@ export type {
   MutatorDefinition,
   MutatorDefinitions,
   MutatorRegistry,
+  MutatorRegistryBase,
   MutatorThunk,
 } from '../../zql/src/mutate/define-mutator.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';

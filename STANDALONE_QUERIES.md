@@ -97,6 +97,8 @@ If this direction is accepted, we need to:
 
 7. **Migration guide** - Document how to migrate from `z.query.foo()` to `queries.foo()`
 
+8. **Mutator registration validation** - Add runtime or type check that mutators passed to `z.mutate()` were registered with Zero ahead of time
+
 ## Files Changed
 
 ### Core Implementation

@@ -123,7 +123,7 @@ import {
 } from './crud.ts';
 import type {MutatorResult, MutatorThunk} from './custom.ts';
 import {makeReplicacheMutatorFromThunk} from './custom.ts';
-import type {MutatorRegistry} from '../../../zql/src/mutate/define-mutator.ts';
+import type {MutatorRegistryBase} from '../../../zql/src/mutate/define-mutator.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
 import {shouldEnableAnalytics} from './enable-analytics.ts';
 import {
@@ -247,7 +247,7 @@ interface TestZero {
 function asTestZero<
   S extends Schema,
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  MD extends MutatorRegistry<S, Context, any> | undefined,
+  MD extends MutatorRegistryBase<S, Context> | undefined,
   Context,
   QD extends QueryDefinitions<S, Context> | undefined,
 >(z: Zero<S, MD, Context, QD>): TestZero {
@@ -433,7 +433,7 @@ function registerQueries<
 export class Zero<
   const S extends Schema,
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  MD extends MutatorRegistry<S, TContext, any> | undefined = undefined,
+  MD extends MutatorRegistryBase<S, TContext> | undefined = undefined,
   TContext = unknown,
   QD extends QueryDefinitions<S, TContext> | undefined = undefined,
 > {
@@ -675,7 +675,7 @@ export class Zero<
       // Recursively process mutator definitions (new format only)
       const processMutators = (
         // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-        mutators: MutatorRegistry<S, TContext, any>,
+        mutators: MutatorRegistryBase<S, TContext>,
         namespacePrefix: string[] = [],
       ) => {
         for (const [key, value] of Object.entries(mutators)) {
