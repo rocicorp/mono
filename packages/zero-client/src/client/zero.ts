@@ -25,7 +25,6 @@ import {
   getBrowserGlobal,
   mustGetBrowserGlobal,
 } from '../../../shared/src/browser-env.ts';
-import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
 import {getErrorMessage} from '../../../shared/src/error.ts';
 import {h64} from '../../../shared/src/hash.ts';
@@ -122,14 +121,9 @@ import {
   makeCRUDMutate,
   makeCRUDMutator,
 } from './crud.ts';
-import type {
-  CustomMutatorDefs,
-  CustomMutatorImpl,
-  MakeCustomMutatorInterfaces,
-  MutatorResult,
-  MutatorThunk,
-} from './custom.ts';
-import {makeReplicacheMutator, makeReplicacheMutatorFromThunk} from './custom.ts';
+import type {MutatorResult, MutatorThunk} from './custom.ts';
+import {makeReplicacheMutatorFromThunk} from './custom.ts';
+import type {MutatorRegistry} from '../../../zql/src/mutate/define-mutator.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
 import {shouldEnableAnalytics} from './enable-analytics.ts';
 import {
@@ -252,7 +246,8 @@ interface TestZero {
 
 function asTestZero<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined,
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  MD extends MutatorRegistry<S, Context, any> | undefined,
   Context,
   QD extends QueryDefinitions<S, Context> | undefined,
 >(z: Zero<S, MD, Context, QD>): TestZero {
@@ -437,7 +432,8 @@ function registerQueries<
 
 export class Zero<
   const S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  MD extends MutatorRegistry<S, TContext, any> | undefined = undefined,
   TContext = unknown,
   QD extends QueryDefinitions<S, TContext> | undefined = undefined,
 > {
@@ -459,7 +455,6 @@ export class Zero<
   readonly #clientToServer: NameMapper;
   readonly #deleteClientsManager: DeleteClientsManager;
   readonly #mutationTracker: MutationTracker;
-  #mutatorProxy: MutatorProxy | undefined;
 
   /**
    * The queries we sent when inside the sec-protocol header when establishing a connection.
@@ -677,49 +672,24 @@ export class Zero<
     const contextHolder = {context: options.context as TContext};
 
     if (options.mutators) {
-      // Check if this is new format (MutatorRegistry) by testing first leaf
-      const isNewFormat = (mutators: object): boolean => {
-        for (const value of Object.values(mutators)) {
-          if (typeof value === 'function') {
-            // New format functions take 1 arg (or 0 with optional) and return thunk with mutatorName
-            // Old format functions take 2 args (tx, args)
-            // We check function.length, but also the return value for certainty
-            return value.length <= 1;
-          } else if (typeof value === 'object' && value !== null) {
-            return isNewFormat(value);
-          }
-        }
-        return false;
-      };
-
-      const newFormat = isNewFormat(options.mutators);
-
-      // Recursively process mutator definitions at arbitrary depth
+      // Recursively process mutator definitions (new format only)
       const processMutators = (
-        mutators: CustomMutatorDefs,
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+        mutators: MutatorRegistry<S, TContext, any>,
         namespacePrefix: string[] = [],
       ) => {
         for (const [key, value] of Object.entries(mutators)) {
           if (typeof value === 'function') {
             const fullKey = customMutatorKey(...namespacePrefix, key);
             assertUnique(fullKey);
-            if (newFormat) {
-              // New format: function returns a thunk
-              replicacheMutators[fullKey] = makeReplicacheMutatorFromThunk(
-                lc,
-                // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-                value as unknown as (args: any) => MutatorThunk<S, TContext>,
-                schema,
-                contextHolder,
-              ) as () => MutatorReturn;
-            } else {
-              // Old format: function is the mutator itself
-              replicacheMutators[fullKey] = makeReplicacheMutator(
-                lc,
-                value as CustomMutatorImpl<S>,
-                schema,
-              ) as () => MutatorReturn;
-            }
+            // New format: function returns a thunk
+            replicacheMutators[fullKey] = makeReplicacheMutatorFromThunk(
+              lc,
+              // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+              value as unknown as (args: any) => MutatorThunk<S, TContext>,
+              schema,
+              contextHolder,
+            ) as () => MutatorReturn;
           } else if (typeof value === 'object') {
             processMutators(value, [...namespacePrefix, key]);
           } else {
@@ -865,46 +835,41 @@ export class Zero<
     this.#rep.onClientStateNotFound = onClientStateNotFoundCallback;
 
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    const {mutate, mutateBatch} = makeCRUDMutate<S>(schema, rep.mutate) as any;
+    const {mutate: crudMutate, mutateBatch} = makeCRUDMutate<S>(
+      schema,
+      rep.mutate,
+    ) as any;
 
     const mutatorProxy = new MutatorProxy(
       this.#connectionManager,
       this.#mutationTracker,
     );
-    this.#mutatorProxy = mutatorProxy;
 
-    if (options.mutators) {
-      // Recursively expose mutators on the mutate property
-      const exposeMutators = (
-        mutators: CustomMutatorDefs,
-        target: Record<string, unknown>,
-        namespacePrefix: string[] = [],
-      ) => {
-        for (const [key, value] of Object.entries(mutators)) {
-          if (typeof value === 'function') {
-            const fullKey = customMutatorKey(...namespacePrefix, key);
-            target[key] = mutatorProxy.wrapCustomMutator(
-              must(rep.mutate[fullKey]) as unknown as (
-                ...args: unknown[]
-              ) => MutatorResult,
-            );
-          } else if (typeof value === 'object' && value !== null) {
-            let existing = target[key];
-            if (existing === undefined) {
-              existing = {};
-              target[key] = existing;
-            }
-            exposeMutators(value, existing as Record<string, unknown>, [
-              ...namespacePrefix,
-              key,
-            ]);
-          }
-        }
-      };
-      exposeMutators(options.mutators, mutate);
-    }
+    // Create callable mutate that also has CRUD properties
+    const callableMutate = (
+      thunk: MutatorThunk<S, TContext>,
+    ): MutatorResult => {
+      const {mutatorName, mutatorArgs} = thunk;
+      const repMutator = rep.mutate[mutatorName];
+      if (!repMutator) {
+        throw new Error(
+          `Mutator "${mutatorName}" not found. Did you pass it to the Zero constructor?`,
+        );
+      }
+      const wrappedMutator = mutatorProxy.wrapCustomMutator(
+        repMutator as unknown as (...args: [] | [ReadonlyJSONValue]) => {
+          client: Promise<unknown>;
+          server: Promise<unknown>;
+        },
+      );
+      return wrappedMutator(mutatorArgs[0] as ReadonlyJSONValue);
+    };
 
-    this.mutate = mutate;
+    // Assign CRUD properties to the callable function
+    Object.assign(callableMutate, crudMutate);
+
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    this.mutate = callableMutate as any;
     this.mutateBatch = mutateBatch;
 
     this.#queryManager = new QueryManager(
@@ -1067,7 +1032,10 @@ export class Zero<
   preload<
     TTable extends keyof S['tables'] & string,
     TReturn extends PullRow<TTable, S>,
-  >(query: (ctx: TContext) => Query<S, TTable, TReturn>, options?: PreloadOptions) {
+  >(
+    query: (ctx: TContext) => Query<S, TTable, TReturn>,
+    options?: PreloadOptions,
+  ) {
     const resolvedQuery = query(this.context);
     return this.#zeroContext.preload(resolvedQuery, options);
   }
@@ -1093,10 +1061,13 @@ export class Zero<
    * ```
    */
   run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn> | ((ctx: TContext) => Query<S, TTable, TReturn>),
+    query:
+      | Query<S, TTable, TReturn>
+      | ((ctx: TContext) => Query<S, TTable, TReturn>),
     runOptions?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
-    const resolvedQuery = typeof query === 'function' ? query(this.context) : query;
+    const resolvedQuery =
+      typeof query === 'function' ? query(this.context) : query;
     return this.#zeroContext.run(resolvedQuery, runOptions);
   }
 
@@ -1129,20 +1100,27 @@ export class Zero<
    * ```
    */
   materialize<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn> | ((ctx: TContext) => Query<S, TTable, TReturn>),
+    query:
+      | Query<S, TTable, TReturn>
+      | ((ctx: TContext) => Query<S, TTable, TReturn>),
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn> | ((ctx: TContext) => Query<S, TTable, TReturn>),
+    query:
+      | Query<S, TTable, TReturn>
+      | ((ctx: TContext) => Query<S, TTable, TReturn>),
     factory: ViewFactory<S, TTable, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn> | ((ctx: TContext) => Query<S, TTable, TReturn>),
+    query:
+      | Query<S, TTable, TReturn>
+      | ((ctx: TContext) => Query<S, TTable, TReturn>),
     factoryOrOptions?: ViewFactory<S, TTable, TReturn, T> | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
-    const resolvedQuery = typeof query === 'function' ? query(this.context) : query;
+    const resolvedQuery =
+      typeof query === 'function' ? query(this.context) : query;
     let factory;
     let options;
     if (typeof factoryOrOptions === 'function') {
@@ -1212,13 +1190,19 @@ export class Zero<
   }
 
   /**
-   * Provides simple "CRUD" mutations for the tables in the schema.
+   * Provides mutations for the database.
    *
-   * Each table has `create`, `set`, `update`, and `delete` methods.
+   * Can be called as a function with a mutator thunk:
+   * ```ts
+   * await zero.mutate(mutators.issue.create({id: '1', title: 'Hello'}));
+   * ```
+   *
+   * Also provides simple "CRUD" mutations for the tables in the schema
+   * (when `enableLegacyMutators` is not false):
    *
    * ```ts
-   * await zero.mutate.issue.create({id: '1', title: 'First issue', priority: 'high'});
-   * await zero.mutate.comment.create({id: '1', text: 'First comment', issueID: '1'});
+   * await zero.mutate.issue.insert({id: '1', title: 'First issue', priority: 'high'});
+   * await zero.mutate.comment.insert({id: '1', text: 'First comment', issueID: '1'});
    * ```
    *
    * The `update` methods support partials. Unspecified or `undefined` fields
@@ -1229,11 +1213,8 @@ export class Zero<
    * await zero.mutate.issue.update({id: '1', title: 'Updated title'});
    * ```
    */
-  readonly mutate: MD extends CustomMutatorDefs
-    ? S['enableLegacyMutators'] extends false
-      ? MakeCustomMutatorInterfaces<S, MD, TContext>
-      : DeepMerge<DBMutator<S>, MakeCustomMutatorInterfaces<S, MD, TContext>>
-    : DBMutator<S>;
+  readonly mutate: ((thunk: MutatorThunk<S, TContext>) => MutatorResult) &
+    (S['enableLegacyMutators'] extends false ? {} : DBMutator<S>);
 
   /**
    * Provides a way to batch multiple CRUD mutations together:
@@ -1253,42 +1234,6 @@ export class Zero<
    * will throw an error.
    */
   readonly mutateBatch: BatchMutator<S>;
-
-  /**
-   * Calls a mutator thunk created from `defineMutators`.
-   *
-   * This is the new way to call custom mutators when using the standalone
-   * mutator definition pattern.
-   *
-   * @example
-   * ```ts
-   * // Define mutators
-   * const mutators = defineMutators<AuthData>()({
-   *   issue: {
-   *     create: defineMutator(schema, async (tx, {args, ctx}) => {
-   *       await tx.mutate.issue.insert(args);
-   *     }),
-   *   },
-   * });
-   *
-   * // Call mutator
-   * await z.callMutator(mutators.issue.create({id: '1', title: 'Hello'}));
-   * ```
-   */
-  callMutator(thunk: MutatorThunk<S, TContext>): MutatorResult {
-    const {mutatorName, mutatorArgs} = thunk;
-    const repMutator = this.#rep.mutate[mutatorName];
-    if (!repMutator) {
-      throw new Error(`Mutator "${mutatorName}" not found. Did you pass it to the Zero constructor?`);
-    }
-    const wrappedMutator = must(this.#mutatorProxy).wrapCustomMutator(
-      repMutator as unknown as (...args: [] | [ReadonlyJSONValue]) => {
-        client: Promise<unknown>;
-        server: Promise<unknown>;
-      },
-    );
-    return wrappedMutator(mutatorArgs[0] as ReadonlyJSONValue);
-  }
 
   /**
    * The connection API for managing Zero's connection lifecycle.

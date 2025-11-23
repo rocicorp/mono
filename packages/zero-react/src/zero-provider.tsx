@@ -8,17 +8,18 @@ import {
   type ReactNode,
 } from 'react';
 import {stringCompare} from '../../shared/src/string-compare.ts';
-import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
+import type {MutatorRegistry} from '../../zql/src/mutate/define-mutator.ts';
 import type {QueryDefinitions} from '../../zql/src/query/query-definitions.ts';
 
 export const ZeroContext = createContext<unknown | undefined>(undefined);
 
 export function useZero<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  MD extends MutatorRegistry<S, Context, any> | undefined = undefined,
   Context = unknown,
   QD extends QueryDefinitions<S, Context> | undefined = undefined,
 >(): Zero<S, MD, Context, QD> {
@@ -31,7 +32,8 @@ export function useZero<
 
 export function createUseZero<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  MD extends MutatorRegistry<S, Context, any> | undefined = undefined,
   Context = unknown,
   QD extends QueryDefinitions<S, Context> | undefined = undefined,
 >() {
@@ -40,7 +42,8 @@ export function createUseZero<
 
 export type ZeroProviderProps<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined,
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  MD extends MutatorRegistry<S, Context, any> | undefined,
   Context,
   QD extends QueryDefinitions<S, Context> | undefined,
 > = (ZeroOptions<S, MD, Context, QD> | {zero: Zero<S, MD, Context, QD>}) & {
@@ -52,7 +55,8 @@ const NO_AUTH_SET = Symbol();
 
 export function ZeroProvider<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined,
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  MD extends MutatorRegistry<S, Context, any> | undefined,
   Context,
   QD extends QueryDefinitions<S, Context> | undefined,
 >({children, init, ...props}: ZeroProviderProps<S, MD, Context, QD>) {
