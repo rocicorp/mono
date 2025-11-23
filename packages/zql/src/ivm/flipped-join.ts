@@ -189,10 +189,10 @@ export class FlippedJoin implements Input {
         const iter = parentIterators[i];
         let result = iter.next();
         // yield yields when initializing
-        // while (!result.done && result.value === 'yield') {
-        //   yield result.value;
-        //   result = iter.next();
-        // }
+        while (!result.done && result.value === 'yield') {
+          yield result.value;
+          result = iter.next();
+        }
         nextParentNodes[i] = result.done ? null : (result.value as Node);
       }
 
