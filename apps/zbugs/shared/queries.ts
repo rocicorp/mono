@@ -63,9 +63,11 @@ export const queries = defineQueries({
     }),
 
     ({args: {projectName}}) =>
-      builder.label.whereExists('project', q =>
-        q.where('lowerCaseName', projectName.toLocaleLowerCase()),
-      ),
+      builder.label
+        .whereExists('project', q =>
+          q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+        )
+        .orderBy('name', 'asc'),
   ),
 
   issuePreloadV2: defineQuery(

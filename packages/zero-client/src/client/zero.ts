@@ -81,10 +81,7 @@ import {
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
-import {
-  wrapCustomQuery,
-  type QueryThunk,
-} from '../../../zql/src/query/define-query.ts';
+import {wrapCustomQuery} from '../../../zql/src/query/define-query.ts';
 import {
   type ClientMetricMap,
   type MetricMap,

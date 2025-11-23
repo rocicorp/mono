@@ -238,7 +238,9 @@ export type QueryRegistry<
     // oxlint-disable-next-line no-explicit-any
     any
   >
-    ? (args: TInput) => (ctx: TContext) => Query<S, string, TReturn>
+    ? TInput extends undefined
+      ? (args?: TInput) => (ctx: TContext) => Query<S, string, TReturn>
+      : (args: TInput) => (ctx: TContext) => Query<S, string, TReturn>
     : T[K] extends QueryDefinitions<S, TContext>
       ? QueryRegistry<S, TContext, T[K]>
       : never;
