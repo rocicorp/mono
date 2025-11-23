@@ -91,9 +91,11 @@ If this direction is accepted, we need to:
 
 4. **Clean up exports** - Remove now-unnecessary exports related to constructor-based queries
 
-5. **Documentation** - Update docs to reflect new pattern
+5. **Move to correct package** - `defineQuery`, `defineMutator`, and related code belong in `zero-client`, not `zql`. ZQL should just be about the query language itself.
 
-6. **Migration guide** - Document how to migrate from `z.query.foo()` to `queries.foo()`
+6. **Documentation** - Update docs to reflect new pattern
+
+7. **Migration guide** - Document how to migrate from `z.query.foo()` to `queries.foo()`
 
 ## Files Changed
 

@@ -1,4 +1,10 @@
-import type {Transaction, UpdateValue} from '@rocicorp/zero';
+import {
+  defineMutators,
+  defineMutatorWithContextType,
+  type Transaction,
+  type UpdateValue,
+} from '@rocicorp/zero';
+import * as z from 'zod/mini';
 import {
   assertIsCreatorOrAdmin,
   assertIsLoggedIn,
@@ -14,68 +20,153 @@ function projectIDWithDefault(projectID: string | undefined): string {
   return projectID ?? ZERO_PROJECT_ID;
 }
 
-export type AddEmojiArgs = {
-  id: string;
-  unicode: string;
-  annotation: string;
-  subjectID: string;
-  created: number;
-};
-
-export type CreateIssueArgs = {
-  id: string;
-  title: string;
-  description?: string | undefined;
-  created: number;
-  modified: number;
-  projectID?: string | undefined;
-};
-
-export type AddCommentArgs = {
-  id: string;
-  issueID: string;
-  body: string;
-  created: number;
-};
-
 export type NotificationType = 'subscribe' | 'unsubscribe';
 
-export type MutatorTx = Transaction<typeof schema>;
+export type MutatorTx = Transaction<typeof schema, AuthData | undefined>;
 
-export function createMutators(authData: AuthData | undefined) {
-  return {
-    issue: {
-      async create(
-        tx: MutatorTx,
-        {id, title, description, created, modified, projectID}: CreateIssueArgs,
-      ) {
+const defineMutator = defineMutatorWithContextType<AuthData | undefined>();
+
+// Helper functions that need tx and authData
+// Use MutatorTx and cast tx in the mutator callbacks
+async function addEmoji(
+  tx: MutatorTx,
+  authData: AuthData | undefined,
+  subjectType: 'issue' | 'comment',
+  {
+    id,
+    unicode,
+    annotation,
+    subjectID,
+    created,
+  }: {
+    id: string;
+    unicode: string;
+    annotation: string;
+    subjectID: string;
+    created: number;
+  },
+) {
+  assertIsLoggedIn(authData);
+  const creatorID = authData.sub;
+
+  if (subjectType === 'issue') {
+    await assertUserCanSeeIssue(tx, creatorID, subjectID);
+  } else {
+    await assertUserCanSeeComment(tx, creatorID, subjectID);
+  }
+
+  await tx.mutate.emoji.insert({
+    id,
+    value: unicode,
+    annotation,
+    subjectID,
+    creatorID,
+    created,
+  });
+
+  // subscribe to notifications if the user emojis the issue itself
+  if (subjectType === 'issue') {
+    await updateIssueNotification(tx, authData, {
+      userID: creatorID,
+      issueID: subjectID,
+      subscribed: 'subscribe',
+      created,
+    });
+  }
+}
+
+async function updateIssueNotification(
+  tx: MutatorTx,
+  _authData: AuthData | undefined,
+  {
+    userID,
+    issueID,
+    subscribed,
+    created,
+    forceUpdate = false,
+  }: {
+    userID: string;
+    issueID: string;
+    subscribed: NotificationType;
+    created: number;
+    forceUpdate?: boolean;
+  },
+) {
+  await assertUserCanSeeIssue(tx, userID, issueID);
+
+  const existingNotification = await tx.run(
+    builder.issueNotifications
+      .where('userID', userID)
+      .where('issueID', issueID)
+      .one(),
+  );
+
+  // if the user is subscribing to the issue, and they don't already have a preference
+  // or the forceUpdate flag is set, we upsert the notification.
+  if (subscribed === 'subscribe' && (!existingNotification || forceUpdate)) {
+    await tx.mutate.issueNotifications.upsert({
+      userID,
+      issueID,
+      subscribed: true,
+      created,
+    });
+  } else if (subscribed === 'unsubscribe') {
+    await tx.mutate.issueNotifications.upsert({
+      userID,
+      issueID,
+      subscribed: false,
+      created,
+    });
+  }
+}
+
+export const mutators = defineMutators<AuthData | undefined>()({
+  issue: {
+    create: defineMutator(
+      z.object({
+        id: z.string(),
+        title: z.string(),
+        description: z.optional(z.string()),
+        created: z.number(),
+        modified: z.number(),
+        projectID: z.optional(z.string()),
+      }),
+      async (tx, {args, ctx: authData}) => {
         assertIsLoggedIn(authData);
         const creatorID = authData.sub;
         await tx.mutate.issue.insert({
-          id,
-          projectID: projectIDWithDefault(projectID),
-          title,
-          description: description ?? '',
-          created,
+          id: args.id,
+          projectID: projectIDWithDefault(args.projectID),
+          title: args.title,
+          description: args.description ?? '',
+          created: args.created,
           creatorID,
-          modified,
+          modified: args.modified,
           open: true,
           visibility: 'public',
         });
 
         // subscribe to notifications if the user creates the issue
-        await updateIssueNotification(tx, {
+        await updateIssueNotification(tx as unknown as MutatorTx, authData, {
           userID: creatorID,
-          issueID: id,
+          issueID: args.id,
           subscribed: 'subscribe',
-          created,
+          created: args.created,
         });
       },
+    ),
 
-      async update(
-        tx: MutatorTx,
-        change: UpdateValue<typeof schema.tables.issue> & {modified: number},
-      ) {
+    update: defineMutator(
+      z.object({
+        id: z.string(),
+        title: z.optional(z.string()),
+        description: z.optional(z.string()),
+        open: z.optional(z.boolean()),
+        modified: z.number(),
+        assigneeID: z.optional(z.nullable(z.string())),
+        visibility: z.optional(z.enum(['public', 'private'])),
+      }),
+      async (tx, {args: change, ctx: authData}) => {
         const oldIssue = await tx.run(
           builder.issue.where('id', change.id).one(),
         );
@@ -88,8 +179,10 @@ export function createMutators(authData: AuthData | undefined) {
           );
         }
 
-        await assertIsCreatorOrAdmin(tx, authData, builder.issue, change.id);
-        await tx.mutate.issue.update(change);
+        await assertIsCreatorOrAdmin(tx as unknown as MutatorTx, authData, builder.issue, change.id);
+        await tx.mutate.issue.update(
+          change as UpdateValue<typeof schema.tables.issue>,
+        );
 
         const isAssigneeChange =
           change.assigneeID !== undefined &&
@@ -100,7 +193,7 @@ export function createMutators(authData: AuthData | undefined) {
 
         // subscribe to notifications if the user is assigned to the issue
         if (change.assigneeID) {
-          await updateIssueNotification(tx, {
+          await updateIssueNotification(tx as unknown as MutatorTx, authData, {
             userID: change.assigneeID,
             issueID: change.id,
             subscribed: 'subscribe',
@@ -110,7 +203,7 @@ export function createMutators(authData: AuthData | undefined) {
 
         // unsubscribe from notifications if the user is no longer assigned to the issue
         if (previousAssigneeID) {
-          await updateIssueNotification(tx, {
+          await updateIssueNotification(tx as unknown as MutatorTx, authData, {
             userID: previousAssigneeID,
             issueID: change.id,
             subscribed: 'unsubscribe',
@@ -118,252 +211,236 @@ export function createMutators(authData: AuthData | undefined) {
           });
         }
       },
+    ),
 
-      async delete(tx: MutatorTx, id: string) {
-        await assertIsCreatorOrAdmin(tx, authData, builder.issue, id);
-        await tx.mutate.issue.delete({id});
-      },
+    delete: defineMutator(z.string(), async (tx, {args: id, ctx: authData}) => {
+      await assertIsCreatorOrAdmin(tx as unknown as MutatorTx, authData, builder.issue, id);
+      await tx.mutate.issue.delete({id});
+    }),
 
-      async addLabel(
-        tx: MutatorTx,
-        {
-          issueID,
-          labelID,
-          projectID,
-        }: {issueID: string; labelID: string; projectID?: string | undefined},
-      ) {
-        await assertIsCreatorOrAdmin(tx, authData, builder.issue, issueID);
+    addLabel: defineMutator(
+      z.object({
+        issueID: z.string(),
+        labelID: z.string(),
+        projectID: z.optional(z.string()),
+      }),
+      async (tx, {args, ctx: authData}) => {
+        await assertIsCreatorOrAdmin(tx as unknown as MutatorTx, authData, builder.issue, args.issueID);
         await tx.mutate.issueLabel.insert({
-          issueID,
-          labelID,
-          projectID: projectIDWithDefault(projectID),
+          issueID: args.issueID,
+          labelID: args.labelID,
+          projectID: projectIDWithDefault(args.projectID),
         });
       },
+    ),
 
-      async removeLabel(
-        tx: MutatorTx,
-        {issueID, labelID}: {issueID: string; labelID: string},
-      ) {
-        await assertIsCreatorOrAdmin(tx, authData, builder.issue, issueID);
-        await tx.mutate.issueLabel.delete({issueID, labelID});
+    removeLabel: defineMutator(
+      z.object({
+        issueID: z.string(),
+        labelID: z.string(),
+      }),
+      async (tx, {args, ctx: authData}) => {
+        await assertIsCreatorOrAdmin(tx as unknown as MutatorTx, authData, builder.issue, args.issueID);
+        await tx.mutate.issueLabel.delete({
+          issueID: args.issueID,
+          labelID: args.labelID,
+        });
       },
-    },
+    ),
+  },
 
-    notification: {
-      async update(
-        tx: MutatorTx,
-        {
-          issueID,
-          subscribed,
-          created,
-        }: {issueID: string; subscribed: NotificationType; created: number},
-      ) {
+  notification: {
+    update: defineMutator(
+      z.object({
+        issueID: z.string(),
+        subscribed: z.enum(['subscribe', 'unsubscribe']),
+        created: z.number(),
+      }),
+      async (tx, {args, ctx: authData}) => {
         assertIsLoggedIn(authData);
         const userID = authData.sub;
-        await updateIssueNotification(tx, {
+        await updateIssueNotification(tx as unknown as MutatorTx, authData, {
           userID,
-          issueID,
-          subscribed,
-          created,
+          issueID: args.issueID,
+          subscribed: args.subscribed,
+          created: args.created,
           forceUpdate: true,
         });
       },
-    },
+    ),
+  },
 
-    emoji: {
-      async addToIssue(tx: MutatorTx, args: AddEmojiArgs) {
-        await addEmoji(tx, 'issue', args);
+  emoji: {
+    addToIssue: defineMutator(
+      z.object({
+        id: z.string(),
+        unicode: z.string(),
+        annotation: z.string(),
+        subjectID: z.string(),
+        created: z.number(),
+      }),
+      async (tx, {args, ctx: authData}) => {
+        await addEmoji(tx as unknown as MutatorTx, authData, 'issue', args);
       },
+    ),
 
-      async addToComment(tx: MutatorTx, args: AddEmojiArgs) {
-        await addEmoji(tx, 'comment', args);
+    addToComment: defineMutator(
+      z.object({
+        id: z.string(),
+        unicode: z.string(),
+        annotation: z.string(),
+        subjectID: z.string(),
+        created: z.number(),
+      }),
+      async (tx, {args, ctx: authData}) => {
+        await addEmoji(tx as unknown as MutatorTx, authData, 'comment', args);
       },
+    ),
 
-      async remove(tx: MutatorTx, id: string) {
-        await assertIsCreatorOrAdmin(tx, authData, builder.emoji, id);
-        await tx.mutate.emoji.delete({id});
-      },
-    },
+    remove: defineMutator(z.string(), async (tx, {args: id, ctx: authData}) => {
+      await assertIsCreatorOrAdmin(tx as unknown as MutatorTx, authData, builder.emoji, id);
+      await tx.mutate.emoji.delete({id});
+    }),
+  },
 
-    comment: {
-      async add(tx: MutatorTx, {id, issueID, body, created}: AddCommentArgs) {
+  comment: {
+    add: defineMutator(
+      z.object({
+        id: z.string(),
+        issueID: z.string(),
+        body: z.string(),
+        created: z.number(),
+      }),
+      async (tx, {args, ctx: authData}) => {
         assertIsLoggedIn(authData);
         const creatorID = authData.sub;
 
-        await assertUserCanSeeIssue(tx, creatorID, issueID);
+        await assertUserCanSeeIssue(tx as unknown as MutatorTx, creatorID, args.issueID);
 
-        await tx.mutate.comment.insert({id, issueID, creatorID, body, created});
+        await tx.mutate.comment.insert({
+          id: args.id,
+          issueID: args.issueID,
+          creatorID,
+          body: args.body,
+          created: args.created,
+        });
 
-        await updateIssueNotification(tx, {
+        await updateIssueNotification(tx as unknown as MutatorTx, authData, {
           userID: creatorID,
-          issueID,
+          issueID: args.issueID,
           subscribed: 'subscribe',
-          created,
+          created: args.created,
         });
       },
+    ),
 
-      async edit(tx: MutatorTx, {id, body}: {id: string; body: string}) {
-        await assertIsCreatorOrAdmin(tx, authData, builder.comment, id);
-        await tx.mutate.comment.update({id, body});
+    edit: defineMutator(
+      z.object({
+        id: z.string(),
+        body: z.string(),
+      }),
+      async (tx, {args, ctx: authData}) => {
+        await assertIsCreatorOrAdmin(tx as unknown as MutatorTx, authData, builder.comment, args.id);
+        await tx.mutate.comment.update({id: args.id, body: args.body});
       },
+    ),
 
-      async remove(tx: MutatorTx, id: string) {
-        await assertIsCreatorOrAdmin(tx, authData, builder.comment, id);
-        await tx.mutate.comment.delete({id});
-      },
-    },
+    remove: defineMutator(z.string(), async (tx, {args: id, ctx: authData}) => {
+      await assertIsCreatorOrAdmin(tx as unknown as MutatorTx, authData, builder.comment, id);
+      await tx.mutate.comment.delete({id});
+    }),
+  },
 
-    label: {
-      async create(
-        tx: MutatorTx,
-        {
-          id,
-          name,
-          projectID,
-        }: {id: string; name: string; projectID?: string | undefined},
-      ) {
+  label: {
+    create: defineMutator(
+      z.object({
+        id: z.string(),
+        name: z.string(),
+        projectID: z.optional(z.string()),
+      }),
+      async (tx, {args, ctx: authData}) => {
         if (!isAdmin(authData)) {
           throw new MutationError(
             `Only admins can create labels`,
             MutationErrorCode.NOT_AUTHORIZED,
-            id,
+            args.id,
           );
         }
 
         await tx.mutate.label.insert({
-          id,
-          name,
-          projectID: projectIDWithDefault(projectID),
+          id: args.id,
+          name: args.name,
+          projectID: projectIDWithDefault(args.projectID),
         });
       },
+    ),
 
-      async createAndAddToIssue(
-        tx: MutatorTx,
-        {
-          issueID,
-          labelID,
-          labelName,
-          projectID,
-        }: {
-          labelID: string;
-          issueID: string;
-          labelName: string;
-          projectID?: string | undefined;
-        },
-      ) {
+    createAndAddToIssue: defineMutator(
+      z.object({
+        labelID: z.string(),
+        issueID: z.string(),
+        labelName: z.string(),
+        projectID: z.optional(z.string()),
+      }),
+      async (tx, {args, ctx: authData}) => {
         if (!isAdmin(authData)) {
           throw new MutationError(
             `Only admins can create labels`,
             MutationErrorCode.NOT_AUTHORIZED,
-            labelID,
+            args.labelID,
           );
         }
 
-        projectID = projectIDWithDefault(projectID);
+        const projectID = projectIDWithDefault(args.projectID);
         await tx.mutate.label.insert({
-          id: labelID,
-          name: labelName,
+          id: args.labelID,
+          name: args.labelName,
           projectID,
         });
-        await tx.mutate.issueLabel.insert({issueID, labelID, projectID});
+        await tx.mutate.issueLabel.insert({
+          issueID: args.issueID,
+          labelID: args.labelID,
+          projectID,
+        });
       },
-    },
+    ),
+  },
 
-    viewState: {
-      async set(
-        tx: MutatorTx,
-        {issueID, viewed}: {issueID: string; viewed: number},
-      ) {
+  viewState: {
+    set: defineMutator(
+      z.object({
+        issueID: z.string(),
+        viewed: z.number(),
+      }),
+      async (tx, {args, ctx: authData}) => {
         assertIsLoggedIn(authData);
         const userID = authData.sub;
-        await tx.mutate.viewState.upsert({issueID, userID, viewed});
+        await tx.mutate.viewState.upsert({
+          issueID: args.issueID,
+          userID,
+          viewed: args.viewed,
+        });
       },
-    },
+    ),
+  },
 
-    userPref: {
-      async set(tx: MutatorTx, {key, value}: {key: string; value: string}) {
+  userPref: {
+    set: defineMutator(
+      z.object({
+        key: z.string(),
+        value: z.string(),
+      }),
+      async (tx, {args, ctx: authData}) => {
         assertIsLoggedIn(authData);
         const userID = authData.sub;
-        await tx.mutate.userPref.upsert({key, value, userID});
+        await tx.mutate.userPref.upsert({
+          key: args.key,
+          value: args.value,
+          userID,
+        });
       },
-    },
-  } as const;
+    ),
+  },
+});
 
-  async function addEmoji(
-    tx: Transaction<typeof schema, unknown>,
-    subjectType: 'issue' | 'comment',
-    {id, unicode, annotation, subjectID, created}: AddEmojiArgs,
-  ) {
-    assertIsLoggedIn(authData);
-    const creatorID = authData.sub;
-
-    if (subjectType === 'issue') {
-      await assertUserCanSeeIssue(tx, creatorID, subjectID);
-    } else {
-      await assertUserCanSeeComment(tx, creatorID, subjectID);
-    }
-
-    await tx.mutate.emoji.insert({
-      id,
-      value: unicode,
-      annotation,
-      subjectID,
-      creatorID,
-      created,
-    });
-
-    // subscribe to notifications if the user emojis the issue itself
-    if (subjectType === 'issue') {
-      await updateIssueNotification(tx, {
-        userID: creatorID,
-        issueID: subjectID,
-        subscribed: 'subscribe',
-        created,
-      });
-    }
-  }
-
-  async function updateIssueNotification(
-    tx: Transaction<typeof schema, unknown>,
-    {
-      userID,
-      issueID,
-      subscribed,
-      created,
-      forceUpdate = false,
-    }: {
-      userID: string;
-      issueID: string;
-      subscribed: NotificationType;
-      created: number;
-      forceUpdate?: boolean;
-    },
-  ) {
-    await assertUserCanSeeIssue(tx, userID, issueID);
-
-    const existingNotification = builder.issueNotifications
-      .where('userID', userID)
-      .where('issueID', issueID)
-      .one();
-
-    // if the user is subscribing to the issue, and they don't already have a preference
-    // or the forceUpdate flag is set, we upsert the notification.
-    if (subscribed === 'subscribe' && (!existingNotification || forceUpdate)) {
-      await tx.mutate.issueNotifications.upsert({
-        userID,
-        issueID,
-        subscribed: true,
-        created,
-      });
-    } else if (subscribed === 'unsubscribe') {
-      await tx.mutate.issueNotifications.upsert({
-        userID,
-        issueID,
-        subscribed: false,
-        created,
-      });
-    }
-  }
-}
-
-export type Mutators = ReturnType<typeof createMutators>;
+export type Mutators = typeof mutators;

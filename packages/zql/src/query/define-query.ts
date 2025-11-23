@@ -253,7 +253,7 @@ export type QueryRegistry<
  *
  * @example
  * ```typescript
- * const queries = defineQueries({
+ * const queries = defineQueries<AuthData>({
  *   issue: {
  *     byID: defineQuery(z.string(), ({args, ctx}) =>
  *       zql.issue.where('id', args)
@@ -269,27 +269,7 @@ export type QueryRegistry<
  * const query = thunk(context);              // Query
  * ```
  */
-export function defineQueries<
-  S extends Schema,
-  TContext,
-  T extends QueryDefinitions<S, TContext>,
->(defs: T, prefix = ''): QueryRegistry<S, TContext, T> {
-  return defineQueriesImpl(defs, prefix);
-}
-
-/**
- * Creates a type-safe defineQueries function that is parameterized by a
- * custom context type.
- *
- * @example
- * ```ts
- * const defineQueries = defineQueriesWithContextType<AuthData>();
- * const queries = defineQueries({
- *   user: defineQuery(z.string(), ({args, ctx}) => ...),
- * });
- * ```
- */
-export function defineQueriesWithContextType<TContext>(): <
+export function defineQueries<TContext>(): <
   S extends Schema,
   T extends QueryDefinitions<S, TContext>,
 >(

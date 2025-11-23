@@ -119,7 +119,6 @@ export type {
 export {
   defineQuery,
   defineQueries,
-  defineQueriesWithContextType,
   defineQueryWithContextType,
   isQueryDefinition,
 } from '../../zql/src/query/define-query.ts';
@@ -129,6 +128,18 @@ export type {
   QueryRegistry,
   QueryThunk,
 } from '../../zql/src/query/define-query.ts';
+export {
+  defineMutator,
+  defineMutators,
+  defineMutatorWithContextType,
+  isMutatorDefinition,
+} from '../../zql/src/mutate/define-mutator.ts';
+export type {
+  MutatorDefinition,
+  MutatorDefinitions,
+  MutatorRegistry,
+  MutatorThunk,
+} from '../../zql/src/mutate/define-mutator.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {
   ExpressionBuilder,

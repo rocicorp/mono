@@ -1,5 +1,5 @@
 import {
-  defineQueriesWithContextType,
+  defineQueries,
   defineQueryWithContextType,
   escapeLike,
   type Query,
@@ -44,9 +44,8 @@ const issueRowSort = z.object({
 type IssueRowSort = z.infer<typeof issueRowSort>;
 
 const defineQuery = defineQueryWithContextType<AuthData | undefined>();
-const defineQueries = defineQueriesWithContextType<AuthData | undefined>();
 
-export const queries = defineQueries({
+export const queries = defineQueries<AuthData | undefined>()({
   allLabels: defineQuery(z.undefined(), () => builder.label),
 
   allUsers: defineQuery(z.undefined(), () => builder.user),
