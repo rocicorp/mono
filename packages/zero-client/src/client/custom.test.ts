@@ -14,6 +14,10 @@ import {must} from '../../../shared/src/must.ts';
 import {promiseUndefined} from '../../../shared/src/resolved-promises.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
+import {
+  defineMutator,
+  defineMutators,
+} from '../../../zql/src/mutate/define-mutator.ts';
 import type {Row} from '../../../zql/src/query/query.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import {bindingsForZero} from './bindings.ts';
@@ -141,112 +145,142 @@ test('argument types are preserved with arbitrary depth nesting', () => {
 });
 
 test('supports mutators without a namespace', async () => {
-  const z = zeroForTest({
-    logLevel: 'debug',
-    schema,
-    mutators: {
-      createIssue: async (
+  const mutators = defineMutators<Schema, unknown>()({
+    createIssue: defineMutator(
+      async (
         tx: Transaction<Schema>,
-        args: InsertValue<typeof schema.tables.issue>,
+        {args}: {args: InsertValue<typeof schema.tables.issue>; ctx: unknown},
       ) => {
         await tx.mutate.issue.insert(args);
       },
-    },
+    ),
   });
 
-  await z.mutate.createIssue({
-    id: '1',
-    title: 'no-namespace',
-    closed: false,
-    ownerId: '',
-    description: '',
-    createdAt: 1743018138477,
-  }).client;
+  const z = zeroForTest({
+    logLevel: 'debug',
+    schema,
+    mutators,
+  });
+
+  await z.mutate(
+    mutators.createIssue({
+      id: '1',
+      title: 'no-namespace',
+      closed: false,
+      ownerId: '',
+      description: '',
+      createdAt: 1743018138477,
+    }),
+  ).client;
 
   const issues = await z.run(z.query.issue);
   expect(issues[0].title).toEqual('no-namespace');
 });
 
 test('supports arbitrary depth nesting of mutators', async () => {
-  const z = zeroForTest({
-    logLevel: 'debug',
-    schema,
-    mutators: {
-      level1: {
-        level2: {
-          level3: {
-            createIssue: async (
+  const mutators = defineMutators<Schema, unknown>()({
+    level1: {
+      level2: {
+        level3: {
+          createIssue: defineMutator(
+            async (
               tx: Transaction<Schema>,
-              args: InsertValue<typeof schema.tables.issue>,
+              {args}: {args: InsertValue<typeof schema.tables.issue>; ctx: unknown},
             ) => {
               await tx.mutate.issue.insert(args);
             },
-            updateTitle: async (
+          ),
+          updateTitle: defineMutator(
+            async (
               tx: Transaction<Schema>,
-              {id, title}: {id: string; title: string},
+              {args}: {args: {id: string; title: string}; ctx: unknown},
             ) => {
-              await tx.mutate.issue.update({id, title});
+              await tx.mutate.issue.update(args);
             },
-          },
-          anotherMutator: async (
+          ),
+        },
+        anotherMutator: defineMutator(
+          async (
             tx: Transaction<Schema>,
-            args: InsertValue<typeof schema.tables.issue>,
+            {args}: {args: InsertValue<typeof schema.tables.issue>; ctx: unknown},
           ) => {
             await tx.mutate.issue.insert(args);
           },
-        },
-        directMutator: async (tx: Transaction<Schema>, id: string) => {
+        ),
+      },
+      directMutator: defineMutator(
+        async (
+          tx: Transaction<Schema>,
+          {args: id}: {args: string; ctx: unknown},
+        ) => {
           await tx.mutate.issue.update({id, closed: true});
         },
-      },
-      topLevel: async (tx: Transaction<Schema>, id: string) => {
+      ),
+    },
+    topLevel: defineMutator(
+      async (
+        tx: Transaction<Schema>,
+        {args: id}: {args: string; ctx: unknown},
+      ) => {
         await tx.mutate.issue.update({id, title: 'top-level'});
       },
-    },
+    ),
+  });
+
+  const z = zeroForTest({
+    logLevel: 'debug',
+    schema,
+    mutators,
   });
 
   // Test deeply nested mutator
-  await z.mutate.level1.level2.level3.createIssue({
-    id: '1',
-    title: 'deeply-nested',
-    closed: false,
-    ownerId: '',
-    description: '',
-    createdAt: 1743018138477,
-  }).client;
+  await z.mutate(
+    mutators.level1.level2.level3.createIssue({
+      id: '1',
+      title: 'deeply-nested',
+      closed: false,
+      ownerId: '',
+      description: '',
+      createdAt: 1743018138477,
+    }),
+  ).client;
 
   await z.markQueryAsGot(z.query.issue);
   let issues = await z.run(z.query.issue);
   expect(issues[0].title).toEqual('deeply-nested');
 
   // Test deeply nested update
-  await z.mutate.level1.level2.level3.updateTitle({
-    id: '1',
-    title: 'updated-deep',
-  }).client;
+  await z.mutate(
+    mutators.level1.level2.level3.updateTitle({
+      id: '1',
+      title: 'updated-deep',
+    }),
+  ).client;
   issues = await z.run(z.query.issue);
   expect(issues[0].title).toEqual('updated-deep');
 
   // Test intermediate level mutator
-  await z.mutate.level1.level2.anotherMutator({
-    id: '2',
-    title: 'intermediate',
-    closed: false,
-    ownerId: '',
-    description: '',
-    createdAt: 1743018138477,
-  }).client;
+  await z.mutate(
+    mutators.level1.level2.anotherMutator({
+      id: '2',
+      title: 'intermediate',
+      closed: false,
+      ownerId: '',
+      description: '',
+      createdAt: 1743018138477,
+    }),
+  ).client;
   issues = await z.run(z.query.issue);
   expect(issues.length).toEqual(2);
   expect(issues[1].title).toEqual('intermediate');
 
   // Test level1 direct mutator
-  await z.mutate.level1.directMutator('2').client;
+  await z.mutate(mutators.level1.directMutator('2')).client;
   issues = await z.run(z.query.issue);
   expect(issues[1].closed).toEqual(true);
 
   // Test top level mutator
-  await z.mutate.topLevel('1').client;
+  await z.mutate(mutators.topLevel('1')).client;
   issues = await z.run(z.query.issue);
   expect(issues[0].title).toEqual('top-level');
 });
