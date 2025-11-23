@@ -118,10 +118,17 @@ export type {
 } from '../../zql/src/mutate/custom.ts';
 export {
   defineQuery,
+  defineQueries,
+  defineQueriesWithContextType,
   defineQueryWithContextType,
   isQueryDefinition,
 } from '../../zql/src/query/define-query.ts';
-export type {QueryDefinition} from '../../zql/src/query/define-query.ts';
+export type {
+  QueryDefinition,
+  QueryDefinitions,
+  QueryRegistry,
+  QueryThunk,
+} from '../../zql/src/query/define-query.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {
   ExpressionBuilder,
@@ -141,7 +148,6 @@ export type {
   QueryFn,
   SyncedQuery,
 } from '../../zql/src/query/named.ts';
-export type {QueryDefinitions} from '../../zql/src/query/query-definitions.ts';
 export type {QueryInternals} from '../../zql/src/query/query-internals.ts';
 export type {
   AnyQuery,

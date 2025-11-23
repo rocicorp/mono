@@ -8,7 +8,6 @@ import {ZeroProvider} from '@rocicorp/zero/react';
 import {useMemo, type ReactNode} from 'react';
 import type {AuthData} from '../shared/auth.ts';
 import {createMutators} from '../shared/mutators.ts';
-import {queries} from '../shared/queries.ts';
 import {schema} from '../shared/schema.ts';
 import {useLogin} from './hooks/use-login.tsx';
 
@@ -22,7 +21,6 @@ export function ZeroInit({children}: {children: ReactNode}) {
         server: import.meta.env.VITE_PUBLIC_SERVER,
         userID: login.loginState?.decoded?.sub ?? 'anon',
         mutators: createMutators(login.loginState?.decoded),
-        queries,
         logLevel: 'info' as const,
         // changing the auth token will cause ZeroProvider to call connection.connect
         auth: login.loginState?.encoded,

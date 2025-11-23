@@ -63,8 +63,9 @@ export function useQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
+  TContext = unknown,
 >(
-  query: Query<TSchema, TTable, TReturn>,
+  query: Query<TSchema, TTable, TReturn> | ((ctx: TContext) => Query<TSchema, TTable, TReturn>),
   options?: UseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -75,7 +76,9 @@ export function useQuery<
     ({enabled = true, ttl = DEFAULT_TTL_MS} = options);
   }
 
-  const view = viewStore.getView(useZero(), query, enabled, ttl);
+  const zero = useZero<TSchema, CustomMutatorDefs | undefined, TContext>();
+  const resolvedQuery = typeof query === 'function' ? query(zero.context) : query;
+  const view = viewStore.getView(zero, resolvedQuery, enabled, ttl);
   // https://react.dev/reference/react/useSyncExternalStore
   return useSyncExternalStore(
     view.subscribeReactInternals,
@@ -88,8 +91,9 @@ export function useSuspenseQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
+  TContext = unknown,
 >(
-  query: Query<TSchema, TTable, TReturn>,
+  query: Query<TSchema, TTable, TReturn> | ((ctx: TContext) => Query<TSchema, TTable, TReturn>),
   options?: UseSuspenseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -105,7 +109,9 @@ export function useSuspenseQuery<
     } = options);
   }
 
-  const view = viewStore.getView(useZero(), query, enabled, ttl);
+  const zero = useZero<TSchema, CustomMutatorDefs | undefined, TContext>();
+  const resolvedQuery = typeof query === 'function' ? query(zero.context) : query;
+  const view = viewStore.getView(zero, resolvedQuery, enabled, ttl);
   // https://react.dev/reference/react/useSyncExternalStore
   const snapshot = useSyncExternalStore(
     view.subscribeReactInternals,

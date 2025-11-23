@@ -81,7 +81,10 @@ import {
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
-import {wrapCustomQuery} from '../../../zql/src/query/define-query.ts';
+import {
+  wrapCustomQuery,
+  type QueryThunk,
+} from '../../../zql/src/query/define-query.ts';
 import {
   type ClientMetricMap,
   type MetricMap,
@@ -1031,8 +1034,9 @@ export class Zero<
   preload<
     TTable extends keyof S['tables'] & string,
     TReturn extends PullRow<TTable, S>,
-  >(query: Query<S, TTable, TReturn>, options?: PreloadOptions) {
-    return this.#zeroContext.preload(query, options);
+  >(query: (ctx: TContext) => Query<S, TTable, TReturn>, options?: PreloadOptions) {
+    const resolvedQuery = query(this.context);
+    return this.#zeroContext.preload(resolvedQuery, options);
   }
 
   /**
@@ -1056,10 +1060,11 @@ export class Zero<
    * ```
    */
   run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+    query: Query<S, TTable, TReturn> | ((ctx: TContext) => Query<S, TTable, TReturn>),
     runOptions?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
-    return this.#zeroContext.run(query, runOptions);
+    const resolvedQuery = typeof query === 'function' ? query(this.context) : query;
+    return this.#zeroContext.run(resolvedQuery, runOptions);
   }
 
   get context(): TContext {
@@ -1091,19 +1096,20 @@ export class Zero<
    * ```
    */
   materialize<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+    query: Query<S, TTable, TReturn> | ((ctx: TContext) => Query<S, TTable, TReturn>),
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+    query: Query<S, TTable, TReturn> | ((ctx: TContext) => Query<S, TTable, TReturn>),
     factory: ViewFactory<S, TTable, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+    query: Query<S, TTable, TReturn> | ((ctx: TContext) => Query<S, TTable, TReturn>),
     factoryOrOptions?: ViewFactory<S, TTable, TReturn, T> | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
+    const resolvedQuery = typeof query === 'function' ? query(this.context) : query;
     let factory;
     let options;
     if (typeof factoryOrOptions === 'function') {
@@ -1112,7 +1118,7 @@ export class Zero<
     } else {
       options = factoryOrOptions;
     }
-    return this.#zeroContext.materialize(query, factory, options);
+    return this.#zeroContext.materialize(resolvedQuery, factory, options);
   }
 
   /**

@@ -2,11 +2,25 @@ import type {StandardSchemaV1} from '@standard-schema/spec';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {QueryDefinitions} from './query-definitions.ts';
 import {asQueryInternals} from './query-internals.ts';
 import type {AnyQuery, Query} from './query.ts';
 import {validateInput} from './validate-input.ts';
 
+export type {QueryDefinitions} from './query-definitions.ts';
+
 const defineQueryTag = Symbol();
+
+/**
+ * A query thunk returned by defineQueries. This is a function that takes
+ * context and returns a Query with the name already stamped.
+ */
+export type QueryThunk<
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
+  TReturn,
+  TContext,
+> = (ctx: TContext) => Query<TSchema, TTable, TReturn>;
 
 /**
  * A query definition function that has been wrapped by `defineQuery`.
@@ -124,42 +138,6 @@ export function defineQuery<
 }
 
 /**
- * Wraps a query definition with a query name and context, creating a function that
- * returns a Query with the name and args bound to the instance.
- *
- * @param queryName - The name to assign to the query
- * @param f - The query definition to wrap
- * @param contextHolder - An object containing the context to pass to the query
- * @returns A function that takes args and returns a Query
- */
-export function wrapCustomQuery<TArgs, Context>(
-  queryName: string,
-  // oxlint-disable-next-line no-explicit-any
-  f: QueryDefinition<any, any, any, any, any, any>,
-  contextHolder: {context: Context},
-): (args: TArgs) => AnyQuery {
-  const {validator} = f;
-  const validate = validator
-    ? (args: TArgs) =>
-        validateInput<TArgs, TArgs>(queryName, args, validator, 'query')
-    : (args: TArgs) => args;
-
-  return (args?: TArgs) => {
-    // The args that we send to the server is the args that the user passed in.
-    // This is what gets fed into the validator.
-    const q = f({
-      args: validate(args as TArgs),
-      ctx: contextHolder.context,
-    });
-    return asQueryInternals(q).nameAndArgs(
-      queryName,
-      // TODO(arv): Get rid of the array?
-      args === undefined ? [] : [args as unknown as ReadonlyJSONValue],
-    );
-  };
-}
-
-/**
  * Creates a type-safe query definition function that is parameterized by a
  * custom context type, without requiring a query name.
  *
@@ -238,5 +216,178 @@ export function defineQueryWithContextType<TContext>(): {
         ctx: TContext;
       }) => Query<TSchema, TTable, TReturn>,
     ): QueryDefinition<TSchema, TTable, TReturn, TContext, TInput, TOutput>;
+  };
+}
+
+/**
+ * The type returned by defineQueries - same tree shape but each leaf
+ * is now a function that takes args and returns a thunk (ctx) => Query.
+ */
+export type QueryRegistry<
+  S extends Schema,
+  TContext,
+  T extends QueryDefinitions<S, TContext>,
+> = {
+  readonly [K in keyof T]: T[K] extends QueryDefinition<
+    S,
+    // oxlint-disable-next-line no-explicit-any
+    any,
+    infer TReturn,
+    TContext,
+    infer TInput,
+    // oxlint-disable-next-line no-explicit-any
+    any
+  >
+    ? (args: TInput) => (ctx: TContext) => Query<S, string, TReturn>
+    : T[K] extends QueryDefinitions<S, TContext>
+      ? QueryRegistry<S, TContext, T[K]>
+      : never;
+};
+
+/**
+ * Wraps a tree of query definitions, stamping each with its fully-qualified
+ * name derived from the object keys. Returns functions that take args and
+ * return thunks that need context to produce a Query.
+ *
+ * @example
+ * ```typescript
+ * const queries = defineQueries({
+ *   issue: {
+ *     byID: defineQuery(z.string(), ({args, ctx}) =>
+ *       zql.issue.where('id', args)
+ *     ),
+ *   },
+ *   user: defineQuery(z.string(), ({args, ctx}) =>
+ *     zql.user.where('id', args)
+ *   ),
+ * });
+ *
+ * // Usage:
+ * const thunk = queries.issue.byID('123');  // (ctx) => Query
+ * const query = thunk(context);              // Query
+ * ```
+ */
+export function defineQueries<
+  S extends Schema,
+  TContext,
+  T extends QueryDefinitions<S, TContext>,
+>(defs: T, prefix = ''): QueryRegistry<S, TContext, T> {
+  return defineQueriesImpl(defs, prefix);
+}
+
+/**
+ * Creates a type-safe defineQueries function that is parameterized by a
+ * custom context type.
+ *
+ * @example
+ * ```ts
+ * const defineQueries = defineQueriesWithContextType<AuthData>();
+ * const queries = defineQueries({
+ *   user: defineQuery(z.string(), ({args, ctx}) => ...),
+ * });
+ * ```
+ */
+export function defineQueriesWithContextType<TContext>(): <
+  S extends Schema,
+  T extends QueryDefinitions<S, TContext>,
+>(
+  defs: T,
+) => QueryRegistry<S, TContext, T> {
+  return <S extends Schema, T extends QueryDefinitions<S, TContext>>(
+    defs: T,
+  ): QueryRegistry<S, TContext, T> => defineQueriesImpl(defs, '');
+}
+
+function defineQueriesImpl<
+  S extends Schema,
+  TContext,
+  T extends QueryDefinitions<S, TContext>,
+>(defs: T, prefix: string): QueryRegistry<S, TContext, T> {
+  const result: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(defs)) {
+    const name = prefix ? `${prefix}.${key}` : key;
+
+    if (isQueryDefinition(value)) {
+      // Leaf - wrap it
+      result[key] = wrapCustomQuery2(name, value);
+    } else {
+      // Namespace - recurse
+      // oxlint-disable-next-line no-explicit-any
+      result[key] = defineQueriesImpl<S, TContext, any>(
+        value as QueryDefinitions<S, TContext>,
+        name,
+      );
+    }
+  }
+
+  return result as QueryRegistry<S, TContext, T>;
+}
+
+/**
+ * Wraps a query definition with a query name and context, creating a function that
+ * returns a Query with the name and args bound to the instance.
+ *
+ * @param queryName - The name to assign to the query
+ * @param f - The query definition to wrap
+ * @param contextHolder - An object containing the context to pass to the query
+ * @returns A function that takes args and returns a Query
+ */
+export function wrapCustomQuery<TArgs, Context>(
+  queryName: string,
+  // oxlint-disable-next-line no-explicit-any
+  f: QueryDefinition<any, any, any, any, any, any>,
+  contextHolder: {context: Context},
+): (args: TArgs) => AnyQuery {
+  const {validator} = f;
+  const validate = validator
+    ? (args: TArgs) =>
+        validateInput<TArgs, TArgs>(queryName, args, validator, 'query')
+    : (args: TArgs) => args;
+
+  return (args?: TArgs) => {
+    const q = f({
+      args: validate(args as TArgs),
+      ctx: contextHolder.context,
+    });
+    return asQueryInternals(q).nameAndArgs(
+      queryName,
+      args === undefined ? [] : [args as unknown as ReadonlyJSONValue],
+    );
+  };
+}
+
+/**
+ * Wraps a query definition for standalone use (without Zero constructor).
+ * Returns a function that takes args and returns a thunk (ctx) => Query.
+ *
+ * @param queryName - The name to assign to the query
+ * @param f - The query definition to wrap
+ * @returns A function that takes args and returns a thunk needing context
+ */
+export function wrapCustomQuery2<TArgs, TContext>(
+  queryName: string,
+  // oxlint-disable-next-line no-explicit-any
+  f: QueryDefinition<any, any, any, TContext, any, any>,
+): (args: TArgs) => (ctx: TContext) => AnyQuery {
+  const {validator} = f;
+  const validate = validator
+    ? (args: TArgs) =>
+        validateInput<TArgs, TArgs>(queryName, args, validator, 'query')
+    : (args: TArgs) => args;
+
+  return (args?: TArgs) => {
+    const validatedArgs = validate(args as TArgs);
+
+    return (ctx: TContext) => {
+      const q = f({
+        args: validatedArgs,
+        ctx,
+      });
+      return asQueryInternals(q).nameAndArgs(
+        queryName,
+        args === undefined ? [] : [args as unknown as ReadonlyJSONValue],
+      );
+    };
   };
 }
