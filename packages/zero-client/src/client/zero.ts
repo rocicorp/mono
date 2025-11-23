@@ -29,6 +29,7 @@ import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
 import {getErrorMessage} from '../../../shared/src/error.ts';
 import {h64} from '../../../shared/src/hash.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {navigator} from '../../../shared/src/navigator.ts';
 import {promiseRace} from '../../../shared/src/promise-race.ts';
@@ -126,8 +127,9 @@ import type {
   CustomMutatorImpl,
   MakeCustomMutatorInterfaces,
   MutatorResult,
+  MutatorThunk,
 } from './custom.ts';
-import {makeReplicacheMutator} from './custom.ts';
+import {makeReplicacheMutator, makeReplicacheMutatorFromThunk} from './custom.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
 import {shouldEnableAnalytics} from './enable-analytics.ts';
 import {
@@ -457,6 +459,7 @@ export class Zero<
   readonly #clientToServer: NameMapper;
   readonly #deleteClientsManager: DeleteClientsManager;
   readonly #mutationTracker: MutationTracker;
+  #mutatorProxy: MutatorProxy | undefined;
 
   /**
    * The queries we sent when inside the sec-protocol header when establishing a connection.
@@ -670,7 +673,27 @@ export class Zero<
       (upTo: MutationID) => this.#send(['ackMutationResponses', upTo]),
       error => this.#disconnect(lc, error),
     );
+    // Context holder for passing context to mutators
+    const contextHolder = {context: options.context as TContext};
+
     if (options.mutators) {
+      // Check if this is new format (MutatorRegistry) by testing first leaf
+      const isNewFormat = (mutators: object): boolean => {
+        for (const value of Object.values(mutators)) {
+          if (typeof value === 'function') {
+            // New format functions take 1 arg (or 0 with optional) and return thunk with mutatorName
+            // Old format functions take 2 args (tx, args)
+            // We check function.length, but also the return value for certainty
+            return value.length <= 1;
+          } else if (typeof value === 'object' && value !== null) {
+            return isNewFormat(value);
+          }
+        }
+        return false;
+      };
+
+      const newFormat = isNewFormat(options.mutators);
+
       // Recursively process mutator definitions at arbitrary depth
       const processMutators = (
         mutators: CustomMutatorDefs,
@@ -680,11 +703,23 @@ export class Zero<
           if (typeof value === 'function') {
             const fullKey = customMutatorKey(...namespacePrefix, key);
             assertUnique(fullKey);
-            replicacheMutators[fullKey] = makeReplicacheMutator(
-              lc,
-              value as CustomMutatorImpl<S>,
-              schema,
-            ) as () => MutatorReturn;
+            if (newFormat) {
+              // New format: function returns a thunk
+              replicacheMutators[fullKey] = makeReplicacheMutatorFromThunk(
+                lc,
+                // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+                value as unknown as (args: any) => MutatorThunk<S, TContext>,
+                schema,
+                contextHolder,
+              ) as () => MutatorReturn;
+            } else {
+              // Old format: function is the mutator itself
+              replicacheMutators[fullKey] = makeReplicacheMutator(
+                lc,
+                value as CustomMutatorImpl<S>,
+                schema,
+              ) as () => MutatorReturn;
+            }
           } else if (typeof value === 'object') {
             processMutators(value, [...namespacePrefix, key]);
           } else {
@@ -836,6 +871,7 @@ export class Zero<
       this.#connectionManager,
       this.#mutationTracker,
     );
+    this.#mutatorProxy = mutatorProxy;
 
     if (options.mutators) {
       // Recursively expose mutators on the mutate property
@@ -1217,6 +1253,42 @@ export class Zero<
    * will throw an error.
    */
   readonly mutateBatch: BatchMutator<S>;
+
+  /**
+   * Calls a mutator thunk created from `defineMutators`.
+   *
+   * This is the new way to call custom mutators when using the standalone
+   * mutator definition pattern.
+   *
+   * @example
+   * ```ts
+   * // Define mutators
+   * const mutators = defineMutators<AuthData>()({
+   *   issue: {
+   *     create: defineMutator(schema, async (tx, {args, ctx}) => {
+   *       await tx.mutate.issue.insert(args);
+   *     }),
+   *   },
+   * });
+   *
+   * // Call mutator
+   * await z.callMutator(mutators.issue.create({id: '1', title: 'Hello'}));
+   * ```
+   */
+  callMutator(thunk: MutatorThunk<S, TContext>): MutatorResult {
+    const {mutatorName, mutatorArgs} = thunk;
+    const repMutator = this.#rep.mutate[mutatorName];
+    if (!repMutator) {
+      throw new Error(`Mutator "${mutatorName}" not found. Did you pass it to the Zero constructor?`);
+    }
+    const wrappedMutator = must(this.#mutatorProxy).wrapCustomMutator(
+      repMutator as unknown as (...args: [] | [ReadonlyJSONValue]) => {
+        client: Promise<unknown>;
+        server: Promise<unknown>;
+      },
+    );
+    return wrappedMutator(mutatorArgs[0] as ReadonlyJSONValue);
+  }
 
   /**
    * The connection API for managing Zero's connection lifecycle.

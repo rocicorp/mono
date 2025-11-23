@@ -8,6 +8,10 @@ import {emptyFunction} from '../../../shared/src/sentinels.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {
+  MutatorRegistry,
+  MutatorThunk,
+} from '../../../zql/src/mutate/define-mutator.ts';
+import type {
   ClientTransaction,
   DeleteID,
   InsertValue,
@@ -29,6 +33,8 @@ import {ZeroContext} from './context.ts';
 import {deleteImpl, insertImpl, updateImpl, upsertImpl} from './crud.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
 import type {WriteTransaction} from './replicache-types.ts';
+
+export type {MutatorRegistry, MutatorThunk};
 
 /**
  * The shape which a user's custom mutator definitions must conform to.
@@ -180,6 +186,27 @@ export function makeReplicacheMutator<S extends Schema, TWrappedTransaction>(
   ): Promise<void> => {
     const tx = new TransactionImpl(lc, repTx, schema);
     await mutator(tx, args);
+  };
+}
+
+/**
+ * Creates a replicache mutator from a thunk-returning function (new format).
+ * The thunkFn takes args and returns a MutatorThunk.
+ */
+export function makeReplicacheMutatorFromThunk<S extends Schema, TContext>(
+  lc: LogContext,
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  thunkFn: (args: any) => MutatorThunk<S, TContext>,
+  schema: S,
+  contextHolder: {context: TContext},
+) {
+  return async (
+    repTx: WriteTransaction,
+    args: ReadonlyJSONValue,
+  ): Promise<void> => {
+    const tx = new TransactionImpl(lc, repTx, schema);
+    const thunk = thunkFn(args);
+    await thunk(tx, contextHolder.context);
   };
 }
 
