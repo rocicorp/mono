@@ -12,8 +12,9 @@ import {
   CRUD_MUTATION_NAME,
   type MutationResponse,
 } from '../../zero-protocol/src/push.ts';
+import type {CustomMutatorDefs} from './custom.ts';
 import type {Database, TransactionProviderHooks} from './process-mutations.ts';
-import {handleMutationRequest} from './process-mutations.ts';
+import {getMutation, handleMutationRequest} from './process-mutations.ts';
 
 const baseQuery = {
   schema: 'test_schema',
@@ -745,5 +746,47 @@ describe('handleMutationRequest', () => {
     expect(recordedLMIDs).toEqual([1]);
     // Successful mutations don't call writeMutationResult
     expect(recordedResults).toEqual([]);
+  });
+});
+
+describe('getMutation', () => {
+  const rootMutator = async () => {};
+  const childMutator = async () => {};
+  const grandchildMutator = async () => {};
+  const pipeMutator = async () => {};
+
+  const mutators = {
+    root: rootMutator,
+    nested: {
+      child: childMutator,
+      deeper: {
+        grandchild: grandchildMutator,
+      },
+    },
+    pipe: {
+      ns: {
+        action: pipeMutator,
+      },
+    },
+  } satisfies CustomMutatorDefs<unknown>;
+
+  test('returns root-level mutators', () => {
+    expect(getMutation(mutators, 'root')).toBe(rootMutator);
+  });
+
+  test('returns arbitrarily deep dot-delimited mutators', () => {
+    expect(getMutation(mutators, 'nested.deeper.grandchild')).toBe(
+      grandchildMutator,
+    );
+  });
+
+  test('returns arbitrarily deep pipe-delimited mutators', () => {
+    expect(getMutation(mutators, 'pipe|ns|action')).toBe(pipeMutator);
+  });
+
+  test('throws when a mutator does not exist', () => {
+    expect(() => getMutation(mutators, 'nested.missing')).toThrow(
+      'could not find mutator nested.missing',
+    );
   });
 });
