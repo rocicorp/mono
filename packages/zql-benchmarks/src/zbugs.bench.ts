@@ -9,7 +9,8 @@ import {mapAST} from '../../zero-protocol/src/ast.ts';
 import type {AST, Condition} from '../../zero-protocol/src/ast.ts';
 import {QueryImpl} from '../../zql/src/query/query-impl.ts';
 import {defaultFormat} from '../../zql/src/ivm/default-format.ts';
-import type {Query} from '../../zql/src/query/query.ts';
+import type {AnyQuery, Query} from '../../zql/src/query/query.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import {expect, test} from 'vitest';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
@@ -82,56 +83,69 @@ function createQuery<TTable extends keyof typeof schema.tables & string>(
   queryAST: AST,
 ) {
   return new QueryImpl(
-    delegate,
     schema,
     tableName,
     queryAST,
     defaultFormat,
     'test',
+    undefined,
+    undefined,
   );
 }
 
 // Helper to benchmark planned vs unplanned
-function benchmarkQuery<TTable extends keyof typeof schema.tables & string>(
+async function benchmarkQuery<
+  TTable extends keyof typeof schema.tables & string,
+>(
   name: string,
   // oxlint-disable-next-line no-explicit-any
   query: Query<typeof schema, TTable, any>,
 ) {
-  const unplannedAST = query.ast;
+  const unplannedAST = asQueryInternals(query).ast;
 
   // Map to server names, plan, then map back to client names
-  const mappedAST = mapAST(unplannedAST, clientToServerMapper);
+  // const mappedAST = mapAST(unplannedAST, clientToServerMapper);
 
   // Deep copy mappedAST and set flip to false for all correlated subqueries
-  const mappedASTCopy = setFlipToFalseInAST(mappedAST);
+  // const mappedASTCopy = setFlipToFalseInAST(mappedAST);
 
-  const dbg = new AccumulatorDebugger();
+  // const dbg = new AccumulatorDebugger();
 
-  const plannedServerAST = planQuery(mappedASTCopy, costModel, dbg);
-  const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
+  // const plannedServerAST = planQuery(mappedASTCopy, costModel, dbg);
+  // const plannedClientAST = mapAST(plannedServerAST, serverToClientMapper);
 
   // console.log('Planned ast', JSON.stringify(plannedClientAST, null, 2));
   // console.log(dbg.format());
 
   const tableName = unplannedAST.table as TTable;
   const unplannedQuery = createQuery(tableName, unplannedAST);
-  const plannedQuery = createQuery(tableName, plannedClientAST);
+  // const plannedQuery = createQuery(tableName, plannedClientAST);
 
-  summary(() => {
-    bench(`unplanned: ${name}`, async () => {
-      await unplannedQuery.run();
-    });
+  const start = performance.now();
+  await delegate.run(unplannedQuery as AnyQuery);
+  const unplannedTime = performance.now() - start;
+  console.log('Duration unplanned', name, unplannedTime);
 
-    bench(`planned: ${name}`, async () => {
-      await plannedQuery.run();
-    });
-  });
+  // summary(() => {
+  //   bench(`unplanned: ${name}`, async () => {
+  //     // oxlint-disable-next-line no-explicit-any
+  //     await delegate.run(unplannedQuery as any);
+  //   });
+
+  //   bench(`planned: ${name}`, async () => {
+  //     // oxlint-disable-next-line no-explicit-any
+  //     await delegate.run(plannedQuery as any);
+  //   });
+  // });
 }
 
 // Benchmark queries from apps/zbugs/shared/queries.ts
 
 // allLabels query
-benchmarkQuery('allLabels', builder.label);
+benchmarkQuery(
+  'exists',
+  builder.issue.whereExists('creator', q => q.where('name', 'sdf')),
+);
 
 // Check if JSON output is requested via environment variable
 const format = process.env.BENCH_OUTPUT_FORMAT;
