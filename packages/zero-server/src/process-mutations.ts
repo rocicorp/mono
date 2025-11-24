@@ -500,11 +500,13 @@ function makeAppErrorResponse(
 export function getMutation<TDBTransaction>(
   mutators: CustomMutatorDefs<TDBTransaction>,
   name: string,
-): CustomMutatorImpl<TDBTransaction> {
+  // oxlint-disable-next-line no-explicit-any
+): CustomMutatorImpl<any> {
   const path = name.split(/\.|\|/);
   const mutator = getObjectAtPath(mutators, path);
   assert(typeof mutator === 'function', `could not find mutator ${name}`);
-  return mutator as CustomMutatorImpl<TDBTransaction>;
+  // oxlint-disable-next-line no-explicit-any
+  return mutator as CustomMutatorImpl<any>;
 }
 
 function getObjectAtPath(
