@@ -2,77 +2,154 @@
 
 ## Overview
 
-This spike explores a new pattern for defining synced queries as standalone objects rather than registering them on the Zero constructor.
+This spike revisits the idea of defining custom queries and mutators as standalone objects rather than invoking them through the Zero constructor.
 
 ### Problem
 
-The current API has queries registered on the Zero constructor and accessed via `z.query.queryName(args)`. This creates several issues:
+The current API has custom queries registered on the Zero constructor and accessed via `z.query.queryName(args)`. However, Zero continues to support ad-hoc queries in two places:
 
-1. **Namespace collision** - Table names and query names share the same namespace on `z.query`
-2. **Inconsistency with mutators** - Custom mutators are standalone, but queries are tied to Zero instance
-3. **Context coupling** - Queries capture context at definition time rather than execution time
+- Inside a transaction (tx.query.tableName...)
+- Local-only queries (z.run, z.materialize, and z.preload)
 
-### Solution
+Exposing custom queries at z.query.<queryName> creates the question of how to handle these ad-hoc queries:
 
-Queries become "dumb data" - pure objects that can be passed around:
+- creates an awkward inconsistency in how custom vs ad-hoc queries are run: custom are z.query.<queryName>.run() and ad-hoc are z.run() or tx.run()
+- It muddies what is possible to do with queries with the queries themselves. Outside of transactions, it makes sense to .materialize(), .run(), or .preload() custom queries. Inside of tx, it still makes sense to be able to use custom queries, but only .run() makes sense. But with this functionality being a method of query, it makes it harder to make these distinctions. It would be much more convenient if the queries themselves were separate from what you can do with them.
+- We already knew this but it kind of doubles the api surface area for running queries. Like for running queries and waiting for complet we have both q.run({type: "complete"}) and z.run(q, {type: "complete"}). Or for materializing we have q.materialize() and z.materialize(q). This also interacts weirdly with useQuery.
 
-```typescript
-// Define queries as standalone registry
-const queries = defineQueries({
-  labels: defineQuery(
-    z.object({ projectName: z.string() }),
-    ({args: {projectName}, ctx}) =>
-      builder.label.whereExists('project', q =>
-        q.where('lowerCaseName', projectName.toLocaleLowerCase())
-      ).orderBy('name', 'asc')
-  ),
+## Why Standalone Queries Didn't Work
 
-  user: defineQuery(z.string(), ({args: userID}) =>
-    builder.user.where('id', userID).one()
-  ),
-});
+Two reasons:
 
-// Usage - clean and simple
-const [labels] = useQuery(queries.labels({projectName}));
-const [user] = useQuery(queries.user(currentUserID));
+1. Namespace collisions. We need every query and mutator to have a unique name. Passing the tree of objects to Zero to create names provided a handy chokepoint to do this.
+2. Mutators _have_ to be known to Zero for offline/persistent support.
+
+## New Proposal
+
+Queries become "dumb data" again:
+
+```ts
+const issuesByLabel = defineQuery<ZeroContext>(
+  z.string(),
+  ({args: label, ctx: {userID}}) => {
+    return zql.issue
+      .whereExists('label', q => q.where('name', label))
+      .whereExists('viewer', q => q.where('userID', userID));
+  },
+);
 ```
 
-### How It Works
+To solve the naming issue, we factor out that functionality into a new `defineQueries()` helper:
 
-1. `defineQueries()` stamps fully-qualified names from the object tree
-2. `queries.foo(args)` returns a thunk: `(ctx) => Query`
-3. `useQuery()` / `z.run()` resolves the thunk by injecting context
-4. No chaining allowed - thunks prevent it by design (this is intentional)
+```ts
+const queries = defineQueries({
+  issues: {
+    byID: defineQuery(z.string(), ({args: id, ctx: {userID}}) => {
+      return viewableIssues(userID).where('id', id).one();
+    }),
+    byLabel: defineQuery(z.string(), ({args: label, ctx: {userID}}) => {
+      return viewableIssues(userID).whereExists('label', q =>
+        q.where('name', label),
+      );
+    }),
+  },
+});
+```
 
-### Benefits
+These queries can now be used with `z.run()`, `z.materialize()`, or anywhere else ZQL queries can be used today:
 
-- Queries are portable - pass them around, store them, test them
-- Clear separation between synced queries (named) and ad-hoc queries (unnamed)
-- Server only sees `{name, args}` - chaining is client-local only
-- Cleaner component code: `useQuery(queries.foo(args))` vs `useQuery(z.query.foo(args))`
+```ts
+const [issues] = await zero.run(queries.issues.byLabel('important'), {
+  type: 'complete',
+});
+
+const [issue] = useQuery(queries.issues.byID('i1'));
+```
+
+Note that the `Context` is still passed into these queries automatically. Just as in `mono` right now. The examples above rely on having previously done:
+
+```tsx
+<ZeroProvider context={userID: "u1"}>
+...
+</ZeroProvider>
+```
+
+This means that the return value from `queries.issues.byID("i1")` is not a ZQL query. It's: `(ctx) => ZQL`.
+
+Also note this also means that `tx` no longer needs `tx.query.tableName` (except maybe for backward compat), because you can just say:
+
+```ts
+tx.run(zql.query.tableName);
+```
+
+## Mutators
+
+Mutators are set up exactly the same way:
+
+```ts
+const mutators = defineMutators({
+  issue: {
+    addLabel: defineMutator(
+      z.object({
+        issueID: z.string(),
+        labelID: z.string(),
+      }),
+      async (tx, {args: {issueID, labelID}, ctx: {userID}}) => {
+        must(
+          await tx.query.issue
+            .where('id', 'issueID')
+            .whereExists('editors', userID),
+          'Access denied',
+        );
+        await tx.mutate.issueLabel.upsert({
+          issueID,
+          labelID,
+        });
+      },
+    ),
+  },
+});
+```
+
+The only difference is that before you can invoke a mutator you must also register the set of them with Zero:
+
+```tsx
+<ZeroProvider mutators={mutators} context={context}>
+  ...
+</ZeroProvider>
+```
+
+Once you've done that, you call mutators similarly to queries:
+
+```ts
+z.mutate(mutators.addLabel('i1', 'l1'));
+```
+
+If you call a mutator that hasn't been registered, it's a runtime error.
+
+Note that `z.mutate(query)` implies that you should also be able to do do something like `z.mutate(crud.issue.insert({...}))`. This would enable getting rid of `tx.query.tableName`.
 
 ## Design Decisions
 
 ### No Chaining
 
-We explicitly chose not to support chaining on synced queries:
+I explicitly choose to remove chaining from synced queries for now:
 
-```typescript
+```ts
 // This is NOT allowed
-queries.labels({projectName}).orderBy('name', 'asc')  // Error: thunk is not a Query
+queries.labels({projectName}).orderBy('name', 'asc'); // Error: thunk is not a Query
 ```
 
-Reasoning:
-- On the server (queries endpoint), chaining doesn't make sense - the server just resolves `{name, args}` to ZQL
-- Chaining blurs the line between "what syncs" and "how I view it locally"
-- If you need a sort, put it in the query definition
+Implementation is complex (it means these query factory functions have to have entire query interface too) and the semantics are unclear server-side.
+
+We can revisit this later.
 
 ### Optional Args for No-Input Queries
 
 Queries defined with `z.undefined()` can be called without arguments:
 
 ```typescript
-const [users] = useQuery(queries.allUsers());  // No need to pass undefined
+const [users] = useQuery(queries.allUsers()); // No need to pass undefined
 ```
 
 ## Cleanup TODO
@@ -93,24 +170,6 @@ If this direction is accepted, we need to:
 
 5. **Move to correct package** - `defineQuery`, `defineMutator`, and related code belong in `zero-client`, not `zql`. ZQL should just be about the query language itself.
 
-6. **Documentation** - Update docs to reflect new pattern
+6. **Mutator registration validation** - Add runtime or type check that mutators passed to `z.mutate()` were registered with Zero ahead of time
 
-7. **Migration guide** - Document how to migrate from `z.query.foo()` to `queries.foo()`
-
-8. **Mutator registration validation** - Add runtime or type check that mutators passed to `z.mutate()` were registered with Zero ahead of time
-
-9. **Remove QueryRegistry and MutatorRegistry classes** - These server-side classes that build maps from definitions are no longer needed with the new thunk-based pattern. Use `getQuery` and `getMutation` directly instead
-
-## Files Changed
-
-### Core Implementation
-- `packages/zql/src/query/define-query.ts` - defineQueries, wrapCustomQuery2, QueryRegistry type
-- `packages/zero-client/src/client/zero.ts` - run/preload/materialize handle thunks
-- `packages/zero-react/src/use-query.tsx` - useQuery resolves thunks
-- `packages/zero-client/src/mod.ts` - exports
-
-### Zbugs Migration
-- `apps/zbugs/shared/queries.ts` - Uses defineQueriesWithContextType
-- `apps/zbugs/shared/zero-type.ts` - Removed Queries type parameter
-- `apps/zbugs/src/hooks/use-zero.ts` - Removed Queries type parameter
-- All components updated to use `queries.foo(args)` pattern
+7. **Remove QueryRegistry and MutatorRegistry classes** - These server-side classes that build maps from definitions are no longer needed with the new thunk-based pattern. Use `getQuery` and `getMutation` directly instead
