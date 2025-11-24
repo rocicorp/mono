@@ -3,11 +3,12 @@ import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import type {QueryResultType} from '../../../zql/src/query/query.ts';
 import type {MutatorResultDetails} from './custom.ts';
+import {type MakeEntityQueriesFromSchema} from './make-query-property.ts';
 import {zeroStress} from './zero-stress-client-test.ts';
 import {queryDeep} from './zero-stress-queries-deep-test.ts';
 import {queryWide} from './zero-stress-queries-wide-test.ts';
 import {zeroStressSchema} from './zero-stress-schema-test.ts';
-import {Zero, type MakeEntityQueriesFromSchema} from './zero.ts';
+import {Zero} from './zero.ts';
 
 type Schema = typeof zeroStressSchema;
 type Tx = Transaction<Schema, unknown>;

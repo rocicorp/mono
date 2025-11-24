@@ -1,15 +1,22 @@
 import {lazy, Suspense, useState} from 'react';
 import type {CustomMutatorDefs} from '../../../zero-client/src/client/custom.ts';
+import type {MutatorDefinitions} from '../../../zero-client/src/client/mutator-definitions.ts';
 import type {Zero} from '../../../zero-client/src/client/zero.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
 import {MarkIcon} from './mark-icon.tsx';
 
 const Inspector = lazy(() => import('./inspector.tsx'));
 
 export function ZeroInspector<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
->({zero}: {zero: Zero<S, MD>}): JSX.Element {
+  MD extends
+    | MutatorDefinitions<S, Context>
+    | CustomMutatorDefs
+    | undefined = undefined,
+  Context = unknown,
+  QD extends QueryDefinitions<S, Context> | undefined = undefined,
+>({zero}: {zero: Zero<S, MD, Context, QD>}): JSX.Element {
   const [show, setShow] = useState(false);
   return show ? (
     <Suspense fallback={<div>Loading Inspector...</div>}>

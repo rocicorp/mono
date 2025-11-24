@@ -22,6 +22,10 @@ export type {
   ReadonlyJSONValue,
 } from '../../shared/src/json.ts';
 export type {MaybePromise} from '../../shared/src/types.ts';
+export type {
+  AnalyzeQueryResult,
+  PlanDebugEventJSON,
+} from '../../zero-protocol/src/analyze-query-result.ts';
 export {ApplicationError} from '../../zero-protocol/src/application-error.ts';
 export type {ApplicationErrorOptions} from '../../zero-protocol/src/application-error.ts';
 export type {
@@ -178,17 +182,21 @@ export type {
   MutatorResultSuccessDetails,
   MutatorResult as PromiseWithServerResult,
 } from './client/custom.ts';
-export type {
-  AnalyzeQueryResult,
-  PlanDebugEventJSON,
-} from '../../zero-protocol/src/analyze-query-result.ts';
+export {
+  defineMutator,
+  defineMutatorWithType,
+  isMutatorDefinition,
+  type MutatorDefinition,
+} from './client/define-mutator.ts';
 export type {ClientGroup as InspectorClientGroup} from './client/inspector/client-group.ts';
 export type {Client as InspectorClient} from './client/inspector/client.ts';
 export type {Inspector} from './client/inspector/inspector.ts';
 export type {Query as InspectorQuery} from './client/inspector/query.ts';
+export type {MakeEntityQueriesFromSchema} from './client/make-query-property.ts';
+export type {MutatorDefinitions} from './client/mutator-definitions.ts';
 export type {UpdateNeededReason, ZeroOptions} from './client/options.ts';
 export {UpdateNeededReasonType} from './client/update-needed-reason-type.ts';
-export {Zero, type MakeEntityQueriesFromSchema} from './client/zero.ts';
+export {Zero} from './client/zero.ts';
 export type {
   QueryErrorDetails,
   QueryResultDetails,

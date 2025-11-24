@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import type {ZeroTxData} from '../../../replicache/src/replicache-options.ts';
 import type {WriteTransactionImpl} from '../../../replicache/src/transactions.ts';
 import {zeroData} from '../../../replicache/src/transactions.ts';
 import {assert} from '../../../shared/src/asserts.ts';
@@ -126,10 +127,7 @@ export class TransactionImpl<TSchema extends Schema>
 
   constructor(lc: LogContext, repTx: WriteTransaction, schema: TSchema) {
     must(repTx.reason === 'initial' || repTx.reason === 'rebase');
-    const txData = must(
-      (repTx as WriteTransactionImpl)[zeroData],
-      'zero was not set on replicache internal options!',
-    );
+    const txData = getZeroTxData(repTx);
 
     this.#repTx = repTx;
     this.mutate = makeSchemaCRUD(
@@ -169,11 +167,19 @@ export class TransactionImpl<TSchema extends Schema>
   }
 }
 
+export function getZeroTxData(repTx: WriteTransaction): ZeroTxData {
+  const txData = must(
+    (repTx as WriteTransactionImpl)[zeroData],
+    'zero was not set on replicache internal options!',
+  );
+  return txData as ZeroTxData;
+}
+
 export function makeReplicacheMutator<S extends Schema, TWrappedTransaction>(
   lc: LogContext,
   mutator: CustomMutatorImpl<S, TWrappedTransaction>,
   schema: S,
-) {
+): (repTx: WriteTransaction, args: ReadonlyJSONValue) => Promise<void> {
   return async (
     repTx: WriteTransaction,
     args: ReadonlyJSONValue,

@@ -22,6 +22,7 @@ import {schema} from '../../../../zql/src/query/test/test-schemas.ts';
 import {nanoid} from '../../util/nanoid.ts';
 import {bindingsForZero} from '../bindings.ts';
 import type {CustomMutatorDefs} from '../custom.ts';
+import type {MutatorDefinitions} from '../mutator-definitions.ts';
 import type {TestZero} from '../test-utils.ts';
 import {MockSocket, zeroForTest} from '../test-utils.ts';
 import type {Inspector} from './inspector.ts';
@@ -51,12 +52,12 @@ async function waitForID(socketP: Promise<MockSocket>, op: string) {
 
 async function getMetrics<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined,
-  Context,
-  QD extends QueryDefinitions<S, Context> | undefined,
+  MD extends MutatorDefinitions<S, C> | CustomMutatorDefs | undefined,
+  C,
+  QD extends QueryDefinitions<S, C> | undefined,
 >(
   inspector: Inspector,
-  z: TestZero<S, MD, Context, QD>,
+  z: TestZero<S, MD, C, QD>,
   metricsResponseValue?: InspectMetricsDown['value'],
 ): Promise<Metrics> {
   const socket = await z.socket;

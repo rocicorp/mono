@@ -32,7 +32,7 @@ import type {
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
-import type {PullRow, Query} from '../../../zql/src/query/query.ts';
+import type {AnyQuery, Query} from '../../../zql/src/query/query.ts';
 import {bindingsForZero} from './bindings.ts';
 import type {
   ConnectionManager,
@@ -41,6 +41,7 @@ import type {
 import {ConnectionStatus} from './connection-status.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {LogOptions} from './log-options.ts';
+import type {MutatorDefinitions} from './mutator-definitions.ts';
 import type {ZeroOptions} from './options.ts';
 import {
   Zero,
@@ -102,10 +103,13 @@ export class MockSocket extends EventTarget {
 
 export class TestZero<
   const S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
-  QD extends QueryDefinitions<S, Context> | undefined = undefined,
-> extends Zero<S, MD, Context, QD> {
+  MD extends
+    | MutatorDefinitions<S, C>
+    | CustomMutatorDefs
+    | undefined = undefined,
+  C = unknown,
+  QD extends QueryDefinitions<S, C> | undefined = undefined,
+> extends Zero<S, MD, C, QD> {
   pokeIDCounter = 0;
 
   #connectionStatusResolvers: Set<{
@@ -131,7 +135,7 @@ export class TestZero<
     return this[exposedToTestingSymbol].connectStart;
   }
 
-  constructor(options: ZeroOptions<S, MD, Context, QD>) {
+  constructor(options: ZeroOptions<S, MD, C, QD>) {
     super(options);
 
     // Subscribe to connection manager to handle connection state change notifications
@@ -260,7 +264,7 @@ export class TestZero<
       gotQueriesPatch: [
         {
           op: 'put',
-          hash: bindingsForZero(this).hash(q),
+          hash: bindingsForZero(this as Zero<S, MD, C>).hash(q),
         },
       ],
     });
@@ -292,18 +296,14 @@ export class TestZero<
     return getInternalReplicacheImplForTesting(this).persist();
   }
 
-  markQueryAsGot<
-    TSchema extends Schema,
-    TTable extends keyof TSchema['tables'] & string,
-    TReturn = PullRow<TTable, TSchema>,
-  >(q: Query<TSchema, TTable, TReturn>): Promise<void> {
+  markQueryAsGot(q: AnyQuery): Promise<void> {
     // TODO(arv): The cookies here could be better... Not sure if the client
     // ever checks these?
     return this.triggerPoke(null, '1', {
       gotQueriesPatch: [
         {
           op: 'put',
-          hash: bindingsForZero(this as unknown as Zero<TSchema, MD>).hash(q),
+          hash: bindingsForZero(this).hash(q),
         },
       ],
     });
@@ -316,13 +316,16 @@ let testZeroCounter = 0;
 
 export function zeroForTest<
   const S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
-  QD extends QueryDefinitions<S, Context> | undefined = undefined,
+  MD extends
+    | MutatorDefinitions<S, C>
+    | CustomMutatorDefs
+    | undefined = undefined,
+  C = unknown,
+  QD extends QueryDefinitions<S, C> | undefined = undefined,
 >(
-  options: Partial<ZeroOptions<S, MD, Context, QD>> = {},
+  options: Partial<ZeroOptions<S, MD, C, QD>> = {},
   errorOnUpdateNeeded = true,
-): TestZero<S, MD, Context, QD> {
+): TestZero<S, MD, C, QD> {
   // Special case kvStore. If not present we default to 'mem'. This allows
   // passing `undefined` to get the default behavior.
   const newOptions = {...options};
@@ -344,7 +347,7 @@ export function zeroForTest<
         }
       : undefined,
     ...newOptions,
-  } satisfies ZeroOptions<S, MD, Context, QD>);
+  } satisfies ZeroOptions<S, MD, C, QD>);
 }
 
 export async function waitForUpstreamMessage(

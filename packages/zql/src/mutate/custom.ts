@@ -155,16 +155,16 @@ export type UpdateValue<S extends TableSchema> = Expand<
   }
 >;
 
-export function customMutatorKey(...parts: string[]) {
+export function customMutatorKey(sep: string, parts: string[]) {
   for (const part of parts) {
     assert(
-      !part.includes('|'),
-      'mutator names/namespaces must not include a |',
+      !part.includes(sep),
+      `mutator names/namespaces must not include a ${sep}`,
     );
   }
-  return parts.join('|');
+  return parts.join(sep);
 }
 
-export function splitMutatorKey(key: string) {
-  return key.split('|');
+export function splitMutatorKey(key: string, sep: string): string[] {
+  return key.split(sep);
 }

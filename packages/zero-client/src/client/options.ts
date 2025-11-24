@@ -4,6 +4,7 @@ import * as v from '../../../shared/src/valita.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
 import type {CustomMutatorDefs} from './custom.ts';
+import type {MutatorDefinitions} from './mutator-definitions.ts';
 import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 
 /**
@@ -11,9 +12,12 @@ import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
  */
 export interface ZeroOptions<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
-  QD extends QueryDefinitions<S, Context> | undefined = undefined,
+  MD extends
+    | MutatorDefinitions<S, C>
+    | CustomMutatorDefs
+    | undefined = undefined,
+  C = unknown,
+  QD extends QueryDefinitions<S, C> | undefined = undefined,
 > {
   /**
    * URL to the zero-cache. This can be a simple hostname, e.g.
@@ -86,6 +90,39 @@ export interface ZeroOptions<
    * implementations. Client side mutators must be idempotent as a
    * mutation can be rebased multiple times when folding in authoritative
    * changes from the server to the client.
+   *
+   * Define mutators using the `defineMutator` function to create type-safe,
+   * parameterized mutations. Mutators can be top-level or grouped in namespaces.
+   *
+   * @example
+   * ```ts
+   * import {defineMutator} from '@rocicorp/zero';
+   *
+   * const z = new Zero({
+   *   schema,
+   *   userID,
+   *   mutators: {
+   *     // Top-level mutator
+   *     increment: defineMutator(({tx, args}: {tx: Transaction<Schema>, args: {id: string}}) =>
+   *       tx.mutate.counter.update({id: args.id, value: tx.query.counter.where('id', '=', args.id).value + 1})
+   *     ),
+   *     // Namespace with multiple mutators
+   *     issues: {
+   *       create: defineMutator(({tx, args}: {tx: Transaction<Schema>, args: {title: string}}) =>
+   *         tx.mutate.issues.insert({id: nanoid(), title: args.title, status: 'open'})
+   *       ),
+   *       close: defineMutator(({tx, args}: {tx: Transaction<Schema>, args: {id: string}}) =>
+   *         tx.mutate.issues.update({id: args.id, status: 'closed'})
+   *       ),
+   *     },
+   *   },
+   * });
+   *
+   * // Usage
+   * await z.mutate.increment({id: 'counter-1'}).client;
+   * await z.mutate.issues.create({title: 'New issue'}).client;
+   * await z.mutate.issues.close({id: 'issue-123'}).client;
+   * ```
    */
   mutators?: MD | undefined;
 
@@ -290,7 +327,7 @@ export interface ZeroOptions<
    * Context is passed to Synced Queries when they are executed
    */
   // TODO(arv): Mutators should also get context.
-  context?: Context | undefined;
+  context?: C | undefined;
 }
 
 /**
@@ -298,7 +335,7 @@ export interface ZeroOptions<
  */
 export interface ZeroAdvancedOptions<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined,
+  MD extends MutatorDefinitions<S, Context> | CustomMutatorDefs | undefined,
   Context,
   QD extends QueryDefinitions<S, Context> | undefined,
 > extends ZeroOptions<S, MD, Context, QD> {}

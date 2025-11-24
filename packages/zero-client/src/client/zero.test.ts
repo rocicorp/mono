@@ -74,6 +74,7 @@ import type {CustomMutatorDefs} from './custom.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
 import {ClientError, isServerError} from './error.ts';
 import type {WSString} from './http-string.ts';
+import type {MutatorDefinitions} from './mutator-definitions.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import type {QueryManager} from './query-manager.ts';
 import {RELOAD_REASON_STORAGE_KEY} from './reload-error-handler.ts';
@@ -1142,16 +1143,19 @@ describe('initConnection', () => {
 
   async function zeroForTestWithDeletedClients<
     const S extends Schema,
-    MD extends CustomMutatorDefs,
-    Context,
-    QD extends QueryDefinitions<S, Context>,
+    MD extends
+      | MutatorDefinitions<S, C>
+      | CustomMutatorDefs
+      | undefined = undefined,
+    C = unknown,
+    QD extends QueryDefinitions<S, C> | undefined = undefined,
   >(
-    options: Partial<ZeroOptions<S, MD, Context, QD>> & {
+    options: Partial<ZeroOptions<S, MD, C, QD>> & {
       deletedClients?:
         | {clientGroupID?: ClientGroupID | undefined; clientID: ClientID}[]
         | undefined;
     },
-  ): Promise<TestZero<S, MD, Context, QD>> {
+  ): Promise<TestZero<S, MD, C, QD>> {
     // We need to set the deleted clients before creating the zero instance but
     // we use a random name for the user ID. So we create a zero instance with a
     // random user ID, set the deleted clients, close it and then create a new

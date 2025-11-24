@@ -8,6 +8,7 @@ import {
   type BindingsForZero,
 } from '../../zero-client/src/client/bindings.ts';
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
+import type {MutatorDefinitions} from '../../zero-client/src/client/mutator-definitions.ts';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
 import type {
   QueryErrorDetails,
@@ -301,7 +302,10 @@ export class ViewStore {
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
-    MD extends CustomMutatorDefs | undefined,
+    MD extends
+      | MutatorDefinitions<TSchema, TContext>
+      | CustomMutatorDefs
+      | undefined,
     TContext,
   >(
     zero: Zero<TSchema, MD, TContext>,
@@ -381,7 +385,10 @@ class ViewWrapper<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
-  MD extends CustomMutatorDefs | undefined,
+  MD extends
+    | MutatorDefinitions<TSchema, TContext>
+    | CustomMutatorDefs
+    | undefined,
   TContext,
 > {
   #view: TypedView<HumanReadable<TReturn>> | undefined;

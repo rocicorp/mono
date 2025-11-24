@@ -140,8 +140,7 @@ export function wrapCustomQuery<TArgs, Context>(
 ): (args: TArgs) => AnyQuery {
   const {validator} = f;
   const validate = validator
-    ? (args: TArgs) =>
-        validateInput<TArgs, TArgs>(queryName, args, validator, 'query')
+    ? (args: TArgs) => validateInput(queryName, args, validator, 'query')
     : (args: TArgs) => args;
 
   return (args?: TArgs) => {
@@ -175,8 +174,8 @@ export function wrapCustomQuery<TArgs, Context>(
  *
  * @example
  * ```ts
- * const defineQuery2 = defineQuery2WithContextType<MyContext>();
- * const myQuery = defineQuery2(
+ * const defineQuery = defineQueryWithContextType<MyContext>();
+ * const myQuery = defineQuery(
  *   z.string(),
  *   ({ctx, args}) => {
  *     ctx satisfies MyContext;
@@ -185,6 +184,7 @@ export function wrapCustomQuery<TArgs, Context>(
  * );
  * ```
  */
+// TODO(arv): defineQueryWithType and multiple overloads.
 export function defineQueryWithContextType<TContext>(): {
   <
     TSchema extends Schema,
@@ -212,31 +212,5 @@ export function defineQueryWithContextType<TContext>(): {
     }) => Query<TSchema, TTable, TReturn>,
   ): QueryDefinition<TSchema, TTable, TReturn, TContext, TInput, TOutput>;
 } {
-  return defineQuery as {
-    <
-      TSchema extends Schema,
-      TTable extends keyof TSchema['tables'] & string,
-      TReturn,
-      TArgs extends ReadonlyJSONValue | undefined,
-    >(
-      queryFn: (options: {
-        args: TArgs;
-        ctx: TContext;
-      }) => Query<TSchema, TTable, TReturn>,
-    ): QueryDefinition<TSchema, TTable, TReturn, TContext, TArgs, TArgs>;
-
-    <
-      TSchema extends Schema,
-      TTable extends keyof TSchema['tables'] & string,
-      TReturn,
-      TInput extends ReadonlyJSONValue | undefined,
-      TOutput extends ReadonlyJSONValue | undefined,
-    >(
-      validator: StandardSchemaV1<TInput, TOutput>,
-      queryFn: (options: {
-        args: TOutput;
-        ctx: TContext;
-      }) => Query<TSchema, TTable, TReturn>,
-    ): QueryDefinition<TSchema, TTable, TReturn, TContext, TInput, TOutput>;
-  };
+  return defineQuery;
 }

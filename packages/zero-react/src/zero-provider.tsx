@@ -9,6 +9,7 @@ import {
 } from 'react';
 import {stringCompare} from '../../shared/src/string-compare.ts';
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
+import type {MutatorDefinitions} from '../../zero-client/src/client/mutator-definitions.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
@@ -18,7 +19,10 @@ export const ZeroContext = createContext<unknown | undefined>(undefined);
 
 export function useZero<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
+  MD extends
+    | MutatorDefinitions<S, Context>
+    | CustomMutatorDefs
+    | undefined = undefined,
   Context = unknown,
   QD extends QueryDefinitions<S, Context> | undefined = undefined,
 >(): Zero<S, MD, Context, QD> {
@@ -31,7 +35,10 @@ export function useZero<
 
 export function createUseZero<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
+  MD extends
+    | MutatorDefinitions<S, Context>
+    | CustomMutatorDefs
+    | undefined = undefined,
   Context = unknown,
   QD extends QueryDefinitions<S, Context> | undefined = undefined,
 >() {
@@ -40,7 +47,7 @@ export function createUseZero<
 
 export type ZeroProviderProps<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined,
+  MD extends MutatorDefinitions<S, Context> | CustomMutatorDefs | undefined,
   Context,
   QD extends QueryDefinitions<S, Context> | undefined,
 > = (ZeroOptions<S, MD, Context, QD> | {zero: Zero<S, MD, Context, QD>}) & {
@@ -52,7 +59,7 @@ const NO_AUTH_SET = Symbol();
 
 export function ZeroProvider<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined,
+  MD extends MutatorDefinitions<S, Context> | CustomMutatorDefs | undefined,
   Context,
   QD extends QueryDefinitions<S, Context> | undefined,
 >({children, init, ...props}: ZeroProviderProps<S, MD, Context, QD>) {

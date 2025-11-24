@@ -12,7 +12,9 @@ import {
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {registerZeroDelegate} from '../../zero-client/src/client/bindings.ts';
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
+import type {MutatorDefinitions} from '../../zero-client/src/client/mutator-definitions.ts';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
+import type {QueryDefinitions} from '../../zql/src/query/query-definitions.ts';
 import type {QueryResultDetails} from '../../zero-client/src/types/query-result.ts';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
@@ -45,15 +47,22 @@ function newMockQuery(
   return ret;
 }
 
-function newMockZero<MD extends CustomMutatorDefs, Context>(
+function newMockZero<
+  MD extends
+    | MutatorDefinitions<Schema, Context>
+    | CustomMutatorDefs
+    | undefined = undefined,
+  Context = unknown,
+  QD extends QueryDefinitions<Schema, Context> | undefined = undefined,
+>(
   clientID: string,
-): {zero: Zero<Schema, MD, Context>; delegate: QueryDelegate} {
+): {zero: Zero<Schema, MD, Context, QD>; delegate: QueryDelegate} {
   const view = newView();
   const delegate = newMockDelegate();
   const zero = {
     clientID,
     materialize: vi.fn().mockImplementation(() => view),
-  } as unknown as Zero<Schema, MD, Context>;
+  } as unknown as Zero<Schema, MD, Context, QD>;
   registerZeroDelegate(zero, delegate);
   return {zero, delegate};
 }

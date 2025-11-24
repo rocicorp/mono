@@ -1,12 +1,19 @@
 import type {CustomMutatorDefs} from '../../../zero-client/src/client/custom.ts';
+import type {MutatorDefinitions} from '../../../zero-client/src/client/mutator-definitions.ts';
 import type {Zero} from '../../../zero-client/src/client/zero.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
 import {MarkIcon} from './mark-icon.tsx';
 
 export default function Inspector<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
->({zero, onClose}: {zero: Zero<S, MD>; onClose: () => void}) {
+  MD extends
+    | MutatorDefinitions<S, Context>
+    | CustomMutatorDefs
+    | undefined = undefined,
+  Context = unknown,
+  QD extends QueryDefinitions<S, Context> | undefined = undefined,
+>({zero, onClose}: {zero: Zero<S, MD, Context, QD>; onClose: () => void}) {
   return (
     <dialog
       open
