@@ -8,9 +8,9 @@ import {Octokit} from '@octokit/core';
 import type {ReadonlyJSONValue} from '@rocicorp/zero';
 import {
   getMutation,
+  getQuery,
   handleMutationRequest,
   handleTransformRequest,
-  QueryRegistry,
 } from '@rocicorp/zero/server';
 import {zeroPostgresJS} from '@rocicorp/zero/server/adapters/postgresjs';
 import assert from 'assert';
@@ -20,7 +20,7 @@ import {jwtVerify, SignJWT, type JWK} from 'jose';
 import {nanoid} from 'nanoid';
 import postgres from 'postgres';
 import {must} from '../../../packages/shared/src/must.ts';
-import {createServerMutators} from '../server/server-mutators.ts';
+import {mutators} from '../shared/mutators.ts';
 import {jwtDataSchema, type JWTData} from '../shared/auth.ts';
 import {queries} from '../shared/queries.ts';
 import {schema} from '../shared/schema.ts';
@@ -178,21 +178,16 @@ async function mutateHandler(
     throw e;
   }
 
-  const postCommitTasks: (() => Promise<void>)[] = [];
-  const mutators = createServerMutators(jwtData, postCommitTasks);
-
   const response = await handleMutationRequest(
     dbProvider,
     (transact, _mutation) =>
-      transact((tx, name, args) => getMutation(mutators, name)(tx, args)),
+      transact((tx, name, args) =>
+        getMutation(mutators, name)(args)(tx as any, jwtData),
+      ),
     request.query,
     request.body,
     'info',
   );
-
-  // we don't yet handle errors here, since Loops emails return 429 very often
-  // and we don't want to block the mutation
-  await Promise.allSettled(postCommitTasks.map(task => task()));
 
   reply.send(response);
 }
@@ -207,8 +202,6 @@ fastify.post<{
   Body: ReadonlyJSONValue;
 }>('/api/get-queries', getQueriesHandler);
 
-const queryRegistry = new QueryRegistry(queries);
-
 async function getQueriesHandler(
   request: FastifyRequest<{
     Querystring: Record<string, string>;
@@ -220,8 +213,11 @@ async function getQueriesHandler(
     reply.send(
       await handleTransformRequest(
         (name: string, args: ReadonlyJSONValue | undefined) => {
-          const query = queryRegistry.mustGet(name, authData);
-          return query(args);
+          const query = getQuery(queries, name);
+          if (!query) {
+            throw new Error(`Query not found: ${name}`);
+          }
+          return query(args)(authData);
         },
         schema,
         request.body,

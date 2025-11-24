@@ -25,7 +25,11 @@ import {
   type PushBody,
   type PushResponse,
 } from '../../zero-protocol/src/push.ts';
-import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
+import type {
+  MutatorRegistryBase,
+  MutatorThunk,
+} from '../../zql/src/mutate/define-mutator.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
 import {createLogContext} from './logging.ts';
 
 export interface TransactionProviderHooks {
@@ -497,12 +501,15 @@ function makeAppErrorResponse(
   };
 }
 
-export function getMutation(
+/**
+ * Look up a mutator by name in a MutatorRegistry.
+ * Returns a function (tx, args) => Promise<void> that can be called to execute the mutator.
+ */
+export function getMutation<S extends Schema, Context>(
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  mutators: CustomMutatorDefs<any>,
+  mutators: MutatorRegistryBase<S, Context>,
   name: string,
-  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-): CustomMutatorImpl<any, any> {
+): (args: ReadonlyJSONValue) => MutatorThunk<S, Context> {
   let path: string[];
   if (name.includes('|')) {
     path = name.split('|');
@@ -511,20 +518,19 @@ export function getMutation(
   }
 
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  let mutator: any;
-  if (path.length === 1) {
-    mutator = mutators[path[0]];
-  } else {
-    const nextMap = mutators[path[0]];
+  let current: any = mutators;
+  for (const segment of path) {
+    current = current[segment];
     assert(
-      typeof nextMap === 'object' && nextMap !== undefined,
-      `could not find mutator map for ${name}`,
+      current !== undefined,
+      `could not find mutator segment '${segment}' in path '${name}'`,
     );
-    mutator = nextMap[path[1]];
   }
 
-  assert(typeof mutator === 'function', () => `could not find mutator ${name}`);
-  return mutator;
+  assert(typeof current === 'function', () => `could not find mutator ${name}`);
+
+  // Return a function with the (tx, args) signature that wraps the thunk
+  return current;
 }
 
 type DatabaseTransactionPhase = 'open' | 'execute';

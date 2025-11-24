@@ -8,5 +8,5 @@ export {
   handleTransformRequest,
   type TransformQueryFunction,
 } from './queries/process-queries.ts';
-export {QueryRegistry} from './query-registry.ts';
+export {getQuery, QueryRegistry} from './query-registry.ts';
 export * from './zql-database.ts';

@@ -220,6 +220,17 @@ export function defineQueryWithContextType<TContext>(): {
 }
 
 /**
+ * Base type for query registries used in constraints.
+ * This is a simpler recursive type that doesn't require the full definition shape.
+ */
+export type QueryRegistryBase<S extends Schema, TContext> = {
+  readonly [key: string]:
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    | ((args: any) => QueryThunk<S, any, any, TContext>)
+    | QueryRegistryBase<S, TContext>;
+};
+
+/**
  * The type returned by defineQueries - same tree shape but each leaf
  * is now a function that takes args and returns a thunk (ctx) => Query.
  */

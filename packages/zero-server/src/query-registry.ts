@@ -1,8 +1,11 @@
+import {assert} from '../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import {
   isQueryDefinition,
   type QueryDefinition,
+  type QueryRegistryBase,
+  type QueryThunk,
   wrapCustomQuery,
 } from '../../zql/src/query/define-query.ts';
 import type {QueryDefinitions} from '../../zql/src/query/query-definitions.ts';
@@ -66,4 +69,36 @@ function buildMap<
   recurse(queries, '');
 
   return map;
+}
+
+/**
+ * Look up a query by name in a QueryRegistry.
+ * Returns the thunk factory function that can be called with args to get a QueryThunk.
+ */
+export function getQuery<S extends Schema, Context>(
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  queries: QueryRegistryBase<S, Context>,
+  name: string,
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+): (args: any) => QueryThunk<S, any, any, Context> {
+  let path: string[];
+  if (name.includes('|')) {
+    path = name.split('|');
+  } else {
+    path = name.split('.');
+  }
+
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  let current: any = queries;
+  for (const segment of path) {
+    current = current[segment];
+    assert(
+      current !== undefined,
+      `could not find query segment '${segment}' in path '${name}'`,
+    );
+  }
+
+  assert(typeof current === 'function', () => `could not find query ${name}`);
+
+  return current;
 }

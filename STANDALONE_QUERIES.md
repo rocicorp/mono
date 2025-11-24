@@ -99,6 +99,8 @@ If this direction is accepted, we need to:
 
 8. **Mutator registration validation** - Add runtime or type check that mutators passed to `z.mutate()` were registered with Zero ahead of time
 
+9. **Remove QueryRegistry and MutatorRegistry classes** - These server-side classes that build maps from definitions are no longer needed with the new thunk-based pattern. Use `getQuery` and `getMutation` directly instead
+
 ## Files Changed
 
 ### Core Implementation
