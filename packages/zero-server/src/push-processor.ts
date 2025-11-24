@@ -92,26 +92,20 @@ export class PushProcessor<
     key: string,
     args: ReadonlyJSONValue,
   ): Promise<void> {
-    const [namespace, name] = splitMutatorKey(key);
-    if (name === undefined) {
-      const mutator = mutators[namespace];
-      assert(
-        typeof mutator === 'function',
-        () => `could not find mutator ${key}`,
-      );
-      return mutator(dbTx, args);
-    }
-
-    const mutatorGroup = mutators[namespace];
-    assert(
-      typeof mutatorGroup === 'object',
-      () => `could not find mutators for namespace ${namespace}`,
-    );
-    const mutator = mutatorGroup[name];
-    assert(
-      typeof mutator === 'function',
-      () => `could not find mutator ${key}`,
-    );
+    const parts = splitMutatorKey(key);
+    const mutator = objectAtPath(mutators, parts);
+    assert(typeof mutator === 'function', `could not find mutator ${key}`);
     return mutator(dbTx, args);
   }
+}
+
+function objectAtPath(obj: Record<string, unknown>, path: string[]): unknown {
+  let current: unknown = obj;
+  for (const part of path) {
+    if (typeof current !== 'object' || current === null || !(part in current)) {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[part];
+  }
+  return current;
 }
