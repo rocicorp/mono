@@ -8,7 +8,7 @@ import {
   type AuthData,
 } from './auth.ts';
 import {MutationError, MutationErrorCode} from './error.ts';
-import {builder, ZERO_PROJECT_ID, type Schema, type schema} from './schema.ts';
+import {builder, ZERO_PROJECT_ID, type schema} from './schema.ts';
 
 function projectIDWithDefault(projectID: string | undefined): string {
   return projectID ?? ZERO_PROJECT_ID;
@@ -40,7 +40,7 @@ export type AddCommentArgs = {
 
 export type NotificationType = 'subscribe' | 'unsubscribe';
 
-export type MutatorTx = Transaction<Schema>;
+export type MutatorTx = Transaction<typeof schema>;
 
 export function createMutators(authData: AuthData | undefined) {
   return {

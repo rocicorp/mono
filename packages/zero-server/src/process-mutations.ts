@@ -497,8 +497,9 @@ function makeAppErrorResponse(
   };
 }
 
-export function getMutation<TDBTransaction>(
-  mutators: CustomMutatorDefs<TDBTransaction>,
+export function getMutation(
+  // oxlint-disable-next-line no-explicit-any
+  mutators: CustomMutatorDefs<any>,
   name: string,
   // oxlint-disable-next-line no-explicit-any
 ): CustomMutatorImpl<any> {
