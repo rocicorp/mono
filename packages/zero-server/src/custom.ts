@@ -35,10 +35,8 @@ interface ServerTransaction<TSchema extends Schema, TWrappedTransaction>
 
 export type CustomMutatorDefs<TDBTransaction> = {
   [namespaceOrKey: string]:
-    | {
-        [key: string]: CustomMutatorImpl<TDBTransaction>;
-      }
-    | CustomMutatorImpl<TDBTransaction>;
+    | CustomMutatorImpl<TDBTransaction>
+    | CustomMutatorDefs<TDBTransaction>;
 };
 
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any

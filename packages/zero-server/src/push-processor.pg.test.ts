@@ -1,22 +1,22 @@
-import {beforeEach, describe, expect, test, assert} from 'vitest';
+import {assert, beforeEach, describe, expect, test} from 'vitest';
+import {zip} from '../../shared/src/arrays.ts';
 import {
   getClientsTableDefinition,
   getMutationsTableDefinition,
 } from '../../zero-cache/src/services/change-source/pg/schema/shard.ts';
+import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
-import {zip} from '../../shared/src/arrays.ts';
-import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
-import type {MutationResult, PushBody} from '../../zero-protocol/src/push.ts';
-import {customMutatorKey} from '../../zql/src/mutate/custom.ts';
 import {ApplicationError} from '../../zero-protocol/src/application-error.ts';
-import {PostgresJSConnection} from './adapters/postgresjs.ts';
-import {PushProcessor} from './push-processor.ts';
-import {ZQLDatabase} from './zql-database.ts';
 import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
-import {OutOfOrderMutation} from './process-mutations.ts';
 import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
+import type {MutationResult, PushBody} from '../../zero-protocol/src/push.ts';
+import {customMutatorKey} from '../../zql/src/mutate/custom.ts';
+import {PostgresJSConnection} from './adapters/postgresjs.ts';
+import {OutOfOrderMutation} from './process-mutations.ts';
+import {PushProcessor} from './push-processor.ts';
+import {ZQLDatabase} from './zql-database.ts';
 
 let pg: PostgresDB;
 const params = {
@@ -774,6 +774,114 @@ test('mutators with and without namespaces', async () => {
         details: {
           key: 'value1',
         },
+      },
+    },
+  ]);
+});
+
+test('mutators with arbitrary depth nesting', async () => {
+  const processor = new PushProcessor(
+    new ZQLDatabase(new PostgresJSConnection(pg), {
+      tables: {},
+      relationships: {},
+      version: 1,
+    }),
+  );
+  const mutators = {
+    level1: {
+      level2: {
+        level3: {
+          pass: () => Promise.resolve(),
+          reject: () => Promise.reject(new Error('deep application error')),
+        },
+      },
+    },
+    deep: {
+      nested: {
+        structure: {
+          works: {
+            fine: () => Promise.resolve(),
+          },
+        },
+      },
+    },
+  };
+
+  // Test 3-level nesting - pass
+  expect(
+    await processor.process(
+      mutators,
+      params,
+      makePush(1, 'level1|level2|level3|pass'),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "mutations": [
+        {
+          "id": {
+            "clientID": "cid",
+            "id": 1,
+          },
+          "result": {},
+        },
+      ],
+    }
+  `);
+
+  // Test 3-level nesting - reject
+  expect(
+    await processor.process(
+      mutators,
+      params,
+      makePush(2, 'level1|level2|level3|reject'),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "mutations": [
+        {
+          "id": {
+            "clientID": "cid",
+            "id": 2,
+          },
+          "result": {
+            "error": "app",
+            "message": "deep application error",
+          },
+        },
+      ],
+    }
+  `);
+
+  // Test 5-level nesting
+  expect(
+    await processor.process(
+      mutators,
+      params,
+      makePush(3, 'deep|nested|structure|works|fine'),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "mutations": [
+        {
+          "id": {
+            "clientID": "cid",
+            "id": 3,
+          },
+          "result": {},
+        },
+      ],
+    }
+  `);
+
+  await checkClientsTable(pg, 3);
+  await checkMutationsTable(pg, [
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 2n,
+      result: {
+        error: 'app',
+        message: 'deep application error',
       },
     },
   ]);
