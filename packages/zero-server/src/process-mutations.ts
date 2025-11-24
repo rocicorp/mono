@@ -498,33 +498,30 @@ function makeAppErrorResponse(
 }
 
 export function getMutation(
-  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  // oxlint-disable-next-line no-explicit-any
   mutators: CustomMutatorDefs<any>,
   name: string,
-  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-): CustomMutatorImpl<any, any> {
-  let path: string[];
-  if (name.includes('|')) {
-    path = name.split('|');
-  } else {
-    path = name.split('.');
-  }
+  // oxlint-disable-next-line no-explicit-any
+): CustomMutatorImpl<any> {
+  const path = name.split(/\.|\|/);
+  const mutator = getObjectAtPath(mutators, path);
+  assert(typeof mutator === 'function', `could not find mutator ${name}`);
+  // oxlint-disable-next-line no-explicit-any
+  return mutator as CustomMutatorImpl<any>;
+}
 
-  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  let mutator: any;
-  if (path.length === 1) {
-    mutator = mutators[path[0]];
-  } else {
-    const nextMap = mutators[path[0]];
-    assert(
-      typeof nextMap === 'object' && nextMap !== undefined,
-      `could not find mutator map for ${name}`,
-    );
-    mutator = nextMap[path[1]];
+function getObjectAtPath(
+  obj: Record<string, unknown>,
+  path: string[],
+): unknown {
+  let current: unknown = obj;
+  for (const part of path) {
+    if (typeof current !== 'object' || current === null || !(part in current)) {
+      return undefined;
+    }
+    current = (current as Record<string, unknown>)[part];
   }
-
-  assert(typeof mutator === 'function', () => `could not find mutator ${name}`);
-  return mutator;
+  return current;
 }
 
 type DatabaseTransactionPhase = 'open' | 'execute';
