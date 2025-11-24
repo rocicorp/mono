@@ -1,10 +1,10 @@
 import type {LogLevel} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import * as v from '../../../shared/src/valita.ts';
+import type {MutatorDefinitions} from '../../../zero-types/src/mutator-definitions.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
 import type {CustomMutatorDefs} from './custom.ts';
-import type {MutatorDefinitions} from './mutator-definitions.ts';
 import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 
 /**

@@ -25,6 +25,10 @@ import {
   type PushBody,
   type PushResponse,
 } from '../../zero-protocol/src/push.ts';
+import {isMutatorDefinition} from '../../zero-types/src/define-mutator.ts';
+import type {MutatorDefinitions} from '../../zero-types/src/mutator-definitions.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
+import {validateInput} from '../../zql/src/query/validate-input.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
 import {createLogContext} from './logging.ts';
 
@@ -98,7 +102,7 @@ const applicationErrorWrapper = async <T>(fn: () => Promise<T>): Promise<T> => {
 
 export function handleMutationRequest<
   D extends Database<ExtractTransactionType<D>>,
-  C,
+  C = undefined,
 >(
   dbProvider: D,
   cb: (
@@ -107,13 +111,13 @@ export function handleMutationRequest<
   ) => Promise<MutationResponse>,
   queryString: URLSearchParams | Record<string, string>,
   body: ReadonlyJSONValue,
-  context: C,
+  context?: C,
   logLevel?: LogLevel,
 ): Promise<PushResponse>;
 
 export function handleMutationRequest<
   D extends Database<ExtractTransactionType<D>>,
-  C,
+  C = undefined,
 >(
   dbProvider: D,
   cb: (
@@ -121,7 +125,7 @@ export function handleMutationRequest<
     mutation: CustomMutation,
   ) => Promise<MutationResponse>,
   request: Request,
-  context: C,
+  context?: C,
   logLevel?: LogLevel,
 ): Promise<PushResponse>;
 
@@ -536,15 +540,25 @@ function makeAppErrorResponse(
   };
 }
 
-export function getMutation(
+export function getMutation<S extends Schema, C>(
   // oxlint-disable-next-line no-explicit-any
-  mutators: CustomMutatorDefs<any>,
+  mutators: MutatorDefinitions<S, C> | CustomMutatorDefs<any>,
   name: string,
   // oxlint-disable-next-line no-explicit-any
 ): CustomMutatorImpl<any> {
   const path = name.split(/\.|\|/);
   const mutator = getObjectAtPath(mutators, path);
   assert(typeof mutator === 'function', `could not find mutator ${name}`);
+
+  if (isMutatorDefinition(mutator)) {
+    // mutator needs to be called with {tx, args, ctx}
+    // CustomMutatorImpl is called with (tx, args, ctx)
+    return (tx, args, ctx) => {
+      const v = validateInput(name, args, mutator.validator, 'mutator');
+      return mutator({args: v, ctx, tx});
+    };
+  }
+
   // oxlint-disable-next-line no-explicit-any
   return mutator as CustomMutatorImpl<any>;
 }

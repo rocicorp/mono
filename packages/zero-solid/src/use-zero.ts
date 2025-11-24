@@ -11,9 +11,9 @@ import {
   type JSX,
 } from 'solid-js';
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
-import type {MutatorDefinitions} from '../../zero-client/src/client/mutator-definitions.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
+import type {MutatorDefinitions} from '../../zero-types/src/mutator-definitions.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {QueryDefinitions} from '../../zql/src/query/query-definitions.ts';
 

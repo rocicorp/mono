@@ -1,5 +1,10 @@
 import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
 import {must} from '../../../shared/src/must.ts';
+import {
+  isMutatorDefinition,
+  type MutatorDefinition,
+} from '../../../zero-types/src/define-mutator.ts';
+import type {MutatorDefinitions} from '../../../zero-types/src/mutator-definitions.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {
   customMutatorKey,
@@ -11,8 +16,6 @@ import type {
   CustomMutatorImpl,
   MutatorResult,
 } from './custom.ts';
-import {isMutatorDefinition, type MutatorDefinition} from './define-mutator.ts';
-import type {MutatorDefinitions} from './mutator-definitions.ts';
 import type {MutatorProxy} from './mutator-proxy.ts';
 
 /**

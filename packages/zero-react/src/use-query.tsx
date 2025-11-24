@@ -8,13 +8,13 @@ import {
   type BindingsForZero,
 } from '../../zero-client/src/client/bindings.ts';
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
-import type {MutatorDefinitions} from '../../zero-client/src/client/mutator-definitions.ts';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
 import type {
   QueryErrorDetails,
   QueryResultDetails,
 } from '../../zero-client/src/types/query-result.ts';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
+import type {MutatorDefinitions} from '../../zero-types/src/mutator-definitions.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';

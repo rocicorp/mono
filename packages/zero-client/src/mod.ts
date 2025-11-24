@@ -95,6 +95,13 @@ export type {
   SchemaValueWithCustomType,
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
+export {
+  defineMutator,
+  defineMutatorWithType,
+  isMutatorDefinition,
+  type MutatorDefinition,
+} from '../../zero-types/src/define-mutator.ts';
+export type {MutatorDefinitions} from '../../zero-types/src/mutator-definitions.ts';
 export type {Schema} from '../../zero-types/src/schema.ts';
 export type {Change} from '../../zql/src/ivm/change.ts';
 export type {Node} from '../../zql/src/ivm/data.ts';
@@ -182,18 +189,11 @@ export type {
   MutatorResultSuccessDetails,
   MutatorResult as PromiseWithServerResult,
 } from './client/custom.ts';
-export {
-  defineMutator,
-  defineMutatorWithType,
-  isMutatorDefinition,
-  type MutatorDefinition,
-} from './client/define-mutator.ts';
 export type {ClientGroup as InspectorClientGroup} from './client/inspector/client-group.ts';
 export type {Client as InspectorClient} from './client/inspector/client.ts';
 export type {Inspector} from './client/inspector/inspector.ts';
 export type {Query as InspectorQuery} from './client/inspector/query.ts';
 export type {MakeEntityQueriesFromSchema} from './client/make-query-property.ts';
-export type {MutatorDefinitions} from './client/mutator-definitions.ts';
 export type {UpdateNeededReason, ZeroOptions} from './client/options.ts';
 export {UpdateNeededReasonType} from './client/update-needed-reason-type.ts';
 export {Zero} from './client/zero.ts';

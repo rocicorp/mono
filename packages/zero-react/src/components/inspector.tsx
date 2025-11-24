@@ -1,6 +1,6 @@
 import type {CustomMutatorDefs} from '../../../zero-client/src/client/custom.ts';
-import type {MutatorDefinitions} from '../../../zero-client/src/client/mutator-definitions.ts';
 import type {Zero} from '../../../zero-client/src/client/zero.ts';
+import type {MutatorDefinitions} from '../../../zero-types/src/mutator-definitions.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
 import {MarkIcon} from './mark-icon.tsx';

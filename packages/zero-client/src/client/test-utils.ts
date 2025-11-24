@@ -30,6 +30,7 @@ import type {
   PushResponseMessage,
 } from '../../../zero-protocol/src/push.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
+import type {MutatorDefinitions} from '../../../zero-types/src/mutator-definitions.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
 import type {AnyQuery, Query} from '../../../zql/src/query/query.ts';
@@ -41,7 +42,6 @@ import type {
 import {ConnectionStatus} from './connection-status.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {LogOptions} from './log-options.ts';
-import type {MutatorDefinitions} from './mutator-definitions.ts';
 import type {ZeroOptions} from './options.ts';
 import {
   Zero,

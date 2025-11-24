@@ -76,6 +76,7 @@ import {
   type NameMapper,
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
+import type {MutatorDefinitions} from '../../../zero-types/src/mutator-definitions.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import {
@@ -146,7 +147,6 @@ import {
   shouldReportConnectError,
 } from './metrics.ts';
 import {MutationTracker} from './mutation-tracker.ts';
-import type {MutatorDefinitions} from './mutator-definitions.ts';
 import {MutatorProxy} from './mutator-proxy.ts';
 import type {UpdateNeededReason, ZeroOptions} from './options.ts';
 import {QueryManager} from './query-manager.ts';

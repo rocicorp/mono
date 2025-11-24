@@ -15,6 +15,7 @@ import {
   string,
   table,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
+import type {MutatorDefinitions} from '../../../../zero-types/src/mutator-definitions.ts';
 import type {Schema} from '../../../../zero-types/src/schema.ts';
 import type {QueryDefinitions} from '../../../../zql/src/query/query-definitions.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
@@ -22,7 +23,6 @@ import {schema} from '../../../../zql/src/query/test/test-schemas.ts';
 import {nanoid} from '../../util/nanoid.ts';
 import {bindingsForZero} from '../bindings.ts';
 import type {CustomMutatorDefs} from '../custom.ts';
-import type {MutatorDefinitions} from '../mutator-definitions.ts';
 import type {TestZero} from '../test-utils.ts';
 import {MockSocket, zeroForTest} from '../test-utils.ts';
 import type {Inspector} from './inspector.ts';

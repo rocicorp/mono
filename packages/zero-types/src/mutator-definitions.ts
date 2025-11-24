@@ -1,6 +1,6 @@
 // oxlint-disable no-explicit-any
-import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {MutatorDefinition} from './define-mutator.ts';
+import type {Schema} from './schema.ts';
 
 /**
  * A collection of mutator definitions that can be organized hierarchically.

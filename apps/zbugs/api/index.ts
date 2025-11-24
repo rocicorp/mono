@@ -7,6 +7,7 @@ import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
 import {Octokit} from '@octokit/core';
 import type {ReadonlyJSONValue} from '@rocicorp/zero';
 import {
+  getMutation,
   handleMutationRequest,
   handleTransformRequest,
   MutatorRegistry,
@@ -191,23 +192,32 @@ async function mutateHandler(
   const response = await handleMutationRequest(
     dbProvider,
     (transact, _mutation) =>
-      transact((tx, name, args) => getMutation(mutators, name)(tx, args)),
-    // transact =>
-    //   transact(dbProvider, (tx, name, args) => {
-    //     assert(
-    //       tx.location === 'server',
-    //       'Transaction must be a server transaction',
-    //     );
-    //     const mutator = mutatorRegistry.mustGet(name, jwtData);
-    //     return mutator(
-    //       tx as unknown as ServerTransaction<Schema, PostgresJsTransaction>,
-    //       args,
-    //     );
-    //   }),
+      transact((tx, name, args, ctx) => {
+        const mutator = getMutation(mutators, name);
+        return mutator(tx, args, ctx);
+      }),
     request.query,
     request.body,
+    jwtData,
     'info',
   );
+  // transact((tx, name, args) => getMutation(mutators, name)(tx, args)),
+  // transact =>
+  //   transact(dbProvider, (tx, name, args) => {
+  //     assert(
+  //       tx.location === 'server',
+  //       'Transaction must be a server transaction',
+  //     );
+  //     const mutator = mutatorRegistry.mustGet(name, jwtData);
+  //     return mutator(
+  //       tx as unknown as ServerTransaction<Schema, PostgresJsTransaction>,
+  //       args,
+  //     );
+  //   }),
+  //   request.query,
+  //   request.body,
+  //   'info',
+  // );
 
   // we don't yet handle errors here, since Loops emails return 429 very often
   // and we don't want to block the mutation

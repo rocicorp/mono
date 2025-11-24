@@ -1,7 +1,10 @@
-import type {QueryDefinitions, ZeroOptions} from '@rocicorp/zero';
+import type {
+  MutatorDefinitions,
+  QueryDefinitions,
+  ZeroOptions,
+} from '@rocicorp/zero';
 import {ZeroProvider} from '@rocicorp/zero/react';
 import {useMemo, type ReactNode} from 'react';
-import type {MutatorDefinitions} from '../../../packages/zero-client/src/client/mutator-definitions.ts';
 import type {AuthData} from '../shared/auth.ts';
 import {mutators} from '../shared/mutators.ts';
 import {queries} from '../shared/queries.ts';

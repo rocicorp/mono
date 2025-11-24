@@ -2,8 +2,6 @@ import {type LogLevel} from '@rocicorp/logger';
 import {assert} from '../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {must} from '../../shared/src/must.ts';
-import {isMutatorDefinition} from '../../zero-client/src/client/define-mutator.ts';
-import type {MutatorDefinitions} from '../../zero-client/src/client/mutator-definitions.ts';
 import {
   type CustomMutation,
   type MutationResponse,
@@ -15,7 +13,10 @@ import {
   handleMutationRequest,
   type TransactFn,
 } from '../../zero-server/src/process-mutations.ts';
+import {isMutatorDefinition} from '../../zero-types/src/define-mutator.ts';
+import type {MutatorDefinitions} from '../../zero-types/src/mutator-definitions.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
+import type {Transaction} from '../../zql/src/mutate/custom.ts';
 import {splitMutatorKey} from '../../zql/src/mutate/custom.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 
@@ -25,15 +26,15 @@ export class PushProcessor<
   MD extends
     | MutatorDefinitions<S, C>
     | CustomMutatorDefs<ExtractTransactionType<D>>,
-  C,
+  C = undefined,
 > {
   readonly #dbProvider: D;
-  readonly #logLevel;
+  readonly #logLevel: LogLevel;
   readonly #context: C;
 
-  constructor(dbProvider: D, context: C, logLevel: LogLevel = 'info') {
+  constructor(dbProvider: D, context?: C, logLevel: LogLevel = 'info') {
     this.#dbProvider = dbProvider;
-    this.#context = context;
+    this.#context = context as C;
     this.#logLevel = logLevel;
   }
 
@@ -108,9 +109,18 @@ export class PushProcessor<
     const parts = splitMutatorKey(key, /\.|\|/);
     const mutator = objectAtPath(mutators, parts);
     assert(typeof mutator === 'function', `could not find mutator ${key}`);
-    const tx = dbTx;
-    if (isMutatorDefinition(mutator)) {
-      return mutator({tx, args, ctx});
+    const tx = dbTx as Transaction<S, unknown>;
+    if (
+      isMutatorDefinition<
+        S,
+        C,
+        ReadonlyJSONValue | undefined,
+        ReadonlyJSONValue | undefined,
+        // oxlint-disable-next-line no-explicit-any
+        any
+      >(mutator)
+    ) {
+      return mutator({args, ctx, tx});
     }
     return mutator(dbTx, args);
   }

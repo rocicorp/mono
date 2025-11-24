@@ -1,8 +1,8 @@
 import type {StandardSchemaV1} from '@standard-schema/spec';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {must} from '../../../shared/src/must.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {Transaction} from '../../../zql/src/mutate/custom.ts';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {must} from '../../shared/src/must.ts';
+import type {Transaction} from '../../zql/src/mutate/custom.ts';
+import type {Schema} from './schema.ts';
 
 const defineMutatorTag = Symbol();
 

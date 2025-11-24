@@ -39,11 +39,12 @@ export type CustomMutatorDefs<TDBTransaction> = {
     | CustomMutatorDefs<TDBTransaction>;
 };
 
-// oxlint-disable-next-line @typescript-eslint/no-explicit-any
-export type CustomMutatorImpl<TDBTransaction, TArgs = any> = (
-  tx: TDBTransaction,
-  args: TArgs,
-) => Promise<void>;
+export type CustomMutatorImpl<
+  TDBTransaction,
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  TArgs = any,
+  Context = unknown,
+> = (tx: TDBTransaction, args: TArgs, ctx: Context) => Promise<void>;
 
 export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
   implements ServerTransaction<TSchema, TWrappedTransaction>
