@@ -20,6 +20,8 @@ import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {Database} from '../db.ts';
 import {compile, sql} from '../internal/sql.ts';
 import {TableSource, toSQLiteTypeName} from '../table-source.ts';
+import {CREATE_STORAGE_TABLE, DatabaseStorage} from '../database-storage.ts';
+import type {Storage} from '../../../zql/src/ivm/operator.ts';
 
 export const createSource: SourceFactory = (
   lc: LogContext,
@@ -101,6 +103,7 @@ class SourceFactoryQueryDelegate extends QueryDelegateBase {
   readonly #logConfig: LogConfig;
   readonly #db: Database;
   readonly #schema: Schema;
+  readonly #cgs;
 
   constructor(
     lc: LogContext,
@@ -110,11 +113,19 @@ class SourceFactoryQueryDelegate extends QueryDelegateBase {
   ) {
     super();
     this.#lc = lc;
+    const dbs = new Database(lc, ':memory:');
+    dbs.prepare(CREATE_STORAGE_TABLE).run();
+    const s = new DatabaseStorage(dbs);
+    this.#cgs = s.createClientGroupStorage('');
     this.#logConfig = logConfig;
     this.#db = db;
     this.#schema = schema;
     this.#clientToServerMapper = clientToServer(schema.tables);
     this.#serverToClientMapper = serverToClient(schema.tables);
+  }
+
+  override createStorage(): Storage {
+    return this.#cgs.createStorage();
   }
 
   override getSource(serverTableName: string): Source {
