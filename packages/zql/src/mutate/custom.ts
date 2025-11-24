@@ -165,6 +165,6 @@ export function customMutatorKey(sep: string, parts: string[]) {
   return parts.join(sep);
 }
 
-export function splitMutatorKey(key: string, sep: string): string[] {
+export function splitMutatorKey(key: string, sep: string | RegExp): string[] {
   return key.split(sep);
 }

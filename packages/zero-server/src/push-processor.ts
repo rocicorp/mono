@@ -2,6 +2,8 @@ import {type LogLevel} from '@rocicorp/logger';
 import {assert} from '../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {must} from '../../shared/src/must.ts';
+import {isMutatorDefinition} from '../../zero-client/src/client/define-mutator.ts';
+import type {MutatorDefinitions} from '../../zero-client/src/client/mutator-definitions.ts';
 import {
   type CustomMutation,
   type MutationResponse,
@@ -13,18 +15,25 @@ import {
   handleMutationRequest,
   type TransactFn,
 } from '../../zero-server/src/process-mutations.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
 import {splitMutatorKey} from '../../zql/src/mutate/custom.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 
 export class PushProcessor<
+  S extends Schema,
   D extends Database<ExtractTransactionType<D>>,
-  MD extends CustomMutatorDefs<ExtractTransactionType<D>>,
+  MD extends
+    | MutatorDefinitions<S, C>
+    | CustomMutatorDefs<ExtractTransactionType<D>>,
+  C,
 > {
   readonly #dbProvider: D;
   readonly #logLevel;
+  readonly #context: C;
 
-  constructor(dbProvider: D, logLevel: LogLevel = 'info') {
+  constructor(dbProvider: D, context: C, logLevel: LogLevel = 'info') {
     this.#dbProvider = dbProvider;
+    this.#context = context;
     this.#logLevel = logLevel;
   }
 
@@ -63,6 +72,7 @@ export class PushProcessor<
         (transact, mutation) =>
           this.#processMutation(mutators, transact, mutation),
         queryOrQueryString,
+        this.#context,
         this.#logLevel,
       );
     }
@@ -72,17 +82,18 @@ export class PushProcessor<
         this.#processMutation(mutators, transact, mutation),
       queryOrQueryString,
       must(body),
+      this.#context,
       this.#logLevel,
     );
   }
 
   #processMutation(
     mutators: MD,
-    transact: TransactFn<D>,
+    transact: TransactFn<D, C>,
     _mutation: CustomMutation,
   ): Promise<MutationResponse> {
-    return transact((tx, name, args) =>
-      this.#dispatchMutation(mutators, tx, name, args),
+    return transact((tx, name, args, ctx) =>
+      this.#dispatchMutation(mutators, tx, name, args, ctx),
     );
   }
 
@@ -90,11 +101,17 @@ export class PushProcessor<
     mutators: MD,
     dbTx: ExtractTransactionType<D>,
     key: string,
-    args: ReadonlyJSONValue,
+    args: ReadonlyJSONValue | undefined,
+    ctx: C,
   ): Promise<void> {
-    const parts = splitMutatorKey(key);
+    // Legacy mutators used | as a separator, new mutators use .
+    const parts = splitMutatorKey(key, /\.|\|/);
     const mutator = objectAtPath(mutators, parts);
     assert(typeof mutator === 'function', `could not find mutator ${key}`);
+    const tx = dbTx;
+    if (isMutatorDefinition(mutator)) {
+      return mutator({tx, args, ctx});
+    }
     return mutator(dbTx, args);
   }
 }

@@ -38,7 +38,7 @@ beforeEach(async () => {
 
 function makePush(
   mid: number | number[],
-  mutatorName: string | string[] = customMutatorKey('foo', 'bar'),
+  mutatorName: string | string[] = customMutatorKey('|', ['foo', 'bar']),
 ): PushBody {
   const mids = Array.isArray(mid) ? mid : [mid];
   const mutatorNames = Array.isArray(mutatorName) ? mutatorName : [mutatorName];
@@ -214,7 +214,7 @@ test('lmid still moves forward if the mutator implementation throws', async () =
   const result = await processor.process(
     mutators,
     params,
-    makePush(3, customMutatorKey('foo', 'baz')),
+    makePush(3, customMutatorKey('|', ['foo', 'baz'])),
   );
   expect(result).toEqual({
     mutations: [
@@ -257,7 +257,10 @@ test('processes all mutations, even if all mutations throw app errors', async ()
     await processor.process(
       mutators,
       params,
-      makePush([1, 2, 3, 4], Array(4).fill(customMutatorKey('foo', 'baz'))),
+      makePush(
+        [1, 2, 3, 4],
+        Array(4).fill(customMutatorKey('|', ['foo', 'baz'])),
+      ),
     ),
   ).toEqual({
     mutations: Array.from({length: 4}, (_, i) => ({
@@ -300,7 +303,10 @@ test('processes all mutations, even if all mutations have been seen before', asy
   await processor.process(
     mutators,
     params,
-    makePush([1, 2, 3, 4], Array(4).fill(customMutatorKey('foo', 'bar'))),
+    makePush(
+      [1, 2, 3, 4],
+      Array(4).fill(customMutatorKey('|', ['foo', 'bar'])),
+    ),
   );
 
   async function resend(basis: number, mutator: string) {
@@ -328,17 +334,20 @@ test('processes all mutations, even if all mutations have been seen before', asy
   }
 
   // re-send the same mutations
-  await resend(0, customMutatorKey('foo', 'bar'));
+  await resend(0, customMutatorKey('|', ['foo', 'bar']));
 
   // process a bunch of mutations that throw app errors
   await processor.process(
     mutators,
     params,
-    makePush([5, 6, 7, 8], Array(4).fill(customMutatorKey('foo', 'baz'))),
+    makePush(
+      [5, 6, 7, 8],
+      Array(4).fill(customMutatorKey('|', ['foo', 'baz'])),
+    ),
   );
 
   // re-send the same mutations that throw app errors
-  await resend(4, customMutatorKey('foo', 'baz'));
+  await resend(4, customMutatorKey('|', ['foo', 'baz']));
 
   expect(
     await pg`select "clientGroupID", "clientID", "mutationID", "result" from "zero_0"."mutations" order by "mutationID"`,
@@ -538,10 +547,10 @@ test('stops processing mutations as soon as it hits an out of order mutation', a
     makePush(
       [1, 2, 5, 4],
       [
-        customMutatorKey('foo', 'bar'),
-        customMutatorKey('foo', 'bar'),
-        customMutatorKey('foo', 'bar'),
-        customMutatorKey('foo', 'bar'),
+        customMutatorKey('|', ['foo', 'bar']),
+        customMutatorKey('|', ['foo', 'bar']),
+        customMutatorKey('|', ['foo', 'bar']),
+        customMutatorKey('|', ['foo', 'bar']),
       ],
     ),
   );
@@ -590,7 +599,7 @@ test('a mutation throws an app error then an ooo mutation error', async () => {
   const response = await processor.process(
     mutators,
     params,
-    makePush(1, customMutatorKey('foo', 'baz')),
+    makePush(1, customMutatorKey('|', ['foo', 'baz'])),
   );
 
   assert('kind' in response, 'expected push failed response');
@@ -630,7 +639,7 @@ test('mutation throws an app error then an already processed error', async () =>
   const response = await processor.process(
     mutators,
     params,
-    makePush(1, customMutatorKey('foo', 'baz')),
+    makePush(1, customMutatorKey('|', ['foo', 'baz'])),
   );
 
   // When MutationAlreadyProcessedError is thrown during error retry,
@@ -680,7 +689,7 @@ test('mutators with and without namespaces', async () => {
     await processor.process(
       mutators,
       params,
-      makePush(1, customMutatorKey('namespaced', 'pass')),
+      makePush(1, customMutatorKey('|', ['namespaced', 'pass'])),
     ),
   ).toMatchInlineSnapshot(`
     {
@@ -714,7 +723,7 @@ test('mutators with and without namespaces', async () => {
     await processor.process(
       mutators,
       params,
-      makePush(3, customMutatorKey('namespaced', 'reject')),
+      makePush(3, customMutatorKey('|', ['namespaced', 'reject'])),
     ),
   ).toMatchInlineSnapshot(`
     {
