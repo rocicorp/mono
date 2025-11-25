@@ -9,6 +9,13 @@ export function ErrorModal() {
   const connectionState = useZeroConnectionState();
   const isError = connectionState.name === 'error';
   const isClosed = connectionState.name === 'closed';
+
+  const isClientNotFound =
+    isError &&
+    connectionState.reason.startsWith(
+      'Server could not find state needed to synchronize this client.',
+    );
+
   const handleAction = useCallback(() => {
     if (isClosed) {
       window.location.reload();
@@ -17,7 +24,7 @@ export function ErrorModal() {
     void zero.connection.connect();
   }, [isClosed, zero]);
 
-  return isError || isClosed ? (
+  return (isError && !isClientNotFound) || isClosed ? (
     <Modal isOpen={true} onDismiss={() => {}}>
       <ModalText>
         {isError
