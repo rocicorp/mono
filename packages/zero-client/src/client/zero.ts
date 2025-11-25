@@ -514,7 +514,7 @@ export class Zero<
     const replicacheMutators = makeReplicacheMutators<S, C>(
       schema,
       options.mutators,
-      this,
+      this.context,
       lc,
     );
 
@@ -694,7 +694,7 @@ export class Zero<
     this.query = makeQueryProperty<S, C, QD>(
       schema,
       options.queries as QD,
-      this,
+      this.context,
       lc,
     );
 

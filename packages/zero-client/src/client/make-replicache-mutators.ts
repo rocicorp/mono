@@ -23,7 +23,7 @@ import type {WriteTransaction} from './replicache-types.ts';
 
 export function extendReplicacheMutators<S extends Schema, C>(
   lc: LogContext,
-  contextHolder: {context: C},
+  context: C,
   mutators: MutatorDefinitions<S, C> | CustomMutatorDefs,
   schema: S,
   mutateObject: Record<string, unknown>,
@@ -42,7 +42,7 @@ export function extendReplicacheMutators<S extends Schema, C>(
           mutator,
           fullKey,
           schema,
-          contextHolder,
+          context,
         );
       } else if (typeof mutator === 'function') {
         // oxlint-disable-next-line no-explicit-any
@@ -52,6 +52,7 @@ export function extendReplicacheMutators<S extends Schema, C>(
           mutator,
           mutator,
           schema,
+          context,
         );
       } else {
         processMutators(mutator, path);
@@ -80,7 +81,7 @@ function makeReplicacheMutator<
   >,
   queryName: string,
   schema: TSchema,
-  contextHolder: {context: TContext},
+  context: TContext,
 ): (repTx: WriteTransaction, args: ReadonlyJSONValue) => Promise<void> {
   const {validator} = mutator;
   const validate = validator
@@ -94,7 +95,7 @@ function makeReplicacheMutator<
     const tx = new TransactionImpl(lc, repTx, schema);
     await mutator({
       args: validate(args as TInput) as TOutput,
-      ctx: contextHolder.context,
+      ctx: context,
       tx: tx,
     });
   };
@@ -113,7 +114,7 @@ function makeReplicacheMutator<
  *
  * @param schema - The schema instance used for validation and type checking
  * @param mutators - The mutator definitions to process, can be nested objects or custom mutator definitions
- * @param contextHolder - An object containing the context to be passed to mutators
+ * @param context - The context to be passed to mutators
  * @param lc - The log context used for logging operations
  *
  * @returns A mutator definitions object containing the CRUD mutator and any custom mutators
@@ -126,7 +127,7 @@ function makeReplicacheMutator<
 export function makeReplicacheMutators<const S extends Schema, C>(
   schema: S,
   mutators: MutatorDefinitions<S, C> | CustomMutatorDefs | undefined,
-  contextHolder: {context: C},
+  context: C,
   lc: LogContext,
 ): MutatorDefs & {_zero_crud: CRUDMutator} {
   const {enableLegacyMutators = true} = schema;
@@ -144,13 +145,7 @@ export function makeReplicacheMutators<const S extends Schema, C>(
   };
 
   if (mutators) {
-    extendReplicacheMutators(
-      lc,
-      contextHolder,
-      mutators,
-      schema,
-      replicacheMutators,
-    );
+    extendReplicacheMutators(lc, context, mutators, schema, replicacheMutators);
   }
 
   return replicacheMutators;

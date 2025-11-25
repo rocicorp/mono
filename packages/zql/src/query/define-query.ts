@@ -129,14 +129,14 @@ export function defineQuery<
  *
  * @param queryName - The name to assign to the query
  * @param f - The query definition to wrap
- * @param contextHolder - An object containing the context to pass to the query
+ * @param context - The context to pass to the query
  * @returns A function that takes args and returns a Query
  */
 export function wrapCustomQuery<TArgs, Context>(
   queryName: string,
   // oxlint-disable-next-line no-explicit-any
   f: QueryDefinition<any, any, any, any, any, any>,
-  contextHolder: {context: Context},
+  context: Context,
 ): (args: TArgs) => AnyQuery {
   const {validator} = f;
   const validate = validator
@@ -148,7 +148,7 @@ export function wrapCustomQuery<TArgs, Context>(
     // This is what gets fed into the validator.
     const q = f({
       args: validate(args as TArgs),
-      ctx: contextHolder.context,
+      ctx: context,
     });
     return asQueryInternals(q).nameAndArgs(
       queryName,

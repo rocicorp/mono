@@ -311,6 +311,7 @@ describe('MutationTracker', () => {
         tables: [],
         relationships: [],
       }),
+      'context',
     );
 
     const tx = {

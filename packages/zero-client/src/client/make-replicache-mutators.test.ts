@@ -13,7 +13,7 @@ type Schema = typeof testSchema;
 describe('extendReplicacheMutators', () => {
   test('processes MutatorDefinition at top level', () => {
     const lc = createSilentLogContext();
-    const contextHolder = {context: {userId: '123'}};
+    const context = {userId: '123'};
     const mutateObject: Record<string, unknown> = {};
 
     const mockMutatorFn = vi.fn(async () => {});
@@ -23,13 +23,7 @@ describe('extendReplicacheMutators', () => {
       createUser: mutator,
     };
 
-    extendReplicacheMutators(
-      lc,
-      contextHolder,
-      mutators,
-      testSchema,
-      mutateObject,
-    );
+    extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
     expect(mutateObject).toHaveProperty('createUser');
     expect(typeof mutateObject['createUser']).toBe('function');
@@ -37,7 +31,7 @@ describe('extendReplicacheMutators', () => {
 
   test('processes nested MutatorDefinition', () => {
     const lc = createSilentLogContext();
-    const contextHolder = {context: {userId: '456'}};
+    const context = {userId: '456'};
     const mutateObject: Record<string, unknown> = {};
 
     const mockMutatorFn = vi.fn(async () => {});
@@ -49,13 +43,7 @@ describe('extendReplicacheMutators', () => {
       },
     };
 
-    extendReplicacheMutators(
-      lc,
-      contextHolder,
-      mutators,
-      testSchema,
-      mutateObject,
-    );
+    extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
     expect(mutateObject).toHaveProperty('users.update');
     expect(typeof mutateObject['users.update']).toBe('function');
@@ -63,7 +51,7 @@ describe('extendReplicacheMutators', () => {
 
   test('processes deeply nested MutatorDefinition', () => {
     const lc = createSilentLogContext();
-    const contextHolder = {context: {}};
+    const context = {};
     const mutateObject: Record<string, unknown> = {};
 
     const mockMutatorFn = vi.fn(async () => {});
@@ -79,20 +67,14 @@ describe('extendReplicacheMutators', () => {
       },
     };
 
-    extendReplicacheMutators(
-      lc,
-      contextHolder,
-      mutators,
-      testSchema,
-      mutateObject,
-    );
+    extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
     expect(mutateObject).toHaveProperty('level1.level2.level3.action');
   });
 
   test('processes legacy CustomMutatorImpl functions', () => {
     const lc = createSilentLogContext();
-    const contextHolder = {context: {}};
+    const context = {};
     const mutateObject: Record<string, unknown> = {};
 
     const legacyMutator = async (_tx: Transaction<Schema>, _args: unknown) => {
@@ -105,13 +87,7 @@ describe('extendReplicacheMutators', () => {
       },
     };
 
-    extendReplicacheMutators(
-      lc,
-      contextHolder,
-      mutators,
-      testSchema,
-      mutateObject,
-    );
+    extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
     // Legacy mutators use '|' separator
     expect(mutateObject).toHaveProperty('legacy|action');
@@ -120,7 +96,7 @@ describe('extendReplicacheMutators', () => {
 
   test('processes mixed MutatorDefinition at different levels', () => {
     const lc = createSilentLogContext();
-    const contextHolder = {context: {userId: 'mixed'}};
+    const context = {userId: 'mixed'};
     const mutateObject: Record<string, unknown> = {};
 
     const createMutator = defineMutator(async () => {});
@@ -133,13 +109,7 @@ describe('extendReplicacheMutators', () => {
       updateUser: updateMutator,
     };
 
-    extendReplicacheMutators(
-      lc,
-      contextHolder,
-      mutators,
-      testSchema,
-      mutateObject,
-    );
+    extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
     expect(mutateObject).toHaveProperty('users.create');
     expect(mutateObject).toHaveProperty('updateUser');
@@ -148,7 +118,7 @@ describe('extendReplicacheMutators', () => {
   test('created mutator calls the underlying MutatorDefinition with correct args', async () => {
     const lc = createSilentLogContext();
     const testContext = {userId: '789', role: 'admin'};
-    const contextHolder = {context: testContext};
+    const context = testContext;
     const mutateObject: Record<string, unknown> = {};
 
     const mockMutatorFn = vi.fn(({args, ctx, tx}) => {
@@ -168,13 +138,7 @@ describe('extendReplicacheMutators', () => {
       updateIssue: mutator,
     };
 
-    extendReplicacheMutators(
-      lc,
-      contextHolder,
-      mutators,
-      testSchema,
-      mutateObject,
-    );
+    extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
     const replicacheMutator = mutateObject['updateIssue'] as (
       repTx: WriteTransaction,
@@ -210,7 +174,7 @@ describe('extendReplicacheMutators', () => {
 
   test('handles multiple mutators at same level', () => {
     const lc = createSilentLogContext();
-    const contextHolder = {context: {}};
+    const context = {};
     const mutateObject: Record<string, unknown> = {};
 
     const createMutator = defineMutator(async () => {});
@@ -225,13 +189,7 @@ describe('extendReplicacheMutators', () => {
       },
     };
 
-    extendReplicacheMutators(
-      lc,
-      contextHolder,
-      mutators,
-      testSchema,
-      mutateObject,
-    );
+    extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
     expect(mutateObject).toHaveProperty('users.create');
     expect(mutateObject).toHaveProperty('users.update');
@@ -240,18 +198,12 @@ describe('extendReplicacheMutators', () => {
 
   test('handles empty mutators object', () => {
     const lc = createSilentLogContext();
-    const contextHolder = {context: {}};
+    const context = {};
     const mutateObject: Record<string, unknown> = {};
 
     const mutators = {};
 
-    extendReplicacheMutators(
-      lc,
-      contextHolder,
-      mutators,
-      testSchema,
-      mutateObject,
-    );
+    extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
     expect(Object.keys(mutateObject)).toHaveLength(0);
   });
@@ -259,7 +211,7 @@ describe('extendReplicacheMutators', () => {
   test('context is shared across mutators', async () => {
     const lc = createSilentLogContext();
     const sharedContext = {counter: 0};
-    const contextHolder = {context: sharedContext};
+    const context = sharedContext;
     const mutateObject: Record<string, unknown> = {};
 
     const incrementMutator = defineMutator(
@@ -280,13 +232,7 @@ describe('extendReplicacheMutators', () => {
       get: getMutator,
     };
 
-    extendReplicacheMutators(
-      lc,
-      contextHolder,
-      mutators,
-      testSchema,
-      mutateObject,
-    );
+    extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
     const mockRepTx = {
       clientID: 'client-1',
@@ -312,7 +258,7 @@ describe('extendReplicacheMutators', () => {
 
   test('processes deeply nested legacy CustomMutatorImpl functions', () => {
     const lc = createSilentLogContext();
-    const contextHolder = {context: {}};
+    const context = {};
     const mutateObject: Record<string, unknown> = {};
 
     const legacyMutator = async (
@@ -328,20 +274,14 @@ describe('extendReplicacheMutators', () => {
       },
     };
 
-    extendReplicacheMutators(
-      lc,
-      contextHolder,
-      mutators,
-      testSchema,
-      mutateObject,
-    );
+    extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
     expect(mutateObject).toHaveProperty('api|v1|legacy');
   });
 
   test('mutator receives transaction wrapper', async () => {
     const lc = createSilentLogContext();
-    const contextHolder = {context: {}};
+    const context = {};
     const mutateObject: Record<string, unknown> = {};
 
     let receivedTx: Transaction<Schema> | undefined;
@@ -355,13 +295,7 @@ describe('extendReplicacheMutators', () => {
       test: mutator,
     };
 
-    extendReplicacheMutators(
-      lc,
-      contextHolder,
-      mutators,
-      testSchema,
-      mutateObject,
-    );
+    extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
     const mockRepTx = {
       clientID: 'client-1',
@@ -393,7 +327,7 @@ describe('extendReplicacheMutators', () => {
 
   test('namespace prefix is correctly maintained during recursion', () => {
     const lc = createSilentLogContext();
-    const contextHolder = {context: {}};
+    const context = {};
     const mutateObject: Record<string, unknown> = {};
 
     const m1 = defineMutator(async () => {});
@@ -418,13 +352,7 @@ describe('extendReplicacheMutators', () => {
       },
     };
 
-    extendReplicacheMutators(
-      lc,
-      contextHolder,
-      mutators,
-      testSchema,
-      mutateObject,
-    );
+    extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
     expect(mutateObject).toHaveProperty('a.m1');
     expect(mutateObject).toHaveProperty('a.b.m2');

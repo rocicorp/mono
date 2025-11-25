@@ -12,7 +12,7 @@ import type {Query} from '../../../zql/src/query/query.ts';
  *
  * @param schema - The Zero schema containing table definitions
  * @param queries - Optional custom query definitions that can be nested arbitrarily deep
- * @param contextHolder - The Zero instance that will be passed to wrapCustomQuery for binding
+ * @param context
  * @returns A query object with both entity and custom queries
  */
 export function makeQueryProperty<
@@ -22,7 +22,7 @@ export function makeQueryProperty<
 >(
   schema: S,
   queries: QD,
-  contextHolder: {context: TContext},
+  context: TContext,
   lc: LogContext,
 ): MakeQueryPropertyType<QD, S, TContext> {
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
@@ -52,7 +52,7 @@ export function makeQueryProperty<
             );
           }
 
-          target[key] = wrapCustomQuery(queryName, value, contextHolder);
+          target[key] = wrapCustomQuery(queryName, value, context);
         } else {
           // Namespace with nested queries
           let existing = target[key];
