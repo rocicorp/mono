@@ -41,7 +41,7 @@ export interface TransactionProviderInput {
 }
 
 /**
- * Defines the abstract interface for a database that PushProcessor can execute
+ * Defines the abstract interface for a database that Zero can execute
  * transactions against.
  */
 export interface Database<T> {
@@ -92,6 +92,12 @@ const applicationErrorWrapper = async <T>(fn: () => Promise<T>): Promise<T> => {
   }
 };
 
+/**
+ * @deprecated Use {@link handleMutateRequest} instead. The ability to manually
+ * control transaction timing is being removed because async work after commit
+ * cannot be guaranteed to execute. Use a transactional outbox pattern for
+ * post-commit side effects.
+ */
 export function handleMutationRequest<
   D extends Database<ExtractTransactionType<D>>,
 >(
@@ -104,6 +110,12 @@ export function handleMutationRequest<
   body: ReadonlyJSONValue,
   logLevel?: LogLevel,
 ): Promise<PushResponse>;
+/**
+ * @deprecated Use {@link handleMutateRequest} instead. The ability to manually
+ * control transaction timing is being removed because async work after commit
+ * cannot be guaranteed to execute. Use a transactional outbox pattern for
+ * post-commit side effects.
+ */
 export function handleMutationRequest<
   D extends Database<ExtractTransactionType<D>>,
 >(
@@ -115,6 +127,12 @@ export function handleMutationRequest<
   request: Request,
   logLevel?: LogLevel,
 ): Promise<PushResponse>;
+/**
+ * @deprecated Use {@link handleMutateRequest} instead. The ability to manually
+ * control transaction timing is being removed because async work after commit
+ * cannot be guaranteed to execute. Use a transactional outbox pattern for
+ * post-commit side effects.
+ */
 export async function handleMutationRequest<
   D extends Database<ExtractTransactionType<D>>,
 >(
@@ -135,7 +153,7 @@ export async function handleMutationRequest<
     }
   }
 
-  const lc = createLogContext(logLevel).withContext('PushProcessor');
+  const lc = createLogContext(logLevel).withContext('handleMutationRequest');
 
   let mutationIDs: MutationID[] = [];
 
@@ -535,4 +553,65 @@ class DatabaseTransactionError extends Error {
     );
     this.name = 'DatabaseTransactionError';
   }
+}
+
+export type MutateFnCallback<D extends Database<ExtractTransactionType<D>>> = (
+  tx: ExtractTransactionType<D>,
+  mutatorName: string,
+  mutatorArgs: ReadonlyJSONValue,
+) => Promise<void>;
+
+/**
+ * Handles a mutation request from a Zero client.
+ *
+ * @example
+ * ```ts
+ * const response = await handleMutateRequest(
+ *   dbProvider,
+ *   (tx, name, args) => getMutation(mutators, name)(tx, args),
+ *   request,
+ * );
+ * ```
+ */
+export function handleMutateRequest<
+  D extends Database<ExtractTransactionType<D>>,
+>(
+  dbProvider: D,
+  cb: MutateFnCallback<D>,
+  queryString: URLSearchParams | Record<string, string>,
+  body: ReadonlyJSONValue,
+  logLevel?: LogLevel,
+): Promise<PushResponse>;
+export function handleMutateRequest<
+  D extends Database<ExtractTransactionType<D>>,
+>(
+  dbProvider: D,
+  cb: MutateFnCallback<D>,
+  request: Request,
+  logLevel?: LogLevel,
+): Promise<PushResponse>;
+export function handleMutateRequest<
+  D extends Database<ExtractTransactionType<D>>,
+>(
+  dbProvider: D,
+  cb: MutateFnCallback<D>,
+  requestOrQueryString: Request | URLSearchParams | Record<string, string>,
+  bodyOrLogLevel?: ReadonlyJSONValue | LogLevel,
+  logLevel?: LogLevel,
+): Promise<PushResponse> {
+  if (requestOrQueryString instanceof Request) {
+    return handleMutationRequest(
+      dbProvider,
+      (transact, _mutation) => transact(cb),
+      requestOrQueryString,
+      bodyOrLogLevel as LogLevel | undefined,
+    );
+  }
+  return handleMutationRequest(
+    dbProvider,
+    (transact, _mutation) => transact(cb),
+    requestOrQueryString,
+    bodyOrLogLevel as ReadonlyJSONValue,
+    logLevel,
+  );
 }
