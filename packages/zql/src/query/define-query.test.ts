@@ -7,8 +7,8 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
+import {createBuilder} from './create-builder.ts';
 import {defineQuery} from './define-query.ts';
-import {createBuilder} from './named.ts';
 import {asQueryInternals} from './query-internals.ts';
 
 const schema = createSchema({

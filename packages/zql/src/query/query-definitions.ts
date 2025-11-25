@@ -12,14 +12,14 @@ import type {QueryDefinition} from './define-query.ts';
  *
  * @example
  * ```typescript
- * const queries = {
+ * const queries = defineQueries({
  *   getUser: defineQuery(...),           // Direct query
  *   admin: {                              // Namespace
  *     users: {                            // Nested namespace
  *       getAll: defineQuery(...),         // Deeply nested query
  *     },
  *   },
- * };
+ * });
  * ```
  */
 export type QueryDefinitions<S extends Schema, Context> = {
