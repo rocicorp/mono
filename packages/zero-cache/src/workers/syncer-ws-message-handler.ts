@@ -167,6 +167,20 @@ export class SyncerWsMessageHandler implements MessageHandler {
         );
         break;
       case 'initConnection': {
+        const userPushURL = msg[1].userPushURL;
+        if (userPushURL === undefined) {
+          return [
+            {
+              type: 'fatal',
+              error: {
+                kind: ErrorKind.VersionNotSupported,
+                message:
+                  'Client must be updated to provide mutateURL when constructing Zero.',
+              },
+            },
+          ];
+        }
+
         const ret: HandlerResult[] = [
           {
             type: 'stream',
