@@ -226,16 +226,14 @@ test('zero-cache --help', () => {
                                                                    take longer than log-slow-hydrate-threshold milliseconds.                                                             
                                                                    This is useful for debugging and performance tuning.                                                                  
                                                                                                                                                                                          
-     --enable-query-planner boolean                                default: false                                                                                                        
+     --enable-query-planner boolean                                default: true                                                                                                         
        ZERO_ENABLE_QUERY_PLANNER env                                                                                                                                                     
                                                                    Enable the query planner for optimizing ZQL queries.                                                                  
                                                                                                                                                                                          
                                                                    The query planner analyzes and optimizes query execution by determining                                               
-                                                                   the most efficient join strategies. This feature                                                                      
-                                                                   is being gradually rolled out and may improve performance for complex                                                 
-                                                                   queries that make use of WHERE EXISTS.                                                                                
+                                                                   the most efficient join strategies.                                                                                   
                                                                                                                                                                                          
-                                                                   When disabled (default), queries use the standard execution path.                                                     
+                                                                   You can disable the planner if it is picking bad strategies.                                                          
                                                                                                                                                                                          
      --change-db string                                            optional                                                                                                              
        ZERO_CHANGE_DB env                                                                                                                                                                
