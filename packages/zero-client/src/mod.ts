@@ -122,6 +122,7 @@ export type {
 export {createBuilder} from '../../zql/src/query/create-builder.ts';
 export {
   defineQueries,
+  defineQueriesWithType,
   defineQuery,
   getQuery,
   isQueryDefinition,

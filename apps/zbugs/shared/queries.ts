@@ -1,5 +1,5 @@
 import {
-  defineQueries,
+  defineQueriesWithType,
   defineQuery,
   escapeLike,
   type Query,
@@ -59,6 +59,8 @@ function labelsOrderByName({
   }
   return q;
 }
+
+const defineQueries = defineQueriesWithType<AuthData | undefined>();
 
 export const queries = defineQueries({
   allLabels: defineQuery(z.undefined(), () => builder.label),
