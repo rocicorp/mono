@@ -1228,6 +1228,7 @@ describe('enableLegacyQueries', () => {
     await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
     const mockSocket = await z.socket;
+
     await z.run(zql.issue.where('id', '1').one());
     z.queryDelegate.flushQueryChanges();
 
