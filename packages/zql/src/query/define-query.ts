@@ -1,4 +1,5 @@
 import type {StandardSchemaV1} from '@standard-schema/spec';
+import {getValueAtPath} from '../../../shared/src/get-value-at-path.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
@@ -51,17 +52,6 @@ export type BoundCustomQuery<
 > = CustomQuery<S, T, R, C, ReadonlyJSONValue | undefined, true>;
 
 /**
- * Convenience type for Query or BoundCustomQuery - the input type for Zero's
- * run/preload/materialize methods.
- */
-export type ToQuery<
-  S extends Schema,
-  T extends keyof S['tables'] & string,
-  R,
-  C,
-> = Query<S, T, R> | BoundCustomQuery<S, T, R, C>;
-
-/**
  * Checks if a value is a BoundCustomQuery (has args set).
  */
 export function isBoundCustomQuery<
@@ -81,9 +71,9 @@ export function isBoundCustomQuery<
 }
 
 // oxlint-disable-next-line no-explicit-any
-export type CustomQueries<MD extends QueryDefinitions<Schema, any>> =
-  MD extends QueryDefinitions<infer S, infer _C>
-    ? CustomQueriesInner<MD, S>
+export type CustomQueries<QD extends QueryDefinitions<Schema, any>> =
+  QD extends QueryDefinitions<infer S, infer _C>
+    ? CustomQueriesInner<QD, S>
     : never;
 
 type CustomQueriesInner<MD, S extends Schema> = {
@@ -364,4 +354,52 @@ export function defineQueriesWithType<C>(): <
 
 export function defineQueriesWithType() {
   return defineQueries;
+}
+
+// oxlint-disable-next-line no-explicit-any
+export function getQuery<S extends Schema, QD extends QueryDefinitions<S, any>>(
+  queries: CustomQueries<QD>,
+  name: string,
+):
+  | CustomQuery<
+      S,
+      keyof S['tables'] & string,
+      unknown, // return
+      unknown, // context
+      ReadonlyJSONValue | undefined,
+      false
+    >
+  | undefined {
+  return getValueAtPath(queries, name, /[.|]/) as
+    | CustomQuery<
+        S,
+        keyof S['tables'] & string,
+        unknown, // return
+        unknown, // context
+        ReadonlyJSONValue | undefined,
+        false
+      >
+    | undefined;
+}
+
+export function mustGetQuery<
+  S extends Schema,
+  // oxlint-disable-next-line no-explicit-any
+  QD extends QueryDefinitions<S, any>,
+>(
+  queries: CustomQueries<QD>,
+  name: string,
+): CustomQuery<
+  S,
+  keyof S['tables'] & string,
+  unknown, // return
+  unknown, // context
+  ReadonlyJSONValue | undefined,
+  false
+> {
+  const v = getQuery(queries, name);
+  if (!v) {
+    throw new Error(`Query not found: ${name}`);
+  }
+  return v;
 }

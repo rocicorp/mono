@@ -123,12 +123,13 @@ export {createBuilder} from '../../zql/src/query/create-builder.ts';
 export {
   defineQueries,
   defineQuery,
+  getQuery,
   isQueryDefinition,
+  mustGetQuery,
 } from '../../zql/src/query/define-query.ts';
 export type {
   BoundCustomQuery,
   CustomQuery,
-  ToQuery as Queryable,
   QueryDefinition,
   QueryDefinitions,
 } from '../../zql/src/query/define-query.ts';
@@ -160,6 +161,7 @@ export type {
   QueryRowType,
   Row,
   RunOptions,
+  ToQuery,
   ZeRow,
 } from '../../zql/src/query/query.ts';
 export type {SchemaQuery} from '../../zql/src/query/schema-query.ts';

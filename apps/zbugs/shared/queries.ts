@@ -43,6 +43,23 @@ const issueRowSort = z.object({
 
 type IssueRowSort = z.infer<typeof issueRowSort>;
 
+function labelsOrderByName({
+  args: {projectName, orderBy},
+}: {
+  args: {
+    projectName: string;
+    orderBy?: 'asc' | 'desc' | undefined;
+  };
+}) {
+  let q = builder.label.whereExists('project', q =>
+    q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+  );
+  if (orderBy !== undefined) {
+    q = q.orderBy('name', orderBy);
+  }
+  return q;
+}
+
 export const queries = defineQueries({
   allLabels: defineQuery(z.undefined(), () => builder.label),
 
@@ -54,15 +71,23 @@ export const queries = defineQueries({
     builder.user.where('id', userID).one(),
   ),
 
+  crewUser: defineQuery(idValidator, ({args: userID}) =>
+    builder.user.where('id', userID).where('role', 'crew').one(),
+  ),
+
   labels: defineQuery(
     z.object({
       projectName: z.string(),
     }),
+    labelsOrderByName,
+  ),
 
-    ({args: {projectName}}) =>
-      builder.label.whereExists('project', q =>
-        q.where('lowerCaseName', projectName.toLocaleLowerCase()),
-      ),
+  labelsOrderByName: defineQuery(
+    z.object({
+      projectName: z.string(),
+      orderBy: z.enum(['asc', 'desc']),
+    }),
+    labelsOrderByName,
   ),
 
   issuePreloadV2: defineQuery(

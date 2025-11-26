@@ -2,10 +2,10 @@ import {type Row} from '@rocicorp/zero';
 import {useQuery} from '@rocicorp/zero/react';
 import {useEffect, useMemo, useState} from 'react';
 import {toSorted} from '../../../../packages/shared/src/to-sorted.ts';
+import {queries} from '../../shared/queries.ts';
 import {type Schema} from '../../shared/schema.ts';
 import avatarIcon from '../assets/icons/avatar-default.svg';
 import {avatarURLWithSize} from '../avatar-url-with-size.ts';
-import {useZero} from '../hooks/use-zero.ts';
 import {Combobox} from './combobox.tsx';
 
 type Props = {
@@ -31,9 +31,8 @@ export function UserPicker({
   allowNone = true,
   filter = undefined,
 }: Props) {
-  const z = useZero();
   const [unsortedUsers] = useQuery(
-    z.query.usersForProject({
+    queries.usersForProject({
       projectName,
       disabled: !!disabled,
       login: selected?.login,

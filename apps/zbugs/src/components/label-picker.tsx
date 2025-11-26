@@ -1,8 +1,8 @@
 import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {useCallback, useRef, useState} from 'react';
+import {queries} from '../../shared/queries.ts';
 import {useClickOutside} from '../hooks/use-click-outside.ts';
-import {useZero} from '../hooks/use-zero.ts';
 import {Button} from './button.tsx';
 import style from './label-picker.module.css';
 
@@ -27,10 +27,9 @@ export function LabelPicker({
   onAssociateLabel: (id: string) => void;
   onCreateNewLabel: (name: string) => void;
 }) {
-  const z = useZero();
   const [isOpen, setIsOpen] = useState(false);
   const [labels] = useQuery(
-    z.query.labels({projectName}).orderBy('name', 'asc'),
+    queries.labelsOrderByName({projectName, orderBy: 'asc'}),
   );
   const ref = useRef<HTMLDivElement>(null);
 
