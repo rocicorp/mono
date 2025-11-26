@@ -11,7 +11,7 @@ import {
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
-import {createBuilder} from '../../../zql/src/query/named.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 
 test('run', async () => {
   const schema = createSchema({

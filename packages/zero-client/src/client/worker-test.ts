@@ -9,7 +9,7 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import {createBuilder} from '../../../zql/src/query/named.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {MockSocket, zeroForTest} from './test-utils.ts';
 
 const {WebSocket} = globalThis;

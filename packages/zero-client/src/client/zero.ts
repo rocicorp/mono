@@ -82,6 +82,10 @@ import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
 import {
+  type BoundCustomQuery,
+  isBoundCustomQuery,
+} from '../../../zql/src/query/define-query.ts';
+import {
   type ClientMetricMap,
   type MetricMap,
   isClientMetric,
@@ -885,8 +889,13 @@ export class Zero<
   preload<
     TTable extends keyof S['tables'] & string,
     TReturn extends PullRow<TTable, S>,
-  >(query: Query<S, TTable, TReturn>, options?: PreloadOptions) {
-    return this.#zeroContext.preload(query, options);
+  >(
+    query:
+      | Query<S, TTable, TReturn>
+      | BoundCustomQuery<S, TTable, TReturn, TContext>,
+    options?: PreloadOptions,
+  ) {
+    return this.#zeroContext.preload(toQuery(query, this.context), options);
   }
 
   /**
@@ -910,10 +919,12 @@ export class Zero<
    * ```
    */
   run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+    query:
+      | Query<S, TTable, TReturn>
+      | BoundCustomQuery<S, TTable, TReturn, TContext>,
     runOptions?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
-    return this.#zeroContext.run(query, runOptions);
+    return this.#zeroContext.run(toQuery(query, this.context), runOptions);
   }
 
   get context(): TContext {
@@ -945,19 +956,27 @@ export class Zero<
    * ```
    */
   materialize<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+    query:
+      | Query<S, TTable, TReturn>
+      | BoundCustomQuery<S, TTable, TReturn, TContext>,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+    query:
+      | Query<S, TTable, TReturn>
+      | BoundCustomQuery<S, TTable, TReturn, TContext>,
     factory: ViewFactory<S, TTable, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+    query:
+      | Query<S, TTable, TReturn>
+      | BoundCustomQuery<S, TTable, TReturn, TContext>,
     factoryOrOptions?: ViewFactory<S, TTable, TReturn, T> | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
+    const q = toQuery(query, this.context);
+
     let factory;
     let options;
     if (typeof factoryOrOptions === 'function') {
@@ -966,7 +985,7 @@ export class Zero<
     } else {
       options = factoryOrOptions;
     }
-    return this.#zeroContext.materialize(query, factory, options);
+    return this.#zeroContext.materialize(q, factory, options);
   }
 
   /**
@@ -2496,4 +2515,11 @@ async function makeActiveClientsManager(
   );
   manager.onDelete = onDelete;
   return manager;
+}
+
+function toQuery<S extends Schema, T extends keyof S['tables'] & string, R, C>(
+  query: Query<S, T, R> | BoundCustomQuery<S, T, R, C>,
+  context: C,
+): Query<S, T, R> {
+  return isBoundCustomQuery(query) ? query.toQuery(context) : query;
 }

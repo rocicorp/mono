@@ -1,7 +1,7 @@
 import {describe, expectTypeOf, test} from 'vitest';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
-import {createBuilder} from '../../../zql/src/query/named.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import type {QueryResultType} from '../../../zql/src/query/query.ts';
 import type {MutatorResultDetails} from './custom.ts';
 import {zeroStress} from './zero-stress-client-test.ts';

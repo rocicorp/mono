@@ -1,5 +1,5 @@
 import {expect, test} from 'vitest';
-import {createBuilder} from '../../../zql/src/query/named.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import {bindingsForZero} from './bindings.ts';
 import {zeroForTest} from './test-utils.ts';

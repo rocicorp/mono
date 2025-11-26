@@ -63,7 +63,7 @@ import {
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
-import {createBuilder} from '../../../zql/src/query/named.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
