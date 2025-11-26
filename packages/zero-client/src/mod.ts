@@ -129,7 +129,6 @@ export {
   mustGetQuery,
 } from '../../zql/src/query/define-query.ts';
 export type {
-  BoundCustomQuery,
   CustomQuery,
   QueryDefinition,
   QueryDefinitions,
