@@ -1,7 +1,7 @@
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {must} from '../../shared/src/must.ts';
-import type {Transaction} from '../../zql/src/mutate/custom.ts';
+import type {AnyTransaction, Transaction} from '../../zql/src/mutate/custom.ts';
 import type {Schema} from './schema.ts';
 
 // ----------------------------------------------------------------------------
@@ -236,11 +236,14 @@ export type Mutator<
    * Execute the mutation. Args are ReadonlyJSONValue because this is called
    * during rebase (from stored JSON) and on the server (from wire format).
    * Validation happens internally before the recipe function runs.
+   *
+   * The tx parameter uses AnyTransaction to avoid contravariance issues when
+   * calling from generic code. The implementation casts to the specific type.
    */
   readonly fn: (options: {
     args: ReadonlyJSONValue | undefined;
     ctx: TContext;
-    tx: Transaction<TSchema, TWrappedTransaction>;
+    tx: AnyTransaction;
   }) => Promise<void>;
 };
 
@@ -264,3 +267,26 @@ export type MutationRequest<
   readonly mutator: Mutator<TSchema, TContext, TArgs, TWrappedTransaction>;
   readonly args: TArgs;
 };
+
+/**
+ * Checks if a value is a Mutator (the result of processing a MutatorDefinition
+ * through defineMutators).
+ */
+export function isMutator(value: unknown): value is Mutator<
+  // oxlint-disable-next-line no-explicit-any
+  any,
+  // oxlint-disable-next-line no-explicit-any
+  any,
+  // oxlint-disable-next-line no-explicit-any
+  any,
+  // oxlint-disable-next-line no-explicit-any
+  any
+> {
+  return (
+    typeof value === 'function' &&
+    'mutatorName' in value &&
+    typeof value.mutatorName === 'string' &&
+    'fn' in value &&
+    typeof value.fn === 'function'
+  );
+}

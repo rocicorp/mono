@@ -5,12 +5,10 @@ import '../../../packages/shared/src/dotenv.ts';
 import cookie from '@fastify/cookie';
 import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
 import {Octokit} from '@octokit/core';
-import type {ReadonlyJSONValue} from '@rocicorp/zero';
+import {mustGetMutator, type ReadonlyJSONValue} from '@rocicorp/zero';
 import {
-  getMutation,
   handleMutationRequest,
   handleTransformRequest,
-  MutatorRegistry,
   QueryRegistry,
 } from '@rocicorp/zero/server';
 import {zeroPostgresJS} from '@rocicorp/zero/server/adapters/postgresjs';
@@ -22,9 +20,9 @@ import postgres from 'postgres';
 import {assert} from '../../../packages/shared/src/asserts.ts';
 import {must} from '../../../packages/shared/src/must.ts';
 import {createServerMutators} from '../server/server-mutators.ts';
-import {jwtDataSchema, type AuthData, type JWTData} from '../shared/auth.ts';
+import {jwtDataSchema, type JWTData} from '../shared/auth.ts';
 import {queries} from '../shared/queries.ts';
-import {schema, type Schema} from '../shared/schema.ts';
+import {schema} from '../shared/schema.ts';
 import {getPresignedUrl} from '../src/server/upload.ts';
 
 declare module 'fastify' {
@@ -182,42 +180,19 @@ async function mutateHandler(
   const postCommitTasks: (() => Promise<void>)[] = [];
   const mutators = createServerMutators(postCommitTasks);
 
-  const mutatorRegistry = new MutatorRegistry<
-    Schema,
-    typeof mutators,
-    AuthData | undefined
-  >(mutators);
-
   // TODO(arv): Update the server side API!
   const response = await handleMutationRequest(
     dbProvider,
     (transact, _mutation) =>
       transact((tx, name, args, ctx) => {
-        const mutator = getMutation(mutators, name);
-        return mutator(tx, args, ctx);
+        const mutator = mustGetMutator(mutators, name);
+        return mutator.fn({tx, args, ctx});
       }),
     request.query,
     request.body,
     jwtData,
     'info',
   );
-  // transact((tx, name, args) => getMutation(mutators, name)(tx, args)),
-  // transact =>
-  //   transact(dbProvider, (tx, name, args) => {
-  //     assert(
-  //       tx.location === 'server',
-  //       'Transaction must be a server transaction',
-  //     );
-  //     const mutator = mutatorRegistry.mustGet(name, jwtData);
-  //     return mutator(
-  //       tx as unknown as ServerTransaction<Schema, PostgresJsTransaction>,
-  //       args,
-  //     );
-  //   }),
-  //   request.query,
-  //   request.body,
-  //   'info',
-  // );
 
   // we don't yet handle errors here, since Loops emails return 429 very often
   // and we don't want to block the mutation

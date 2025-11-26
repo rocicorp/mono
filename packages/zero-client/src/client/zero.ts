@@ -78,6 +78,8 @@ import {
 } from '../../../zero-schema/src/name-mapper.ts';
 import {
   getMutator,
+  isMutatorRegistry,
+  type AnyMutatorRegistry,
   type MutatorDefinitions,
 } from '../../../zero-types/src/mutator-registry.ts';
 import type {MutationRequest} from '../../../zero-types/src/mutator.ts';
@@ -197,7 +199,11 @@ interface TestZero {
 
 function asTestZero<
   S extends Schema,
-  MD extends MutatorDefinitions<S, C> | CustomMutatorDefs | undefined,
+  MD extends
+    | MutatorDefinitions<S, C>
+    | AnyMutatorRegistry
+    | CustomMutatorDefs
+    | undefined,
   C,
   QD extends QueryDefinitions<S, C> | undefined,
 >(z: Zero<S, MD, C, QD>): TestZero {
@@ -301,6 +307,7 @@ export class Zero<
   const S extends Schema,
   MD extends
     | MutatorDefinitions<S, C>
+    | AnyMutatorRegistry
     | CustomMutatorDefs
     | undefined = undefined,
   C = unknown,
@@ -664,8 +671,13 @@ export class Zero<
       this.#mutationTracker,
     );
 
-    if (options.mutators) {
-      makeMutateProperty(options.mutators, mutatorProxy, mutate, rep.mutate);
+    if (options.mutators && !isMutatorRegistry(options.mutators)) {
+      makeMutateProperty(
+        options.mutators as MutatorDefinitions<S, C> | CustomMutatorDefs,
+        mutatorProxy,
+        mutate,
+        rep.mutate,
+      );
     }
 
     // Wrap mutate in a Proxy to make it callable with MutationRequest

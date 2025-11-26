@@ -11,7 +11,10 @@ import {stringCompare} from '../../shared/src/string-compare.ts';
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
-import type {MutatorDefinitions} from '../../zero-types/src/mutator-registry.ts';
+import type {
+  AnyMutatorRegistry,
+  MutatorDefinitions,
+} from '../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {QueryDefinitions} from '../../zql/src/query/query-definitions.ts';
 
@@ -21,6 +24,7 @@ export function useZero<
   S extends Schema,
   MD extends
     | MutatorDefinitions<S, Context>
+    | AnyMutatorRegistry
     | CustomMutatorDefs
     | undefined = undefined,
   Context = unknown,
@@ -37,6 +41,7 @@ export function createUseZero<
   S extends Schema,
   MD extends
     | MutatorDefinitions<S, Context>
+    | AnyMutatorRegistry
     | CustomMutatorDefs
     | undefined = undefined,
   Context = unknown,
@@ -47,7 +52,11 @@ export function createUseZero<
 
 export type ZeroProviderProps<
   S extends Schema,
-  MD extends MutatorDefinitions<S, Context> | CustomMutatorDefs | undefined,
+  MD extends
+    | MutatorDefinitions<S, Context>
+    | AnyMutatorRegistry
+    | CustomMutatorDefs
+    | undefined,
   Context,
   QD extends QueryDefinitions<S, Context> | undefined,
 > = (ZeroOptions<S, MD, Context, QD> | {zero: Zero<S, MD, Context, QD>}) & {
@@ -59,7 +68,11 @@ const NO_AUTH_SET = Symbol();
 
 export function ZeroProvider<
   S extends Schema,
-  MD extends MutatorDefinitions<S, Context> | CustomMutatorDefs | undefined,
+  MD extends
+    | MutatorDefinitions<S, Context>
+    | AnyMutatorRegistry
+    | CustomMutatorDefs
+    | undefined,
   Context,
   QD extends QueryDefinitions<S, Context> | undefined,
 >({children, init, ...props}: ZeroProviderProps<S, MD, Context, QD>) {

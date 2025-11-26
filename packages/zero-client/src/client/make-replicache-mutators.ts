@@ -6,8 +6,8 @@ import {
 } from '../../../zero-types/src/mutator.ts';
 import {
   isMutatorRegistry,
+  type AnyMutatorRegistry,
   type MutatorDefinitions,
-  type MutatorRegistry,
 } from '../../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
@@ -131,11 +131,9 @@ function makeReplicacheMutator<
  */
 export function makeReplicacheMutators<const S extends Schema, C>(
   schema: S,
-  // oxlint-disable-next-line no-explicit-any
   mutators:
     | MutatorDefinitions<S, C>
-    // oxlint-disable-next-line no-explicit-any
-    | MutatorRegistry<S, C, any>
+    | AnyMutatorRegistry
     | CustomMutatorDefs
     | undefined,
   context: C,
@@ -196,8 +194,7 @@ function isMutator(
 function extendFromMutatorRegistry<S extends Schema, C>(
   lc: LogContext,
   context: C,
-  // oxlint-disable-next-line no-explicit-any
-  registry: MutatorRegistry<S, C, any>,
+  registry: AnyMutatorRegistry,
   schema: S,
   mutateObject: Record<string, unknown>,
 ): void {

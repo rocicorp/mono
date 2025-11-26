@@ -13,7 +13,10 @@ import {
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
-import type {MutatorDefinitions} from '../../zero-types/src/mutator-registry.ts';
+import type {
+  AnyMutatorRegistry,
+  MutatorDefinitions,
+} from '../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {QueryDefinitions} from '../../zql/src/query/query-definitions.ts';
 
@@ -28,6 +31,7 @@ export function createZero<
   S extends Schema,
   MD extends
     | MutatorDefinitions<S, Context>
+    | AnyMutatorRegistry
     | CustomMutatorDefs
     | undefined = undefined,
   Context = unknown,

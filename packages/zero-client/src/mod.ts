@@ -98,14 +98,18 @@ export type {
 export {
   defineMutator,
   defineMutatorWithType,
+  isMutator,
   isMutatorDefinition,
   type MutatorDefinition,
 } from '../../zero-types/src/mutator.ts';
 export {
   defineMutators,
+  defineMutatorsWithType,
   getMutator,
   mustGetMutator,
   isMutatorRegistry,
+  mutatorRegistryTag,
+  type AnyMutatorRegistry,
   type MutatorDefinitions,
   type MutatorRegistry,
 } from '../../zero-types/src/mutator-registry.ts';

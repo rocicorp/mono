@@ -17,6 +17,18 @@ type ClientID = string;
 export type Location = 'client' | 'server';
 export type TransactionReason = 'optimistic' | 'rebase' | 'authoritative';
 
+/**
+ * A base transaction interface that any Transaction<S, T> is assignable to.
+ * Used in places where the schema type doesn't need to be preserved,
+ * like the public signature of Mutator.fn.
+ */
+export interface AnyTransaction {
+  readonly location: Location;
+  readonly clientID: string;
+  readonly mutationID: number;
+  readonly reason: TransactionReason;
+}
+
 export interface TransactionBase<S extends Schema> {
   readonly location: Location;
   readonly clientID: ClientID;

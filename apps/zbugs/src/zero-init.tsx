@@ -1,41 +1,30 @@
-import type {
-  MutatorDefinitions,
-  QueryDefinitions,
-  ZeroOptions,
-} from '@rocicorp/zero';
 import {ZeroProvider} from '@rocicorp/zero/react';
-import {useMemo, type ReactNode} from 'react';
-import type {AuthData} from '../shared/auth.ts';
+import {type ReactNode} from 'react';
 import {mutators} from '../shared/mutators.ts';
 import {queries} from '../shared/queries.ts';
-import {schema, type Schema} from '../shared/schema.ts';
+import {schema} from '../shared/schema.ts';
 import {useLogin} from './hooks/use-login.tsx';
 
 export function ZeroInit({children}: {children: ReactNode}) {
   const login = useLogin();
 
-  const props = useMemo(
-    () =>
-      ({
+  return (
+    <ZeroProvider
+      {...{
         schema,
-        server: import.meta.env.VITE_PUBLIC_SERVER,
-        userID: login.loginState?.decoded?.sub ?? 'anon',
         mutators,
         queries,
-        logLevel: 'info' as const,
-        // changing the auth token will cause ZeroProvider to call connection.connect
+
         auth: login.loginState?.encoded,
+        context: login.loginState?.decoded,
+        userID: login.loginState?.decoded?.sub ?? 'anon',
+
+        server: import.meta.env.VITE_PUBLIC_SERVER,
         mutateURL: `${window.location.origin}/api/mutate`,
         getQueriesURL: `${window.location.origin}/api/get-queries`,
-        context: login.loginState?.decoded,
-      }) satisfies ZeroOptions<
-        Schema,
-        MutatorDefinitions<Schema, AuthData | undefined>,
-        AuthData | undefined,
-        QueryDefinitions<typeof schema, AuthData | undefined>
-      >,
-    [login],
+      }}
+    >
+      {children}
+    </ZeroProvider>
   );
-
-  return <ZeroProvider {...props}>{children}</ZeroProvider>;
 }

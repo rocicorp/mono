@@ -2,8 +2,8 @@ import type {LogLevel} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {
+  AnyMutatorRegistry,
   MutatorDefinitions,
-  MutatorRegistry,
 } from '../../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
@@ -17,8 +17,7 @@ export interface ZeroOptions<
   S extends Schema,
   MD extends
     | MutatorDefinitions<S, C>
-    // oxlint-disable-next-line no-explicit-any
-    | MutatorRegistry<S, C, any>
+    | AnyMutatorRegistry
     | CustomMutatorDefs
     | undefined = undefined,
   C = unknown,
@@ -342,8 +341,7 @@ export interface ZeroAdvancedOptions<
   S extends Schema,
   MD extends
     | MutatorDefinitions<S, Context>
-    // oxlint-disable-next-line no-explicit-any
-    | MutatorRegistry<S, Context, any>
+    | AnyMutatorRegistry
     | CustomMutatorDefs
     | undefined,
   Context,

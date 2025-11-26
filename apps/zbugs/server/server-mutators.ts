@@ -1,4 +1,5 @@
 import {
+  defineMutatorsWithType,
   defineMutatorWithType,
   type ServerTransaction,
   type Transaction,
@@ -23,6 +24,8 @@ const defineMutator = defineMutatorWithType<
   MutatorTx
 >();
 
+const defineMutators = defineMutatorsWithType<Schema, AuthData | undefined>();
+
 function asServerTransaction<S extends Schema>(
   tx: Transaction<S, unknown>,
 ): ServerTransaction<S, PostgresJsTransaction> {
@@ -31,12 +34,8 @@ function asServerTransaction<S extends Schema>(
 }
 
 export function createServerMutators(postCommitTasks: PostCommitTask[]) {
-  return {
-    ...mutators,
-
+  return defineMutators(mutators, {
     issue: {
-      ...mutators.issue,
-
       create: defineMutator(
         createIssueArgsSchema,
         async ({
@@ -44,7 +43,7 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
           args: {id, projectID, title, description},
           ctx: authData,
         }) => {
-          await mutators.issue.create({
+          await mutators.issue.create.fn({
             tx,
             args: {
               id,
@@ -69,7 +68,7 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
       update: defineMutator(
         createIssueArgsSchema,
         async ({tx, args, ctx: authData}) => {
-          await mutators.issue.update({
+          await mutators.issue.update.fn({
             tx,
             args: {
               ...args,
@@ -99,7 +98,7 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
           projectID: z.optional(z.string()),
         }),
         async ({tx, args: {issueID, labelID, projectID}, ctx: authData}) => {
-          await mutators.issue.addLabel({
+          await mutators.issue.addLabel.fn({
             tx,
             args: {issueID, labelID, projectID},
             ctx: authData,
@@ -124,7 +123,7 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
           labelID: z.string(),
         }),
         async ({tx, args: {issueID, labelID}, ctx: authData}) => {
-          await mutators.issue.removeLabel({
+          await mutators.issue.removeLabel.fn({
             tx,
             args: {issueID, labelID},
             ctx: authData,
@@ -145,8 +144,6 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
     },
 
     emoji: {
-      ...mutators.emoji,
-
       addToIssue: defineMutator(
         z.object({
           id: z.string(),
@@ -155,7 +152,7 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
           subjectID: z.string(),
         }),
         async ({tx, args, ctx: authData}) => {
-          await mutators.emoji.addToIssue({
+          await mutators.emoji.addToIssue.fn({
             tx,
             args: {
               ...args,
@@ -185,7 +182,7 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
           subjectID: z.string(),
         }),
         async ({tx, args, ctx: authData}) => {
-          await mutators.emoji.addToComment({
+          await mutators.emoji.addToComment.fn({
             tx,
             args: {
               ...args,
@@ -222,8 +219,6 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
     },
 
     comment: {
-      ...mutators.comment,
-
       add: defineMutator(
         z.object({
           id: z.string(),
@@ -231,7 +226,7 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
           body: z.string(),
         }),
         async ({tx, args: {id, issueID, body}, ctx: authData}) => {
-          await mutators.comment.add({
+          await mutators.comment.add.fn({
             tx,
             args: {
               id,
@@ -262,7 +257,7 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
           body: z.string(),
         }),
         async ({tx, args: {id, body}, ctx: authData}) => {
-          await mutators.comment.edit({
+          await mutators.comment.edit.fn({
             tx,
             args: {id, body},
             ctx: authData,
@@ -292,5 +287,5 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
         },
       ),
     },
-  } as const;
+  });
 }

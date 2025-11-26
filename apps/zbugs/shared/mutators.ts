@@ -1,4 +1,8 @@
-import {defineMutatorWithType, type Transaction} from '@rocicorp/zero';
+import {
+  defineMutatorWithType,
+  defineMutatorsWithType,
+  type Transaction,
+} from '@rocicorp/zero';
 import {z} from 'zod/mini';
 import {
   assertIsCreatorOrAdmin,
@@ -69,13 +73,15 @@ const defineMutator = defineMutatorWithType<
   MutatorTx
 >();
 
+const defineMutators = defineMutatorsWithType<Schema, AuthData | undefined>();
+
 const notificationUpdateSchema = z.object({
   issueID: z.string(),
   subscribed: notificationTypeSchema,
   created: z.number(),
 });
 
-export const mutators = {
+export const mutators = defineMutators({
   issue: {
     create: defineMutator(
       createIssueArgsSchema,
@@ -345,7 +351,7 @@ export const mutators = {
       },
     ),
   },
-} as const;
+});
 
 async function addEmoji(
   tx: Transaction<Schema>,

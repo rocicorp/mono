@@ -4,7 +4,10 @@ import {
   isMutatorDefinition,
   type MutatorDefinition,
 } from '../../../zero-types/src/mutator.ts';
-import type {MutatorDefinitions} from '../../../zero-types/src/mutator-registry.ts';
+import type {
+  AnyMutatorRegistry,
+  MutatorDefinitions,
+} from '../../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {
   customMutatorKey,
@@ -121,10 +124,18 @@ type MakeFromMutatorDefinitions<
 
 export type MakeMutatePropertyType<
   S extends Schema,
-  MD extends MutatorDefinitions<S, C> | CustomMutatorDefs | undefined,
+  MD extends
+    | MutatorDefinitions<S, C>
+    | AnyMutatorRegistry
+    | CustomMutatorDefs
+    | undefined,
   C,
-> = MD extends MutatorDefinitions<S, C> | CustomMutatorDefs
-  ? S['enableLegacyMutators'] extends false
-    ? MakeFromMutatorDefinitions<S, MD, C>
-    : DeepMerge<DBMutator<S>, MakeFromMutatorDefinitions<S, MD, C>>
-  : DBMutator<S>;
+> = MD extends AnyMutatorRegistry
+  ? // MutatorRegistry: no property tree, user calls zero.mutate(mr) directly
+    // oxlint-disable-next-line @typescript-eslint/no-empty-object-type
+    {}
+  : MD extends MutatorDefinitions<S, C> | CustomMutatorDefs
+    ? S['enableLegacyMutators'] extends false
+      ? MakeFromMutatorDefinitions<S, MD, C>
+      : DeepMerge<DBMutator<S>, MakeFromMutatorDefinitions<S, MD, C>>
+    : DBMutator<S>;

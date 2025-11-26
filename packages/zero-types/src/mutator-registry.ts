@@ -2,6 +2,7 @@ import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {Transaction} from '../../zql/src/mutate/custom.ts';
 import {validateInput} from '../../zql/src/query/validate-input.ts';
 import {
+  isMutator,
   isMutatorDefinition,
   type MutationRequest,
   type Mutator,
@@ -10,10 +11,12 @@ import {
 import type {Schema} from './schema.ts';
 
 /**
- * Creates a MutatorRegistry from a tree of MutatorDefinitions.
+ * Creates a MutatorRegistry from a tree of MutatorDefinitions,
+ * optionally extending a base MutatorRegistry.
  *
  * @example
  * ```typescript
+ * // Create a new registry
  * const mutators = defineMutators({
  *   user: {
  *     create: defineMutator(...),
@@ -22,6 +25,14 @@ import type {Schema} from './schema.ts';
  *   post: {
  *     publish: defineMutator(...),
  *   },
+ * });
+ *
+ * // Extend an existing registry (e.g., for server-side overrides)
+ * const serverMutators = defineMutators(mutators, {
+ *   user: {
+ *     create: defineMutator(...),  // overrides mutators.user.create
+ *   },
+ *   // post.publish is inherited from mutators
  * });
  *
  * // Access mutators by path
@@ -41,8 +52,30 @@ export function defineMutators<
   S extends Schema,
   C,
   T extends MutatorDefinitionsTree<S, C>,
->(definitions: T): MutatorRegistry<S, C, T> {
-  const tree = buildTree(definitions, []);
+>(definitions: T): MutatorRegistry<S, C, T>;
+
+export function defineMutators<
+  S extends Schema,
+  C,
+  TBase extends MutatorDefinitionsTree<S, C>,
+>(
+  base: MutatorRegistry<S, C, TBase>,
+  overrides: MutatorDefinitionsTree<S, C>,
+): MutatorRegistry<S, C, TBase>;
+
+export function defineMutators<S extends Schema, C>(
+  definitionsOrBase: MutatorDefinitionsTree<S, C> | AnyMutatorRegistry,
+  maybeOverrides?: MutatorDefinitionsTree<S, C>,
+): AnyMutatorRegistry {
+  let tree: Record<string, unknown>;
+
+  if (isMutatorRegistry(definitionsOrBase) && maybeOverrides !== undefined) {
+    // Extending a base registry
+    tree = buildTreeWithBase(definitionsOrBase, maybeOverrides, []);
+  } else {
+    // Creating a new registry from definitions
+    tree = buildTree(definitionsOrBase as MutatorDefinitionsTree<S, C>, []);
+  }
 
   Object.defineProperty(tree, mutatorRegistryTag, {
     value: true,
@@ -51,7 +84,43 @@ export function defineMutators<
     configurable: false,
   });
 
-  return tree as MutatorRegistry<S, C, T>;
+  return tree as AnyMutatorRegistry;
+}
+
+/**
+ * Like `defineMutators`, but allows specifying Schema and Context types upfront.
+ * This is useful when TypeScript can't infer the context type from the definitions.
+ *
+ * @example
+ * ```ts
+ * const defineMutators = defineMutatorsWithType<Schema, AuthData>();
+ *
+ * // Create a new registry
+ * const mutators = defineMutators({
+ *   user: {
+ *     create: defineMutator(...),
+ *   },
+ * });
+ *
+ * // Or extend a base registry
+ * const serverMutators = defineMutators(clientMutators, {
+ *   user: {
+ *     create: defineMutator(...),  // override
+ *   },
+ * });
+ * ```
+ */
+export function defineMutatorsWithType<S extends Schema, C>(): {
+  <T extends MutatorDefinitionsTree<S, C>>(
+    definitions: T,
+  ): MutatorRegistry<S, C, T>;
+  <TBase extends MutatorDefinitionsTree<S, C>>(
+    base: MutatorRegistry<S, C, TBase>,
+    overrides: MutatorDefinitionsTree<S, C>,
+  ): MutatorRegistry<S, C, TBase>;
+} {
+  // oxlint-disable-next-line no-explicit-any
+  return defineMutators as any;
 }
 
 /**
@@ -80,9 +149,8 @@ export function getMutator(
  * Gets a Mutator by its dot-separated name from a MutatorRegistry.
  * Throws if not found.
  */
-// oxlint-disable-next-line no-explicit-any
 export function mustGetMutator(
-  registry: unknown,
+  registry: AnyMutatorRegistry,
   name: string,
   // oxlint-disable-next-line no-explicit-any
 ): Mutator<any, any, any, any> {
@@ -136,11 +204,22 @@ export type MutatorRegistry<
   [mutatorRegistryTag]: true;
 };
 
+/**
+ * A branded type for use in type constraints. Use this instead of
+ * `MutatorRegistry<S, C, any>` to avoid TypeScript drilling into
+ * the complex ToMutatorTree structure and hitting variance issues.
+ */
+// oxlint-disable-next-line no-explicit-any
+export type AnyMutatorRegistry = {[mutatorRegistryTag]: true} & Record<
+  string,
+  unknown
+>;
+
 // ----------------------------------------------------------------------------
 // Internal
 // ----------------------------------------------------------------------------
 
-const mutatorRegistryTag = Symbol();
+export const mutatorRegistryTag: unique symbol = Symbol('mutatorRegistry');
 
 /**
  * Transforms a MutatorDefinitionsTree into a tree of Mutators.
@@ -187,6 +266,66 @@ function buildTree<S extends Schema, C>(
     } else {
       // Nested namespace
       result[key] = buildTree(
+        value as MutatorDefinitionsTree<S, C>,
+        currentPath,
+      );
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Builds a tree by merging a base registry with overrides.
+ * Overrides can contain MutatorDefinitions (which get converted to Mutators)
+ * or nested objects (which get recursively merged).
+ * Base Mutators are copied directly when not overridden.
+ */
+function buildTreeWithBase<S extends Schema, C>(
+  base: AnyMutatorRegistry | Record<string, unknown>,
+  overrides: MutatorDefinitionsTree<S, C>,
+  path: string[],
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+
+  // First, copy all base entries
+  for (const [key, value] of Object.entries(base)) {
+    // Skip the registry tag
+    if (typeof key === 'symbol') continue;
+
+    const currentPath = [...path, key];
+
+    if (isMutator(value)) {
+      // Copy the base mutator directly
+      result[key] = value;
+    } else if (typeof value === 'object' && value !== null) {
+      // Nested namespace - recurse with empty overrides to copy
+      result[key] = buildTreeWithBase(
+        value as Record<string, unknown>,
+        {},
+        currentPath,
+      );
+    }
+  }
+
+  // Then apply overrides
+  for (const [key, value] of Object.entries(overrides)) {
+    const currentPath = [...path, key];
+
+    if (isMutatorDefinition(value)) {
+      // Override with new mutator
+      const name = currentPath.join('.');
+      // oxlint-disable-next-line no-explicit-any
+      result[key] = createMutator(
+        name,
+        // oxlint-disable-next-line no-explicit-any
+        value as MutatorDefinition<S, C, any, any, any>,
+      );
+    } else if (typeof value === 'object' && value !== null) {
+      // Nested override - merge with existing base namespace
+      const baseNamespace = (result[key] ?? {}) as Record<string, unknown>;
+      result[key] = buildTreeWithBase(
+        baseNamespace,
         value as MutatorDefinitionsTree<S, C>,
         currentPath,
       );

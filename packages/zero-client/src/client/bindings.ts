@@ -1,4 +1,7 @@
-import type {MutatorDefinitions} from '../../../zero-types/src/mutator-registry.ts';
+import type {
+  AnyMutatorRegistry,
+  MutatorDefinitions,
+} from '../../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Format, ViewFactory} from '../../../zql/src/ivm/view.ts';
 import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
@@ -28,6 +31,7 @@ export function registerZeroDelegate<
   TSchema extends Schema,
   MD extends
     | MutatorDefinitions<TSchema, TContext>
+    | AnyMutatorRegistry
     | CustomMutatorDefs
     | undefined,
   TContext,
@@ -40,6 +44,7 @@ function mustGetDelegate<
   TSchema extends Schema,
   MD extends
     | MutatorDefinitions<TSchema, TContext>
+    | AnyMutatorRegistry
     | CustomMutatorDefs
     | undefined,
   TContext,
@@ -103,8 +108,9 @@ export interface BindingsForZero<TSchema extends Schema> {
 export function bindingsForZero<
   TSchema extends Schema,
   MD extends
-    | CustomMutatorDefs
     | MutatorDefinitions<TSchema, TContext>
+    | AnyMutatorRegistry
+    | CustomMutatorDefs
     | undefined,
   TContext,
   QD extends QueryDefinitions<TSchema, TContext> | undefined,
