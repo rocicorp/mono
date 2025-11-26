@@ -77,6 +77,7 @@ import {
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {MutatorDefinitions} from '../../../zero-types/src/mutator-registry.ts';
+import type {MutationRequest} from '../../../zero-types/src/mutator.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import {
@@ -166,6 +167,23 @@ import {
 } from './zero-rep.ts';
 
 export type NoRelations = Record<string, never>;
+
+/**
+ * Checks if a value is a MutationRequest (from calling a Mutator with args).
+ */
+function isMutationRequest(
+  value: unknown,
+  // oxlint-disable-next-line no-explicit-any
+): value is MutationRequest<any, any, any, any> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'mutator' in value &&
+    'args' in value &&
+    typeof (value as {mutator?: {mutatorName?: unknown}}).mutator
+      ?.mutatorName === 'string'
+  );
+}
 
 declare const TESTING: boolean;
 

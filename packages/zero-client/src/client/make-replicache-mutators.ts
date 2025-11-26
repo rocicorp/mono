@@ -2,8 +2,13 @@ import type {LogContext} from '@rocicorp/logger';
 import {
   isMutatorDefinition,
   type MutatorDefinition,
+  type Mutator,
 } from '../../../zero-types/src/mutator.ts';
-import type {MutatorDefinitions} from '../../../zero-types/src/mutator-registry.ts';
+import {
+  isMutatorRegistry,
+  type MutatorDefinitions,
+  type MutatorRegistry,
+} from '../../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
@@ -126,7 +131,13 @@ function makeReplicacheMutator<
  */
 export function makeReplicacheMutators<const S extends Schema, C>(
   schema: S,
-  mutators: MutatorDefinitions<S, C> | CustomMutatorDefs | undefined,
+  // oxlint-disable-next-line no-explicit-any
+  mutators:
+    | MutatorDefinitions<S, C>
+    // oxlint-disable-next-line no-explicit-any
+    | MutatorRegistry<S, C, any>
+    | CustomMutatorDefs
+    | undefined,
   context: C,
   lc: LogContext,
 ): MutatorDefs & {_zero_crud: CRUDMutator} {
@@ -145,8 +156,70 @@ export function makeReplicacheMutators<const S extends Schema, C>(
   };
 
   if (mutators) {
-    extendReplicacheMutators(lc, context, mutators, schema, replicacheMutators);
+    if (isMutatorRegistry(mutators)) {
+      extendFromMutatorRegistry(lc, context, mutators, schema, replicacheMutators);
+    } else {
+      extendReplicacheMutators(
+        lc,
+        context,
+        mutators as MutatorDefinitions<S, C> | CustomMutatorDefs,
+        schema,
+        replicacheMutators,
+      );
+    }
   }
 
   return replicacheMutators;
+}
+
+/**
+ * Checks if a value is a Mutator (from MutatorRegistry).
+ * Mutators have `mutatorName` and `fn` properties.
+ */
+function isMutator(
+  value: unknown,
+  // oxlint-disable-next-line no-explicit-any
+): value is Mutator<any, any, any, any> {
+  return (
+    typeof value === 'function' &&
+    'mutatorName' in value &&
+    typeof value.mutatorName === 'string' &&
+    'fn' in value &&
+    typeof value.fn === 'function'
+  );
+}
+
+/**
+ * Extends replicache mutators from a MutatorRegistry.
+ * Walks the registry tree and wraps each Mutator.fn for Replicache.
+ */
+function extendFromMutatorRegistry<S extends Schema, C>(
+  lc: LogContext,
+  context: C,
+  // oxlint-disable-next-line no-explicit-any
+  registry: MutatorRegistry<S, C, any>,
+  schema: S,
+  mutateObject: Record<string, unknown>,
+): void {
+  const walk = (node: unknown) => {
+    if (typeof node !== 'object' || node === null) {
+      return;
+    }
+    for (const value of Object.values(node)) {
+      if (isMutator(value)) {
+        // Mutator.fn already handles validation internally
+        mutateObject[value.mutatorName] = (
+          repTx: WriteTransaction,
+          args: ReadonlyJSONValue,
+        ): Promise<void> => {
+          const tx = new TransactionImpl(lc, repTx, schema);
+          return value.fn({args, ctx: context, tx});
+        };
+      } else if (typeof value === 'object' && value !== null) {
+        // Nested namespace
+        walk(value);
+      }
+    }
+  };
+  walk(registry);
 }
