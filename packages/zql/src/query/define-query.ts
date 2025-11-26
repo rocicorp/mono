@@ -8,7 +8,6 @@ import type {Query} from './query.ts';
 import {validateInput} from './validate-input.ts';
 
 const customQueryTag = Symbol();
-const hasBoundArgs = Symbol();
 
 /**
  * CustomQuery is what is returned from defineQueries. It supports a builder
@@ -29,7 +28,6 @@ export type CustomQuery<
   HasArgs extends boolean = false,
 > = {
   readonly [customQueryTag]: true;
-  readonly [hasBoundArgs]: HasArgs;
 } & (HasArgs extends true
   ? unknown
   : undefined extends Args
@@ -41,36 +39,6 @@ export type CustomQuery<
         (args: Args): CustomQuery<S, T, R, C, Args, true>;
       }) &
   (HasArgs extends true ? {toQuery(ctx: C): Query<S, T, R>} : unknown);
-
-/**
- * A CustomQuery that has args bound/set. Can be passed to Zero's run/preload/materialize
- * methods, which will add context internally.
- */
-export type BoundCustomQuery<
-  S extends Schema,
-  T extends keyof S['tables'] & string,
-  R,
-  C,
-> = CustomQuery<S, T, R, C, ReadonlyJSONValue | undefined, true>;
-
-/**
- * Checks if a value is a BoundCustomQuery (has args set).
- */
-export function isBoundCustomQuery<
-  S extends Schema,
-  T extends keyof S['tables'] & string,
-  R,
-  C,
->(value: unknown): value is BoundCustomQuery<S, T, R, C> {
-  // CustomQuery is a callable (function) with extra properties
-  if (typeof value !== 'function') {
-    return false;
-  }
-
-  // oxlint-disable-next-line no-explicit-any
-  const obj = value as any;
-  return Boolean(obj[customQueryTag] && obj[hasBoundArgs]);
-}
 
 // oxlint-disable-next-line no-explicit-any
 export type CustomQueries<QD extends QueryDefinitions<Schema, any>> =
@@ -268,8 +236,6 @@ function createCustomQueryBuilder<
 
   // Add the tag
   builder[customQueryTag] = true;
-
-  builder[hasBoundArgs] = hasArgs as HasArgs;
 
   return builder as unknown as CustomQuery<S, T, R, C, Args, HasArgs>;
 }

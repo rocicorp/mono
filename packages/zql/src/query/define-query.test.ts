@@ -13,7 +13,6 @@ import {
   defineQueries,
   defineQueriesWithType,
   defineQuery,
-  isBoundCustomQuery,
   type ContextTypeOfCustomQueries,
 } from './define-query.ts';
 import {asQueryInternals} from './query-internals.ts';
@@ -663,44 +662,6 @@ describe('defineQueriesWithType', () => {
     expectTypeOf<Parameters<typeof withArgs.toQuery>>().toEqualTypeOf<
       [{userId: string}]
     >();
-  });
-});
-
-describe('isBoundCustomQuery', () => {
-  test('returns false for incomplete CustomQuery (no args)', () => {
-    const queries = defineQueries({
-      getUser: defineQuery(
-        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
-          builder.foo.where('id', '=', args),
-      ),
-    });
-
-    expect(isBoundCustomQuery(queries.getUser)).toBe(false);
-  });
-
-  test('returns true for CustomQuery with args', () => {
-    const queries = defineQueries({
-      getUser: defineQuery(
-        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
-          builder.foo.where('id', '=', args),
-      ),
-    });
-
-    const withArgs = queries.getUser('test-id');
-    expect(isBoundCustomQuery(withArgs)).toBe(true);
-  });
-
-  test('returns false for non-CustomQuery values', () => {
-    expect(isBoundCustomQuery(null)).toBe(false);
-    expect(isBoundCustomQuery(undefined)).toBe(false);
-    expect(isBoundCustomQuery({})).toBe(false);
-    expect(isBoundCustomQuery({create: 'not a function'})).toBe(false);
-    expect(isBoundCustomQuery(() => {})).toBe(false);
-  });
-
-  test('returns false for Query (not CustomQuery)', () => {
-    const query = builder.foo.where('id', '=', 'test');
-    expect(isBoundCustomQuery(query)).toBe(false);
   });
 });
 
