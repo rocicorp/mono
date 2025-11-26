@@ -4,7 +4,7 @@ import type {ClientID} from '../../replicache/src/sync/ids.ts';
 import {bindingsForZero} from '../../zero-client/src/client/bindings.ts';
 import type {QueryResultDetails} from '../../zero-client/src/types/query-result.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
-import type {HumanReadable, Query} from '../../zql/src/query/query.ts';
+import type {HumanReadable, ToQuery} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import {
   createSolidViewFactory,
@@ -39,8 +39,9 @@ export function createQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
+  TContext,
 >(
-  querySignal: Accessor<Query<TSchema, TTable, TReturn>>,
+  querySignal: Accessor<ToQuery<TSchema, TTable, TReturn, TContext>>,
   options?: CreateQueryOptions | Accessor<CreateQueryOptions>,
 ): QueryResult<TReturn> {
   return useQuery(querySignal, options);
@@ -50,8 +51,9 @@ export function useQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
+  TContext,
 >(
-  querySignal: Accessor<Query<TSchema, TTable, TReturn>>,
+  querySignal: Accessor<ToQuery<TSchema, TTable, TReturn, TContext>>,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
 ): QueryResult<TReturn> {
   const [state, setState] = createStore<State>([
@@ -74,7 +76,7 @@ export function useQuery<
     [
       SolidView | undefined,
       ClientID | undefined,
-      Query<TSchema, TTable, TReturn> | undefined,
+      ToQuery<TSchema, TTable, TReturn, TContext> | undefined,
       string | undefined,
       TTL | undefined,
       number,
@@ -92,8 +94,9 @@ export function useQuery<
       const currentRefetchKey = refetchKey(); // depend on refetchKey to force re-evaluation
       const {clientID} = zero;
       const query = querySignal();
+      const q = query.toQuery(zero.context as TContext);
       const bindings = bindingsForZero(zero);
-      const queryHash = bindings.hash(query);
+      const queryHash = bindings.hash(q);
       const ttl = normalize(options)?.ttl ?? DEFAULT_TTL_MS;
       if (
         !prevView ||
@@ -106,7 +109,7 @@ export function useQuery<
           prevView.destroy();
         }
         view = bindings.materialize(
-          query,
+          q,
           createSolidViewFactory(setState, refetch),
           {ttl},
         );

@@ -46,6 +46,7 @@ import {
   type PullRow,
   type Query,
   type RunOptions,
+  type ToQuery,
 } from './query.ts';
 import {DEFAULT_PRELOAD_TTL_MS, DEFAULT_TTL_MS, type TTL} from './ttl.ts';
 import type {TypedView} from './typed-view.ts';
@@ -92,7 +93,8 @@ export abstract class AbstractQuery<
   >
   implements
     Query<TSchema, TTable, TReturn>,
-    QueryInternals<TSchema, TTable, TReturn>
+    QueryInternals<TSchema, TTable, TReturn>,
+    ToQuery<TSchema, TTable, TReturn, unknown>
 {
   readonly [queryInternalsTag] = true;
 
@@ -537,6 +539,10 @@ export abstract class AbstractQuery<
   get ast(): AST {
     return this.#ast;
   }
+
+  toQuery(_context: unknown): this {
+    return this;
+  }
 }
 
 function asAbstractQuery<
@@ -722,7 +728,9 @@ export class QueryImpl<
     TReturn = PullRow<TTable, TSchema>,
   >
   extends AbstractQuery<TSchema, TTable, TReturn>
-  implements Query<TSchema, TTable, TReturn>
+  implements
+    Query<TSchema, TTable, TReturn>,
+    ToQuery<TSchema, TTable, TReturn, unknown>
 {
   constructor(
     schema: TSchema,

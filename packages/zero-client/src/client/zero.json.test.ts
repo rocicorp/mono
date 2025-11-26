@@ -6,6 +6,7 @@ import {
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {zeroForTest} from './test-utils.ts';
 
 test('we can create rows with json columns and query those rows', async () => {
@@ -34,7 +35,9 @@ test('we can create rows with json columns and query those rows', async () => {
     artists: ['artist 2', 'artist 3'],
   });
 
-  const tracks = await z.run(z.query.track);
+  const zql = createBuilder(z.schema);
+
+  const tracks = await z.run(zql.track);
 
   expect(tracks).toEqual([
     {

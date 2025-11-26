@@ -16,7 +16,7 @@ import {
   table,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
 import type {Schema} from '../../../../zero-types/src/schema.ts';
-import type {QueryDefinitions} from '../../../../zql/src/query/query-definitions.ts';
+import {createBuilder} from '../../../../zql/src/query/create-builder.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {schema} from '../../../../zql/src/query/test/test-schemas.ts';
 import {nanoid} from '../../util/nanoid.ts';
@@ -53,10 +53,9 @@ async function getMetrics<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined,
   Context,
-  QD extends QueryDefinitions<S, Context> | undefined,
 >(
   inspector: Inspector,
-  z: TestZero<S, MD, Context, QD>,
+  z: TestZero<S, MD, Context>,
   metricsResponseValue?: InspectMetricsDown['value'],
 ): Promise<Metrics> {
   const socket = await z.socket;
@@ -347,7 +346,9 @@ describe('query metrics', () => {
     const z = zeroForTest({schema});
     await z.triggerConnected();
 
-    const issueQuery = z.query.issue;
+    const zql = createBuilder(schema);
+
+    const issueQuery = zql.issue;
     await z.run(issueQuery);
 
     const metrics = await getMetrics(z.inspector, z);
@@ -362,7 +363,9 @@ describe('query metrics', () => {
     const z = zeroForTest({schema});
     await z.triggerConnected();
 
-    const issueQuery = z.query.issue.orderBy('id', 'desc');
+    const zql = createBuilder(schema);
+
+    const issueQuery = zql.issue.orderBy('id', 'desc');
     const view = z.materialize(issueQuery);
 
     await z.triggerGotQueriesPatch(issueQuery);
@@ -433,9 +436,11 @@ describe('query metrics', () => {
     const z = zeroForTest({schema});
     await z.triggerConnected();
 
+    const zql = createBuilder(schema);
+
     // Execute multiple queries to generate real metrics
-    const query1 = z.query.issue;
-    const query2 = z.query.issue.where('id', '1');
+    const query1 = zql.issue;
+    const query2 = zql.issue.where('id', '1');
 
     await z.run(query1);
     await z.run(query2);
@@ -457,10 +462,12 @@ describe('query metrics', () => {
     const z = zeroForTest({schema});
     await z.triggerConnected();
 
+    const zql = createBuilder(schema);
+
     // Execute queries with different characteristics to test metrics collection
-    await z.run(z.query.issue); // Simple table query
-    await z.run(z.query.issue.where('id', '1')); // Filtered query
-    await z.run(z.query.issue.where('id', '2')); // Another filtered query
+    await z.run(zql.issue); // Simple table query
+    await z.run(zql.issue.where('id', '1')); // Filtered query
+    await z.run(zql.issue.where('id', '2')); // Another filtered query
 
     // Test that the inspector can access the real metrics
 
@@ -489,7 +496,7 @@ describe('query metrics', () => {
 
     ensureRealData(globalMetricsQueryMaterializationClient);
 
-    const q = z.query.issue;
+    const q = zql.issue;
     const view = z.materialize(q);
     await z.triggerGotQueriesPatch(q);
 
@@ -513,8 +520,10 @@ describe('query metrics', () => {
     const z = zeroForTest({schema});
     await z.triggerConnected();
 
+    const zql = createBuilder(schema);
+
     // Create a query and materialize a view to set up the query pipeline
-    const issueQuery = z.query.issue;
+    const issueQuery = zql.issue;
     const view = z.materialize(issueQuery);
     await z.triggerGotQueriesPatch(issueQuery);
 
@@ -573,7 +582,9 @@ describe('query metrics', () => {
     const z = zeroForTest({schema});
     await z.triggerConnected();
 
-    const issueQuery = z.query.issue.orderBy('id', 'desc');
+    const zql = createBuilder(schema);
+
+    const issueQuery = zql.issue.orderBy('id', 'desc');
     const view = z.materialize(issueQuery);
     await z.triggerGotQueriesPatch(issueQuery);
 
@@ -712,8 +723,10 @@ test('clientZQL', async () => {
   const queriesP = z.inspector.client.queries();
   await waitForLazyModule();
 
+  const zql = createBuilder(schema);
+
   // Trigger QueryManager.#add by materializing a query and marking it as got
-  const issueQuery = z.query.issue.where('ownerId', 'arv');
+  const issueQuery = zql.issue.where('ownerId', 'arv');
   const view = z.materialize(issueQuery);
   await z.triggerGotQueriesPatch(issueQuery);
 
@@ -1968,9 +1981,11 @@ describe('inspector.analyzeQuery name mapping', () => {
     const z = zeroForTest({schema: mappedSchema});
     await z.triggerConnected();
 
+    const zql = createBuilder(schema);
+
     const {result, sentAst} = await testAnalyzeQuery(
       z,
-      z.query.issue,
+      zql.issue,
       {syncedRows: true},
       {
         syncedRowCount: 5,
@@ -2005,9 +2020,11 @@ describe('inspector.analyzeQuery name mapping', () => {
     const z = zeroForTest({schema: mappedSchema});
     await z.triggerConnected();
 
+    const zql = createBuilder(mappedSchema);
+
     const {result, sentAst} = await testAnalyzeQuery(
       z,
-      z.query.issue.where('creatorID', '=', 'user123'),
+      zql.issue.where('creatorID', '=', 'user123'),
       {syncedRows: true},
       {
         syncedRowCount: 1,
@@ -2045,9 +2062,11 @@ describe('inspector.analyzeQuery name mapping', () => {
     const z = zeroForTest({schema: simpleSchema});
     await z.triggerConnected();
 
+    const zql = createBuilder(simpleSchema);
+
     const {result, sentAst} = await testAnalyzeQuery(
       z,
-      z.query.issue,
+      zql.issue,
       {syncedRows: true},
       {
         syncedRowCount: 3,
@@ -2097,9 +2116,11 @@ describe('inspector.analyzeQuery name mapping', () => {
     const z = zeroForTest({schema: mappedSchema});
     await z.triggerConnected();
 
+    const zql = createBuilder(mappedSchema);
+
     const {result, sentAst} = await testAnalyzeQuery(
       z,
-      z.query.issue.related('project', q => q.one()),
+      zql.issue.related('project', q => q.one()),
       {syncedRows: true},
       {
         syncedRowCount: 2,

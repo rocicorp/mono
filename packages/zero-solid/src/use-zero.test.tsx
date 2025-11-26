@@ -270,7 +270,7 @@ describe('ZeroProvider', () => {
     test('omits auth from constructor args when not provided', () => {
       const zero = createMockZero();
       // oxlint-disable-next-line no-explicit-any
-      const capturedOptions: ZeroOptions<any, any, any, any>[] = [];
+      const capturedOptions: ZeroOptions<any, any, any>[] = [];
       ZeroMock.mockImplementation(options => {
         capturedOptions.push(options);
         return zero;

@@ -14,7 +14,6 @@ import type {
 import type {
   DBTransaction,
   SchemaCRUD,
-  SchemaQuery,
   TableCRUD,
   TransactionBase,
 } from '../../zql/src/mutate/custom.ts';
@@ -24,6 +23,7 @@ import type {
   Query,
   RunOptions,
 } from '../../zql/src/query/query.ts';
+import type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
 import {getServerSchema} from './schema.ts';
 
 interface ServerTransaction<TSchema extends Schema, TWrappedTransaction>

@@ -163,7 +163,7 @@ export interface Query<
   TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn = PullRow<TTable, TSchema>,
-> {
+> extends ToQuery<TSchema, TTable, TReturn, unknown> {
   related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
   ): Query<
@@ -301,3 +301,24 @@ export const DEFAULT_RUN_OPTIONS_COMPLETE = {
 } as const;
 
 export type AnyQuery = Query<Schema, string, any>;
+
+/**
+ * An interface for objects that can be converted to a {@link Query}.
+ *
+ * This is useful for creating lazy or deferred queries that are only
+ * materialized when needed, allowing the query to be constructed with
+ * runtime context.
+ *
+ * @template S - The schema type
+ * @template T - The table name (must be a key of S['tables'])
+ * @template R - The return type of the query
+ * @template C - The context type passed to {@link toQuery}
+ */
+export interface ToQuery<
+  S extends Schema,
+  T extends keyof S['tables'] & string,
+  R,
+  C,
+> {
+  toQuery(context: C): Query<S, T, R>;
+}

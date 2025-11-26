@@ -1,4 +1,5 @@
 import {expect, test} from 'vitest';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import {bindingsForZero} from './bindings.ts';
 import {zeroForTest} from './test-utils.ts';
@@ -9,8 +10,10 @@ test('multiple metadata() calls return consistent results', () => {
     schema,
   });
 
+  const zql = createBuilder(schema);
+
   const bindings = bindingsForZero(z);
-  const query = z.query.issue;
+  const query = zql.issue;
 
   // Call metadata multiple times
   const hash1 = bindings.hash(query);
