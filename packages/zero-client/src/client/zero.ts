@@ -449,7 +449,9 @@ export class Zero<
         message: 'ZeroOptions.userID must not be empty.',
       });
     }
-    const server = getServer(options.server);
+    const cacheURL =
+      options.cacheURL !== undefined ? options.cacheURL : options.server;
+    const server = getServer(cacheURL);
     this.#enableAnalytics = shouldEnableAnalytics(
       server,
       false /*options.enableAnalytics,*/, // Reenable analytics

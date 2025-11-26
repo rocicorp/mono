@@ -95,7 +95,7 @@ describe('ZeroProvider', () => {
       const schema = {} as Schema;
 
       const wrapper = (props: {children: JSX.Element}) => (
-        <ZeroProvider server={server()} schema={schema} userID="u">
+        <ZeroProvider cacheURL={server()} schema={schema} userID="u">
           {props.children}
         </ZeroProvider>
       );
@@ -123,7 +123,7 @@ describe('ZeroProvider', () => {
       const schema = {} as Schema;
 
       const wrapper = (props: {children: JSX.Element}) => (
-        <ZeroProvider server="foo" schema={schema} userID="u">
+        <ZeroProvider cacheURL="foo" schema={schema} userID="u">
           {wrap() ? <div>{props.children}</div> : props.children}
         </ZeroProvider>
       );
@@ -156,7 +156,7 @@ describe('ZeroProvider', () => {
       const [schema, setSchema] = createSignal<Schema>(baseSchema);
 
       const wrapper = (props: {children: JSX.Element}) => (
-        <ZeroProvider server={server()} schema={schema()} userID="u">
+        <ZeroProvider cacheURL={server()} schema={schema()} userID="u">
           {props.children}
         </ZeroProvider>
       );
@@ -196,7 +196,7 @@ describe('ZeroProvider', () => {
         initialProps: [],
         wrapper: (props: {children: JSX.Element}) => (
           <ZeroProvider
-            server="https://example.com"
+            cacheURL="https://example.com"
             schema={schema}
             userID="u"
             init={init}
@@ -253,7 +253,7 @@ describe('ZeroProvider', () => {
         initialProps: [],
         wrapper: (props: {children: JSX.Element}) => (
           <ZeroProvider
-            server="https://example.com"
+            cacheURL="https://example.com"
             schema={schema}
             auth="token-1"
             userID="u"
@@ -281,7 +281,11 @@ describe('ZeroProvider', () => {
       renderHook(() => useZero<Schema>(), {
         initialProps: [],
         wrapper: (props: {children: JSX.Element}) => (
-          <ZeroProvider server="https://example.com" schema={schema} userID="u">
+          <ZeroProvider
+            cacheURL="https://example.com"
+            schema={schema}
+            userID="u"
+          >
             {props.children}
           </ZeroProvider>
         ),
@@ -300,7 +304,7 @@ describe('ZeroProvider', () => {
 
       const wrapper = (props: {children: JSX.Element}) => (
         <ZeroProvider
-          server="https://example.com"
+          cacheURL="https://example.com"
           schema={schema}
           auth={auth()}
           userID="u"
@@ -340,7 +344,7 @@ describe('ZeroProvider', () => {
 
       const wrapper = (props: {children: JSX.Element}) => (
         <ZeroProvider
-          server="https://example.com"
+          cacheURL="https://example.com"
           schema={schema}
           auth={auth()}
           userID="u"
@@ -372,7 +376,7 @@ describe('ZeroProvider', () => {
 
       const wrapper = (props: {children: JSX.Element}) => (
         <ZeroProvider
-          server="https://example.com"
+          cacheURL="https://example.com"
           schema={schema}
           userID="u"
           auth={auth()}

@@ -7,7 +7,7 @@ import {Zero} from './zero.ts';
 const zeroStress = new Zero({
   schema: zeroStressSchema,
   userID: 'anon',
-  server: null,
+  cacheURL: null,
 });
 
 export {zeroStress};
