@@ -100,12 +100,14 @@ export default function runWorker(
     );
 
     // Create the custom query transformer if configured
-    const {getQueries} = config;
+    const queriesUrl = config.queries?.url ?? config.getQueries?.url;
+    const forwardCookies =
+      config.queries?.forwardCookies ?? config.getQueries?.forwardCookies;
     const customQueryTransformer =
-      getQueries.url &&
+      queriesUrl &&
       new CustomQueryTransformer(
         logger,
-        {url: getQueries.url, forwardCookies: getQueries.forwardCookies},
+        {url: queriesUrl, forwardCookies},
         shard,
       );
 

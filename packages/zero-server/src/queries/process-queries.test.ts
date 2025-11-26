@@ -88,7 +88,7 @@ describe('handleGetQueriesRequest', () => {
       ],
     ]);
 
-    const request = new Request('https://example.com/get-queries', {
+    const request = new Request('https://example.com/queries', {
       method: 'POST',
       body,
     });
@@ -130,7 +130,7 @@ describe('handleGetQueriesRequest', () => {
 
   test('returns transformFailed parse error when request body parsing fails', async () => {
     // Create a Request that will fail to parse as JSON
-    const request = new Request('https://example.com/get-queries', {
+    const request = new Request('https://example.com/queries', {
       method: 'POST',
       body: 'not valid json',
     });
@@ -411,7 +411,7 @@ describe('handleTransformRequest', () => {
       ],
     ]);
 
-    const request = new Request('https://example.com/get-queries', {
+    const request = new Request('https://example.com/queries', {
       method: 'POST',
       body,
     });
@@ -455,7 +455,7 @@ describe('handleTransformRequest', () => {
 
   test('returns transformFailed parse error when request body parsing fails', async () => {
     // Create a Request that will fail to parse as JSON
-    const request = new Request('https://example.com/get-queries', {
+    const request = new Request('https://example.com/queries', {
       method: 'POST',
       body: 'not valid json',
     });

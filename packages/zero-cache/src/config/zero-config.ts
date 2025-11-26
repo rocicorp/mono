@@ -229,7 +229,14 @@ const makeMutatorQueryOptions = (
 
 const mutateOptions = makeMutatorQueryOptions(undefined, 'push mutations');
 const pushOptions = makeMutatorQueryOptions('mutate-url', 'push mutations');
-const queryOptions = makeMutatorQueryOptions(undefined, 'send synced queries');
+const queriesOptions = makeMutatorQueryOptions(
+  undefined,
+  'send synced queries',
+);
+const getQueriesOptions = makeMutatorQueryOptions(
+  'queries-url',
+  'send synced queries',
+);
 
 export type AuthConfig = Config<typeof authOptions>;
 
@@ -276,9 +283,12 @@ export const zeroOptions = {
     },
   },
 
+  /** @deprecated */
   push: pushOptions,
   mutate: mutateOptions,
-  getQueries: queryOptions,
+  /** @deprecated */
+  getQueries: getQueriesOptions,
+  queries: queriesOptions,
 
   cvr: {
     db: {
@@ -429,6 +439,7 @@ export const zeroOptions = {
       ],
     },
 
+    /** @deprecated */
     address: {
       type: v.string().optional(),
       deprecated: [
@@ -437,6 +448,7 @@ export const zeroOptions = {
       hidden: true,
     },
 
+    /** @deprecated */
     protocol: {
       type: v.literalUnion('ws', 'wss').default('ws'),
       deprecated: [
@@ -667,6 +679,7 @@ export const zeroOptions = {
     },
   },
 
+  /** @deprecated */
   targetClientRowCount: {
     type: v.number().default(20_000),
     deprecated: [
