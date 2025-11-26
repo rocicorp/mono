@@ -26,7 +26,6 @@ import {
 } from './custom.ts';
 import {ClientError} from './error.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
-import {QueryManager} from './query-manager.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 import {MockSocket, zeroForTest} from './test-utils.ts';
 import {createDb} from './test/create-db.ts';
@@ -1163,39 +1162,60 @@ test('crud mutators work if `enableLegacyMutators` is set to true (or not set)',
   await z.close();
 });
 
-test('unnamed queries do not get registered with the query manager if `enableLegacyQueries` is set to false', async () => {
-  const addLegacySpy = vi.spyOn(QueryManager.prototype, 'addLegacy');
-  const z = zeroForTest({
-    schema: {
-      ...schema,
-      enableLegacyQueries: false,
-    },
+describe('enableLegacyQueries', () => {
+  beforeEach(() => {
+    vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
+
+    return () => {
+      vi.unstubAllGlobals();
+    };
   });
 
-  // mock the QueryManager class
-  // and spy on addLegacy
+  test('unnamed queries do not get registered with the query manager if `enableLegacyQueries` is set to false', async () => {
+    const z = zeroForTest({
+      schema: {
+        ...schema,
+        enableLegacyQueries: false,
+      },
+    });
 
-  await z.triggerConnected();
-  await z.waitForConnectionStatus(ConnectionStatus.Connected);
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-  await z.run(z.query.issue.where('id', '1').one());
+    const mockSocket = await z.socket;
 
-  expect(addLegacySpy).not.toHaveBeenCalled();
-  await z.close();
-});
+    await z.run(z.query.issue.where('id', '1').one());
 
-test('unnamed queries do get registered with the query manager if `enableLegacyQueries` is set to true', async () => {
-  const addLegacySpy = vi.spyOn(QueryManager.prototype, 'addLegacy');
+    await z.run(z.query.issue.where('id', '1').one());
+    z.queryDelegate.flushQueryChanges();
 
-  const z = zeroForTest({
-    schema,
+    // No changeDesiredQueries message should be sent
+    const changeDesiredQueriesMessages = mockSocket.jsonMessages.filter(
+      m => Array.isArray(m) && m[0] === 'changeDesiredQueries',
+    );
+    expect(changeDesiredQueriesMessages).toHaveLength(0);
+    await z.close();
   });
 
-  await z.triggerConnected();
-  await z.waitForConnectionStatus(ConnectionStatus.Connected);
+  test('unnamed queries do get registered with the query manager if `enableLegacyQueries` is set to true', async () => {
+    const z = zeroForTest({
+      schema,
+    });
 
-  await z.run(z.query.issue.where('id', '1').one());
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-  expect(addLegacySpy).toHaveBeenCalled();
-  await z.close();
+    const mockSocket = await z.socket;
+
+    await z.run(z.query.issue.where('id', '1').one());
+
+    z.queryDelegate.flushQueryChanges();
+
+    // A changeDesiredQueries message should be sent
+    const changeDesiredQueriesMessages = mockSocket.jsonMessages.filter(
+      m => Array.isArray(m) && m[0] === 'changeDesiredQueries',
+    );
+    expect(changeDesiredQueriesMessages.length).toBeGreaterThan(0);
+    await z.close();
+  });
 });
