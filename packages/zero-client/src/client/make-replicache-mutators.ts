@@ -2,8 +2,8 @@ import type {LogContext} from '@rocicorp/logger';
 import {
   isMutatorDefinition,
   type MutatorDefinition,
-} from '../../../zero-types/src/define-mutator.ts';
-import type {MutatorDefinitions} from '../../../zero-types/src/mutator-definitions.ts';
+} from '../../../zero-types/src/mutator.ts';
+import type {MutatorDefinitions} from '../../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';

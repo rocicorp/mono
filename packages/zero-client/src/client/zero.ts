@@ -76,7 +76,7 @@ import {
   type NameMapper,
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
-import type {MutatorDefinitions} from '../../../zero-types/src/mutator-definitions.ts';
+import type {MutatorDefinitions} from '../../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import {

@@ -14,7 +14,7 @@ import type {
   QueryResultDetails,
 } from '../../zero-client/src/types/query-result.ts';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
-import type {MutatorDefinitions} from '../../zero-types/src/mutator-definitions.ts';
+import type {MutatorDefinitions} from '../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';

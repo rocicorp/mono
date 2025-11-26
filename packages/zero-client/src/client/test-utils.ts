@@ -30,7 +30,7 @@ import type {
   PushResponseMessage,
 } from '../../../zero-protocol/src/push.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
-import type {MutatorDefinitions} from '../../../zero-types/src/mutator-definitions.ts';
+import type {MutatorDefinitions} from '../../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
 import type {AnyQuery, Query} from '../../../zql/src/query/query.ts';

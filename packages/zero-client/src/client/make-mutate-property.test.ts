@@ -1,7 +1,7 @@
 // oxlint-disable no-explicit-any
 import {describe, expect, test, vi} from 'vitest';
-import {defineMutator} from '../../../zero-types/src/define-mutator.ts';
-import type {MutatorDefinitions} from '../../../zero-types/src/mutator-definitions.ts';
+import {defineMutator} from '../../../zero-types/src/mutator.ts';
+import type {MutatorDefinitions} from '../../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {CustomMutatorDefs, MutatorResult} from './custom.ts';
 import {makeMutateProperty} from './make-mutate-property.ts';

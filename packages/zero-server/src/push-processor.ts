@@ -13,8 +13,8 @@ import {
   handleMutationRequest,
   type TransactFn,
 } from '../../zero-server/src/process-mutations.ts';
-import {isMutatorDefinition} from '../../zero-types/src/define-mutator.ts';
-import type {MutatorDefinitions} from '../../zero-types/src/mutator-definitions.ts';
+import {isMutatorDefinition} from '../../zero-types/src/mutator.ts';
+import type {MutatorDefinitions} from '../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {Transaction} from '../../zql/src/mutate/custom.ts';
 import {splitMutatorKey} from '../../zql/src/mutate/custom.ts';

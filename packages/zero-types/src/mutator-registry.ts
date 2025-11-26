@@ -118,6 +118,14 @@ export type MutatorDefinitionsTree<S extends Schema, C> = {
 };
 
 /**
+ * Alias for MutatorDefinitionsTree for backward compatibility.
+ */
+export type MutatorDefinitions<S extends Schema, C> = MutatorDefinitionsTree<
+  S,
+  C
+>;
+
+/**
  * The result of defineMutators(). A tree of Mutators with a tag for detection.
  */
 export type MutatorRegistry<

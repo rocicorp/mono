@@ -100,8 +100,16 @@ export {
   defineMutatorWithType,
   isMutatorDefinition,
   type MutatorDefinition,
-} from '../../zero-types/src/define-mutator.ts';
-export type {MutatorDefinitions} from '../../zero-types/src/mutator-definitions.ts';
+} from '../../zero-types/src/mutator.ts';
+export {
+  defineMutators,
+  getMutator,
+  mustGetMutator,
+  isMutatorRegistry,
+  type MutatorDefinitions,
+  type MutatorRegistry,
+} from '../../zero-types/src/mutator-registry.ts';
+export type {Mutator, MutationRequest} from '../../zero-types/src/mutator.ts';
 export type {Schema} from '../../zero-types/src/schema.ts';
 export type {Change} from '../../zql/src/ivm/change.ts';
 export type {Node} from '../../zql/src/ivm/data.ts';

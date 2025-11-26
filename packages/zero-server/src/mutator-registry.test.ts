@@ -2,7 +2,7 @@
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import {describe, expect, test} from 'vitest';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
-import {defineMutator} from '../../zero-types/src/define-mutator.ts';
+import {defineMutator} from '../../zero-types/src/mutator.ts';
 import {MutatorRegistry} from './mutator-registry.ts';
 
 describe('MutatorRegistry', () => {

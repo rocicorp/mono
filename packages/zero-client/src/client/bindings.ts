@@ -1,4 +1,4 @@
-import type {MutatorDefinitions} from '../../../zero-types/src/mutator-definitions.ts';
+import type {MutatorDefinitions} from '../../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Format, ViewFactory} from '../../../zql/src/ivm/view.ts';
 import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';

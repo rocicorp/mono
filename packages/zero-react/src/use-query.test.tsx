@@ -15,7 +15,7 @@ import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
 import type {QueryResultDetails} from '../../zero-client/src/types/query-result.ts';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
-import type {MutatorDefinitions} from '../../zero-types/src/mutator-definitions.ts';
+import type {MutatorDefinitions} from '../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {QueryDefinitions} from '../../zql/src/query/query-definitions.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';

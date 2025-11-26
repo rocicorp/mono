@@ -25,8 +25,8 @@ import {
   type PushBody,
   type PushResponse,
 } from '../../zero-protocol/src/push.ts';
-import {isMutatorDefinition} from '../../zero-types/src/define-mutator.ts';
-import type {MutatorDefinitions} from '../../zero-types/src/mutator-definitions.ts';
+import {isMutatorDefinition} from '../../zero-types/src/mutator.ts';
+import type {MutatorDefinitions} from '../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import {validateInput} from '../../zql/src/query/validate-input.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
