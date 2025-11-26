@@ -1,9 +1,8 @@
-import type {IssueRow} from '../shared/schema.ts';
-import type {ZeroBugs} from '../shared/zero-type.ts';
+import {builder} from '../shared/schema.ts';
 
-export function commentQuery(z: ZeroBugs, displayed: IssueRow | undefined) {
-  return z.query.comment
-    .where('issueID', 'IS', displayed?.id ?? null)
+export function commentQuery(id: string | null = null) {
+  return builder.comment
+    .where('issueID', 'IS', id)
     .related('creator')
     .related('emoji', emoji => emoji.related('creator'))
     .orderBy('created', 'asc')

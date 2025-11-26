@@ -7,7 +7,7 @@ import {
   number,
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
-import {createBuilder} from '../../zql/src/query/named.ts';
+import {createBuilder} from '../../zql/src/query/create-builder.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {newQueryDelegate} from '../../zqlite/src/test/source-factory.ts';
 

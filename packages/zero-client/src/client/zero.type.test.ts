@@ -11,7 +11,7 @@ import {
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
-import {createBuilder} from '../../../zql/src/query/named.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 
 test('run', async () => {
   const schema = createSchema({
@@ -179,6 +179,8 @@ test('CRUD and custom mutators work together with enableLegacyMutators: true', a
     enableLegacyMutators: true,
   });
 
+  const zql = createBuilder(schema);
+
   const z = zeroForTest({
     schema,
     mutators: {
@@ -214,7 +216,7 @@ test('CRUD and custom mutators work together with enableLegacyMutators: true', a
   const result = z.mutate.issue.closeIssue({id: '1'});
   await result.client;
 
-  const issues = await z.run(z.query.issues.where('id', '1').one());
+  const issues = await z.run(zql.issues.where('id', '1').one());
   expect(issues?.status).toBe('closed');
 });
 

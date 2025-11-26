@@ -5,12 +5,8 @@ import type {SchemaValueToTSType} from '../../../zero-types/src/schema-value.ts'
 import type {Schema, TableSchema} from '../../../zero-types/src/schema.ts';
 import type {ServerSchema} from '../../../zero-types/src/server-schema.ts';
 import type {Format} from '../ivm/view.ts';
-import type {
-  HumanReadable,
-  PullRow,
-  Query,
-  RunOptions,
-} from '../query/query.ts';
+import type {HumanReadable, Query, RunOptions} from '../query/query.ts';
+import type {SchemaQuery} from '../query/schema-query.ts';
 
 type ClientID = string;
 
@@ -118,10 +114,6 @@ export type TableCRUD<S extends TableSchema> = {
    * function does nothing.
    */
   delete: (id: DeleteID<S>) => Promise<void>;
-};
-
-export type SchemaQuery<S extends Schema> = {
-  readonly [K in keyof S['tables'] & string]: Query<S, K, PullRow<K, S>>;
 };
 
 export type DeleteID<S extends TableSchema> = Expand<PrimaryKeyFields<S>>;

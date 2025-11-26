@@ -2,6 +2,7 @@ import {expect, test, vi} from 'vitest';
 import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {zeroForTest} from './test-utils.ts';
 
 test('Zero Junction', async () => {
@@ -50,7 +51,8 @@ test('Zero Junction', async () => {
   const z = zeroForTest({
     schema,
   });
-  const q = z.query.event.related('athletes');
+  const zql = createBuilder(schema);
+  const q = zql.event.related('athletes');
   const view = z.materialize(q);
   const listener = vi.fn();
   view.addListener(listener);

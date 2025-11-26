@@ -1,5 +1,6 @@
 import {
-  defineQueryWithContextType,
+  defineQueriesWithType,
+  defineQuery,
   escapeLike,
   type Query,
 } from '@rocicorp/zero';
@@ -42,9 +43,26 @@ const issueRowSort = z.object({
 
 type IssueRowSort = z.infer<typeof issueRowSort>;
 
-const defineQuery = defineQueryWithContextType<AuthData | undefined>();
+function labelsOrderByName({
+  args: {projectName, orderBy},
+}: {
+  args: {
+    projectName: string;
+    orderBy?: 'asc' | 'desc' | undefined;
+  };
+}) {
+  let q = builder.label.whereExists('project', q =>
+    q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+  );
+  if (orderBy !== undefined) {
+    q = q.orderBy('name', orderBy);
+  }
+  return q;
+}
 
-export const queries = {
+const defineQueries = defineQueriesWithType<AuthData | undefined>();
+
+export const queries = defineQueries({
   allLabels: defineQuery(z.undefined(), () => builder.label),
 
   allUsers: defineQuery(z.undefined(), () => builder.user),
@@ -55,15 +73,23 @@ export const queries = {
     builder.user.where('id', userID).one(),
   ),
 
+  crewUser: defineQuery(idValidator, ({args: userID}) =>
+    builder.user.where('id', userID).where('role', 'crew').one(),
+  ),
+
   labels: defineQuery(
     z.object({
       projectName: z.string(),
     }),
+    labelsOrderByName,
+  ),
 
-    ({args: {projectName}}) =>
-      builder.label.whereExists('project', q =>
-        q.where('lowerCaseName', projectName.toLocaleLowerCase()),
-      ),
+  labelsOrderByName: defineQuery(
+    z.object({
+      projectName: z.string(),
+      orderBy: z.enum(['asc', 'desc']),
+    }),
+    labelsOrderByName,
   ),
 
   issuePreloadV2: defineQuery(
@@ -274,7 +300,7 @@ export const queries = {
       return q;
     },
   ),
-} as const;
+});
 
 export type Queries = typeof queries;
 

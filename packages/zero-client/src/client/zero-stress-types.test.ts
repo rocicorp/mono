@@ -1,6 +1,7 @@
 import {describe, expectTypeOf, test} from 'vitest';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import type {QueryResultType} from '../../../zql/src/query/query.ts';
 import type {MutatorResultDetails} from './custom.ts';
 import {zeroStress} from './zero-stress-client-test.ts';
@@ -12,10 +13,12 @@ import {Zero, type MakeEntityQueriesFromSchema} from './zero.ts';
 type Schema = typeof zeroStressSchema;
 type Tx = Transaction<Schema, unknown>;
 
+const zql = createBuilder(zeroStressSchema);
+
 describe('stress test types', () => {
   test('zero can resolve query return types', async () => {
     const result = await zeroStress.run(
-      zeroStress.query.abTest.where('endDate', '>', 1726339646439),
+      zql.abTest.where('endDate', '>', 1726339646439),
     );
 
     expectTypeOf(result).toEqualTypeOf<
@@ -84,9 +87,9 @@ describe('stress test types', () => {
   });
 
   test('multiple table queries maintain distinct types', async () => {
-    const users = await zeroStress.run(zeroStress.query.user);
-    const products = await zeroStress.run(zeroStress.query.product);
-    const orders = await zeroStress.run(zeroStress.query.order);
+    const users = await zeroStress.run(zql.user);
+    const products = await zeroStress.run(zql.product);
+    const orders = await zeroStress.run(zql.order);
 
     type UserResult = (typeof users)[number];
     type ProductResult = (typeof products)[number];
@@ -99,7 +102,7 @@ describe('stress test types', () => {
 
   test('query chaining maintains type safety', async () => {
     const results = await zeroStress.run(
-      zeroStress.query.supportTicket
+      zql.supportTicket
         .where('status', '=', 'open')
         .where('priority', '=', 'high')
         .orderBy('createdAt', 'desc')
@@ -256,21 +259,21 @@ describe('stress test types', () => {
   });
 
   test('query and mutation methods exist for all major tables', () => {
-    expectTypeOf(zeroStress.query.user['where']).toBeFunction();
-    expectTypeOf(zeroStress.query.workspace['where']).toBeFunction();
-    expectTypeOf(zeroStress.query.product['where']).toBeFunction();
-    expectTypeOf(zeroStress.query.order['where']).toBeFunction();
-    expectTypeOf(zeroStress.query.supportTicket['where']).toBeFunction();
-    expectTypeOf(zeroStress.query.emailCampaign['where']).toBeFunction();
-    expectTypeOf(zeroStress.query.inventoryAdjustment['where']).toBeFunction();
-    expectTypeOf(zeroStress.query.patient['where']).toBeFunction();
-    expectTypeOf(zeroStress.query.appointment['where']).toBeFunction();
-    expectTypeOf(zeroStress.query.invoice['where']).toBeFunction();
+    expectTypeOf(zql.user['where']).toBeFunction();
+    expectTypeOf(zql.workspace['where']).toBeFunction();
+    expectTypeOf(zql.product['where']).toBeFunction();
+    expectTypeOf(zql.order['where']).toBeFunction();
+    expectTypeOf(zql.supportTicket['where']).toBeFunction();
+    expectTypeOf(zql.emailCampaign['where']).toBeFunction();
+    expectTypeOf(zql.inventoryAdjustment['where']).toBeFunction();
+    expectTypeOf(zql.patient['where']).toBeFunction();
+    expectTypeOf(zql.appointment['where']).toBeFunction();
+    expectTypeOf(zql.invoice['where']).toBeFunction();
   });
 
   test('single-level relationship queries maintain type safety', async () => {
     // Query with one-to-many relationship
-    const userQuery = zeroStress.query.user.related('sessions');
+    const userQuery = zql.user.related('sessions');
     const users = await zeroStress.run(userQuery);
 
     type UserResult = (typeof users)[number];
@@ -283,7 +286,7 @@ describe('stress test types', () => {
 
   test('relationship queries with filters maintain correct types', async () => {
     const results = await zeroStress.run(
-      zeroStress.query.user
+      zql.user
         .where('role', '=', 'admin')
         .related('sessions', q => q.where('ipAddress', '=', '127.0.0.1'))
         .related('accounts', q =>
@@ -303,7 +306,7 @@ describe('stress test types', () => {
   });
 
   test('multiple independent relationship queries on same table', async () => {
-    const query = zeroStress.query.product
+    const query = zql.product
       .related('createdByUser')
       .related('updatedByUser')
       .related('workspace');
@@ -325,7 +328,7 @@ describe('stress test types', () => {
 
   test('relationship queries preserve enum types through nesting', async () => {
     const results = await zeroStress.run(
-      zeroStress.query.product
+      zql.product
         .where('status', '=', 'active')
         .related('createdByUser', q => q.where('role', '=', 'admin')),
     );
@@ -341,7 +344,7 @@ describe('stress test types', () => {
   });
 
   test('relationship queries with limit and orderBy maintain types', async () => {
-    const query = zeroStress.query.user
+    const query = zql.user
       .where('emailVerified', '=', true)
       .related('sessions', q =>
         q
@@ -362,12 +365,8 @@ describe('stress test types', () => {
   });
 
   test('relationship types remain distinct across different parent queries', async () => {
-    const products = await zeroStress.run(
-      zeroStress.query.product.related('workspace'),
-    );
-    const orders = await zeroStress.run(
-      zeroStress.query.order.related('workspace'),
-    );
+    const products = await zeroStress.run(zql.product.related('workspace'));
+    const orders = await zeroStress.run(zql.order.related('workspace'));
 
     type ProductWithWorkspace = (typeof products)[number];
     type OrderWithWorkspace = (typeof orders)[number];
@@ -379,15 +378,11 @@ describe('stress test types', () => {
 
   test('relationship queries work across many table types simultaneously', async () => {
     const [users, products, orders, tickets, campaigns] = await Promise.all([
-      zeroStress.run(
-        zeroStress.query.user.related('sessions').related('accounts'),
-      ),
-      zeroStress.run(
-        zeroStress.query.product.related('workspace').related('createdByUser'),
-      ),
-      zeroStress.run(zeroStress.query.order.related('createdByUser')),
-      zeroStress.run(zeroStress.query.supportTicket.related('workspace')),
-      zeroStress.run(zeroStress.query.emailCampaign.related('workspace')),
+      zeroStress.run(zql.user.related('sessions').related('accounts')),
+      zeroStress.run(zql.product.related('workspace').related('createdByUser')),
+      zeroStress.run(zql.order.related('createdByUser')),
+      zeroStress.run(zql.supportTicket.related('workspace')),
+      zeroStress.run(zql.emailCampaign.related('workspace')),
     ]);
 
     type User = (typeof users)[number];

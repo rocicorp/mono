@@ -6,14 +6,14 @@ import type {
   DBConnection,
   DBTransaction,
   SchemaCRUD,
-  SchemaQuery,
 } from '../../zql/src/mutate/custom.ts';
-import {createBuilder} from '../../zql/src/query/named.ts';
+import {createBuilder} from '../../zql/src/query/create-builder.ts';
 import type {
   HumanReadable,
   Query,
   RunOptions,
 } from '../../zql/src/query/query.ts';
+import type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
 import type {TransactionImpl} from './custom.ts';
 import {makeSchemaCRUD, makeServerTransaction} from './custom.ts';
 import type {

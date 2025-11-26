@@ -14,6 +14,7 @@ import {must} from '../../../shared/src/must.ts';
 import {promiseUndefined} from '../../../shared/src/resolved-promises.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {InsertValue, Transaction} from '../../../zql/src/mutate/custom.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import type {Row} from '../../../zql/src/query/query.ts';
 import {schema} from '../../../zql/src/query/test/test-schemas.ts';
 import {bindingsForZero} from './bindings.ts';
@@ -26,7 +27,6 @@ import {
 } from './custom.ts';
 import {ClientError} from './error.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
-import {QueryManager} from './query-manager.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 import {MockSocket, zeroForTest} from './test-utils.ts';
 import {createDb} from './test/create-db.ts';
@@ -163,7 +163,8 @@ test('supports mutators without a namespace', async () => {
     createdAt: 1743018138477,
   }).client;
 
-  const issues = await z.run(z.query.issue);
+  const zql = createBuilder(schema);
+  const issues = await z.run(zql.issue);
   expect(issues[0].title).toEqual('no-namespace');
 });
 
@@ -215,8 +216,10 @@ test('supports arbitrary depth nesting of mutators', async () => {
     createdAt: 1743018138477,
   }).client;
 
-  await z.markQueryAsGot(z.query.issue);
-  let issues = await z.run(z.query.issue);
+  const zql = createBuilder(schema);
+
+  await z.markQueryAsGot(zql.issue);
+  let issues = await z.run(zql.issue);
   expect(issues[0].title).toEqual('deeply-nested');
 
   // Test deeply nested update
@@ -224,7 +227,7 @@ test('supports arbitrary depth nesting of mutators', async () => {
     id: '1',
     title: 'updated-deep',
   }).client;
-  issues = await z.run(z.query.issue);
+  issues = await z.run(zql.issue);
   expect(issues[0].title).toEqual('updated-deep');
 
   // Test intermediate level mutator
@@ -236,18 +239,18 @@ test('supports arbitrary depth nesting of mutators', async () => {
     description: '',
     createdAt: 1743018138477,
   }).client;
-  issues = await z.run(z.query.issue);
+  issues = await z.run(zql.issue);
   expect(issues.length).toEqual(2);
   expect(issues[1].title).toEqual('intermediate');
 
   // Test level1 direct mutator
   await z.mutate.level1.directMutator('2').client;
-  issues = await z.run(z.query.issue);
+  issues = await z.run(zql.issue);
   expect(issues[1].closed).toEqual(true);
 
   // Test top level mutator
   await z.mutate.topLevel('1').client;
-  issues = await z.run(z.query.issue);
+  issues = await z.run(zql.issue);
   expect(issues[0].title).toEqual('top-level');
 });
 
@@ -323,16 +326,18 @@ test('custom mutators write to the local store', async () => {
     createdAt: 1743018138477,
   }).client;
 
-  await z.markQueryAsGot(z.query.issue);
-  let issues = await z.run(z.query.issue);
+  const zql = createBuilder(schema);
+
+  await z.markQueryAsGot(zql.issue);
+  let issues = await z.run(zql.issue);
   expect(issues[0].title).toEqual('foo');
 
   await z.mutate.issue.setTitle({id: '1', title: 'bar'}).client;
-  issues = await z.run(z.query.issue);
+  issues = await z.run(zql.issue);
   expect(issues[0].title).toEqual('bar');
 
   await z.mutate.customNamespace.clown('1').client;
-  issues = await z.run(z.query.issue);
+  issues = await z.run(zql.issue);
   expect(issues[0].title).toEqual('🤡');
 
   await z.mutate.issue.create({
@@ -343,12 +348,12 @@ test('custom mutators write to the local store', async () => {
     description: '',
     createdAt: 1743018138477,
   }).client;
-  issues = await z.run(z.query.issue);
+  issues = await z.run(zql.issue);
   expect(issues.length).toEqual(2);
 
   await z.mutate.issue.deleteTwoIssues({id1: issues[0].id, id2: issues[1].id})
     .client;
-  issues = await z.run(z.query.issue);
+  issues = await z.run(zql.issue);
   expect(issues.length).toEqual(0);
 });
 
@@ -388,7 +393,9 @@ test('custom mutators can query the local store during an optimistic mutation', 
     }),
   );
 
-  const q = z.query.issue.where('closed', false);
+  const zql = createBuilder(schema);
+
+  const q = zql.issue.where('closed', false);
   await z.markQueryAsGot(q);
   let issues = await z.run(q);
   expect(issues.length).toEqual(10);
@@ -482,7 +489,9 @@ describe('rebasing custom mutators', () => {
       createdAt: 1743018138477,
     }).client;
 
-    const q = z.query.issue.where('id', '1').one();
+    const zql = createBuilder(schema);
+
+    const q = zql.issue.where('id', '1').one();
     const issue = await z.run(q, {type: 'unknown'});
     expect(issue?.title).toEqual('foo updated');
     expect(issue?.description).toEqual('updated');
@@ -540,7 +549,9 @@ describe('rebasing custom mutators', () => {
         createdAt: 1743018138477,
       }).client;
 
-      const result = await z.run(z.query.issue.where('id', String(i)).one());
+      const zql = createBuilder(schema);
+
+      const result = await z.run(zql.issue.where('id', String(i)).one());
       expect(result?.title).toEqual('foo ' + i);
       expect(result?.id).toEqual(String(i));
     }
@@ -548,6 +559,9 @@ describe('rebasing custom mutators', () => {
 
   test('mutations on main do not change main until they are committed', async () => {
     let mutationRun = false;
+
+    const zql = createBuilder(schema);
+
     const z = zeroForTest({
       schema,
       mutators: {
@@ -558,7 +572,7 @@ describe('rebasing custom mutators', () => {
           ) => {
             await tx.mutate.issue.insert(args);
             // query main. The issue should not be there yet.
-            expect(await z.run(z.query.issue)).toHaveLength(0);
+            expect(await z.run(zql.issue)).toHaveLength(0);
             // but it is in this tx
             expect(await tx.run(tx.query.issue)).toHaveLength(1);
 
@@ -903,7 +917,9 @@ describe('server results and keeping read queries', () => {
     await z.triggerConnected();
     await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-    const q = z.materialize(z.query.issue.limit(1));
+    const zql = createBuilder(schema);
+
+    const q = z.materialize(zql.issue.limit(1));
     const create = z.mutate.issue.create({
       id: '1',
       title: 'foo',
@@ -962,7 +978,7 @@ describe('server results and keeping read queries', () => {
     messages.length = 0;
 
     // check the error case
-    const q2 = z.materialize(z.query.issue);
+    const q2 = z.materialize(zql.issue);
     const close = z.mutate.issue.close({});
     await close.client;
     q2.destroy();
@@ -1056,9 +1072,11 @@ describe('server results and keeping read queries', () => {
     });
     await create.client;
 
+    const zql = createBuilder(schema);
+
     let foundIssue: Row<typeof schema.tables.issue> | undefined;
     void create.server.then(async () => {
-      foundIssue = await z.run(z.query.issue.where('id', '1').one());
+      foundIssue = await z.run(zql.issue.where('id', '1').one());
     });
 
     // confirm the mutation
@@ -1149,8 +1167,11 @@ test('crud mutators work if `enableLegacyMutators` is set to true (or not set)',
     ownerId: '',
     createdAt: 1743018138477,
   });
+
+  const zql = createBuilder(schema);
+
   // read a row
-  await expect(z.run(z.query.issue.where('id', '1').one())).resolves.toEqual({
+  await expect(z.run(zql.issue.where('id', '1').one())).resolves.toEqual({
     id: '1',
     title: 'foo',
     closed: false,
@@ -1163,39 +1184,59 @@ test('crud mutators work if `enableLegacyMutators` is set to true (or not set)',
   await z.close();
 });
 
-test('unnamed queries do not get registered with the query manager if `enableLegacyQueries` is set to false', async () => {
-  const addLegacySpy = vi.spyOn(QueryManager.prototype, 'addLegacy');
-  const z = zeroForTest({
-    schema: {
-      ...schema,
-      enableLegacyQueries: false,
-    },
+describe('enableLegacyQueries', () => {
+  beforeEach(() => {
+    vi.stubGlobal('WebSocket', MockSocket as unknown as typeof WebSocket);
+
+    return () => {
+      vi.unstubAllGlobals();
+    };
   });
 
-  // mock the QueryManager class
-  // and spy on addLegacy
+  test('unnamed queries do not get registered with the query manager if `enableLegacyQueries` is set to false', async () => {
+    const zql = createBuilder(schema);
+    const z = zeroForTest({
+      schema: {
+        ...schema,
+        enableLegacyQueries: false,
+      },
+    });
 
-  await z.triggerConnected();
-  await z.waitForConnectionStatus(ConnectionStatus.Connected);
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-  await z.run(z.query.issue.where('id', '1').one());
+    const mockSocket = await z.socket;
 
-  expect(addLegacySpy).not.toHaveBeenCalled();
-  await z.close();
-});
+    await z.run(zql.issue.where('id', '1').one());
+    z.queryDelegate.flushQueryChanges();
 
-test('unnamed queries do get registered with the query manager if `enableLegacyQueries` is set to true', async () => {
-  const addLegacySpy = vi.spyOn(QueryManager.prototype, 'addLegacy');
-
-  const z = zeroForTest({
-    schema,
+    // No changeDesiredQueries message should be sent
+    const changeDesiredQueriesMessages = mockSocket.jsonMessages.filter(
+      m => Array.isArray(m) && m[0] === 'changeDesiredQueries',
+    );
+    expect(changeDesiredQueriesMessages).toHaveLength(0);
+    await z.close();
   });
 
-  await z.triggerConnected();
-  await z.waitForConnectionStatus(ConnectionStatus.Connected);
+  test('unnamed queries do get registered with the query manager if `enableLegacyQueries` is set to true', async () => {
+    const zql = createBuilder(schema);
+    const z = zeroForTest({
+      schema,
+    });
 
-  await z.run(z.query.issue.where('id', '1').one());
+    await z.triggerConnected();
+    await z.waitForConnectionStatus(ConnectionStatus.Connected);
 
-  expect(addLegacySpy).toHaveBeenCalled();
-  await z.close();
+    const mockSocket = await z.socket;
+
+    await z.run(zql.issue.where('id', '1').one());
+    z.queryDelegate.flushQueryChanges();
+
+    // A changeDesiredQueries message should be sent
+    const changeDesiredQueriesMessages = mockSocket.jsonMessages.filter(
+      m => Array.isArray(m) && m[0] === 'changeDesiredQueries',
+    );
+    expect(changeDesiredQueriesMessages.length).toBeGreaterThan(0);
+    await z.close();
+  });
 });
