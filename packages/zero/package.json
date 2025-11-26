@@ -171,6 +171,10 @@
       "types": "./out/zero/src/sqlite.d.ts",
       "default": "./out/zero/src/sqlite.js"
     },
+    "./test-helpers": {
+      "types": "./out/zero/src/test-helpers.d.ts",
+      "default": "./out/zero/src/test-helpers.js"
+    },
     "./zqlite": {
       "types": "./out/zero/src/zqlite.d.ts",
       "default": "./out/zero/src/zqlite.js"
