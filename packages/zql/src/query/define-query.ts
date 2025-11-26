@@ -8,6 +8,7 @@ import type {Query} from './query.ts';
 import {validateInput} from './validate-input.ts';
 
 const customQueryTag = Symbol();
+const hasBoundArgs = Symbol();
 
 /**
  * CustomQuery is what is returned from defineQueries. It supports a builder
@@ -27,7 +28,8 @@ export type CustomQuery<
   Args extends ReadonlyJSONValue | undefined,
   HasArgs extends boolean = false,
 > = {
-  [customQueryTag]: true;
+  readonly [customQueryTag]: true;
+  readonly [hasBoundArgs]: HasArgs;
 } & (HasArgs extends true
   ? unknown
   : undefined extends Args
@@ -216,40 +218,6 @@ export function defineQuery<
   return f;
 }
 
-// function wrap<TArgs, Context>(
-//   queryName: string,
-//   // oxlint-disable-next-line no-explicit-any
-//   f: QueryDefinition<any, any, any, any, any, any>,
-//   contextHolder: {context: Context},
-// ): (args: TArgs) => AnyQuery {
-//   const {validator} = f;
-//   const validate = validator
-//     ? (args: TArgs) =>
-//         validateInput<TArgs, TArgs>(queryName, args, validator, 'query')
-//     : (args: TArgs) => args;
-
-//   return (args?: TArgs) => {
-//     // The args that we send to the server is the args that the user passed in.
-//     // This is what gets fed into the validator.
-//     const q = f({
-//       args: validate(args as TArgs),
-//       ctx: contextHolder.context,
-//     });
-//     return asQueryInternals(q).nameAndArgs(
-//       queryName,
-//       // TODO(arv): Get rid of the array?
-//       args === undefined ? [] : [args as unknown as ReadonlyJSONValue],
-//     );
-//   };
-// }
-
-interface CustomQueryState {
-  args: ReadonlyJSONValue | undefined;
-  hasArgs: boolean;
-}
-
-const hasBoundArgs = Symbol();
-
 function createCustomQueryBuilder<
   S extends Schema,
   T extends keyof S['tables'] & string,
@@ -261,29 +229,31 @@ function createCustomQueryBuilder<
   // oxlint-disable-next-line no-explicit-any
   queryDef: QueryDefinition<S, T, R, C, any, Args>,
   name: string,
-  state: CustomQueryState,
+  args: Args,
+  hasArgs: HasArgs,
 ): CustomQuery<S, T, R, C, Args, HasArgs> {
   const {validator} = queryDef;
 
   // The callable function that sets args
-  // oxlint-disable-next-line no-explicit-any
-  const builder: any = (args: Args) => {
-    if (state.hasArgs) {
+  const builder = (args: Args) => {
+    if (hasArgs) {
       throw new Error('args already set');
     }
     const validatedArgs = validateInput(name, args, validator, 'query');
-    return createCustomQueryBuilder<S, T, R, C, Args, true>(queryDef, name, {
-      args: validatedArgs,
-      hasArgs: true,
-    });
+    return createCustomQueryBuilder<S, T, R, C, Args, true>(
+      queryDef,
+      name,
+      validatedArgs,
+      true,
+    );
   };
 
   // Add create method
   builder.toQuery = (ctx: C) => {
-    if (!state.hasArgs) {
+    if (!hasArgs) {
       throw new Error('args not set');
     }
-    const {args} = state as unknown as {args: Args};
+
     return asQueryInternals(
       queryDef({
         args,
@@ -299,9 +269,9 @@ function createCustomQueryBuilder<
   // Add the tag
   builder[customQueryTag] = true;
 
-  builder[hasBoundArgs] = state.hasArgs;
+  builder[hasBoundArgs] = hasArgs as HasArgs;
 
-  return builder as CustomQuery<S, T, R, C, Args, HasArgs>;
+  return builder as unknown as CustomQuery<S, T, R, C, Args, HasArgs>;
 }
 
 export function defineQueries<
@@ -321,10 +291,12 @@ export function defineQueries<
       const defaultName = currentPath.join('.');
 
       if (isQueryDefinition(value)) {
-        result[key] = createCustomQueryBuilder(value, defaultName, {
-          args: undefined,
-          hasArgs: false,
-        });
+        result[key] = createCustomQueryBuilder(
+          value,
+          defaultName,
+          undefined,
+          false,
+        );
       } else {
         // Nested definitions
         result[key] = processDefinitions(
