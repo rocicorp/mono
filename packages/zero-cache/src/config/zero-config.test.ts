@@ -138,8 +138,8 @@ test('zero-cache --help', () => {
                                                                    This is useful for passing authentication cookies to the API server.                                                  
                                                                    If false, cookies are not forwarded.                                                                                  
                                                                                                                                                                                          
-     --get-queries-url string[]                                    optional                                                                                                              
-       ZERO_GET_QUERIES_URL env                                                                                                                                                          
+     --queries-url string[]                                        optional                                                                                                              
+       ZERO_QUERIES_URL env                                                                                                                                                          
                                                                                                                                                                                          
                                                                    The URL of the API server to which zero-cache will send synced queries.                                               
                                                                                                                                                                                          
@@ -176,12 +176,12 @@ test('zero-cache --help', () => {
                                                                                                                                                                                          
                                                                    For full URLPattern syntax, see: https://developer.mozilla.org/en-US/docs/Web/API/URLPattern                          
                                                                                                                                                                                          
-     --get-queries-api-key string                                  optional                                                                                                              
-       ZERO_GET_QUERIES_API_KEY env                                                                                                                                                      
+     --queries-api-key string                                      optional                                                                                                              
+       ZERO_QUERIES_API_KEY env                                                                                                                                                      
                                                                    An optional secret used to authorize zero-cache to call the API server handling writes.                               
                                                                                                                                                                                          
-     --get-queries-forward-cookies boolean                         default: false                                                                                                        
-       ZERO_GET_QUERIES_FORWARD_COOKIES env                                                                                                                                              
+     --queries-forward-cookies boolean                             default: false                                                                                                        
+       ZERO_QUERIES_FORWARD_COOKIES env                                                                                                                                              
                                                                    If true, zero-cache will forward cookies from the request.                                                            
                                                                    This is useful for passing authentication cookies to the API server.                                                  
                                                                    If false, cookies are not forwarded.                                                                                  

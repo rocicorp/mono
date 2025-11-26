@@ -569,7 +569,7 @@ export class Zero<
     const nameKey = JSON.stringify({
       storageKey: this.storageKey,
       mutateUrl: options.mutateURL ?? '',
-      queryUrl: options.getQueriesURL ?? '',
+      queryUrl: options.queriesURL ?? options.getQueriesURL ?? '',
     });
     const hashedKey = h64(nameKey).toString(36);
 
@@ -1452,7 +1452,7 @@ export class Zero<
           // Henceforth it is stored with the CVR and verified automatically.
           ...(this.#connectCookie === null ? {clientSchema} : {}),
           userPushURL: this.#options.mutateURL,
-          userQueryURL: this.#options.getQueriesURL,
+          userQueryURL: this.#options.queriesURL ?? this.#options.getQueriesURL,
         },
       ]);
       this.#deletedClients = undefined;
@@ -1561,7 +1561,7 @@ export class Zero<
       this.#options.logLevel === 'debug',
       lc,
       this.#options.mutateURL,
-      this.#options.getQueriesURL,
+      this.#options.queriesURL ?? this.#options.getQueriesURL,
       additionalConnectParams,
       await this.#activeClientsManager,
       this.#options.maxHeaderLength,
