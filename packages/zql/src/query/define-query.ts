@@ -115,6 +115,51 @@ export type QueryDefinitions<S extends Schema, Context> = {
     | QueryDefinitions<S, Context>;
 };
 
+/**
+ * Defines a query to be used with {@link defineQueries}.
+ *
+ * The query function receives an object with `args` (the query arguments) and
+ * `ctx` (the context). It should return a {@link Query} built using a builder
+ * created from {@link createBuilder}.
+ *
+ * Note: A query defined with `defineQuery` must be passed to
+ * {@link defineQueries} to be usable. The query name is derived from its
+ * position in the `defineQueries` object.
+ *
+ * @example
+ * ```ts
+ * const builder = createBuilder(schema);
+ *
+ * const queries = defineQueries({
+ *   // Simple query with no arguments
+ *   allIssues: defineQuery(() => builder.issue.orderBy('created', 'desc')),
+ *
+ *   // Query with typed arguments
+ *   issueById: defineQuery(({args}: {args: {id: string}}) =>
+ *     builder.issue.where('id', args.id).one(),
+ *   ),
+ *
+ *   // Query with validation using a Standard Schema validator (e.g., Zod)
+ *   issuesByStatus: defineQuery(
+ *     z.object({status: z.enum(['open', 'closed'])}),
+ *     ({args}) => builder.issue.where('status', args.status),
+ *   ),
+ *
+ *   // Query using context
+ *   myIssues: defineQuery(({ctx}: {ctx: {userID: string}}) =>
+ *     builder.issue.where('creatorID', ctx.userID),
+ *   ),
+ * });
+ * ```
+ *
+ * @param queryFn - A function that receives `{args, ctx}` and returns a Query.
+ * @returns A {@link QueryDefinition} that can be passed to {@link defineQueries}.
+ *
+ * @overload
+ * @param validator - A Standard Schema validator for the arguments.
+ * @param queryFn - A function that receives `{args, ctx}` and returns a Query.
+ * @returns A {@link QueryDefinition} with validated arguments.
+ */
 // Overload for no validator parameter with default inference for untyped functions
 export function defineQuery<
   TSchema extends Schema,
@@ -240,6 +285,36 @@ function createCustomQueryBuilder<
   return builder as unknown as CustomQuery<S, T, R, C, Args, HasArgs>;
 }
 
+/**
+ * Converts query definitions created with {@link defineQuery} into callable
+ * {@link CustomQuery} objects that can be invoked with arguments and a context.
+ *
+ * Query definitions can be nested for organization. The resulting query names
+ * are dot-separated paths (e.g., `users.byId`).
+ *
+ * @example
+ * ```ts
+ * const builder = createBuilder(schema);
+ *
+ * const queries = defineQueries({
+ *   issues: defineQuery(() => builder.issue.orderBy('created', 'desc')),
+ *   users: {
+ *     byId: defineQuery(({args}: {args: {id: string}}) =>
+ *       builder.user.where('id', args.id),
+ *     ),
+ *   },
+ * });
+ *
+ * // Usage:
+ * const q = queries.issues().toQuery(ctx);
+ * const q2 = queries.users.byId({id: '123'}).toQuery(ctx);
+ * ```
+ *
+ * @param defs - An object containing query definitions or nested objects of
+ *   query definitions.
+ * @returns An object with the same structure where each query definition is
+ *   converted to a {@link CustomQuery}.
+ */
 export function defineQueries<
   // oxlint-disable-next-line no-explicit-any
   QD extends QueryDefinitions<Schema, any>,
@@ -253,8 +328,8 @@ export function defineQueries<
     const result: Record<string, any> = {};
 
     for (const [key, value] of Object.entries(definitions)) {
-      const currentPath = [...path, key];
-      const defaultName = currentPath.join('.');
+      path.push(key);
+      const defaultName = path.join('.');
 
       if (isQueryDefinition(value)) {
         result[key] = createCustomQueryBuilder(
@@ -267,9 +342,10 @@ export function defineQueries<
         // Nested definitions
         result[key] = processDefinitions(
           value as QueryDefinitions<Schema, unknown>,
-          currentPath,
+          path,
         );
       }
+      path.pop();
     }
 
     return result;
@@ -278,12 +354,44 @@ export function defineQueries<
   return processDefinitions(defs, []) as CustomQueries<QD>;
 }
 
+/**
+ * Returns a typed version of {@link defineQueries} with the schema and context
+ * types pre-specified. This enables better type inference when defining
+ * queries.
+ *
+ * @example
+ * ```ts
+ * const builder = createBuilder(schema);
+ *
+ * // With both Schema and Context types
+ * const defineAppQueries = defineQueriesWithType<AppSchema, AppContext>();
+ * const queries = defineAppQueries({
+ *   issues: defineQuery(({ctx}) => builder.issue.where('userID', ctx.userID)),
+ * });
+ *
+ * // With just Context type (Schema inferred)
+ * const defineAppQueries = defineQueriesWithType<AppContext>();
+ * ```
+ *
+ * @typeParam S - The Zero schema type.
+ * @typeParam C - The context type passed to query functions.
+ * @returns A function equivalent to {@link defineQueries} but with types
+ *   pre-bound.
+ */
 export function defineQueriesWithType<S extends Schema, C = unknown>(): <
   QD extends QueryDefinitions<S, C>,
 >(
   defs: QD,
 ) => CustomQueries<QD>;
 
+/**
+ * Returns a typed version of {@link defineQueries} with the context type
+ * pre-specified.
+ *
+ * @typeParam C - The context type passed to query functions.
+ * @returns A function equivalent to {@link defineQueries} but with the context
+ *   type pre-bound.
+ */
 export function defineQueriesWithType<C>(): <
   QD extends QueryDefinitions<Schema, C>,
 >(
