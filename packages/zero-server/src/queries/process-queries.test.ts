@@ -444,7 +444,9 @@ describe('handleTransformRequest', () => {
       'transformFailed',
       {
         kind: expect.any(String),
-        message: expect.stringContaining('Failed to parse get queries request'),
+        message: expect.stringContaining(
+          'Failed to parse transform queries request',
+        ),
         origin: expect.any(String),
         queryIDs: [],
         reason: ErrorReason.Parse,
@@ -474,7 +476,9 @@ describe('handleTransformRequest', () => {
         reason: ErrorReason.Parse,
         kind: expect.any(String),
         origin: expect.any(String),
-        message: expect.stringContaining('Failed to parse get queries request'),
+        message: expect.stringContaining(
+          'Failed to parse transform queries request',
+        ),
         details: expect.objectContaining({name: 'SyntaxError'}),
         queryIDs: [],
       },
