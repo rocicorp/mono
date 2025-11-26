@@ -102,7 +102,7 @@ export const shardOptions = {
 
 const replicaOptions = {
   file: {
-    type: v.string(),
+    type: v.string().default('zero.db'),
     desc: [
       `File path to the SQLite replica that zero-cache maintains.`,
       `This can be lost, but if it is, zero-cache will have to re-replicate next`,
