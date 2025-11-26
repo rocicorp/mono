@@ -76,7 +76,10 @@ import {
   type NameMapper,
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
-import type {MutatorDefinitions} from '../../../zero-types/src/mutator-registry.ts';
+import {
+  getMutator,
+  type MutatorDefinitions,
+} from '../../../zero-types/src/mutator-registry.ts';
 import type {MutationRequest} from '../../../zero-types/src/mutator.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
@@ -110,7 +113,7 @@ import {ConnectionStatus} from './connection-status.ts';
 import {type Connection, ConnectionImpl} from './connection.ts';
 import {ZeroContext} from './context.ts';
 import {type BatchMutator, type WithCRUD, makeCRUDMutate} from './crud.ts';
-import type {CustomMutatorDefs} from './custom.ts';
+import type {CustomMutatorDefs, MutatorResult} from './custom.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
 import {shouldEnableAnalytics} from './enable-analytics.ts';
 import {
@@ -167,23 +170,6 @@ import {
 } from './zero-rep.ts';
 
 export type NoRelations = Record<string, never>;
-
-/**
- * Checks if a value is a MutationRequest (from calling a Mutator with args).
- */
-function isMutationRequest(
-  value: unknown,
-  // oxlint-disable-next-line no-explicit-any
-): value is MutationRequest<any, any, any, any> {
-  return (
-    typeof value === 'object' &&
-    value !== null &&
-    'mutator' in value &&
-    'args' in value &&
-    typeof (value as {mutator?: {mutatorName?: unknown}}).mutator
-      ?.mutatorName === 'string'
-  );
-}
 
 declare const TESTING: boolean;
 
@@ -682,7 +668,28 @@ export class Zero<
       makeMutateProperty(options.mutators, mutatorProxy, mutate, rep.mutate);
     }
 
-    this.mutate = mutate;
+    // Wrap mutate in a Proxy to make it callable with MutationRequest
+    // while preserving property access for zero.mutate.foo.bar(args)
+    const mutators = options.mutators;
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    this.mutate = new Proxy(mutate as any, {
+      apply: (_target, _thisArg, [mr]) => {
+        // Validate that mr.mutator is the exact registered mutator
+        const registered = getMutator(mutators, mr.mutator.mutatorName);
+        if (registered !== mr.mutator) {
+          throw new Error(
+            `Mutator "${mr.mutator.mutatorName}" is not registered. ` +
+              `Mutators must be registered with the Zero constructor before use.`,
+          );
+        }
+        const repMutator = rep.mutate[
+          mr.mutator.mutatorName
+          // oxlint-disable-next-line no-explicit-any
+        ] as unknown as (args?: any) => MutatorResult;
+        return mutatorProxy.wrapCustomMutator(repMutator)(mr.args);
+      },
+      get: (target, prop) => Reflect.get(target, prop),
+    });
     this.mutateBatch = mutateBatch;
 
     this.#queryManager = new QueryManager(
@@ -1001,7 +1008,10 @@ export class Zero<
    * await zero.mutate.issue.update({id: '1', title: 'Updated title'});
    * ```
    */
-  readonly mutate: MakeMutatePropertyType<S, MD, C>;
+  readonly mutate: MakeMutatePropertyType<S, MD, C> &
+    // Also callable with MutationRequest: zero.mutate(mr)
+    // oxlint-disable-next-line no-explicit-any
+    ((mr: MutationRequest<S, C, any, any>) => MutatorResult);
 
   /**
    * Provides a way to batch multiple CRUD mutations together:

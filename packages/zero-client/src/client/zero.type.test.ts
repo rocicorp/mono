@@ -1,5 +1,6 @@
 import {expect, expectTypeOf, test} from 'vitest';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {MutationRequest} from '../../../zero-types/src/mutator.ts';
 import type {DBMutator} from './crud.ts';
 import {zeroForTest} from './test-utils.ts';
 
@@ -137,7 +138,8 @@ test('legacy mutators disabled - table mutators do not exist', () => {
   expectTypeOf<TestDBMutator>().toEqualTypeOf<{}>();
 
   // Verify table mutators do not exist when legacy mutators disabled
-  expectTypeOf(z.mutate).toEqualTypeOf<{}>();
+  // mutate is still callable with MutationRequest even when legacy mutators disabled
+  expectTypeOf(z.mutate).toBeCallableWith({} as MutationRequest<any, any, any, any>);
 
   // @ts-expect-error - issues table should not exist when legacy mutators disabled
   z.mutate.issues;
