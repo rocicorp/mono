@@ -4,6 +4,10 @@ import {must} from '../../shared/src/must.ts';
 import type {Transaction} from '../../zql/src/mutate/custom.ts';
 import type {Schema} from './schema.ts';
 
+// ----------------------------------------------------------------------------
+// defineMutator
+// ----------------------------------------------------------------------------
+
 const defineMutatorTag = Symbol();
 
 export function isMutatorDefinition<
@@ -200,3 +204,63 @@ export function defineMutatorWithType<
 export function defineMutatorWithType() {
   return defineMutator;
 }
+
+// ----------------------------------------------------------------------------
+// Mutator and MutationRequest types
+// ----------------------------------------------------------------------------
+
+/**
+ * A callable wrapper around a MutatorDefinition, created by `defineMutators()`.
+ *
+ * Accessed like `mutators.foo.bar`, and called to create a MutationRequest:
+ * `mutators.foo.bar(42)` returns a `MutationRequest`.
+ *
+ * The `fn` property is used for execution and takes raw JSON args (for rebase
+ * and server wire format cases) that are validated internally.
+ *
+ * @template TSchema - The schema type
+ * @template TContext - The context type available during mutation execution
+ * @template TArgs - The argument type (after validation)
+ * @template TWrappedTransaction - The wrapped transaction type
+ */
+export type Mutator<
+  TSchema extends Schema,
+  TContext,
+  TArgs extends ReadonlyJSONValue | undefined,
+  TWrappedTransaction,
+> = ((
+  args: TArgs,
+) => MutationRequest<TSchema, TContext, TArgs, TWrappedTransaction>) & {
+  readonly mutatorName: string;
+  /**
+   * Execute the mutation. Args are ReadonlyJSONValue because this is called
+   * during rebase (from stored JSON) and on the server (from wire format).
+   * Validation happens internally before the recipe function runs.
+   */
+  readonly fn: (options: {
+    args: ReadonlyJSONValue | undefined;
+    ctx: TContext;
+    tx: Transaction<TSchema, TWrappedTransaction>;
+  }) => Promise<void>;
+};
+
+/**
+ * The result of calling a Mutator with arguments.
+ *
+ * Created by `mutators.foo.bar(42)`, executed by `zero.mutate(mr)` on the client
+ * or `mr.mutator.fn({tx, ctx, args: mr.args})` on the server.
+ *
+ * @template TSchema - The schema type
+ * @template TContext - The context type available during mutation execution
+ * @template TArgs - The argument type (after validation)
+ * @template TWrappedTransaction - The wrapped transaction type
+ */
+export type MutationRequest<
+  TSchema extends Schema,
+  TContext,
+  TArgs extends ReadonlyJSONValue | undefined,
+  TWrappedTransaction,
+> = {
+  readonly mutator: Mutator<TSchema, TContext, TArgs, TWrappedTransaction>;
+  readonly args: TArgs;
+};

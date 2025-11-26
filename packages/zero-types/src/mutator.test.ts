@@ -7,8 +7,9 @@ import {
   defineMutatorWithType,
   isMutatorDefinition,
   type MutatorDefinition,
-} from './define-mutator.ts';
+} from './mutator.ts';
 import type {Schema} from './schema.ts';
+import * as z from 'zod';
 
 describe('defineMutator', () => {
   test('creates a mutator definition without validator', () => {
@@ -140,6 +141,22 @@ describe('defineMutatorWithType', () => {
     expect(isMutatorDefinition(def)).toBe(true);
     expect(def.validator).toBe(validator);
   });
+
+  test('infers args from validator and ctx from bound context type', () => {
+    type Context = {userId: string};
+    const validator = z.object({name: z.string()});
+
+    const define = defineMutatorWithType<Schema, Context>();
+
+    // Key test: args and ctx types should be inferred without explicit annotations
+    const def = define(validator, async ({args, ctx}) => {
+      // These should compile - types inferred from validator and Context
+      args.name;
+      ctx.userId;
+    });
+
+    expect(isMutatorDefinition(def)).toBe(true);
+  });
 });
 
 describe('Type Tests', () => {
@@ -176,6 +193,7 @@ describe('Type Tests', () => {
       },
     );
 
+    // Without validator, TInput === TOutput === TArgs
     expectTypeOf(def).toEqualTypeOf<
       MutatorDefinition<
         Schema,
@@ -197,11 +215,13 @@ describe('Type Tests', () => {
     };
 
     const def = defineMutator(validator, async ({args, ctx, tx}) => {
+      // args is TOutput (the validated type)
       expectTypeOf(args).toEqualTypeOf<{b: string}>();
       void ctx;
       void tx;
     });
 
+    // MutatorDefinition still has TInput/TOutput for validator typing
     expectTypeOf(def).toEqualTypeOf<
       MutatorDefinition<Schema, unknown, {a: number}, {b: string}, unknown>
     >();
