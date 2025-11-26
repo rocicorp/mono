@@ -41,6 +41,7 @@ function newMockQuery(
       return query;
     },
     format: {singular},
+    toQuery: () => ret,
   } as unknown as AbstractQuery<Schema, string>;
   return ret;
 }
