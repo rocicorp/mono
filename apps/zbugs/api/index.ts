@@ -180,7 +180,6 @@ async function mutateHandler(
   const postCommitTasks: (() => Promise<void>)[] = [];
   const mutators = createServerMutators(postCommitTasks);
 
-  // TODO(arv): Update the server side API!
   const response = await handleMutationRequest(
     dbProvider,
     (transact, _mutation) =>
