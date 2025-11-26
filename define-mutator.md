@@ -1,0 +1,12 @@
+- [x] Implement Mutator, MutationRequest
+- [x] Delete duplicate `MutatorRegistry` class from zero-server (was conflicting with the type)
+- [x] Implement MutatorRegistry and defineMutators
+- [x] Add support for passing MutatorRegistry to Zero ctor
+- [x] Implement callable mutate() method
+- [x] Add `defineMutators(base, overrides)` API for extending a base registry with server-side overrides
+- [x] Update zbugs
+- [ ] Test zbugs
+- [ ] Add strongly typed `.fn` for server-mutators pattern (calling base mutator with typed args)
+- [ ] Remove `MutatorDefinitions` and everything connected
+- [ ] Update all the tests
+- [ ] Remove `getMutator` helper function
