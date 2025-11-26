@@ -1,64 +1,134 @@
-import {expect, test} from 'vitest';
+import {expect, expectTypeOf, test} from 'vitest';
 import {getValueAtPath} from './get-value-at-path.ts';
 
-test('returns value at simple path', () => {
-  const obj = {a: 1};
-  expect(getValueAtPath(obj, 'a', '.')).toBe(1);
+test.each([
+  {name: 'simple path', obj: {a: 1}, path: 'a', sep: '.', expected: 1},
+  {
+    name: 'nested path',
+    obj: {a: {b: {c: 42}}},
+    path: 'a.b.c',
+    sep: '.',
+    expected: 42,
+  },
+  {
+    name: 'non-existent path',
+    obj: {a: 1},
+    path: 'b',
+    sep: '.',
+    expected: undefined,
+  },
+  {
+    name: 'non-existent nested path',
+    obj: {a: {b: 1}},
+    path: 'a.c.d',
+    sep: '.',
+    expected: undefined,
+  },
+  {
+    name: 'object at path',
+    obj: {a: {b: {c: 1}}},
+    path: 'a.b',
+    sep: '.',
+    expected: {c: 1},
+  },
+  {
+    name: 'array at path',
+    obj: {a: [1, 2, 3]},
+    path: 'a',
+    sep: '.',
+    expected: [1, 2, 3],
+  },
+  {
+    name: 'traversing through non-object',
+    obj: {a: 42},
+    path: 'a.b',
+    sep: '.',
+    expected: undefined,
+  },
+  {
+    name: 'traversing through null',
+    obj: {a: null},
+    path: 'a.b',
+    sep: '.',
+    expected: undefined,
+  },
+  {
+    name: 'custom separator',
+    obj: {a: {b: {c: 'value'}}},
+    path: 'a/b/c',
+    sep: '/',
+    expected: 'value',
+  },
+  {name: 'empty path', obj: {a: 1}, path: '', sep: '.', expected: undefined},
+  {
+    name: 'array index access',
+    obj: {a: ['first', 'second']},
+    path: 'a.0',
+    sep: '.',
+    expected: 'first',
+  },
+] as const)('$name', ({obj, path, sep, expected}) => {
+  expect(getValueAtPath(obj, path, sep)).toEqual(expected);
 });
 
-test('returns value at nested path', () => {
-  const obj = {a: {b: {c: 42}}};
-  expect(getValueAtPath(obj, 'a.b.c', '.')).toBe(42);
-});
-
-test('returns undefined for non-existent path', () => {
-  const obj = {a: 1};
-  expect(getValueAtPath(obj, 'b', '.')).toBe(undefined);
-});
-
-test('returns undefined for non-existent nested path', () => {
-  const obj = {a: {b: 1}};
-  expect(getValueAtPath(obj, 'a.c.d', '.')).toBe(undefined);
-});
-
-test('returns value at path', () => {
-  const obj = {a: {b: {c: 1}}};
-  expect(getValueAtPath(obj, 'a.b', '.')).toEqual({c: 1});
-});
-
-test('returns array at path', () => {
-  const obj = {a: [1, 2, 3]};
-  expect(getValueAtPath(obj, 'a', '.')).toEqual([1, 2, 3]);
-});
-
-test('returns undefined when traversing through non-object', () => {
-  const obj = {a: 42};
-  expect(getValueAtPath(obj, 'a.b', '.')).toBe(undefined);
-});
-
-test('returns undefined when traversing through null', () => {
-  const obj = {a: null};
-  expect(getValueAtPath(obj, 'a.b', '.')).toBe(undefined);
-});
-
-test('works with custom separator', () => {
-  const obj = {a: {b: {c: 'value'}}} as const;
-  const result = getValueAtPath(obj, 'a/b/c', '/');
-  result satisfies 'value';
-  expect(result).toBe('value');
-});
-
-test('works with regex separator', () => {
+test('regex separator', () => {
   const obj = {a: {b: {c: 'value'}}};
   expect(getValueAtPath(obj, 'a.b/c', /[./]/)).toBe('value');
 });
 
-test('returns undefined for empty path', () => {
-  const obj = {a: 1};
-  expect(getValueAtPath(obj, '', '.')).toBe(undefined);
+// Type tests
+test('type inference', () => {
+  const obj = {a: {b: {c: 'hello'}}} as const;
+
+  // Simple path returns correct type
+  const a = getValueAtPath(obj, 'a', '.');
+  expectTypeOf(a).toEqualTypeOf<{readonly b: {readonly c: 'hello'}}>();
+  expect(a).toEqual({b: {c: 'hello'}});
+
+  // Nested path returns correct type
+  const c = getValueAtPath(obj, 'a.b.c', '.');
+  expectTypeOf(c).toEqualTypeOf<'hello'>();
+  expect(c).toBe('hello');
+
+  // Non-existent path returns undefined
+  const missing = getValueAtPath(obj, 'x', '.');
+  expectTypeOf(missing).toEqualTypeOf<undefined>();
+  expect(missing).toBe(undefined);
+
+  // Custom separator works with types
+  const custom = getValueAtPath(obj, 'a/b/c', '/');
+  expectTypeOf(custom).toEqualTypeOf<'hello'>();
+  expect(custom).toBe('hello');
+
+  // Partial path returns nested object type
+  const partial = getValueAtPath(obj, 'a.b', '.');
+  expectTypeOf(partial).toEqualTypeOf<{readonly c: 'hello'}>();
+  expect(partial).toEqual({c: 'hello'});
 });
 
-test('handles array index access', () => {
-  const obj = {a: ['first', 'second']};
-  expect(getValueAtPath(obj, 'a.0', '.')).toBe('first');
+test('type inference with complex objects', () => {
+  const obj = {
+    users: {
+      admin: {name: 'Alice', role: 'admin' as const},
+      guest: {name: 'Bob', role: 'guest' as const},
+    },
+  } as const;
+
+  const adminName = getValueAtPath(obj, 'users.admin.name', '.');
+  expectTypeOf(adminName).toEqualTypeOf<'Alice'>();
+  expect(adminName).toBe('Alice');
+
+  const adminRole = getValueAtPath(obj, 'users.admin.role', '.');
+  expectTypeOf(adminRole).toEqualTypeOf<'admin'>();
+  expect(adminRole).toBe('admin');
+
+  const users = getValueAtPath(obj, 'users', '.');
+  expectTypeOf(users).toEqualTypeOf<{
+    readonly admin: {readonly name: 'Alice'; readonly role: 'admin'};
+    readonly guest: {readonly name: 'Bob'; readonly role: 'guest'};
+  }>();
+  expect(users).toEqual({
+    admin: {name: 'Alice', role: 'admin'},
+    guest: {name: 'Bob', role: 'guest'},
+  });
 });
