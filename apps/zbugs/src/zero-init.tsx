@@ -13,7 +13,7 @@ export function ZeroInit({children}: {children: ReactNode}) {
     () =>
       ({
         schema,
-        server: import.meta.env.VITE_PUBLIC_SERVER,
+        cacheURL: import.meta.env.VITE_PUBLIC_SERVER,
         userID: login.loginState?.decoded?.sub ?? 'anon',
         mutators: createMutators(login.loginState?.decoded),
         logLevel: 'info' as const,

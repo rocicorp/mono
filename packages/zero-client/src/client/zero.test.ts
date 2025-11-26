@@ -2072,7 +2072,7 @@ test('passing server null allows queries without WS connection', async () => {
     ],
   });
   const z = zeroForTest({
-    server: null,
+    cacheURL: null,
     schema,
   });
 
@@ -2633,7 +2633,7 @@ test('socketOrigin', async () => {
   ];
 
   for (const c of cases) {
-    const z = zeroForTest(c.socketEnabled ? {} : {server: null});
+    const z = zeroForTest(c.socketEnabled ? {} : {cacheURL: null});
 
     await tickAFewTimes(vi);
 
@@ -3383,7 +3383,7 @@ test('kvStore option', async () => {
       ],
     });
     const z = zeroForTest({
-      server: null,
+      cacheURL: null,
       userID,
       kvStore,
       schema,

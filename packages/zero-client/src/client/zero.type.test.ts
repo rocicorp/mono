@@ -25,7 +25,7 @@ test('run', async () => {
     ],
   });
   const z = zeroForTest({
-    server: null,
+    cacheURL: null,
     schema,
   });
   const builder = createBuilder(schema);
@@ -53,7 +53,7 @@ test('materialize', async () => {
     ],
   });
   const z = zeroForTest({
-    server: null,
+    cacheURL: null,
     schema,
   });
   const builder = createBuilder(schema);
