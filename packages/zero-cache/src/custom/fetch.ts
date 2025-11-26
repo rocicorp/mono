@@ -86,7 +86,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
             kind: ErrorKind.TransformFailed,
             origin: ErrorOrigin.ZeroCache,
             reason: ErrorReason.Internal,
-            message: `URL "${url}" is not allowed by the ZERO_GET_QUERIES_URL configuration`,
+            message: `URL "${url}" is not allowed by the ZERO_QUERY_URL configuration`,
             queryIDs: [],
           },
     );

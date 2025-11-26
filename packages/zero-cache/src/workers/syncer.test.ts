@@ -35,11 +35,11 @@ import {
   createSilentLogContext,
   TestLogSink,
 } from '../../../shared/src/logging-test-utils.ts';
-import {Database} from '../../../zqlite/src/db.ts';
 import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,
 } from '../../../zqlite/src/database-storage.ts';
+import {Database} from '../../../zqlite/src/db.ts';
 import * as jwt from '../auth/jwt.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
 import {
@@ -357,9 +357,9 @@ describe('jwt auth without options', () => {
     const env = setupSyncer(lc, {
       // No auth options set; should not verify token
       auth: {},
-      // set custom mutations & get queries to avoid token verification
+      // set custom mutations & queries to avoid token verification
       mutate: {url: ['http://mutate.example.com']},
-      getQueries: {url: ['http://queries.example.com']},
+      query: {url: ['http://queries.example.com']},
     } as ZeroConfig);
     syncer = env.syncer;
     mutagens = env.mutagens;
@@ -373,7 +373,7 @@ describe('jwt auth without options', () => {
   const newConnection = (clientID: number, params: any = {}) =>
     openConnection(clientID, params);
 
-  test('succeeds when using mutations & get queries and skips verification', () => {
+  test('succeeds when using mutations & queries and skips verification', () => {
     const ws = newConnection(1, {auth: 'dummy-token'});
 
     expect(vi.mocked(recordConnectionAttempted)).toHaveBeenCalledTimes(1);
@@ -410,7 +410,7 @@ describe('jwt auth missing options and missing endpoints', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     const env = setupSyncer(lc, {
-      // No auth and no mutate/getQueries set; should assert on receiving auth
+      // No auth and no mutate/queries set; should assert on receiving auth
       auth: {},
     } as ZeroConfig);
     syncer = env.syncer;

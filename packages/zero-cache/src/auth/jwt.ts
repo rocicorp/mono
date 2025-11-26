@@ -1,5 +1,7 @@
 import {
   createRemoteJWKSet,
+  exportJWK,
+  generateKeyPair,
   jwtVerify,
   type JWK,
   type JWTClaimVerificationOptions,
@@ -7,8 +9,8 @@ import {
   type KeyLike,
 } from 'jose';
 import type {AuthConfig} from '../config/zero-config.ts';
-import {exportJWK, generateKeyPair} from 'jose';
 
+/** @deprecated */
 export async function createJwkPair() {
   const {publicKey, privateKey} = await generateKeyPair('PS256');
 
@@ -35,6 +37,7 @@ function getRemoteKeyset(jwksUrl: string) {
   return remoteKeyset;
 }
 
+/** @deprecated */
 export const tokenConfigOptions = (config: AuthConfig) => {
   const tokenOptions = (['jwk', 'secret', 'jwksUrl'] as const).filter(
     key => config[key] !== undefined,
@@ -43,6 +46,7 @@ export const tokenConfigOptions = (config: AuthConfig) => {
   return tokenOptions;
 };
 
+/** @deprecated */
 export async function verifyToken(
   config: AuthConfig,
   token: string,

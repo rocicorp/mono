@@ -161,7 +161,7 @@ describe('fetchFromAPIServer', () => {
         body,
       ),
     ).rejects.toThrow(
-      'URL "https://evil.example.com/endpoint" is not allowed by the ZERO_GET_QUERIES_URL configuration',
+      'URL "https://evil.example.com/endpoint" is not allowed by the ZERO_QUERY_URL configuration',
     );
     expect(mockFetch).not.toHaveBeenCalled();
   });

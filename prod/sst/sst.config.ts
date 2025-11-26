@@ -3,7 +3,6 @@
 // Load .env file
 require('@dotenvx/dotenvx').config();
 import {createDefu} from 'defu';
-import {join} from 'node:path';
 const defu = createDefu((obj, key, value) => {
   // Don't merge functions, just use the last one
   if (typeof obj[key] === 'function' || typeof value === 'function') {
@@ -55,8 +54,8 @@ export default $config({
       ZERO_APP_PUBLICATIONS: process.env.ZERO_APP_PUBLICATIONS!,
       ZERO_UPSTREAM_DB: process.env.ZERO_UPSTREAM_DB!,
       ZERO_ADMIN_PASSWORD: process.env.ZERO_ADMIN_PASSWORD!,
-      ZERO_PUSH_URL: process.env.ZERO_PUSH_URL!,
-      ZERO_GET_QUERIES_URL: process.env.ZERO_GET_QUERIES_URL!,
+      ZERO_MUTATE_URL: process.env.ZERO_MUTATE_URL!,
+      ZERO_QUERY_URL: process.env.ZERO_QUERY_URL!,
       ZERO_CVR_DB: process.env.ZERO_CVR_DB!,
       ZERO_CHANGE_DB: process.env.ZERO_CHANGE_DB!,
       ZERO_AUTH_JWK: process.env.ZERO_AUTH_JWK!,

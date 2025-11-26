@@ -42,7 +42,7 @@ export type ConnectionState =
             body?: string;
           }
         | {
-            type: 'get-queries';
+            type: 'query';
             status: 401 | 403;
             body?: string;
           }
@@ -206,7 +206,7 @@ export class ConnectionSource implements Source<ConnectionState> {
                 }
               : state.reason.errorBody.kind === ErrorKind.TransformFailed
                 ? {
-                    type: 'get-queries',
+                    type: 'query',
                     status: state.reason.errorBody.status,
                     ...(state.reason.errorBody.bodyPreview
                       ? {body: state.reason.errorBody.bodyPreview}

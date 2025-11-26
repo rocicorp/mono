@@ -25,21 +25,21 @@ test('idbName generation with URL configuration', async () => {
       name: 'basic mutate and query URLs',
       config: {
         mutateURL: 'https://example.com/mutate',
-        getQueriesURL: 'https://example.com/query',
+        queryURL: 'https://example.com/query',
       },
     },
     {
       name: 'different mutate URL',
       config: {
         mutateURL: 'https://different.com/mutate',
-        getQueriesURL: 'https://example.com/query',
+        queryURL: 'https://example.com/query',
       },
     },
     {
       name: 'different query URL',
       config: {
         mutateURL: 'https://example.com/mutate',
-        getQueriesURL: 'https://different.com/query',
+        queryURL: 'https://different.com/query',
       },
     },
     {
@@ -55,14 +55,14 @@ test('idbName generation with URL configuration', async () => {
     {
       name: 'only query URL provided',
       config: {
-        getQueriesURL: 'https://example.com/query',
+        queryURL: 'https://example.com/query',
       },
     },
     {
       name: 'different storage key produces different hash',
       config: {
         mutateURL: 'https://example.com/mutate',
-        getQueriesURL: 'https://example.com/query',
+        queryURL: 'https://example.com/query',
       },
       storageKey: 'different-storage-key',
     },
@@ -83,7 +83,7 @@ test('idbName generation with URL configuration', async () => {
       JSON.stringify({
         storageKey: testStorageKey,
         mutateUrl: testCase.config.mutateURL ?? '',
-        queryUrl: testCase.config.getQueriesURL ?? '',
+        queryUrl: testCase.config.queryURL ?? '',
       }),
     ).toString(36)}`;
 
