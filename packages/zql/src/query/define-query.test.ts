@@ -13,7 +13,8 @@ import {
   defineQueries,
   defineQueriesWithType,
   defineQuery,
-  type ContextTypeOfCustomQueries,
+  isQueryRegistry,
+  type ContextTypeOfQueryRegistry,
 } from './define-query.ts';
 import {asQueryInternals} from './query-internals.ts';
 import type {Query} from './query.ts';
@@ -496,6 +497,47 @@ describe('defineQueries', () => {
   });
 });
 
+describe('isQueryRegistry', () => {
+  test('returns true for query registry created with defineQueries', () => {
+    const queries = defineQueries({
+      getUser: defineQuery(
+        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
+          builder.foo.where('id', '=', args),
+      ),
+    });
+
+    expect(isQueryRegistry(queries)).toBe(true);
+  });
+
+  test('returns true for nested query registry', () => {
+    const queries = defineQueries({
+      users: {
+        getById: defineQuery(
+          ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
+            builder.foo.where('id', '=', args),
+        ),
+      },
+    });
+
+    expect(isQueryRegistry(queries)).toBe(true);
+  });
+
+  test.for([
+    ['null', null],
+    ['undefined', undefined],
+    ['empty object', {}],
+    ['plain object', {foo: 'bar'}],
+    ['string', 'string'],
+    ['number', 123],
+    ['boolean', true],
+    ['empty array', []],
+    ['array', [1, 2, 3]],
+    ['function', () => {}],
+  ] as const)('returns false for %s', ([_name, value]) => {
+    expect(isQueryRegistry(value)).toBe(false);
+  });
+});
+
 describe('defineQueries types', () => {
   test('initial CustomQuery should have args callable but no toQuery', () => {
     const queries = defineQueries({
@@ -679,7 +721,7 @@ describe('context type mismatch detection', () => {
       ),
     });
 
-    expectTypeOf<ContextTypeOfCustomQueries<typeof queries>>().toEqualTypeOf<
+    expectTypeOf<ContextTypeOfQueryRegistry<typeof queries>>().toEqualTypeOf<
       {userId: string} & {role: 'admin' | 'user'}
     >();
 
@@ -694,6 +736,388 @@ describe('context type mismatch detection', () => {
     // q2 only needs role
     expectTypeOf<Parameters<typeof q2.toQuery>>().toEqualTypeOf<
       [{role: 'admin' | 'user'}]
+    >();
+  });
+});
+
+describe('defineQueries merging', () => {
+  test('should merge base and overrides at runtime', () => {
+    const base = defineQueries({
+      queryA: defineQuery(
+        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
+          builder.foo.where('id', '=', args),
+      ),
+      queryB: defineQuery(
+        ({args, ctx: _ctx}: {args: number; ctx: {userId: string}}) =>
+          builder.foo.where('val', '=', args),
+      ),
+    });
+
+    const extended = defineQueries(base, {
+      queryC: defineQuery(
+        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
+          builder.bar.where('id', '=', args),
+      ),
+    });
+
+    // All queries should be present
+    expect('queryA' in extended).toBe(true);
+    expect('queryB' in extended).toBe(true);
+    expect('queryC' in extended).toBe(true);
+
+    // Queries should work correctly
+    const resultA = extended.queryA('test-a').toQuery({userId: 'user1'});
+    expect(asQueryInternals(resultA).ast).toEqual({
+      table: 'foo',
+      where: {
+        type: 'simple',
+        left: {type: 'column', name: 'id'},
+        op: '=',
+        right: {type: 'literal', value: 'test-a'},
+      },
+    });
+
+    const resultC = extended.queryC('test-c').toQuery({userId: 'user1'});
+    expect(asQueryInternals(resultC).ast).toEqual({
+      table: 'bar',
+      where: {
+        type: 'simple',
+        left: {type: 'column', name: 'id'},
+        op: '=',
+        right: {type: 'literal', value: 'test-c'},
+      },
+    });
+  });
+
+  test('should override existing queries', () => {
+    const base = defineQueries({
+      queryA: defineQuery(
+        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
+          builder.foo.where('id', '=', args),
+      ),
+      queryB: defineQuery(
+        ({args, ctx: _ctx}: {args: number; ctx: {userId: string}}) =>
+          builder.foo.where('val', '=', args),
+      ),
+    });
+
+    const extended = defineQueries(base, {
+      // Override queryB with a different implementation
+      queryB: defineQuery(
+        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
+          builder.bar.where('val', '=', args),
+      ),
+    });
+
+    // queryA should still work as before
+    const resultA = extended.queryA('test-a').toQuery({userId: 'user1'});
+    expect(asQueryInternals(resultA).ast).toEqual({
+      table: 'foo',
+      where: {
+        type: 'simple',
+        left: {type: 'column', name: 'id'},
+        op: '=',
+        right: {type: 'literal', value: 'test-a'},
+      },
+    });
+
+    // queryB should use the new implementation (bar table, string args)
+    const resultB = extended.queryB('overridden').toQuery({userId: 'user1'});
+    expect(asQueryInternals(resultB).ast).toEqual({
+      table: 'bar',
+      where: {
+        type: 'simple',
+        left: {type: 'column', name: 'val'},
+        op: '=',
+        right: {type: 'literal', value: 'overridden'},
+      },
+    });
+  });
+
+  test('merged registry should be a valid query registry', () => {
+    const base = defineQueries({
+      queryA: defineQuery(({args: _args}: {args: undefined}) => builder.foo),
+    });
+
+    const extended = defineQueries(base, {
+      queryB: defineQuery(({args: _args}: {args: undefined}) => builder.bar),
+    });
+
+    expect(isQueryRegistry(extended)).toBe(true);
+  });
+
+  test('should merge two plain query definitions at runtime', () => {
+    // This tests the overload: defineQueries(defs1, defs2)
+    // where both are plain QueryDefinitions, not a QueryRegistry
+    const defs1 = {
+      queryA: defineQuery(
+        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
+          builder.foo.where('id', '=', args),
+      ),
+      queryB: defineQuery(
+        ({args, ctx: _ctx}: {args: number; ctx: {userId: string}}) =>
+          builder.foo.where('val', '=', args),
+      ),
+    };
+
+    const defs2 = {
+      queryC: defineQuery(
+        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
+          builder.bar.where('id', '=', args),
+      ),
+    };
+
+    const merged = defineQueries(defs1, defs2);
+
+    // All queries should be present
+    expect('queryA' in merged).toBe(true);
+    expect('queryB' in merged).toBe(true);
+    expect('queryC' in merged).toBe(true);
+
+    // Queries should work correctly
+    const resultA = merged.queryA('test-a').toQuery({userId: 'user1'});
+    expect(asQueryInternals(resultA).ast).toEqual({
+      table: 'foo',
+      where: {
+        type: 'simple',
+        left: {type: 'column', name: 'id'},
+        op: '=',
+        right: {type: 'literal', value: 'test-a'},
+      },
+    });
+
+    const resultC = merged.queryC('test-c').toQuery({userId: 'user1'});
+    expect(asQueryInternals(resultC).ast).toEqual({
+      table: 'bar',
+      where: {
+        type: 'simple',
+        left: {type: 'column', name: 'id'},
+        op: '=',
+        right: {type: 'literal', value: 'test-c'},
+      },
+    });
+
+    expect(isQueryRegistry(merged)).toBe(true);
+  });
+
+  test('should merge two plain query definitions with overrides', () => {
+    const defs1 = {
+      queryA: defineQuery(
+        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
+          builder.foo.where('id', '=', args),
+      ),
+      queryB: defineQuery(
+        ({args, ctx: _ctx}: {args: number; ctx: {userId: string}}) =>
+          builder.foo.where('val', '=', args),
+      ),
+    };
+
+    const defs2 = {
+      // Override queryB with a different implementation
+      queryB: defineQuery(
+        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
+          builder.bar.where('val', '=', args),
+      ),
+    };
+
+    const merged = defineQueries(defs1, defs2);
+
+    // queryA should still work as before
+    const resultA = merged.queryA('test-a').toQuery({userId: 'user1'});
+    expect(asQueryInternals(resultA).ast).toEqual({
+      table: 'foo',
+      where: {
+        type: 'simple',
+        left: {type: 'column', name: 'id'},
+        op: '=',
+        right: {type: 'literal', value: 'test-a'},
+      },
+    });
+
+    // queryB should use the new implementation (bar table, string args)
+    const resultB = merged.queryB('overridden').toQuery({userId: 'user1'});
+    expect(asQueryInternals(resultB).ast).toEqual({
+      table: 'bar',
+      where: {
+        type: 'simple',
+        left: {type: 'column', name: 'val'},
+        op: '=',
+        right: {type: 'literal', value: 'overridden'},
+      },
+    });
+  });
+});
+
+describe('defineQueries merging types', () => {
+  test('merged type should include all queries from base and overrides', () => {
+    const base = defineQueries({
+      queryA: defineQuery(
+        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
+          builder.foo.where('id', '=', args),
+      ),
+      queryB: defineQuery(
+        ({args, ctx: _ctx}: {args: number; ctx: {userId: string}}) =>
+          builder.foo.where('val', '=', args),
+      ),
+    });
+
+    const extended = defineQueries(base, {
+      queryC: defineQuery(
+        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
+          builder.bar.where('id', '=', args),
+      ),
+    });
+
+    // All queries should be accessible with correct types
+    expectTypeOf<Parameters<typeof extended.queryA>>().toEqualTypeOf<
+      [args: string]
+    >();
+    expectTypeOf<Parameters<typeof extended.queryB>>().toEqualTypeOf<
+      [args: number]
+    >();
+    expectTypeOf<Parameters<typeof extended.queryC>>().toEqualTypeOf<
+      [args: string]
+    >();
+  });
+
+  test('override should change the type of the query', () => {
+    const base = defineQueries({
+      queryA: defineQuery(
+        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
+          builder.foo.where('id', '=', args),
+      ),
+      queryB: defineQuery(
+        ({args, ctx: _ctx}: {args: number; ctx: {userId: string}}) =>
+          builder.foo.where('val', '=', args),
+      ),
+    });
+
+    const extended = defineQueries(base, {
+      // Override queryB with different args type
+      queryB: defineQuery(
+        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
+          builder.bar.where('val', '=', args),
+      ),
+    });
+
+    // queryA keeps its original type
+    expectTypeOf<Parameters<typeof extended.queryA>>().toEqualTypeOf<
+      [args: string]
+    >();
+
+    // queryB now has string args instead of number
+    expectTypeOf<Parameters<typeof extended.queryB>>().toEqualTypeOf<
+      [args: string]
+    >();
+  });
+
+  test('toQuery context types should be preserved', () => {
+    const base = defineQueries({
+      queryA: defineQuery(
+        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
+          builder.foo.where('id', '=', args),
+      ),
+    });
+
+    const extended = defineQueries(base, {
+      queryB: defineQuery(
+        ({args, ctx: _ctx}: {args: string; ctx: {role: string}}) =>
+          builder.bar.where('id', '=', args),
+      ),
+    });
+
+    const qA = extended.queryA('test');
+    const qB = extended.queryB('test');
+
+    expectTypeOf<Parameters<typeof qA.toQuery>>().toEqualTypeOf<
+      [{userId: string}]
+    >();
+    expectTypeOf<Parameters<typeof qB.toQuery>>().toEqualTypeOf<
+      [{role: string}]
+    >();
+  });
+
+  test('return type should be Query with correct table', () => {
+    const base = defineQueries({
+      getFoo: defineQuery(({args: _args}: {args: undefined}) => builder.foo),
+    });
+
+    const extended = defineQueries(base, {
+      getBar: defineQuery(({args: _args}: {args: undefined}) => builder.bar),
+    });
+
+    const fooQuery = extended.getFoo().toQuery({});
+    const barQuery = extended.getBar().toQuery({});
+
+    expectTypeOf(fooQuery).toEqualTypeOf<Query<typeof schema, 'foo'>>();
+    expectTypeOf(barQuery).toEqualTypeOf<Query<typeof schema, 'bar'>>();
+  });
+
+  test('merging two plain query definitions should have correct types', () => {
+    // This tests the overload: defineQueries(defs1, defs2)
+    // where both are plain QueryDefinitions, not a QueryRegistry
+    const defs1 = {
+      queryA: defineQuery(
+        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
+          builder.foo.where('id', '=', args),
+      ),
+      queryB: defineQuery(
+        ({args, ctx: _ctx}: {args: number; ctx: {userId: string}}) =>
+          builder.foo.where('val', '=', args),
+      ),
+    };
+
+    const defs2 = {
+      queryC: defineQuery(
+        ({args, ctx: _ctx}: {args: boolean; ctx: {userId: string}}) =>
+          builder.bar.where('id', '=', args ? 'yes' : 'no'),
+      ),
+    };
+
+    const merged = defineQueries(defs1, defs2);
+
+    // All queries should be accessible with correct types
+    expectTypeOf<Parameters<typeof merged.queryA>>().toEqualTypeOf<
+      [args: string]
+    >();
+    expectTypeOf<Parameters<typeof merged.queryB>>().toEqualTypeOf<
+      [args: number]
+    >();
+    expectTypeOf<Parameters<typeof merged.queryC>>().toEqualTypeOf<
+      [args: boolean]
+    >();
+  });
+
+  test('merging two plain query definitions with overrides should have correct types', () => {
+    const defs1 = {
+      queryA: defineQuery(
+        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
+          builder.foo.where('id', '=', args),
+      ),
+      queryB: defineQuery(
+        ({args, ctx: _ctx}: {args: number; ctx: {userId: string}}) =>
+          builder.foo.where('val', '=', args),
+      ),
+    };
+
+    const defs2 = {
+      // Override queryB with a different type
+      queryB: defineQuery(
+        ({args, ctx: _ctx}: {args: string; ctx: {userId: string}}) =>
+          builder.bar.where('val', '=', args),
+      ),
+    };
+
+    const merged = defineQueries(defs1, defs2);
+
+    // queryA keeps its original type
+    expectTypeOf<Parameters<typeof merged.queryA>>().toEqualTypeOf<
+      [args: string]
+    >();
+
+    // queryB now has string args instead of number
+    expectTypeOf<Parameters<typeof merged.queryB>>().toEqualTypeOf<
+      [args: string]
     >();
   });
 });

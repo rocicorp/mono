@@ -145,6 +145,7 @@ export {
   getQuery,
   isQueryDefinition,
   mustGetQuery,
+  type QueryRegistry,
 } from '../../zql/src/query/define-query.ts';
 export type {
   CustomQuery,
