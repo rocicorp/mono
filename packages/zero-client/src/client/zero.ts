@@ -81,16 +81,12 @@ import {
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
-import {wrapCustomQuery} from '../../../zql/src/query/define-query.ts';
 import {
   type ClientMetricMap,
   type MetricMap,
   isClientMetric,
 } from '../../../zql/src/query/metrics-delegate.ts';
-import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {newQuery} from '../../../zql/src/query/query-impl.ts';
-import {isQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import {
   type HumanReadable,
   type MaterializeOptions,
@@ -98,6 +94,7 @@ import {
   type PullRow,
   type Query,
   type RunOptions,
+  type ToQuery,
 } from '../../../zql/src/query/query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
@@ -182,48 +179,6 @@ export type MakeEntityQueriesFromSchema<S extends Schema> = {
   readonly [K in keyof S['tables'] & string]: Query<S, K>;
 };
 
-/**
- * The shape exposed on the `Zero.query` instance with custom queries.
- * Custom defined queries are added as properties that can be called to create query objects.
- */
-export type MakeCustomQueryInterfaces<
-  S extends Schema,
-  QD extends QueryDefinitions<S, TContext>,
-  TContext,
-> = {
-  readonly [NamespaceOrName in keyof QD]: QD[NamespaceOrName] extends (options: {
-    ctx: TContext;
-    args: infer Args;
-  }) => Query<S, infer TTable, infer TReturn>
-    ? [Args] extends [undefined]
-      ? () => Query<S, TTable & string, TReturn>
-      : undefined extends Args
-        ? (args?: Args) => Query<S, TTable & string, TReturn>
-        : (args: Args) => Query<S, TTable & string, TReturn>
-    : {
-        readonly [P in keyof QD[NamespaceOrName]]: MakeCustomQueryInterface<
-          S,
-          QD[NamespaceOrName][P],
-          TContext
-        >;
-      };
-};
-
-export type MakeCustomQueryInterface<
-  TSchema extends Schema,
-  F,
-  TContext,
-> = F extends (options: {
-  ctx: TContext;
-  args: infer Args;
-}) => Query<TSchema, infer TTable, infer TReturn>
-  ? [Args] extends [undefined]
-    ? () => Query<TSchema, TTable & string, TReturn>
-    : undefined extends Args
-      ? (args?: Args) => Query<TSchema, TTable & string, TReturn>
-      : (args: Args) => Query<TSchema, TTable & string, TReturn>
-  : never;
-
 declare const TESTING: boolean;
 
 export type TestingContext = {
@@ -252,8 +207,7 @@ function asTestZero<
   S extends Schema,
   MD extends CustomMutatorDefs | undefined,
   Context,
-  QD extends QueryDefinitions<S, Context> | undefined,
->(z: Zero<S, MD, Context, QD>): TestZero {
+>(z: Zero<S, MD, Context>): TestZero {
   return z as TestZero;
 }
 
@@ -350,94 +304,10 @@ const CLOSE_CODE_NORMAL = 1000;
 const CLOSE_CODE_GOING_AWAY = 1001;
 type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
 
-type MakeZeroQueryType<
-  QD extends QueryDefinitions<S, TContext> | undefined,
-  S extends Schema,
-  TContext,
-> =
-  QD extends QueryDefinitions<S, TContext>
-    ? MakeEntityQueriesFromSchema<S> &
-        MakeCustomQueryInterfaces<S, QD, TContext>
-    : MakeEntityQueriesFromSchema<S>;
-
-/**
- * Registers both entity queries (from schema tables) and custom queries at arbitrary depth.
- * Returns a combined query interface that includes table queries and custom query namespaces.
- *
- * @param schema - The Zero schema containing table definitions
- * @param queries - Optional custom query definitions that can be nested arbitrarily deep
- * @param contextHolder - The Zero instance that will be passed to wrapCustomQuery for binding
- * @returns A query object with both entity and custom queries
- */
-function registerQueries<
-  S extends Schema,
-  TContext,
-  QD extends QueryDefinitions<S, TContext> | undefined,
->(
-  schema: S,
-  queries: QD,
-  contextHolder: {context: TContext},
-  lc: LogContext,
-): MakeZeroQueryType<QD, S, TContext> {
-  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  const rv = {} as Record<string, any>;
-
-  // Register entity queries for each table
-  for (const name of Object.keys(schema.tables)) {
-    rv[name] = newQuery(schema, name);
-  }
-
-  // Register custom queries if provided
-  if (queries) {
-    // Recursively process query definitions at arbitrary depth
-    const processQueries = (
-      queriesToProcess: QueryDefinitions<S, TContext>,
-      target: Record<string, unknown>,
-      namespacePrefix: string[] = [],
-    ) => {
-      for (const [key, value] of Object.entries(queriesToProcess)) {
-        if (typeof value === 'function') {
-          const queryName = [...namespacePrefix, key].join('.');
-          // Single query function - wrap it with the name
-          const targetValue = target[key];
-          if (isQueryInternals(targetValue)) {
-            lc.debug?.(
-              `Query key "${[...namespacePrefix, key].join('.')}" conflicts with an existing table name.`,
-            );
-          }
-
-          target[key] = wrapCustomQuery(queryName, value, contextHolder);
-        } else {
-          // Namespace with nested queries
-          let existing = target[key];
-          // Check if the namespace conflicts with an existing table query
-          if (isQueryInternals(existing)) {
-            lc.debug?.(
-              `Query namespace "${[...namespacePrefix, key].join('.')}" conflicts with an existing table name.`,
-            );
-          }
-          if (existing === undefined) {
-            existing = {};
-            target[key] = existing;
-          }
-          processQueries(value, existing as Record<string, unknown>, [
-            ...namespacePrefix,
-            key,
-          ]);
-        }
-      }
-    };
-    processQueries(queries, rv);
-  }
-
-  return rv as MakeZeroQueryType<QD, S, TContext>;
-}
-
 export class Zero<
   const S extends Schema,
   MD extends CustomMutatorDefs | undefined = undefined,
   TContext = unknown,
-  QD extends QueryDefinitions<S, TContext> | undefined = undefined,
 > {
   readonly version = version;
 
@@ -544,12 +414,7 @@ export class Zero<
   // 2. client successfully connects
   #totalToConnectStart: number | undefined = undefined;
 
-  readonly #options: ZeroOptions<S, MD, TContext, QD>;
-
-  readonly query: QD extends QueryDefinitions<S, TContext>
-    ? MakeEntityQueriesFromSchema<S> &
-        MakeCustomQueryInterfaces<S, QD, TContext>
-    : MakeEntityQueriesFromSchema<S>;
+  readonly #options: ZeroOptions<S, MD, TContext>;
 
   // TODO: Metrics needs to be rethought entirely as we're not going to
   // send metrics to customer server.
@@ -562,7 +427,7 @@ export class Zero<
   /**
    * Constructs a new Zero client.
    */
-  constructor(options: ZeroOptions<S, MD, TContext, QD>) {
+  constructor(options: ZeroOptions<S, MD, TContext>) {
     const {
       userID,
       storageKey,
@@ -895,16 +760,6 @@ export class Zero<
       this.#rep.clientGroupID,
     );
 
-    this.query = registerQueries(
-      schema,
-      this.#options.queries,
-      this,
-      lc,
-    ) as QD extends QueryDefinitions<S, TContext>
-      ? MakeEntityQueriesFromSchema<S> &
-          MakeCustomQueryInterfaces<S, QD, TContext>
-      : MakeEntityQueriesFromSchema<S>;
-
     reportReloadReason(this.#lc);
 
     this.#metrics = new MetricManager({
@@ -1031,8 +886,8 @@ export class Zero<
   preload<
     TTable extends keyof S['tables'] & string,
     TReturn extends PullRow<TTable, S>,
-  >(query: Query<S, TTable, TReturn>, options?: PreloadOptions) {
-    return this.#zeroContext.preload(query, options);
+  >(query: ToQuery<S, TTable, TReturn, TContext>, options?: PreloadOptions) {
+    return this.#zeroContext.preload(query.toQuery(this.context), options);
   }
 
   /**
@@ -1056,10 +911,10 @@ export class Zero<
    * ```
    */
   run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+    query: ToQuery<S, TTable, TReturn, TContext>,
     runOptions?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
-    return this.#zeroContext.run(query, runOptions);
+    return this.#zeroContext.run(query.toQuery(this.context), runOptions);
   }
 
   get context(): TContext {
@@ -1091,19 +946,21 @@ export class Zero<
    * ```
    */
   materialize<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+    query: ToQuery<S, TTable, TReturn, TContext>,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+    query: ToQuery<S, TTable, TReturn, TContext>,
     factory: ViewFactory<S, TTable, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+    query: ToQuery<S, TTable, TReturn, TContext>,
     factoryOrOptions?: ViewFactory<S, TTable, TReturn, T> | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
+    const q = query.toQuery(this.context);
+
     let factory;
     let options;
     if (typeof factoryOrOptions === 'function') {
@@ -1112,7 +969,7 @@ export class Zero<
     } else {
       options = factoryOrOptions;
     }
-    return this.#zeroContext.materialize(query, factory, options);
+    return this.#zeroContext.materialize(q, factory, options);
   }
 
   /**

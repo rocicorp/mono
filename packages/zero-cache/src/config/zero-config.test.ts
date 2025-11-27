@@ -247,7 +247,7 @@ test('zero-cache --help', () => {
                                                                    This is used by the change-streamer for catching up                                                                   
                                                                    zero-cache replication subscriptions.                                                                                 
                                                                                                                                                                                          
-     --replica-file string                                         required                                                                                                              
+     --replica-file string                                         default: "zero.db"                                                                                                    
        ZERO_REPLICA_FILE env                                                                                                                                                             
                                                                    File path to the SQLite replica that zero-cache maintains.                                                            
                                                                    This can be lost, but if it is, zero-cache will have to re-replicate next                                             

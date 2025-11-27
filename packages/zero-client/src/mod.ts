@@ -22,6 +22,10 @@ export type {
   ReadonlyJSONValue,
 } from '../../shared/src/json.ts';
 export type {MaybePromise} from '../../shared/src/types.ts';
+export type {
+  AnalyzeQueryResult,
+  PlanDebugEventJSON,
+} from '../../zero-protocol/src/analyze-query-result.ts';
 export {ApplicationError} from '../../zero-protocol/src/application-error.ts';
 export type {ApplicationErrorOptions} from '../../zero-protocol/src/application-error.ts';
 export type {
@@ -110,25 +114,31 @@ export type {
 export type {
   DeleteID,
   InsertValue,
-  SchemaQuery,
   ServerTransaction,
   Transaction,
   UpdateValue,
   UpsertValue,
 } from '../../zql/src/mutate/custom.ts';
+export {createBuilder} from '../../zql/src/query/create-builder.ts';
 export {
+  defineQueries,
+  defineQueriesWithType,
   defineQuery,
-  defineQueryWithContextType,
+  getQuery,
   isQueryDefinition,
+  mustGetQuery,
 } from '../../zql/src/query/define-query.ts';
-export type {QueryDefinition} from '../../zql/src/query/define-query.ts';
+export type {
+  CustomQuery,
+  QueryDefinition,
+  QueryDefinitions,
+} from '../../zql/src/query/define-query.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {
   ExpressionBuilder,
   ExpressionFactory,
 } from '../../zql/src/query/expression.ts';
 export {
-  createBuilder,
   syncedQuery,
   syncedQueryWithContext,
   withValidation,
@@ -141,7 +151,6 @@ export type {
   QueryFn,
   SyncedQuery,
 } from '../../zql/src/query/named.ts';
-export type {QueryDefinitions} from '../../zql/src/query/query-definitions.ts';
 export type {QueryInternals} from '../../zql/src/query/query-internals.ts';
 export type {
   AnyQuery,
@@ -152,8 +161,10 @@ export type {
   QueryRowType,
   Row,
   RunOptions,
+  ToQuery,
   ZeRow,
 } from '../../zql/src/query/query.ts';
+export type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
 export {type TTL} from '../../zql/src/query/ttl.ts';
 export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 export {
@@ -178,17 +189,13 @@ export type {
   MutatorResultSuccessDetails,
   MutatorResult as PromiseWithServerResult,
 } from './client/custom.ts';
-export type {
-  AnalyzeQueryResult,
-  PlanDebugEventJSON,
-} from '../../zero-protocol/src/analyze-query-result.ts';
 export type {ClientGroup as InspectorClientGroup} from './client/inspector/client-group.ts';
 export type {Client as InspectorClient} from './client/inspector/client.ts';
 export type {Inspector} from './client/inspector/inspector.ts';
 export type {Query as InspectorQuery} from './client/inspector/query.ts';
 export type {UpdateNeededReason, ZeroOptions} from './client/options.ts';
 export {UpdateNeededReasonType} from './client/update-needed-reason-type.ts';
-export {Zero, type MakeEntityQueriesFromSchema} from './client/zero.ts';
+export {Zero} from './client/zero.ts';
 export type {
   QueryErrorDetails,
   QueryResultDetails,
