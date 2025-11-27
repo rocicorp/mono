@@ -6,7 +6,7 @@
 - [x] Add `defineMutators(base, overrides)` API for extending a base registry with server-side overrides
 - [x] Update zbugs
 - [ ] Test zbugs
-- [ ] Add strongly typed `.fn` for server-mutators pattern (calling base mutator with typed args)
+- [x] Add strongly typed `.fn` for server-mutators pattern (calling base mutator with typed args)
 - [ ] Remove `MutatorDefinitions` and everything connected
 - [ ] Update all the tests
 - [ ] Remove `getMutator` helper function
