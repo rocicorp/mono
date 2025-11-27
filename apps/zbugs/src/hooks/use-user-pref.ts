@@ -1,11 +1,10 @@
 import {useQuery} from '@rocicorp/zero/react';
-import type {ZeroBugs} from '../../shared/zero-type.ts';
-import {useZero} from './use-zero.ts';
 import {mutators} from '../../shared/mutators.ts';
+import {queries} from '../../shared/queries.ts';
+import type {ZeroBugs} from '../../shared/zero-type.ts';
 
 export function useUserPref(key: string): string | undefined {
-  const z = useZero();
-  const [pref] = useQuery(z.query.userPref(key));
+  const [pref] = useQuery(queries.userPref(key));
   return pref?.value;
 }
 

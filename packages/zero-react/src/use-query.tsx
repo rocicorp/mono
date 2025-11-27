@@ -17,7 +17,11 @@ import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import type {MutatorDefinitions} from '../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
-import {type HumanReadable, type Query} from '../../zql/src/query/query.ts';
+import {
+  type HumanReadable,
+  type Query,
+  type ToQuery,
+} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
 import type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 import {useZero} from './zero-provider.tsx';
@@ -64,8 +68,9 @@ export function useQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
+  TContext,
 >(
-  query: Query<TSchema, TTable, TReturn>,
+  query: ToQuery<TSchema, TTable, TReturn, TContext>,
   options?: UseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -89,8 +94,9 @@ export function useSuspenseQuery<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
+  TContext,
 >(
-  query: Query<TSchema, TTable, TReturn>,
+  query: ToQuery<TSchema, TTable, TReturn, TContext>,
   options?: UseSuspenseQueryOptions | boolean,
 ): QueryResult<TReturn> {
   let enabled = true;
@@ -309,7 +315,7 @@ export class ViewStore {
     TContext,
   >(
     zero: Zero<TSchema, MD, TContext>,
-    query: Query<TSchema, TTable, TReturn>,
+    query: ToQuery<TSchema, TTable, TReturn, TContext>,
     enabled: boolean,
     ttl: TTL,
   ): {
@@ -321,8 +327,9 @@ export class ViewStore {
     complete: boolean;
     nonEmpty: boolean;
   } {
+    const q = query.toQuery(zero.context);
     const bindings = bindingsForZero(zero);
-    const format = bindings.format(query);
+    const format = bindings.format(q);
     if (!enabled) {
       return {
         getSnapshot: () => getDefaultSnapshot(format.singular),
@@ -335,10 +342,10 @@ export class ViewStore {
       };
     }
 
-    const hash = bindings.hash(query) + zero.clientID;
+    const hash = bindings.hash(q) + zero.clientID;
     let existing = this.#views.get(hash);
     if (!existing) {
-      existing = new ViewWrapper(bindings, query, format, ttl, view => {
+      existing = new ViewWrapper(bindings, q, format, ttl, view => {
         const currentView = this.#views.get(hash);
         if (currentView && currentView !== view) {
           // we replaced the view with a new one already.

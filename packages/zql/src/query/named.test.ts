@@ -1,12 +1,8 @@
 import {describe, expect, expectTypeOf, test} from 'vitest';
 import * as v from '../../../shared/src/valita.ts';
+import {createBuilder} from './create-builder.ts';
 import {QueryParseError} from './error.ts';
-import {
-  createBuilder,
-  syncedQuery,
-  syncedQueryWithContext,
-  withValidation,
-} from './named.ts';
+import {syncedQuery, syncedQueryWithContext, withValidation} from './named.ts';
 import {asQueryInternals} from './query-internals.ts';
 import type {QueryResultType, QueryReturn, QueryRowType, Row} from './query.ts';
 import {schema} from './test/test-schemas.ts';

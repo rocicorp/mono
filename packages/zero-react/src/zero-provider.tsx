@@ -16,7 +16,6 @@ import type {
   MutatorDefinitions,
 } from '../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
-import type {QueryDefinitions} from '../../zql/src/query/query-definitions.ts';
 
 export const ZeroContext = createContext<unknown | undefined>(undefined);
 
@@ -28,13 +27,12 @@ export function useZero<
     | CustomMutatorDefs
     | undefined = undefined,
   Context = unknown,
-  QD extends QueryDefinitions<S, Context> | undefined = undefined,
->(): Zero<S, MD, Context, QD> {
+>(): Zero<S, MD, Context> {
   const zero = useContext(ZeroContext);
   if (zero === undefined) {
     throw new Error('useZero must be used within a ZeroProvider');
   }
-  return zero as Zero<S, MD, Context, QD>;
+  return zero as Zero<S, MD, Context>;
 }
 
 export function createUseZero<
@@ -45,9 +43,8 @@ export function createUseZero<
     | CustomMutatorDefs
     | undefined = undefined,
   Context = unknown,
-  QD extends QueryDefinitions<S, Context> | undefined = undefined,
 >() {
-  return () => useZero<S, MD, Context, QD>();
+  return () => useZero<S, MD, Context>();
 }
 
 export type ZeroProviderProps<
@@ -58,9 +55,8 @@ export type ZeroProviderProps<
     | CustomMutatorDefs
     | undefined,
   Context,
-  QD extends QueryDefinitions<S, Context> | undefined,
-> = (ZeroOptions<S, MD, Context, QD> | {zero: Zero<S, MD, Context, QD>}) & {
-  init?: (zero: Zero<S, MD, Context, QD>) => void;
+> = (ZeroOptions<S, MD, Context> | {zero: Zero<S, MD, Context>}) & {
+  init?: (zero: Zero<S, MD, Context>) => void;
   children: ReactNode;
 };
 
@@ -74,11 +70,10 @@ export function ZeroProvider<
     | CustomMutatorDefs
     | undefined,
   Context,
-  QD extends QueryDefinitions<S, Context> | undefined,
->({children, init, ...props}: ZeroProviderProps<S, MD, Context, QD>) {
+>({children, init, ...props}: ZeroProviderProps<S, MD, Context>) {
   const isExternalZero = 'zero' in props;
 
-  const [zero, setZero] = useState<Zero<S, MD, Context, QD> | undefined>(
+  const [zero, setZero] = useState<Zero<S, MD, Context> | undefined>(
     isExternalZero ? props.zero : undefined,
   );
 

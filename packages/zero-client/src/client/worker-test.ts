@@ -9,6 +9,7 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {MockSocket, zeroForTest} from './test-utils.ts';
 
 const {WebSocket} = globalThis;
@@ -35,21 +36,22 @@ async function testBasics(userID: string) {
     value: number;
   };
 
+  const schema = createSchema({
+    tables: [
+      table('e')
+        .columns({
+          id: string(),
+          value: number(),
+        })
+        .primaryKey('id'),
+    ],
+  });
   const z = zeroForTest({
     userID,
-    schema: createSchema({
-      tables: [
-        table('e')
-          .columns({
-            id: string(),
-            value: number(),
-          })
-          .primaryKey('id'),
-      ],
-    }),
+    schema,
   });
-
-  const q = z.query.e.limit(1);
+  const zql = createBuilder(schema);
+  const q = zql.e.limit(1);
   const view = z.materialize(q);
   const log: (readonly E[])[] = [];
   const removeListener = view.addListener(rows => {

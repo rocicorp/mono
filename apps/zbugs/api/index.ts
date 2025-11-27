@@ -5,11 +5,14 @@ import '../../../packages/shared/src/dotenv.ts';
 import cookie from '@fastify/cookie';
 import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
 import {Octokit} from '@octokit/core';
-import {mustGetMutator, type ReadonlyJSONValue} from '@rocicorp/zero';
+import {
+  mustGetMutator,
+  mustGetQuery,
+  type ReadonlyJSONValue,
+} from '@rocicorp/zero';
 import {
   handleMutationRequest,
   handleTransformRequest,
-  QueryRegistry,
 } from '@rocicorp/zero/server';
 import {zeroPostgresJS} from '@rocicorp/zero/server/adapters/postgresjs';
 import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
@@ -210,8 +213,6 @@ fastify.post<{
   Body: ReadonlyJSONValue;
 }>('/api/get-queries', getQueriesHandler);
 
-const queryRegistry = new QueryRegistry(queries);
-
 async function getQueriesHandler(
   request: FastifyRequest<{
     Querystring: Record<string, string>;
@@ -223,8 +224,8 @@ async function getQueriesHandler(
     reply.send(
       await handleTransformRequest(
         (name: string, args: ReadonlyJSONValue | undefined) => {
-          const query = queryRegistry.mustGet(name, authData);
-          return query(args);
+          const query = mustGetQuery(queries, name);
+          return query(args).toQuery(authData);
         },
         schema,
         request.body,

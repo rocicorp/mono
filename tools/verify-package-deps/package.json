@@ -3,9 +3,13 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "packageManager": "npm@10.9.2",
+  "engines": {
+    "node": ">=22.x"
+  },
   "scripts": {
-    "verify": "node src/verify-package-deps.ts",
-    "verify:fix": "node src/verify-package-deps.ts --fix",
+    "verify": "node --experimental-strip-types src/verify-package-deps.ts",
+    "verify:fix": "node --experimental-strip-types src/verify-package-deps.ts --fix",
     "check-types": "tsc",
     "format": "prettier --write .",
     "check-format": "prettier --check .",

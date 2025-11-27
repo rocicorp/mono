@@ -1,8 +1,8 @@
 import {beforeEach, describe, expect, test} from 'vitest';
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
-import type {SchemaQuery} from '../../zql/src/mutate/custom.ts';
-import {createBuilder} from '../../zql/src/query/named.ts';
+import {createBuilder} from '../../zql/src/query/create-builder.ts';
+import type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
 import {makeSchemaCRUD, makeServerTransaction} from './custom.ts';
 import {schema, schemaSql, seedDataSql} from './test/schema.ts';
 import {Transaction} from './test/util.ts';

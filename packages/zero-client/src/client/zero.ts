@@ -77,10 +77,10 @@ import {
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
 import {
-  getMutator,
-  isMutatorRegistry,
   type AnyMutatorRegistry,
   type MutatorDefinitions,
+  getMutator,
+  isMutatorRegistry,
 } from '../../../zero-types/src/mutator-registry.ts';
 import type {MutationRequest} from '../../../zero-types/src/mutator.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
@@ -90,15 +90,14 @@ import {
   type MetricMap,
   isClientMetric,
 } from '../../../zql/src/query/metrics-delegate.ts';
-import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {
   type HumanReadable,
   type MaterializeOptions,
   type PreloadOptions,
   type PullRow,
-  type Query,
   type RunOptions,
+  type ToQuery,
 } from '../../../zql/src/query/query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
@@ -139,10 +138,6 @@ import {IVMSourceBranch} from './ivm-branch.ts';
 import {type LogOptions, createLogOptions} from './log-options.ts';
 import type {MakeMutatePropertyType} from './make-mutate-property.ts';
 import {makeMutateProperty} from './make-mutate-property.ts';
-import {
-  type MakeQueryPropertyType,
-  makeQueryProperty,
-} from './make-query-property.ts';
 import {makeReplicacheMutators} from './make-replicache-mutators.ts';
 import {
   DID_NOT_CONNECT_VALUE,
@@ -205,8 +200,7 @@ function asTestZero<
     | CustomMutatorDefs
     | undefined,
   C,
-  QD extends QueryDefinitions<S, C> | undefined,
->(z: Zero<S, MD, C, QD>): TestZero {
+>(z: Zero<S, MD, C>): TestZero {
   return z as TestZero;
 }
 
@@ -311,7 +305,6 @@ export class Zero<
     | CustomMutatorDefs
     | undefined = undefined,
   C = unknown,
-  QD extends QueryDefinitions<S, C> | undefined = undefined,
 > {
   readonly version = version;
 
@@ -418,9 +411,7 @@ export class Zero<
   // 2. client successfully connects
   #totalToConnectStart: number | undefined = undefined;
 
-  readonly #options: ZeroOptions<S, MD, C, QD>;
-
-  readonly query: MakeQueryPropertyType<QD, S, C>;
+  readonly #options: ZeroOptions<S, MD, C>;
 
   // TODO: Metrics needs to be rethought entirely as we're not going to
   // send metrics to customer server.
@@ -433,7 +424,8 @@ export class Zero<
   /**
    * Constructs a new Zero client.
    */
-  constructor(options: ZeroOptions<S, MD, C, QD>) {
+
+  constructor(options: ZeroOptions<S, MD, C>) {
     const {
       userID,
       storageKey,
@@ -728,13 +720,6 @@ export class Zero<
       this.#rep.clientGroupID,
     );
 
-    this.query = makeQueryProperty<S, C, QD>(
-      schema,
-      options.queries as QD,
-      this.context,
-      lc,
-    );
-
     reportReloadReason(this.#lc);
 
     this.#metrics = new MetricManager({
@@ -861,8 +846,8 @@ export class Zero<
   preload<
     TTable extends keyof S['tables'] & string,
     TReturn extends PullRow<TTable, S>,
-  >(query: Query<S, TTable, TReturn>, options?: PreloadOptions) {
-    return this.#zeroContext.preload(query, options);
+  >(query: ToQuery<S, TTable, TReturn, C>, options?: PreloadOptions) {
+    return this.#zeroContext.preload(query.toQuery(this.context), options);
   }
 
   /**
@@ -886,10 +871,10 @@ export class Zero<
    * ```
    */
   run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+    query: ToQuery<S, TTable, TReturn, C>,
     runOptions?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
-    return this.#zeroContext.run(query, runOptions);
+    return this.#zeroContext.run(query.toQuery(this.context), runOptions);
   }
 
   get context(): C {
@@ -921,19 +906,21 @@ export class Zero<
    * ```
    */
   materialize<TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+    query: ToQuery<S, TTable, TReturn, C>,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+    query: ToQuery<S, TTable, TReturn, C>,
     factory: ViewFactory<S, TTable, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: Query<S, TTable, TReturn>,
+    query: ToQuery<S, TTable, TReturn, C>,
     factoryOrOptions?: ViewFactory<S, TTable, TReturn, T> | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
+    const q = query.toQuery(this.context);
+
     let factory;
     let options;
     if (typeof factoryOrOptions === 'function') {
@@ -942,7 +929,7 @@ export class Zero<
     } else {
       options = factoryOrOptions;
     }
-    return this.#zeroContext.materialize(query, factory, options);
+    return this.#zeroContext.materialize(q, factory, options);
   }
 
   /**

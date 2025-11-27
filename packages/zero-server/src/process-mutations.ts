@@ -262,6 +262,10 @@ export async function handleMutationRequest<
     //      here are logged but the mutation remains committed.
     for (const m of pushBody.mutations) {
       assert(m.type === 'custom', 'Expected custom mutation');
+      lc.debug?.(
+        `Processing mutation '${m.name}' (id=${m.id}, clientID=${m.clientID})`,
+        m.args,
+      );
 
       let mutationPhase: MutationPhase = 'preTransaction';
 
@@ -277,6 +281,7 @@ export async function handleMutationRequest<
       try {
         const res = await applicationErrorWrapper(() => cb(transactProxy, m));
         responses.push(res);
+        lc.debug?.(`Mutation '${m.name}' (id=${m.id}) completed successfully`);
 
         processedCount++;
       } catch (error) {
@@ -444,6 +449,9 @@ class Transactor<D extends Database<ExtractTransactionType<D>>, Context> {
           );
 
           if (appError === undefined) {
+            this.#lc.debug?.(
+              `Executing mutator '${mutation.name}' (id=${mutation.id})`,
+            );
             try {
               await cb(dbTx, mutation.name, mutation.args[0], this.#context);
             } catch (appError) {

@@ -30,9 +30,11 @@ import type {
   PushResponseMessage,
 } from '../../../zero-protocol/src/push.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
-import type {MutatorDefinitions} from '../../../zero-types/src/mutator-registry.ts';
+import type {
+  AnyMutatorRegistry,
+  MutatorDefinitions,
+} from '../../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
 import type {AnyQuery, Query} from '../../../zql/src/query/query.ts';
 import {bindingsForZero} from './bindings.ts';
 import type {
@@ -105,11 +107,11 @@ export class TestZero<
   const S extends Schema,
   MD extends
     | MutatorDefinitions<S, C>
+    | AnyMutatorRegistry
     | CustomMutatorDefs
     | undefined = undefined,
   C = unknown,
-  QD extends QueryDefinitions<S, C> | undefined = undefined,
-> extends Zero<S, MD, C, QD> {
+> extends Zero<S, MD, C> {
   pokeIDCounter = 0;
 
   #connectionStatusResolvers: Set<{
@@ -135,7 +137,7 @@ export class TestZero<
     return this[exposedToTestingSymbol].connectStart;
   }
 
-  constructor(options: ZeroOptions<S, MD, C, QD>) {
+  constructor(options: ZeroOptions<S, MD, C>) {
     super(options);
 
     // Subscribe to connection manager to handle connection state change notifications
@@ -318,14 +320,14 @@ export function zeroForTest<
   const S extends Schema,
   MD extends
     | MutatorDefinitions<S, C>
+    | AnyMutatorRegistry
     | CustomMutatorDefs
     | undefined = undefined,
   C = unknown,
-  QD extends QueryDefinitions<S, C> | undefined = undefined,
 >(
-  options: Partial<ZeroOptions<S, MD, C, QD>> = {},
+  options: Partial<ZeroOptions<S, MD, C>> = {},
   errorOnUpdateNeeded = true,
-): TestZero<S, MD, C, QD> {
+): TestZero<S, MD, C> {
   // Special case kvStore. If not present we default to 'mem'. This allows
   // passing `undefined` to get the default behavior.
   const newOptions = {...options};
@@ -347,7 +349,7 @@ export function zeroForTest<
         }
       : undefined,
     ...newOptions,
-  } satisfies ZeroOptions<S, MD, C, QD>);
+  } satisfies ZeroOptions<S, MD, C>);
 }
 
 export async function waitForUpstreamMessage(

@@ -5,9 +5,12 @@
 // We also export the query and Zero instance so that tsc will try to compile it
 // and fail if it can't output .d.ts
 
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {zeroStress} from './zero-stress-client-test.ts';
 
-const queryDeep = zeroStress.query.order.related('createdByUser', q =>
+const zql = createBuilder(zeroStress.schema);
+
+const queryDeep = zql.order.related('createdByUser', q =>
   q.related('workspaceMembers', q =>
     q.related('workspace', q =>
       q.related('budgets', q =>

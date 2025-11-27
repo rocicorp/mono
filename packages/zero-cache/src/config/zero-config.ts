@@ -102,7 +102,7 @@ export const shardOptions = {
 
 const replicaOptions = {
   file: {
-    type: v.string(),
+    type: v.string().default('zero.db'),
     desc: [
       `File path to the SQLite replica that zero-cache maintains.`,
       `This can be lost, but if it is, zero-cache will have to re-replicate next`,
@@ -346,16 +346,14 @@ export const zeroOptions = {
   },
 
   enableQueryPlanner: {
-    type: v.boolean().default(false),
+    type: v.boolean().default(true),
     desc: [
       `Enable the query planner for optimizing ZQL queries.`,
       ``,
       `The query planner analyzes and optimizes query execution by determining`,
-      `the most efficient join strategies. This feature`,
-      `is being gradually rolled out and may improve performance for complex`,
-      `queries that make use of WHERE EXISTS.`,
+      `the most efficient join strategies.`,
       ``,
-      `When disabled (default), queries use the standard execution path.`,
+      `You can disable the planner if it is picking bad strategies.`,
     ],
   },
 

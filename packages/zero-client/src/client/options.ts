@@ -6,7 +6,6 @@ import type {
   MutatorDefinitions,
 } from '../../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {QueryDefinitions} from '../../../zql/src/query/query-definitions.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 
@@ -21,7 +20,6 @@ export interface ZeroOptions<
     | CustomMutatorDefs
     | undefined = undefined,
   C = unknown,
-  QD extends QueryDefinitions<S, C> | undefined = undefined,
 > {
   /**
    * URL to the zero-cache. This can be a simple hostname, e.g.
@@ -135,39 +133,6 @@ export interface ZeroOptions<
    * If not provided, uses the default configured in zero-cache.
    */
   mutateURL?: string | undefined;
-
-  /**
-   * An object whose values are your custom query definitions. Queries can
-   * either be top-level functions or grouped in namespaces (objects).
-   *
-   * Define queries using the `defineQuery` function to create parameterized
-   * queries that can be called with arguments.
-   *
-   * @example
-   * ```ts
-   * const z = new Zero({
-   *   schema,
-   *   userID,
-   *   queries: {
-   *     // Top-level query
-   *     activeIssues: defineQuery('activeIssues', ({ctx}) =>
-   *       ctx.query.issue.where('status', '=', 'active')
-   *     ),
-   *     // Namespace with multiple queries
-   *     user: {
-   *       byID: defineQuery('userByID', ({ctx, args}: {args: string}) =>
-   *         ctx.query.user.where('id', '=', args)
-   *       ),
-   *     },
-   *   },
-   * });
-   *
-   * // Usage
-   * const issues = await z.run(z.query.activeIssues());
-   * const user = await z.run(z.query.user.byID('user-123'));
-   * ```
-   */
-  queries?: QD | undefined;
 
   /**
    * Custom URL for query requests sent to your API server.
@@ -345,8 +310,7 @@ export interface ZeroAdvancedOptions<
     | CustomMutatorDefs
     | undefined,
   Context,
-  QD extends QueryDefinitions<S, Context> | undefined,
-> extends ZeroOptions<S, MD, Context, QD> {}
+> extends ZeroOptions<S, MD, Context> {}
 
 type UpdateNeededReasonBase = {
   message?: string;
