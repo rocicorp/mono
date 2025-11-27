@@ -12,6 +12,7 @@ import {getExternalFromPackageJSON} from '../../shared/src/tool/get-external-fro
 import * as workerUrls from '../../zero-cache/src/server/worker-urls.ts';
 
 const forBundleSizeDashboard = process.argv.includes('--bundle-sizes');
+const watchMode = process.argv.includes('--watch');
 
 async function getExternal(): Promise<string[]> {
   return [
@@ -220,14 +221,29 @@ async function build() {
   // Run vite build and tsc in parallel
   const startTime = performance.now();
 
-  // Clean output directory for normal builds (preserve for bundle size dashboard)
-  if (!forBundleSizeDashboard) {
+  // Clean output directory for normal builds (preserve for bundle size dashboard and watch mode)
+  if (!forBundleSizeDashboard && !watchMode) {
     await rm(resolve('out'), {recursive: true, force: true});
   }
 
   if (forBundleSizeDashboard) {
     // For bundle size dashboard, build a single minified bundle
     await runViteBuild(bundleSizeConfig, 'vite build (bundle sizes)');
+  } else if (watchMode) {
+    // Watch mode: run vite and tsc in watch mode
+    const viteConfig = await getViteConfig();
+    viteConfig.build = {...viteConfig.build, watch: {}};
+    await Promise.all([
+      runViteBuild(viteConfig, 'vite build (watch)'),
+      exec(
+        'tsc -p tsconfig.client.json --watch --preserveWatchOutput',
+        'client dts (watch)',
+      ),
+      exec(
+        'tsc -p tsconfig.server.json --watch --preserveWatchOutput',
+        'server dts (watch)',
+      ),
+    ]);
   } else {
     // Normal build: use inline vite config + type declarations
     const viteConfig = await getViteConfig();
