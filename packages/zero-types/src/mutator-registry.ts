@@ -151,6 +151,13 @@ export function defineMutators<S extends Schema, C>(
  *   },
  * });
  *
+ * // Extend an existing registry
+ * const serverMutators = defineAppMutators(mutators, {
+ *   user: {
+ *     create: defineMutator(...),  // override
+ *   },
+ * });
+ *
  * // With just Context type (Schema inferred)
  * const defineAppMutators = defineMutatorsWithType<AuthData>();
  * ```
@@ -160,11 +167,10 @@ export function defineMutators<S extends Schema, C>(
  * @returns A function equivalent to {@link defineMutators} but with types
  *   pre-bound.
  */
-export function defineMutatorsWithType<S extends Schema, C = unknown>(): <
-  T extends MutatorDefinitionsTree<S, C>,
->(
-  definitions: T,
-) => MutatorRegistry<S, C, T>;
+export function defineMutatorsWithType<
+  S extends Schema,
+  C = unknown,
+>(): TypedDefineMutators<S, C>;
 
 /**
  * Returns a typed version of {@link defineMutators} with the context type
@@ -174,15 +180,37 @@ export function defineMutatorsWithType<S extends Schema, C = unknown>(): <
  * @returns A function equivalent to {@link defineMutators} but with the context
  *   type pre-bound.
  */
-export function defineMutatorsWithType<C>(): <
-  T extends MutatorDefinitionsTree<Schema, C>,
->(
-  definitions: T,
-) => MutatorRegistry<Schema, C, T>;
+export function defineMutatorsWithType<C>(): TypedDefineMutators<Schema, C>;
 
 export function defineMutatorsWithType() {
   return defineMutators;
 }
+
+/**
+ * The return type of defineMutatorsWithType. A function matching the
+ * defineMutators overloads but with Schema and Context pre-bound.
+ */
+type TypedDefineMutators<S extends Schema, C> = {
+  <T extends MutatorDefinitionsTree<S, C>>(definitions: T): MutatorRegistry<
+    S,
+    C,
+    T
+  >;
+  <
+    TBase extends MutatorDefinitionsTree<S, C>,
+    TOverrides extends MutatorDefinitionsTree<S, C>,
+  >(
+    base: MutatorRegistry<S, C, TBase>,
+    overrides: TOverrides,
+  ): MutatorRegistry<S, C, DeepMerge<TBase, TOverrides>>;
+  <
+    TBase extends MutatorDefinitionsTree<S, C>,
+    TOverrides extends MutatorDefinitionsTree<S, C>,
+  >(
+    base: TBase,
+    overrides: TOverrides,
+  ): MutatorRegistry<S, C, DeepMerge<TBase, TOverrides>>;
+};
 
 /**
  * Gets a Mutator by its dot-separated name from a MutatorRegistry.

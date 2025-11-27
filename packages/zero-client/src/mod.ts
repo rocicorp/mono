@@ -138,20 +138,6 @@ export type {
   UpsertValue,
 } from '../../zql/src/mutate/custom.ts';
 export {createBuilder} from '../../zql/src/query/create-builder.ts';
-export {
-  defineQueries,
-  defineQueriesWithType,
-  defineQuery,
-  getQuery,
-  isQueryDefinition,
-  mustGetQuery,
-  type QueryRegistry,
-} from '../../zql/src/query/define-query.ts';
-export type {
-  CustomQuery,
-  QueryDefinition,
-  QueryDefinitions,
-} from '../../zql/src/query/define-query.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {
   ExpressionBuilder,
@@ -171,6 +157,20 @@ export type {
   SyncedQuery,
 } from '../../zql/src/query/named.ts';
 export type {QueryInternals} from '../../zql/src/query/query-internals.ts';
+export {
+  defineQueries,
+  defineQueriesWithType,
+  defineQuery,
+  getQuery,
+  isQueryDefinition,
+  mustGetQuery,
+  type QueryRegistry,
+} from '../../zql/src/query/query-registry.ts';
+export type {
+  CustomQuery,
+  QueryDefinition,
+  QueryDefinitions,
+} from '../../zql/src/query/query-registry.ts';
 export type {
   AnyQuery,
   HumanReadable,

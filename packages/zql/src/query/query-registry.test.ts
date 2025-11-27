@@ -9,14 +9,14 @@ import {
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 import {createBuilder} from './create-builder.ts';
+import {asQueryInternals} from './query-internals.ts';
 import {
   defineQueries,
   defineQueriesWithType,
   defineQuery,
   isQueryRegistry,
   type ContextTypeOfQueryRegistry,
-} from './define-query.ts';
-import {asQueryInternals} from './query-internals.ts';
+} from './query-registry.ts';
 import type {Query} from './query.ts';
 
 const schema = createSchema({

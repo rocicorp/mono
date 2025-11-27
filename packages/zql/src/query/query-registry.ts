@@ -344,9 +344,12 @@ export function defineQueries<QD extends QueryDefinitions<Schema, any>>(
  * @returns A merged query registry with all queries from both base and overrides.
  */
 export function defineQueries<
-  QD1 extends QueryDefinitions<Schema, any>,
-  QD2 extends QueryDefinitions<Schema, any>,
->(base: QueryRegistry<QD1>, overrides: QD2): QueryRegistry<DeepMerge<QD1, QD2>>;
+  TBase extends QueryDefinitions<Schema, any>,
+  TOverrides extends QueryDefinitions<Schema, any>,
+>(
+  base: QueryRegistry<TBase>,
+  overrides: TOverrides,
+): QueryRegistry<DeepMerge<TBase, TOverrides>>;
 
 /**
  * Merges two query definition objects into a single query registry.
@@ -359,9 +362,12 @@ export function defineQueries<
  * @returns A merged query registry with all queries from both parameters.
  */
 export function defineQueries<
-  QD1 extends QueryDefinitions<Schema, any>,
-  QD2 extends QueryDefinitions<Schema, any>,
->(base: QD1, overrides: QD2): QueryRegistry<DeepMerge<QD1, QD2>>;
+  TBase extends QueryDefinitions<Schema, any>,
+  TOverrides extends QueryDefinitions<Schema, any>,
+>(
+  base: TBase,
+  overrides: TOverrides,
+): QueryRegistry<DeepMerge<TBase, TOverrides>>;
 
 export function defineQueries<QD extends QueryDefinitions<Schema, any>>(
   defsOrBase: QD | QueryRegistry<QD>,
@@ -434,6 +440,11 @@ export function defineQueries<QD extends QueryDefinitions<Schema, any>>(
  *   issues: defineQuery(({ctx}) => builder.issue.where('userID', ctx.userID)),
  * });
  *
+ * // Extend an existing registry
+ * const serverQueries = defineAppQueries(queries, {
+ *   admin: defineQuery(...),  // add new query
+ * });
+ *
  * // With just Context type (Schema inferred)
  * const defineAppQueries = defineQueriesWithType<AppContext>();
  * ```
@@ -443,11 +454,10 @@ export function defineQueries<QD extends QueryDefinitions<Schema, any>>(
  * @returns A function equivalent to {@link defineQueries} but with types
  *   pre-bound.
  */
-export function defineQueriesWithType<S extends Schema, C = unknown>(): <
-  QD extends QueryDefinitions<S, C>,
->(
-  defs: QD,
-) => QueryRegistry<QD>;
+export function defineQueriesWithType<
+  S extends Schema,
+  C = unknown,
+>(): TypedDefineQueries<S, C>;
 
 /**
  * Returns a typed version of {@link defineQueries} with the context type
@@ -457,15 +467,33 @@ export function defineQueriesWithType<S extends Schema, C = unknown>(): <
  * @returns A function equivalent to {@link defineQueries} but with the context
  *   type pre-bound.
  */
-export function defineQueriesWithType<C>(): <
-  QD extends QueryDefinitions<Schema, C>,
->(
-  defs: QD,
-) => QueryRegistry<QD>;
+export function defineQueriesWithType<C>(): TypedDefineQueries<Schema, C>;
 
 export function defineQueriesWithType() {
   return defineQueries;
 }
+
+/**
+ * The return type of defineQueriesWithType. A function matching the
+ * defineQueries overloads but with Schema and Context pre-bound.
+ */
+type TypedDefineQueries<S extends Schema, C> = {
+  <QD extends QueryDefinitions<S, C>>(defs: QD): QueryRegistry<QD>;
+  <
+    TBase extends QueryDefinitions<S, C>,
+    TOverrides extends QueryDefinitions<S, C>,
+  >(
+    base: QueryRegistry<TBase>,
+    overrides: TOverrides,
+  ): QueryRegistry<DeepMerge<TBase, TOverrides>>;
+  <
+    TBase extends QueryDefinitions<S, C>,
+    TOverrides extends QueryDefinitions<S, C>,
+  >(
+    base: TBase,
+    overrides: TOverrides,
+  ): QueryRegistry<DeepMerge<TBase, TOverrides>>;
+};
 
 export function getQuery<S extends Schema, QD extends QueryDefinitions<S, any>>(
   queries: QueryRegistry<QD>,

@@ -241,7 +241,7 @@ export type Mutator<
    * calling from generic code. The implementation casts to the specific type.
    */
   readonly fn: (options: {
-    args: ReadonlyJSONValue | undefined;
+    args: TArgs;
     ctx: TContext;
     tx: AnyTransaction;
   }) => Promise<void>;
