@@ -11,4 +11,4 @@
 - [ ] Update all the tests
 - [ ] Remove `getMutator` helper function
 - [ ] Remove Proxy for z.mutate
-- [ ] defineMutators needs better merging
+- [x] defineMutators needs better merging
