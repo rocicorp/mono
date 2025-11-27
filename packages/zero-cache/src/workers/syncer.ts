@@ -147,7 +147,7 @@ export class Syncer implements SingletonService {
         this.#config?.push?.url !== undefined ||
         this.#config?.mutate?.url !== undefined;
       const hasQueries =
-        this.#config?.queries?.url !== undefined ||
+        this.#config?.query?.url !== undefined ||
         this.#config?.getQueries?.url !== undefined;
 
       // must either have one of the token options set or have custom mutations & queries enabled
@@ -157,7 +157,7 @@ export class Syncer implements SingletonService {
         throw new Error(
           'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
             JSON.stringify(tokenOptions) +
-            '. You may also set both ZERO_MUTATE_URL and ZERO_QUERIES_URL to enable custom mutations and queries without passing token verification options.',
+            '. You may also set both ZERO_MUTATE_URL and ZERO_QUERY_URL to enable custom mutations and queries without passing token verification options.',
         );
       }
 

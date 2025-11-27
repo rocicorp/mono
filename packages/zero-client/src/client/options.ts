@@ -97,7 +97,7 @@ export interface ZeroOptions<
    * Custom URL for query requests sent to your API server.
    * If not provided, uses the default configured in zero-cache.
    *
-   * @deprecated Use {@linkcode queriesURL} instead.
+   * @deprecated Use {@linkcode queryURL} instead.
    */
   getQueriesURL?: string | undefined;
 
@@ -105,7 +105,7 @@ export interface ZeroOptions<
    * Custom URL for query requests sent to your API server.
    * If not provided, uses the default configured in zero-cache.
    */
-  queriesURL?: string | undefined;
+  queryURL?: string | undefined;
 
   /**
    * `onOnlineChange` is called when the Zero instance's online status changes.
