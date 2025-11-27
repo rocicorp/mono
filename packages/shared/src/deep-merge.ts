@@ -1,25 +1,31 @@
+// Force TypeScript to evaluate/flatten a type
+type Simplify<T> = {[K in keyof T]: T[K]} & {};
+
+// Helper to check if T is a plain object (not array or function)
 type IsPlainObject<T> = T extends object
-  ? T extends Function | unknown[]
+  ? T extends Function | readonly unknown[]
     ? false
     : true
   : false;
 
-// Force TypeScript to evaluate/flatten a type
-type Simplify<T> = {[K in keyof T]: T[K]} & {};
+// Merge when both are plain objects, otherwise B wins
+type MergeValue<A, B> =
+  IsPlainObject<A> extends true
+    ? IsPlainObject<B> extends true
+      ? DeepMerge<A & {}, B & {}>
+      : B
+    : B;
 
-export type DeepMerge<A, B> = Simplify<{
-  [K in keyof A | keyof B]: K extends keyof B
-    ? K extends keyof A
-      ? IsPlainObject<A[K]> extends true
-        ? IsPlainObject<B[K]> extends true
-          ? Simplify<DeepMerge<A[K], B[K]>> // Recursively merge objects
-          : B[K] // B wins
-        : B[K]
-      : B[K]
-    : K extends keyof A
-      ? A[K]
-      : never;
-}>;
+/**
+ * Type-level deep merge of two object types. Properties from B override
+ * properties from A. When both A[K] and B[K] are objects (not arrays or
+ * functions), they are recursively merged.
+ */
+export type DeepMerge<A, B> = Simplify<
+  Omit<A, keyof B> & {
+    [K in keyof B]: K extends keyof A ? MergeValue<A[K], B[K]> : B[K];
+  }
+>;
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
