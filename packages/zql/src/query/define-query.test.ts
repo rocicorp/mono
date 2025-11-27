@@ -1120,4 +1120,68 @@ describe('defineQueries merging types', () => {
       [args: string]
     >();
   });
+
+  test('deep merge preserves nested query types', () => {
+    const base = defineQueries({
+      users: {
+        byId: defineQuery(({args}: {args: {id: string}}) =>
+          builder.foo.where('id', '=', args.id),
+        ),
+        byVal: defineQuery(({args}: {args: {val: number}}) =>
+          builder.foo.where('val', '=', args.val),
+        ),
+      },
+      posts: {
+        all: defineQuery(() => builder.bar),
+      },
+    });
+
+    const extended = defineQueries(base, {
+      users: {
+        byEmail: defineQuery(({args}: {args: {email: string}}) =>
+          builder.foo.where('id', '=', args.email),
+        ),
+      },
+    });
+
+    // Original nested queries should be preserved with correct types
+    expectTypeOf<Parameters<typeof extended.users.byId>>().toEqualTypeOf<
+      [args: {id: string}]
+    >();
+    expectTypeOf<Parameters<typeof extended.users.byVal>>().toEqualTypeOf<
+      [args: {val: number}]
+    >();
+
+    // New nested query should be available
+    expectTypeOf<Parameters<typeof extended.users.byEmail>>().toEqualTypeOf<
+      [args: {email: string}]
+    >();
+
+    // Other namespaces preserved - query with no args is callable without arguments
+    expectTypeOf(extended.posts.all).toBeCallableWith();
+  });
+
+  test('deep merge overrides nested queries correctly', () => {
+    const base = defineQueries({
+      users: {
+        byId: defineQuery(({args}: {args: {id: string}}) =>
+          builder.foo.where('id', '=', args.id),
+        ),
+      },
+    });
+
+    const extended = defineQueries(base, {
+      users: {
+        // Override byId with different args type
+        byId: defineQuery(({args}: {args: {id: string; extra: boolean}}) =>
+          builder.bar.where('id', '=', args.id),
+        ),
+      },
+    });
+
+    // Overridden query has new type
+    expectTypeOf<Parameters<typeof extended.users.byId>>().toEqualTypeOf<
+      [args: {id: string; extra: boolean}]
+    >();
+  });
 });

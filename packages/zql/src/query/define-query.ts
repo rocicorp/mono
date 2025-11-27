@@ -1,5 +1,6 @@
 // oxlint-disable no-explicit-any
 import type {StandardSchemaV1} from '@standard-schema/spec';
+import {deepMerge, type DeepMerge} from '../../../shared/src/deep-merge.ts';
 import {getValueAtPath} from '../../../shared/src/get-value-at-path.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
@@ -345,10 +346,7 @@ export function defineQueries<QD extends QueryDefinitions<Schema, any>>(
 export function defineQueries<
   QD1 extends QueryDefinitions<Schema, any>,
   QD2 extends QueryDefinitions<Schema, any>,
->(
-  base: QueryRegistry<QD1>,
-  overrides: QD2,
-): QueryRegistry<Omit<QD1, keyof QD2> & QD2>;
+>(base: QueryRegistry<QD1>, overrides: QD2): QueryRegistry<DeepMerge<QD1, QD2>>;
 
 /**
  * Merges two query definition objects into a single query registry.
@@ -363,7 +361,7 @@ export function defineQueries<
 export function defineQueries<
   QD1 extends QueryDefinitions<Schema, any>,
   QD2 extends QueryDefinitions<Schema, any>,
->(base: QD1, overrides: QD2): QueryRegistry<Omit<QD1, keyof QD2> & QD2>;
+>(base: QD1, overrides: QD2): QueryRegistry<DeepMerge<QD1, QD2>>;
 
 export function defineQueries<QD extends QueryDefinitions<Schema, any>>(
   defsOrBase: QD | QueryRegistry<QD>,
@@ -413,7 +411,9 @@ export function defineQueries<QD extends QueryDefinitions<Schema, any>>(
 
     const processed = processDefinitions(overrides, []);
 
-    return {...base, ...processed} as QueryRegistry<any>;
+    const merged = deepMerge(base, processed) as QueryRegistry<any>;
+    merged[queryRegistryTag] = true;
+    return merged;
   }
 
   return processDefinitions(defsOrBase as QD, []) as QueryRegistry<QD>;

@@ -284,9 +284,9 @@ export function isMutator(value: unknown): value is Mutator<
 > {
   return (
     typeof value === 'function' &&
-    'mutatorName' in value &&
-    typeof value.mutatorName === 'string' &&
-    'fn' in value &&
-    typeof value.fn === 'function'
+    // oxlint-disable-next-line no-explicit-any
+    typeof (value as any).mutatorName === 'string' &&
+    // oxlint-disable-next-line no-explicit-any
+    typeof (value as any).fn === 'function'
   );
 }

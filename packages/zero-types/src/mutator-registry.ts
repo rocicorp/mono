@@ -1,3 +1,4 @@
+import {deepMerge, type DeepMerge} from '../../shared/src/deep-merge.ts';
 import {getValueAtPath} from '../../shared/src/get-value-at-path.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {Transaction} from '../../zql/src/mutate/custom.ts';
@@ -59,64 +60,128 @@ export function defineMutators<
   S extends Schema,
   C,
   TBase extends MutatorDefinitionsTree<S, C>,
+  TOverrides extends MutatorDefinitionsTree<S, C>,
 >(
   base: MutatorRegistry<S, C, TBase>,
-  overrides: MutatorDefinitionsTree<S, C>,
-): MutatorRegistry<S, C, TBase>;
+  overrides: TOverrides,
+): MutatorRegistry<S, C, DeepMerge<TBase, TOverrides>>;
+
+export function defineMutators<
+  S extends Schema,
+  C,
+  TBase extends MutatorDefinitionsTree<S, C>,
+  TOverrides extends MutatorDefinitionsTree<S, C>,
+>(
+  base: TBase,
+  overrides: TOverrides,
+): MutatorRegistry<S, C, DeepMerge<TBase, TOverrides>>;
 
 export function defineMutators<S extends Schema, C>(
   definitionsOrBase: MutatorDefinitionsTree<S, C> | AnyMutatorRegistry,
   maybeOverrides?: MutatorDefinitionsTree<S, C>,
 ): AnyMutatorRegistry {
-  let tree: Record<string | symbol, unknown>;
+  function processDefinitions(
+    definitions: MutatorDefinitionsTree<S, C>,
+    path: string[],
+  ): Record<string | symbol, unknown> {
+    const result: Record<string | symbol, unknown> = {
+      [mutatorRegistryTag]: true,
+    };
 
-  if (isMutatorRegistry(definitionsOrBase) && maybeOverrides !== undefined) {
-    // Extending a base registry
-    tree = buildTreeWithBase(definitionsOrBase, maybeOverrides, []);
-  } else {
-    // Creating a new registry from definitions
-    tree = buildTree(definitionsOrBase as MutatorDefinitionsTree<S, C>, []);
+    for (const [key, value] of Object.entries(definitions)) {
+      path.push(key);
+      const name = path.join('.');
+
+      if (isMutatorDefinition(value)) {
+        result[key] = createMutator(name, value as AnyMutatorDefinition);
+      } else {
+        // Nested definitions
+        result[key] = processDefinitions(
+          value as MutatorDefinitionsTree<S, C>,
+          path,
+        );
+      }
+      path.pop();
+    }
+
+    return result;
   }
 
-  tree[mutatorRegistryTag] = true;
+  if (maybeOverrides !== undefined) {
+    // Merge base and overrides
+    let base: Record<string | symbol, unknown>;
+    if (!isMutatorRegistry(definitionsOrBase)) {
+      base = processDefinitions(
+        definitionsOrBase as MutatorDefinitionsTree<S, C>,
+        [],
+      );
+    } else {
+      base = definitionsOrBase;
+    }
 
-  return tree as AnyMutatorRegistry;
+    const processed = processDefinitions(maybeOverrides, []);
+
+    const merged = deepMerge(base, processed, isMutator) as Record<
+      string | symbol,
+      unknown
+    >;
+    // deepMerge doesn't copy symbols, so we need to add the tag
+    merged[mutatorRegistryTag] = true;
+    return merged as AnyMutatorRegistry;
+  }
+
+  return processDefinitions(
+    definitionsOrBase as MutatorDefinitionsTree<S, C>,
+    [],
+  ) as AnyMutatorRegistry;
 }
 
 /**
- * Like `defineMutators`, but allows specifying Schema and Context types upfront.
- * This is useful when TypeScript can't infer the context type from the definitions.
+ * Returns a typed version of {@link defineMutators} with the schema and context
+ * types pre-specified. This enables better type inference when defining
+ * mutators.
  *
  * @example
  * ```ts
- * const defineMutators = defineMutatorsWithType<Schema, AuthData>();
- *
- * // Create a new registry
- * const mutators = defineMutators({
+ * // With both Schema and Context types
+ * const defineAppMutators = defineMutatorsWithType<AppSchema, AuthData>();
+ * const mutators = defineAppMutators({
  *   user: {
  *     create: defineMutator(...),
  *   },
  * });
  *
- * // Or extend a base registry
- * const serverMutators = defineMutators(clientMutators, {
- *   user: {
- *     create: defineMutator(...),  // override
- *   },
- * });
+ * // With just Context type (Schema inferred)
+ * const defineAppMutators = defineMutatorsWithType<AuthData>();
  * ```
+ *
+ * @typeParam S - The Zero schema type.
+ * @typeParam C - The context type passed to mutator functions.
+ * @returns A function equivalent to {@link defineMutators} but with types
+ *   pre-bound.
  */
-export function defineMutatorsWithType<S extends Schema, C>(): {
-  <T extends MutatorDefinitionsTree<S, C>>(
-    definitions: T,
-  ): MutatorRegistry<S, C, T>;
-  <TBase extends MutatorDefinitionsTree<S, C>>(
-    base: MutatorRegistry<S, C, TBase>,
-    overrides: MutatorDefinitionsTree<S, C>,
-  ): MutatorRegistry<S, C, TBase>;
-} {
-  // oxlint-disable-next-line no-explicit-any
-  return defineMutators as any;
+export function defineMutatorsWithType<S extends Schema, C = unknown>(): <
+  T extends MutatorDefinitionsTree<S, C>,
+>(
+  definitions: T,
+) => MutatorRegistry<S, C, T>;
+
+/**
+ * Returns a typed version of {@link defineMutators} with the context type
+ * pre-specified.
+ *
+ * @typeParam C - The context type passed to mutator functions.
+ * @returns A function equivalent to {@link defineMutators} but with the context
+ *   type pre-bound.
+ */
+export function defineMutatorsWithType<C>(): <
+  T extends MutatorDefinitionsTree<Schema, C>,
+>(
+  definitions: T,
+) => MutatorRegistry<Schema, C, T>;
+
+export function defineMutatorsWithType() {
+  return defineMutators;
 }
 
 /**
@@ -237,91 +302,6 @@ type ToMutatorTree<
 
 // oxlint-disable-next-line no-explicit-any
 type AnyMutatorDefinition = MutatorDefinition<Schema, any, any, any, any>;
-
-function buildTree<S extends Schema, C>(
-  defs: MutatorDefinitionsTree<S, C>,
-  path: string[],
-): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-
-  for (const [key, value] of Object.entries(defs)) {
-    const currentPath = [...path, key];
-
-    if (isMutatorDefinition(value)) {
-      const name = currentPath.join('.');
-
-      const mutator = createMutator(name, value as AnyMutatorDefinition);
-      result[key] = mutator;
-    } else {
-      // Nested namespace
-      result[key] = buildTree(
-        value as MutatorDefinitionsTree<S, C>,
-        currentPath,
-      );
-    }
-  }
-
-  return result;
-}
-
-/**
- * Builds a tree by merging a base registry with overrides.
- * Overrides can contain MutatorDefinitions (which get converted to Mutators)
- * or nested objects (which get recursively merged).
- * Base Mutators are copied directly when not overridden.
- */
-function buildTreeWithBase<S extends Schema, C>(
-  base: AnyMutatorRegistry | Record<string, unknown>,
-  overrides: MutatorDefinitionsTree<S, C>,
-  path: string[],
-): Record<string, unknown> {
-  const result: Record<string, unknown> = {};
-
-  // First, copy all base entries
-  for (const [key, value] of Object.entries(base)) {
-    // Skip the registry tag
-    if (typeof key === 'symbol') continue;
-
-    const currentPath = [...path, key];
-
-    if (isMutator(value)) {
-      // Copy the base mutator directly
-      result[key] = value;
-    } else if (typeof value === 'object' && value !== null) {
-      // Nested namespace - recurse with empty overrides to copy
-      result[key] = buildTreeWithBase(
-        value as Record<string, unknown>,
-        {},
-        currentPath,
-      );
-    }
-  }
-
-  // Then apply overrides
-  for (const [key, value] of Object.entries(overrides)) {
-    const currentPath = [...path, key];
-
-    if (isMutatorDefinition(value)) {
-      // Override with new mutator
-      const name = currentPath.join('.');
-      result[key] = createMutator(
-        name,
-        // oxlint-disable-next-line no-explicit-any
-        value as MutatorDefinition<S, C, any, any, any>,
-      );
-    } else if (typeof value === 'object' && value !== null) {
-      // Nested override - merge with existing base namespace
-      const baseNamespace = (result[key] ?? {}) as Record<string, unknown>;
-      result[key] = buildTreeWithBase(
-        baseNamespace,
-        value as MutatorDefinitionsTree<S, C>,
-        currentPath,
-      );
-    }
-  }
-
-  return result;
-}
 
 function createMutator<S extends Schema, C>(
   name: string,
