@@ -359,7 +359,7 @@ describe('jwt auth without options', () => {
       auth: {},
       // set custom mutations & queries to avoid token verification
       mutate: {url: ['http://mutate.example.com']},
-      queries: {url: ['http://queries.example.com']},
+      query: {url: ['http://queries.example.com']},
     } as ZeroConfig);
     syncer = env.syncer;
     mutagens = env.mutagens;

@@ -80,7 +80,7 @@ export const ON_FAILURE = (e: unknown) => {
   throw e;
 };
 
-export const queryConfig: ZeroConfig['queries'] = {
+export const queryConfig: ZeroConfig['query'] = {
   url: ['http://my-pull-endpoint.dev/api/zero/pull'],
   forwardCookies: true,
 };
@@ -677,7 +677,7 @@ export async function setup(
   ).createClientGroupStorage(serviceID);
 
   const config = {
-    queries: queryConfig,
+    query: queryConfig,
     adminPassword: TEST_ADMIN_PASSWORD,
     app: {
       id: 'this_app',
@@ -691,12 +691,12 @@ export async function setup(
   } as NormalizedZeroConfig;
 
   // Create the custom query transformer if configured
-  const {queries} = config;
+  const {query} = config;
   const customQueryTransformer =
-    queries.url &&
+    query.url &&
     new CustomQueryTransformer(
       lc,
-      {url: queries.url, forwardCookies: queries.forwardCookies},
+      {url: query.url, forwardCookies: query.forwardCookies},
       SHARD,
     );
 

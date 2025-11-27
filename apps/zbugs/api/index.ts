@@ -203,24 +203,19 @@ async function mutateHandler(
   reply.send(response);
 }
 
-fastify.post<{
-  Querystring: Record<string, string>;
-  Body: ReadonlyJSONValue;
-}>('/api/pull', queriesHandler);
-
 // this endpoint was kept for backwards compatibility
-// in the transition to /queries
+// in the transition to /query
 fastify.post<{
   Querystring: Record<string, string>;
   Body: ReadonlyJSONValue;
-}>('/api/get-queries', queriesHandler);
+}>('/api/get-queries', queryHandler);
 
 fastify.post<{
   Querystring: Record<string, string>;
   Body: ReadonlyJSONValue;
-}>('/api/queries', queriesHandler);
+}>('/api/query', queryHandler);
 
-async function queriesHandler(
+async function queryHandler(
   request: FastifyRequest<{
     Querystring: Record<string, string>;
     Body: ReadonlyJSONValue;
