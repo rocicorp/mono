@@ -67,7 +67,7 @@ export function defineMutators<S extends Schema, C>(
   definitionsOrBase: MutatorDefinitionsTree<S, C> | AnyMutatorRegistry,
   maybeOverrides?: MutatorDefinitionsTree<S, C>,
 ): AnyMutatorRegistry {
-  let tree: Record<string, unknown>;
+  let tree: Record<string | symbol, unknown>;
 
   if (isMutatorRegistry(definitionsOrBase) && maybeOverrides !== undefined) {
     // Extending a base registry
@@ -77,12 +77,7 @@ export function defineMutators<S extends Schema, C>(
     tree = buildTree(definitionsOrBase as MutatorDefinitionsTree<S, C>, []);
   }
 
-  Object.defineProperty(tree, mutatorRegistryTag, {
-    value: true,
-    writable: false,
-    enumerable: false,
-    configurable: false,
-  });
+  tree[mutatorRegistryTag] = true;
 
   return tree as AnyMutatorRegistry;
 }
@@ -219,7 +214,7 @@ export type AnyMutatorRegistry = {[mutatorRegistryTag]: true} & Record<
 // Internal
 // ----------------------------------------------------------------------------
 
-export const mutatorRegistryTag: unique symbol = Symbol('mutatorRegistry');
+const mutatorRegistryTag = Symbol('mutatorRegistry');
 
 /**
  * Transforms a MutatorDefinitionsTree into a tree of Mutators.

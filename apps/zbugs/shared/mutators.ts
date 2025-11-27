@@ -1,6 +1,6 @@
 import {
-  defineMutatorWithType,
   defineMutatorsWithType,
+  defineMutatorWithType,
   type Transaction,
 } from '@rocicorp/zero';
 import {z} from 'zod/mini';
@@ -40,7 +40,7 @@ export const createIssueArgsSchema = z.object({
 
 export type CreateIssueArgs = z.infer<typeof createIssueArgsSchema>;
 
-const updateIssueArgsSchema = z.object({
+export const updateIssueArgsSchema = z.object({
   id: z.string(),
   title: z.optional(z.string()),
   description: z.optional(z.string()),

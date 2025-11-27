@@ -3,8 +3,8 @@ import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import type {QueryResultType} from '../../../zql/src/query/query.ts';
+import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {MutatorResultDetails} from './custom.ts';
-import {type MakeEntityQueriesFromSchema} from './make-query-property.ts';
 import {zeroStress} from './zero-stress-client-test.ts';
 import {queryDeep} from './zero-stress-queries-deep-test.ts';
 import {queryWide} from './zero-stress-queries-wide-test.ts';
@@ -117,7 +117,7 @@ describe('stress test types', () => {
 
   test('complex nested JSON types are preserved', () => {
     type UserRow = QueryResultType<
-      MakeEntityQueriesFromSchema<typeof zeroStressSchema>['user']
+      SchemaQuery<typeof zeroStressSchema>['user']
     >[number];
 
     expectTypeOf<UserRow['metadata']>().toEqualTypeOf<{
@@ -223,7 +223,7 @@ describe('stress test types', () => {
   });
 
   test('enum types are preserved across different tables', () => {
-    type Queries = MakeEntityQueriesFromSchema<typeof zeroStressSchema>;
+    type Queries = SchemaQuery<typeof zeroStressSchema>;
 
     type UserRow = QueryResultType<Queries['user']>[number];
     type WorkspaceRow = QueryResultType<Queries['workspace']>[number];

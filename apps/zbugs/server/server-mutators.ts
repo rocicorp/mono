@@ -9,7 +9,11 @@ import {assert} from 'shared/src/asserts.js';
 import {z} from 'zod/mini';
 import type {AuthData} from '../shared/auth.ts';
 import {MutationError, MutationErrorCode} from '../shared/error.ts';
-import {createIssueArgsSchema, mutators} from '../shared/mutators.ts';
+import {
+  createIssueArgsSchema,
+  mutators,
+  updateIssueArgsSchema,
+} from '../shared/mutators.ts';
 import type {Schema} from '../shared/schema.ts';
 import {builder} from '../shared/schema.ts';
 import {notify} from './notify.ts';
@@ -66,7 +70,7 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
       ),
 
       update: defineMutator(
-        createIssueArgsSchema,
+        updateIssueArgsSchema,
         async ({tx, args, ctx: authData}) => {
           await mutators.issue.update.fn({
             tx,
@@ -82,7 +86,6 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
             authData,
             {
               kind: 'update-issue',
-
               issueID: args.id,
               update: args,
             },

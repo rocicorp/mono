@@ -96,7 +96,8 @@ export function makeCRUDMutate<const S extends Schema>(
     return rv;
   };
 
-  const mutate: Record<string, TableMutator<TableSchema>> = {};
+  // oxlint-disable-next-line no-explicit-any
+  const mutate: any = () => {};
   for (const [name, tableSchema] of Object.entries(schema.tables)) {
     mutate[name] = makeEntityCRUDMutate(name, tableSchema.primaryKey, zeroCRUD);
   }

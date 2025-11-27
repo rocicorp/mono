@@ -96,24 +96,23 @@ export type {
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
 export {
+  defineMutators,
+  defineMutatorsWithType,
+  getMutator,
+  isMutatorRegistry,
+  mustGetMutator,
+  type AnyMutatorRegistry,
+  type MutatorDefinitions,
+  type MutatorRegistry,
+} from '../../zero-types/src/mutator-registry.ts';
+export {
   defineMutator,
   defineMutatorWithType,
   isMutator,
   isMutatorDefinition,
   type MutatorDefinition,
 } from '../../zero-types/src/mutator.ts';
-export {
-  defineMutators,
-  defineMutatorsWithType,
-  getMutator,
-  mustGetMutator,
-  isMutatorRegistry,
-  mutatorRegistryTag,
-  type AnyMutatorRegistry,
-  type MutatorDefinitions,
-  type MutatorRegistry,
-} from '../../zero-types/src/mutator-registry.ts';
-export type {Mutator, MutationRequest} from '../../zero-types/src/mutator.ts';
+export type {MutationRequest, Mutator} from '../../zero-types/src/mutator.ts';
 export type {Schema} from '../../zero-types/src/schema.ts';
 export type {Change} from '../../zql/src/ivm/change.ts';
 export type {Node} from '../../zql/src/ivm/data.ts';
@@ -212,7 +211,6 @@ export type {ClientGroup as InspectorClientGroup} from './client/inspector/clien
 export type {Client as InspectorClient} from './client/inspector/client.ts';
 export type {Inspector} from './client/inspector/inspector.ts';
 export type {Query as InspectorQuery} from './client/inspector/query.ts';
-export type {MakeEntityQueriesFromSchema} from './client/make-query-property.ts';
 export type {UpdateNeededReason, ZeroOptions} from './client/options.ts';
 export {UpdateNeededReasonType} from './client/update-needed-reason-type.ts';
 export {Zero} from './client/zero.ts';
