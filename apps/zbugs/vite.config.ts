@@ -5,7 +5,7 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 import {makeDefine} from '../../packages/shared/src/build.ts';
 
 async function configureServer(server: ViteDevServer) {
-  const {fastify} = await import('./api/index.js');
+  const {fastify} = await server.ssrLoadModule('/api/index.ts');
   await fastify.ready();
   server.middlewares.use((req, res, next) => {
     if (!req.url?.startsWith('/api')) {
