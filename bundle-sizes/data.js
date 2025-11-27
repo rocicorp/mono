@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1763123091998,
+  "lastUpdate": 1764231867109,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -54729,6 +54729,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/5dda8ab1866ee33f54d7eb49ae795cb403f1602c"
         },
         "date": 1763123080338,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 301987,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 54431,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 111258,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 31798,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f10233a3ecb01b22c3ed3a4d9aedcd058d216170",
+          "message": "chore: update GitHub Actions to use checkout and setup-node v6 (#5232)",
+          "timestamp": "2025-11-27T08:23:05Z",
+          "tree_id": "5b3ec179d53c590777a889065f7f5f5a691b5fb7",
+          "url": "https://github.com/rocicorp/mono/commit/f10233a3ecb01b22c3ed3a4d9aedcd058d216170"
+        },
+        "date": 1764231855267,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
