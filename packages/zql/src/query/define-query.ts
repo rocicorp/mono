@@ -1,3 +1,4 @@
+// oxlint-disable no-explicit-any
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import {getValueAtPath} from '../../../shared/src/get-value-at-path.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
@@ -40,37 +41,52 @@ export type CustomQuery<
       }) &
   (HasArgs extends true ? {toQuery(ctx: C): Query<S, T, R>} : unknown);
 
-// oxlint-disable-next-line no-explicit-any
-export type CustomQueries<QD extends QueryDefinitions<Schema, any>> =
-  QD extends QueryDefinitions<infer S, infer _C>
-    ? CustomQueriesInner<QD, S>
-    : never;
+const queryRegistryTag = Symbol();
 
-type CustomQueriesInner<MD, S extends Schema> = {
-  readonly [K in keyof MD]: MD[K] extends QueryDefinition<
+export function isQueryRegistry<Q extends QueryDefinitions<Schema, any>>(
+  obj: unknown,
+): obj is QueryRegistry<Q> {
+  return (
+    typeof obj === 'object' &&
+    obj !== null &&
+    (obj as any)[queryRegistryTag] === true
+  );
+}
+
+type SchemaFromQueryDefinitions<QD extends QueryDefinitions<Schema, any>> =
+  QD extends QueryDefinitions<infer S, any> ? S : never;
+
+export type QueryRegistry<QD extends QueryDefinitions<Schema, any>> =
+  CustomQueriesInner<QD, SchemaFromQueryDefinitions<QD>>;
+
+type CustomQueriesInner<
+  QD extends QueryDefinitions<Schema, any>,
+  S extends Schema,
+> = {
+  readonly [K in keyof QD]: QD[K] extends QueryDefinition<
     S,
     infer TTable,
     infer TReturn,
     infer TContext,
-    // oxlint-disable-next-line no-explicit-any
     any,
     infer TOutput
   >
     ? CustomQuery<S, TTable, TReturn, TContext, TOutput>
-    : // oxlint-disable-next-line no-explicit-any
-      MD[K] extends QueryDefinitions<S, any>
-      ? CustomQueriesInner<MD[K], S>
+    : QD[K] extends QueryDefinitions<S, any>
+      ? CustomQueriesInner<QD[K], S>
       : never;
+} & {
+  [queryRegistryTag]: true;
 };
 
-export type ContextTypeOfCustomQueries<CQ> =
-  CQ extends CustomQueries<infer QD>
+export type ContextTypeOfQueryRegistry<CQ> =
+  CQ extends QueryRegistry<infer QD>
     ? QD extends QueryDefinitions<Schema, infer C>
       ? C
       : never
     : never;
 
-const defineQueryTag = Symbol();
+export const defineQueryTag = Symbol();
 
 type QueryDefinitionFunction<
   TSchema extends Schema,
@@ -105,13 +121,12 @@ export function isQueryDefinition<
 >(
   f: unknown,
 ): f is QueryDefinition<TSchema, TTable, TReturn, TContext, TInput, TOutput> {
-  // oxlint-disable-next-line no-explicit-any
   return typeof f === 'function' && (f as any)[defineQueryTag];
 }
 
 export type QueryDefinitions<S extends Schema, Context> = {
-  readonly [key: string]: // oxlint-disable-next-line no-explicit-any
-  | QueryDefinition<S, any, any, Context, any, any>
+  readonly [key: string]:
+    | QueryDefinition<S, any, any, Context, any, any>
     | QueryDefinitions<S, Context>;
 };
 
@@ -239,7 +254,6 @@ function createCustomQueryBuilder<
   Args extends ReadonlyJSONValue | undefined,
   HasArgs extends boolean,
 >(
-  // oxlint-disable-next-line no-explicit-any
   queryDef: QueryDefinition<S, T, R, C, any, Args>,
   name: string,
   args: Args,
@@ -315,17 +329,53 @@ function createCustomQueryBuilder<
  * @returns An object with the same structure where each query definition is
  *   converted to a {@link CustomQuery}.
  */
+export function defineQueries<QD extends QueryDefinitions<Schema, any>>(
+  defs: QD,
+): QueryRegistry<QD>;
+
+/**
+ * Extends an existing query registry with additional or overriding query
+ * definitions. Properties from overrides replace properties from base with
+ * the same key.
+ *
+ * @param base - An existing query registry to extend.
+ * @param overrides - New query definitions to add or override.
+ * @returns A merged query registry with all queries from both base and overrides.
+ */
 export function defineQueries<
-  // oxlint-disable-next-line no-explicit-any
-  QD extends QueryDefinitions<Schema, any>,
->(defs: QD): CustomQueries<QD> {
+  QD1 extends QueryDefinitions<Schema, any>,
+  QD2 extends QueryDefinitions<Schema, any>,
+>(
+  base: QueryRegistry<QD1>,
+  overrides: QD2,
+): QueryRegistry<Omit<QD1, keyof QD2> & QD2>;
+
+/**
+ * Merges two query definition objects into a single query registry.
+ * Properties from the second parameter replace properties from the first
+ * with the same key.
+ *
+ * @param base - The base query definitions to start with.
+ * @param overrides - Additional query definitions to merge in, overriding any
+ *   existing definitions with the same key.
+ * @returns A merged query registry with all queries from both parameters.
+ */
+export function defineQueries<
+  QD1 extends QueryDefinitions<Schema, any>,
+  QD2 extends QueryDefinitions<Schema, any>,
+>(base: QD1, overrides: QD2): QueryRegistry<Omit<QD1, keyof QD2> & QD2>;
+
+export function defineQueries<QD extends QueryDefinitions<Schema, any>>(
+  defsOrBase: QD | QueryRegistry<QD>,
+  overrides?: QueryDefinitions<Schema, unknown>,
+): QueryRegistry<any> {
   function processDefinitions(
     definitions: QueryDefinitions<Schema, unknown>,
     path: string[],
-    // oxlint-disable-next-line no-explicit-any
-  ): Record<string, any> {
-    // oxlint-disable-next-line no-explicit-any
-    const result: Record<string, any> = {};
+  ): Record<string | symbol, any> {
+    const result: Record<string | symbol, any> = {
+      [queryRegistryTag]: true,
+    };
 
     for (const [key, value] of Object.entries(definitions)) {
       path.push(key);
@@ -351,7 +401,22 @@ export function defineQueries<
     return result;
   }
 
-  return processDefinitions(defs, []) as CustomQueries<QD>;
+  if (overrides !== undefined) {
+    // Merge base and overrides
+
+    let base: Record<string | symbol, any>;
+    if (!isQueryRegistry(defsOrBase)) {
+      base = processDefinitions(defsOrBase as QD, []);
+    } else {
+      base = defsOrBase;
+    }
+
+    const processed = processDefinitions(overrides, []);
+
+    return {...base, ...processed} as QueryRegistry<any>;
+  }
+
+  return processDefinitions(defsOrBase as QD, []) as QueryRegistry<QD>;
 }
 
 /**
@@ -382,7 +447,7 @@ export function defineQueriesWithType<S extends Schema, C = unknown>(): <
   QD extends QueryDefinitions<S, C>,
 >(
   defs: QD,
-) => CustomQueries<QD>;
+) => QueryRegistry<QD>;
 
 /**
  * Returns a typed version of {@link defineQueries} with the context type
@@ -396,15 +461,14 @@ export function defineQueriesWithType<C>(): <
   QD extends QueryDefinitions<Schema, C>,
 >(
   defs: QD,
-) => CustomQueries<QD>;
+) => QueryRegistry<QD>;
 
 export function defineQueriesWithType() {
   return defineQueries;
 }
 
-// oxlint-disable-next-line no-explicit-any
 export function getQuery<S extends Schema, QD extends QueryDefinitions<S, any>>(
-  queries: CustomQueries<QD>,
+  queries: QueryRegistry<QD>,
   name: string,
 ):
   | CustomQuery<
@@ -430,10 +494,9 @@ export function getQuery<S extends Schema, QD extends QueryDefinitions<S, any>>(
 
 export function mustGetQuery<
   S extends Schema,
-  // oxlint-disable-next-line no-explicit-any
   QD extends QueryDefinitions<S, any>,
 >(
-  queries: CustomQueries<QD>,
+  queries: QueryRegistry<QD>,
   name: string,
 ): CustomQuery<
   S,
