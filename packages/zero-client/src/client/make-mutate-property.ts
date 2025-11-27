@@ -1,13 +1,13 @@
 import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
 import {must} from '../../../shared/src/must.ts';
-import {
-  isMutatorDefinition,
-  type MutatorDefinition,
-} from '../../../zero-types/src/mutator.ts';
 import type {
   AnyMutatorRegistry,
   MutatorDefinitions,
 } from '../../../zero-types/src/mutator-registry.ts';
+import {
+  isMutatorDefinition,
+  type MutatorDefinition,
+} from '../../../zero-types/src/mutator.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {
   customMutatorKey,
@@ -132,7 +132,6 @@ export type MakeMutatePropertyType<
   C,
 > = MD extends AnyMutatorRegistry
   ? // MutatorRegistry: no property tree, user calls zero.mutate(mr) directly
-    // oxlint-disable-next-line @typescript-eslint/no-empty-object-type
     {}
   : MD extends MutatorDefinitions<S, C> | CustomMutatorDefs
     ? S['enableLegacyMutators'] extends false

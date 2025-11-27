@@ -655,45 +655,48 @@ export class Zero<
     this.#onClientStateNotFound = onClientStateNotFoundCallback;
     this.#rep.onClientStateNotFound = onClientStateNotFoundCallback;
 
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    const {mutate, mutateBatch} = makeCRUDMutate<S>(schema, rep.mutate) as any;
-
     const mutatorProxy = new MutatorProxy(
       this.#connectionManager,
       this.#mutationTracker,
+    );
+
+    // Create a callable function that handles zero.mutate(mr) calls.
+    // The CRUD table properties (e.g. zero.mutate.issues.insert(args)) are added by makeCRUDMutate.
+    const {mutators} = options;
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    const callableMutate = (mr: MutationRequest<S, C, any, any>) => {
+      // Validate that mr.mutator is the exact registered mutator
+      const registered = getMutator(mutators, mr.mutator.mutatorName);
+      if (registered !== mr.mutator) {
+        throw new Error(
+          `Mutator "${mr.mutator.mutatorName}" is not registered. ` +
+            `Mutators must be registered with the Zero constructor before use.`,
+        );
+      }
+      const repMutator = rep.mutate[mr.mutator.mutatorName] as unknown as (
+        args?: unknown,
+      ) => MutatorResult;
+      return mutatorProxy.wrapCustomMutator(repMutator)(mr.args);
+    };
+
+    const mutateBatch = makeCRUDMutate<S>(
+      schema,
+      rep.mutate,
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      callableMutate as ((...args: any[]) => any) & Record<string, unknown>,
     );
 
     if (options.mutators && !isMutatorRegistry(options.mutators)) {
       makeMutateProperty(
         options.mutators as MutatorDefinitions<S, C> | CustomMutatorDefs,
         mutatorProxy,
-        mutate,
+        callableMutate as unknown as Record<string, unknown>,
         rep.mutate,
       );
     }
 
-    // Wrap mutate in a Proxy to make it callable with MutationRequest
-    // while preserving property access for zero.mutate.foo.bar(args)
-    const mutators = options.mutators;
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    this.mutate = new Proxy(mutate as any, {
-      apply: (_target, _thisArg, [mr]) => {
-        // Validate that mr.mutator is the exact registered mutator
-        const registered = getMutator(mutators, mr.mutator.mutatorName);
-        if (registered !== mr.mutator) {
-          throw new Error(
-            `Mutator "${mr.mutator.mutatorName}" is not registered. ` +
-              `Mutators must be registered with the Zero constructor before use.`,
-          );
-        }
-        const repMutator = rep.mutate[
-          mr.mutator.mutatorName
-          // oxlint-disable-next-line no-explicit-any
-        ] as unknown as (args?: any) => MutatorResult;
-        return mutatorProxy.wrapCustomMutator(repMutator)(mr.args);
-      },
-      get: (target, prop) => Reflect.get(target, prop),
-    });
+    this.mutate = callableMutate as any;
     this.mutateBatch = mutateBatch;
 
     this.#queryManager = new QueryManager(

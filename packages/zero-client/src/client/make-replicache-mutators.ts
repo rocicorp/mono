@@ -155,7 +155,13 @@ export function makeReplicacheMutators<const S extends Schema, C>(
 
   if (mutators) {
     if (isMutatorRegistry(mutators)) {
-      extendFromMutatorRegistry(lc, context, mutators, schema, replicacheMutators);
+      extendFromMutatorRegistry(
+        lc,
+        context,
+        mutators,
+        schema,
+        replicacheMutators,
+      );
     } else {
       extendReplicacheMutators(
         lc,
