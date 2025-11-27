@@ -1,3 +1,4 @@
+import {getValueAtPath} from '../../shared/src/get-value-at-path.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {Transaction} from '../../zql/src/mutate/custom.ts';
 import {validateInput} from '../../zql/src/query/validate-input.ts';
@@ -122,22 +123,18 @@ export function defineMutatorsWithType<S extends Schema, C>(): {
  * Gets a Mutator by its dot-separated name from a MutatorRegistry.
  * Returns undefined if not found.
  */
-// oxlint-disable-next-line no-explicit-any
 export function getMutator(
   registry: unknown,
   name: string,
   // oxlint-disable-next-line no-explicit-any
 ): Mutator<any, any, any, any> | undefined {
-  const parts = name.split('.');
-  let current: unknown = registry;
-  for (const part of parts) {
-    if (typeof current !== 'object' || current === null) {
-      return undefined;
-    }
-    current = (current as Record<string, unknown>)[part];
+  if (typeof registry !== 'object' || registry === null) {
+    return undefined;
   }
+  const m = getValueAtPath(registry, name, '.');
+
   // oxlint-disable-next-line no-explicit-any
-  return current as Mutator<any, any, any, any> | undefined;
+  return m as Mutator<any, any, any, any> | undefined;
 }
 
 /**
@@ -174,7 +171,6 @@ export function isMutatorRegistry<S extends Schema, C>(
 /**
  * A tree of MutatorDefinitions, possibly nested.
  */
-// oxlint-disable-next-line no-explicit-any
 export type MutatorDefinitionsTree<S extends Schema, C> = {
   readonly [key: string]: // oxlint-disable-next-line no-explicit-any
   MutatorDefinition<S, C, any, any, any> | MutatorDefinitionsTree<S, C>;
@@ -204,7 +200,6 @@ export type MutatorRegistry<
  * `MutatorRegistry<S, C, any>` to avoid TypeScript drilling into
  * the complex ToMutatorTree structure and hitting variance issues.
  */
-// oxlint-disable-next-line no-explicit-any
 export type AnyMutatorRegistry = {[mutatorRegistryTag]: true} & Record<
   string,
   unknown
@@ -240,6 +235,9 @@ type ToMutatorTree<
       : never;
 };
 
+// oxlint-disable-next-line no-explicit-any
+type AnyMutatorDefinition = MutatorDefinition<Schema, any, any, any, any>;
+
 function buildTree<S extends Schema, C>(
   defs: MutatorDefinitionsTree<S, C>,
   path: string[],
@@ -251,12 +249,8 @@ function buildTree<S extends Schema, C>(
 
     if (isMutatorDefinition(value)) {
       const name = currentPath.join('.');
-      // oxlint-disable-next-line no-explicit-any
-      const mutator = createMutator(
-        name,
-        // oxlint-disable-next-line no-explicit-any
-        value as MutatorDefinition<S, C, any, any, any>,
-      );
+
+      const mutator = createMutator(name, value as AnyMutatorDefinition);
       result[key] = mutator;
     } else {
       // Nested namespace
@@ -310,7 +304,6 @@ function buildTreeWithBase<S extends Schema, C>(
     if (isMutatorDefinition(value)) {
       // Override with new mutator
       const name = currentPath.join('.');
-      // oxlint-disable-next-line no-explicit-any
       result[key] = createMutator(
         name,
         // oxlint-disable-next-line no-explicit-any
@@ -330,7 +323,6 @@ function buildTreeWithBase<S extends Schema, C>(
   return result;
 }
 
-// oxlint-disable-next-line no-explicit-any
 function createMutator<S extends Schema, C>(
   name: string,
   // oxlint-disable-next-line no-explicit-any
@@ -358,23 +350,14 @@ function createMutator<S extends Schema, C>(
 
   // Create the callable mutator
   // oxlint-disable-next-line no-explicit-any
-  const mutator = ((args: unknown): MutationRequest<S, C, any, any> => ({
-    mutator,
-    args,
+  const mutator = (args: unknown): MutationRequest<S, C, any, any> => ({
     // oxlint-disable-next-line no-explicit-any
-  })) as Mutator<S, C, any, any>;
-  Object.defineProperty(mutator, 'mutatorName', {
-    value: name,
-    writable: false,
-    enumerable: true,
-    configurable: false,
+    mutator: mutator as Mutator<S, C, any, any>,
+    args,
   });
-  Object.defineProperty(mutator, 'fn', {
-    value: fn,
-    writable: false,
-    enumerable: true,
-    configurable: false,
-  });
+  mutator.mutatorName = name;
+  mutator.fn = fn;
 
-  return mutator;
+  // oxlint-disable-next-line no-explicit-any
+  return mutator as Mutator<S, C, any, any>;
 }

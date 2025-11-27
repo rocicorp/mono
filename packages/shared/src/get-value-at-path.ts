@@ -21,18 +21,14 @@ type ValueAtPath<Path extends string, T, Sep extends string> = GetAtPath<
   Split<Path, Sep>
 >;
 
-export function getValueAtPath(
-  obj: Record<string, unknown>,
-  path: string,
-  sep: RegExp,
-): unknown;
+export function getValueAtPath(obj: object, path: string, sep: RegExp): unknown;
 export function getValueAtPath<
   const Path extends string,
-  const T extends Record<string, unknown>,
+  const T extends object,
   const Sep extends string,
 >(obj: T, path: Path, sep: Sep): ValueAtPath<Path, T, Sep>;
 export function getValueAtPath(
-  obj: Record<string, unknown>,
+  obj: object,
   path: string,
   sep: string | RegExp,
 ): unknown {
