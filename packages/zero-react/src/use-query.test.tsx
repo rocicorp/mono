@@ -16,6 +16,7 @@ import type {Zero} from '../../zero-client/src/client/zero.ts';
 import type {QueryResultDetails} from '../../zero-client/src/types/query-result.ts';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
+import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {type AbstractQuery} from '../../zql/src/query/query-impl.ts';
 import {
@@ -46,15 +47,16 @@ function newMockQuery(
   return ret;
 }
 
-function newMockZero<MD extends CustomMutatorDefs, Context>(
-  clientID: string,
-): {zero: Zero<Schema, MD, Context>; delegate: QueryDelegate} {
+function newMockZero<
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+  C = unknown,
+>(clientID: string): {zero: Zero<Schema, MD, C>; delegate: QueryDelegate} {
   const view = newView();
   const delegate = newMockDelegate();
   const zero = {
     clientID,
     materialize: vi.fn().mockImplementation(() => view),
-  } as unknown as Zero<Schema, MD, Context>;
+  } as unknown as Zero<Schema, MD, C>;
   registerZeroDelegate(zero, delegate);
   return {zero, delegate};
 }

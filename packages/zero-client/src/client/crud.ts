@@ -75,13 +75,19 @@ type ZeroCRUDMutate = {
 
 /**
  * This is the zero.mutate object part representing the CRUD operations. If the
- * queries are `issue` and `label`, then this object will have `issue` and
+ * tables are `issue` and `label`, then this object will have `issue` and
  * `label` properties.
+ *
+ * @param schema - The schema defining the tables
+ * @param repMutate - The replicache mutate object with the CRUD mutation
+ * @param mutate - The object to use as the mutate object. Properties for each
+ *                 table will be assigned to this object.
  */
 export function makeCRUDMutate<const S extends Schema>(
   schema: S,
   repMutate: ZeroCRUDMutate,
-): {mutate: DBMutator<S>; mutateBatch: BatchMutator<S>} {
+  mutate: object,
+): BatchMutator<S> {
   const {[CRUD_MUTATION_NAME]: zeroCRUD} = repMutate;
 
   const mutateBatch = async <R>(body: (m: DBMutator<S>) => R): Promise<R> => {
@@ -96,14 +102,14 @@ export function makeCRUDMutate<const S extends Schema>(
     return rv;
   };
 
-  const mutate: Record<string, TableMutator<TableSchema>> = {};
   for (const [name, tableSchema] of Object.entries(schema.tables)) {
-    mutate[name] = makeEntityCRUDMutate(name, tableSchema.primaryKey, zeroCRUD);
+    (mutate as Record<string, unknown>)[name] = makeEntityCRUDMutate(
+      name,
+      tableSchema.primaryKey,
+      zeroCRUD,
+    );
   }
-  return {
-    mutate: mutate as DBMutator<S>,
-    mutateBatch: mutateBatch as BatchMutator<S>,
-  };
+  return mutateBatch as BatchMutator<S>;
 }
 
 /**

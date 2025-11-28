@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import type {ZeroTxData} from '../../../replicache/src/replicache-options.ts';
 import type {WriteTransactionImpl} from '../../../replicache/src/transactions.ts';
 import {zeroData} from '../../../replicache/src/transactions.ts';
 import {assert} from '../../../shared/src/asserts.ts';
@@ -35,10 +36,8 @@ import type {WriteTransaction} from './replicache-types.ts';
  * Supports arbitrary depth nesting of namespaces.
  */
 export type CustomMutatorDefs = {
-  [
-    namespaceOrKey: string
-  ]: // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-  CustomMutatorImpl<any> | CustomMutatorDefs;
+  // oxlint-disable-next-line no-explicit-any
+  [namespaceOrKey: string]: CustomMutatorImpl<any> | CustomMutatorDefs;
 };
 
 export type MutatorResultDetails =
@@ -78,11 +77,13 @@ export type CustomMutatorImpl<
   TWrappedTransaction = unknown,
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   TArgs = any,
+  Context = unknown,
 > = (
   tx: Transaction<S, TWrappedTransaction>,
   // TODO: many args. See commit: 52657c2f934b4a458d628ea77e56ce92b61eb3c6 which did have many args.
   // The issue being that it will be a protocol change to support varargs.
   args: TArgs,
+  ctx: Context,
 ) => Promise<void>;
 
 /**
@@ -126,10 +127,7 @@ export class TransactionImpl<TSchema extends Schema>
 
   constructor(lc: LogContext, repTx: WriteTransaction, schema: TSchema) {
     must(repTx.reason === 'initial' || repTx.reason === 'rebase');
-    const txData = must(
-      (repTx as WriteTransactionImpl)[zeroData],
-      'zero was not set on replicache internal options!',
-    );
+    const txData = getZeroTxData(repTx);
 
     this.#repTx = repTx;
     this.mutate = makeSchemaCRUD(
@@ -169,17 +167,30 @@ export class TransactionImpl<TSchema extends Schema>
   }
 }
 
-export function makeReplicacheMutator<S extends Schema, TWrappedTransaction>(
+export function getZeroTxData(repTx: WriteTransaction): ZeroTxData {
+  const txData = must(
+    (repTx as WriteTransactionImpl)[zeroData],
+    'zero was not set on replicache internal options!',
+  );
+  return txData as ZeroTxData;
+}
+
+export function makeReplicacheMutator<
+  S extends Schema,
+  TWrappedTransaction,
+  Context,
+>(
   lc: LogContext,
   mutator: CustomMutatorImpl<S, TWrappedTransaction>,
   schema: S,
-) {
+  context: Context,
+): (repTx: WriteTransaction, args: ReadonlyJSONValue) => Promise<void> {
   return async (
     repTx: WriteTransaction,
     args: ReadonlyJSONValue,
   ): Promise<void> => {
     const tx = new TransactionImpl(lc, repTx, schema);
-    await mutator(tx, args);
+    await mutator(tx, args, context);
   };
 }
 

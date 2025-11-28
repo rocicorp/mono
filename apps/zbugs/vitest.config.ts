@@ -32,6 +32,7 @@ export function configForVersion(version: number, url: string) {
       include: [
         'src/**/*.pg.test.?(c|m)[jt]s?(x)',
         'server/**/*.pg.test.?(c|m)[jt]s?(x)',
+        'shared/**/*.pg.test.?(c|m)[jt]s?(x)',
       ],
       exclude: [],
       globalSetup: ['../../packages/zero-cache/test/pg-16.ts'],
@@ -54,10 +55,12 @@ export function configForNoPg(url: string) {
       include: [
         'src/**/*.test.?(c|m)[jt]s?(x)',
         'server/**/*.test.?(c|m)[jt]s?(x)',
+        'shared/**/*.test.?(c|m)[jt]s?(x)',
       ],
       exclude: [
         'src/**/*.pg.test.?(c|m)[jt]s?(x)',
         'server/**/*.pg.test.?(c|m)[jt]s?(x)',
+        'shared/**/*.pg.test.?(c|m)[jt]s?(x)',
       ],
       coverage: {
         enabled: !ci,

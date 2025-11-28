@@ -15,6 +15,7 @@
   },
   "scripts": {
     "build": "node --experimental-strip-types --no-warnings tool/build.ts",
+    "build:watch": "node --experimental-strip-types --no-warnings tool/build.ts --watch",
     "check-types": "tsc -p tsconfig.client.json && tsc -p tsconfig.server.json",
     "check-types:client:watch": "tsc -p tsconfig.client.json --watch",
     "check-types:server:watch": "tsc -p tsconfig.server.json --watch",

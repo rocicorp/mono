@@ -23,7 +23,7 @@ import {findLastIndex} from '../../../../../packages/shared/src/find-last-index.
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {difference} from '../../../../../packages/shared/src/set-utils.ts';
 import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
-import type {NotificationType} from '../../../shared/mutators.ts';
+import {mutators, type NotificationType} from '../../../shared/mutators.ts';
 import {queries, type ListContextParams} from '../../../shared/queries.ts';
 import {
   type CommentRow,
@@ -132,10 +132,12 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     ) {
       // only set to viewed if the user has looked at it for > 1 second
       const handle = setTimeout(() => {
-        z.mutate.viewState.set({
-          issueID: displayed.id,
-          viewed: Date.now(),
-        });
+        z.mutate(
+          mutators.viewState.set({
+            issueID: displayed.id,
+            viewed: Date.now(),
+          }),
+        );
       }, 1000);
       return () => clearTimeout(handle);
     }
@@ -171,7 +173,9 @@ export function IssuePage({onReady}: {onReady: () => void}) {
     if (!editing) {
       return;
     }
-    z.mutate.issue.update({id: editing.id, ...edits, modified: Date.now()});
+    z.mutate(
+      mutators.issue.update({id: editing.id, ...edits, modified: Date.now()}),
+    );
     setEditing(null);
     setEdits({});
   };
@@ -385,7 +389,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
 
   const remove = async () => {
     // TODO: Implement undo - https://github.com/rocicorp/undo
-    const result = z.mutate.issue.delete(displayed.id);
+    const result = z.mutate(mutators.issue.delete(displayed.id));
 
     // we wait for the client result to redirect to the list page
     const clientResult = await result.client;
@@ -549,11 +553,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               ]}
               selectedValue={displayed.open}
               onChange={value =>
-                z.mutate.issue.update({
-                  id: displayed.id,
-                  open: value,
-                  modified: Date.now(),
-                })
+                z.mutate(
+                  mutators.issue.update({
+                    id: displayed.id,
+                    open: value,
+                    modified: Date.now(),
+                  }),
+                )
               }
             />
           </div>
@@ -568,11 +574,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               unselectedLabel="Nobody"
               filter="crew"
               onSelect={user => {
-                z.mutate.issue.update({
-                  id: displayed.id,
-                  assigneeID: user?.id ?? null,
-                  modified: Date.now(),
-                });
+                z.mutate(
+                  mutators.issue.update({
+                    id: displayed.id,
+                    assigneeID: user?.id ?? null,
+                    modified: Date.now(),
+                  }),
+                );
               }}
             />
           </div>
@@ -597,11 +605,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                 ]}
                 selectedValue={displayed.visibility}
                 onChange={value =>
-                  z.mutate.issue.update({
-                    id: displayed.id,
-                    visibility: value,
-                    modified: Date.now(),
-                  })
+                  z.mutate(
+                    mutators.issue.update({
+                      id: displayed.id,
+                      visibility: value,
+                      modified: Date.now(),
+                    }),
+                  )
                 }
               />
             </div>
@@ -625,11 +635,13 @@ export function IssuePage({onReady}: {onReady: () => void}) {
               ]}
               selectedValue={currentState}
               onChange={value =>
-                z.mutate.notification.update({
-                  issueID: displayed.id,
-                  subscribed: value,
-                  created: Date.now(),
-                })
+                z.mutate(
+                  mutators.notification.update({
+                    issueID: displayed.id,
+                    subscribed: value,
+                    created: Date.now(),
+                  }),
+                )
               }
             />
           </div>
@@ -660,24 +672,30 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                 selected={labelSet}
                 projectName={projectName}
                 onAssociateLabel={labelID =>
-                  z.mutate.issue.addLabel({
-                    issueID: displayed.id,
-                    labelID,
-                  })
+                  z.mutate(
+                    mutators.issue.addLabel({
+                      issueID: displayed.id,
+                      labelID,
+                    }),
+                  )
                 }
                 onDisassociateLabel={labelID =>
-                  z.mutate.issue.removeLabel({
-                    issueID: displayed.id,
-                    labelID,
-                  })
+                  z.mutate(
+                    mutators.issue.removeLabel({
+                      issueID: displayed.id,
+                      labelID,
+                    }),
+                  )
                 }
                 onCreateNewLabel={labelName => {
                   const labelID = nanoid();
-                  z.mutate.label.createAndAddToIssue({
-                    labelID,
-                    labelName,
-                    issueID: displayed.id,
-                  });
+                  z.mutate(
+                    mutators.label.createAndAddToIssue({
+                      labelID,
+                      labelName,
+                      issueID: displayed.id,
+                    }),
+                  );
                 }}
               />
             </CanEdit>

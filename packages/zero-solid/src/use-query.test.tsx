@@ -10,7 +10,7 @@ import {afterEach, expect, test, vi} from 'vitest';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import {registerZeroDelegate} from '../../zero-client/src/client/bindings.ts';
-import type {Zero} from '../../zero/src/zero.ts';
+import type {AnyMutatorRegistry, Zero} from '../../zero/src/zero.ts';
 import {
   createSchema,
   number,
@@ -59,12 +59,11 @@ function setupTestEnvironment() {
 
 afterEach(() => vi.resetAllMocks());
 
-type Context = unknown;
+type C = unknown;
 
-function newMockZero<MD extends CustomMutatorDefs>(
-  clientID: string,
-  queryDelegate: QueryDelegate,
-): Zero<Schema, MD, Context> {
+function newMockZero<
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+>(clientID: string, queryDelegate: QueryDelegate): Zero<Schema, MD, C> {
   function m<TTable extends keyof Schema['tables'] & string, TReturn, T>(
     query: Query<Schema, TTable, TReturn>,
     factoryOrOptions?:
@@ -81,7 +80,7 @@ function newMockZero<MD extends CustomMutatorDefs>(
   const zero = {
     clientID,
     materialize: m,
-  } as unknown as Zero<Schema, MD, Context>;
+  } as unknown as Zero<Schema, MD, C>;
   registerZeroDelegate(zero, queryDelegate);
   return zero;
 }
@@ -90,12 +89,12 @@ function useQueryWithZeroProvider<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
-  MD extends CustomMutatorDefs,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
   TContext,
 >(
   zeroOrZeroSignal:
-    | Zero<Schema, MD, TContext>
-    | Accessor<Zero<Schema, MD, TContext>>,
+    | Zero<TSchema, MD, TContext>
+    | Accessor<Zero<TSchema, MD, TContext>>,
   querySignal: () => Query<TSchema, TTable, TReturn>,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
 ) {

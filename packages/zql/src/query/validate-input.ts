@@ -21,22 +21,22 @@ export function validateInput<TInput, TOutput>(
   if (!validator) {
     // No validator, so input and output are the same
     return input as unknown as TOutput;
-  } else {
-    const result = validator['~standard'].validate(input);
-    if (result instanceof Promise) {
-      throw new Error(
-        `Async validators are not supported. ${titleCase(kind)} name ${name}`,
-      );
-    }
-    if (result.issues) {
-      throw new Error(
-        `Validation failed for ${kind} ${name}: ${result.issues
-          .map(issue => issue.message)
-          .join(', ')}`,
-      );
-    }
-    return result.value;
   }
+
+  const result = validator['~standard'].validate(input);
+  if (result instanceof Promise) {
+    throw new Error(
+      `Async validators are not supported. ${titleCase(kind)} name ${name}`,
+    );
+  }
+  if (result.issues) {
+    throw new Error(
+      `Validation failed for ${kind} ${name}: ${result.issues
+        .map(issue => issue.message)
+        .join(', ')}`,
+    );
+  }
+  return result.value;
 }
 
 function titleCase(kind: string): string {

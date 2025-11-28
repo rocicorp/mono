@@ -14,6 +14,7 @@ import {
   MAX_ISSUE_TITLE_LENGTH,
 } from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
+import {mutators} from '../../../shared/mutators.ts';
 
 interface Props {
   /** If id is defined the issue created by the composer. */
@@ -61,14 +62,16 @@ export function IssueComposer({isOpen, onDismiss, projectID}: Props) {
   const handleSubmit = async () => {
     const id = nanoid();
 
-    const result = z.mutate.issue.create({
-      id,
-      projectID,
-      title,
-      description: description ?? '',
-      created: Date.now(),
-      modified: Date.now(),
-    });
+    const result = z.mutate(
+      mutators.issue.create({
+        id,
+        projectID,
+        title,
+        description: description ?? '',
+        created: Date.now(),
+        modified: Date.now(),
+      }),
+    );
 
     // we wait for the client result to redirect to the issue page
     const clientResult = await result.client;

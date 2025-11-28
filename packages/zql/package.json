@@ -18,6 +18,7 @@
     "@rocicorp/logger": "^5.4.0",
     "@rocicorp/prettier-config": "^0.4.0",
     "@rocicorp/rails": "^0.10.0",
+    "@standard-schema/spec": "^1.0.0",
     "fast-check": "^3.18.0",
     "nanoid": "^5.1.2",
     "shared": "0.0.0",

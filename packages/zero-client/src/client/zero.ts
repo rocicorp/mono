@@ -17,7 +17,6 @@ import type {PullRequest} from '../../../replicache/src/sync/pull.ts';
 import type {PushRequest} from '../../../replicache/src/sync/push.ts';
 import type {
   MutatorDefs,
-  MutatorReturn,
   UpdateNeededReason as ReplicacheUpdateNeededReason,
 } from '../../../replicache/src/types.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
@@ -25,7 +24,6 @@ import {
   getBrowserGlobal,
   mustGetBrowserGlobal,
 } from '../../../shared/src/browser-env.ts';
-import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
 import {getErrorMessage} from '../../../shared/src/error.ts';
 import {h64} from '../../../shared/src/hash.ts';
@@ -80,7 +78,15 @@ import {
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
-import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
+import {
+  type AnyMutatorRegistry,
+  isMutatorRegistry,
+  iterateMutators,
+} from '../../../zql/src/mutate/mutator-registry.ts';
+import type {
+  AnyMutator,
+  MutationRequest,
+} from '../../../zql/src/mutate/mutator.ts';
 import {
   type ClientMetricMap,
   type MetricMap,
@@ -92,7 +98,6 @@ import {
   type MaterializeOptions,
   type PreloadOptions,
   type PullRow,
-  type Query,
   type RunOptions,
   type ToQuery,
 } from '../../../zql/src/query/query.ts';
@@ -110,21 +115,8 @@ import {
 import {ConnectionStatus} from './connection-status.ts';
 import {type Connection, ConnectionImpl} from './connection.ts';
 import {ZeroContext} from './context.ts';
-import {
-  type BatchMutator,
-  type CRUDMutator,
-  type DBMutator,
-  type WithCRUD,
-  makeCRUDMutate,
-  makeCRUDMutator,
-} from './crud.ts';
-import type {
-  CustomMutatorDefs,
-  CustomMutatorImpl,
-  MakeCustomMutatorInterfaces,
-  MutatorResult,
-} from './custom.ts';
-import {makeReplicacheMutator} from './custom.ts';
+import {type BatchMutator, type WithCRUD, makeCRUDMutate} from './crud.ts';
+import type {CustomMutatorDefs, MutatorResult} from './custom.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
 import {shouldEnableAnalytics} from './enable-analytics.ts';
 import {
@@ -146,6 +138,9 @@ import {
 import {Inspector} from './inspector/inspector.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 import {type LogOptions, createLogOptions} from './log-options.ts';
+import type {MakeMutatePropertyType} from './make-mutate-property.ts';
+import {makeMutateProperty} from './make-mutate-property.ts';
+import {makeReplicacheMutators} from './make-replicache-mutators.ts';
 import {
   DID_NOT_CONNECT_VALUE,
   MetricManager,
@@ -175,10 +170,6 @@ import {
 
 export type NoRelations = Record<string, never>;
 
-export type MakeEntityQueriesFromSchema<S extends Schema> = {
-  readonly [K in keyof S['tables'] & string]: Query<S, K>;
-};
-
 declare const TESTING: boolean;
 
 export type TestingContext = {
@@ -205,9 +196,9 @@ interface TestZero {
 
 function asTestZero<
   S extends Schema,
-  MD extends CustomMutatorDefs | undefined,
-  Context,
->(z: Zero<S, MD, Context>): TestZero {
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
+  C,
+>(z: Zero<S, MD, C>): TestZero {
   return z as TestZero;
 }
 
@@ -306,8 +297,8 @@ type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
 
 export class Zero<
   const S extends Schema,
-  MD extends CustomMutatorDefs | undefined = undefined,
-  TContext = unknown,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+  C = unknown,
 > {
   readonly version = version;
 
@@ -414,7 +405,7 @@ export class Zero<
   // 2. client successfully connects
   #totalToConnectStart: number | undefined = undefined;
 
-  readonly #options: ZeroOptions<S, MD, TContext>;
+  readonly #options: ZeroOptions<S, MD, C>;
 
   // TODO: Metrics needs to be rethought entirely as we're not going to
   // send metrics to customer server.
@@ -427,7 +418,8 @@ export class Zero<
   /**
    * Constructs a new Zero client.
    */
-  constructor(options: ZeroOptions<S, MD, TContext>) {
+
+  constructor(options: ZeroOptions<S, MD, C>) {
     const {
       userID,
       storageKey,
@@ -503,30 +495,6 @@ export class Zero<
     syncConnectionState(this.#connectionManager.state);
     this.#connectionManager.subscribe(syncConnectionState);
 
-    const {enableLegacyMutators = true, enableLegacyQueries = true} = schema;
-
-    const replicacheMutators: MutatorDefs & {
-      [CRUD_MUTATION_NAME]: CRUDMutator;
-    } = {
-      [CRUD_MUTATION_NAME]: enableLegacyMutators
-        ? makeCRUDMutator(schema)
-        : () =>
-            Promise.reject(
-              new ClientError({
-                kind: ClientErrorKind.Internal,
-                message: 'Zero CRUD mutators are not enabled.',
-              }),
-            ),
-    };
-    this.#ivmMain = new IVMSourceBranch(schema.tables);
-
-    function assertUnique(key: string) {
-      assert(
-        replicacheMutators[key] === undefined,
-        `A mutator, or mutator namespace, has already been defined for ${key}`,
-      );
-    }
-
     const sink = logOptions.logSink;
     const lc = new LogContext(logOptions.logLevel, {}, sink);
 
@@ -535,30 +503,17 @@ export class Zero<
       (upTo: MutationID) => this.#send(['ackMutationResponses', upTo]),
       error => this.#disconnect(lc, error),
     );
-    if (options.mutators) {
-      // Recursively process mutator definitions at arbitrary depth
-      const processMutators = (
-        mutators: CustomMutatorDefs,
-        namespacePrefix: string[] = [],
-      ) => {
-        for (const [key, value] of Object.entries(mutators)) {
-          if (typeof value === 'function') {
-            const fullKey = customMutatorKey(...namespacePrefix, key);
-            assertUnique(fullKey);
-            replicacheMutators[fullKey] = makeReplicacheMutator(
-              lc,
-              value as CustomMutatorImpl<S>,
-              schema,
-            ) as () => MutatorReturn;
-          } else if (typeof value === 'object') {
-            processMutators(value, [...namespacePrefix, key]);
-          } else {
-            unreachable(value);
-          }
-        }
-      };
-      processMutators(options.mutators);
-    }
+
+    this.#ivmMain = new IVMSourceBranch(schema.tables);
+
+    const {enableLegacyQueries = true} = schema;
+
+    const replicacheMutators = makeReplicacheMutators<S, C>(
+      schema,
+      options.mutators,
+      this.context,
+      lc,
+    );
 
     this.storageKey = storageKey ?? '';
 
@@ -694,46 +649,48 @@ export class Zero<
     this.#onClientStateNotFound = onClientStateNotFoundCallback;
     this.#rep.onClientStateNotFound = onClientStateNotFoundCallback;
 
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    const {mutate, mutateBatch} = makeCRUDMutate<S>(schema, rep.mutate) as any;
-
     const mutatorProxy = new MutatorProxy(
       this.#connectionManager,
       this.#mutationTracker,
     );
 
-    if (options.mutators) {
-      // Recursively expose mutators on the mutate property
-      const exposeMutators = (
-        mutators: CustomMutatorDefs,
-        target: Record<string, unknown>,
-        namespacePrefix: string[] = [],
-      ) => {
-        for (const [key, value] of Object.entries(mutators)) {
-          if (typeof value === 'function') {
-            const fullKey = customMutatorKey(...namespacePrefix, key);
-            target[key] = mutatorProxy.wrapCustomMutator(
-              must(rep.mutate[fullKey]) as unknown as (
-                ...args: unknown[]
-              ) => MutatorResult,
-            );
-          } else if (typeof value === 'object' && value !== null) {
-            let existing = target[key];
-            if (existing === undefined) {
-              existing = {};
-              target[key] = existing;
-            }
-            exposeMutators(value, existing as Record<string, unknown>, [
-              ...namespacePrefix,
-              key,
-            ]);
-          }
-        }
-      };
-      exposeMutators(options.mutators, mutate);
+    // Create a callable function that handles zero.mutate(mr) calls.
+    // The CRUD table properties (e.g. zero.mutate.issues.insert(args)) are added by makeCRUDMutate.
+    const {mutators} = options;
+
+    // If mutators is a MutatorRegistry, we store the mutator in a Map so we can quickly check if it was registered.
+    const registeredMutators: Set<AnyMutator> = new Set(
+      isMutatorRegistry(mutators) ? iterateMutators(mutators) : undefined,
+    );
+
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    const callableMutate = (mr: MutationRequest<S, C, any, any>) => {
+      if (!registeredMutators.has(mr.mutator)) {
+        throw new Error(
+          `Mutator "${mr.mutator.mutatorName}" is not registered. ` +
+            `Mutators must be registered with the Zero constructor before use.`,
+        );
+      }
+      const repMutator = rep.mutate[mr.mutator.mutatorName] as unknown as (
+        args?: unknown,
+      ) => MutatorResult;
+      return mutatorProxy.wrapCustomMutator(repMutator)(mr.args);
+    };
+
+    const mutateBatch = makeCRUDMutate<S>(schema, rep.mutate, callableMutate);
+
+    //  This is the legacy mutators. They are added to zero.mutate.<mutatorName>.
+    if (mutators && !isMutatorRegistry(mutators)) {
+      makeMutateProperty(
+        mutators as AnyMutatorRegistry | CustomMutatorDefs,
+        mutatorProxy,
+        callableMutate as unknown as Record<string, unknown>,
+        rep.mutate,
+      );
     }
 
-    this.mutate = mutate;
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    this.mutate = callableMutate as any;
     this.mutateBatch = mutateBatch;
 
     this.#queryManager = new QueryManager(
@@ -886,7 +843,7 @@ export class Zero<
   preload<
     TTable extends keyof S['tables'] & string,
     TReturn extends PullRow<TTable, S>,
-  >(query: ToQuery<S, TTable, TReturn, TContext>, options?: PreloadOptions) {
+  >(query: ToQuery<S, TTable, TReturn, C>, options?: PreloadOptions) {
     return this.#zeroContext.preload(query.toQuery(this.context), options);
   }
 
@@ -911,14 +868,14 @@ export class Zero<
    * ```
    */
   run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToQuery<S, TTable, TReturn, TContext>,
+    query: ToQuery<S, TTable, TReturn, C>,
     runOptions?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return this.#zeroContext.run(query.toQuery(this.context), runOptions);
   }
 
-  get context(): TContext {
-    return this.#options.context as TContext;
+  get context(): C {
+    return this.#options.context as C;
   }
 
   /**
@@ -946,16 +903,16 @@ export class Zero<
    * ```
    */
   materialize<TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToQuery<S, TTable, TReturn, TContext>,
+    query: ToQuery<S, TTable, TReturn, C>,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToQuery<S, TTable, TReturn, TContext>,
+    query: ToQuery<S, TTable, TReturn, C>,
     factory: ViewFactory<S, TTable, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToQuery<S, TTable, TReturn, TContext>,
+    query: ToQuery<S, TTable, TReturn, C>,
     factoryOrOptions?: ViewFactory<S, TTable, TReturn, T> | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
@@ -1047,11 +1004,10 @@ export class Zero<
    * await zero.mutate.issue.update({id: '1', title: 'Updated title'});
    * ```
    */
-  readonly mutate: MD extends CustomMutatorDefs
-    ? S['enableLegacyMutators'] extends false
-      ? MakeCustomMutatorInterfaces<S, MD, TContext>
-      : DeepMerge<DBMutator<S>, MakeCustomMutatorInterfaces<S, MD, TContext>>
-    : DBMutator<S>;
+  readonly mutate: MakeMutatePropertyType<S, MD, C> &
+    // Also callable with MutationRequest: zero.mutate(mr)
+    // oxlint-disable-next-line no-explicit-any
+    ((mr: MutationRequest<S, C, any, any>) => MutatorResult);
 
   /**
    * Provides a way to batch multiple CRUD mutations together:
@@ -1069,6 +1025,8 @@ export class Zero<
    *
    * `mutateBatch` is not allowed inside another `mutateBatch` call. Doing so
    * will throw an error.
+   *
+   * @deprecated Use `zero.mutate(mutationRequest)`
    */
   readonly mutateBatch: BatchMutator<S>;
 

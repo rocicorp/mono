@@ -6,5 +6,5 @@
     "noEmit": false,
     "emitDeclarationOnly": true
   },
-  "include": ["src/**/*.ts", "../zql/src/query/query-definitions.ts"]
+  "include": ["src/**/*.ts"]
 }

@@ -1,4 +1,5 @@
 import {useQuery} from '@rocicorp/zero/react';
+import {mutators} from '../../shared/mutators.ts';
 import {queries} from '../../shared/queries.ts';
 import type {ZeroBugs} from '../../shared/zero-type.ts';
 
@@ -11,9 +12,8 @@ export async function setUserPref(
   z: ZeroBugs,
   key: string,
   value: string,
-  mutate = z.mutate,
 ): Promise<void> {
-  await mutate.userPref.set({key, value}).client;
+  await z.mutate(mutators.userPref.set({key, value})).client;
 }
 
 export function useNumericPref(key: string, defaultValue: number): number {

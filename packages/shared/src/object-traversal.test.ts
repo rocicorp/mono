@@ -1,5 +1,5 @@
-import {expect, expectTypeOf, test} from 'vitest';
-import {getValueAtPath} from './get-value-at-path.ts';
+import {describe, expect, expectTypeOf, test} from 'vitest';
+import {getValueAtPath, iterateLeaves} from './object-traversal.ts';
 
 test.each([
   {name: 'simple path', obj: {a: 1}, path: 'a', sep: '.', expected: 1},
@@ -130,5 +130,86 @@ test('type inference with complex objects', () => {
   expect(users).toEqual({
     admin: {name: 'Alice', role: 'admin'},
     guest: {name: 'Bob', role: 'guest'},
+  });
+});
+
+const leafTag = Symbol('leaf');
+
+type Leaf = {
+  [leafTag]: true;
+  name: string;
+};
+
+function createLeaf(name: string): Leaf {
+  return {[leafTag]: true, name};
+}
+
+function isLeaf(value: unknown): value is Leaf {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    leafTag in value &&
+    (value as Leaf)[leafTag] === true
+  );
+}
+
+describe('iterateLeaves', () => {
+  test('yields all leaves from flat object', () => {
+    const a = createLeaf('a');
+    const b = createLeaf('b');
+    const c = createLeaf('c');
+    const obj = {a, b, c};
+
+    const result = Array.from(iterateLeaves(obj, isLeaf));
+
+    expect(result).toHaveLength(3);
+    expect(result[0]).toBe(a);
+    expect(result[1]).toBe(b);
+    expect(result[2]).toBe(c);
+  });
+
+  test('yields all leaves from nested object', () => {
+    const a = createLeaf('a');
+    const b = createLeaf('b');
+    const c = createLeaf('c');
+    const obj = {
+      group1: {a, b},
+      group2: {c},
+    };
+
+    const result = Array.from(iterateLeaves(obj, isLeaf));
+
+    expect(result).toHaveLength(3);
+    expect(result[0]).toBe(a);
+    expect(result[1]).toBe(b);
+    expect(result[2]).toBe(c);
+  });
+
+  test('yields all leaves from deeply nested object', () => {
+    const a = createLeaf('a');
+    const b = createLeaf('b');
+    const c = createLeaf('c');
+    const d = createLeaf('d');
+    const obj = {
+      level1: {
+        level2a: {a, b},
+        level2b: {c},
+      },
+      other: {d},
+    };
+
+    const result = Array.from(iterateLeaves(obj, isLeaf));
+
+    expect(result).toHaveLength(4);
+    expect(result[0]).toBe(a);
+    expect(result[1]).toBe(b);
+    expect(result[2]).toBe(c);
+    expect(result[3]).toBe(d);
+  });
+
+  test('yields nothing from empty object', () => {
+    const result = Array.from(iterateLeaves({}, isLeaf));
+
+    expect(result).toHaveLength(0);
   });
 });

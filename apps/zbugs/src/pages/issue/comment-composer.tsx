@@ -11,6 +11,7 @@ import {useLogin} from '../../hooks/use-login.tsx';
 import {useZero} from '../../hooks/use-zero.ts';
 import {maxCommentLength} from '../../limits.ts';
 import {isCtrlEnter} from './is-ctrl-enter.ts';
+import {mutators} from '../../../shared/mutators.ts';
 
 export function CommentComposer({
   id,
@@ -32,17 +33,19 @@ export function CommentComposer({
   const save = () => {
     setCurrentBody(body ?? '');
     if (!id) {
-      z.mutate.comment.add({
-        id: nanoid(),
-        issueID,
-        body: currentBody,
-        created: Date.now(),
-      });
+      z.mutate(
+        mutators.comment.add({
+          id: nanoid(),
+          issueID,
+          body: currentBody,
+          created: Date.now(),
+        }),
+      );
       onDone?.();
       return;
     }
 
-    z.mutate.comment.edit({id, body: currentBody});
+    z.mutate(mutators.comment.edit({id, body: currentBody}));
     onDone?.();
   };
 

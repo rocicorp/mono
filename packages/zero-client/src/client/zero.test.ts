@@ -63,6 +63,7 @@ import {
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
+import type {AnyMutatorRegistry} from '../../../zql/src/mutate/mutator-registry.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
@@ -1063,15 +1064,15 @@ describe('initConnection', () => {
 
   async function zeroForTestWithDeletedClients<
     const S extends Schema,
-    MD extends CustomMutatorDefs,
-    Context,
+    MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+    C = unknown,
   >(
-    options: Partial<ZeroOptions<S, MD, Context>> & {
+    options: Partial<ZeroOptions<S, MD, C>> & {
       deletedClients?:
         | {clientGroupID?: ClientGroupID | undefined; clientID: ClientID}[]
         | undefined;
     },
-  ): Promise<TestZero<S, MD, Context>> {
+  ): Promise<TestZero<S, MD, C>> {
     // We need to set the deleted clients before creating the zero instance but
     // we use a random name for the user ID. So we create a zero instance with a
     // random user ID, set the deleted clients, close it and then create a new

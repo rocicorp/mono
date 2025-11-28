@@ -33,6 +33,7 @@ import {ButtonWithLoginCheck} from './button-with-login-check.tsx';
 import {type ButtonProps} from './button.tsx';
 import {EmojiPicker} from './emoji-picker.tsx';
 import {EmojiPill} from './emoji-pill.tsx';
+import {mutators} from '../../shared/mutators.ts';
 
 const loginMessage = 'You need to be logged in to modify emoji reactions.';
 
@@ -65,9 +66,9 @@ export const EmojiPanel = memo(
             created: Date.now(),
           } as const;
           if (commentID !== undefined) {
-            z.mutate.emoji.addToComment(args);
+            z.mutate(mutators.emoji.addToComment(args));
           } else {
-            z.mutate.emoji.addToIssue(args);
+            z.mutate(mutators.emoji.addToIssue(args));
           }
         },
         [subjectID, commentID, z],
@@ -75,7 +76,7 @@ export const EmojiPanel = memo(
 
       const removeEmoji = useCallback(
         (id: string) => {
-          z.mutate.emoji.remove(id);
+          z.mutate(mutators.emoji.remove(id));
         },
         [z],
       );
