@@ -1,11 +1,15 @@
 import {deepMerge, type DeepMerge} from '../../shared/src/deep-merge.ts';
-import {getValueAtPath} from '../../shared/src/get-value-at-path.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {
+  getValueAtPath,
+  iterateLeaves,
+} from '../../shared/src/object-traversal.ts';
 import type {Transaction} from '../../zql/src/mutate/custom.ts';
 import {validateInput} from '../../zql/src/query/validate-input.ts';
 import {
   isMutator,
   isMutatorDefinition,
+  type AnyMutator,
   type MutationRequest,
   type Mutator,
   type MutatorDefinition,
@@ -191,11 +195,9 @@ export function defineMutatorsWithType() {
  * defineMutators overloads but with Schema and Context pre-bound.
  */
 type TypedDefineMutators<S extends Schema, C> = {
-  <T extends MutatorDefinitionsTree<S, C>>(definitions: T): MutatorRegistry<
-    S,
-    C,
-    T
-  >;
+  <T extends MutatorDefinitionsTree<S, C>>(
+    definitions: T,
+  ): MutatorRegistry<S, C, T>;
   <
     TBase extends MutatorDefinitionsTree<S, C>,
     TOverrides extends MutatorDefinitionsTree<S, C>,
@@ -368,4 +370,10 @@ function createMutator<S extends Schema, C>(
 
   // oxlint-disable-next-line no-explicit-any
   return mutator as Mutator<S, C, any, any>;
+}
+
+export function* iterateMutators(
+  registry: AnyMutatorRegistry,
+): Iterable<AnyMutator> {
+  yield* iterateLeaves(registry, isMutator);
 }

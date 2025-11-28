@@ -79,10 +79,13 @@ import {
 import {
   type AnyMutatorRegistry,
   type MutatorDefinitions,
-  getMutator,
   isMutatorRegistry,
+  iterateMutators,
 } from '../../../zero-types/src/mutator-registry.ts';
-import type {MutationRequest} from '../../../zero-types/src/mutator.ts';
+import type {
+  AnyMutator,
+  MutationRequest,
+} from '../../../zero-types/src/mutator.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import {
@@ -663,11 +666,15 @@ export class Zero<
     // Create a callable function that handles zero.mutate(mr) calls.
     // The CRUD table properties (e.g. zero.mutate.issues.insert(args)) are added by makeCRUDMutate.
     const {mutators} = options;
+
+    // If mutators is a MutatorRegistry, we store the mutator in a Map so we can quickly check if it was registered.
+    const registeredMutators: Set<AnyMutator> = new Set(
+      isMutatorRegistry(mutators) ? iterateMutators(mutators) : undefined,
+    );
+
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     const callableMutate = (mr: MutationRequest<S, C, any, any>) => {
-      // Validate that mr.mutator is the exact registered mutator
-      const registered = getMutator(mutators, mr.mutator.mutatorName);
-      if (registered !== mr.mutator) {
+      if (!registeredMutators.has(mr.mutator)) {
         throw new Error(
           `Mutator "${mr.mutator.mutatorName}" is not registered. ` +
             `Mutators must be registered with the Zero constructor before use.`,
@@ -679,16 +686,12 @@ export class Zero<
       return mutatorProxy.wrapCustomMutator(repMutator)(mr.args);
     };
 
-    const mutateBatch = makeCRUDMutate<S>(
-      schema,
-      rep.mutate,
-      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-      callableMutate as ((...args: any[]) => any) & Record<string, unknown>,
-    );
+    const mutateBatch = makeCRUDMutate<S>(schema, rep.mutate, callableMutate);
 
-    if (options.mutators && !isMutatorRegistry(options.mutators)) {
+    //  This is the legacy mutators. They are added to zero.mutate.<mutatorName>.
+    if (mutators && !isMutatorRegistry(mutators)) {
       makeMutateProperty(
-        options.mutators as MutatorDefinitions<S, C> | CustomMutatorDefs,
+        mutators as MutatorDefinitions<S, C> | CustomMutatorDefs,
         mutatorProxy,
         callableMutate as unknown as Record<string, unknown>,
         rep.mutate,
@@ -1031,6 +1034,8 @@ export class Zero<
    *
    * `mutateBatch` is not allowed inside another `mutateBatch` call. Doing so
    * will throw an error.
+   *
+   * @deprecated Use `zero.mutate(mutationRequest)`
    */
   readonly mutateBatch: BatchMutator<S>;
 

@@ -43,3 +43,25 @@ export function getValueAtPath(
   }
   return current;
 }
+
+/**
+ * Recursively iterates over all leaf values in a nested object tree.
+ * A value is considered a leaf if `isLeaf(value)` returns true,
+ * or if it's not a plain object.
+ *
+ * @param obj - The object to iterate over
+ * @param isLeaf - A function that returns true if a value should be yielded as a leaf
+ */
+export function* iterateLeaves<T>(
+  obj: object,
+  isLeaf: (value: unknown) => value is T,
+): Iterable<T> {
+  for (const key of Object.keys(obj)) {
+    const value = (obj as Record<string, unknown>)[key];
+    if (isLeaf(value)) {
+      yield value;
+    } else if (value && typeof value === 'object') {
+      yield* iterateLeaves(value, isLeaf);
+    }
+  }
+}

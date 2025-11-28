@@ -247,6 +247,9 @@ export type Mutator<
   }) => Promise<void>;
 };
 
+// oxlint-disable-next-line no-explicit-any
+export type AnyMutator = Mutator<Schema, any, any, any>;
+
 /**
  * The result of calling a Mutator with arguments.
  *
@@ -272,16 +275,7 @@ export type MutationRequest<
  * Checks if a value is a Mutator (the result of processing a MutatorDefinition
  * through defineMutators).
  */
-export function isMutator(value: unknown): value is Mutator<
-  // oxlint-disable-next-line no-explicit-any
-  any,
-  // oxlint-disable-next-line no-explicit-any
-  any,
-  // oxlint-disable-next-line no-explicit-any
-  any,
-  // oxlint-disable-next-line no-explicit-any
-  any
-> {
+export function isMutator(value: unknown): value is AnyMutator {
   return (
     typeof value === 'function' &&
     // oxlint-disable-next-line no-explicit-any

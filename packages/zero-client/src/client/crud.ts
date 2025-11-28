@@ -80,13 +80,13 @@ type ZeroCRUDMutate = {
  *
  * @param schema - The schema defining the tables
  * @param repMutate - The replicache mutate object with the CRUD mutation
- * @param mutate - The function to use as the mutate object. Properties for each
- *                 table will be assigned to this function.
+ * @param mutate - The object to use as the mutate object. Properties for each
+ *                 table will be assigned to this object.
  */
 export function makeCRUDMutate<const S extends Schema>(
   schema: S,
   repMutate: ZeroCRUDMutate,
-  mutate: Record<string, unknown>,
+  mutate: object,
 ): BatchMutator<S> {
   const {[CRUD_MUTATION_NAME]: zeroCRUD} = repMutate;
 
@@ -103,7 +103,11 @@ export function makeCRUDMutate<const S extends Schema>(
   };
 
   for (const [name, tableSchema] of Object.entries(schema.tables)) {
-    mutate[name] = makeEntityCRUDMutate(name, tableSchema.primaryKey, zeroCRUD);
+    (mutate as Record<string, unknown>)[name] = makeEntityCRUDMutate(
+      name,
+      tableSchema.primaryKey,
+      zeroCRUD,
+    );
   }
   return mutateBatch as BatchMutator<S>;
 }

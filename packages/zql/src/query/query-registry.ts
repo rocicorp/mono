@@ -1,9 +1,9 @@
 // oxlint-disable no-explicit-any
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import {deepMerge, type DeepMerge} from '../../../shared/src/deep-merge.ts';
-import {getValueAtPath} from '../../../shared/src/get-value-at-path.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
+import {getValueAtPath} from '../../../shared/src/object-traversal.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {asQueryInternals} from './query-internals.ts';
 import type {Query} from './query.ts';
