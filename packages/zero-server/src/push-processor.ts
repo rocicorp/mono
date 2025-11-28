@@ -2,6 +2,7 @@ import {type LogLevel} from '@rocicorp/logger';
 import {assert} from '../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {must} from '../../shared/src/must.ts';
+import {getValueAtPath} from '../../shared/src/object-traversal.ts';
 import {
   type CustomMutation,
   type MutationResponse,
@@ -13,11 +14,13 @@ import {
   handleMutationRequest,
   type TransactFn,
 } from '../../zero-server/src/process-mutations.ts';
+import type {
+  AnyMutatorRegistry,
+  MutatorDefinitions,
+} from '../../zero-types/src/mutator-registry.ts';
 import {isMutatorDefinition} from '../../zero-types/src/mutator.ts';
-import type {MutatorDefinitions} from '../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {Transaction} from '../../zql/src/mutate/custom.ts';
-import {splitMutatorKey} from '../../zql/src/mutate/custom.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 
 export class PushProcessor<
@@ -25,6 +28,7 @@ export class PushProcessor<
   D extends Database<ExtractTransactionType<D>>,
   MD extends
     | MutatorDefinitions<S, C>
+    | AnyMutatorRegistry
     | CustomMutatorDefs<ExtractTransactionType<D>>,
   C = undefined,
 > {
@@ -106,33 +110,11 @@ export class PushProcessor<
     ctx: C,
   ): Promise<void> {
     // Legacy mutators used | as a separator, new mutators use .
-    const parts = splitMutatorKey(key, /\.|\|/);
-    const mutator = objectAtPath(mutators, parts);
+    const mutator = getValueAtPath(mutators, key, /\.|\|/);
     assert(typeof mutator === 'function', `could not find mutator ${key}`);
-    const tx = dbTx as Transaction<S, unknown>;
-    if (
-      isMutatorDefinition<
-        S,
-        C,
-        ReadonlyJSONValue | undefined,
-        ReadonlyJSONValue | undefined,
-        // oxlint-disable-next-line no-explicit-any
-        any
-      >(mutator)
-    ) {
-      return mutator({args, ctx, tx});
+    if (isMutatorDefinition(mutator)) {
+      return mutator({args, ctx, tx: dbTx as Transaction<Schema, unknown>});
     }
     return mutator(dbTx, args);
   }
-}
-
-function objectAtPath(obj: Record<string, unknown>, path: string[]): unknown {
-  let current: unknown = obj;
-  for (const part of path) {
-    if (typeof current !== 'object' || current === null || !(part in current)) {
-      return undefined;
-    }
-    current = (current as Record<string, unknown>)[part];
-  }
-  return current;
 }
