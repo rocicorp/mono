@@ -1,11 +1,13 @@
 // oxlint-disable require-await
-import {describe, expect, expectTypeOf, test} from 'vitest';
+import type {StandardSchemaV1} from '@standard-schema/spec';
+import {describe, expect, expectTypeOf, test, vi} from 'vitest';
 import type {AnyTransaction, Transaction} from '../../zql/src/mutate/custom.ts';
 import {
   defineMutators,
   defineMutatorsWithType,
   getMutator,
   isMutatorRegistry,
+  iterateMutators,
   mustGetMutator,
 } from './mutator-registry.ts';
 import {
@@ -73,6 +75,93 @@ test('calling a mutator returns a MutationRequest', () => {
   expect(mr.args).toEqual({name: 'Alice'});
 });
 
+test('mutator.fn executes the definition with args, ctx, and tx', async () => {
+  const capturedArgs: unknown[] = [];
+  const testMutator = defineMutator(
+    ({args, ctx, tx}: {args: {id: string}; ctx: unknown; tx: unknown}) => {
+      capturedArgs.push({args, ctx, tx});
+      return Promise.resolve();
+    },
+  );
+
+  const mutators = defineMutators({
+    item: {
+      test: testMutator,
+    },
+  });
+
+  const mockTx = {
+    location: 'client',
+    clientID: 'test-client',
+    mutationID: 1,
+    reason: 'optimistic',
+    mutate: {},
+    query: {},
+  } as AnyTransaction;
+  const mockCtx = {user: 'testuser'};
+
+  await mutators.item.test.fn({
+    args: {id: '123'},
+    ctx: mockCtx,
+    tx: mockTx,
+  });
+
+  expect(capturedArgs).toHaveLength(1);
+  expect(capturedArgs[0]).toEqual({
+    args: {id: '123'},
+    ctx: mockCtx,
+    tx: mockTx,
+  });
+});
+
+test('mutator.fn validates args when validator is provided', async () => {
+  const capturedArgs: unknown[] = [];
+  const validator: StandardSchemaV1<{id: string}, {id: string}> = {
+    '~standard': {
+      version: 1,
+      vendor: 'test',
+      validate: vi.fn(input => ({value: input})),
+    },
+  };
+
+  const testMutator = defineMutator(
+    validator,
+    ({args, ctx, tx}: {args: {id: string}; ctx: unknown; tx: unknown}) => {
+      capturedArgs.push({args, ctx, tx});
+      return Promise.resolve();
+    },
+  );
+
+  const mutators = defineMutators({
+    item: {
+      test: testMutator,
+    },
+  });
+
+  const mockTx = {
+    location: 'client',
+    clientID: 'test-client',
+    mutationID: 1,
+    reason: 'optimistic',
+    mutate: {},
+    query: {},
+  } as AnyTransaction;
+
+  await mutators.item.test.fn({
+    args: {id: '456'},
+    ctx: undefined,
+    tx: mockTx,
+  });
+
+  expect(validator['~standard'].validate).toHaveBeenCalledWith({id: '456'});
+  expect(capturedArgs).toHaveLength(1);
+  expect(capturedArgs[0]).toEqual({
+    args: {id: '456'},
+    ctx: undefined,
+    tx: mockTx,
+  });
+});
+
 test('getMutator looks up by dot-separated name', () => {
   const mutators = defineMutators({
     user: {
@@ -109,6 +198,25 @@ test('isMutatorRegistry returns false for non-registries', () => {
   expect(isMutatorRegistry(undefined)).toBe(false);
   expect(isMutatorRegistry({})).toBe(false);
   expect(isMutatorRegistry({user: {create: createUser}})).toBe(false);
+});
+
+test('iterateMutators yields all mutators in the registry', () => {
+  const mutators = defineMutators({
+    user: {
+      create: createUser,
+      delete: deleteUser,
+    },
+    post: {
+      publish: publishPost,
+    },
+  });
+
+  const allMutators = [...iterateMutators(mutators)];
+
+  expect(allMutators).toHaveLength(3);
+  expect(allMutators).toContain(mutators.user.create);
+  expect(allMutators).toContain(mutators.user.delete);
+  expect(allMutators).toContain(mutators.post.publish);
 });
 
 test('defineMutators extends a registry with overrides', () => {

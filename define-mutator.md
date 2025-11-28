@@ -8,7 +8,7 @@
 - [x] Test zbugs
 - [x] Add strongly typed `.fn` for server-mutators pattern (calling base mutator with typed args)
 - [x] Remove `MutatorDefinitions` and everything connected
-- [ ] Update all the tests
+- [x] Update all the tests
 - [ ] Remove `getMutator` helper function
 - [x] Remove Proxy for z.mutate
 - [x] defineMutators needs better merging

@@ -15,7 +15,7 @@ import {
   type TransactFn,
 } from '../../zero-server/src/process-mutations.ts';
 import type {AnyMutatorRegistry} from '../../zero-types/src/mutator-registry.ts';
-import {isMutatorDefinition} from '../../zero-types/src/mutator.ts';
+import {isMutator} from '../../zero-types/src/mutator.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {Transaction} from '../../zql/src/mutate/custom.ts';
 import type {CustomMutatorDefs} from './custom.ts';
@@ -106,8 +106,8 @@ export class PushProcessor<
     // Legacy mutators used | as a separator, new mutators use .
     const mutator = getValueAtPath(mutators, key, /\.|\|/);
     assert(typeof mutator === 'function', `could not find mutator ${key}`);
-    if (isMutatorDefinition(mutator)) {
-      return mutator({args, ctx, tx: dbTx as Transaction<Schema, unknown>});
+    if (isMutator(mutator)) {
+      return mutator.fn({args, ctx, tx: dbTx as Transaction<Schema, unknown>});
     }
     return mutator(dbTx, args);
   }

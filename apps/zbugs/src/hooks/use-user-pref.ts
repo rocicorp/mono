@@ -12,9 +12,8 @@ export async function setUserPref(
   z: ZeroBugs,
   key: string,
   value: string,
-  mutate = z.mutate,
 ): Promise<void> {
-  await mutate(mutators.userPref.set({key, value})).client;
+  await z.mutate(mutators.userPref.set({key, value})).client;
 }
 
 export function useNumericPref(key: string, defaultValue: number): number {

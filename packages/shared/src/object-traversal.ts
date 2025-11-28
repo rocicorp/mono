@@ -65,22 +65,3 @@ export function* iterateLeaves<T>(
     }
   }
 }
-
-/**
- * Recursively iterates over all leaf entries in a nested object tree,
- * yielding [path, value] tuples.
- */
-export function* iterateEntries<T>(
-  obj: object,
-  isLeaf: (value: unknown) => value is T,
-): Iterable<[path: readonly string[], value: T]> {
-  for (const [key, value] of Object.entries(obj)) {
-    if (isLeaf(value)) {
-      yield [[key], value];
-    } else if (value && typeof value === 'object') {
-      for (const [subPath, subValue] of iterateEntries(value, isLeaf)) {
-        yield [[key, ...subPath], subValue];
-      }
-    }
-  }
-}
