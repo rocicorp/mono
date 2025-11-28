@@ -14,7 +14,11 @@ import {
 } from '../../zero-protocol/src/push.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {Database, TransactionProviderHooks} from './process-mutations.ts';
-import {getMutation, handleMutationRequest} from './process-mutations.ts';
+import {
+  getMutation,
+  handleMutateRequest,
+  handleMutationRequest,
+} from './process-mutations.ts';
 
 const baseQuery = {
   schema: 'test_schema',
@@ -276,7 +280,7 @@ describe('handleMutationRequest', () => {
     expect(recordedResults).toEqual([]);
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'PushProcessor',
+      'handleMutationRequest',
       expect.stringContaining('Post-commit mutation handler failed'),
       expect.stringContaining('"message":"post-processing failed"'),
     );
@@ -467,7 +471,7 @@ describe('handleMutationRequest', () => {
     expect(recordedResults).toEqual([]);
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'PushProcessor',
+      'handleMutationRequest',
       expect.stringContaining('Failed to parse push body'),
       expect.stringContaining('invalid body'),
     );
@@ -503,7 +507,7 @@ describe('handleMutationRequest', () => {
     expect(recordedResults).toEqual([]);
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
-      'PushProcessor',
+      'handleMutationRequest',
       expect.stringContaining('Failed to parse push query parameters'),
       expect.stringContaining('Missing property'),
     );
@@ -746,6 +750,90 @@ describe('handleMutationRequest', () => {
     expect(recordedLMIDs).toEqual([1]);
     // Successful mutations don't call writeMutationResult
     expect(recordedResults).toEqual([]);
+  });
+});
+
+describe('handleMutateRequest', () => {
+  test('processes mutations with simplified callback', async () => {
+    const {db: trackingDb, recordedLMIDs} = createTrackingDatabase();
+    const processedMutations: Array<{name: string; args: unknown}> = [];
+
+    const response = await handleMutateRequest(
+      trackingDb,
+      async (_tx, name, args) => {
+        processedMutations.push({name, args});
+      },
+      baseQuery,
+      makePushBody([
+        makeCustomMutation({
+          id: 1,
+          name: 'createUser',
+          args: [{userId: '123'}],
+        }),
+        makeCustomMutation({
+          id: 2,
+          name: 'updateUser',
+          args: [{userId: '456'}],
+        }),
+      ]),
+    );
+
+    expect(recordedLMIDs).toEqual([1, 2]);
+    expect(processedMutations).toEqual([
+      {name: 'createUser', args: {userId: '123'}},
+      {name: 'updateUser', args: {userId: '456'}},
+    ]);
+    expect(response).toEqual({
+      mutations: [
+        {id: {clientID: 'cid', id: 1}, result: {}},
+        {id: {clientID: 'cid', id: 2}, result: {}},
+      ],
+    });
+  });
+
+  test('handles errors in callback as application errors', async () => {
+    const {
+      db: trackingDb,
+      recordedLMIDs,
+      recordedResults,
+    } = createTrackingDatabase();
+
+    const response = await handleMutateRequest(
+      trackingDb,
+      async (_tx, name, _args) => {
+        if (name === 'failingMutation') {
+          throw new Error('mutation failed');
+        }
+      },
+      baseQuery,
+      makePushBody([
+        makeCustomMutation({id: 1, name: 'failingMutation'}),
+        makeCustomMutation({id: 2, name: 'succeedingMutation'}),
+      ]),
+    );
+
+    expect(recordedLMIDs).toEqual([1, 2]);
+    expect(recordedResults).toEqual([
+      {
+        id: {clientID: 'cid', id: 1},
+        result: {
+          error: 'app',
+          message: expect.stringContaining('mutation failed'),
+        },
+      },
+    ]);
+    expect(response).toEqual({
+      mutations: [
+        {
+          id: {clientID: 'cid', id: 1},
+          result: {
+            error: 'app',
+            message: expect.stringContaining('mutation failed'),
+          },
+        },
+        {id: {clientID: 'cid', id: 2}, result: {}},
+      ],
+    });
   });
 });
 

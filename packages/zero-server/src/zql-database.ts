@@ -23,7 +23,7 @@ import type {
 } from './process-mutations.ts';
 
 /**
- * Implements a Database for use with PushProcessor that is backed by Postgres.
+ * Postgres implementation of Database interface.
  *
  * This implementation also implements the same ZQL interfaces for reading and
  * writing data that the Zero client does, so that mutator functions can be

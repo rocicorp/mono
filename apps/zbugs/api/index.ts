@@ -8,7 +8,7 @@ import {Octokit} from '@octokit/core';
 import {mustGetQuery, type ReadonlyJSONValue} from '@rocicorp/zero';
 import {
   getMutation,
-  handleMutationRequest,
+  handleMutateRequest,
   handleTransformRequest,
 } from '@rocicorp/zero/server';
 import {zeroPostgresJS} from '@rocicorp/zero/server/adapters/postgresjs';
@@ -180,10 +180,9 @@ async function mutateHandler(
   const postCommitTasks: (() => Promise<void>)[] = [];
   const mutators = createServerMutators(jwtData, postCommitTasks);
 
-  const response = await handleMutationRequest(
+  const response = await handleMutateRequest(
     dbProvider,
-    (transact, _mutation) =>
-      transact((tx, name, args) => getMutation(mutators, name)(tx, args)),
+    (tx, name, args) => getMutation(mutators, name)(tx, args),
     request.query,
     request.body,
     'info',
