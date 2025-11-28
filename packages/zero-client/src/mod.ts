@@ -102,7 +102,7 @@ export {
   isMutatorRegistry,
   mustGetMutator,
   type AnyMutatorRegistry,
-  type MutatorDefinitionsTree,
+  type MutatorDefinitions,
   type MutatorRegistry,
 } from '../../zero-types/src/mutator-registry.ts';
 export {

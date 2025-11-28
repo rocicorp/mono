@@ -12,4 +12,4 @@
 - [ ] Remove `getMutator` helper function
 - [x] Remove Proxy for z.mutate
 - [x] defineMutators needs better merging
-- [ ] Rename MutatorDefinitionsTree back to MutatorDefinitions.
+- [x] Rename MutatorDefinitionsTree back to MutatorDefinitions.

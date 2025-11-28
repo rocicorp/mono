@@ -57,14 +57,14 @@ import type {Schema} from './schema.ts';
 export function defineMutators<
   S extends Schema,
   C,
-  T extends MutatorDefinitionsTree<S, C>,
+  T extends MutatorDefinitions<S, C>,
 >(definitions: T): MutatorRegistry<S, C, T>;
 
 export function defineMutators<
   S extends Schema,
   C,
-  TBase extends MutatorDefinitionsTree<S, C>,
-  TOverrides extends MutatorDefinitionsTree<S, C>,
+  TBase extends MutatorDefinitions<S, C>,
+  TOverrides extends MutatorDefinitions<S, C>,
 >(
   base: MutatorRegistry<S, C, TBase>,
   overrides: TOverrides,
@@ -73,19 +73,19 @@ export function defineMutators<
 export function defineMutators<
   S extends Schema,
   C,
-  TBase extends MutatorDefinitionsTree<S, C>,
-  TOverrides extends MutatorDefinitionsTree<S, C>,
+  TBase extends MutatorDefinitions<S, C>,
+  TOverrides extends MutatorDefinitions<S, C>,
 >(
   base: TBase,
   overrides: TOverrides,
 ): MutatorRegistry<S, C, DeepMerge<TBase, TOverrides>>;
 
 export function defineMutators<S extends Schema, C>(
-  definitionsOrBase: MutatorDefinitionsTree<S, C> | AnyMutatorRegistry,
-  maybeOverrides?: MutatorDefinitionsTree<S, C>,
+  definitionsOrBase: MutatorDefinitions<S, C> | AnyMutatorRegistry,
+  maybeOverrides?: MutatorDefinitions<S, C>,
 ): AnyMutatorRegistry {
   function processDefinitions(
-    definitions: MutatorDefinitionsTree<S, C>,
+    definitions: MutatorDefinitions<S, C>,
     path: string[],
   ): Record<string | symbol, unknown> {
     const result: Record<string | symbol, unknown> = {
@@ -101,7 +101,7 @@ export function defineMutators<S extends Schema, C>(
       } else {
         // Nested definitions
         result[key] = processDefinitions(
-          value as MutatorDefinitionsTree<S, C>,
+          value as MutatorDefinitions<S, C>,
           path,
         );
       }
@@ -116,7 +116,7 @@ export function defineMutators<S extends Schema, C>(
     let base: Record<string | symbol, unknown>;
     if (!isMutatorRegistry(definitionsOrBase)) {
       base = processDefinitions(
-        definitionsOrBase as MutatorDefinitionsTree<S, C>,
+        definitionsOrBase as MutatorDefinitions<S, C>,
         [],
       );
     } else {
@@ -135,7 +135,7 @@ export function defineMutators<S extends Schema, C>(
   }
 
   return processDefinitions(
-    definitionsOrBase as MutatorDefinitionsTree<S, C>,
+    definitionsOrBase as MutatorDefinitions<S, C>,
     [],
   ) as AnyMutatorRegistry;
 }
@@ -195,19 +195,19 @@ export function defineMutatorsWithType() {
  * defineMutators overloads but with Schema and Context pre-bound.
  */
 type TypedDefineMutators<S extends Schema, C> = {
-  <T extends MutatorDefinitionsTree<S, C>>(
+  <T extends MutatorDefinitions<S, C>>(
     definitions: T,
   ): MutatorRegistry<S, C, T>;
   <
-    TBase extends MutatorDefinitionsTree<S, C>,
-    TOverrides extends MutatorDefinitionsTree<S, C>,
+    TBase extends MutatorDefinitions<S, C>,
+    TOverrides extends MutatorDefinitions<S, C>,
   >(
     base: MutatorRegistry<S, C, TBase>,
     overrides: TOverrides,
   ): MutatorRegistry<S, C, DeepMerge<TBase, TOverrides>>;
   <
-    TBase extends MutatorDefinitionsTree<S, C>,
-    TOverrides extends MutatorDefinitionsTree<S, C>,
+    TBase extends MutatorDefinitions<S, C>,
+    TOverrides extends MutatorDefinitions<S, C>,
   >(
     base: TBase,
     overrides: TOverrides,
@@ -246,7 +246,7 @@ export function mustGetMutator(
  */
 export function isMutatorRegistry<S extends Schema, C>(
   value: unknown,
-): value is MutatorRegistry<S, C, MutatorDefinitionsTree<S, C>> {
+): value is MutatorRegistry<S, C, MutatorDefinitions<S, C>> {
   return (
     typeof value === 'object' && value !== null && mutatorRegistryTag in value
   );
@@ -259,10 +259,9 @@ export function isMutatorRegistry<S extends Schema, C>(
 /**
  * A tree of MutatorDefinitions, possibly nested.
  */
-// TODO(arv): Rename back to MutatorDefinitions
-export type MutatorDefinitionsTree<S extends Schema, C> = {
+export type MutatorDefinitions<S extends Schema, C> = {
   readonly [key: string]: // oxlint-disable-next-line no-explicit-any
-  MutatorDefinition<S, C, any, any, any> | MutatorDefinitionsTree<S, C>;
+  MutatorDefinition<S, C, any, any, any> | MutatorDefinitions<S, C>;
 };
 
 /**
@@ -271,7 +270,7 @@ export type MutatorDefinitionsTree<S extends Schema, C> = {
 export type MutatorRegistry<
   S extends Schema,
   C,
-  T extends MutatorDefinitionsTree<S, C>,
+  T extends MutatorDefinitions<S, C>,
 > = ToMutatorTree<S, C, T> & {
   [mutatorRegistryTag]: true;
 };
@@ -293,15 +292,11 @@ export type AnyMutatorRegistry = {[mutatorRegistryTag]: true} & Record<
 const mutatorRegistryTag = Symbol('mutatorRegistry');
 
 /**
- * Transforms a MutatorDefinitionsTree into a tree of Mutators.
+ * Transforms a MutatorDefinitions into a tree of Mutators.
  * Each MutatorDefinition becomes a Mutator at the same path.
  * Uses TOutput (the validated type) as TArgs for the resulting Mutator.
  */
-type ToMutatorTree<
-  S extends Schema,
-  C,
-  T extends MutatorDefinitionsTree<S, C>,
-> = {
+type ToMutatorTree<S extends Schema, C, T extends MutatorDefinitions<S, C>> = {
   readonly [K in keyof T]: T[K] extends MutatorDefinition<
     S,
     C,
@@ -311,7 +306,7 @@ type ToMutatorTree<
     infer TWrappedTransaction
   >
     ? Mutator<S, C, TOutput, TWrappedTransaction>
-    : T[K] extends MutatorDefinitionsTree<S, C>
+    : T[K] extends MutatorDefinitions<S, C>
       ? ToMutatorTree<S, C, T[K]>
       : never;
 };
