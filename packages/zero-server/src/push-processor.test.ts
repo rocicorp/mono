@@ -6,8 +6,11 @@ import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
 import {type PushBody} from '../../zero-protocol/src/push.ts';
+import {
+  defineMutators,
+  type AnyMutatorRegistry,
+} from '../../zero-types/src/mutator-registry.ts';
 import {defineMutator} from '../../zero-types/src/mutator.ts';
-import type {MutatorDefinitions} from '../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import {PostgresJSConnection} from './adapters/postgresjs.ts';
 import type {CustomMutatorDefs} from './custom.ts';
@@ -287,16 +290,17 @@ describe('mutator calling conventions', () => {
     const processor = new PushProcessor<
       Schema,
       FakeDatabase,
-      MutatorDefinitions<typeof mockSchema, typeof context>,
+      // oxlint-disable-next-line no-explicit-any
+      AnyMutatorRegistry | CustomMutatorDefs<any>,
       typeof context
     >(new FakeDatabase(fakeTx), context);
 
     const capture = vi.fn();
-    const mutators = {
+    const mutators = defineMutators({
       foo: {
         bar: defineMutator(capture),
       },
-    };
+    });
 
     const response = await processor.process(
       mutators,

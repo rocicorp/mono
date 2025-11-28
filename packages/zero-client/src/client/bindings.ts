@@ -1,7 +1,4 @@
-import type {
-  AnyMutatorRegistry,
-  MutatorDefinitions,
-} from '../../../zero-types/src/mutator-registry.ts';
+import type {AnyMutatorRegistry} from '../../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Format, ViewFactory} from '../../../zql/src/ivm/view.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
@@ -28,11 +25,7 @@ const zeroDelegates = new WeakMap<
 
 export function registerZeroDelegate<
   TSchema extends Schema,
-  MD extends
-    | MutatorDefinitions<TSchema, TContext>
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
   TContext,
 >(zero: Zero<TSchema, MD, TContext>, delegate: QueryDelegate): void {
   zeroDelegates.set(zero, delegate);
@@ -40,11 +33,7 @@ export function registerZeroDelegate<
 
 function mustGetDelegate<
   TSchema extends Schema,
-  MD extends
-    | MutatorDefinitions<TSchema, TContext>
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
   TContext,
 >(zero: Zero<TSchema, MD, TContext>): QueryDelegate {
   const delegate = zeroDelegates.get(zero);
@@ -104,11 +93,7 @@ export interface BindingsForZero<TSchema extends Schema> {
  */
 export function bindingsForZero<
   TSchema extends Schema,
-  MD extends
-    | MutatorDefinitions<TSchema, TContext>
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
   TContext,
 >(zero: Zero<TSchema, MD, TContext>): BindingsForZero<TSchema> {
   const delegate = mustGetDelegate(zero);

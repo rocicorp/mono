@@ -21,7 +21,7 @@ import type {Schema} from './schema.ts';
  * optionally extending a base MutatorRegistry.
  *
  * @example
- * ```typescript
+ * ```ts
  * // Create a new registry
  * const mutators = defineMutators({
  *   user: {
@@ -219,17 +219,11 @@ type TypedDefineMutators<S extends Schema, C> = {
  * Returns undefined if not found.
  */
 export function getMutator(
-  registry: unknown,
+  registry: AnyMutatorRegistry,
   name: string,
-  // oxlint-disable-next-line no-explicit-any
-): Mutator<any, any, any, any> | undefined {
-  if (typeof registry !== 'object' || registry === null) {
-    return undefined;
-  }
+): AnyMutator | undefined {
   const m = getValueAtPath(registry, name, '.');
-
-  // oxlint-disable-next-line no-explicit-any
-  return m as Mutator<any, any, any, any> | undefined;
+  return m as AnyMutator | undefined;
 }
 
 /**
@@ -239,8 +233,7 @@ export function getMutator(
 export function mustGetMutator(
   registry: AnyMutatorRegistry,
   name: string,
-  // oxlint-disable-next-line no-explicit-any
-): Mutator<any, any, any, any> {
+): AnyMutator {
   const mutator = getMutator(registry, name);
   if (mutator === undefined) {
     throw new Error(`Mutator not found: ${name}`);
@@ -266,18 +259,11 @@ export function isMutatorRegistry<S extends Schema, C>(
 /**
  * A tree of MutatorDefinitions, possibly nested.
  */
+// TODO(arv): Rename back to MutatorDefinitions
 export type MutatorDefinitionsTree<S extends Schema, C> = {
   readonly [key: string]: // oxlint-disable-next-line no-explicit-any
   MutatorDefinition<S, C, any, any, any> | MutatorDefinitionsTree<S, C>;
 };
-
-/**
- * Alias for MutatorDefinitionsTree for backward compatibility.
- */
-export type MutatorDefinitions<S extends Schema, C> = MutatorDefinitionsTree<
-  S,
-  C
->;
 
 /**
  * The result of defineMutators(). A tree of Mutators with a tag for detection.

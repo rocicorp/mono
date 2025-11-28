@@ -78,7 +78,6 @@ import {
 } from '../../../zero-schema/src/name-mapper.ts';
 import {
   type AnyMutatorRegistry,
-  type MutatorDefinitions,
   isMutatorRegistry,
   iterateMutators,
 } from '../../../zero-types/src/mutator-registry.ts';
@@ -197,11 +196,7 @@ interface TestZero {
 
 function asTestZero<
   S extends Schema,
-  MD extends
-    | MutatorDefinitions<S, C>
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
   C,
 >(z: Zero<S, MD, C>): TestZero {
   return z as TestZero;
@@ -302,11 +297,7 @@ type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
 
 export class Zero<
   const S extends Schema,
-  MD extends
-    | MutatorDefinitions<S, C>
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined = undefined,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
   C = unknown,
 > {
   readonly version = version;
@@ -691,7 +682,7 @@ export class Zero<
     //  This is the legacy mutators. They are added to zero.mutate.<mutatorName>.
     if (mutators && !isMutatorRegistry(mutators)) {
       makeMutateProperty(
-        mutators as MutatorDefinitions<S, C> | CustomMutatorDefs,
+        mutators as AnyMutatorRegistry | CustomMutatorDefs,
         mutatorProxy,
         callableMutate as unknown as Record<string, unknown>,
         rep.mutate,

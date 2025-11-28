@@ -1,11 +1,8 @@
 import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
 import {must} from '../../../shared/src/must.ts';
-import type {
-  AnyMutatorRegistry,
-  MutatorDefinitions,
-} from '../../../zero-types/src/mutator-registry.ts';
+import type {AnyMutatorRegistry} from '../../../zero-types/src/mutator-registry.ts';
 import {
-  isMutatorDefinition,
+  isMutator,
   type MutatorDefinition,
 } from '../../../zero-types/src/mutator.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
@@ -14,11 +11,7 @@ import {
   type Transaction,
 } from '../../../zql/src/mutate/custom.ts';
 import type {DBMutator} from './crud.ts';
-import type {
-  CustomMutatorDefs,
-  CustomMutatorImpl,
-  MutatorResult,
-} from './custom.ts';
+import type {CustomMutatorDefs, MutatorResult} from './custom.ts';
 import type {MutatorProxy} from './mutator-proxy.ts';
 
 /**
@@ -44,24 +37,24 @@ import type {MutatorProxy} from './mutator-proxy.ts';
  * using different separators ('.' for mutator definitions, '|' for custom functions) and wraps them
  * using the mutator proxy.
  */
-export function makeMutateProperty<S extends Schema, C = unknown>(
-  mutators: MutatorDefinitions<S, C> | CustomMutatorDefs,
+export function makeMutateProperty(
+  mutators: AnyMutatorRegistry | CustomMutatorDefs,
   mutatorProxy: MutatorProxy,
   mutateObject: Record<string, unknown>,
   replicacheMutate: Record<string, unknown>,
 ): void {
   const processMutators = (
-    mutators: MutatorDefinitions<S, C> | CustomMutatorDefs,
+    mutators: AnyMutatorRegistry | CustomMutatorDefs,
     path: string[],
     mutateObject: Record<string, unknown>,
   ) => {
     for (const [key, mutator] of Object.entries(mutators)) {
       path.push(key);
       let fullKey: string | undefined;
-      if (isMutatorDefinition(mutator)) {
+      if (isMutator(mutator)) {
         fullKey = customMutatorKey('.', path);
       } else if (typeof mutator === 'function') {
-        mutator satisfies CustomMutatorImpl<S>;
+        // Legacy CustomMutatorImpl
         fullKey = customMutatorKey('|', path);
       }
 
@@ -79,7 +72,7 @@ export function makeMutateProperty<S extends Schema, C = unknown>(
           mutateObject[key] = existing;
         }
         processMutators(
-          mutator as MutatorDefinitions<S, unknown> | CustomMutatorDefs,
+          mutator as AnyMutatorRegistry | CustomMutatorDefs,
           path,
           existing as Record<string, unknown>,
         );
@@ -98,7 +91,7 @@ export function makeMutateProperty<S extends Schema, C = unknown>(
  */
 type MakeFromMutatorDefinitions<
   S extends Schema,
-  MD extends MutatorDefinitions<S, C> | CustomMutatorDefs,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs,
   C,
 > = {
   readonly [K in keyof MD]: MD[K] extends MutatorDefinition<
@@ -117,23 +110,19 @@ type MakeFromMutatorDefinitions<
         : (args: TInput) => MutatorResult
     : MD[K] extends (tx: Transaction<S>, ...args: infer Args) => Promise<void>
       ? (...args: Args) => MutatorResult
-      : MD[K] extends MutatorDefinitions<S, C> | CustomMutatorDefs
+      : MD[K] extends AnyMutatorRegistry | CustomMutatorDefs
         ? MakeFromMutatorDefinitions<S, MD[K], C>
         : never;
 };
 
 export type MakeMutatePropertyType<
   S extends Schema,
-  MD extends
-    | MutatorDefinitions<S, C>
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
   C,
 > = MD extends AnyMutatorRegistry
   ? // MutatorRegistry: no property tree, user calls zero.mutate(mr) directly
     {}
-  : MD extends MutatorDefinitions<S, C> | CustomMutatorDefs
+  : MD extends AnyMutatorRegistry | CustomMutatorDefs
     ? S['enableLegacyMutators'] extends false
       ? MakeFromMutatorDefinitions<S, MD, C>
       : DeepMerge<DBMutator<S>, MakeFromMutatorDefinitions<S, MD, C>>

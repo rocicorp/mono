@@ -5,10 +5,11 @@
 - [x] Implement callable mutate() method
 - [x] Add `defineMutators(base, overrides)` API for extending a base registry with server-side overrides
 - [x] Update zbugs
-- [ ] Test zbugs
+- [x] Test zbugs
 - [x] Add strongly typed `.fn` for server-mutators pattern (calling base mutator with typed args)
-- [ ] Remove `MutatorDefinitions` and everything connected
+- [x] Remove `MutatorDefinitions` and everything connected
 - [ ] Update all the tests
 - [ ] Remove `getMutator` helper function
 - [x] Remove Proxy for z.mutate
 - [x] defineMutators needs better merging
+- [ ] Rename MutatorDefinitionsTree back to MutatorDefinitions.

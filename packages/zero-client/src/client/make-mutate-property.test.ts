@@ -1,8 +1,7 @@
 // oxlint-disable no-explicit-any
 import {describe, expect, test, vi} from 'vitest';
+import {defineMutators} from '../../../zero-types/src/mutator-registry.ts';
 import {defineMutator} from '../../../zero-types/src/mutator.ts';
-import type {MutatorDefinitions} from '../../../zero-types/src/mutator-registry.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {CustomMutatorDefs, MutatorResult} from './custom.ts';
 import {makeMutateProperty} from './make-mutate-property.ts';
 import type {MutatorProxy} from './mutator-proxy.ts';
@@ -21,8 +20,6 @@ describe('makeMutateProperty', () => {
     } as MutatorResult;
   }
 
-  type TestSchema = Schema;
-
   test('handles flat mutator definitions', () => {
     const mutatorProxy = createMockMutatorProxy();
     const mutateObject = {};
@@ -34,10 +31,10 @@ describe('makeMutateProperty', () => {
     const mockMutatorFn1 = defineMutator(async () => {});
     const mockMutatorFn2 = defineMutator(async () => {});
 
-    const mutators = {
+    const mutators = defineMutators({
       createUser: mockMutatorFn1,
       updateUser: mockMutatorFn2,
-    } as MutatorDefinitions<TestSchema, unknown>;
+    });
 
     makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
 
@@ -65,7 +62,7 @@ describe('makeMutateProperty', () => {
     const mockMutatorFn2 = defineMutator(async () => {});
     const mockMutatorFn3 = defineMutator(async () => {});
 
-    const mutators = {
+    const mutators = defineMutators({
       user: {
         create: mockMutatorFn1,
         update: mockMutatorFn2,
@@ -73,7 +70,7 @@ describe('makeMutateProperty', () => {
       post: {
         create: mockMutatorFn3,
       },
-    } as MutatorDefinitions<TestSchema, unknown>;
+    });
 
     makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
 
@@ -109,7 +106,7 @@ describe('makeMutateProperty', () => {
     const mockMutatorFn1 = defineMutator(async () => {});
     const mockMutatorFn2 = defineMutator(async () => {});
 
-    const mutators = {
+    const mutators = defineMutators({
       api: {
         user: {
           profile: {
@@ -118,7 +115,7 @@ describe('makeMutateProperty', () => {
           },
         },
       },
-    } as MutatorDefinitions<TestSchema, unknown>;
+    });
 
     makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
 
@@ -146,12 +143,12 @@ describe('makeMutateProperty', () => {
     const mockMutatorFn1 = defineMutator(async () => {});
     const mockMutatorFn2 = defineMutator(async () => {});
 
-    const mutators = {
+    const mutators = defineMutators({
       simpleAction: mockMutatorFn1,
       user: {
         create: mockMutatorFn2,
       },
-    } as MutatorDefinitions<TestSchema, unknown>;
+    });
 
     makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
 
@@ -175,9 +172,9 @@ describe('makeMutateProperty', () => {
 
     const mockMutatorFn = defineMutator(async () => {});
 
-    const mutators = {
+    const mutators = defineMutators({
       newMutator: mockMutatorFn,
-    } as MutatorDefinitions<TestSchema, unknown>;
+    });
 
     makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
 
@@ -199,11 +196,11 @@ describe('makeMutateProperty', () => {
 
     const mockMutatorFn = defineMutator(async () => {});
 
-    const mutators = {
+    const mutators = defineMutators({
       user: {
         create: mockMutatorFn,
       },
-    } as MutatorDefinitions<TestSchema, unknown>;
+    });
 
     makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
 
@@ -245,9 +242,9 @@ describe('makeMutateProperty', () => {
 
     const mockMutatorFn = defineMutator(async () => {});
 
-    const mutators = {
+    const mutators = defineMutators({
       testMutator: mockMutatorFn,
-    } as MutatorDefinitions<TestSchema, unknown>;
+    });
 
     makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
 
@@ -266,7 +263,7 @@ describe('makeMutateProperty', () => {
     const mutateObject = {};
     const mockRepMutate = {};
 
-    const mutators = {} as MutatorDefinitions<TestSchema, unknown>;
+    const mutators = defineMutators({});
 
     makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);
 
@@ -281,9 +278,9 @@ describe('makeMutateProperty', () => {
 
     const mockMutatorFn = defineMutator(async () => {});
 
-    const mutators = {
+    const mutators = defineMutators({
       missingMutator: mockMutatorFn,
-    } as MutatorDefinitions<TestSchema, unknown>;
+    });
 
     expect(() => {
       makeMutateProperty(mutators, mutatorProxy, mutateObject, mockRepMutate);

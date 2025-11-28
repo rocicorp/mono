@@ -18,7 +18,6 @@ import {
   string,
   table,
   type CustomMutatorDefs,
-  type MutatorDefinitions,
   type Query,
   type Schema,
   type TTL,
@@ -63,11 +62,7 @@ afterEach(() => vi.resetAllMocks());
 type C = unknown;
 
 function newMockZero<
-  MD extends
-    | MutatorDefinitions<Schema, C>
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined = undefined,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
 >(clientID: string, queryDelegate: QueryDelegate): Zero<Schema, MD, C> {
   function m<TTable extends keyof Schema['tables'] & string, TReturn, T>(
     query: Query<Schema, TTable, TReturn>,
@@ -94,11 +89,7 @@ function useQueryWithZeroProvider<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
-  MD extends
-    | MutatorDefinitions<TSchema, TContext>
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
   TContext,
 >(
   zeroOrZeroSignal:

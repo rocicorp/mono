@@ -5,11 +5,7 @@ import '../../../packages/shared/src/dotenv.ts';
 import cookie from '@fastify/cookie';
 import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
 import {Octokit} from '@octokit/core';
-import {
-  mustGetMutator,
-  mustGetQuery,
-  type ReadonlyJSONValue,
-} from '@rocicorp/zero';
+import {mustGetQuery, type ReadonlyJSONValue} from '@rocicorp/zero';
 import {
   handleMutationRequest,
   handleTransformRequest,

@@ -102,7 +102,7 @@ export {
   isMutatorRegistry,
   mustGetMutator,
   type AnyMutatorRegistry,
-  type MutatorDefinitions,
+  type MutatorDefinitionsTree,
   type MutatorRegistry,
 } from '../../zero-types/src/mutator-registry.ts';
 export {
@@ -161,6 +161,7 @@ export {
   defineQueries,
   defineQueriesWithType,
   defineQuery,
+  defineQueryWithType,
   getQuery,
   isQueryDefinition,
   mustGetQuery,

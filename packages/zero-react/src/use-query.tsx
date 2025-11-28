@@ -14,7 +14,7 @@ import type {
   QueryResultDetails,
 } from '../../zero-client/src/types/query-result.ts';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
-import type {MutatorDefinitions} from '../../zero-types/src/mutator-registry.ts';
+import type {AnyMutatorRegistry} from '../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {Format} from '../../zql/src/ivm/view.ts';
 import {
@@ -308,10 +308,7 @@ export class ViewStore {
     TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
     TReturn,
-    MD extends
-      | MutatorDefinitions<TSchema, TContext>
-      | CustomMutatorDefs
-      | undefined,
+    MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
     TContext,
   >(
     zero: Zero<TSchema, MD, TContext>,
@@ -392,10 +389,7 @@ class ViewWrapper<
   TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
   TReturn,
-  MD extends
-    | MutatorDefinitions<TSchema, TContext>
-    | CustomMutatorDefs
-    | undefined,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
   TContext,
 > {
   #view: TypedView<HumanReadable<TReturn>> | undefined;

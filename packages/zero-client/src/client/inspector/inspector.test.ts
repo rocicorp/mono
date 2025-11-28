@@ -15,10 +15,7 @@ import {
   string,
   table,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
-import type {
-  AnyMutatorRegistry,
-  MutatorDefinitions,
-} from '../../../../zero-types/src/mutator-registry.ts';
+import type {AnyMutatorRegistry} from '../../../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../../../zero-types/src/schema.ts';
 import {createBuilder} from '../../../../zql/src/query/create-builder.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
@@ -55,11 +52,7 @@ async function waitForID(socketP: Promise<MockSocket>, op: string) {
 
 async function getMetrics<
   S extends Schema,
-  MD extends
-    | MutatorDefinitions<S, C>
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
   C,
 >(
   inspector: Inspector,

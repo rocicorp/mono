@@ -13,10 +13,7 @@ import {
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
-import type {
-  AnyMutatorRegistry,
-  MutatorDefinitions,
-} from '../../zero-types/src/mutator-registry.ts';
+import type {AnyMutatorRegistry} from '../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 
 const ZeroContext = createContext<
@@ -28,11 +25,7 @@ const NO_AUTH_SET = Symbol();
 
 export function createZero<
   S extends Schema,
-  MD extends
-    | MutatorDefinitions<S, Context>
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined = undefined,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
   Context = unknown,
 >(options: ZeroOptions<S, MD, Context>): Zero<S, MD, Context> {
   const opts = {
@@ -44,11 +37,7 @@ export function createZero<
 
 export function useZero<
   S extends Schema,
-  MD extends
-    | MutatorDefinitions<S, Context>
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined = undefined,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
   Context = unknown,
 >(): () => Zero<S, MD, Context> {
   const zero = useContext(ZeroContext);
@@ -61,11 +50,7 @@ export function useZero<
 
 export function createUseZero<
   S extends Schema,
-  MD extends
-    | MutatorDefinitions<S, Context>
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined = undefined,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
   Context = unknown,
 >() {
   return () => useZero<S, MD, Context>();
@@ -73,11 +58,7 @@ export function createUseZero<
 
 export function ZeroProvider<
   S extends Schema,
-  MD extends
-    | MutatorDefinitions<S, Context>
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
   Context,
 >(
   props: {

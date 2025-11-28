@@ -1,7 +1,8 @@
 import {describe, expect, test, vi} from 'vitest';
 import {zeroData} from '../../../replicache/src/transactions.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {defineMutator} from '../../../zero-types/src/mutator.ts';
+import {defineMutatorsWithType} from '../../../zero-types/src/mutator-registry.ts';
+import {defineMutatorWithType} from '../../../zero-types/src/mutator.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {schema as testSchema} from '../../../zql/src/query/test/test-schemas.ts';
 import type {CustomMutatorDefs} from './custom.ts';
@@ -9,6 +10,8 @@ import {extendReplicacheMutators} from './make-replicache-mutators.ts';
 import type {WriteTransaction} from './replicache-types.ts';
 
 type Schema = typeof testSchema;
+const defineMutators = defineMutatorsWithType<Schema>();
+const defineMutator = defineMutatorWithType<Schema>();
 
 describe('extendReplicacheMutators', () => {
   test('processes MutatorDefinition at top level', () => {
@@ -19,9 +22,9 @@ describe('extendReplicacheMutators', () => {
     const mockMutatorFn = vi.fn(async () => {});
     const mutator = defineMutator(mockMutatorFn);
 
-    const mutators = {
+    const mutators = defineMutators({
       createUser: mutator,
-    };
+    });
 
     extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
@@ -37,11 +40,11 @@ describe('extendReplicacheMutators', () => {
     const mockMutatorFn = vi.fn(async () => {});
     const updateMutator = defineMutator(mockMutatorFn);
 
-    const mutators = {
+    const mutators = defineMutators({
       users: {
         update: updateMutator,
       },
-    };
+    });
 
     extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
@@ -57,7 +60,7 @@ describe('extendReplicacheMutators', () => {
     const mockMutatorFn = vi.fn(async () => {});
     const deepMutator = defineMutator(mockMutatorFn);
 
-    const mutators = {
+    const mutators = defineMutators({
       level1: {
         level2: {
           level3: {
@@ -65,7 +68,7 @@ describe('extendReplicacheMutators', () => {
           },
         },
       },
-    };
+    });
 
     extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
@@ -102,12 +105,12 @@ describe('extendReplicacheMutators', () => {
     const createMutator = defineMutator(async () => {});
     const updateMutator = defineMutator(async () => {});
 
-    const mutators = {
+    const mutators = defineMutators({
       users: {
         create: createMutator,
       },
       updateUser: updateMutator,
-    };
+    });
 
     extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
@@ -134,9 +137,9 @@ describe('extendReplicacheMutators', () => {
 
     const mutator = defineMutator(mockMutatorFn);
 
-    const mutators = {
+    const mutators = defineMutators({
       updateIssue: mutator,
-    };
+    });
 
     extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
@@ -181,13 +184,13 @@ describe('extendReplicacheMutators', () => {
     const updateMutator = defineMutator(async () => {});
     const deleteMutator = defineMutator(async () => {});
 
-    const mutators = {
+    const mutators = defineMutators({
       users: {
         create: createMutator,
         update: updateMutator,
         delete: deleteMutator,
       },
-    };
+    });
 
     extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
@@ -214,23 +217,32 @@ describe('extendReplicacheMutators', () => {
     const context = sharedContext;
     const mutateObject: Record<string, unknown> = {};
 
-    const incrementMutator = defineMutator(
+    const defineTypedMutator = defineMutatorWithType<
+      Schema,
+      {counter: number}
+    >();
+
+    const incrementMutator = defineTypedMutator(
       ({ctx}: {ctx: {counter: number}}) => {
         ctx.counter++;
         return Promise.resolve();
       },
     );
 
-    const getMutator = defineMutator(({ctx}: {ctx: {counter: number}}) => {
+    const getMutator = defineTypedMutator(({ctx}: {ctx: {counter: number}}) => {
       // Read the counter value
       void ctx.counter;
       return Promise.resolve();
     });
 
-    const mutators = {
+    const defineTypedMutators = defineMutatorsWithType<
+      Schema,
+      {counter: number}
+    >();
+    const mutators = defineTypedMutators({
       increment: incrementMutator,
       get: getMutator,
-    };
+    });
 
     extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
@@ -291,9 +303,9 @@ describe('extendReplicacheMutators', () => {
       return Promise.resolve();
     });
 
-    const mutators = {
+    const mutators = defineMutators({
       test: mutator,
-    };
+    });
 
     extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 
@@ -335,7 +347,7 @@ describe('extendReplicacheMutators', () => {
     const m3 = defineMutator(async () => {});
     const m4 = defineMutator(async () => {});
 
-    const mutators = {
+    const mutators = defineMutators({
       a: {
         m1,
         b: {
@@ -350,7 +362,7 @@ describe('extendReplicacheMutators', () => {
           m4,
         },
       },
-    };
+    });
 
     extendReplicacheMutators(lc, context, mutators, testSchema, mutateObject);
 

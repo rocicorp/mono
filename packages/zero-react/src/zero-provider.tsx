@@ -11,21 +11,14 @@ import {stringCompare} from '../../shared/src/string-compare.ts';
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
-import type {
-  AnyMutatorRegistry,
-  MutatorDefinitions,
-} from '../../zero-types/src/mutator-registry.ts';
+import type {AnyMutatorRegistry} from '../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 
 export const ZeroContext = createContext<unknown | undefined>(undefined);
 
 export function useZero<
   S extends Schema,
-  MD extends
-    | MutatorDefinitions<S, Context>
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined = undefined,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
   Context = unknown,
 >(): Zero<S, MD, Context> {
   const zero = useContext(ZeroContext);
@@ -37,11 +30,7 @@ export function useZero<
 
 export function createUseZero<
   S extends Schema,
-  MD extends
-    | MutatorDefinitions<S, Context>
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined = undefined,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
   Context = unknown,
 >() {
   return () => useZero<S, MD, Context>();
@@ -49,11 +38,7 @@ export function createUseZero<
 
 export type ZeroProviderProps<
   S extends Schema,
-  MD extends
-    | MutatorDefinitions<S, Context>
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
   Context,
 > = (ZeroOptions<S, MD, Context> | {zero: Zero<S, MD, Context>}) & {
   init?: (zero: Zero<S, MD, Context>) => void;
@@ -64,11 +49,7 @@ const NO_AUTH_SET = Symbol();
 
 export function ZeroProvider<
   S extends Schema,
-  MD extends
-    | MutatorDefinitions<S, Context>
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
   Context,
 >({children, init, ...props}: ZeroProviderProps<S, MD, Context>) {
   const isExternalZero = 'zero' in props;

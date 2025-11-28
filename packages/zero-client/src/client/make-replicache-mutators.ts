@@ -1,14 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
 import {
-  isMutatorDefinition,
-  type MutatorDefinition,
-  type Mutator,
-} from '../../../zero-types/src/mutator.ts';
-import {
   isMutatorRegistry,
   type AnyMutatorRegistry,
-  type MutatorDefinitions,
 } from '../../../zero-types/src/mutator-registry.ts';
+import {type Mutator} from '../../../zero-types/src/mutator.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
@@ -16,9 +11,8 @@ import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
 import type {MutatorDefs} from '../../../replicache/src/types.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {CRUD_MUTATION_NAME} from '../../../zero-protocol/src/push.ts';
-import {validateInput} from '../../../zql/src/query/validate-input.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
-import {type CRUDMutator, makeCRUDMutator} from './crud.ts';
+import {makeCRUDMutator, type CRUDMutator} from './crud.ts';
 import {
   makeReplicacheMutator as makeReplicacheMutatorLegacy,
   TransactionImpl,
@@ -29,33 +23,28 @@ import type {WriteTransaction} from './replicache-types.ts';
 export function extendReplicacheMutators<S extends Schema, C>(
   lc: LogContext,
   context: C,
-  mutators: MutatorDefinitions<S, C> | CustomMutatorDefs,
+  mutators: AnyMutatorRegistry | CustomMutatorDefs,
   schema: S,
   mutateObject: Record<string, unknown>,
 ): void {
   // Recursively process mutator definitions at arbitrary depth
-  const processMutators = (
-    mutators: MutatorDefinitions<S, C> | CustomMutatorDefs,
-    path: string[],
-  ) => {
+  const processMutators = (mutators: object, path: string[]) => {
     for (const [key, mutator] of Object.entries(mutators)) {
       path.push(key);
-      if (isMutatorDefinition(mutator)) {
+      if (isMutator(mutator)) {
         const fullKey = customMutatorKey('.', path);
         mutateObject[fullKey] = makeReplicacheMutator(
           lc,
           mutator,
-          fullKey,
           schema,
           context,
         );
       } else if (typeof mutator === 'function') {
-        // oxlint-disable-next-line no-explicit-any
-        mutator satisfies CustomMutatorImpl<any>;
         const fullKey = customMutatorKey('|', path);
         mutateObject[fullKey] = makeReplicacheMutatorLegacy(
-          mutator,
-          mutator,
+          lc,
+          // oxlint-disable-next-line no-explicit-any
+          mutator as CustomMutatorImpl<any>,
           schema,
           context,
         );
@@ -72,34 +61,22 @@ export function extendReplicacheMutators<S extends Schema, C>(
 function makeReplicacheMutator<
   TSchema extends Schema,
   TContext,
-  TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TArgs extends ReadonlyJSONValue | undefined,
   TWrappedTransaction,
 >(
   lc: LogContext,
-  mutator: MutatorDefinition<
-    TSchema,
-    TContext,
-    TInput,
-    TOutput,
-    TWrappedTransaction
-  >,
-  queryName: string,
+  mutator: Mutator<TSchema, TContext, TArgs, TWrappedTransaction>,
   schema: TSchema,
   context: TContext,
 ): (repTx: WriteTransaction, args: ReadonlyJSONValue) => Promise<void> {
-  const {validator} = mutator;
-  const validate = validator
-    ? (args: TInput) => validateInput(queryName, args, validator, 'query')
-    : (args: TInput) => args;
-
   return async (
     repTx: WriteTransaction,
     args: ReadonlyJSONValue,
   ): Promise<void> => {
     const tx = new TransactionImpl(lc, repTx, schema);
-    await mutator({
-      args: validate(args as TInput) as TOutput,
+    // fn does input validation internally
+    await mutator.fn({
+      args: args as TArgs,
       ctx: context,
       tx: tx,
     });
@@ -131,11 +108,7 @@ function makeReplicacheMutator<
  */
 export function makeReplicacheMutators<const S extends Schema, C>(
   schema: S,
-  mutators:
-    | MutatorDefinitions<S, C>
-    | AnyMutatorRegistry
-    | CustomMutatorDefs
-    | undefined,
+  mutators: AnyMutatorRegistry | CustomMutatorDefs | undefined,
   context: C,
   lc: LogContext,
 ): MutatorDefs & {_zero_crud: CRUDMutator} {
@@ -166,7 +139,7 @@ export function makeReplicacheMutators<const S extends Schema, C>(
       extendReplicacheMutators(
         lc,
         context,
-        mutators as MutatorDefinitions<S, C> | CustomMutatorDefs,
+        mutators as CustomMutatorDefs,
         schema,
         replicacheMutators,
       );

@@ -25,10 +25,8 @@ import {
   type PushBody,
   type PushResponse,
 } from '../../zero-protocol/src/push.ts';
-import {isMutatorDefinition} from '../../zero-types/src/mutator.ts';
-import type {MutatorDefinitions} from '../../zero-types/src/mutator-registry.ts';
-import type {Schema} from '../../zero-types/src/schema.ts';
-import {validateInput} from '../../zql/src/query/validate-input.ts';
+import type {AnyMutatorRegistry} from '../../zero-types/src/mutator-registry.ts';
+import {isMutator} from '../../zero-types/src/mutator.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
 import {createLogContext} from './logging.ts';
 
@@ -548,9 +546,10 @@ function makeAppErrorResponse(
   };
 }
 
-export function getMutation<S extends Schema, C>(
+/** @deprecated Use getMutator instead */
+export function getMutation(
   // oxlint-disable-next-line no-explicit-any
-  mutators: MutatorDefinitions<S, C> | CustomMutatorDefs<any>,
+  mutators: AnyMutatorRegistry | CustomMutatorDefs<any>,
   name: string,
   // oxlint-disable-next-line no-explicit-any
 ): CustomMutatorImpl<any> {
@@ -558,13 +557,10 @@ export function getMutation<S extends Schema, C>(
   const mutator = getObjectAtPath(mutators, path);
   assert(typeof mutator === 'function', `could not find mutator ${name}`);
 
-  if (isMutatorDefinition(mutator)) {
+  if (isMutator(mutator)) {
     // mutator needs to be called with {tx, args, ctx}
     // CustomMutatorImpl is called with (tx, args, ctx)
-    return (tx, args, ctx) => {
-      const v = validateInput(name, args, mutator.validator, 'mutator');
-      return mutator({args: v, ctx, tx});
-    };
+    return (tx, args, ctx) => mutator.fn({args, ctx, tx});
   }
 
   // oxlint-disable-next-line no-explicit-any

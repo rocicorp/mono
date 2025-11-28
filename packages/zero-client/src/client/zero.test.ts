@@ -60,10 +60,7 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import type {
-  AnyMutatorRegistry,
-  MutatorDefinitions,
-} from '../../../zero-types/src/mutator-registry.ts';
+import type {AnyMutatorRegistry} from '../../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
@@ -1067,11 +1064,7 @@ describe('initConnection', () => {
 
   async function zeroForTestWithDeletedClients<
     const S extends Schema,
-    MD extends
-      | MutatorDefinitions<S, C>
-      | AnyMutatorRegistry
-      | CustomMutatorDefs
-      | undefined = undefined,
+    MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
     C = unknown,
   >(
     options: Partial<ZeroOptions<S, MD, C>> & {

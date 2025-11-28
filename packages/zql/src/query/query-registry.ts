@@ -247,6 +247,81 @@ export function defineQuery<
   return f;
 }
 
+/**
+ * Returns a typed version of {@link defineQuery} with the schema and context
+ * types pre-specified. This enables better type inference when defining
+ * queries.
+ *
+ * @example
+ * ```ts
+ * const builder = createBuilder(schema);
+ *
+ * // With both Schema and Context types
+ * const defineAppQuery = defineQueryWithType<AppSchema, AppContext>();
+ * const myQuery = defineAppQuery(({ctx}) =>
+ *   builder.issue.where('userID', ctx.userID),
+ * );
+ *
+ * // With just Context type (Schema inferred)
+ * const defineAppQuery = defineQueryWithType<AppContext>();
+ * ```
+ *
+ * @typeParam S - The Zero schema type.
+ * @typeParam C - The context type passed to query functions.
+ * @returns A function equivalent to {@link defineQuery} but with types
+ *   pre-bound.
+ */
+export function defineQueryWithType<
+  S extends Schema,
+  C = unknown,
+>(): TypedDefineQuery<S, C>;
+
+/**
+ * Returns a typed version of {@link defineQuery} with the context type
+ * pre-specified.
+ *
+ * @typeParam C - The context type passed to query functions.
+ * @returns A function equivalent to {@link defineQuery} but with the context
+ *   type pre-bound.
+ */
+export function defineQueryWithType<C>(): TypedDefineQuery<Schema, C>;
+
+export function defineQueryWithType() {
+  return defineQuery;
+}
+
+/**
+ * The return type of defineQueryWithType. A function matching the
+ * defineQuery overloads but with Schema and Context pre-bound.
+ */
+type TypedDefineQuery<TSchema extends Schema, TContext> = {
+  // Without validator
+  <
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+    TArgs extends ReadonlyJSONValue | undefined,
+  >(
+    queryFn: QueryDefinitionFunction<TSchema, TTable, TReturn, TContext, TArgs>,
+  ): QueryDefinition<TSchema, TTable, TReturn, TContext, TArgs, TArgs>;
+
+  // With validator
+  <
+    TTable extends keyof TSchema['tables'] & string,
+    TReturn,
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput extends ReadonlyJSONValue | undefined,
+  >(
+    validator: StandardSchemaV1<TInput, TOutput>,
+    queryFn: QueryDefinitionFunction<
+      TSchema,
+      TTable,
+      TReturn,
+      TContext,
+      TOutput
+    >,
+  ): QueryDefinition<TSchema, TTable, TReturn, TContext, TInput, TOutput>;
+};
+
 function createCustomQueryBuilder<
   S extends Schema,
   T extends keyof S['tables'] & string,
