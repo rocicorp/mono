@@ -1,11 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
 import {
   isMutatorRegistry,
   type AnyMutatorRegistry,
-} from '../../../zero-types/src/mutator-registry.ts';
-import {type Mutator} from '../../../zero-types/src/mutator.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
-import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
+} from '../../../zql/src/mutate/mutator-registry.ts';
+import {type Mutator} from '../../../zql/src/mutate/mutator.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
 
 import type {MutatorDefs} from '../../../replicache/src/types.ts';

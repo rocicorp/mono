@@ -6,12 +6,12 @@ import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
 import {type PushBody} from '../../zero-protocol/src/push.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
 import {
   defineMutators,
   type AnyMutatorRegistry,
-} from '../../zero-types/src/mutator-registry.ts';
-import {defineMutator} from '../../zero-types/src/mutator.ts';
-import type {Schema} from '../../zero-types/src/schema.ts';
+} from '../../zql/src/mutate/mutator-registry.ts';
+import {defineMutator} from '../../zql/src/mutate/mutator.ts';
 import {PostgresJSConnection} from './adapters/postgresjs.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import type {

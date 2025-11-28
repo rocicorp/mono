@@ -95,24 +95,6 @@ export type {
   SchemaValueWithCustomType,
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
-export {
-  defineMutators,
-  defineMutatorsWithType,
-  getMutator,
-  isMutatorRegistry,
-  mustGetMutator,
-  type AnyMutatorRegistry,
-  type MutatorDefinitions,
-  type MutatorRegistry,
-} from '../../zero-types/src/mutator-registry.ts';
-export {
-  defineMutator,
-  defineMutatorWithType,
-  isMutator,
-  isMutatorDefinition,
-  type MutatorDefinition,
-} from '../../zero-types/src/mutator.ts';
-export type {MutationRequest, Mutator} from '../../zero-types/src/mutator.ts';
 export type {Schema} from '../../zero-types/src/schema.ts';
 export type {Change} from '../../zql/src/ivm/change.ts';
 export type {Node} from '../../zql/src/ivm/data.ts';
@@ -137,6 +119,24 @@ export type {
   UpdateValue,
   UpsertValue,
 } from '../../zql/src/mutate/custom.ts';
+export {
+  defineMutators,
+  defineMutatorsWithType,
+  getMutator,
+  isMutatorRegistry,
+  mustGetMutator,
+  type AnyMutatorRegistry,
+  type MutatorDefinitions,
+  type MutatorRegistry,
+} from '../../zql/src/mutate/mutator-registry.ts';
+export {
+  defineMutator,
+  defineMutatorWithType,
+  isMutator,
+  isMutatorDefinition,
+  type MutatorDefinition,
+} from '../../zql/src/mutate/mutator.ts';
+export type {MutationRequest, Mutator} from '../../zql/src/mutate/mutator.ts';
 export {createBuilder} from '../../zql/src/query/create-builder.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {

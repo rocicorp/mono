@@ -14,10 +14,10 @@ import {
   handleMutationRequest,
   type TransactFn,
 } from '../../zero-server/src/process-mutations.ts';
-import type {AnyMutatorRegistry} from '../../zero-types/src/mutator-registry.ts';
-import {isMutator} from '../../zero-types/src/mutator.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {Transaction} from '../../zql/src/mutate/custom.ts';
+import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
+import {isMutator} from '../../zql/src/mutate/mutator.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 
 export class PushProcessor<

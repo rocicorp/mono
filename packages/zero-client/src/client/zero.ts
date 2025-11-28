@@ -76,17 +76,17 @@ import {
   type NameMapper,
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import {
   type AnyMutatorRegistry,
   isMutatorRegistry,
   iterateMutators,
-} from '../../../zero-types/src/mutator-registry.ts';
+} from '../../../zql/src/mutate/mutator-registry.ts';
 import type {
   AnyMutator,
   MutationRequest,
-} from '../../../zero-types/src/mutator.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
+} from '../../../zql/src/mutate/mutator.ts';
 import {
   type ClientMetricMap,
   type MetricMap,

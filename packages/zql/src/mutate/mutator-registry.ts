@@ -1,11 +1,12 @@
-import {deepMerge, type DeepMerge} from '../../shared/src/deep-merge.ts';
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {deepMerge, type DeepMerge} from '../../../shared/src/deep-merge.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {
   getValueAtPath,
   iterateLeaves,
-} from '../../shared/src/object-traversal.ts';
-import type {Transaction} from '../../zql/src/mutate/custom.ts';
-import {validateInput} from '../../zql/src/query/validate-input.ts';
+} from '../../../shared/src/object-traversal.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import {validateInput} from '../query/validate-input.ts';
+import type {Transaction} from './custom.ts';
 import {
   isMutator,
   isMutatorDefinition,
@@ -14,7 +15,6 @@ import {
   type Mutator,
   type MutatorDefinition,
 } from './mutator.ts';
-import type {Schema} from './schema.ts';
 
 /**
  * Creates a MutatorRegistry from a tree of MutatorDefinitions,

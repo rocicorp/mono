@@ -1,6 +1,6 @@
 import {expect, expectTypeOf, test} from 'vitest';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import type {MutationRequest} from '../../../zero-types/src/mutator.ts';
+import type {MutationRequest} from '../../../zql/src/mutate/mutator.ts';
 import type {DBMutator} from './crud.ts';
 import type {MutatorResult} from './custom.ts';
 import {zeroForTest} from './test-utils.ts';

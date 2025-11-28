@@ -1,15 +1,15 @@
 // oxlint-disable require-await
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import {describe, expect, expectTypeOf, test, vi} from 'vitest';
-import type {Transaction} from '../../zql/src/mutate/custom.ts';
+import * as z from 'zod';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {Transaction} from './custom.ts';
 import {
   defineMutator,
   defineMutatorWithType,
   isMutatorDefinition,
   type MutatorDefinition,
 } from './mutator.ts';
-import type {Schema} from './schema.ts';
-import * as z from 'zod';
 
 describe('defineMutator', () => {
   test('creates a mutator definition without validator', () => {

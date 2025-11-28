@@ -1,7 +1,8 @@
 // oxlint-disable require-await
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import {describe, expect, expectTypeOf, test, vi} from 'vitest';
-import type {AnyTransaction, Transaction} from '../../zql/src/mutate/custom.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {AnyTransaction, Transaction} from './custom.ts';
 import {
   defineMutators,
   defineMutatorsWithType,
@@ -16,7 +17,6 @@ import {
   type MutationRequest,
   type Mutator,
 } from './mutator.ts';
-import type {Schema} from './schema.ts';
 
 const createUser = defineMutator(
   ({args, ctx, tx}: {args: {name: string}; ctx: unknown; tx: unknown}) => {

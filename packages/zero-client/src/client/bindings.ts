@@ -1,6 +1,6 @@
-import type {AnyMutatorRegistry} from '../../../zero-types/src/mutator-registry.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Format, ViewFactory} from '../../../zql/src/ivm/view.ts';
+import type {AnyMutatorRegistry} from '../../../zql/src/mutate/mutator-registry.ts';
 import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {

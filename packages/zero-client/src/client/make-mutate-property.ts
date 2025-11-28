@@ -1,15 +1,15 @@
 import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
 import {must} from '../../../shared/src/must.ts';
-import type {AnyMutatorRegistry} from '../../../zero-types/src/mutator-registry.ts';
-import {
-  isMutator,
-  type MutatorDefinition,
-} from '../../../zero-types/src/mutator.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {
   customMutatorKey,
   type Transaction,
 } from '../../../zql/src/mutate/custom.ts';
+import type {AnyMutatorRegistry} from '../../../zql/src/mutate/mutator-registry.ts';
+import {
+  isMutator,
+  type MutatorDefinition,
+} from '../../../zql/src/mutate/mutator.ts';
 import type {DBMutator} from './crud.ts';
 import type {CustomMutatorDefs, MutatorResult} from './custom.ts';
 import type {MutatorProxy} from './mutator-proxy.ts';
