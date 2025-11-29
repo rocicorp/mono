@@ -151,6 +151,43 @@ test('expose and unexpose', async () => {
   expect(g.__zero).toBeUndefined();
 });
 
+test('query property provides table query builders', async () => {
+  const schema = createSchema({
+    tables: [
+      table('user')
+        .columns({
+          id: string(),
+          name: string(),
+        })
+        .primaryKey('id'),
+      table('post')
+        .columns({
+          id: string(),
+          title: string(),
+        })
+        .primaryKey('id'),
+    ],
+  });
+
+  const z = zeroForTest({schema});
+
+  // query property should exist
+  expect(z.query).toBeDefined();
+
+  // Should have query builders for each table
+  expect(z.query.user).toBeDefined();
+  expect(z.query.post).toBeDefined();
+
+  // Query builders should be usable
+  const userQuery = z.query.user.where('id', '123');
+  expect(userQuery).toBeDefined();
+
+  const postQuery = z.query.post.where('title', 'Hello');
+  expect(postQuery).toBeDefined();
+
+  await z.close();
+});
+
 describe('onOnlineChange callback', () => {
   const getNewZero = () => {
     let onlineCount = 0;
