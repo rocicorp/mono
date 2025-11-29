@@ -87,6 +87,7 @@ import type {
   AnyMutator,
   MutationRequest,
 } from '../../../zql/src/mutate/mutator.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {
   type ClientMetricMap,
   type MetricMap,
@@ -101,6 +102,7 @@ import {
   type RunOptions,
   type ToQuery,
 } from '../../../zql/src/query/query.ts';
+import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {send} from '../util/socket.ts';
@@ -407,6 +409,13 @@ export class Zero<
 
   readonly #options: ZeroOptions<S, MD, C>;
 
+  /**
+   * Query builders for each table in the schema.
+   *
+   * @deprecated Use {@linkcode createBuilder} to create query builders instead.
+   */
+  readonly query: SchemaQuery<S>;
+
   // TODO: Metrics needs to be rethought entirely as we're not going to
   // send metrics to customer server.
   #metrics: MetricManager;
@@ -473,6 +482,7 @@ export class Zero<
     }
 
     this.#options = options;
+    this.query = createBuilder(schema);
 
     this.#logOptions = this.#createLogOptions({
       consoleLogLevel: options.logLevel ?? 'warn',

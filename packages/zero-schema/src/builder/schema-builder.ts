@@ -59,7 +59,7 @@ export function createSchema<
       throw new Error(`Multiple tables reference the name "${serverName}"`);
     }
     serverNames.add(serverName);
-    if (retTables[table.schema.name]) {
+    if (Object.hasOwn(retTables, table.schema.name)) {
       throw new Error(
         `Table "${table.schema.name}" is defined more than once in the schema`,
       );
