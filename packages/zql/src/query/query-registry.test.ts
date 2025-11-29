@@ -691,7 +691,9 @@ describe('defineQueriesWithType', () => {
   test('works without type annotations on defineQuery', () => {
     const queries = defineQueriesWithType<{userId: string}>()({
       getUser: defineQuery(
-        makeValidator(v => v as string | undefined),
+        makeValidator<string | undefined, string | undefined>(
+          v => v as string | undefined,
+        ),
         ({args, ctx}) => builder.foo.where('id', '=', args ?? ctx.userId),
       ),
     });

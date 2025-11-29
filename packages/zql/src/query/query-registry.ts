@@ -26,19 +26,20 @@ export type CustomQuery<
   T extends keyof S['tables'] & string,
   R,
   C,
-  Args extends ReadonlyJSONValue | undefined,
+  ArgsInput extends ReadonlyJSONValue | undefined,
+  ArgsOutput extends ReadonlyJSONValue | undefined = ArgsInput,
   HasArgs extends boolean = false,
 > = {
   readonly [customQueryTag]: true;
 } & (HasArgs extends true
   ? unknown
-  : undefined extends Args
+  : undefined extends ArgsInput
     ? {
-        (): CustomQuery<S, T, R, C, Args, true>;
-        (args?: Args): CustomQuery<S, T, R, C, Args, true>;
+        (): CustomQuery<S, T, R, C, ArgsInput, ArgsOutput, true>;
+        (args?: ArgsInput): CustomQuery<S, T, R, C, ArgsInput, ArgsOutput, true>;
       }
     : {
-        (args: Args): CustomQuery<S, T, R, C, Args, true>;
+        (args: ArgsInput): CustomQuery<S, T, R, C, ArgsInput, ArgsOutput, true>;
       }) &
   (HasArgs extends true ? {toQuery(ctx: C): Query<S, T, R>} : unknown);
 
@@ -69,10 +70,10 @@ type CustomQueriesInner<
     infer TTable,
     infer TReturn,
     infer TContext,
-    any,
+    infer TInput,
     infer TOutput
   >
-    ? CustomQuery<S, TTable, TReturn, TContext, TOutput>
+    ? CustomQuery<S, TTable, TReturn, TContext, TInput, TOutput>
     : QD[K] extends QueryDefinitions<S, any>
       ? CustomQueriesInner<QD[K], S>
       : never;
@@ -327,23 +328,24 @@ function createCustomQueryBuilder<
   T extends keyof S['tables'] & string,
   R,
   C,
-  Args extends ReadonlyJSONValue | undefined,
+  ArgsInput extends ReadonlyJSONValue | undefined,
+  ArgsOutput extends ReadonlyJSONValue | undefined,
   HasArgs extends boolean,
 >(
-  queryDef: QueryDefinition<S, T, R, C, any, Args>,
+  queryDef: QueryDefinition<S, T, R, C, ArgsInput, ArgsOutput>,
   name: string,
-  args: Args,
+  args: ArgsOutput,
   hasArgs: HasArgs,
-): CustomQuery<S, T, R, C, Args, HasArgs> {
+): CustomQuery<S, T, R, C, ArgsInput, ArgsOutput, HasArgs> {
   const {validator} = queryDef;
 
   // The callable function that sets args
-  const builder = (args: Args) => {
+  const builder = (args: ArgsInput) => {
     if (hasArgs) {
       throw new Error('args already set');
     }
     const validatedArgs = validateInput(name, args, validator, 'query');
-    return createCustomQueryBuilder<S, T, R, C, Args, true>(
+    return createCustomQueryBuilder<S, T, R, C, ArgsInput, ArgsOutput, true>(
       queryDef,
       name,
       validatedArgs,
@@ -372,7 +374,7 @@ function createCustomQueryBuilder<
   // Add the tag
   builder[customQueryTag] = true;
 
-  return builder as unknown as CustomQuery<S, T, R, C, Args, HasArgs>;
+  return builder as unknown as CustomQuery<S, T, R, C, ArgsInput, ArgsOutput, HasArgs>;
 }
 
 /**
@@ -579,7 +581,8 @@ export function getQuery<S extends Schema, QD extends QueryDefinitions<S, any>>(
       keyof S['tables'] & string,
       unknown, // return
       unknown, // context
-      ReadonlyJSONValue | undefined,
+      ReadonlyJSONValue | undefined, // ArgsInput
+      ReadonlyJSONValue | undefined, // ArgsOutput
       false
     >
   | undefined {
@@ -589,7 +592,8 @@ export function getQuery<S extends Schema, QD extends QueryDefinitions<S, any>>(
         keyof S['tables'] & string,
         unknown, // return
         unknown, // context
-        ReadonlyJSONValue | undefined,
+        ReadonlyJSONValue | undefined, // ArgsInput
+        ReadonlyJSONValue | undefined, // ArgsOutput
         false
       >
     | undefined;
@@ -606,7 +610,8 @@ export function mustGetQuery<
   keyof S['tables'] & string,
   unknown, // return
   unknown, // context
-  ReadonlyJSONValue | undefined,
+  ReadonlyJSONValue | undefined, // ArgsInput
+  ReadonlyJSONValue | undefined, // ArgsOutput
   false
 > {
   const v = getQuery(queries, name);
