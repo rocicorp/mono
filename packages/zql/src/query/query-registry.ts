@@ -334,7 +334,8 @@ function createCustomQueryBuilder<
 >(
   queryDef: QueryDefinition<S, T, R, C, ArgsInput, ArgsOutput>,
   name: string,
-  args: ArgsOutput,
+  inputArgs: ArgsInput,
+  validatedArgs: ArgsOutput,
   hasArgs: HasArgs,
 ): CustomQuery<S, T, R, C, ArgsInput, ArgsOutput, HasArgs> {
   const {validator} = queryDef;
@@ -344,11 +345,12 @@ function createCustomQueryBuilder<
     if (hasArgs) {
       throw new Error('args already set');
     }
-    const validatedArgs = validateInput(name, args, validator, 'query');
+    const validated = validateInput(name, args, validator, 'query');
     return createCustomQueryBuilder<S, T, R, C, ArgsInput, ArgsOutput, true>(
       queryDef,
       name,
-      validatedArgs,
+      args,
+      validated,
       true,
     );
   };
@@ -361,13 +363,14 @@ function createCustomQueryBuilder<
 
     return asQueryInternals(
       queryDef({
-        args,
+        args: validatedArgs,
         ctx,
       }),
     ).nameAndArgs(
       name,
       // TODO(arv): Get rid of the array?
-      args === undefined ? [] : [args as unknown as ReadonlyJSONValue],
+      // Send original input args to server (not transformed output)
+      inputArgs === undefined ? [] : [inputArgs as unknown as ReadonlyJSONValue],
     );
   };
 
@@ -466,6 +469,7 @@ export function defineQueries<QD extends QueryDefinitions<Schema, any>>(
         result[key] = createCustomQueryBuilder(
           value,
           defaultName,
+          undefined,
           undefined,
           false,
         );
