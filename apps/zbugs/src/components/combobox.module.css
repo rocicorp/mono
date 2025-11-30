@@ -90,8 +90,10 @@
   transition: opacity 0.3s ease;
   height: 0.875rem;
   width: 0.875rem;
-  color: white;
-  fill: white;
+}
+
+[data-theme='light'] .toggleIcon {
+  filter: invert(1);
 }
 
 .optionsList {
