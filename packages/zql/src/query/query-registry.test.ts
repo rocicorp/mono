@@ -495,6 +495,107 @@ describe('defineQueries', () => {
       table: 'foo',
     });
   });
+
+  test('should accept input type and send input args to server when input !== output', () => {
+    // Validator transforms string to number
+    const stringToNumberValidator = makeValidator<string, number>(data => {
+      const num = parseInt(data as string, 10);
+      if (isNaN(num)) throw new Error('Expected numeric string');
+      return num;
+    });
+
+    const queries = defineQueries({
+      getByVal: defineQuery(
+        stringToNumberValidator,
+        ({args}: {args: number; ctx: unknown}) =>
+          builder.foo.where('val', '=', args),
+      ),
+    });
+
+    // Type test: callable should accept string (input type), not number (output type)
+    expectTypeOf(queries.getByVal).parameter(0).toEqualTypeOf<string>();
+
+    // Call with string input
+    const result = queries.getByVal('42').toQuery({});
+
+    // The query AST should use the transformed value (number) for the where clause
+    expect(asQueryInternals(result).ast).toEqual({
+      table: 'foo',
+      where: {
+        type: 'simple',
+        left: {type: 'column', name: 'val'},
+        op: '=',
+        right: {type: 'literal', value: 42}, // transformed to number
+      },
+    });
+
+    // But the args sent to server (in customQueryID) should be the original input (string)
+    expect(asQueryInternals(result).customQueryID).toEqual({
+      name: 'getByVal',
+      args: ['42'], // original string, not transformed number
+    });
+  });
+
+  test('should handle validator with default value transform', () => {
+    // Validator provides default when input is undefined
+    const withDefaultValidator = makeValidator<string | undefined, string>(
+      data => (data === undefined ? 'default-value' : (data as string)),
+    );
+
+    const queries = defineQueries({
+      getValue: defineQuery(
+        withDefaultValidator,
+        ({args}: {args: string; ctx: unknown}) =>
+          builder.foo.where('id', '=', args),
+      ),
+    });
+
+    // Type test: callable should accept string | undefined (input type)
+    expectTypeOf(queries.getValue).parameter(0).toEqualTypeOf<
+      string | undefined
+    >();
+
+    // Call with undefined - query function gets transformed value
+    const result = queries.getValue(undefined).toQuery({});
+
+    // The query AST should use the transformed value
+    expect(asQueryInternals(result).ast).toEqual({
+      table: 'foo',
+      where: {
+        type: 'simple',
+        left: {type: 'column', name: 'id'},
+        op: '=',
+        right: {type: 'literal', value: 'default-value'}, // transformed
+      },
+    });
+
+    // Args sent to server: undefined args produce empty array (existing behavior)
+    expect(asQueryInternals(result).customQueryID).toEqual({
+      name: 'getValue',
+      args: [], // undefined becomes empty array
+    });
+
+    // Call with actual string value
+    const result2 = queries.getValue('explicit').toQuery({});
+
+    // The query AST should use the input value (no transform needed)
+    expect(asQueryInternals(result2).ast).toEqual({
+      table: 'foo',
+      where: {
+        type: 'simple',
+        left: {type: 'column', name: 'id'},
+        op: '=',
+        right: {type: 'literal', value: 'explicit'},
+      },
+    });
+
+    // Args sent to server should be the original input string
+    expect(asQueryInternals(result2).customQueryID).toEqual({
+      name: 'getValue',
+      args: ['explicit'],
+    });
+  });
+
 });
 
 describe('isQueryRegistry', () => {
