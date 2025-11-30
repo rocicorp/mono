@@ -116,7 +116,7 @@ export class CustomQueryTransformer {
         userQueryURL ??
           must(
             this.#config.url[0],
-            'A ZERO_GET_QUERIES_URL must be configured for custom queries',
+            'A ZERO_QUERY_URL must be configured for custom queries',
           ),
         this.#urlPatterns,
         this.#shard,
