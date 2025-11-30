@@ -27,7 +27,7 @@ export type CustomQuery<
   R,
   C,
   ArgsInput extends ReadonlyJSONValue | undefined,
-  ArgsOutput extends ReadonlyJSONValue | undefined = ArgsInput,
+  ArgsOutput extends ReadonlyJSONValue | undefined,
   HasArgs extends boolean = false,
 > = {
   readonly [customQueryTag]: true;
@@ -36,7 +36,9 @@ export type CustomQuery<
   : undefined extends ArgsInput
     ? {
         (): CustomQuery<S, T, R, C, ArgsInput, ArgsOutput, true>;
-        (args?: ArgsInput): CustomQuery<S, T, R, C, ArgsInput, ArgsOutput, true>;
+        (
+          args?: ArgsInput,
+        ): CustomQuery<S, T, R, C, ArgsInput, ArgsOutput, true>;
       }
     : {
         (args: ArgsInput): CustomQuery<S, T, R, C, ArgsInput, ArgsOutput, true>;
@@ -99,7 +101,7 @@ type QueryDefinitionFunction<
 > = (options: {args: Args; ctx: TContext}) => Query<TSchema, TTable, TReturn>;
 
 /**
- * A query definition is the function callback that you pass into defineQuery.
+ * A query definition is the return type of `defineQuery()`.
  */
 export type QueryDefinition<
   TSchema extends Schema,
@@ -370,14 +372,24 @@ function createCustomQueryBuilder<
       name,
       // TODO(arv): Get rid of the array?
       // Send original input args to server (not transformed output)
-      inputArgs === undefined ? [] : [inputArgs as unknown as ReadonlyJSONValue],
+      inputArgs === undefined
+        ? []
+        : [inputArgs as unknown as ReadonlyJSONValue],
     );
   };
 
   // Add the tag
   builder[customQueryTag] = true;
 
-  return builder as unknown as CustomQuery<S, T, R, C, ArgsInput, ArgsOutput, HasArgs>;
+  return builder as unknown as CustomQuery<
+    S,
+    T,
+    R,
+    C,
+    ArgsInput,
+    ArgsOutput,
+    HasArgs
+  >;
 }
 
 /**
