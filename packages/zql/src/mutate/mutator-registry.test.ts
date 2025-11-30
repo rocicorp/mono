@@ -475,3 +475,195 @@ describe('Type Tests', () => {
     expectTypeOf<FnCtx>().toEqualTypeOf<ServerContext>();
   });
 });
+
+describe('input/output type separation', () => {
+  function makeValidator<Input, Output>(
+    validate: (data: unknown) => Output,
+  ): StandardSchemaV1<Input, Output> {
+    return {
+      '~standard': {
+        version: 1,
+        vendor: 'test',
+        validate: data => {
+          try {
+            return {value: validate(data)};
+          } catch (e) {
+            return {issues: [{message: (e as Error).message}]};
+          }
+        },
+      },
+    };
+  }
+
+  test('callable accepts input type, MutationRequest.args stores input', () => {
+    // Validator transforms string to number
+    const stringToNumberValidator = makeValidator<string, number>(data => {
+      const num = parseInt(data as string, 10);
+      if (isNaN(num)) throw new Error('Expected numeric string');
+      return num;
+    });
+
+    const mutators = defineMutators({
+      item: {
+        update: defineMutator(
+          stringToNumberValidator,
+          async ({args}: {args: number; ctx: unknown; tx: unknown}) => {
+            // args is the transformed number type
+            expectTypeOf(args).toEqualTypeOf<number>();
+            void args;
+          },
+        ),
+      },
+    });
+
+    // Type test: callable should accept string (input type), not number (output type)
+    expectTypeOf(mutators.item.update).parameter(0).toEqualTypeOf<string>();
+
+    // Call with string input
+    const mr = mutators.item.update('42');
+
+    // MutationRequest.args should be the original input (string)
+    expect(mr.args).toBe('42');
+    expectTypeOf(mr.args).toEqualTypeOf<string>();
+  });
+
+  test('fn validates and transforms args before passing to mutator', async () => {
+    const capturedArgs: unknown[] = [];
+
+    // Validator transforms string to number
+    const stringToNumberValidator = makeValidator<string, number>(data => {
+      const num = parseInt(data as string, 10);
+      if (isNaN(num)) throw new Error('Expected numeric string');
+      return num;
+    });
+
+    const mutators = defineMutators({
+      item: {
+        update: defineMutator(
+          stringToNumberValidator,
+          async ({args}: {args: number; ctx: unknown; tx: unknown}) => {
+            capturedArgs.push(args);
+          },
+        ),
+      },
+    });
+
+    const mockTx = {
+      location: 'client',
+      clientID: 'test-client',
+      mutationID: 1,
+      reason: 'optimistic',
+      mutate: {},
+      query: {},
+    } as AnyTransaction;
+
+    // Call fn with string input (simulating server receiving raw args)
+    await mutators.item.update.fn({
+      args: '42',
+      ctx: undefined,
+      tx: mockTx,
+    });
+
+    // The mutator function should receive the transformed number
+    expect(capturedArgs).toHaveLength(1);
+    expect(capturedArgs[0]).toBe(42); // transformed to number
+  });
+
+  test('validator with default value transform', async () => {
+    const capturedArgs: unknown[] = [];
+
+    // Validator provides default when input is undefined
+    const withDefaultValidator = makeValidator<string | undefined, string>(
+      data => (data === undefined ? 'default-value' : (data as string)),
+    );
+
+    const mutators = defineMutators({
+      item: {
+        create: defineMutator(
+          withDefaultValidator,
+          async ({args}: {args: string; ctx: unknown; tx: unknown}) => {
+            capturedArgs.push(args);
+          },
+        ),
+      },
+    });
+
+    // Type test: callable should accept string | undefined (input type)
+    expectTypeOf(mutators.item.create).parameter(0).toEqualTypeOf<
+      string | undefined
+    >();
+
+    // Call with undefined
+    const mr = mutators.item.create(undefined);
+
+    // MutationRequest.args should be the original input (undefined)
+    expect(mr.args).toBe(undefined);
+
+    const mockTx = {
+      location: 'client',
+      clientID: 'test-client',
+      mutationID: 1,
+      reason: 'optimistic',
+      mutate: {},
+      query: {},
+    } as AnyTransaction;
+
+    // When fn is called, it should transform undefined to 'default-value'
+    await mutators.item.create.fn({
+      args: undefined,
+      ctx: undefined,
+      tx: mockTx,
+    });
+
+    expect(capturedArgs).toHaveLength(1);
+    expect(capturedArgs[0]).toBe('default-value'); // transformed
+  });
+
+  test('MutationRequest preserves input type for server transmission', () => {
+    // This test verifies that when a mutation is sent to the server,
+    // the args in MutationRequest are the original input (not transformed)
+
+    const transformValidator = makeValidator<
+      {id: string; count: string},
+      {id: string; count: number}
+    >(data => {
+      const input = data as {id: string; count: string};
+      return {
+        id: input.id,
+        count: parseInt(input.count, 10),
+      };
+    });
+
+    const mutators = defineMutators({
+      item: {
+        update: defineMutator(
+          transformValidator,
+          async ({
+            args,
+          }: {
+            args: {id: string; count: number};
+            ctx: unknown;
+            tx: unknown;
+          }) => {
+            // Mutator receives transformed args with count as number
+            expectTypeOf(args.count).toEqualTypeOf<number>();
+            void args;
+          },
+        ),
+      },
+    });
+
+    // Callable accepts input type (count as string)
+    expectTypeOf(mutators.item.update).parameter(0).toEqualTypeOf<{
+      id: string;
+      count: string;
+    }>();
+
+    const mr = mutators.item.update({id: 'abc', count: '123'});
+
+    // MutationRequest.args should be input type (count as string)
+    // This is what gets sent to the server
+    expect(mr.args).toEqual({id: 'abc', count: '123'});
+    expectTypeOf(mr.args).toEqualTypeOf<{id: string; count: string}>();
+  });
+});

@@ -294,18 +294,18 @@ const mutatorRegistryTag = Symbol('mutatorRegistry');
 /**
  * Transforms a MutatorDefinitions into a tree of Mutators.
  * Each MutatorDefinition becomes a Mutator at the same path.
- * Uses TOutput (the validated type) as TArgs for the resulting Mutator.
+ * Uses TInput for the callable args (TOutput is only used internally for validation).
  */
 type ToMutatorTree<S extends Schema, C, T extends MutatorDefinitions<S, C>> = {
   readonly [K in keyof T]: T[K] extends MutatorDefinition<
     S,
     C,
+    infer TInput,
     // oxlint-disable-next-line no-explicit-any
-    any, // TInput - we don't need it for the public Mutator type
-    infer TOutput,
+    any, // TOutput - only used internally for validation
     infer TWrappedTransaction
   >
-    ? Mutator<S, C, TOutput, TWrappedTransaction>
+    ? Mutator<S, C, TInput, TWrappedTransaction>
     : T[K] extends MutatorDefinitions<S, C>
       ? ToMutatorTree<S, C, T[K]>
       : never;

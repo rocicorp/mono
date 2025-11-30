@@ -195,17 +195,17 @@ type TypedDefineMutator<
  *
  * @template TSchema - The schema type
  * @template TContext - The context type available during mutation execution
- * @template TArgs - The argument type (after validation)
+ * @template TArgsInput - The argument type accepted by the callable (before validation)
  * @template TWrappedTransaction - The wrapped transaction type
  */
 export type Mutator<
   TSchema extends Schema,
   TContext,
-  TArgs extends ReadonlyJSONValue | undefined,
-  TWrappedTransaction,
+  TArgsInput extends ReadonlyJSONValue | undefined,
+  TWrappedTransaction = unknown,
 > = ((
-  args: TArgs,
-) => MutationRequest<TSchema, TContext, TArgs, TWrappedTransaction>) & {
+  args: TArgsInput,
+) => MutationRequest<TSchema, TContext, TArgsInput, TWrappedTransaction>) & {
   readonly mutatorName: string;
   /**
    * Execute the mutation. Args are ReadonlyJSONValue because this is called
@@ -216,7 +216,7 @@ export type Mutator<
    * calling from generic code. The implementation casts to the specific type.
    */
   readonly fn: (options: {
-    args: TArgs;
+    args: TArgsInput;
     ctx: TContext;
     tx: AnyTransaction;
   }) => Promise<void>;
@@ -233,17 +233,17 @@ export type AnyMutator = Mutator<Schema, any, any, any>;
  *
  * @template TSchema - The schema type
  * @template TContext - The context type available during mutation execution
- * @template TArgs - The argument type (after validation)
+ * @template TArgsInput - The argument type (before validation, sent to server)
  * @template TWrappedTransaction - The wrapped transaction type
  */
 export type MutationRequest<
   TSchema extends Schema,
   TContext,
-  TArgs extends ReadonlyJSONValue | undefined,
+  TArgsInput extends ReadonlyJSONValue | undefined,
   TWrappedTransaction,
 > = {
-  readonly mutator: Mutator<TSchema, TContext, TArgs, TWrappedTransaction>;
-  readonly args: TArgs;
+  readonly mutator: Mutator<TSchema, TContext, TArgsInput, TWrappedTransaction>;
+  readonly args: TArgsInput;
 };
 
 /**
