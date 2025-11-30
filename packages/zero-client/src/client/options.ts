@@ -25,6 +25,11 @@ export interface ZeroOptions<
    * the zero-cache is hosted on the same domain as the application. **Note that
    * only a single path segment is allowed (e.g. it cannot be "/proxy/zero/\*")**.
    */
+  cacheURL?: string | null | undefined;
+
+  /**
+   * @deprecated Use {@linkcode cacheURL} instead.
+   */
   server?: string | null | undefined;
 
   /**

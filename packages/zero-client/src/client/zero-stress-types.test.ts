@@ -56,7 +56,7 @@ describe('stress test types', () => {
     const zero = new Zero({
       schema: zeroStressSchema,
       userID: 'anon',
-      server: null,
+      cacheURL: null,
       mutators: {
         updateThing: (tx: Tx, _opts: {}) => {
           expectTypeOf<
@@ -136,7 +136,7 @@ describe('stress test types', () => {
     new Zero({
       schema: zeroStressSchema,
       userID: 'anon',
-      server: null,
+      cacheURL: null,
       mutators: {
         testCrudExists: (tx: Tx) => {
           // Test that insert, update, delete, and upsert all exist
@@ -171,7 +171,7 @@ describe('stress test types', () => {
     new Zero({
       schema: zeroStressSchema,
       userID: 'anon',
-      server: null,
+      cacheURL: null,
       mutators: {
         testCompositePKs: (tx: Tx) => {
           type DeleteUser = Parameters<typeof tx.mutate.user.delete>[0];
@@ -208,7 +208,7 @@ describe('stress test types', () => {
     new Zero({
       schema: zeroStressSchema,
       userID: 'anon',
-      server: null,
+      cacheURL: null,
       mutators: {
         testUpsert: (tx: Tx) => {
           // Upsert methods should be callable
