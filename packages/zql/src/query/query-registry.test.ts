@@ -551,9 +551,9 @@ describe('defineQueries', () => {
     });
 
     // Type test: callable should accept string | undefined (input type)
-    expectTypeOf(queries.getValue).parameter(0).toEqualTypeOf<
-      string | undefined
-    >();
+    expectTypeOf(queries.getValue)
+      .parameter(0)
+      .toEqualTypeOf<string | undefined>();
 
     // Call with undefined - query function gets transformed value
     const result = queries.getValue(undefined).toQuery({});
@@ -595,7 +595,6 @@ describe('defineQueries', () => {
       args: ['explicit'],
     });
   });
-
 });
 
 describe('isQueryRegistry', () => {

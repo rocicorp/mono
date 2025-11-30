@@ -589,9 +589,9 @@ describe('input/output type separation', () => {
     });
 
     // Type test: callable should accept string | undefined (input type)
-    expectTypeOf(mutators.item.create).parameter(0).toEqualTypeOf<
-      string | undefined
-    >();
+    expectTypeOf(mutators.item.create)
+      .parameter(0)
+      .toEqualTypeOf<string | undefined>();
 
     // Call with undefined
     const mr = mutators.item.create(undefined);
