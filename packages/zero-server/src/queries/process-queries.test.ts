@@ -88,7 +88,7 @@ describe('handleGetQueriesRequest', () => {
       ],
     ]);
 
-    const request = new Request('https://example.com/queries', {
+    const request = new Request('https://example.com/get-queries', {
       method: 'POST',
       body,
     });
@@ -130,7 +130,7 @@ describe('handleGetQueriesRequest', () => {
 
   test('returns transformFailed parse error when request body parsing fails', async () => {
     // Create a Request that will fail to parse as JSON
-    const request = new Request('https://example.com/queries', {
+    const request = new Request('https://example.com/get-queries', {
       method: 'POST',
       body: 'not valid json',
     });
@@ -411,7 +411,7 @@ describe('handleTransformRequest', () => {
       ],
     ]);
 
-    const request = new Request('https://example.com/queries', {
+    const request = new Request('https://example.com/get-queries', {
       method: 'POST',
       body,
     });
@@ -444,9 +444,7 @@ describe('handleTransformRequest', () => {
       'transformFailed',
       {
         kind: expect.any(String),
-        message: expect.stringContaining(
-          'Failed to parse transform queries request',
-        ),
+        message: expect.stringContaining('Failed to parse get queries request'),
         origin: expect.any(String),
         queryIDs: [],
         reason: ErrorReason.Parse,
@@ -457,7 +455,7 @@ describe('handleTransformRequest', () => {
 
   test('returns transformFailed parse error when request body parsing fails', async () => {
     // Create a Request that will fail to parse as JSON
-    const request = new Request('https://example.com/queries', {
+    const request = new Request('https://example.com/get-queries', {
       method: 'POST',
       body: 'not valid json',
     });
@@ -476,9 +474,7 @@ describe('handleTransformRequest', () => {
         reason: ErrorReason.Parse,
         kind: expect.any(String),
         origin: expect.any(String),
-        message: expect.stringContaining(
-          'Failed to parse transform queries request',
-        ),
+        message: expect.stringContaining('Failed to parse get queries request'),
         details: expect.objectContaining({name: 'SyntaxError'}),
         queryIDs: [],
       },
