@@ -26,22 +26,19 @@ export type CustomQuery<
   T extends keyof S['tables'] & string,
   R,
   C,
-  ArgsInput extends ReadonlyJSONValue | undefined,
-  ArgsOutput extends ReadonlyJSONValue | undefined,
+  Args extends ReadonlyJSONValue | undefined,
   HasArgs extends boolean = false,
 > = {
   readonly [customQueryTag]: true;
 } & (HasArgs extends true
   ? unknown
-  : undefined extends ArgsInput
+  : undefined extends Args
     ? {
-        (): CustomQuery<S, T, R, C, ArgsInput, ArgsOutput, true>;
-        (
-          args?: ArgsInput,
-        ): CustomQuery<S, T, R, C, ArgsInput, ArgsOutput, true>;
+        (): CustomQuery<S, T, R, C, Args, true>;
+        (args?: Args): CustomQuery<S, T, R, C, Args, true>;
       }
     : {
-        (args: ArgsInput): CustomQuery<S, T, R, C, ArgsInput, ArgsOutput, true>;
+        (args: Args): CustomQuery<S, T, R, C, Args, true>;
       }) &
   (HasArgs extends true ? {toQuery(ctx: C): Query<S, T, R>} : unknown);
 
@@ -73,9 +70,9 @@ type CustomQueriesInner<
     infer TReturn,
     infer TContext,
     infer TInput,
-    infer TOutput
+    any
   >
-    ? CustomQuery<S, TTable, TReturn, TContext, TInput, TOutput>
+    ? CustomQuery<S, TTable, TReturn, TContext, TInput>
     : QD[K] extends QueryDefinitions<S, any>
       ? CustomQueriesInner<QD[K], S>
       : never;
@@ -339,7 +336,7 @@ function createCustomQueryBuilder<
   inputArgs: ArgsInput,
   validatedArgs: ArgsOutput,
   hasArgs: HasArgs,
-): CustomQuery<S, T, R, C, ArgsInput, ArgsOutput, HasArgs> {
+): CustomQuery<S, T, R, C, ArgsInput, HasArgs> {
   const {validator} = queryDef;
 
   // The callable function that sets args
@@ -381,15 +378,7 @@ function createCustomQueryBuilder<
   // Add the tag
   builder[customQueryTag] = true;
 
-  return builder as unknown as CustomQuery<
-    S,
-    T,
-    R,
-    C,
-    ArgsInput,
-    ArgsOutput,
-    HasArgs
-  >;
+  return builder as unknown as CustomQuery<S, T, R, C, ArgsInput, HasArgs>;
 }
 
 /**
@@ -598,7 +587,6 @@ export function getQuery<S extends Schema, QD extends QueryDefinitions<S, any>>(
       unknown, // return
       unknown, // context
       ReadonlyJSONValue | undefined, // ArgsInput
-      ReadonlyJSONValue | undefined, // ArgsOutput
       false
     >
   | undefined {
@@ -609,7 +597,6 @@ export function getQuery<S extends Schema, QD extends QueryDefinitions<S, any>>(
         unknown, // return
         unknown, // context
         ReadonlyJSONValue | undefined, // ArgsInput
-        ReadonlyJSONValue | undefined, // ArgsOutput
         false
       >
     | undefined;
@@ -627,7 +614,6 @@ export function mustGetQuery<
   unknown, // return
   unknown, // context
   ReadonlyJSONValue | undefined, // ArgsInput
-  ReadonlyJSONValue | undefined, // ArgsOutput
   false
 > {
   const v = getQuery(queries, name);
