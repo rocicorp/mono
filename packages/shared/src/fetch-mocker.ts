@@ -10,10 +10,39 @@ type HandlerFn = (
 
 type Handler = {
   method: Method;
-  urlSubstring: string;
+  urlSubstring: string | undefined; // undefined means match all URLs
   response: Response | HandlerFn;
   once?: boolean;
 };
+
+type StatusResponse = {body?: unknown; status: number};
+type ThrowResponse = {throws: Error};
+type PostHandler<T> = (
+  url: string,
+  init: RequestInit | undefined,
+  request: Request,
+) =>
+  | T
+  | StatusResponse
+  | ThrowResponse
+  | Promise<T | StatusResponse | ThrowResponse>;
+
+function isStatusResponse(value: unknown): value is StatusResponse {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'status' in value &&
+    typeof (value as StatusResponse).status === 'number'
+  );
+}
+
+function isThrowResponse(value: unknown): value is ThrowResponse {
+  return typeof value === 'object' && value !== null && 'throws' in value;
+}
+
+function getUrl(input: string | Request | URL): string {
+  return input instanceof Request ? input.url : input.toString();
+}
 
 function defaultSuccessResponse<T>(result: T): Response {
   return {
@@ -32,7 +61,7 @@ function defaultErrorResponse(code: number, message: string = ''): Response {
   } as unknown as Response;
 }
 
-export interface SpyOn {
+interface SpyOn {
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   spyOn(obj: object, methodName: string): any;
 }
@@ -81,7 +110,7 @@ export class FetchMocker {
     input: RequestInfo | URL,
     init?: RequestInit,
   ): Promise<Response> {
-    const url = input instanceof Request ? input.url : input.toString();
+    const url = getUrl(input);
     const method =
       init?.method ?? (input instanceof Request ? input.method : 'GET');
 
@@ -109,12 +138,11 @@ export class FetchMocker {
     // Search backwards so newer handlers take precedence (like overwriteRoutes)
     for (let i = this.handlers.length - 1; i >= 0; i--) {
       const handler = this.handlers[i];
-      // Empty urlSubstring matches nothing (unlike String.includes which returns true)
-      if (
-        handler.method === method &&
-        handler.urlSubstring !== '' &&
-        url.includes(handler.urlSubstring)
-      ) {
+      // undefined = match all; empty string = match nothing; other = substring match
+      const urlMatches =
+        handler.urlSubstring === undefined ||
+        (handler.urlSubstring !== '' && url.includes(handler.urlSubstring));
+      if (handler.method === method && urlMatches) {
         if (handler.once) {
           this.handlers.splice(i, 1);
         }
@@ -167,90 +195,52 @@ export class FetchMocker {
   }
 
   /**
-   * Shorthand for result('POST', ...). Also supports function responses for compatibility.
-   * Handler functions receive (url, init, request) arguments.
+   * Register a POST handler. Accepts:
+   * - A JSON response value
+   * - A handler function that returns JSON, {status, body}, or {throws: Error}
+   * - A {status, body} object for error responses
    */
   post<T>(
-    urlSubstring: string,
-    json:
-      | T
-      | ((
-          url: string,
-          init: RequestInit | undefined,
-          request: Request,
-        ) => T | Promise<T>)
-      | {body: string; status: number},
+    urlSubstring: string | undefined,
+    json: T | PostHandler<T> | StatusResponse,
   ): this {
-    this.handlers.push({
-      method: 'POST',
-      urlSubstring,
-      response:
-        typeof json === 'function'
-          ? async (
-              url: string,
-              init: RequestInit | undefined,
-              request: Request,
-            ) => {
-              const result = await (
-                json as (
-                  url: string,
-                  init: RequestInit | undefined,
-                  request: Request,
-                ) => T | Promise<T>
-              )(url, init, request);
-              // Check if the function returned an error-like object with explicit status
-              if (
-                typeof result === 'object' &&
-                result !== null &&
-                'status' in result &&
-                typeof (result as {status: unknown}).status === 'number'
-              ) {
-                const r = result as {status: number; body?: unknown};
-                // Non-200 status codes should use the error response format
-                if (r.status !== 200) {
-                  return this.#error(r.status, String(r.body ?? ''));
-                }
-                // Status 200 with body - return success with the body
-                return this.#success(r.body);
-              }
-              // Check if the function requested to throw
-              if (
-                typeof result === 'object' &&
-                result !== null &&
-                'throws' in result
-              ) {
-                throw (result as {throws: Error}).throws;
-              }
-              return this.#success(result);
-            }
-          : typeof json === 'object' &&
-              json !== null &&
-              'body' in json &&
-              'status' in json
-            ? (json as {body: unknown; status: number}).status === 200
-              ? this.#success((json as {body: unknown}).body)
-              : this.#error(
-                  (json as {status: number}).status,
-                  String((json as {body: unknown}).body),
-                )
-            : this.#success(json),
-    });
+    if (typeof json === 'function') {
+      this.handlers.push({
+        method: 'POST',
+        urlSubstring,
+        response: async (url, init, request) => {
+          const result = await (json as PostHandler<T>)(url, init, request);
+          return this.#handleResult(result);
+        },
+      });
+    } else {
+      this.handlers.push({
+        method: 'POST',
+        urlSubstring,
+        response: this.#handleResult(json),
+      });
+    }
     return this;
   }
 
+  #handleResult<T>(result: T | StatusResponse | ThrowResponse): Response {
+    if (isThrowResponse(result)) {
+      throw result.throws;
+    }
+    if (isStatusResponse(result)) {
+      return result.status === 200
+        ? this.#success(result.body)
+        : this.#error(result.status, String(result.body ?? ''));
+    }
+    return this.#success(result);
+  }
+
   /**
-   * Shorthand for post() with once: true.
+   * Like post() but handler is removed after first match.
    */
   postOnce<T>(
-    urlSubstring: string,
-    json:
-      | T
-      | ((
-          url: string,
-          init: RequestInit | undefined,
-          request: Request,
-        ) => T | Promise<T>)
-      | {body: string; status: number},
+    urlSubstring: string | undefined,
+    json: T | PostHandler<T> | StatusResponse,
   ): this {
     this.post(urlSubstring, json);
     this.handlers[this.handlers.length - 1].once = true;
@@ -258,10 +248,10 @@ export class FetchMocker {
   }
 
   /**
-   * Match any POST request (uses empty string as substring, which matches all URLs).
+   * Match any POST request.
    */
   postAny<T>(json: T): this {
-    return this.post('', json);
+    return this.post(undefined, json);
   }
 
   /**
@@ -299,10 +289,9 @@ export class FetchMocker {
 
   requests(): [method: string, url: string][] {
     return this.spy.mock.calls.map(([input, init]) => {
-      const url = input instanceof Request ? input.url : input.toString();
       const method =
         init?.method ?? (input instanceof Request ? input.method : 'GET');
-      return [method, url];
+      return [method, getUrl(input)];
     });
   }
 
@@ -314,11 +303,10 @@ export class FetchMocker {
   calls(urlSubstring: string): {body: unknown}[] {
     const result: {body: unknown}[] = [];
     this.spy.mock.calls.forEach(([input], index) => {
-      const url = input instanceof Request ? input.url : input.toString();
       const matchesUrl =
         urlSubstring === 'unmatched'
           ? !this.#matchedIndices.has(index)
-          : url.includes(urlSubstring);
+          : getUrl(input).includes(urlSubstring);
 
       if (matchesUrl) {
         const body = this.#requestBodies[index];
