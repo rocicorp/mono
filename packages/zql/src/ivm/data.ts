@@ -17,6 +17,7 @@ export type Node = {
   /**
    * Relationships are generated lazily as read.
    * The stream may contain 'yield' to indicate the operator has yielded control.
+   * See {@linkcode Operator.fetch} for more details about yields.
    */
   relationships: Record<string, () => Stream<Node | 'yield'>>;
 };

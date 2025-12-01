@@ -32,8 +32,8 @@ export interface Input extends InputBase {
    * The stream may contain 'yield' to indicate the operator has yielded control.
    *
    * Contract:
-   * - During fetch: If an input yields 'yield', 'yield' must be yielded to the o
-   * utput immediately.
+   * - During fetch: If an input yields 'yield', 'yield' must be yielded to the
+   * caller of fetch immediately.
    * - During push: If a fetch to an input yields 'yield', it can be skipped/ignored.
    */
   fetch(req: FetchRequest): Stream<Node | 'yield'>;
