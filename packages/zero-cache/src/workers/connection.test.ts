@@ -204,4 +204,21 @@ describe('sendError', () => {
     );
     expect(lastLogLevel()).toBe('warn');
   });
+
+  test('socket closed while compressing is logged as warning', () => {
+    const err = new Error(
+      'The socket was closed while data was being compressed',
+    );
+    sendError(
+      lc,
+      ws,
+      {
+        kind: ErrorKind.Internal,
+        message: 'The socket was closed while data was being compressed',
+        origin: ErrorOrigin.ZeroCache,
+      },
+      err,
+    );
+    expect(lastLogLevel()).toBe('warn');
+  });
 });

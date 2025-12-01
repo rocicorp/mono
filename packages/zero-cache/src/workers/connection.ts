@@ -423,12 +423,23 @@ function hasErrno(error: unknown): boolean {
 
 const TRANSIENT_SOCKET_ERROR_CODES = ['EPIPE', 'ECONNRESET', 'ECANCELED'];
 
+// Error messages that indicate transient socket conditions (not just error codes)
+const TRANSIENT_SOCKET_MESSAGE_PATTERNS = [
+  'socket was closed while data was being compressed',
+];
+
 function containsTransientSocketCode(message: string | undefined): boolean {
   if (!message) {
     return false;
   }
   const upper = message.toUpperCase();
-  return TRANSIENT_SOCKET_ERROR_CODES.some(code => upper.includes(code));
+  if (TRANSIENT_SOCKET_ERROR_CODES.some(code => upper.includes(code))) {
+    return true;
+  }
+  const lower = message.toLowerCase();
+  return TRANSIENT_SOCKET_MESSAGE_PATTERNS.some(pattern =>
+    lower.includes(pattern),
+  );
 }
 
 function hasTransientSocketCode(error: unknown): boolean {
