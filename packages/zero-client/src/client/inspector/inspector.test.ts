@@ -1843,7 +1843,7 @@ describe('authenticate', () => {
       const fastDigest = new TDigest();
       fastDigest.add(10, 1); // 10ms
 
-      const emptyDigest = new TDigest(); // Empty digest for null hydrateServer
+      const emptyDigest = new TDigest(); // Empty digest: quantile() returns NaN, converted to null hydrateServer
       const emptyUpdateDigest = new TDigest();
 
       // Use waitForID pattern which awaits socket before calling inspector
