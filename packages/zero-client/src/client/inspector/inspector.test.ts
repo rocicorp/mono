@@ -1829,7 +1829,7 @@ describe('authenticate', () => {
       await z.close();
     });
 
-    test('queries are sorted ascending by server hydrate time', async () => {
+    test('queries are sorted descending by server hydrate time', async () => {
       const z = zeroForTest({schema});
       await z.triggerConnected();
 
