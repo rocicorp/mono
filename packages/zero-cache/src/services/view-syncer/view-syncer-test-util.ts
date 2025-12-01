@@ -737,12 +737,16 @@ export async function setup(
   function connectWithQueueAndSource(
     ctx: SyncContext,
     desiredQueriesPatch: UpQueriesPatch,
-    clientSchema: ClientSchema = defaultClientSchema,
+    clientSchema: ClientSchema | null = defaultClientSchema,
     activeClients?: string[],
   ): {queue: Queue<Downstream>; source: Source<Downstream>} {
     const source = vs.initConnection(ctx, [
       'initConnection',
-      {desiredQueriesPatch, clientSchema, activeClients},
+      {
+        desiredQueriesPatch,
+        clientSchema: clientSchema ?? undefined,
+        activeClients,
+      },
     ]);
     const queue = new Queue<Downstream>();
 
@@ -762,7 +766,7 @@ export async function setup(
   function connect(
     ctx: SyncContext,
     desiredQueriesPatch: UpQueriesPatch,
-    clientSchema?: ClientSchema,
+    clientSchema?: ClientSchema | null,
   ) {
     return connectWithQueueAndSource(ctx, desiredQueriesPatch, clientSchema)
       .queue;

@@ -407,7 +407,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   async run(): Promise<void> {
     try {
       // Wait for initialization if we need to process queries.
-      // This ensures authData is available before transforming custom queries.
+      // This ensures authData and cvr.clientSchema are available before
+      // transforming custom queries (dependency on authData) and building
+      // pipelines (dependency on cvr.clientSchema).
       if ((await this.readyState()) === 'draining') {
         this.#lc.debug?.(`draining view-syncer ${this.id} before running`);
         void this.stop();
@@ -420,9 +422,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         assert(state === 'version-ready', 'state should be version-ready'); // This is the only state change used.
 
         await this.#runInLockWithCVR(async (lc, cvr) => {
+          const clientSchema = must(
+            cvr.clientSchema,
+            'cvr.clientSchema missing after initialization',
+          );
           if (!this.#pipelines.initialized()) {
             // On the first version-ready signal, connect to the replica.
-            this.#pipelines.init(must(cvr.clientSchema));
+            this.#pipelines.init(clientSchema);
           }
           if (
             cvr.replicaVersion !== null &&
@@ -446,7 +452,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               return;
             }
             lc.info?.(`resetting pipelines: ${result.message}`);
-            this.#pipelines.reset(must(cvr.clientSchema));
+            this.#pipelines.reset(clientSchema);
           }
 
           // Advance the snapshot to the current version.
@@ -612,7 +618,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         protocolVersion,
       } = ctx;
       this.#authData = pickToken(this.#lc, this.#authData, tokenData);
-      this.#initialized.resolve('initialized'); // Signal that initialization is complete.
       this.#lc.debug?.(
         `Picked auth token: ${JSON.stringify(this.#authData?.decoded)}`,
       );
@@ -687,7 +692,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       void this.#runInLockForClient(
         ctx,
         initConnectionMessage,
-        this.#handleConfigUpdate,
+        async (lc, clientID, msg: InitConnectionBody, cvr) => {
+          if (cvr.clientSchema === null && !msg.clientSchema) {
+            throw new ProtocolErrorWithLevel({
+              kind: ErrorKind.InvalidConnectionRequest,
+              message:
+                'The initConnection message for a new client group must include client schema.',
+              origin: ErrorOrigin.ZeroCache,
+            });
+          }
+          await this.#handleConfigUpdate(lc, clientID, msg, cvr);
+          // this.#authData  and cvr (in particular cvr.clientSchema) have been
+          // initialized, signal the run loop to run.
+          this.#initialized.resolve('initialized');
+        },
         newClient,
       ).catch(e => newClient.fail(e));
 
