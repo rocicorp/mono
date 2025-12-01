@@ -325,7 +325,7 @@ export function zeroForTest<
   }
 
   return new TestZero({
-    server: 'https://example.com/',
+    cacheURL: 'https://example.com/',
     // Make sure we do not reuse IDB instances between tests by default
     userID: options.userID ?? 'test-user-id-' + testZeroCounter++,
     auth: 'test-auth',

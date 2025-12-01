@@ -35,7 +35,7 @@ const N = 1_000;
 
 const z = new Zero({
   schema,
-  server: null,
+  cacheURL: null,
   userID,
   kvStore: 'idb',
 });
