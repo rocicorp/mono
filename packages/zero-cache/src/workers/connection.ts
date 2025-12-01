@@ -423,7 +423,7 @@ function hasErrno(error: unknown): boolean {
 
 // System error codes that indicate transient socket conditions.
 // These are checked via the `code` property on errors.
-const TRANSIENT_SOCKET_ERROR_CODES = ['EPIPE', 'ECONNRESET', 'ECANCELED'];
+const TRANSIENT_SOCKET_ERROR_CODES = new Set(['EPIPE', 'ECONNRESET', 'ECANCELED']);
 
 // Error messages that indicate transient socket conditions but don't have
 // standard error codes (e.g., WebSocket library errors).
@@ -438,7 +438,7 @@ function hasTransientSocketCode(error: unknown): boolean {
   const maybeCode =
     'code' in error ? String((error as {code?: unknown}).code) : undefined;
   return Boolean(
-    maybeCode && TRANSIENT_SOCKET_ERROR_CODES.includes(maybeCode.toUpperCase()),
+    maybeCode && TRANSIENT_SOCKET_ERROR_CODES.has(maybeCode.toUpperCase()),
   );
 }
 
