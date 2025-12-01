@@ -1,7 +1,5 @@
 import type * as vitest from 'vitest';
 
-type Method = 'GET' | 'PUT' | 'PATCH' | 'POST' | 'DELETE';
-
 type HandlerFn = (
   url: string,
   init: RequestInit | undefined,
@@ -9,7 +7,6 @@ type HandlerFn = (
 ) => Response | Promise<Response>;
 
 type Handler = {
-  method: Method;
   urlSubstring: string | undefined; // undefined means match all URLs
   response: Response | HandlerFn;
   once?: boolean;
@@ -44,7 +41,7 @@ function getUrl(input: string | Request | URL): string {
   return input instanceof Request ? input.url : input.toString();
 }
 
-function defaultSuccessResponse<T>(result: T): Response {
+function successResponse<T>(result: T): Response {
   return {
     ok: true,
     status: 200,
@@ -52,7 +49,7 @@ function defaultSuccessResponse<T>(result: T): Response {
   } as unknown as Response;
 }
 
-function defaultErrorResponse(code: number, message: string = ''): Response {
+function errorResponse(code: number, message: string = ''): Response {
   return {
     ok: false,
     status: code,
@@ -73,35 +70,22 @@ type FetchSpy = vitest.MockInstance<
 >;
 
 export class FetchMocker {
-  #success: (result: unknown) => Response;
-  #error: (code: number, message?: string) => Response;
-
   readonly spy: FetchSpy;
 
   // Store request bodies separately since Request.body is a ReadableStream
   readonly #requestBodies: (string | null)[] = [];
 
-  constructor(
-    spyOn: SpyOn,
-    success: (result: unknown) => Response = defaultSuccessResponse,
-    error: (code: number, message?: string) => Response = defaultErrorResponse,
-  ) {
+  constructor(spyOn: SpyOn) {
     this.spy = spyOn
       .spyOn(globalThis, 'fetch')
       .mockImplementation(
         (input: RequestInfo | URL, init: RequestInit | undefined) =>
           this.#handle(input, init),
       );
-    this.#success = success;
-    this.#error = error;
   }
 
   readonly handlers: Handler[] = [];
-  #defaultResponse: Response = {
-    ok: false,
-    status: 404,
-    text: () => Promise.resolve('not found'),
-  } as unknown as Response;
+  #defaultResponse: Response = errorResponse(404, 'not found');
   #catchHandler: (() => Response | Promise<Response>) | undefined;
   // Track which calls were matched (by index into spy.mock.calls)
   readonly #matchedIndices = new Set<number>();
@@ -111,10 +95,8 @@ export class FetchMocker {
     init?: RequestInit,
   ): Promise<Response> {
     const url = getUrl(input);
-    const method =
-      init?.method ?? (input instanceof Request ? input.method : 'GET');
 
-    // Store the body for later retrieval via calls()/lastCall()
+    // Store the body for later retrieval via calls()/lastBody()
     let body: string | null = null;
     if (init?.body) {
       body = typeof init.body === 'string' ? init.body : String(init.body);
@@ -142,7 +124,7 @@ export class FetchMocker {
       const urlMatches =
         handler.urlSubstring === undefined ||
         (handler.urlSubstring !== '' && url.includes(handler.urlSubstring));
-      if (handler.method === method && urlMatches) {
+      if (urlMatches) {
         if (handler.once) {
           this.handlers.splice(i, 1);
         }
@@ -177,20 +159,8 @@ export class FetchMocker {
   ): this {
     this.#defaultResponse =
       typeof errorCodeOrResult === 'number'
-        ? this.#error(errorCodeOrResult, message)
-        : this.#success(errorCodeOrResult);
-    return this;
-  }
-
-  result<T>(method: Method, urlSubstring: string, json: T | (() => T)): this {
-    this.handlers.push({
-      method,
-      urlSubstring,
-      response:
-        typeof json === 'function'
-          ? () => this.#success((json as () => T)())
-          : this.#success(json),
-    });
+        ? errorResponse(errorCodeOrResult, message)
+        : successResponse(errorCodeOrResult);
     return this;
   }
 
@@ -206,7 +176,6 @@ export class FetchMocker {
   ): this {
     if (typeof json === 'function') {
       this.handlers.push({
-        method: 'POST',
         urlSubstring,
         response: async (url, init, request) => {
           const result = await (json as PostHandler<T>)(url, init, request);
@@ -215,7 +184,6 @@ export class FetchMocker {
       });
     } else {
       this.handlers.push({
-        method: 'POST',
         urlSubstring,
         response: this.#handleResult(json),
       });
@@ -229,10 +197,10 @@ export class FetchMocker {
     }
     if (isStatusResponse(result)) {
       return result.status === 200
-        ? this.#success(result.body)
-        : this.#error(result.status, String(result.body ?? ''));
+        ? successResponse(result.body)
+        : errorResponse(result.status, String(result.body ?? ''));
     }
-    return this.#success(result);
+    return successResponse(result);
   }
 
   /**
@@ -255,7 +223,7 @@ export class FetchMocker {
   }
 
   /**
-   * Reset all handlers (clear the handlers array) and clear recorded calls.
+   * Reset all handlers and clear recorded calls.
    */
   reset(): void {
     this.handlers.length = 0;
@@ -263,36 +231,6 @@ export class FetchMocker {
     this.#matchedIndices.clear();
     this.#catchHandler = undefined;
     this.spy.mockClear();
-  }
-
-  error(
-    method: Method,
-    urlSubstring: string,
-    code: number,
-    message?: string,
-  ): this {
-    this.handlers.push({
-      method,
-      urlSubstring,
-      response: this.#error(code, message),
-    });
-    return this;
-  }
-
-  /**
-   * Configures the last specified handler (via result() or error()) to only be applied once.
-   */
-  once(): this {
-    this.handlers[this.handlers.length - 1].once = true;
-    return this;
-  }
-
-  requests(): [method: string, url: string][] {
-    return this.spy.mock.calls.map(([input, init]) => {
-      const method =
-        init?.method ?? (input instanceof Request ? input.method : 'GET');
-      return [method, getUrl(input)];
-    });
   }
 
   /**
@@ -322,23 +260,5 @@ export class FetchMocker {
   lastBody(): unknown {
     const body = this.#requestBodies[this.#requestBodies.length - 1];
     return body ? JSON.parse(body) : undefined;
-  }
-
-  /**
-   * Returns all request bodies as strings.
-   */
-  bodys(): (string | null)[] {
-    return [...this.#requestBodies];
-  }
-
-  headers(): (HeadersInit | undefined)[] {
-    return this.spy.mock.calls.map(([_, init]) => init?.headers);
-  }
-
-  /**
-   * Returns all request bodies parsed as JSON.
-   */
-  jsonBodies(): unknown[] {
-    return this.#requestBodies.map(body => (body ? JSON.parse(body) : null));
   }
 }

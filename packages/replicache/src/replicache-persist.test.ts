@@ -70,23 +70,21 @@ test('basic persist & load', async () => {
   );
   assertNotUndefined(clientGroupBeforePull);
 
-  fetchMocker
-    .post(
-      pullURL,
-      makePullResponseV1(clientID, 2, [
-        {
-          op: 'put',
-          key: 'a',
-          value: 1,
-        },
-        {
-          op: 'put',
-          key: 'b',
-          value: 2,
-        },
-      ]),
-    )
-    .once();
+  fetchMocker.postOnce(
+    pullURL,
+    makePullResponseV1(clientID, 2, [
+      {
+        op: 'put',
+        key: 'a',
+        value: 1,
+      },
+      {
+        op: 'put',
+        key: 'b',
+        value: 2,
+      },
+    ]),
+  );
 
   await rep.pull();
 
