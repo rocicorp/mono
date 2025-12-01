@@ -1,17 +1,19 @@
-import {createComputed, createSignal, onCleanup, type Accessor} from 'solid-js';
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  on,
+  onCleanup,
+  untrack,
+  type Accessor,
+} from 'solid-js';
 import {createStore} from 'solid-js/store';
-import type {ClientID} from '../../replicache/src/sync/ids.ts';
 import {bindingsForZero} from '../../zero-client/src/client/bindings.ts';
 import type {QueryResultDetails} from '../../zero-client/src/types/query-result.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {HumanReadable, ToQuery} from '../../zql/src/query/query.ts';
 import {DEFAULT_TTL_MS, type TTL} from '../../zql/src/query/ttl.ts';
-import {
-  createSolidViewFactory,
-  UNKNOWN,
-  type SolidView,
-  type State,
-} from './solid-view.ts';
+import {createSolidViewFactory, UNKNOWN, type State} from './solid-view.ts';
 import {useZero} from './use-zero.ts';
 
 export type QueryResult<TReturn> = readonly [
@@ -69,65 +71,44 @@ export function useQuery<
     setRefetchKey(k => k + 1);
   };
 
-  let view: SolidView | undefined = undefined;
+  const zero = useZero();
 
-  // Wrap in in createComputed to ensure a new view is created if the querySignal changes.
-  createComputed<
-    [
-      SolidView | undefined,
-      ClientID | undefined,
-      ToQuery<TSchema, TTable, TReturn, TContext> | undefined,
-      string | undefined,
-      TTL | undefined,
-      number,
-    ]
-  >(
-    ([
-      prevView,
-      prevClientID,
-      prevQuery,
-      prevQueryHash,
-      prevTtl,
-      prevRefetchKey,
-    ]) => {
-      const zero = useZero()();
-      const currentRefetchKey = refetchKey(); // depend on refetchKey to force re-evaluation
-      const {clientID} = zero;
-      const query = querySignal();
-      const q = query.toQuery(zero.context as TContext);
-      const bindings = bindingsForZero(zero);
-      const queryHash = bindings.hash(q);
-      const ttl = normalize(options)?.ttl ?? DEFAULT_TTL_MS;
-      if (
-        !prevView ||
-        clientID !== prevClientID ||
-        prevRefetchKey !== currentRefetchKey ||
-        (query !== prevQuery &&
-          (clientID === undefined || queryHash !== prevQueryHash))
-      ) {
-        if (prevView) {
-          prevView.destroy();
-        }
-        view = bindings.materialize(
-          q,
-          createSolidViewFactory(setState, refetch),
-          {ttl},
-        );
-      } else {
-        view = prevView;
-        if (ttl !== prevTtl) {
-          view.updateTTL(ttl);
-        }
-      }
-
-      return [view, clientID, query, queryHash, ttl, currentRefetchKey];
-    },
-    [undefined, undefined, undefined, undefined, undefined, initialRefetchKey],
+  const query = createMemo(() =>
+    querySignal().toQuery(zero().context as TContext),
   );
+  const bindings = createMemo(() => bindingsForZero(zero()));
+  const hash = createMemo(() => bindings().hash(query()));
+  const ttl = createMemo(() => normalize(options)?.ttl ?? DEFAULT_TTL_MS);
 
-  onCleanup(() => {
-    view?.destroy();
+  const initialTTL = ttl();
+
+  const view = createMemo(() => {
+    // Depend on hash instead of query to avoid recreating the view when the
+    // query object changes but the hash is the same.
+    hash();
+    refetchKey();
+    const b = bindings();
+    const q = untrack(query);
+
+    const v = b.materialize(q, createSolidViewFactory(setState, refetch), {
+      ttl: initialTTL,
+    });
+
+    onCleanup(() => v.destroy());
+
+    return v;
   });
+
+  // Update TTL on existing view when it changes.
+  createEffect(
+    on(
+      ttl,
+      currentTTL => {
+        view().updateTTL(currentTTL);
+      },
+      {defer: true},
+    ),
+  );
 
   return [() => state[0][''] as HumanReadable<TReturn>, () => state[1]];
 }

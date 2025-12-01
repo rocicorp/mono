@@ -20,7 +20,6 @@
     "@rocicorp/prettier-config": "^0.4.0",
     "@solidjs/testing-library": "^0.8.10",
     "jsdom": "^26.1.0",
-    "replicache": "15.2.1",
     "shared": "0.0.0",
     "solid-js": "^1.9.4",
     "vite-plugin-solid": "^2.11.7",
