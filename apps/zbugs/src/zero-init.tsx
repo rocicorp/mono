@@ -18,7 +18,7 @@ export function ZeroInit({children}: {children: ReactNode}) {
         // changing the auth token will cause ZeroProvider to call connection.connect
         auth: login.loginState?.encoded,
         mutateURL: `${window.location.origin}/api/mutate`,
-        getQueriesURL: `${window.location.origin}/api/get-queries`,
+        queryURL: `${window.location.origin}/api/query`,
         context: login.loginState?.decoded,
       }}
     >
