@@ -1,18 +1,16 @@
 import {expect, test, vi} from 'vitest';
 import type {JSONValue} from '../../shared/src/json.ts';
+import {TestStore} from './dag/test-store.ts';
+import {ChainBuilder} from './db/test-helpers.ts';
+import {pendingMutationsForAPI} from './pending-mutations.ts';
 import {
+  fetchMocker,
   initReplicacheTesting,
   makePullResponseV1,
   replicacheForTesting,
   tickAFewTimes,
 } from './test-util.ts';
 import type {WriteTransaction} from './transactions.ts';
-// fetch-mock has invalid d.ts file so we removed that on npm install.
-// @ts-expect-error
-import fetchMock from 'fetch-mock/esm/client';
-import {TestStore} from './dag/test-store.ts';
-import {ChainBuilder} from './db/test-helpers.ts';
-import {pendingMutationsForAPI} from './pending-mutations.ts';
 import {withRead} from './with-transactions.ts';
 
 initReplicacheTesting();
@@ -47,15 +45,15 @@ test('pending mutation', async () => {
   ]);
 
   rep.pullURL = 'https://diff.com/pull';
-  fetchMock.post(rep.pullURL, makePullResponseV1(clientID, 2, undefined, 1));
+  fetchMocker.post(rep.pullURL, makePullResponseV1(clientID, 2, undefined, 1));
   rep.pullIgnorePromise();
   await tickAFewTimes(vi, 100);
   await rep.mutate.addData({a: 3});
   const addAMutation = {id: 3, name: 'addData', args: {a: 3}, clientID};
   expect(await rep.experimentalPendingMutations()).toEqual([addAMutation]);
 
-  fetchMock.reset();
-  fetchMock.post(rep.pullURL, makePullResponseV1(clientID, 3, undefined, 2));
+  fetchMocker.reset();
+  fetchMocker.post(rep.pullURL, makePullResponseV1(clientID, 3, undefined, 2));
   rep.pullIgnorePromise();
   await tickAFewTimes(vi, 100);
   expect(await rep.experimentalPendingMutations()).toEqual([]);

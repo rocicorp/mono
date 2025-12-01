@@ -2,6 +2,10 @@ import type {Context, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
+import {
+  clearBrowserOverrides,
+  overrideBrowserGlobal,
+} from '../../shared/src/browser-env.ts';
 import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {promiseVoid} from '../../shared/src/resolved-promises.ts';
 import {sleep} from '../../shared/src/sleep.ts';
@@ -24,6 +28,7 @@ import {
   expectAsyncFuncToThrow,
   expectConsoleLogContextStub,
   expectLogContext,
+  fetchMocker,
   initReplicacheTesting,
   makePullResponseV1,
   replicacheForTesting,
@@ -35,14 +40,6 @@ import {TransactionClosedError} from './transaction-closed-error.ts';
 import type {ReadTransaction, WriteTransaction} from './transactions.ts';
 import type {MutatorDefs, Poke} from './types.ts';
 import {withRead} from './with-transactions.ts';
-
-// fetch-mock has invalid d.ts file so we removed that on npm install.
-// @ts-expect-error
-import fetchMock from 'fetch-mock/esm/client';
-import {
-  clearBrowserOverrides,
-  overrideBrowserGlobal,
-} from '../../shared/src/browser-env.ts';
 
 initReplicacheTesting();
 
@@ -64,7 +61,7 @@ test('cookie', async () => {
   expect(await rep.impl.cookie).toBe(null);
 
   let pullDone = false;
-  fetchMock.post(pullURL, () => {
+  fetchMocker.post(pullURL, () => {
     pullDone = true;
     return makePullResponseV1(rep.clientID, 0, [], 'newCookie');
   });
@@ -75,7 +72,7 @@ test('cookie', async () => {
   await tickAFewTimes(vi);
 
   expect(await rep.impl.cookie).toBe('newCookie');
-  fetchMock.reset();
+  fetchMocker.reset();
 });
 
 test('get, has, scan on empty db', async () => {
@@ -354,7 +351,7 @@ test('overlapping writes', async () => {
       },
     },
   });
-  fetchMock.post(pushURL, {});
+  fetchMocker.post(pushURL, {});
 
   const mut = rep.mutate['wait-then-return'];
 
@@ -402,21 +399,21 @@ test('push delay', async () => {
   const id1 = 14323534;
 
   await tickAFewTimes(vi);
-  fetchMock.reset();
+  fetchMocker.reset();
 
-  fetchMock.postOnce(pushURL, {
+  fetchMocker.postOnce(pushURL, {
     mutationInfos: [],
   });
 
-  expect(fetchMock.calls()).toHaveLength(0);
+  expect(fetchMocker.spy).not.toHaveBeenCalled();
 
   await createTodo({id: id1});
 
-  expect(fetchMock.calls()).toHaveLength(0);
+  expect(fetchMocker.spy).not.toHaveBeenCalled();
 
   await tickAFewTimes(vi);
 
-  expect(fetchMock.calls()).toHaveLength(1);
+  expect(fetchMocker.spy).toHaveBeenCalledOnce();
 });
 
 test('reauth push', async () => {
@@ -438,7 +435,7 @@ test('reauth push', async () => {
 
   await tickAFewTimes(vi);
 
-  fetchMock.post(pushURL, {body: 'xxx', status: httpStatusUnauthorized});
+  fetchMocker.post(pushURL, {body: 'xxx', status: httpStatusUnauthorized});
 
   await rep.mutate.noop();
   await tickUntil(vi, () => getAuthFake.mock.calls.length > 0, 1);
@@ -479,7 +476,7 @@ test('HTTP status pull', async () => {
   const {clientID} = rep;
   let okCalled = false;
   let i = 0;
-  fetchMock.post(pullURL, () => {
+  fetchMocker.post(pullURL, () => {
     switch (i++) {
       case 0:
         return {body: 'internal error', status: 500};
@@ -543,7 +540,7 @@ test('HTTP status push', async () => {
 
   let okCalled = false;
   let i = 0;
-  fetchMock.post(pushURL, () => {
+  fetchMocker.post(pushURL, () => {
     switch (i++) {
       case 0:
         return {body: 'internal error', status: 500};
@@ -1321,7 +1318,7 @@ test('onSync', async () => {
   expect(onSync).toHaveBeenCalledTimes(0);
 
   const {clientID} = rep;
-  fetchMock.postOnce(pullURL, makePullResponseV1(clientID, 2, undefined, 1));
+  fetchMocker.postOnce(pullURL, makePullResponseV1(clientID, 2, undefined, 1));
   await rep.pull();
   await tickAFewTimes(vi, 15);
 
@@ -1330,7 +1327,7 @@ test('onSync', async () => {
   expect(onSync.mock.calls[1][0]).toBe(false);
 
   onSync.mockClear();
-  fetchMock.postOnce(pushURL, {});
+  fetchMocker.postOnce(pushURL, {});
   await add({a: 'a'});
   await tickAFewTimes(vi);
 
@@ -1338,7 +1335,7 @@ test('onSync', async () => {
   expect(onSync.mock.calls[0][0]).toBe(true);
   expect(onSync.mock.calls[1][0]).toBe(false);
 
-  fetchMock.postOnce(pushURL, {});
+  fetchMocker.postOnce(pushURL, {});
   onSync.mockClear();
   await add({b: 'b'});
   await tickAFewTimes(vi);
@@ -1349,11 +1346,14 @@ test('onSync', async () => {
   {
     // Try with reauth
     const consoleErrorStub = vi.spyOn(console, 'error');
-    fetchMock.postOnce(pushURL, {body: 'xxx', status: httpStatusUnauthorized});
+    fetchMocker.postOnce(pushURL, {
+      body: 'xxx',
+      status: httpStatusUnauthorized,
+    });
     onSync.mockClear();
     rep.getAuth = () => {
       // Next time it is going to be fine
-      fetchMock.postOnce({url: pushURL, headers: {authorization: 'ok'}}, {});
+      fetchMocker.postOnce(pushURL, {});
       return 'ok';
     };
 
@@ -1377,7 +1377,7 @@ test('onSync', async () => {
 
   rep.onSync = null;
   onSync.mockClear();
-  fetchMock.postOnce(pushURL, {});
+  fetchMocker.postOnce(pushURL, {});
   expect(onSync).toHaveBeenCalledTimes(0);
 });
 
@@ -1395,7 +1395,7 @@ test('push timing', async () => {
 
   const add = rep.mutate.addData;
 
-  fetchMock.post(pushURL, {});
+  fetchMocker.post(pushURL, {});
   await add({a: 0});
   await tickAFewTimes(vi);
 
@@ -1478,11 +1478,11 @@ test('push and pull concurrently', async () => {
   const requests: string[] = [];
 
   const {clientID} = rep;
-  fetchMock.post(pushURL, () => {
+  fetchMocker.post(pushURL, () => {
     requests.push(pushURL);
     return {};
   });
-  fetchMock.post(pullURL, () => {
+  fetchMocker.post(pullURL, () => {
     requests.push(pullURL);
     return makePullResponseV1(clientID, 0, [], 1);
   });
@@ -1527,7 +1527,7 @@ test('schemaVersion pull', async () => {
   await rep.pull();
   await tickAFewTimes(vi);
 
-  const req = await fetchMock.lastCall().request.json();
+  const req = fetchMocker.lastBody() as {schemaVersion: string};
   expect(req.schemaVersion).toEqual(schemaVersion);
 });
 
@@ -1545,10 +1545,10 @@ test('schemaVersion push', async () => {
   const add = rep.mutate.addData;
   await add({a: 1});
 
-  fetchMock.post(pushURL, {});
+  fetchMocker.post(pushURL, {});
   await tickAFewTimes(vi);
 
-  const req = await fetchMock.lastCall().request.json();
+  const req = fetchMocker.lastBody() as {schemaVersion: string};
   expect(req.schemaVersion).toEqual(schemaVersion);
 });
 
@@ -1617,7 +1617,7 @@ test('pull and index update', async () => {
     expectedResult: JSONValue;
   }) {
     let pullDone = false;
-    fetchMock.post(pullURL, () => {
+    fetchMocker.post(pullURL, () => {
       pullDone = true;
       return makePullResponseV1(
         clientID,
@@ -1696,7 +1696,7 @@ async function populateDataUsingPull<MD extends MutatorDefs = {}>(
   data: Record<string, ReadonlyJSONValue>,
 ) {
   const {clientID} = rep;
-  fetchMock.postOnce(rep.pullURL, {
+  fetchMocker.postOnce(rep.pullURL, {
     cookie: '',
     lastMutationIDChanges: {[clientID]: 2},
     patch: Object.entries(data).map(([key, value]) => ({
@@ -1737,7 +1737,7 @@ test('pull mutate options', {retry: 3}, async () => {
   const {clientID} = rep;
   const log: number[] = [];
 
-  fetchMock.post(pullURL, () => {
+  fetchMocker.post(pullURL, () => {
     log.push(Date.now());
     return makePullResponseV1(clientID, undefined, [], '');
   });
@@ -1807,7 +1807,7 @@ test('online', async () => {
 
   const consoleDebugStub = vi.spyOn(console, 'debug');
 
-  fetchMock.post(pushURL, async () => {
+  fetchMocker.post(pushURL, async () => {
     await sleep(10);
     return {throws: new Error('Simulate fetch error in push')};
   });
@@ -1829,7 +1829,7 @@ test('online', async () => {
 
   consoleDebugStub.mockClear();
 
-  fetchMock.post(pushURL, 'ok');
+  fetchMocker.post(pushURL, 'ok');
   await rep.mutate.addData({a: 1});
 
   await tickAFewTimes(vi, 20);
