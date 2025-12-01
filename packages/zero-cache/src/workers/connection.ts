@@ -379,12 +379,12 @@ export function sendError(
   if (thrown instanceof ProtocolErrorWithLevel) {
     logLevel = thrown.logLevel;
   }
-  // Errors with errno are low-level, transient I/O issues (e.g., EPIPE, ECONNRESET)
-  // and should be warnings, not errors
+  // Errors with errno or transient socket codes are low-level, transient I/O issues
+  // (e.g., EPIPE, ECONNRESET) and should be warnings, not errors
   else if (
     hasErrno(thrown) ||
-    containsTransientSocketCode(errorBody.message) ||
-    hasTransientSocketCode(thrown)
+    hasTransientSocketCode(thrown) ||
+    isTransientSocketMessage(errorBody.message)
   ) {
     logLevel = 'warn';
   }
@@ -421,15 +421,19 @@ function hasErrno(error: unknown): boolean {
   );
 }
 
-const TRANSIENT_SOCKET_ERROR_CODES = ['EPIPE', 'ECONNRESET', 'ECANCELED'];
+// System error codes that indicate transient socket conditions.
+// These are checked via the `code` property on errors.
+const TRANSIENT_SOCKET_ERROR_CODES = new Set([
+  'EPIPE',
+  'ECONNRESET',
+  'ECANCELED',
+]);
 
-function containsTransientSocketCode(message: string | undefined): boolean {
-  if (!message) {
-    return false;
-  }
-  const upper = message.toUpperCase();
-  return TRANSIENT_SOCKET_ERROR_CODES.some(code => upper.includes(code));
-}
+// Error messages that indicate transient socket conditions but don't have
+// standard error codes (e.g., WebSocket library errors).
+const TRANSIENT_SOCKET_MESSAGE_PATTERNS = [
+  'socket was closed while data was being compressed',
+];
 
 function hasTransientSocketCode(error: unknown): boolean {
   if (!error || typeof error !== 'object') {
@@ -437,17 +441,17 @@ function hasTransientSocketCode(error: unknown): boolean {
   }
   const maybeCode =
     'code' in error ? String((error as {code?: unknown}).code) : undefined;
-  if (
-    maybeCode &&
-    TRANSIENT_SOCKET_ERROR_CODES.includes(maybeCode.toUpperCase())
-  ) {
-    return true;
+  return Boolean(
+    maybeCode && TRANSIENT_SOCKET_ERROR_CODES.has(maybeCode.toUpperCase()),
+  );
+}
+
+function isTransientSocketMessage(message: string | undefined): boolean {
+  if (!message) {
+    return false;
   }
-  if (
-    'message' in error &&
-    typeof (error as {message?: unknown}).message === 'string'
-  ) {
-    return containsTransientSocketCode((error as {message?: string}).message);
-  }
-  return false;
+  const lower = message.toLowerCase();
+  return TRANSIENT_SOCKET_MESSAGE_PATTERNS.some(pattern =>
+    lower.includes(pattern),
+  );
 }
