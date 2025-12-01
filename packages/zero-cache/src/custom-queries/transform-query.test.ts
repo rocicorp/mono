@@ -663,7 +663,7 @@ describe('CustomQueryTransformer', () => {
     // fetchFromAPIServer will throw a regular Error (not ProtocolError) for disallowed URLs
     mockFetchFromAPIServer.mockRejectedValue(
       new Error(
-        `URL "${disallowedUrl}" is not allowed by the ZERO_MUTATE/QUERY_URL configuration`,
+        `URL "${disallowedUrl}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
       ),
     );
 
@@ -690,7 +690,7 @@ describe('CustomQueryTransformer', () => {
       origin: ErrorOrigin.ZeroCache,
       reason: ErrorReason.Internal,
       message: expect.stringContaining(
-        `URL "${disallowedUrl}" is not allowed by the ZERO_MUTATE/QUERY_URL configuration`,
+        `URL "${disallowedUrl}" is not allowed by the ZERO_MUTATE/GET_QUERIES_URL configuration`,
       ),
       queryIDs: ['query1'],
     });

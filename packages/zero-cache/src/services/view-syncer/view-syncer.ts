@@ -172,7 +172,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly #drainCoordinator: DrainCoordinator;
   readonly #keepaliveMs: number;
   readonly #slowHydrateThreshold: number;
-  readonly #queryConfig: ZeroConfig['query'];
+  readonly #queryConfig: ZeroConfig['getQueries'];
 
   userQueryURL?: string | undefined;
 
@@ -308,11 +308,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     keepaliveMs = DEFAULT_KEEPALIVE_MS,
     setTimeoutFn: SetTimeout = setTimeout.bind(globalThis),
   ) {
-    const queryConfig = config.query?.url ? config.query : config.getQueries;
+    const {getQueries: pullConfig} = config;
     this.#config = config;
     this.id = clientGroupID;
     this.#shard = shard;
-    this.#queryConfig = queryConfig;
+    this.#queryConfig = pullConfig;
     this.#lc = lc;
     this.#pipelines = pipelineDriver;
     this.#stateChanges = versionChanges;
@@ -1112,7 +1112,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     const transformedQueries: TransformedAndHashed[] = [];
     if (customQueries.size > 0 && !this.#customQueryTransformer) {
       lc.error?.(
-        'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
+        'Custom/named queries were requested but no `ZERO_GET_QUERIES_URL` is configured for Zero Cache.',
       );
     }
     if (this.#customQueryTransformer && customQueries.size > 0) {
@@ -1350,7 +1350,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       if (customQueries.size > 0 && !this.#customQueryTransformer) {
         lc.error?.(
-          'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
+          'Custom/named queries were requested but no `ZERO_GET_QUERIES_URL` is configured for Zero Cache.',
         );
       }
 

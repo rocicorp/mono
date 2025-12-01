@@ -68,7 +68,7 @@ async function transform<S extends Schema>(
   } catch (error) {
     lc.error?.(`Failed to parse ${apiName} queries request`, error);
 
-    const message = `Failed to parse ${apiName} queries request: ${getErrorMessage(error)}`;
+    const message = `Failed to parse get queries request: ${getErrorMessage(error)}`;
     const details = getErrorDetails(error);
 
     return [

@@ -79,8 +79,8 @@ jobs:
         env:
           ZERO_UPSTREAM_DB: ${{ secrets.GIGABUGS_ZERO_UPSTREAM_DB }}
           ZERO_ENABLE_QUERY_PLANNER: 'true'
-          ZERO_MUTATE_URL: ${{ vars.GIGABUGS_ZERO_PUSH_URL }}
-          ZERO_QUERY_URL: ${{ vars.GIGABUGS_ZERO_PULL_URL }}
+          ZERO_PUSH_URL: ${{ vars.GIGABUGS_ZERO_PUSH_URL }}
+          ZERO_GET_QUERIES_URL: ${{ vars.GIGABUGS_ZERO_PULL_URL }}
           ZERO_CVR_DB: ${{ secrets.GIGABUGS_ZERO_CVR_DB }}
           ZERO_CHANGE_DB: ${{ secrets.GIGABUGS_ZERO_CHANGE_DB }}
           ZERO_AUTH_JWK: ${{ secrets.GIGABUGS_ZERO_AUTH_JWK }}
@@ -100,8 +100,8 @@ jobs:
           ZERO_APP_ID: 'gigabugs1'
           ZERO_UPSTREAM_DB: ${{ secrets.GIGABUGS_ZERO_UPSTREAM_DB }}
           ZERO_ENABLE_QUERY_PLANNER: 'true'
-          ZERO_MUTATE_URL: ${{ vars.GIGABUGS_ZERO_PUSH_URL }}
-          ZERO_QUERY_URL: ${{ vars.GIGABUGS_ZERO_PULL_URL }}
+          ZERO_PUSH_URL: ${{ vars.GIGABUGS_ZERO_PUSH_URL }}
+          ZERO_GET_QUERIES_URL: ${{ vars.GIGABUGS_ZERO_PULL_URL }}
           ZERO_CVR_DB: ${{ secrets.GIGABUGS_ZERO_CVR_DB }}2
           ZERO_CHANGE_DB: ${{ secrets.GIGABUGS_ZERO_CHANGE_DB }}2
           ZERO_AUTH_JWK: ${{ secrets.GIGABUGS_ZERO_AUTH_JWK }}
