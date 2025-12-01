@@ -97,7 +97,7 @@ export function defineMutators<S extends Schema, C>(
       const name = path.join('.');
 
       if (isMutatorDefinition(value)) {
-        result[key] = createMutator(name, value as AnyMutatorDefinition);
+        result[key] = createMutator(name, value);
       } else {
         // Nested definitions
         result[key] = processDefinitions(
@@ -311,27 +311,39 @@ type ToMutatorTree<S extends Schema, C, T extends MutatorDefinitions<S, C>> = {
       : never;
 };
 
-// oxlint-disable-next-line no-explicit-any
-type AnyMutatorDefinition = MutatorDefinition<Schema, any, any, any, any>;
-
-function createMutator<S extends Schema, C>(
+function createMutator<
+  S extends Schema,
+  C,
+  ArgsInput extends ReadonlyJSONValue | undefined,
+  ArgsOutput extends ReadonlyJSONValue | undefined,
+  TWrappedTransaction,
+>(
   name: string,
-  // oxlint-disable-next-line no-explicit-any
-  definition: MutatorDefinition<S, C, any, any, any>,
-  // oxlint-disable-next-line no-explicit-any
-): Mutator<S, C, any, any> {
+  definition: MutatorDefinition<
+    S,
+    C,
+    ArgsInput,
+    ArgsOutput,
+    TWrappedTransaction
+  >,
+): Mutator<S, C, ArgsInput, TWrappedTransaction> {
   const {validator} = definition;
 
   // fn takes ReadonlyJSONValue args because it's called during rebase (from
   // stored JSON) and on the server (from wire format). Validation happens here.
   const fn = async (options: {
-    args: ReadonlyJSONValue | undefined;
+    args: ArgsInput;
     ctx: C;
-    tx: Transaction<S, unknown>;
+    tx: Transaction<S, TWrappedTransaction>;
   }): Promise<void> => {
     const validatedArgs = validator
-      ? validateInput(name, options.args, validator, 'mutator')
-      : options.args;
+      ? validateInput<ArgsInput, ArgsOutput>(
+          name,
+          options.args,
+          validator,
+          'mutator',
+        )
+      : (options.args as unknown as ArgsOutput);
     await definition({
       args: validatedArgs,
       ctx: options.ctx,
@@ -340,17 +352,26 @@ function createMutator<S extends Schema, C>(
   };
 
   // Create the callable mutator
-  // oxlint-disable-next-line no-explicit-any
-  const mutator = (args: unknown): MutationRequest<S, C, any, any> => ({
-    // oxlint-disable-next-line no-explicit-any
-    mutator: mutator as Mutator<S, C, any, any>,
+  const mutator = (
+    args: ArgsInput,
+  ): MutationRequest<S, C, ArgsInput, Transaction<S, TWrappedTransaction>> => ({
+    mutator: mutator as Mutator<
+      S,
+      C,
+      ArgsInput,
+      Transaction<S, TWrappedTransaction>
+    >,
     args,
   });
   mutator.mutatorName = name;
   mutator.fn = fn;
 
-  // oxlint-disable-next-line no-explicit-any
-  return mutator as Mutator<S, C, any, any>;
+  return mutator as Mutator<
+    S,
+    C,
+    ArgsInput,
+    Transaction<S, TWrappedTransaction>
+  >;
 }
 
 export function* iterateMutators(
