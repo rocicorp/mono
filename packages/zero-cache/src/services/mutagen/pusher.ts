@@ -298,7 +298,7 @@ class PushWorker {
     // if the entire push failed, send that to the client.
     if ('kind' in response || 'error' in response) {
       this.#lc.warn?.(
-        'The server behind ZERO_PUSH_URL returned a push error.',
+        'The server behind ZERO_MUTATE_URL returned a push error.',
         response,
       );
       const groupedMutationIDs = groupBy(
@@ -370,7 +370,7 @@ class PushWorker {
           const m = mutations[i];
           if ('error' in m.result) {
             this.#lc.warn?.(
-              'The server behind ZERO_PUSH_URL returned a mutation error.',
+              'The server behind ZERO_MUTATE_URL returned a mutation error.',
               m.result,
             );
           }
