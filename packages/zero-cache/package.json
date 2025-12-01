@@ -73,7 +73,6 @@
     "@types/strip-ansi": "^3.0.0",
     "@types/ws": "^8.5.12",
     "@vitest/runner": "3.2.4",
-    "concurrently": "^8.2.1",
     "nock": "^14.0.4",
     "otel": "0.0.0",
     "shared": "0.0.0",
