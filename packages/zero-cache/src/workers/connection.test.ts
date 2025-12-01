@@ -114,7 +114,10 @@ describe('sendError', () => {
     expect(lastLogLevel()).toBe('warn');
   });
 
-  test('transient socket codes in the message are logged as warnings', () => {
+  test('ECANCELED error code is logged as warning', () => {
+    const err = Object.assign(new Error('write ECANCELED'), {
+      code: 'ECANCELED',
+    });
     sendError(
       lc,
       ws,
@@ -123,7 +126,7 @@ describe('sendError', () => {
         message: 'write ECANCELED',
         origin: ErrorOrigin.ZeroCache,
       },
-      undefined,
+      err,
     );
     expect(lastLogLevel()).toBe('warn');
   });
