@@ -11,10 +11,7 @@ export function createBuilder<S extends Schema>(schema: S): SchemaQuery<S> {
   const cache = new Map<string, Query<S, string, any>>();
   const {tables} = schema;
 
-  function getQuery(prop: string | symbol) {
-    if (typeof prop === 'symbol') {
-      return undefined;
-    }
+  function getQuery(prop: string) {
     const cached = cache.get(prop);
     if (cached) {
       return cached;
@@ -31,6 +28,9 @@ export function createBuilder<S extends Schema>(schema: S): SchemaQuery<S> {
 
   return new Proxy(tables, {
     get: (_target, prop) => {
+      if (typeof prop === 'symbol') {
+        return undefined;
+      }
       const q = getQuery(prop);
       if (!q) {
         throw new Error(`Table ${String(prop)} does not exist in schema`);
@@ -39,6 +39,9 @@ export function createBuilder<S extends Schema>(schema: S): SchemaQuery<S> {
     },
 
     getOwnPropertyDescriptor: (_target, prop) => {
+      if (typeof prop === 'symbol') {
+        return undefined;
+      }
       const value = getQuery(prop);
       if (!value) {
         return undefined;
