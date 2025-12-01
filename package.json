@@ -20,7 +20,6 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "oxlint --type-aware --quiet --ignore-pattern '**/um.js' --report-unused-disable-directives-severity=error",
-    "lint:eslint": "eslint .",
     "format": "npx turbo run format",
     "check-format": "npx turbo run check-format",
     "check-types": "npx turbo run check-types",
@@ -31,18 +30,14 @@
     "verify-deps:fix": "cd tools/verify-package-deps && npm run verify:fix"
   },
   "devDependencies": {
-    "@eslint/js": "^9.39.1",
     "@rocicorp/prettier-config": "^0.4.0",
     "@vitest/coverage-v8": "3.2.4",
     "@vitest/runner": "3.2.4",
-    "eslint": "^9.39.1",
-    "globals": "^16.5.0",
     "oxlint": "^1.22.0",
     "oxlint-tsgolint": "^0.2.0",
     "prettier": "^3.5.3",
     "tsx": "^4.19.1",
     "turbo": "^2.4.4",
-    "typescript-eslint": "^8.48.0",
     "vitest": "3.2.4"
   },
   "prettier": "@rocicorp/prettier-config"
