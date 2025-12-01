@@ -1843,6 +1843,7 @@ describe('authenticate', () => {
       const fastDigest = new TDigest();
       fastDigest.add(10, 1); // 10ms
 
+      const emptyDigest = new TDigest(); // Empty digest: quantile() returns NaN, converted to null hydrateServer
       const emptyUpdateDigest = new TDigest();
 
       // Use waitForID pattern which awaits socket before calling inspector
@@ -1850,7 +1851,7 @@ describe('authenticate', () => {
       const p = z.inspector.client.queries();
       const id = await idPromise;
 
-      // Send queries in non-sorted order: slow, fast, medium
+      // Send queries in non-sorted order: slow, fast, no-metrics, medium
       await z.triggerMessage([
         'inspect',
         {
@@ -1891,6 +1892,22 @@ describe('authenticate', () => {
             },
             {
               clientID: z.clientID,
+              queryID: 'no-metrics-query',
+              ast: {table: 'issues'},
+              name: null,
+              args: null,
+              deleted: false,
+              got: true,
+              inactivatedAt: null,
+              rowCount: 3,
+              ttl: 60_000,
+              metrics: {
+                'query-materialization-server': emptyDigest.toJSON(),
+                'query-update-server': emptyUpdateDigest.toJSON(),
+              },
+            },
+            {
+              clientID: z.clientID,
               queryID: 'medium-query',
               ast: {table: 'issues'},
               name: null,
@@ -1910,7 +1927,7 @@ describe('authenticate', () => {
       ] satisfies InspectDownMessage);
 
       const queries = await p;
-      expect(queries).toHaveLength(3);
+      expect(queries).toHaveLength(4);
 
       // Queries should be sorted descending by hydrateServer (slowest first)
       expect(queries[0].id).toBe('slow-query');
@@ -1921,6 +1938,10 @@ describe('authenticate', () => {
 
       expect(queries[2].id).toBe('fast-query');
       expect(queries[2].hydrateServer).toBe(10);
+
+      // Query with null hydrateServer (treated as 0) should be sorted to the end
+      expect(queries[3].id).toBe('no-metrics-query');
+      expect(queries[3].hydrateServer).toBeNull();
 
       await z.close();
     });
