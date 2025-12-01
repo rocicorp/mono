@@ -403,7 +403,7 @@ try {
   execute('npm install');
   execute('npm run build');
   execute('npm run format');
-  execute('npx syncpack fix-mismatches');
+  execute('npx syncpack@13 fix-mismatches');
 
   // Surface information about the code as image metadata (labels) for
   // production / release management.
