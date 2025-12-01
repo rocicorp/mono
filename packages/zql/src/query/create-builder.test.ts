@@ -114,7 +114,7 @@ describe('createBuilder', () => {
     test('in operator works for existing tables', () => {
       const builder = createBuilder(schema);
 
-      // 'in' operator uses the 'has' trap to check if property exists
+      // 'in' operator checks if property exists in the target tables object
       expect('user' in builder).toBe(true);
       expect('post' in builder).toBe(true);
       expect('nonExistent' in builder).toBe(false);
@@ -157,9 +157,8 @@ describe('createBuilder', () => {
     test('toString throws (null prototype, no inherited methods)', () => {
       const builder = createBuilder(schema);
 
-      // With null prototype, there's no inherited toString
-      // Accessing it throws like any other non-existent table
-      expect(() => builder.toString()).toThrow(
+      // Accessing inherited methods throws like any other non-existent table
+      expect(() => builder.toString).toThrow(
         'Table toString does not exist in schema',
       );
     });
@@ -187,6 +186,18 @@ describe('createBuilder', () => {
       // Should be usable as a query builder
       const filtered = query.where('id', '123');
       expect(filtered).toBeDefined();
+    });
+
+    test('Symbol.toStringTag is passed through to underlying tables object', () => {
+      const builder = createBuilder(schema);
+
+      // Symbol properties should be passed through to the underlying tables object
+      // The tables object doesn't have a custom toStringTag, so it returns undefined
+      expect(
+        (builder as unknown as {[Symbol.toStringTag]: string})[
+          Symbol.toStringTag
+        ],
+      ).toBeUndefined();
     });
   });
 });
