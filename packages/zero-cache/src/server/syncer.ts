@@ -7,6 +7,7 @@ import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {DatabaseStorage} from '../../../zqlite/src/database-storage.ts';
+import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {CustomQueryTransformer} from '../custom-queries/transform-query.ts';
 import {warmupConnections} from '../db/warmup.ts';
@@ -36,6 +37,21 @@ import {startOtelAuto} from './otel-start.ts';
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
+}
+
+function getCustomQueryConfig(
+  config: Pick<NormalizedZeroConfig, 'query' | 'getQueries'>,
+) {
+  const queryConfig = config.query?.url ? config.query : config.getQueries;
+
+  if (!queryConfig?.url) {
+    return undefined;
+  }
+
+  return {
+    url: queryConfig.url,
+    forwardCookies: queryConfig.forwardCookies ?? false,
+  };
 }
 
 export default function runWorker(
@@ -100,16 +116,10 @@ export default function runWorker(
     );
 
     // Create the custom query transformer if configured
-    const queryUrl = config.query?.url ?? config.getQueries?.url;
-    const forwardCookies =
-      config.query?.forwardCookies ?? config.getQueries?.forwardCookies;
+    const customQueryConfig = getCustomQueryConfig(config);
     const customQueryTransformer =
-      queryUrl &&
-      new CustomQueryTransformer(
-        logger,
-        {url: queryUrl, forwardCookies},
-        shard,
-      );
+      customQueryConfig &&
+      new CustomQueryTransformer(logger, customQueryConfig, shard);
 
     const inspectorDelegate = new InspectorDelegate(customQueryTransformer);
 
