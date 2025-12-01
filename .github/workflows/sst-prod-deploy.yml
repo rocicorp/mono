@@ -19,7 +19,7 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 22.x
-          cache: "npm"
+          cache: 'npm'
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
@@ -73,7 +73,7 @@ jobs:
       - name: Deploy SST app
         env:
           ZERO_UPSTREAM_DB: ${{ secrets.PROD_ZERO_UPSTREAM_DB }}
-          ZERO_ENABLE_QUERY_PLANNER: "true"
+          ZERO_ENABLE_QUERY_PLANNER: 'true'
           ZERO_ADMIN_PASSWORD: ${{ secrets.ZERO_ADMIN_PASSWORD }}
           ZERO_MUTATE_URL: ${{ vars.PROD_ZERO_PUSH_URL }}
           ZERO_QUERY_URL: ${{ vars.PROD_ZERO_PULL_URL }}
@@ -83,7 +83,7 @@ jobs:
           ZERO_APP_PUBLICATIONS: ${{ vars.PROD_ZERO_APP_PUBLICATIONS }}
           AWS_REGION: ${{ vars.AWS_DEFAULT_REGION }}
           ZERO_IMAGE_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_DEFAULT_REGION }}.amazonaws.com/${{ env.ECR_IMAGE_ZERO_CACHE }}:${{ env.SHA }}
-          DOMAIN_NAME: "zbugs-sync.rocicorp.dev"
+          DOMAIN_NAME: 'zbugs-sync.rocicorp.dev'
           DOMAIN_CERT: ${{ vars.PROD_CERTIFICATE_ARN }}
           DATADOG_API_KEY: ${{ secrets.PROD_DATADOG_API_KEY }}
           OTEL_EXPORTER_OTLP_ENDPOINT: ${{ secrets.PROD_OTEL_EXPORTER_OTLP_ENDPOINT }}
