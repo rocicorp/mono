@@ -103,8 +103,8 @@ type AnySyncedQuery = SyncedQuery<any, any, any, any, any>;
 export function withValidation<F extends AnySyncedQuery>(
   fn: F,
   // oxlint-disable-next-line no-explicit-any
-): F extends SyncedQuery<infer N, infer C, any, infer A, infer R>
-  ? SyncedQuery<N, C, true, A, R>
+): F extends SyncedQuery<infer N, infer C, any, any, infer R>
+  ? SyncedQuery<N, C, true, ReadonlyJSONValue[], R>
   : F {
   // If we have a parse function this is a SyncedQuery
   if ('parse' in fn) {

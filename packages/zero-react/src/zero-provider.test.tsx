@@ -206,7 +206,7 @@ describe('ZeroProvider', () => {
       }
 
       const options: ZeroOptions<Schema> = {
-        server: 'https://example.com',
+        cacheURL: 'https://example.com',
         userID: 'test-user',
         schema: {} as Schema,
       };
@@ -219,7 +219,7 @@ describe('ZeroProvider', () => {
 
       expect(ZeroMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          server: 'https://example.com',
+          cacheURL: 'https://example.com',
           schema: {},
         }),
       );
@@ -242,7 +242,7 @@ describe('ZeroProvider', () => {
       const options: ZeroOptions<Schema> & {
         init: (zero: Zero<Schema>) => void;
       } = {
-        server: 'https://example.com',
+        cacheURL: 'https://example.com',
         userID: 'test-user',
         schema: {} as Schema,
         init: initMock,
@@ -268,7 +268,7 @@ describe('ZeroProvider', () => {
       ZeroMock.mockImplementation(() => mockZero);
 
       const options: ZeroOptions<Schema> = {
-        server: 'https://example.com',
+        cacheURL: 'https://example.com',
         schema: {} as Schema,
         userID: 'test-user',
       };
@@ -296,7 +296,7 @@ describe('ZeroProvider', () => {
       const auth = 'test-token';
 
       const options: ZeroOptions<Schema> = {
-        server: 'https://example.com',
+        cacheURL: 'https://example.com',
         schema: {} as Schema,
         auth,
         userID: 'test-user',
@@ -328,7 +328,7 @@ describe('ZeroProvider', () => {
 
       const root = renderWithRoot(
         <ZeroProvider
-          server="https://example.com"
+          cacheURL="https://example.com"
           schema={schema}
           auth="token-1"
           userID="test-user"
@@ -345,7 +345,7 @@ describe('ZeroProvider', () => {
       act(() => {
         root.render(
           <ZeroProvider
-            server="https://example.com"
+            cacheURL="https://example.com"
             schema={schema}
             auth="token-2"
             userID="test-user"
@@ -370,7 +370,7 @@ describe('ZeroProvider', () => {
       act(() => {
         root.render(
           <ZeroProvider
-            server="https://example.com"
+            cacheURL="https://example.com"
             schema={schema}
             auth="token-3"
             userID="test-user"
@@ -398,7 +398,7 @@ describe('ZeroProvider', () => {
 
       const root = renderWithRoot(
         <ZeroProvider
-          server="https://example.com"
+          cacheURL="https://example.com"
           schema={schema}
           auth="token-same"
           userID="test-user"
@@ -410,7 +410,7 @@ describe('ZeroProvider', () => {
       act(() => {
         root.render(
           <ZeroProvider
-            server="https://example.com"
+            cacheURL="https://example.com"
             schema={schema}
             auth="token-same"
             userID="test-user"
@@ -438,7 +438,7 @@ describe('ZeroProvider', () => {
 
       const root = renderWithRoot(
         <ZeroProvider
-          server="https://example.com"
+          cacheURL="https://example.com"
           schema={schema}
           auth={null}
           userID="test-user"
@@ -450,7 +450,7 @@ describe('ZeroProvider', () => {
       act(() => {
         root.render(
           <ZeroProvider
-            server="https://example.com"
+            cacheURL="https://example.com"
             schema={schema}
             auth="token-new"
             userID="test-user"
@@ -480,7 +480,7 @@ describe('ZeroProvider', () => {
 
       const root = renderWithRoot(
         <ZeroProvider
-          server="https://example.com"
+          cacheURL="https://example.com"
           schema={schema}
           userID="test-user"
         >
@@ -491,7 +491,7 @@ describe('ZeroProvider', () => {
       act(() => {
         root.render(
           <ZeroProvider
-            server="https://example.com"
+            cacheURL="https://example.com"
             schema={schema}
             auth="token-new"
             userID="test-user"
@@ -588,7 +588,7 @@ describe('ZeroProvider', () => {
 
       const root = renderWithRoot(
         <ZeroProvider
-          server="https://example.com"
+          cacheURL="https://example.com"
           schema={{} as Schema}
           userID="test-user"
         >
@@ -632,7 +632,7 @@ describe('ZeroProvider', () => {
 
       const root = renderWithRoot(
         <ZeroProvider
-          server="https://example1.com"
+          cacheURL="https://example1.com"
           schema={{} as Schema}
           userID="test-user"
         >
@@ -647,7 +647,7 @@ describe('ZeroProvider', () => {
       act(() => {
         root.render(
           <ZeroProvider
-            server="https://example2.com"
+            cacheURL="https://example2.com"
             schema={{} as Schema}
             userID="test-user"
           >
