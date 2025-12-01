@@ -90,7 +90,7 @@ describe('view-syncer/service', () => {
   let connect: (
     ctx: SyncContext,
     desiredQueriesPatch: UpQueriesPatch,
-    clientSchema?: ClientSchema,
+    clientSchema?: ClientSchema | null,
   ) => Queue<Downstream>;
   let connectWithQueueAndSource: (
     ctx: SyncContext,
@@ -194,6 +194,15 @@ describe('view-syncer/service', () => {
       version: {stateVersion: '00', minorVersion: 1},
     });
   });
+
+  test('initConnectionMessage for new client group missing clientSchema', async () => {
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ], null /** no clientSchema */);
+    await expect(client.dequeue()).rejects.toThrowErrorMatchingInlineSnapshot(
+    `[ProtocolError: The initConnection message for a new client group must include client schema.]`);
+  });
+
 
   test('responds to changeDesiredQueries patch', async () => {
     const now = Date.UTC(2025, 1, 20);
