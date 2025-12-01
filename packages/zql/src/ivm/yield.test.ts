@@ -1,5 +1,6 @@
 import {describe, expect, test} from 'vitest';
-import type {FetchRequest, Input, Output} from './operator.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
+import type {FetchRequest, Input, Output, Storage} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Stream} from './stream.ts';
 import {compareValues, type Node} from './data.ts';
@@ -10,6 +11,7 @@ import {Snitch} from './snitch.ts';
 import {Catch} from './catch.ts';
 import {Join} from './join.ts';
 import {UnionFanIn} from './union-fan-in.ts';
+import {UnionFanOut} from './union-fan-out.ts';
 import {FlippedJoin} from './flipped-join.ts';
 
 const YIELD_SOURCE_SCHEMA_BASE: SourceSchema = {
@@ -28,12 +30,11 @@ class YieldSource implements Input {
   constructor(schema: Partial<SourceSchema> = {}) {
     this.#schema = {
       ...YIELD_SOURCE_SCHEMA_BASE,
-      ...schema
+      ...schema,
     };
   }
 
-  setOutput(_: Output): void {
-  }
+  setOutput(_: Output): void {}
 
   getSchema(): SourceSchema {
     return this.#schema;
@@ -53,12 +54,13 @@ class YieldSource implements Input {
   destroy(): void {}
 }
 
-class MockStorage {
+class MockStorage implements Storage {
   get(_key: string) {
     return undefined;
   }
-  set(_key: string, _value: any) {}
+  set(_key: string, _value: JSONValue) {}
   del(_key: string) {}
+  *scan(_options?: {prefix: string}): Stream<[string, JSONValue]> {}
 }
 
 describe('Yield Propagation', () => {
@@ -113,7 +115,7 @@ describe('Yield Propagation', () => {
 
   test('Take propagates yield', () => {
     const source = new YieldSource();
-    const take = new Take(source, new MockStorage() as any, 10);
+    const take = new Take(source, new MockStorage(), 10);
     const catchOp = new Catch(take);
     expect(catchOp.fetch({})).toMatchInlineSnapshot(`
       [
@@ -162,11 +164,8 @@ describe('Yield Propagation', () => {
   test('UnionFanIn propagates yield', () => {
     const source1 = new YieldSource();
     const source2 = new YieldSource();
-    const mockFanOut = {
-      getSchema: () => source1.getSchema(),
-      setFanIn: () => {},
-    } as any;
-    const ufi = new UnionFanIn(mockFanOut, [source1, source2]);
+    const fanOut = new UnionFanOut(new YieldSource());
+    const ufi = new UnionFanIn(fanOut, [source1, source2]);
     const catchOp = new Catch(ufi);
     expect(catchOp.fetch({})).toMatchInlineSnapshot(`
       [
@@ -196,7 +195,7 @@ describe('Yield Propagation', () => {
     const join = new Join({
       parent,
       child,
-      storage: new MockStorage() as any,
+      storage: new MockStorage(),
       parentKey: ['id'],
       childKey: ['id'],
       relationshipName: 'child',

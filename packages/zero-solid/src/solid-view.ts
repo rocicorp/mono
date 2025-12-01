@@ -20,7 +20,7 @@ import type {
 } from '../../zero-client/src/types/query-result.ts';
 import type {ErroredQuery} from '../../zero-protocol/src/custom-queries.ts';
 import {idSymbol} from '../../zql/src/ivm/view-apply-change.ts';
-import { skipYields } from '../../zql/src/ivm/operator.ts';
+import {skipYields} from '../../zql/src/ivm/operator.ts';
 
 export type State = [Entry, QueryResultDetails];
 

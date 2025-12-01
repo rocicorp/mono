@@ -481,16 +481,16 @@ export class Take implements Operator {
 
         const beforeBoundNode = must(
           first(
-          skipYields(
-            this.#input.fetch({
-              start: {
-                row: takeState.bound,
-                basis: 'after',
-              },
-              constraint,
-              reverse: true,
-            }),
-          ),
+            skipYields(
+              this.#input.fetch({
+                start: {
+                  row: takeState.bound,
+                  basis: 'after',
+                },
+                constraint,
+                reverse: true,
+              }),
+            ),
           ),
         );
 

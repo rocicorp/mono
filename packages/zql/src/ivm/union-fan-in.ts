@@ -104,9 +104,8 @@ export class UnionFanIn implements Operator {
 
   fetch(req: FetchRequest): Stream<Node | 'yield'> {
     const iterables = this.#inputs.map(input => input.fetch(req));
-    return mergeFetches(
-      iterables,
-      (l, r) =>  this.#schema.compareRows(l.row, r.row),
+    return mergeFetches(iterables, (l, r) =>
+      this.#schema.compareRows(l.row, r.row),
     );
   }
 
@@ -213,7 +212,7 @@ export class UnionFanIn implements Operator {
 
 export function* mergeFetches(
   fetches: Iterable<Node | 'yield'>[],
-  comparator: (l: Node, r: Node) => number
+  comparator: (l: Node, r: Node) => number,
 ): IterableIterator<Node | 'yield'> {
   const iterators = fetches.map(i => i[Symbol.iterator]());
   let threw = false;
@@ -228,7 +227,7 @@ export function* mergeFetches(
         yield result.value;
         result = iter.next();
       }
-      current[i] = result.done ? null : result.value as Node;
+      current[i] = result.done ? null : (result.value as Node);
     }
     while (current.some(c => c !== null)) {
       const min = current.reduce(
@@ -252,7 +251,7 @@ export function* mergeFetches(
         yield result.value;
         result = iter.next();
       }
-      current[minIndex] = result.done ? null : result.value as Node;
+      current[minIndex] = result.done ? null : (result.value as Node);
       if (
         lastNodeYielded !== undefined &&
         comparator(lastNodeYielded, minNode) === 0
@@ -263,26 +262,26 @@ export function* mergeFetches(
       yield minNode;
     }
   } catch (e) {
-      threw = true;
+    threw = true;
+    for (const iter of iterators) {
+      try {
+        iter.throw?.(e);
+      } catch (_cleanupError) {
+        // error in the iter.throw cleanup,
+        // catch so other iterators are cleaned up
+      }
+    }
+    throw e;
+  } finally {
+    if (!threw) {
       for (const iter of iterators) {
         try {
-          iter.throw?.(e);
+          iter.return?.();
         } catch (_cleanupError) {
-          // error in the iter.throw cleanup,
+          // error in the iter.return cleanup,
           // catch so other iterators are cleaned up
         }
       }
-      throw e;
-    } finally {
-      if (!threw) {
-        for (const iter of iterators) {
-          try {
-            iter.return?.();
-          } catch (_cleanupError) {
-            // error in the iter.return cleanup,
-            // catch so other iterators are cleaned up
-          }
-        }
-      }
     }
+  }
 }

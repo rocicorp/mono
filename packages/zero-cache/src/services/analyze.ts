@@ -44,9 +44,7 @@ export async function analyzeQuery(
     ? createSQLiteCostModel(db, tableSpecs)
     : undefined;
   const timer = await new TimeSliceTimer().start();
-  const shouldYield = () => {
-    return timer.elapsedLap() > TIME_SLICE_LAP_THRESHOLD_MS;
-  };
+  const shouldYield = () => timer.elapsedLap() > TIME_SLICE_LAP_THRESHOLD_MS;
   const yieldProcess = () => timer.yieldProcess();
   const result = await runAst(
     lc,

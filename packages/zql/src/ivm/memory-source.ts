@@ -342,7 +342,9 @@ export class MemorySource implements Source {
     );
 
     const withConstraint = generateWithConstraint(
-      skipYields(generateWithStart(withOverlay, req.start, connectionComparator)),
+      skipYields(
+        generateWithStart(withOverlay, req.start, connectionComparator),
+      ),
       // we use `req.constraint` and not `fetchOrPkConstraint` here because we need to
       // AND the constraint with what could have been the primary key constraint
       req.constraint,

@@ -26,7 +26,7 @@ import {
 import {
   type SyncContext,
   TimeSliceTimer,
-  ViewSyncerService,
+  type ViewSyncerService,
 } from './view-syncer.ts';
 import {HYDRATE_YIELD_THRESHOLD_MS} from './pipeline-driver.ts';
 import {CVRStore} from './cvr-store.ts';

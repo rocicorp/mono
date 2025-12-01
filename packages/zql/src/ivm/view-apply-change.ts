@@ -8,7 +8,7 @@ import {must} from '../../../shared/src/must.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {drainStreams, type Comparator, type Node} from './data.ts';
-import { skipYields } from './operator.ts';
+import {skipYields} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Entry, Format} from './view.ts';
 
