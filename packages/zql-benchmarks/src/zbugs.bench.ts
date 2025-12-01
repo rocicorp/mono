@@ -1,11 +1,12 @@
-import {bench, run, summary} from 'mitata';
-import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
-import {
-  clientToServer,
-  serverToClient,
-} from '../../zero-schema/src/name-mapper.ts';
-import {planQuery} from '../../zql/src/planner/planner-builder.ts';
-import {mapAST} from '../../zero-protocol/src/ast.ts';
+// oxlint-disable no-console
+// import {bench, run, summary} from 'mitata';
+// import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
+// import {
+//   clientToServer,
+//   serverToClient,
+// } from '../../zero-schema/src/name-mapper.ts';
+// import {planQuery} from '../../zql/src/planner/planner-builder.ts';
+// import {mapAST} from '../../zero-protocol/src/ast.ts';
 import type {AST, Condition} from '../../zero-protocol/src/ast.ts';
 import {QueryImpl} from '../../zql/src/query/query-impl.ts';
 import {defaultFormat} from '../../zql/src/ivm/default-format.ts';
@@ -19,7 +20,7 @@ import {Database} from '../../zqlite/src/db.ts';
 import {newQueryDelegate} from '../../zqlite/src/test/source-factory.ts';
 import {schema, builder} from './schema.ts';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
-import {AccumulatorDebugger} from '../../zql/src/planner/planner-debug.ts';
+// import {AccumulatorDebugger} from '../../zql/src/planner/planner-debug.ts';
 // import {AccumulatorDebugger} from '../../zql/src/planner/planner-debug.ts';
 
 // Open the zbugs SQLite database
@@ -37,11 +38,11 @@ const tableSpecs = new Map<string, LiteAndZqlSpec>();
 computeZqlSpecs(createSilentLogContext(), db, tableSpecs);
 
 // Create SQLite cost model
-const costModel = createSQLiteCostModel(db, tableSpecs);
+// const costModel = createSQLiteCostModel(db, tableSpecs);
 
 // Create name mappers
-const clientToServerMapper = clientToServer(schema.tables);
-const serverToClientMapper = serverToClient(schema.tables);
+// const clientToServerMapper = clientToServer(schema.tables);
+// const serverToClientMapper = serverToClient(schema.tables);
 
 // Create SQLite delegate
 const delegate = newQueryDelegate(lc, testLogConfig, db, schema);
@@ -146,23 +147,6 @@ benchmarkQuery(
   'exists',
   builder.issue.whereExists('creator', q => q.where('name', 'sdf')),
 );
-
-// Check if JSON output is requested via environment variable
-const format = process.env.BENCH_OUTPUT_FORMAT;
-
-if (format === 'json') {
-  // Output JSON without samples for smaller, cleaner output
-  await run({
-    format: {
-      json: {
-        samples: false,
-        debug: false,
-      },
-    },
-  });
-} else {
-  await run();
-}
 
 test('no-op', () => {
   expect(true).toBe(true);

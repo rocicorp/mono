@@ -7,7 +7,7 @@ import {
   string,
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
-import {createBuilder} from '../../zql/src/query/named.ts';
+import {createBuilder} from '../../zql/src/query/create-builder.ts';
 import type {Row} from '../../zql/src/query/query.ts';
 
 // Table definitions
