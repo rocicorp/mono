@@ -932,7 +932,7 @@ function runReadQueryWithPermissions(
   );
   const pipeline = buildPipeline(updatedAst, queryDelegate, 'query-id');
   const out = new Catch(pipeline);
-  return out.fetch({});
+  return out.fetch({}).filter(n => n !== 'yield');
 }
 
 describe('comment & issueLabel permissions', () => {
@@ -1545,14 +1545,16 @@ describe('read permissions against nested paths', () => {
 // maps over nodes, drops all information from `row` except the id
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
 function toIdsOnly(nodes: CaughtNode[]): any[] {
-  return nodes.map(node => ({
-    id: node.row.id,
-    ...Object.fromEntries(
-      Object.entries(node.relationships)
-        .filter(([k]) => !k.startsWith('zsubq_'))
-        .map(([k, v]) => [k, toIdsOnly(Array.isArray(v) ? v : [...v])]),
-    ),
-  }));
+  return nodes
+    .filter(n => n !== 'yield')
+    .map(node => ({
+      id: node.row.id,
+      ...Object.fromEntries(
+        Object.entries(node.relationships)
+          .filter(([k]) => !k.startsWith('zsubq_'))
+          .map(([k, v]) => [k, toIdsOnly(Array.isArray(v) ? v : [...v])]),
+      ),
+    }));
 }
 
 // TODO (mlaw): test that `exists` does not provide an oracle
