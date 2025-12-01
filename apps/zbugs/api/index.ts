@@ -203,19 +203,17 @@ async function mutateHandler(
   reply.send(response);
 }
 
-// this endpoint was kept for backwards compatibility
-// in the transition to /query
 fastify.post<{
   Querystring: Record<string, string>;
   Body: ReadonlyJSONValue;
-}>('/api/get-queries', queryHandler);
+}>('/api/pull', getQueriesHandler);
 
 fastify.post<{
   Querystring: Record<string, string>;
   Body: ReadonlyJSONValue;
-}>('/api/query', queryHandler);
+}>('/api/get-queries', getQueriesHandler);
 
-async function queryHandler(
+async function getQueriesHandler(
   request: FastifyRequest<{
     Querystring: Record<string, string>;
     Body: ReadonlyJSONValue;
