@@ -407,8 +407,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   async run(): Promise<void> {
     try {
       // Wait for initialization if we need to process queries.
-      // This ensures authData and cvr.clientSchema are available before 
-      // transforming custom queries (dependency on authData) and building 
+      // This ensures authData and cvr.clientSchema are available before
+      // transforming custom queries (dependency on authData) and building
       // pipelines (dependency on cvr.clientSchema).
       if ((await this.readyState()) === 'draining') {
         this.#lc.debug?.(`draining view-syncer ${this.id} before running`);
@@ -422,8 +422,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         assert(state === 'version-ready', 'state should be version-ready'); // This is the only state change used.
 
         await this.#runInLockWithCVR(async (lc, cvr) => {
-
-          const clientSchema = must(cvr.clientSchema, 'cvr.clientSchema missing after initialization');
+          const clientSchema = must(
+            cvr.clientSchema,
+            'cvr.clientSchema missing after initialization',
+          );
           if (!this.#pipelines.initialized()) {
             // On the first version-ready signal, connect to the replica.
             this.#pipelines.init(clientSchema);
@@ -694,18 +696,18 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           if (cvr.clientSchema === null && !msg.clientSchema) {
             throw new ProtocolErrorWithLevel({
               kind: ErrorKind.InvalidConnectionRequest,
-              message: 'The initConnection message for a new client group must include client schema.',
+              message:
+                'The initConnection message for a new client group must include client schema.',
               origin: ErrorOrigin.ZeroCache,
             });
           }
           await this.#handleConfigUpdate(lc, clientID, msg, cvr);
-          // this.#authData  and cvr (in particular cvr.clientSchema) have been 
+          // this.#authData  and cvr (in particular cvr.clientSchema) have been
           // initialized, signal the run loop to run.
           this.#initialized.resolve('initialized');
         },
         newClient,
-      )
-      .catch(e => newClient.fail(e));
+      ).catch(e => newClient.fail(e));
 
       return downstream;
     });

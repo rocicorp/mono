@@ -196,13 +196,15 @@ describe('view-syncer/service', () => {
   });
 
   test('initConnectionMessage for new client group missing clientSchema', async () => {
-    const client = connect(SYNC_CONTEXT, [
-      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
-    ], null /** no clientSchema */);
+    const client = connect(
+      SYNC_CONTEXT,
+      [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
+      null /** no clientSchema */,
+    );
     await expect(client.dequeue()).rejects.toThrowErrorMatchingInlineSnapshot(
-    `[ProtocolError: The initConnection message for a new client group must include client schema.]`);
+      `[ProtocolError: The initConnection message for a new client group must include client schema.]`,
+    );
   });
-
 
   test('responds to changeDesiredQueries patch', async () => {
     const now = Date.UTC(2025, 1, 20);

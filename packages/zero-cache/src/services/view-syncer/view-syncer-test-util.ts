@@ -742,7 +742,11 @@ export async function setup(
   ): {queue: Queue<Downstream>; source: Source<Downstream>} {
     const source = vs.initConnection(ctx, [
       'initConnection',
-      {desiredQueriesPatch, clientSchema: clientSchema ?? undefined, activeClients},
+      {
+        desiredQueriesPatch,
+        clientSchema: clientSchema ?? undefined,
+        activeClients,
+      },
     ]);
     const queue = new Queue<Downstream>();
 
