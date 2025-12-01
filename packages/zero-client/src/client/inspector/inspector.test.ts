@@ -2233,7 +2233,3 @@ describe('inspector.analyzeQuery name mapping', () => {
     await z.close();
   });
 });
-
-async function waitForLazyModule() {
-  await import('./lazy-inspector.ts');
-}
