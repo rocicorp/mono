@@ -265,17 +265,11 @@ export async function clientGroupClientsWithQueries(
   );
 }
 
-export async function clientGroupQueries(
+export function clientGroupQueries(
   delegate: ExtendedInspectorDelegate,
 ): Promise<Query[]> {
-  const rows: InspectQueryRow[] = await rpc(
-    await delegate.getSocket(),
-    {op: 'queries'},
-    inspectQueriesDownSchema,
-  );
-  return rows.map(row => new Query(row, delegate, delegate.getSocket));
+  return queries(delegate, {op: 'queries'});
 }
-
 export function clientMap(
   delegate: ExtendedInspectorDelegate,
   clientID: string,
@@ -319,16 +313,25 @@ export async function serverVersion(
   );
 }
 
-export async function clientQueries(
+export function clientQueries(
   delegate: ExtendedInspectorDelegate,
   clientID: string,
 ): Promise<Query[]> {
+  return queries(delegate, {op: 'queries', clientID});
+}
+
+async function queries(
+  delegate: ExtendedInspectorDelegate,
+  arg: {op: 'queries'; clientID?: string},
+): Promise<Query[]> {
   const rows: InspectQueryRow[] = await rpc(
     await delegate.getSocket(),
-    {op: 'queries', clientID},
+    arg,
     inspectQueriesDownSchema,
   );
-  return rows.map(row => new Query(row, delegate, delegate.getSocket));
+  const queries = rows.map(row => new Query(row, delegate, delegate.getSocket));
+  queries.sort((a, b) => (b.hydrateServer ?? 0) - (a.hydrateServer ?? 0));
+  return queries;
 }
 
 export async function analyzeQuery(
