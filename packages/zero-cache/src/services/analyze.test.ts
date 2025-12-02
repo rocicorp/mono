@@ -708,6 +708,7 @@ describe('analyzeQuery', () => {
           costModel: expect.anything(),
           planDebugger: mockDebugger,
         }),
+        expect.anything(), // shouldYield
       );
 
       // Verify serializePlanDebugEvents was called
@@ -759,6 +760,7 @@ describe('analyzeQuery', () => {
           costModel: undefined,
           planDebugger: undefined,
         }),
+        expect.anything(), // shouldYield
       );
 
       // Verify serializePlanDebugEvents was NOT called
