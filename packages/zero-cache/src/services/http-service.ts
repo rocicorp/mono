@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import Fastify, {type FastifyInstance} from 'fastify';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {HeartbeatMonitor} from './life-cycle.ts';
 import {RunningState} from './running-state.ts';
 import type {Service} from './service.ts';
@@ -18,7 +19,7 @@ export class HttpService implements Service {
   protected readonly _lc: LogContext;
   readonly #fastify: FastifyInstance;
   readonly #port: number;
-  readonly #state: RunningState;
+  protected readonly _state: RunningState;
   readonly #heartbeatMonitor: HeartbeatMonitor;
   readonly #init: (fastify: FastifyInstance) => void | Promise<void>;
 
@@ -33,26 +34,26 @@ export class HttpService implements Service {
     this.#fastify = Fastify();
     this.#port = opts.port;
     this.#init = init;
-    this.#state = new RunningState(id);
+    this._state = new RunningState(id);
     this.#heartbeatMonitor = new HeartbeatMonitor(this._lc);
   }
 
-  /** Override to delay responding to health checks on "/". */
-  protected _respondToHealthCheck(): boolean {
-    return true;
+  // Life-cycle hooks for subclass implementations
+  protected _onStart() {}
+  protected _onStop(): Promise<void> {
+    return promiseVoid;
   }
-
-  /** Override to delay responding to health checks on "/keepalive". */
-  protected _respondToKeepalive(): boolean {
-    return true;
-  }
+  protected _onHeartbeat(_count: number) {}
 
   // start() is used in unit tests.
   // run() is the lifecycle method called by the ServiceRunner.
   async start(): Promise<string> {
+    let heartbeats = 0;
+
     this.#fastify.get('/', (_req, res) => res.send('OK'));
     this.#fastify.get('/keepalive', ({headers}, res) => {
       this.#heartbeatMonitor.onHeartbeat(headers);
+      this._onHeartbeat(++heartbeats);
       return res.send('OK');
     });
     await this.#init(this.#fastify);
@@ -61,18 +62,20 @@ export class HttpService implements Service {
       port: this.#port,
     });
     this._lc.info?.(`${this.id} listening at ${address}`);
+    this._onStart();
     return address;
   }
 
   async run(): Promise<void> {
     await this.start();
-    await this.#state.stopped();
+    await this._state.stopped();
   }
 
   async stop(): Promise<void> {
     this._lc.info?.(`${this.id}: no longer accepting connections`);
     this.#heartbeatMonitor.stop();
+    this._state.stop(this._lc);
     await this.#fastify.close();
-    this.#state.stop(this._lc);
+    await this._onStop();
   }
 }
