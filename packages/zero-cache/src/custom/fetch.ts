@@ -1,15 +1,15 @@
-import 'urlpattern-polyfill';
 import type {LogContext} from '@rocicorp/logger';
+import 'urlpattern-polyfill';
 import {assert} from '../../../shared/src/asserts.ts';
-import {upstreamSchema, type ShardID} from '../types/shards.ts';
+import {getErrorMessage} from '../../../shared/src/error.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {Type} from '../../../shared/src/valita.ts';
-import {isProtocolError} from '../../../zero-protocol/src/error.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
-import {getErrorMessage} from '../../../shared/src/error.ts';
+import {isProtocolError} from '../../../zero-protocol/src/error.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
+import {upstreamSchema, type ShardID} from '../types/shards.ts';
 
 const reservedParams = ['schema', 'appID'];
 
@@ -196,7 +196,9 @@ export async function fetchFromAPIServer<TValidator extends Type>(
       throw error;
     }
 
-    lc.error?.('failed to fetch from API server with unknown error', {
+    // Failures thrown from fetch generally indicate a timeout
+    // (i.e. transient I/O problem).
+    lc.warn?.('failed to fetch from API server with unknown error', {
       url: finalUrl,
       error,
     });
