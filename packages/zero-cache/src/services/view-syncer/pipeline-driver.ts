@@ -506,7 +506,8 @@ export class PipelineDriver {
       for (const {table, prevValues, nextValue} of diff) {
         // Advance progress is checked each time a row is fetched
         // from a TableSource during push processing, but some pushes
-        // don't read any rows.  Check af
+        // don't read any rows.  Check progress here before processing
+        // the next change.
         this.#checkAdvanceProgress();
         const start = performance.now();
         let type;
