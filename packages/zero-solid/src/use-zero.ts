@@ -25,8 +25,9 @@ const ZeroContext = createContext<
   Accessor<Zero<any, any, any>> | undefined
 >(undefined);
 
-const NO_AUTH_SET = Symbol();
-
+/**
+ * @deprecated Use {@linkcode ZeroProvider} instead of managing your own Zero instance.
+ */
 export function createZero<
   S extends Schema = DefaultSchema,
   MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
@@ -51,6 +52,27 @@ export function useZero<
   }
   return zero;
 }
+
+/**
+ * @deprecated Use {@linkcode useZero} instead, alongside default types defined with:
+ *
+ * ```ts
+ * declare module '@rocicorp/zero' {
+ *   interface DefaultTypes {
+ *     schema: typeof schema;
+ *     context: Context;
+ *   }
+ * }
+ */
+export function createUseZero<
+  S extends Schema = DefaultSchema,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+  Context = DefaultContext,
+>() {
+  return () => useZero<S, MD, Context>();
+}
+
+const NO_AUTH_SET = Symbol();
 
 export function ZeroProvider<
   S extends Schema = DefaultSchema,

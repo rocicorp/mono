@@ -18,7 +18,10 @@ import type {
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
 
-export const ZeroContext = createContext<unknown | undefined>(undefined);
+// oxlint-disable-next-line no-explicit-any
+export const ZeroContext = createContext<Zero<any, any, any> | undefined>(
+  undefined,
+);
 
 export function useZero<
   S extends Schema = DefaultSchema,
@@ -30,6 +33,25 @@ export function useZero<
     throw new Error('useZero must be used within a ZeroProvider');
   }
   return zero as Zero<S, MD, Context>;
+}
+
+/**
+ * @deprecated Use {@linkcode useZero} instead, alongside default types defined with:
+ *
+ * ```ts
+ * declare module '@rocicorp/zero' {
+ *   interface DefaultTypes {
+ *     schema: typeof schema;
+ *     context: Context;
+ *   }
+ * }
+ */
+export function createUseZero<
+  S extends Schema = DefaultSchema,
+  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+  Context = DefaultContext,
+>() {
+  return () => useZero<S, MD, Context>();
 }
 
 export type ZeroProviderProps<
