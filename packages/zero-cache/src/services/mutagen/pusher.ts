@@ -1,4 +1,4 @@
-import type {LogContext} from '@rocicorp/logger';
+import type {LogContext, LogLevel} from '@rocicorp/logger';
 import {groupBy} from '../../../../shared/src/arrays.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
@@ -14,7 +14,7 @@ import {
   type PushResponse,
 } from '../../../../zero-protocol/src/push.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
-import {fetchFromAPIServer, compileUrlPattern} from '../../custom/fetch.ts';
+import {compileUrlPattern, fetchFromAPIServer} from '../../custom/fetch.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {recordMutation} from '../../server/anonymous-otel-start.ts';
 import {ErrorForClient} from '../../types/error-for-client.ts';
@@ -252,7 +252,7 @@ class PushWorker {
     } else {
       // Validate that subsequent clients have compatible parameters
       if (this.#userPushURL !== userPushURL) {
-        this.#lc.error?.(
+        this.#lc.warn?.(
           'Client provided different mutate parameters than client group',
           {
             clientID,
@@ -368,7 +368,7 @@ class PushWorker {
         }
 
         if (failure && i < mutations.length - 1) {
-          this.#lc.error?.(
+          this.#lc.warn?.(
             'push-response contains mutations after a mutation which should fatal the connection',
           );
         }
@@ -405,6 +405,11 @@ class PushWorker {
       'mutations',
     );
 
+    // Errors from a user-specified url are treated 4xx errors
+    // (e.g. bad request) as they are developer driven and should not
+    // trigger error-log based alerts.
+    const error: LogLevel = this.#userPushURL ? 'warn' : 'error';
+
     try {
       const response = await fetchFromAPIServer(
         this.#lc,
@@ -423,6 +428,13 @@ class PushWorker {
       );
 
       if (!response.ok) {
+        if (response.status === 502 || response.status === 504) {
+          // Bad Gateway or Gateway Timeout indicate the server was not reached
+          this.#lc[error]?.(`unable to connect to push server`, {
+            url,
+            code: response.status,
+          });
+        }
         return {
           error: 'http',
           status: response.status,
@@ -438,7 +450,11 @@ class PushWorker {
       try {
         return v.parse(json, pushResponseSchema);
       } catch (e) {
-        this.#lc.error?.('failed to parse push response', JSON.stringify(json));
+        this.#lc[error]?.(
+          'failed to parse push response',
+          JSON.stringify(json),
+          {url},
+        );
         throw e;
       }
     } catch (e) {
@@ -447,7 +463,7 @@ class PushWorker {
         clientID: m.clientID,
       }));
 
-      this.#lc.error?.('failed to push', e);
+      this.#lc[error]?.(`failed to push to ${url}`, e);
       if (e instanceof ErrorForClient) {
         return {
           error: 'forClient',

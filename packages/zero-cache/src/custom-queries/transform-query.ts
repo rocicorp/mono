@@ -1,23 +1,23 @@
-import type {LogContext} from '@rocicorp/logger';
-import type {TransformedAndHashed} from '../auth/read-authorizer.ts';
-import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
+import type {LogContext, LogLevel} from '@rocicorp/logger';
+import {TimedCache} from '../../../shared/src/cache.ts';
+import {must} from '../../../shared/src/must.ts';
+import * as v from '../../../shared/src/valita.ts';
 import {
   transformResponseMessageSchema,
   type ErroredQuery,
   type TransformRequestBody,
   type TransformRequestMessage,
 } from '../../../zero-protocol/src/custom-queries.ts';
+import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
+import type {TransformedAndHashed} from '../auth/read-authorizer.ts';
 import {
-  fetchFromAPIServer,
   compileUrlPattern,
+  fetchFromAPIServer,
   type HeaderOptions,
 } from '../custom/fetch.ts';
-import type {ShardID} from '../types/shards.ts';
-import * as v from '../../../shared/src/valita.ts';
-import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
-import {TimedCache} from '../../../shared/src/cache.ts';
-import {must} from '../../../shared/src/must.ts';
+import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
 import {ErrorForClient} from '../types/error-for-client.ts';
+import type {ShardID} from '../types/shards.ts';
 
 export type HttpError = {
   error: 'http';
@@ -98,15 +98,21 @@ export class CustomQueryTransformer {
       return cachedResponses;
     }
 
+    // Errors from a user-specified url are treated 4xx errors
+    // (e.g. bad request) as they are developer driven and should not
+    // trigger error-log based alerts.
+    let error: LogLevel = userQueryURL ? 'warn' : 'error';
     let response: Response | undefined;
+    const url =
+      userQueryURL ??
+      must(
+        this.#config.url[0],
+        'A ZERO_GET_QUERIES_URL must be configured for custom queries',
+      );
     try {
       response = await fetchFromAPIServer(
         this.#lc,
-        userQueryURL ??
-          must(
-            this.#config.url[0],
-            'A ZERO_GET_QUERIES_URL must be configured for custom queries',
-          ),
+        url,
         this.#urlPatterns,
         this.#shard,
         headerOptions,
@@ -116,6 +122,7 @@ export class CustomQueryTransformer {
       if (e instanceof ErrorForClient) {
         throw e;
       }
+      this.#lc[error]?.(`error transforming query with ${url}`, e);
       return request.map(r => ({
         error: 'zero',
         details: e instanceof Error ? e.message : String(e),
@@ -125,6 +132,13 @@ export class CustomQueryTransformer {
     }
 
     if (!response.ok) {
+      if (response.status === 502 || response.status === 504) {
+        // Bad Gateway or Gateway Timeout indicate the server was not reached
+        this.#lc[error]?.(`unable to connect to query server`, {
+          url,
+          code: response.status,
+        });
+      }
       const details = await response.text();
       return request.map(r => ({
         error: 'http',
