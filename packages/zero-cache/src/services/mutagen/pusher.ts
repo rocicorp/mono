@@ -251,7 +251,7 @@ class PushWorker {
     } else {
       // Validate that subsequent clients have compatible parameters
       if (this.#userPushURL !== userPushURL) {
-        this.#lc.error?.(
+        this.#lc.warn?.(
           'Client provided different mutate parameters than client group',
           {
             clientID,
@@ -394,7 +394,7 @@ class PushWorker {
         }
 
         if (failure && i < mutations.length - 1) {
-          this.#lc.error?.(
+          this.#lc.warn?.(
             'push-response contains mutations after a mutation which should fatal the connection',
           );
         }
@@ -446,6 +446,7 @@ class PushWorker {
         'push',
         this.#lc,
         url,
+        url === this.#userPushURL,
         this.#pushURLPatterns,
         {
           appID: this.#config.app.id,
@@ -459,8 +460,6 @@ class PushWorker {
         entry.push,
       );
     } catch (e) {
-      this.#lc.error?.('failed to push', e);
-
       if (isProtocolError(e) && e.errorBody.kind === ErrorKind.PushFailed) {
         return {
           ...e.errorBody,
