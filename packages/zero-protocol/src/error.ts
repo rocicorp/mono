@@ -12,6 +12,7 @@ const basicErrorKindSchema = v.literalUnion(
   ErrorKind.InvalidPush,
   ErrorKind.MutationRateLimited,
   ErrorKind.MutationFailed,
+  ErrorKind.TransformFailed,
   ErrorKind.Unauthorized,
   ErrorKind.VersionNotSupported,
   ErrorKind.SchemaVersionNotSupported,
