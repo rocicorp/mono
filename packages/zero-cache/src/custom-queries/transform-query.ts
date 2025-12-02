@@ -22,7 +22,6 @@ import {
   fetchFromAPIServer,
   type HeaderOptions,
 } from '../custom/fetch.ts';
-import {getLogLevel} from '../types/error-with-level.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
 import type {ShardID} from '../types/shards.ts';
 
@@ -118,6 +117,7 @@ export class CustomQueryTransformer {
             this.#config.url[0],
             'A ZERO_QUERY_URL must be configured for custom queries',
           ),
+        userQueryURL !== undefined,
         this.#urlPatterns,
         this.#shard,
         headerOptions,
@@ -150,9 +150,6 @@ export class CustomQueryTransformer {
 
       return newResponses.concat(cachedResponses);
     } catch (e) {
-      const level = getLogLevel(e);
-      this.#lc[level]?.('failed to transform queries', e);
-
       if (
         isProtocolError(e) &&
         e.errorBody.kind === ErrorKind.TransformFailed
