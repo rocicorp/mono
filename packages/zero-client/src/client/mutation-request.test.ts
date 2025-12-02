@@ -34,7 +34,7 @@ const defineUserMutator = (
   }) => Promise<void>,
 ) => defineMutator<{id: string; name: string}, Schema>(mutator);
 const makeUserMutators = (create: ReturnType<typeof defineUserMutator>) =>
-  defineMutators<Schema>({user: {create}} satisfies MutatorDefinitions<
+  defineMutators({user: {create}} satisfies MutatorDefinitions<
     Schema,
     unknown
   >) as MutatorRegistry<

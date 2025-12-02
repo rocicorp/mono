@@ -59,26 +59,26 @@ import {
  * ```
  */
 export function defineMutators<
+  T extends MutatorDefinitions<S, C>,
   S extends Schema = DefaultSchema,
   C = DefaultContext,
-  T extends MutatorDefinitions<S, C> = {},
 >(definitions: T): MutatorRegistry<S, C, T>;
 
 export function defineMutators<
+  TBase extends MutatorDefinitions<S, C>,
+  TOverrides extends MutatorDefinitions<S, C>,
   S extends Schema = DefaultSchema,
   C = DefaultContext,
-  TBase extends MutatorDefinitions<S, C> = {},
-  TOverrides extends MutatorDefinitions<S, C> = {},
 >(
   base: MutatorRegistry<S, C, TBase>,
   overrides: TOverrides,
 ): MutatorRegistry<S, C, DeepMerge<TBase, TOverrides>>;
 
 export function defineMutators<
+  TBase extends MutatorDefinitions<S, C>,
+  TOverrides extends MutatorDefinitions<S, C>,
   S extends Schema = DefaultSchema,
   C = DefaultContext,
-  TBase extends MutatorDefinitions<S, C> = {},
-  TOverrides extends MutatorDefinitions<S, C> = {},
 >(
   base: TBase,
   overrides: TOverrides,

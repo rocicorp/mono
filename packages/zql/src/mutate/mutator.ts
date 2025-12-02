@@ -179,14 +179,14 @@ type MutatorCallable<
   TArgsInput extends ReadonlyJSONValue | undefined,
   TWrappedTransaction,
 > = [TArgsInput] extends [undefined]
-  ? () => MutationRequest<TSchema, TContext, TArgsInput, TWrappedTransaction>
+  ? () => MutationRequest<TArgsInput, TSchema, TContext, TWrappedTransaction>
   : undefined extends TArgsInput
     ? (
         args?: TArgsInput,
-      ) => MutationRequest<TSchema, TContext, TArgsInput, TWrappedTransaction>
+      ) => MutationRequest<TArgsInput, TSchema, TContext, TWrappedTransaction>
     : (
         args: TArgsInput,
-      ) => MutationRequest<TSchema, TContext, TArgsInput, TWrappedTransaction>;
+      ) => MutationRequest<TArgsInput, TSchema, TContext, TWrappedTransaction>;
 
 // oxlint-disable-next-line no-explicit-any
 export type AnyMutator = Mutator<any, Schema, any, any>;
