@@ -22,6 +22,7 @@
   "devDependencies": {
     "@rocicorp/prettier-config": "^0.4.0",
     "@types/tmp": "^0.2.6",
+    "otel": "0.0.0",
     "shared": "0.0.0",
     "typescript": "~5.9.3",
     "zero-cache": "0.0.0",
