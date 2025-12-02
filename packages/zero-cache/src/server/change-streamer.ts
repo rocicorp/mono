@@ -35,7 +35,13 @@ export default async function runWorker(
   const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
   const {
     taskID,
-    changeStreamer: {port, address, protocol},
+    changeStreamer: {
+      port,
+      address,
+      protocol,
+      startupDelayMs,
+      startupDelayKeepalives,
+    },
     upstream,
     change,
     replica,
@@ -131,7 +137,7 @@ export default async function runWorker(
   const changeStreamerWebServer = new ChangeStreamerHttpServer(
     lc,
     config,
-    {port},
+    {port, startupDelayMs, startupDelayKeepalives},
     parent,
     changeStreamer,
     backupMonitor,
@@ -139,7 +145,9 @@ export default async function runWorker(
 
   parent.send(['ready', {ready: true}]);
 
-  const services: Service[] = [changeStreamer, changeStreamerWebServer];
+  // Note: The changeStreamer itself is not started here; it is started by the
+  //       changeStreamerWebServer.
+  const services: Service[] = [changeStreamerWebServer];
   if (backupMonitor) {
     services.push(backupMonitor);
   }
