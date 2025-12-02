@@ -266,8 +266,6 @@ export const schema = createSchema({
   enableLegacyQueries: false,
 });
 
-export type Schema = typeof schema;
-
 export const builder = createBuilder(schema);
 
 export const ZERO_PROJECT_ID = 'iCNlS2qEpzYWEes1RTf-D';
