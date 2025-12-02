@@ -583,7 +583,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       } else {
         // Validate that subsequent clients have compatible parameters
         if (this.userQueryURL !== userQueryURL) {
-          this.#lc.error?.(
+          this.#lc.warn?.(
             'Client provided different query parameters than client group',
             {
               clientID,
@@ -663,15 +663,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     ctx: SyncContext,
     msg: DeleteClientsMessage,
   ): Promise<void> {
-    try {
-      await this.#runInLockForClient(
-        ctx,
-        [msg[0], {deleted: msg[1]}],
-        this.#handleConfigUpdate,
-      );
-    } catch (e) {
-      this.#lc.error?.('deleteClients failed', e);
-    }
+    await this.#runInLockForClient(
+      ctx,
+      [msg[0], {deleted: msg[1]}],
+      this.#handleConfigUpdate,
+    );
   }
 
   #getTTLClock(now: number): TTLClock {
@@ -1050,7 +1046,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     const transformedQueries: TransformedAndHashed[] = [];
     if (customQueries.size > 0 && !this.#customQueryTransformer) {
-      lc.error?.(
+      lc.warn?.(
         'Custom/named queries were requested but no `ZERO_GET_QUERIES_URL` is configured for Zero Cache.',
       );
     }
@@ -1141,7 +1137,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     for (const q of transformedCustomQueries) {
       if ('error' in q) {
-        lc.error?.(
+        lc.warn?.(
           `Error transforming custom query ${q.name}: ${q.error} ${q.details}`,
         );
         errors.push(q);
@@ -1263,7 +1259,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       if (customQueries.size > 0 && !this.#customQueryTransformer) {
-        lc.error?.(
+        lc.warn?.(
           'Custom/named queries were requested but no `ZERO_GET_QUERIES_URL` is configured for Zero Cache.',
         );
       }
