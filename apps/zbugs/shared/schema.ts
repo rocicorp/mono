@@ -7,7 +7,6 @@ import {
   relationships,
   string,
   table,
-  type Row,
 } from '@rocicorp/zero';
 import type {Role} from './auth.ts';
 
@@ -269,12 +268,13 @@ export const schema = createSchema({
 
 export type Schema = typeof schema;
 
-export type IssueRow = Row<typeof schema.tables.issue>;
-export type CommentRow = Row<typeof schema.tables.comment>;
-export type UserRow = Row<typeof schema.tables.user>;
-export type ProjectRow = Row<typeof schema.tables.project>;
-
 export const builder = createBuilder(schema);
 
 export const ZERO_PROJECT_ID = 'iCNlS2qEpzYWEes1RTf-D';
 export const ZERO_PROJECT_NAME = 'Zero';
+
+declare module '@rocicorp/zero' {
+  interface DefaultTypes {
+    schema: typeof schema;
+  }
+}

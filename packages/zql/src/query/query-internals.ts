@@ -18,8 +18,8 @@ export const queryInternalsTag = Symbol('QueryInternals');
  * @typeParam TReturn The return type of the query, defaults to PullRow<TTable, TSchema>
  */
 export interface QueryInternals<
-  TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
+  TSchema extends ZeroSchema,
   TReturn,
 > {
   readonly [queryInternalsTag]: true;
@@ -66,7 +66,7 @@ export interface QueryInternals<
   nameAndArgs(
     name: string,
     args: ReadonlyArray<ReadonlyJSONValue>,
-  ): Query<TSchema, TTable, TReturn>;
+  ): Query<TTable, TSchema, TReturn>;
 }
 
 /**
@@ -78,34 +78,34 @@ export interface QueryInternals<
  * @internal
  */
 export function asQueryInternals<
-  TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
+  TSchema extends ZeroSchema,
   TReturn,
 >(
-  query: Query<TSchema, TTable, TReturn>,
-): QueryInternals<TSchema, TTable, TReturn> {
+  query: Query<TTable, TSchema, TReturn>,
+): QueryInternals<TTable, TSchema, TReturn> {
   assert(queryInternalsTag in query);
-  return query as unknown as QueryInternals<TSchema, TTable, TReturn>;
+  return query as unknown as QueryInternals<TTable, TSchema, TReturn>;
 }
 
 export function isQueryInternals<
-  TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
+  TSchema extends ZeroSchema,
   TReturn,
->(obj: unknown): obj is QueryInternals<TSchema, TTable, TReturn> {
+>(obj: unknown): obj is QueryInternals<TTable, TSchema, TReturn> {
   return typeof obj === 'object' && obj !== null && queryInternalsTag in obj;
 }
 
 export function asQuery<
-  TSchema extends ZeroSchema,
   TTable extends keyof TSchema['tables'] & string,
+  TSchema extends ZeroSchema,
   TReturn,
 >(
-  queryInternals: QueryInternals<TSchema, TTable, TReturn>,
-): Query<TSchema, TTable, TReturn> {
+  queryInternals: QueryInternals<TTable, TSchema, TReturn>,
+): Query<TTable, TSchema, TReturn> {
   assert(queryInternalsTag in queryInternals);
-  return queryInternals as unknown as Query<TSchema, TTable, TReturn>;
+  return queryInternals as unknown as Query<TTable, TSchema, TReturn>;
 }
 
 // oxlint-disable-next-line no-explicit-any
-export type AnyQueryInternals = QueryInternals<ZeroSchema, string, any>;
+export type AnyQueryInternals = QueryInternals<string, ZeroSchema, any>;

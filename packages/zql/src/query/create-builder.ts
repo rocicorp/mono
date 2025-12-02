@@ -8,7 +8,7 @@ import type {SchemaQuery} from './schema-query.ts';
  */
 export function createBuilder<S extends Schema>(schema: S): SchemaQuery<S> {
   // oxlint-disable-next-line no-explicit-any
-  const cache = new Map<string, Query<S, string, any>>();
+  const cache = new Map<string, Query<string, S, any>>();
   const {tables} = schema;
 
   function getQuery(prop: string) {

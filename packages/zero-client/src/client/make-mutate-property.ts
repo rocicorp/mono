@@ -95,11 +95,11 @@ type MakeFromMutatorDefinitions<
   C,
 > = {
   readonly [K in keyof MD]: MD[K] extends MutatorDefinition<
-    S,
-    C,
     infer TInput,
     // oxlint-disable-next-line no-explicit-any
     any,
+    S,
+    C,
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
     any
   >

@@ -13,6 +13,11 @@ import {
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
+import type {
+  DefaultContext,
+  DefaultMutators,
+  DefaultSchema,
+} from '../../zero-types/src/default-types.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
 
@@ -24,9 +29,12 @@ const ZeroContext = createContext<
 const NO_AUTH_SET = Symbol();
 
 export function createZero<
-  S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
+  S extends Schema = DefaultSchema,
+  MD extends
+    | AnyMutatorRegistry
+    | CustomMutatorDefs
+    | undefined = DefaultMutators,
+  Context = DefaultContext,
 >(options: ZeroOptions<S, MD, Context>): Zero<S, MD, Context> {
   const opts = {
     ...options,
@@ -36,9 +44,12 @@ export function createZero<
 }
 
 export function useZero<
-  S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
+  S extends Schema = DefaultSchema,
+  MD extends
+    | AnyMutatorRegistry
+    | CustomMutatorDefs
+    | undefined = DefaultMutators,
+  Context = DefaultContext,
 >(): () => Zero<S, MD, Context> {
   const zero = useContext(ZeroContext);
 
@@ -48,18 +59,13 @@ export function useZero<
   return zero;
 }
 
-export function createUseZero<
-  S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
->() {
-  return () => useZero<S, MD, Context>();
-}
-
 export function ZeroProvider<
-  S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
-  Context,
+  S extends Schema = DefaultSchema,
+  MD extends
+    | AnyMutatorRegistry
+    | CustomMutatorDefs
+    | undefined = DefaultMutators,
+  Context = DefaultContext,
 >(
   props: {
     children: JSX.Element;

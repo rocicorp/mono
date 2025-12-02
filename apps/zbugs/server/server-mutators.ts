@@ -1,40 +1,25 @@
 import {
-  defineMutatorsWithType,
-  defineMutatorWithType,
+  defineMutator,
+  defineMutators,
   type ServerTransaction,
   type Transaction,
 } from '@rocicorp/zero';
-import type {PostgresJsTransaction} from '@rocicorp/zero/server/adapters/postgresjs';
 import {assert} from 'shared/src/asserts.js';
 import {z} from 'zod/mini';
-import type {AuthData} from '../shared/auth.ts';
 import {MutationError, MutationErrorCode} from '../shared/error.ts';
 import {
   createIssueArgsSchema,
   mutators,
   updateIssueArgsSchema,
 } from '../shared/mutators.ts';
-import type {Schema} from '../shared/schema.ts';
 import {builder} from '../shared/schema.ts';
 import {notify} from './notify.ts';
 
 export type PostCommitTask = () => Promise<void>;
 
-type MutatorTx = ServerTransaction<Schema, PostgresJsTransaction>;
-
-const defineMutator = defineMutatorWithType<
-  Schema,
-  AuthData | undefined,
-  MutatorTx
->();
-
-const defineMutators = defineMutatorsWithType<Schema, AuthData | undefined>();
-
-function asServerTransaction<S extends Schema>(
-  tx: Transaction<S, unknown>,
-): ServerTransaction<S, PostgresJsTransaction> {
+function asServerTransaction(tx: Transaction): ServerTransaction {
   assert(tx.location === 'server', 'Transaction is not a server transaction');
-  return tx as ServerTransaction<S, PostgresJsTransaction>;
+  return tx;
 }
 
 export function createServerMutators(postCommitTasks: PostCommitTask[]) {

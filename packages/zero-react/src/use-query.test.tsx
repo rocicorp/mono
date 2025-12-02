@@ -35,7 +35,7 @@ import {ZeroProvider} from './zero-provider.tsx';
 function newMockQuery(
   query: string,
   singular = false,
-): Query<Schema, string, unknown> {
+): Query<string, Schema, unknown> {
   const ret = {
     [queryInternalsTag]: true,
     hash() {
@@ -43,7 +43,7 @@ function newMockQuery(
     },
     format: {singular},
     toQuery: () => ret,
-  } as unknown as AbstractQuery<Schema, string>;
+  } as unknown as AbstractQuery<string, Schema>;
   return ret;
 }
 
@@ -69,8 +69,8 @@ function newMockDelegate(): QueryDelegate {
       TTable extends keyof TSchema['tables'] & string,
       TReturn,
     >(
-      q: Query<TSchema, TTable, TReturn>,
-    ): QueryInternals<TSchema, TTable, TReturn> {
+      q: Query<TTable, TSchema, TReturn>,
+    ): QueryInternals<TTable, TSchema, TReturn> {
       return {
         hash() {
           // oxlint-disable-next-line no-explicit-any
@@ -78,7 +78,7 @@ function newMockDelegate(): QueryDelegate {
         },
         // oxlint-disable-next-line no-explicit-any
         format: (q as any).format,
-      } as QueryInternals<TSchema, TTable, TReturn>;
+      } as QueryInternals<TTable, TSchema, TReturn>;
     },
   } as unknown as QueryDelegate;
 }

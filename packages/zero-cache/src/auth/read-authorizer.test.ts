@@ -153,7 +153,7 @@ const permissionRules = must(
         select: [
           (
             authData: {role: string},
-            eb: ExpressionBuilder<Schema, 'adminReadable'>,
+            eb: ExpressionBuilder<'adminReadable', Schema>,
           ) => eb.cmpLit(authData.role, '=', 'admin'),
         ],
       },
@@ -163,7 +163,7 @@ const permissionRules = must(
         select: [
           (
             _authData: {role: string},
-            eb: ExpressionBuilder<Schema, 'readableThruUnreadable'>,
+            eb: ExpressionBuilder<'readableThruUnreadable', Schema>,
           ) => eb.exists('unreadable'),
         ],
       },

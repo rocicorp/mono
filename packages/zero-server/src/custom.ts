@@ -5,6 +5,10 @@ import {
   sqlConvertColumnArg,
 } from '../../z2s/src/sql.ts';
 import type {TableSchema} from '../../zero-schema/src/table-schema.ts';
+import type {
+  DefaultSchema,
+  DefaultWrappedTransaction,
+} from '../../zero-types/src/default-types.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {
   ServerColumnSchema,
@@ -46,8 +50,10 @@ export type CustomMutatorImpl<
   Context = unknown,
 > = (tx: TDBTransaction, args: TArgs, ctx: Context) => Promise<void>;
 
-export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
-  implements ServerTransaction<TSchema, TWrappedTransaction>
+export class TransactionImpl<
+  TSchema extends Schema = DefaultSchema,
+  TWrappedTransaction = DefaultWrappedTransaction,
+> implements ServerTransaction<TSchema, TWrappedTransaction>
 {
   readonly location = 'server';
   readonly reason = 'authoritative';
@@ -78,7 +84,7 @@ export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
   }
 
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(
-    query: Query<TSchema, TTable, TReturn>,
+    query: Query<TTable, TSchema, TReturn>,
     _options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     const queryInternals = asQueryInternals(query);

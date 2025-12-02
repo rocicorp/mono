@@ -1,13 +1,13 @@
+import type {JSONValue} from '../../shared/src/json.ts';
+import {must} from '../../shared/src/must.ts';
+import type {Row} from '../../zero-protocol/src/data.ts';
+import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
+import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
 import {
   runBenchmarks,
   type PushGenerator,
 } from '../../zql-integration-tests/src/helpers/runner.ts';
-import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
-import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
 import type {PullRow} from '../../zql/src/query/query.ts';
-import type {Row} from '../../zero-protocol/src/data.ts';
-import type {JSONValue} from '../../shared/src/json.ts';
-import {must} from '../../shared/src/must.ts';
 
 const pgContent = await getChinook();
 

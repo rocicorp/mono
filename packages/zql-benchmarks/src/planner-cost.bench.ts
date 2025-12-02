@@ -35,9 +35,9 @@ const costModel = createSQLiteCostModel(dbs.sqlite, tableSpecs);
 const clientToServerMapper = clientToServer(schema.tables);
 
 // Helper to benchmark planning time
-function benchmarkPlanning<TTable extends keyof typeof schema.tables>(
+function benchmarkPlanning<TTable extends keyof typeof schema.tables & string>(
   name: string,
-  query: Query<typeof schema, TTable>,
+  query: Query<TTable, typeof schema>,
 ) {
   const unplannedAST = asQueryInternals(query).ast;
   const mappedAST = mapAST(unplannedAST, clientToServerMapper);

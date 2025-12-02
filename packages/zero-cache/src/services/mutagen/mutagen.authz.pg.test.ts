@@ -19,11 +19,11 @@ import {
 import type {Schema as ZeroSchema} from '../../../../zero-types/src/schema.ts';
 import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
 import type {Row} from '../../../../zql/src/query/query.ts';
-import {Database} from '../../../../zqlite/src/db.ts';
 import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,
 } from '../../../../zqlite/src/database-storage.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
 import {WriteAuthorizerImpl} from '../../auth/write-authorizer.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
 import {type PgTest, test} from '../../test/db.ts';
@@ -244,28 +244,28 @@ const permissionsConfig = await definePermissions<AuthData, typeof schema>(
   () => {
     const allowIfAdmin = (
       authData: AuthData,
-      {cmpLit}: ExpressionBuilder<ZeroSchema, string>,
+      {cmpLit}: ExpressionBuilder<string, ZeroSchema>,
     ) => cmpLit(authData.role, '=', 'admin');
 
     const allowIfNotAdminLockedRow = (
       _authData: AuthData,
-      {cmp}: ExpressionBuilder<Schema, 'adminOnlyRow'>,
+      {cmp}: ExpressionBuilder<'adminOnlyRow', Schema>,
     ) => cmp('adminLocked', false);
     const allowIfNotAdminLockedCell = (
       _authData: AuthData,
-      {cmp}: ExpressionBuilder<Schema, 'adminOnlyCell'>,
+      {cmp}: ExpressionBuilder<'adminOnlyCell', Schema>,
     ) => cmp('adminLocked', false);
     const allowIfLoggedIn = (
       authData: AuthData,
-      {cmpLit}: ExpressionBuilder<ZeroSchema, string>,
+      {cmpLit}: ExpressionBuilder<string, ZeroSchema>,
     ) => cmpLit(authData.sub, 'IS NOT', null);
     const allowIfPostMutationIDMatchesLoggedInUser = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<Schema, 'userMatch'>,
+      {cmp}: ExpressionBuilder<'userMatch', Schema>,
     ) => cmp('id', '=', authData.sub);
     const allowIfOwner = (
       authData: AuthData,
-      {cmp}: ExpressionBuilder<Schema, 'pkSecurity'>,
+      {cmp}: ExpressionBuilder<'pkSecurity', Schema>,
     ) => cmp('ownerId', '=', authData.sub);
 
     return {

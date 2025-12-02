@@ -1,4 +1,5 @@
-import {useQuery} from '@rocicorp/zero/react';
+import type {Row} from '@rocicorp/zero';
+import {useQuery, useZero} from '@rocicorp/zero/react';
 import type {Virtualizer} from '@tanstack/react-virtual';
 import {useWindowVirtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
@@ -25,11 +26,6 @@ import {difference} from '../../../../../packages/shared/src/set-utils.ts';
 import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
 import {mutators, type NotificationType} from '../../../shared/mutators.ts';
 import {queries, type ListContextParams} from '../../../shared/queries.ts';
-import {
-  type CommentRow,
-  type IssueRow,
-  type UserRow,
-} from '../../../shared/schema.ts';
 import circle from '../../assets/icons/circle.svg';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';
@@ -57,7 +53,6 @@ import {useIsOffline} from '../../hooks/use-is-offline.ts';
 import {useIsScrolling} from '../../hooks/use-is-scrolling.ts';
 import {useKeypress} from '../../hooks/use-keypress.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
-import {useZero} from '../../hooks/use-zero.ts';
 import {
   MAX_ISSUE_DESCRIPTION_LENGTH,
   MAX_ISSUE_TITLE_LENGTH,
@@ -810,7 +805,9 @@ function getId(params: DefaultParams) {
 
 function maybeShowToastForEmoji(
   emoji: Emoji,
-  issue: IssueRow & {readonly comments: readonly CommentRow[]},
+  issue: Row['issue'] & {
+    readonly comments: readonly Row['comment'][];
+  },
   virtualizer: Virtualizer<Window, HTMLElement>,
   emojiElement: HTMLDivElement | null,
   setRecentEmojis: Dispatch<SetStateAction<Emoji[]>>,
@@ -1018,8 +1015,8 @@ function noop() {
   // no op
 }
 
-type Issue = IssueRow & {
-  readonly comments: readonly CommentRow[];
+type Issue = Row['issue'] & {
+  readonly comments: readonly Row['comment'][];
 };
 
 function useEmojiChangeListener(
@@ -1071,7 +1068,9 @@ function useEmojiChangeListener(
 
 function useShowToastForNewComment(
   comments:
-    | ReadonlyArray<CommentRow & {readonly creator: UserRow | undefined}>
+    | ReadonlyArray<
+        Row['comment'] & {readonly creator: Row['user'] | undefined}
+      >
     | undefined,
   virtualizer: Virtualizer<Window, HTMLElement>,
   highlightComment: (id: string) => void,

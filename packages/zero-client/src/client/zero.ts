@@ -76,6 +76,11 @@ import {
   type NameMapper,
   clientToServer,
 } from '../../../zero-schema/src/name-mapper.ts';
+import type {
+  DefaultContext,
+  DefaultMutators,
+  DefaultSchema,
+} from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
 import {
@@ -298,9 +303,12 @@ const CLOSE_CODE_GOING_AWAY = 1001;
 type CloseCode = typeof CLOSE_CODE_NORMAL | typeof CLOSE_CODE_GOING_AWAY;
 
 export class Zero<
-  const S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
-  C = unknown,
+  const S extends Schema = DefaultSchema,
+  MD extends
+    | AnyMutatorRegistry
+    | CustomMutatorDefs
+    | undefined = DefaultMutators,
+  C = DefaultContext,
 > {
   readonly version = version;
 
@@ -675,7 +683,7 @@ export class Zero<
     );
 
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    const callableMutate = (mr: MutationRequest<S, C, any, any>) => {
+    const callableMutate = (mr: MutationRequest<any, S, C, any>) => {
       if (!registeredMutators.has(mr.mutator)) {
         throw new Error(
           `Mutator "${mr.mutator.mutatorName}" is not registered. ` +
@@ -854,7 +862,7 @@ export class Zero<
   preload<
     TTable extends keyof S['tables'] & string,
     TReturn extends PullRow<TTable, S>,
-  >(query: ToQuery<S, TTable, TReturn, C>, options?: PreloadOptions) {
+  >(query: ToQuery<TTable, S, TReturn, C>, options?: PreloadOptions) {
     return this.#zeroContext.preload(query.toQuery(this.context), options);
   }
 
@@ -879,7 +887,7 @@ export class Zero<
    * ```
    */
   run<TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToQuery<S, TTable, TReturn, C>,
+    query: ToQuery<TTable, S, TReturn, C>,
     runOptions?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return this.#zeroContext.run(query.toQuery(this.context), runOptions);
@@ -914,17 +922,17 @@ export class Zero<
    * ```
    */
   materialize<TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToQuery<S, TTable, TReturn, C>,
+    query: ToQuery<TTable, S, TReturn, C>,
     options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToQuery<S, TTable, TReturn, C>,
-    factory: ViewFactory<S, TTable, TReturn, T>,
+    query: ToQuery<TTable, S, TReturn, C>,
+    factory: ViewFactory<TTable, S, TReturn, T>,
     options?: MaterializeOptions,
   ): T;
   materialize<T, TTable extends keyof S['tables'] & string, TReturn>(
-    query: ToQuery<S, TTable, TReturn, C>,
-    factoryOrOptions?: ViewFactory<S, TTable, TReturn, T> | MaterializeOptions,
+    query: ToQuery<TTable, S, TReturn, C>,
+    factoryOrOptions?: ViewFactory<TTable, S, TReturn, T> | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
     const q = query.toQuery(this.context);
@@ -1018,7 +1026,7 @@ export class Zero<
   readonly mutate: MakeMutatePropertyType<S, MD, C> &
     // Also callable with MutationRequest: zero.mutate(mr)
     // oxlint-disable-next-line no-explicit-any
-    ((mr: MutationRequest<S, C, any, any>) => MutatorResult);
+    ((mr: MutationRequest<any, S, C, any>) => MutatorResult);
 
   /**
    * Provides a way to batch multiple CRUD mutations together:

@@ -12,8 +12,11 @@ import {
   CRUD_MUTATION_NAME,
   type MutationResponse,
 } from '../../zero-protocol/src/push.ts';
+import type {
+  Database,
+  TransactionProviderHooks,
+} from '../../zero-types/src/database.ts';
 import type {CustomMutatorDefs} from './custom.ts';
-import type {Database, TransactionProviderHooks} from './process-mutations.ts';
 import {getMutation, handleMutationRequest} from './process-mutations.ts';
 
 const baseQuery = {

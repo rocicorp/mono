@@ -82,7 +82,7 @@ const schema = createSchema({
 });
 type Schema = typeof schema;
 
-let issueQuery: Query<Schema, 'issue'>;
+let issueQuery: Query<'issue', Schema>;
 let serverSchema: ServerSchema;
 let queryDelegate: QueryDelegate;
 

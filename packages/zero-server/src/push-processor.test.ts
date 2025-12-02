@@ -6,6 +6,11 @@ import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
 import {type PushBody} from '../../zero-protocol/src/push.ts';
+import type {
+  Database,
+  TransactionProviderHooks,
+  TransactionProviderInput,
+} from '../../zero-types/src/database.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import {
   defineMutators,
@@ -14,11 +19,6 @@ import {
 import {defineMutator} from '../../zql/src/mutate/mutator.ts';
 import {PostgresJSConnection} from './adapters/postgresjs.ts';
 import type {CustomMutatorDefs} from './custom.ts';
-import type {
-  Database,
-  TransactionProviderHooks,
-  TransactionProviderInput,
-} from './process-mutations.ts';
 import {PushProcessor} from './push-processor.ts';
 import {ZQLDatabase} from './zql-database.ts';
 

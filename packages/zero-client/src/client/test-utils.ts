@@ -30,6 +30,7 @@ import type {
   PushResponseMessage,
 } from '../../../zero-protocol/src/push.ts';
 import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
+import type {DefaultMutators} from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {AnyMutatorRegistry} from '../../../zql/src/mutate/mutator-registry.ts';
 import type {AnyQuery, Query} from '../../../zql/src/query/query.ts';
@@ -102,7 +103,10 @@ export class MockSocket extends EventTarget {
 
 export class TestZero<
   const S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+  MD extends
+    | AnyMutatorRegistry
+    | CustomMutatorDefs
+    | undefined = DefaultMutators,
   C = unknown,
 > extends Zero<S, MD, C> {
   pokeIDCounter = 0;
@@ -253,7 +257,7 @@ export class TestZero<
   }
 
   async triggerGotQueriesPatch(
-    q: Query<S, keyof S['tables'] & string>,
+    q: Query<keyof S['tables'] & string, S>,
   ): Promise<void> {
     await this.triggerPoke(null, '1', {
       gotQueriesPatch: [
@@ -311,7 +315,10 @@ let testZeroCounter = 0;
 
 export function zeroForTest<
   const S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
+  MD extends
+    | AnyMutatorRegistry
+    | CustomMutatorDefs
+    | undefined = DefaultMutators,
   C = unknown,
 >(
   options: Partial<ZeroOptions<S, MD, C>> = {},

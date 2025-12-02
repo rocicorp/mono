@@ -3,7 +3,6 @@ import {assert} from '../../shared/src/asserts.ts';
 import {getErrorDetails, getErrorMessage} from '../../shared/src/error.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {promiseVoid} from '../../shared/src/resolved-promises.ts';
-import type {MaybePromise} from '../../shared/src/types.ts';
 import * as v from '../../shared/src/valita.ts';
 import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
 import type {ApplicationError} from '../../zero-protocol/src/application-error.ts';
@@ -25,36 +24,15 @@ import {
   type PushBody,
   type PushResponse,
 } from '../../zero-protocol/src/push.ts';
+import type {
+  Database,
+  TransactionProviderHooks,
+  TransactionProviderInput,
+} from '../../zero-types/src/database.ts';
 import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
 import {isMutator} from '../../zql/src/mutate/mutator.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
 import {createLogContext} from './logging.ts';
-
-export interface TransactionProviderHooks {
-  updateClientMutationID: () => Promise<{lastMutationID: number | bigint}>;
-  writeMutationResult: (result: MutationResponse) => Promise<void>;
-}
-
-export interface TransactionProviderInput {
-  upstreamSchema: string;
-  clientGroupID: string;
-  clientID: string;
-  mutationID: number;
-}
-
-/**
- * Defines the abstract interface for a database that PushProcessor can execute
- * transactions against.
- */
-export interface Database<T> {
-  transaction: <R>(
-    callback: (
-      tx: T,
-      transactionHooks: TransactionProviderHooks,
-    ) => MaybePromise<R>,
-    transactionInput?: TransactionProviderInput,
-  ) => Promise<R>;
-}
 
 export type ExtractTransactionType<D> = D extends Database<infer T> ? T : never;
 export type Params = v.Infer<typeof pushParamsSchema>;

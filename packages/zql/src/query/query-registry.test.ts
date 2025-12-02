@@ -12,7 +12,6 @@ import {createBuilder} from './create-builder.ts';
 import {asQueryInternals} from './query-internals.ts';
 import {
   defineQueries,
-  defineQueriesWithType,
   defineQuery,
   isQueryRegistry,
   type ContextTypeOfQueryRegistry,
@@ -725,86 +724,7 @@ describe('defineQueries types', () => {
 
     // Context is unknown, so any value is accepted
     expectTypeOf(withArgs.toQuery).toEqualTypeOf<
-      (ctx: any) => Query<typeof schema, 'foo'>
-    >();
-  });
-});
-
-describe('defineQueriesWithType', () => {
-  test('allows explicit Context type with factory pattern', () => {
-    type MyContext = {userId: string; role: 'admin' | 'user'};
-
-    const queries = defineQueriesWithType<MyContext>()({
-      getUser: defineQuery(
-        ({args, ctx: _ctx}: {args: string; ctx: MyContext}) =>
-          builder.foo.where('id', '=', args),
-      ),
-    });
-
-    const withArgs = queries.getUser('test-id');
-
-    // Context type is enforced
-    expectTypeOf<Parameters<typeof withArgs.toQuery>>().toEqualTypeOf<
-      [{userId: string; role: 'admin' | 'user'}]
-    >();
-  });
-
-  test('allows explicit Schema and Context types', () => {
-    type MyContext = 'my-context';
-
-    const queries = defineQueriesWithType<typeof schema, MyContext>()({
-      getUser: defineQuery(
-        ({args, ctx: _ctx}: {args: string; ctx: MyContext}) =>
-          builder.foo.where('id', '=', args),
-      ),
-    });
-
-    const withArgs = queries.getUser('test-id');
-
-    expectTypeOf<Parameters<typeof withArgs.toQuery>>().toEqualTypeOf<
-      ['my-context']
-    >();
-  });
-
-  test('runtime behavior matches defineQueries', () => {
-    type MyContext = {userId: string};
-
-    const queries = defineQueriesWithType<MyContext>()({
-      getUser: defineQuery(
-        ({args, ctx: _ctx}: {args: string; ctx: MyContext}) =>
-          builder.foo.where('id', '=', args),
-      ),
-    });
-
-    const result = queries.getUser('test-id').toQuery({userId: 'ctx-user'});
-    expect(asQueryInternals(result).ast).toEqual({
-      table: 'foo',
-      where: {
-        type: 'simple',
-        left: {type: 'column', name: 'id'},
-        op: '=',
-        right: {type: 'literal', value: 'test-id'},
-      },
-    });
-  });
-
-  test('works without type annotations on defineQuery', () => {
-    const queries = defineQueriesWithType<{userId: string}>()({
-      getUser: defineQuery(
-        makeValidator<string | undefined, string | undefined>(
-          v => v as string | undefined,
-        ),
-        ({args, ctx}) => builder.foo.where('id', '=', args ?? ctx.userId),
-      ),
-    });
-
-    expectTypeOf<Parameters<typeof queries.getUser>>().toEqualTypeOf<
-      [args?: string | undefined]
-    >();
-
-    const withArgs = queries.getUser('test-id');
-    expectTypeOf<Parameters<typeof withArgs.toQuery>>().toEqualTypeOf<
-      [{userId: string}]
+      (ctx: any) => Query<'foo', typeof schema>
     >();
   });
 });
@@ -1151,8 +1071,8 @@ describe('defineQueries merging types', () => {
     const fooQuery = extended.getFoo().toQuery({});
     const barQuery = extended.getBar().toQuery({});
 
-    expectTypeOf(fooQuery).toEqualTypeOf<Query<typeof schema, 'foo'>>();
-    expectTypeOf(barQuery).toEqualTypeOf<Query<typeof schema, 'bar'>>();
+    expectTypeOf(fooQuery).toEqualTypeOf<Query<'foo', typeof schema>>();
+    expectTypeOf(barQuery).toEqualTypeOf<Query<'bar', typeof schema>>();
   });
 
   test('merging two plain query definitions should have correct types', () => {

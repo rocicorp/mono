@@ -47,13 +47,13 @@ function createQuery<TTable extends keyof typeof schema.tables>(
   queryAST: AST,
 ) {
   const q = new QueryImpl(schema, tableName, queryAST, defaultFormat, 'test');
-  return q as Query<typeof schema, TTable, PullRow<TTable, typeof schema>>;
+  return q as Query<TTable, typeof schema, PullRow<TTable, typeof schema>>;
 }
 
 // Helper to benchmark planned vs unplanned
 function benchmarkQuery<TTable extends keyof typeof schema.tables>(
   name: string,
-  query: Query<typeof schema, TTable>,
+  query: Query<TTable, typeof schema>,
 ) {
   const unplannedAST = asQueryInternals(query).ast;
 

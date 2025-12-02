@@ -11,15 +11,23 @@ import {stringCompare} from '../../shared/src/string-compare.ts';
 import type {CustomMutatorDefs} from '../../zero-client/src/client/custom.ts';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import {Zero} from '../../zero-client/src/client/zero.ts';
+import type {
+  DefaultContext,
+  DefaultMutators,
+  DefaultSchema,
+} from '../../zero-types/src/default-types.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
 
 export const ZeroContext = createContext<unknown | undefined>(undefined);
 
 export function useZero<
-  S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
+  S extends Schema = DefaultSchema,
+  MD extends
+    | AnyMutatorRegistry
+    | CustomMutatorDefs
+    | undefined = DefaultMutators,
+  Context = DefaultContext,
 >(): Zero<S, MD, Context> {
   const zero = useContext(ZeroContext);
   if (zero === undefined) {
@@ -28,18 +36,13 @@ export function useZero<
   return zero as Zero<S, MD, Context>;
 }
 
-export function createUseZero<
-  S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
-  Context = unknown,
->() {
-  return () => useZero<S, MD, Context>();
-}
-
 export type ZeroProviderProps<
-  S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
-  Context,
+  S extends Schema = DefaultSchema,
+  MD extends
+    | AnyMutatorRegistry
+    | CustomMutatorDefs
+    | undefined = DefaultMutators,
+  Context = DefaultContext,
 > = (ZeroOptions<S, MD, Context> | {zero: Zero<S, MD, Context>}) & {
   init?: (zero: Zero<S, MD, Context>) => void;
   children: ReactNode;
@@ -48,9 +51,12 @@ export type ZeroProviderProps<
 const NO_AUTH_SET = Symbol();
 
 export function ZeroProvider<
-  S extends Schema,
-  MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
-  Context,
+  S extends Schema = DefaultSchema,
+  MD extends
+    | AnyMutatorRegistry
+    | CustomMutatorDefs
+    | undefined = DefaultMutators,
+  Context = DefaultContext,
 >({children, init, ...props}: ZeroProviderProps<S, MD, Context>) {
   const isExternalZero = 'zero' in props;
 

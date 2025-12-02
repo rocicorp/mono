@@ -1,13 +1,11 @@
 // oxlint-disable require-await
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import {describe, expect, expectTypeOf, test, vi} from 'vitest';
-import * as z from 'zod';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Transaction} from './custom.ts';
 import {defineMutators} from './mutator-registry.ts';
 import {
   defineMutator,
-  defineMutatorWithType,
   isMutatorDefinition,
   type MutatorDefinition,
 } from './mutator.ts';
@@ -86,87 +84,13 @@ describe('isMutatorDefinition', () => {
   });
 });
 
-describe('defineMutatorWithType', () => {
-  test('creates mutator with bound schema and context type', () => {
-    type Context = {userId: string};
-    const define = defineMutatorWithType<Schema, Context>();
-
-    const mutator = async ({
-      ctx,
-      args,
-      tx,
-    }: {
-      ctx: Context;
-      args: {id: string} | undefined;
-      tx: Transaction<Schema>;
-    }) => {
-      expectTypeOf(ctx).toEqualTypeOf<Context>();
-      void args;
-      void tx;
-    };
-
-    const def = define(mutator);
-
-    expect(isMutatorDefinition(def)).toBe(true);
-    expect(def.validator).toBeUndefined();
-  });
-
-  test('creates mutator with validator and bound schema and context type', () => {
-    type Context = {userId: string};
-    const validator: StandardSchemaV1<{a: number}, {b: string}> = {
-      '~standard': {
-        version: 1,
-        vendor: 'test',
-        validate: () => ({value: {b: 'test'}}),
-      },
-    };
-
-    const define = defineMutatorWithType<Schema, Context>();
-
-    const mutator = async ({
-      ctx,
-      args,
-      tx,
-    }: {
-      ctx: Context;
-      args: {b: string};
-      tx: Transaction<Schema>;
-    }) => {
-      expectTypeOf(ctx).toEqualTypeOf<Context>();
-      void args;
-      void tx;
-    };
-
-    const def = define(validator, mutator);
-
-    expect(isMutatorDefinition(def)).toBe(true);
-    expect(def.validator).toBe(validator);
-  });
-
-  test('infers args from validator and ctx from bound context type', () => {
-    type Context = {userId: string};
-    const validator = z.object({name: z.string()});
-
-    const define = defineMutatorWithType<Schema, Context>();
-
-    // Key test: args and ctx types should be inferred without explicit annotations
-    const def = define(validator, async ({args, ctx}) => {
-      // These should compile - types inferred from validator and Context
-      args.name;
-      ctx.userId;
-    });
-
-    expect(isMutatorDefinition(def)).toBe(true);
-  });
-});
-
 describe('Type Tests', () => {
   test('MutatorDefinition type structure', () => {
     type TestDef = MutatorDefinition<
-      Schema,
-      {userId: string},
       {input: number},
       {output: string},
+      Schema,
+      {userId: string},
       unknown
     >;
 
@@ -197,10 +121,10 @@ describe('Type Tests', () => {
     // Without validator, TInput === TOutput === TArgs
     expectTypeOf(def).toEqualTypeOf<
       MutatorDefinition<
+        {id: string},
+        {id: string},
         Schema,
         {userId: string},
-        {id: string},
-        {id: string},
         unknown
       >
     >();
@@ -224,32 +148,7 @@ describe('Type Tests', () => {
 
     // MutatorDefinition still has TInput/TOutput for validator typing
     expectTypeOf(def).toEqualTypeOf<
-      MutatorDefinition<Schema, unknown, {a: number}, {b: string}, unknown>
-    >();
-  });
-
-  test('defineMutatorWithType returns correct type', () => {
-    type Context = {userId: string; role: string};
-    const define = defineMutatorWithType<Schema, Context>();
-
-    const mutator = async ({
-      ctx,
-      args,
-      tx,
-    }: {
-      ctx: Context;
-      args: undefined;
-      tx: Transaction<Schema>;
-    }) => {
-      expectTypeOf(ctx).toEqualTypeOf<Context>();
-      void args;
-      void tx;
-    };
-
-    const def = define(mutator);
-
-    expectTypeOf(def).toEqualTypeOf<
-      MutatorDefinition<Schema, Context, undefined, undefined, unknown>
+      MutatorDefinition<{a: number}, {b: string}, Schema, unknown, unknown>
     >();
   });
 });

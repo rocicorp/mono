@@ -252,11 +252,11 @@ export function createSolidViewFactory(
   retry?: () => void,
 ) {
   function solidViewFactory<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
   >(
-    _query: Query<TSchema, TTable, TReturn>,
+    _query: Query<TTable, TSchema, TReturn>,
     input: Input,
     format: Format,
     onDestroy: () => void,

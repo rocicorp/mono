@@ -65,9 +65,9 @@ function newMockZero<
   MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined = undefined,
 >(clientID: string, queryDelegate: QueryDelegate): Zero<Schema, MD, C> {
   function m<TTable extends keyof Schema['tables'] & string, TReturn, T>(
-    query: Query<Schema, TTable, TReturn>,
+    query: Query<TTable, Schema, TReturn>,
     factoryOrOptions?:
-      | ViewFactory<Schema, TTable, TReturn, T>
+      | ViewFactory<TTable, Schema, TReturn, T>
       | MaterializeOptions,
     maybeOptions?: MaterializeOptions,
   ) {
@@ -86,8 +86,8 @@ function newMockZero<
 }
 
 function useQueryWithZeroProvider<
-  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
+  TSchema extends Schema,
   TReturn,
   MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
   TContext,
@@ -95,7 +95,7 @@ function useQueryWithZeroProvider<
   zeroOrZeroSignal:
     | Zero<TSchema, MD, TContext>
     | Accessor<Zero<TSchema, MD, TContext>>,
-  querySignal: () => Query<TSchema, TTable, TReturn>,
+  querySignal: () => Query<TTable, TSchema, TReturn>,
   options?: UseQueryOptions | Accessor<UseQueryOptions>,
 ) {
   const isZeroSignal = typeof zeroOrZeroSignal === 'function';

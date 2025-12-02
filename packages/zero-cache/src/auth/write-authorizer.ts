@@ -32,8 +32,8 @@ import {
   staticQuery,
 } from '../../../zql/src/query/static-query.ts';
 import type {
-  DatabaseStorage,
   ClientGroupStorage,
+  DatabaseStorage,
 } from '../../../zqlite/src/database-storage.ts';
 import type {Database} from '../../../zqlite/src/db.ts';
 import {compile, sql} from '../../../zqlite/src/internal/sql.ts';
@@ -479,7 +479,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     applicableRowPolicy: Policy | undefined,
     applicableCellPolicies: Policy[],
     authData: JWTPayload | undefined,
-    rowQuery: Query<Schema, string>,
+    rowQuery: Query<string, Schema>,
   ) {
     if (!(await this.#passesPolicy(applicableRowPolicy, authData, rowQuery))) {
       return false;
@@ -501,7 +501,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
   #passesPolicy(
     policy: Policy | undefined,
     authData: JWTPayload | undefined,
-    rowQuery: Query<Schema, string>,
+    rowQuery: Query<string, Schema>,
   ): MaybePromise<boolean> {
     if (policy === undefined) {
       return false;

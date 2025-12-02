@@ -9,11 +9,11 @@ import {
   type PushResponse,
 } from '../../zero-protocol/src/push.ts';
 import {
-  type Database,
   type ExtractTransactionType,
   handleMutationRequest,
   type TransactFn,
 } from '../../zero-server/src/process-mutations.ts';
+import type {Database} from '../../zero-types/src/database.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {Transaction} from '../../zql/src/mutate/custom.ts';
 import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
