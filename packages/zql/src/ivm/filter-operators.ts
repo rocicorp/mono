@@ -30,7 +30,9 @@ export interface FilterInput extends InputBase {
 }
 
 export interface FilterOutput extends Output {
+  open(): void;
   filter(node: Node, cleanup: boolean): boolean;
+  close(): void;
 }
 
 export interface FilterOperator extends FilterInput, FilterOutput {}
@@ -48,6 +50,9 @@ export const throwFilterOutput: FilterOutput = {
   filter(_node: Node, _cleanup): boolean {
     throw new Error('Output not set');
   },
+
+  open() {},
+  close() {},
 };
 
 export class FilterStart implements FilterInput, Output {
@@ -76,6 +81,7 @@ export class FilterStart implements FilterInput, Output {
   }
 
   *fetch(req: FetchRequest): Stream<Node | 'yield'> {
+    this.#output.open();
     for (const node of this.#input.fetch(req)) {
       if (node === 'yield') {
         yield node;
@@ -85,6 +91,7 @@ export class FilterStart implements FilterInput, Output {
         yield node;
       }
     }
+    this.#output.close();
   }
 
   *cleanup(req: FetchRequest): Stream<Node> {
@@ -115,6 +122,9 @@ export class FilterEnd implements Input, FilterOutput {
       yield node;
     }
   }
+
+  open() {}
+  close() {}
 
   *cleanup(req: FetchRequest): Stream<Node> {
     for (const node of this.#start.cleanup(req)) {
