@@ -281,3 +281,124 @@ suite('fast-check', () => {
     return true;
   }
 });
+
+suite('constructor with sorted entries', () => {
+  const cmp = (a: number, b: number) => a - b;
+
+  test('empty input', () => {
+    const t = new BTreeSet(cmp, []);
+    expect(t.size).toBe(0);
+    expect([...t]).toEqual([]);
+  });
+
+  test('single element', () => {
+    const t = new BTreeSet(cmp, [42]);
+    expect(t.size).toBe(1);
+    expect([...t]).toEqual([42]);
+  });
+
+  test('multiple elements', () => {
+    const t = new BTreeSet(cmp, [1, 2, 3, 4, 5]);
+    expect(t.size).toBe(5);
+    expect([...t]).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  test('large sorted input', () => {
+    const input = Array.from({length: 10000}, (_, i) => i);
+    const t = new BTreeSet(cmp, input);
+    expect(t.size).toBe(10000);
+    expect([...t]).toEqual(input);
+  });
+
+  test('all operations work after bulk construction', () => {
+    const t = new BTreeSet(cmp, [1, 3, 5, 7, 9]);
+
+    // has
+    expect(t.has(1)).toBe(true);
+    expect(t.has(5)).toBe(true);
+    expect(t.has(2)).toBe(false);
+
+    // get
+    expect(t.get(3)).toBe(3);
+    expect(t.get(4)).toBe(undefined);
+
+    // add
+    t.add(4);
+    expect(t.size).toBe(6);
+    expect(t.has(4)).toBe(true);
+
+    // delete
+    t.delete(5);
+    expect(t.size).toBe(5);
+    expect(t.has(5)).toBe(false);
+
+    // valuesFrom
+    expect([...t.valuesFrom(3)]).toEqual([3, 4, 7, 9]);
+    expect([...t.valuesFrom(3, false)]).toEqual([4, 7, 9]);
+
+    // valuesFromReversed
+    expect([...t.valuesFromReversed(7)]).toEqual([7, 4, 3, 1]);
+    expect([...t.valuesFromReversed(7, false)]).toEqual([4, 3, 1]);
+  });
+
+  test('clone after bulk construction', () => {
+    const t1 = new BTreeSet(cmp, [1, 2, 3, 4, 5]);
+
+    const t2 = t1.clone();
+    expect([...t2]).toEqual([1, 2, 3, 4, 5]);
+
+    // Mutations don't affect original
+    t2.delete(3);
+    expect(t1.has(3)).toBe(true);
+    expect(t2.has(3)).toBe(false);
+  });
+
+  test('with entry comparator (like memory-source rows)', () => {
+    const t = new BTreeSet(
+      (a: {id: number; name: string}, b: {id: number; name: string}) =>
+        a.id - b.id,
+      [
+        {id: 1, name: 'alice'},
+        {id: 2, name: 'bob'},
+        {id: 3, name: 'charlie'},
+      ],
+    );
+
+    expect(t.size).toBe(3);
+    expect(t.get({id: 2, name: 'any'})).toEqual({id: 2, name: 'bob'});
+  });
+
+  test('asserts if keys are not sorted', () => {
+    expect(() => new BTreeSet(cmp, [3, 1, 2])).toThrow(
+      'Keys must be in sorted order',
+    );
+  });
+
+  test('asserts if keys have duplicates', () => {
+    expect(() => new BTreeSet(cmp, [1, 2, 2, 3])).toThrow(
+      'Keys must be in sorted order',
+    );
+  });
+
+  test('bulk and sequential produce same values for large input', () => {
+    const input = Array.from({length: 10000}, (_, i) => i);
+
+    const bulkTree = new BTreeSet(cmp, input);
+    const seqTree = new BTreeSet<number>(cmp);
+    for (const v of input) seqTree.add(v);
+
+    // Same logical content
+    expect([...bulkTree]).toEqual([...seqTree]);
+    expect(bulkTree.size).toBe(seqTree.size);
+
+    // Operations work the same
+    expect(bulkTree.has(5000)).toBe(seqTree.has(5000));
+    expect(bulkTree.get(5000)).toBe(seqTree.get(5000));
+    expect([...bulkTree.valuesFrom(5000)]).toEqual([
+      ...seqTree.valuesFrom(5000),
+    ]);
+    expect([...bulkTree.valuesFromReversed(5000)]).toEqual([
+      ...seqTree.valuesFromReversed(5000),
+    ]);
+  });
+});

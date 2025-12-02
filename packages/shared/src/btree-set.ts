@@ -9,12 +9,19 @@ export class BTreeSet<K> {
 
   readonly comparator: Comparator<K>;
 
-  constructor(comparator: Comparator<K>, entries?: IterableIterator<K>) {
+  /**
+   * Creates a BTreeSet.
+   * If entries is provided, it MUST be sorted according to the comparator
+   * and contain no duplicates. This is O(n) and much faster than adding
+   * keys one by one.
+   *
+   * @param comparator The comparator function for ordering keys
+   * @param entries Optional iterable of keys in sorted order (ascending)
+   */
+  constructor(comparator: Comparator<K>, entries?: Iterable<K>) {
     this.comparator = comparator;
     if (entries) {
-      for (const key of entries) {
-        this.add(key);
-      }
+      this.#buildFromSorted(entries);
     }
   }
 
@@ -125,6 +132,60 @@ export class BTreeSet<K> {
   /** Gets the highest key in the tree. Complexity: O(1) */
   #maxKey(): K | undefined {
     return this.#root.maxKey();
+  }
+
+  /**
+   * Builds a BTree from a sorted iterable of keys.
+   * Asserts that keys are in sorted order. This is O(n).
+   */
+  #buildFromSorted(entries: Iterable<K>): void {
+    const comparator = this.comparator;
+
+    // Build leaf nodes from sorted keys
+    const leaves: BNode<K>[] = [];
+    let keys: K[] = [];
+    let size = 0;
+    let prev: K | undefined;
+    let hasPrev = false;
+
+    for (const key of entries) {
+      if (hasPrev) {
+        assert(comparator(prev as K, key) < 0, 'Keys must be in sorted order');
+      }
+      prev = key;
+      hasPrev = true;
+      size++;
+
+      keys.push(key);
+      if (keys.length === MAX_NODE_SIZE) {
+        leaves.push(new BNode<K>(keys));
+        keys = [];
+      }
+    }
+
+    // Handle remaining keys
+    if (keys.length > 0) {
+      leaves.push(new BNode<K>(keys));
+    }
+
+    if (leaves.length === 0) {
+      return;
+    }
+
+    // Build tree bottom-up
+    let currentLevel: BNode<K>[] = leaves;
+    while (currentLevel.length > 1) {
+      const nextLevel: BNodeInternal<K>[] = [];
+      for (let i = 0; i < currentLevel.length; i += MAX_NODE_SIZE) {
+        const end = Math.min(i + MAX_NODE_SIZE, currentLevel.length);
+        const children = currentLevel.slice(i, end);
+        nextLevel.push(new BNodeInternal<K>(children));
+      }
+      currentLevel = nextLevel;
+    }
+
+    this.#root = currentLevel[0];
+    this.size = size;
   }
 
   [Symbol.iterator](): IterableIterator<K> {
