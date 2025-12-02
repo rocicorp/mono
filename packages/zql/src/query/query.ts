@@ -109,6 +109,7 @@ type RowNamespace<S extends Schema | TypeError> = S extends Schema
         ? Row<S['tables'][K]>
         : {
             error: `The table schema for table ${K & string} you have registered with \`declare module '@rocicorp/zero'\` is incorrect.`;
+            registeredTableSchema: S['tables'][K];
           };
     }
   : S;

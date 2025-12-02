@@ -97,7 +97,6 @@ export type {
 } from '../../zero-schema/src/table-schema.ts';
 export type {
   DefaultContext,
-  DefaultDbProvider,
   DefaultSchema,
   DefaultTypes,
   DefaultWrappedTransaction,

@@ -5,10 +5,6 @@ import {
   sqlConvertColumnArg,
 } from '../../z2s/src/sql.ts';
 import type {TableSchema} from '../../zero-schema/src/table-schema.ts';
-import type {
-  DefaultSchema,
-  DefaultWrappedTransaction,
-} from '../../zero-types/src/default-types.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {
   ServerColumnSchema,
@@ -18,8 +14,8 @@ import type {
 import type {
   DBTransaction,
   SchemaCRUD,
+  ServerTransaction,
   TableCRUD,
-  TransactionBase,
 } from '../../zql/src/mutate/custom.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {
@@ -29,13 +25,6 @@ import type {
 } from '../../zql/src/query/query.ts';
 import type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
 import {getServerSchema} from './schema.ts';
-
-interface ServerTransaction<TSchema extends Schema, TWrappedTransaction>
-  extends TransactionBase<TSchema> {
-  readonly location: 'server';
-  readonly reason: 'authoritative';
-  readonly dbTransaction: DBTransaction<TWrappedTransaction>;
-}
 
 export type CustomMutatorDefs<TDBTransaction> = {
   [namespaceOrKey: string]:
@@ -50,10 +39,8 @@ export type CustomMutatorImpl<
   Context = unknown,
 > = (tx: TDBTransaction, args: TArgs, ctx: Context) => Promise<void>;
 
-export class TransactionImpl<
-  TSchema extends Schema = DefaultSchema,
-  TWrappedTransaction = DefaultWrappedTransaction,
-> implements ServerTransaction<TSchema, TWrappedTransaction>
+export class TransactionImpl<TSchema extends Schema, TWrappedTransaction>
+  implements ServerTransaction<TSchema, TWrappedTransaction>
 {
   readonly location = 'server';
   readonly reason = 'authoritative';

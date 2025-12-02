@@ -1,7 +1,5 @@
-import type {BaseDatabase} from './database.ts';
+import type {Expand} from '../../shared/src/expand.ts';
 import type {Schema} from './schema.ts';
-
-// oxlint-disable no-explicit-any
 
 /**
  * Applications can augment this interface to register their Zero types via
@@ -11,7 +9,7 @@ import type {Schema} from './schema.ts';
  * declare module '@rocicorp/zero' {
  *   interface DefaultTypes {
  *     schema: typeof schema;
- *     context: Context;
+ *     context: AuthData;
  *     dbProvider: typeof dbProvider;
  *   }
  * }
@@ -19,37 +17,45 @@ import type {Schema} from './schema.ts';
  */
 export interface DefaultTypes {}
 
-export type DefaultSchema<TRegister = DefaultTypes> = TRegister extends {
-  schema: infer S extends Schema;
-}
-  ? S
-  : Schema;
+export type DefaultSchema<TDefaultTypes = DefaultTypes> =
+  TDefaultTypes extends {
+    readonly schema: infer S extends Schema;
+  }
+    ? S
+    : Schema;
 
-export type DefaultContext<TRegister = DefaultTypes> = TRegister extends {
-  context: infer C;
+export type DefaultContext<TDefaultTypes = DefaultTypes> =
+  TDefaultTypes extends {
+    readonly context: infer C;
+  }
+    ? Expand<Readonly<C>> | undefined
+    : unknown;
+
+export type InferTransactionFromDbProvider<TDbProvider> = TDbProvider extends {
+  transaction: <R>(
+    // oxlint-disable-next-line no-explicit-any
+    callback: (tx: infer TTransaction, ...args: any[]) => any,
+    // oxlint-disable-next-line no-explicit-any
+    ...args: any[]
+  ) => Promise<R>;
 }
-  ? C
+  ? TTransaction
   : unknown;
 
-export type DefaultDbProvider<TRegister = DefaultTypes> = TRegister extends {
-  dbProvider: infer D extends BaseDatabase<any, any, any>;
-}
-  ? D
-  : unknown;
-
-export type DefaultWrappedTransaction<TRegister = DefaultTypes> =
-  DefaultDbProvider<TRegister> extends BaseDatabase<
-    infer TTransaction,
-    any,
-    any
-  >
-    ? TTransaction extends {
-        dbTransaction: infer TDbTransaction;
-      }
-      ? TDbTransaction extends {
-          wrappedTransaction: infer TWrappedTransaction;
+export type DefaultWrappedTransaction<TDefaultTypes = DefaultTypes> =
+  TDefaultTypes extends {
+    readonly dbProvider: infer DbProvider;
+  }
+    ? InferTransactionFromDbProvider<DbProvider> extends infer TTransaction
+      ? TTransaction extends {
+          readonly dbTransaction: {
+            readonly wrappedTransaction: infer TWrappedTransaction;
+          };
         }
         ? TWrappedTransaction
-        : unknown
-      : unknown
+        : {
+            error: `The \`dbProvider\` type you have registered with \`declare module '@rocicorp/zero'\` is incorrect.`;
+            registeredDbProvider: DbProvider;
+          }
+      : never
     : unknown;

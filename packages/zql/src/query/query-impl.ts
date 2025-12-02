@@ -166,11 +166,11 @@ export abstract class AbstractQuery<
       this.#currentJunction,
     );
 
-  whereExists: Query<TTable, TSchema, TReturn>['whereExists'] = (
+  whereExists = (
     relationship: string,
     cbOrOptions?: ((q: AnyQuery) => AnyQuery) | ExistsOptions,
     options?: ExistsOptions,
-  ) => {
+  ): Query<TTable, TSchema, TReturn> => {
     const cb = typeof cbOrOptions === 'function' ? cbOrOptions : undefined;
     const opts = typeof cbOrOptions === 'function' ? options : cbOrOptions;
     const flipped = opts?.flip;
@@ -186,7 +186,8 @@ export abstract class AbstractQuery<
   related = (
     relationship: string,
     cb?: (q: AnyQuery) => AnyQuery,
-  ): Query<TTable, TSchema, TReturn> => {
+    // oxlint-disable-next-line no-explicit-any
+  ): Query<TTable, TSchema, any> => {
     if (relationship.startsWith(SUBQ_PREFIX)) {
       throw new Error(
         `Relationship names may not start with "${SUBQ_PREFIX}". That is a reserved prefix.`,
@@ -231,7 +232,7 @@ export abstract class AbstractQuery<
         'The source and destination of a relationship must have the same number of fields',
       );
 
-      const result = this.#newQuery(
+      return this.#newQuery(
         this.#tableName,
         {
           ...this.#ast,
@@ -257,7 +258,6 @@ export abstract class AbstractQuery<
         this.customQueryID,
         this.#currentJunction,
       ) as AnyQuery;
-      return result as ReturnType<Query<TTable, TSchema, TReturn>['related']>;
     }
 
     if (isTwoHop(related)) {
@@ -287,7 +287,7 @@ export abstract class AbstractQuery<
       assert(isCompoundKey(secondRelation.sourceField), 'Invalid relationship');
       assert(isCompoundKey(secondRelation.destField), 'Invalid relationship');
 
-      const result = this.#newQuery(
+      return this.#newQuery(
         this.#tableName,
         {
           ...this.#ast,
@@ -327,7 +327,6 @@ export abstract class AbstractQuery<
         this.customQueryID,
         this.#currentJunction,
       ) as AnyQuery;
-      return result as ReturnType<Query<TTable, TSchema, TReturn>['related']>;
     }
 
     throw new Error(`Invalid relationship ${relationship}`);

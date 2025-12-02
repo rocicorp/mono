@@ -20,7 +20,7 @@ describe('extendReplicacheMutators', () => {
     const mockMutatorFn = vi.fn(async () => {});
     const mutator = defineMutator(mockMutatorFn);
 
-    const mutators = defineMutators<Schema>({
+    const mutators = defineMutators({
       createUser: mutator,
     });
 
@@ -38,7 +38,7 @@ describe('extendReplicacheMutators', () => {
     const mockMutatorFn = vi.fn(async () => {});
     const updateMutator = defineMutator(mockMutatorFn);
 
-    const mutators = defineMutators<Schema>({
+    const mutators = defineMutators({
       users: {
         update: updateMutator,
       },
@@ -58,7 +58,7 @@ describe('extendReplicacheMutators', () => {
     const mockMutatorFn = vi.fn(async () => {});
     const deepMutator = defineMutator(mockMutatorFn);
 
-    const mutators = defineMutators<Schema>({
+    const mutators = defineMutators({
       level1: {
         level2: {
           level3: {
@@ -103,7 +103,7 @@ describe('extendReplicacheMutators', () => {
     const createMutator = defineMutator(async () => {});
     const updateMutator = defineMutator(async () => {});
 
-    const mutators = defineMutators<Schema>({
+    const mutators = defineMutators({
       users: {
         create: createMutator,
       },
@@ -135,7 +135,7 @@ describe('extendReplicacheMutators', () => {
 
     const mutator = defineMutator(mockMutatorFn);
 
-    const mutators = defineMutators<Schema>({
+    const mutators = defineMutators({
       updateIssue: mutator,
     });
 
@@ -182,7 +182,7 @@ describe('extendReplicacheMutators', () => {
     const updateMutator = defineMutator(async () => {});
     const deleteMutator = defineMutator(async () => {});
 
-    const mutators = defineMutators<Schema>({
+    const mutators = defineMutators({
       users: {
         create: createMutator,
         update: updateMutator,
@@ -232,7 +232,11 @@ describe('extendReplicacheMutators', () => {
       },
     );
 
-    const mutators = defineMutators<Schema, {counter: number}>({
+    const mutators = defineMutators<
+      {increment: typeof incrementMutator; get: typeof getMutator},
+      Schema,
+      {counter: number}
+    >({
       increment: incrementMutator,
       get: getMutator,
     });
@@ -296,7 +300,7 @@ describe('extendReplicacheMutators', () => {
       return Promise.resolve();
     });
 
-    const mutators = defineMutators<Schema>({
+    const mutators = defineMutators<{test: typeof mutator}, Schema>({
       test: mutator,
     });
 
@@ -340,7 +344,7 @@ describe('extendReplicacheMutators', () => {
     const m3 = defineMutator(async () => {});
     const m4 = defineMutator(async () => {});
 
-    const mutators = defineMutators<Schema>({
+    const mutators = defineMutators({
       a: {
         m1,
         b: {

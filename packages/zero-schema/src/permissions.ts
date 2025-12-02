@@ -5,11 +5,6 @@ import {
   type Condition,
   type Parameter,
 } from '../../zero-protocol/src/ast.ts';
-import type {
-  DefaultContext,
-  DefaultSchema,
-} from '../../zero-types/src/default-types.ts';
-
 import {defaultFormat} from '../../zero-types/src/format.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
@@ -50,50 +45,50 @@ export type Queries<TSchema extends Schema> = {
 };
 
 export type PermissionRule<
+  TAuthDataShape,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
-  TSchema extends Schema = DefaultSchema,
-  TAuthDataShape = DefaultContext,
 > = (
   authData: TAuthDataShape,
   eb: ExpressionBuilder<TTable, TSchema>,
 ) => Condition;
 
 export type AssetPermissions<
+  TAuthDataShape,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
-  TSchema extends Schema = DefaultSchema,
-  TAuthDataShape = DefaultContext,
 > = {
   // Why an array of rules?: https://github.com/rocicorp/mono/pull/3184/files#r1869680716
-  select?: PermissionRule<TTable, TSchema, TAuthDataShape>[] | undefined;
+  select?: PermissionRule<TAuthDataShape, TSchema, TTable>[] | undefined;
   /**
    * @deprecated Use Mutators instead.
    * @see {@link https://zero.rocicorp.dev/docs/writing-data}
    */
-  insert?: PermissionRule<TTable, TSchema, TAuthDataShape>[] | undefined;
+  insert?: PermissionRule<TAuthDataShape, TSchema, TTable>[] | undefined;
   /**
    * @deprecated Use Mutators instead.
    * @see {@link https://zero.rocicorp.dev/docs/writing-data}
    */
   update?:
     | {
-        preMutation?: PermissionRule<TTable, TSchema, TAuthDataShape>[];
-        postMutation?: PermissionRule<TTable, TSchema, TAuthDataShape>[];
+        preMutation?: PermissionRule<TAuthDataShape, TSchema, TTable>[];
+        postMutation?: PermissionRule<TAuthDataShape, TSchema, TTable>[];
       }
     | undefined;
   /**
    * @deprecated Use Mutators instead.
    * @see {@link https://zero.rocicorp.dev/docs/writing-data}
    */
-  delete?: PermissionRule<TTable, TSchema, TAuthDataShape>[] | undefined;
+  delete?: PermissionRule<TAuthDataShape, TSchema, TTable>[] | undefined;
 };
 
 export type PermissionsConfig<TAuthDataShape, TSchema extends Schema> = {
   [K in keyof TSchema['tables']]?: {
-    row?: AssetPermissions<K & string, TSchema, TAuthDataShape> | undefined;
+    row?: AssetPermissions<TAuthDataShape, TSchema, K & string> | undefined;
     cell?:
       | {
           [C in keyof TSchema['tables'][K]['columns']]?: Omit<
-            AssetPermissions<K & string, TSchema, TAuthDataShape>,
+            AssetPermissions<TAuthDataShape, TSchema, K & string>,
             'cell'
           >;
         }
@@ -101,10 +96,7 @@ export type PermissionsConfig<TAuthDataShape, TSchema extends Schema> = {
   };
 };
 
-export async function definePermissions<
-  TAuthDataShape = DefaultContext,
-  TSchema extends Schema = DefaultSchema,
->(
+export async function definePermissions<TAuthDataShape, TSchema extends Schema>(
   schema: TSchema,
   definer: () =>
     | Promise<PermissionsConfig<TAuthDataShape, TSchema>>
@@ -159,13 +151,13 @@ function compilePermissions<TAuthDataShape, TSchema extends Schema>(
 }
 
 function compileRowConfig<
-  TTable extends keyof TSchema['tables'] & string,
-  TSchema extends Schema,
   TAuthDataShape,
+  TSchema extends Schema,
+  TTable extends keyof TSchema['tables'] & string,
 >(
   clientToServer: NameMapper,
   tableName: TTable,
-  rowRules: AssetPermissions<TTable, TSchema, TAuthDataShape> | undefined,
+  rowRules: AssetPermissions<TAuthDataShape, TSchema, TTable> | undefined,
   expressionBuilder: ExpressionBuilder<TTable, TSchema>,
 ): CompiledAssetPermissions | undefined {
   if (!rowRules) {
@@ -213,13 +205,13 @@ function compileRowConfig<
  * Please read: https://github.com/rocicorp/mono/pull/3184/files#r1869680716
  */
 function compileRules<
+  TAuthDataShape,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
-  TSchema extends Schema = DefaultSchema,
-  TAuthDataShape = DefaultContext,
 >(
   clientToServer: NameMapper,
   tableName: TTable,
-  rules: PermissionRule<TTable, TSchema, TAuthDataShape>[] | undefined,
+  rules: PermissionRule<TAuthDataShape, TSchema, TTable>[] | undefined,
   expressionBuilder: ExpressionBuilder<TTable, TSchema>,
 ): ['allow', Condition][] | undefined {
   if (!rules) {
@@ -233,14 +225,14 @@ function compileRules<
 }
 
 function compileCellConfig<
+  TAuthDataShape,
+  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
-  TSchema extends Schema = DefaultSchema,
-  TAuthDataShape = DefaultContext,
 >(
   clientToServer: NameMapper,
   tableName: TTable,
   cellRules:
-    | Record<string, AssetPermissions<TTable, TSchema, TAuthDataShape>>
+    | Record<string, AssetPermissions<TAuthDataShape, TSchema, TTable>>
     | undefined,
   expressionBuilder: ExpressionBuilder<TTable, TSchema>,
 ): Record<string, CompiledAssetPermissions> | undefined {

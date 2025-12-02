@@ -18,4 +18,4 @@ export {
 } from './use-query.ts';
 export {useZeroConnectionState} from './use-zero-connection-state.ts';
 export {useZeroOnline} from './use-zero-online.ts';
-export {createZero, useZero, ZeroProvider} from './use-zero.ts';
+export {createUseZero, createZero, useZero, ZeroProvider} from './use-zero.ts';

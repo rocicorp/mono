@@ -86,11 +86,7 @@ export function useQuery<
     ({enabled = true, ttl = DEFAULT_TTL_MS} = options);
   }
 
-  const zero = useZero<
-    TSchema,
-    AnyMutatorRegistry | CustomMutatorDefs | undefined,
-    TContext
-  >();
+  const zero = useZero<TSchema, undefined, TContext>();
   const view = viewStore.getView(zero, query, enabled, ttl);
   // https://react.dev/reference/react/useSyncExternalStore
   return useSyncExternalStore(
@@ -317,8 +313,8 @@ export class ViewStore {
   }
 
   getView<
-    TSchema extends Schema,
     TTable extends keyof TSchema['tables'] & string,
+    TSchema extends Schema,
     TReturn,
     MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
     TContext,
@@ -366,7 +362,7 @@ export class ViewStore {
     } else {
       existing.updateTTL(ttl);
     }
-    return existing as ViewWrapper<TSchema, TTable, TReturn, MD, TContext>;
+    return existing as ViewWrapper<TTable, TSchema, TReturn, MD, TContext>;
   }
 }
 
@@ -398,8 +394,8 @@ const viewStore = new ViewStore();
  * 2. If a different subscribe function is passed during a re-render, React will re-subscribe to the store using the newly passed subscribe function. You can prevent this by declaring subscribe outside the component.
  */
 class ViewWrapper<
-  TSchema extends Schema,
   TTable extends keyof TSchema['tables'] & string,
+  TSchema extends Schema,
   TReturn,
   MD extends AnyMutatorRegistry | CustomMutatorDefs | undefined,
   TContext,
@@ -423,7 +419,7 @@ class ViewWrapper<
     format: Format,
     ttl: TTL,
     onDematerialized: (
-      view: ViewWrapper<TSchema, TTable, TReturn, MD, TContext>,
+      view: ViewWrapper<TTable, TSchema, TReturn, MD, TContext>,
     ) => void,
   ) {
     this.#bindings = bindings;

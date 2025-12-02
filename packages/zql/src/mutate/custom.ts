@@ -29,7 +29,7 @@ export interface AnyTransaction {
   readonly reason: TransactionReason;
 }
 
-export interface TransactionBase<S extends Schema = DefaultSchema> {
+export interface TransactionBase<S extends Schema> {
   readonly location: Location;
   readonly clientID: ClientID;
   /**

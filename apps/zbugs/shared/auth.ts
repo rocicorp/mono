@@ -92,6 +92,6 @@ export async function assertUserCanSeeComment(
 
 declare module '@rocicorp/zero' {
   interface DefaultTypes {
-    context: AuthData | undefined;
+    context: AuthData;
   }
 }

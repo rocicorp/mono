@@ -223,6 +223,14 @@ type TestSchemaWithMoreRelationships =
 type TestSchema = Schema['tables']['test'];
 
 describe('types', () => {
+  test('Row indexed by table name matches schema columns', () => {
+    expectTypeOf<Row<typeof schema>['test']>().toEqualTypeOf<{
+      readonly s: string;
+      readonly b: boolean;
+      readonly n: number;
+    }>();
+  });
+
   test('Row helper shape for table schemas', () => {
     type TestRow = Row<typeof schema.tables.test>;
 

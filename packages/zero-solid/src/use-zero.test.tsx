@@ -4,7 +4,7 @@ import {beforeEach, describe, expect, test, vi, type Mock} from 'vitest';
 import type {ZeroOptions} from '../../zero-client/src/client/options.ts';
 import type {Zero} from '../../zero-client/src/client/zero.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
-import {useZero, ZeroProvider} from './use-zero.ts';
+import {createUseZero, useZero, ZeroProvider} from './use-zero.ts';
 
 vi.mock('../../zero-client/src/client/zero.ts', () => ({
   Zero: vi.fn(),
@@ -55,6 +55,24 @@ describe('useZero', () => {
     );
 
     const {result} = renderHook(() => useZero<Schema>(), {
+      initialProps: [],
+      wrapper,
+    });
+
+    expect(result()).toBe(externalZero);
+  });
+});
+
+describe('createUseZero', () => {
+  test('returns a typed hook', () => {
+    const externalZero = createMockZero();
+    const useTypedZero = createUseZero<Schema>();
+
+    const wrapper = (props: {children: JSX.Element}) => (
+      <ZeroProvider zero={externalZero}>{props.children}</ZeroProvider>
+    );
+
+    const {result} = renderHook(useTypedZero, {
       initialProps: [],
       wrapper,
     });
