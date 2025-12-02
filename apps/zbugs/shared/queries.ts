@@ -10,7 +10,6 @@ import {INITIAL_COMMENT_LIMIT} from './consts.ts';
 import {QueryError, QueryErrorCode} from './error.ts';
 import {builder, ZERO_PROJECT_NAME} from './schema.ts';
 
-// oxlint-disable-next-line no-explicit-any
 function applyIssuePermissions<TQuery extends Query<'issue'>>(
   q: TQuery,
   role: Role | undefined,
