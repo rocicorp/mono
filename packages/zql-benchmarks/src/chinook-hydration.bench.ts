@@ -10,6 +10,7 @@ await runBenchmarks(
     type: 'hydration',
     pgContent,
     zqlSchema: schema,
+    only: 'all playlists',
   },
   [
     {
@@ -31,11 +32,12 @@ await runBenchmarks(
     {
       name: 'all playlists',
       createQuery: q =>
-        q.playlist.related('tracks', t =>
-          t
-            .related('mediaType')
-            .related('genre')
-            .related('album', a => a.related('artist')),
+        q.playlist.related(
+          'tracks',
+          t => t,
+          // .related('mediaType')
+          // .related('genre')
+          // .related('album', a => a.related('artist')),
         ),
     },
     {
