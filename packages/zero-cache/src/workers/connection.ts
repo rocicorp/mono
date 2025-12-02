@@ -13,15 +13,11 @@ import {
   PROTOCOL_VERSION,
 } from '../../../zero-protocol/src/protocol-version.ts';
 import {upstreamSchema, type Upstream} from '../../../zero-protocol/src/up.ts';
-import {ErrorWithLevel, findErrorForClient} from '../types/error-for-client.ts';
 import {
-  ProtocolErrorWithLevel,
+  ErrorWithLevel,
+  findErrorForClient,
   getLogLevel,
-} from '../types/error-with-level.ts';
-import {
-  isProtocolError,
-  type ProtocolError,
-} from '../../../zero-protocol/src/error.ts';
+} from '../types/error-for-client.ts';
 import type {Source} from '../types/streams.ts';
 import type {ConnectParams} from './connect-params.ts';
 
@@ -359,8 +355,8 @@ export function sendError(
 
   let logLevel: LogLevel;
 
-  // If the thrown error is a ProtocolErrorWithLevel, its explicit logLevel takes precedence
-  if (thrown instanceof ProtocolErrorWithLevel) {
+  // If the thrown error has an explicit logLevel, use it
+  if (thrown instanceof ErrorWithLevel) {
     logLevel = thrown.logLevel;
   }
   // Errors with errno or transient socket codes are low-level, transient I/O issues
@@ -372,7 +368,7 @@ export function sendError(
   ) {
     logLevel = 'warn';
   }
-  // Fallback: check errorBody.kind for errors that weren't thrown as ProtocolErrorWithLevel
+  // These error kinds are typically not server bugs, log as warnings
   else if (
     errorBody.kind === ErrorKind.ClientNotFound ||
     errorBody.kind === ErrorKind.TransformFailed
@@ -384,16 +380,6 @@ export function sendError(
 
   lc[logLevel]?.('Sending error on WebSocket', errorBody, thrown ?? '');
   send(lc, ws, ['error', errorBody], 'ignore-backpressure');
-}
-
-export function findProtocolError(error: unknown): ProtocolError | undefined {
-  if (isProtocolError(error)) {
-    return error;
-  }
-  if (error instanceof Error && error.cause) {
-    return findProtocolError(error.cause);
-  }
-  return undefined;
 }
 
 function hasErrno(error: unknown): boolean {
